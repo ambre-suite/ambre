@@ -116,7 +116,7 @@ interrupted and resumes starts again at one (`PROSE-FEAT-026`).
 ```rust
 /// The one-based ordinal of an ordered item within its run (`PROSE-FEAT-002`); `None` for
 /// a block that is not an ordered item.
-pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal>;
+pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<Ordinal<ListItem>>;
 
 /// How deep an item sits in its list, counting the items above it in the parent chain
 /// (`PROSE-005`). A top-level item is at depth zero.

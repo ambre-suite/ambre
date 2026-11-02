@@ -15,8 +15,7 @@
 // ============================================================================
 
 use ambre_commands::{Key, Modifiers};
-use ambre_core::PageMillis;
-use ambre_core::{Point, Px, Tally, View};
+use ambre_core::{FracMs, Point, Px, Tally, TimeSpan, View};
 use ambre_draw::{Color, Rect};
 
 use crate::{ContentRepaint, LayerRepaint, WheelDelta};
@@ -26,10 +25,10 @@ use crate::{ContentRepaint, LayerRepaint, WheelDelta};
 #[derive(Default, Clone, Copy)]
 pub struct FrameStats {
     pub fps: ambre_core::FrameRate,
-    pub frame: PageMillis,
-    pub drain: PageMillis,
-    pub draw: PageMillis,
-    pub gpu: PageMillis,
+    pub frame: TimeSpan<FracMs>,
+    pub drain: TimeSpan<FracMs>,
+    pub draw: TimeSpan<FracMs>,
+    pub gpu: TimeSpan<FracMs>,
 }
 
 /// A full per-frame performance snapshot, published from the canvas view to the
@@ -40,15 +39,15 @@ pub struct FrameStats {
 #[derive(Default, Clone, Copy)]
 pub struct PerfSnapshot {
     pub fps: ambre_core::FrameRate,
-    pub frame: PageMillis,
-    pub drain: PageMillis,
-    pub draw: PageMillis,
-    pub gpu: PageMillis,
-    pub background: PageMillis,
-    pub cells: PageMillis,
-    pub headers: PageMillis,
+    pub frame: TimeSpan<FracMs>,
+    pub drain: TimeSpan<FracMs>,
+    pub draw: TimeSpan<FracMs>,
+    pub gpu: TimeSpan<FracMs>,
+    pub background: TimeSpan<FracMs>,
+    pub cells: TimeSpan<FracMs>,
+    pub headers: TimeSpan<FracMs>,
     pub cells_drawn: Tally<CellsDrawn>,
-    pub input_latency: PageMillis,
+    pub input_latency: TimeSpan<FracMs>,
     pub glyph_misses: Tally<GlyphMisses>,
 }
 

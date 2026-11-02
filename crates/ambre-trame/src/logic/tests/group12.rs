@@ -6,6 +6,7 @@
 use super::*;
 use crate::formula::types::CellValue;
 use crate::logic::schema::{SheetContainer, SheetRoot};
+use ambre_core::index::{Count, Pos};
 use loro::LoroValue;
 
 /// A sheet with one plain edit, so an undo has something to take back that
@@ -13,8 +14,8 @@ use loro::LoroValue;
 fn with_one_edit() -> TrameState {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "kept".to_owned(),
     });
     state
@@ -26,8 +27,8 @@ fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<SheetId>)
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id,
-        start_row: Row::new(0),
-        start_col: Col::new(0),
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
     })
 }
 
@@ -49,8 +50,8 @@ fn numbers_in_col_a(state: &mut TrameState, rows: u32) -> Vec<String> {
     (0..rows)
         .map(|r| {
             state.handle_command(TrameCommand::SetCellText {
-                row: Row::new(r),
-                col: Col::new(2),
+                row: Pos::<Row>::new(r),
+                col: Pos::<Col>::new(2),
                 text: format!("=ISNUMBER(A{})", r + 1),
             });
             read_cell(state, r, 2)
@@ -100,7 +101,7 @@ fn an_imported_number_that_is_not_finite_stays_text() {
 fn a_filled_number_that_is_not_finite_stays_text() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["NaN", "1e308", "1.7e308"]);
-    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let cell = |row| crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(0));
     let sheet_id = state.active_sheet.clone();
     state.handle_command(TrameCommand::FillRange {
         sheet_id: sheet_id.clone(),
@@ -119,7 +120,7 @@ fn a_filled_number_that_is_not_finite_stays_text() {
 fn a_series_past_the_largest_number_stops_there() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["1e308", "1.7e308", "", "kept"]);
-    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let cell = |row| crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(0));
     let sheet_id = state.active_sheet.clone();
     let out = state.handle_command(TrameCommand::FillRange {
         sheet_id,
@@ -144,7 +145,7 @@ fn a_series_past_the_largest_number_stops_there() {
 fn a_series_from_one_large_number_keeps_its_step() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["10000000000000000"]);
-    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let cell = |row| crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(0));
     let sheet_id = state.active_sheet.clone();
     state.handle_command(TrameCommand::FillRange {
         sheet_id,
@@ -161,7 +162,7 @@ fn a_series_from_one_large_number_keeps_its_step() {
 fn a_step_past_the_largest_number_stops_at_once() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["-1.7e308", "1.7e308", "kept"]);
-    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let cell = |row| crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(0));
     let sheet_id = state.active_sheet.clone();
     let out = state.handle_command(TrameCommand::FillRange {
         sheet_id,
@@ -185,8 +186,8 @@ fn an_unknown_function_reads_as_an_error() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["1", "2"]);
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=SUMM(A1:A2)".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 1), "#N/A");
@@ -199,8 +200,8 @@ fn a_function_name_is_read_whatever_its_case() {
     seed_col_a(&mut state, &["1", "2", "4"]);
     for (col, text) in [(1, "=sum(A1:A3)"), (2, "=Sum(A1:A3)"), (3, "=SUM(A1:A3)")] {
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(col),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(col),
             text: text.to_owned(),
         });
         assert_eq!(read_cell(&mut state, 0, col), "7", "{text}");
@@ -214,8 +215,8 @@ fn a_function_name_is_read_whatever_its_case() {
 fn today_reads_the_clock_of_the_recomputation() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "=TODAY()".to_owned(),
     });
     let shown: f64 = read_cell(&mut state, 0, 0).parse().expect("a serial");
@@ -241,39 +242,39 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
         reference: "A1:A3".to_owned(),
     });
     let formula = |raw: &str| crate::ClipboardCell {
-        dr: RowCount::new(0),
-        dc: ColCount::new(0),
+        dr: Count::<Row>::new(0),
+        dc: Count::<Col>::new(0),
         raw: raw.to_owned(),
         bold: ambre_bus::Weight::Regular,
         italic: ambre_bus::Slant::Upright,
         style: crate::CellStyle::default(),
     };
     state.handle_command(TrameCommand::PasteRange {
-        target_row: Row::new(2),
-        target_col: Col::new(1),
+        target_row: Pos::<Row>::new(2),
+        target_col: Pos::<Col>::new(1),
         payload: crate::ClipboardPayload {
-            src_row: Row::new(0),
-            src_col: Col::new(0),
-            rows: RowCount::new(1),
-            cols: ColCount::new(1),
+            src_row: Pos::<Row>::new(0),
+            src_col: Pos::<Col>::new(0),
+            rows: Count::<Row>::new(1),
+            cols: Count::<Col>::new(1),
             cells: vec![formula("=SUM(TOTAL)+A1")],
         },
     });
     assert_eq!(read_raw(&mut state, 2, 1), "=SUM(TOTAL)+B3");
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(2),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(2),
         text: "=SUM(TOTAL)*A1".to_owned(),
     });
     state.handle_command(TrameCommand::FillRange {
         sheet_id: crate::logic::default_sheet(),
         src: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(2)),
-            crate::CellPos::new(Row::new(0), Col::new(2)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(2)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(2)),
         ),
         dest: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(2)),
-            crate::CellPos::new(Row::new(1), Col::new(2)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(2)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(2)),
         ),
         mode: crate::FillMode::Auto,
     });
@@ -441,7 +442,7 @@ fn a_line_element_in_a_non_canonical_spelling_is_refused_and_said() {
     );
     assert_eq!(
         opened.index.row_len(),
-        RowCount::ZERO,
+        Count::<Row>::ZERO,
         "the line is skipped"
     );
 }
@@ -458,8 +459,8 @@ fn a_file_with_no_record_leaves_the_document_alone() {
             delimiter: None,
             header: HeaderRow::Present,
             target_sheet_id: None,
-            start_row: Row::new(0),
-            start_col: Col::new(0),
+            start_row: Pos::<Row>::new(0),
+            start_col: Pos::<Col>::new(0),
         });
         assert!(out.update.is_none(), "{data:?}");
         assert_eq!(state.sheet_order_ids().len(), 1, "{data:?}");
@@ -505,8 +506,8 @@ fn a_separator_outside_the_three_is_named_by_the_caller() {
         delimiter: crate::CsvDelimiter::new(b'|').ok(),
         header: HeaderRow::Absent,
         target_sheet_id: None,
-        start_row: Row::new(0),
-        start_col: Col::new(0),
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
     });
     import_result(&out);
     assert_eq!(read_cell(&mut state, 0, 1), "b");
@@ -517,8 +518,8 @@ fn a_separator_outside_the_three_is_named_by_the_caller() {
 fn a_csv_export_writes_nothing() {
     let mut state = with_one_edit();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "=LEN(A1)".to_owned(),
     });
     let before = state.doc.len_ops();
@@ -559,13 +560,13 @@ fn a_save_leaves_the_document_alone() {
 fn a_computed_value_stays_out_of_the_document() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "=1111*2+2020".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=A1&\"x\"".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "4242");

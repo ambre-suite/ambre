@@ -7,6 +7,7 @@
 //! hashes: the blob is named by its **import slot** until Phase 1 rewrites it
 //! to the real blake2b once Sync returns `MediaUploaded { content_hash }`.
 
+use ambre_core::index::Pos;
 use ambre_core::{Image, Px};
 use std::io::Cursor;
 
@@ -35,7 +36,7 @@ pub fn import_raster(
     limits: &Limits,
 ) -> Result<ImportBatch, ImportError> {
     let mut batch = ImportBatch::default();
-    let media = MediaRef::Pending(ImportSlot::ZERO);
+    let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
     let blob = decode_media(bytes.as_bytes(), limits, media.clone())?;
     let size = Size::new(
         f64::from(blob.size.width.get()),
@@ -225,7 +226,7 @@ mod tests {
         let blob = decode_media(
             &png,
             &Limits::default(),
-            MediaRef::Pending(ImportSlot::ZERO),
+            MediaRef::Pending(Pos::<ImportSlot>::ZERO),
         )
         .unwrap();
         // The thumbnail decodes back to something within the max edge.
@@ -241,7 +242,7 @@ mod tests {
         let blob = decode_media(
             &solid_png(8, 4),
             &Limits::default(),
-            MediaRef::Pending(ImportSlot::ZERO),
+            MediaRef::Pending(Pos::<ImportSlot>::ZERO),
         )
         .unwrap();
         let thumb = image::load_from_memory(blob.thumb.as_bytes()).unwrap();

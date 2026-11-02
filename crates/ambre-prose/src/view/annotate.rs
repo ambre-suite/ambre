@@ -5,19 +5,21 @@
 //! The comment panel and the accept or reject popover are DOM chrome. They
 //! read the canvas positions from here and never from the paint pass.
 
+use ambre_core::index::{Pos, Span};
 use std::collections::HashMap;
 
 use ambre_core::id::{Comment, Id, Suggestion};
 use ambre_core::{Doc, Point, Px, View};
 
 use crate::events::{
-    BlockId, CommentThread, LinkSpan, PageIndex, ProseCommand, SuggestionKind, tree_id,
+    BlockId, CommentThread, LinkSpan, Page, ProseCommand, SuggestionKind, tree_id,
 };
-use crate::layout::run::{RunOffset, RunSpan};
+use crate::layout::run::RunChar;
 use crate::ui::ProseUiState;
 use crate::view::answered_span;
 use crate::view::column::DocPos;
 use crate::view::hit::{Fragment, fragment};
+use ambre_core::{Authored, Instant};
 
 /// A rectangle on the canvas, in pixels of the view.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -164,7 +166,7 @@ impl ProseUiState {
         &self,
         block: BlockId,
         run_y: Px<Doc>,
-    ) -> Option<(PageIndex, Fragment)> {
+    ) -> Option<(Pos<Page>, Fragment)> {
         let index = self.flow_index(&tree_id(block))?;
         let layout = self.shaped.block(index)?;
         let tops = self.shaped.blocks.get(&layout.block_id)?.data().line_tops();
@@ -180,7 +182,7 @@ impl ProseUiState {
     pub(crate) fn to_screen(
         &self,
         block: BlockId,
-        page: PageIndex,
+        page: Pos<Page>,
         piece: Fragment,
         at: Point<Px<Doc>>,
     ) -> Point<Px<View>> {
@@ -207,8 +209,8 @@ impl ProseUiState {
     fn span_under(
         &self,
         block: BlockId,
-        span: RunSpan,
-        page: PageIndex,
+        span: Span<RunChar>,
+        page: Pos<Page>,
         at: Point<Px<View>>,
     ) -> Option<ScreenRect> {
         let index = self.flow_index(&tree_id(block))?;
@@ -239,7 +241,7 @@ impl ProseUiState {
     }
 
     /// The page under a canvas point, if any.
-    pub(crate) fn page_under(&self, at: Point<Px<View>>) -> Option<PageIndex> {
+    pub(crate) fn page_under(&self, at: Point<Px<View>>) -> Option<Pos<Page>> {
         match self.column.screen_to_doc(&self.viewport, at) {
             DocPos::OnPage { page, .. } => Some(page),
             _ => None,
@@ -337,7 +339,7 @@ impl ProseUiState {
     pub fn take_intent(
         &mut self,
         intent: AnnotationIntent,
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     ) -> Option<ProseCommand> {
         Some(match intent {
             AnnotationIntent::Focus { comment_id } => {
@@ -388,7 +390,7 @@ impl ProseUiState {
                     .blocks
                     .get(&layout.block_id)?
                     .data()
-                    .caret_box(RunOffset::from_doc(thread.anchor_start));
+                    .caret_box(thread.anchor_start.as_axis::<RunChar>());
                 let top = Px::<Doc>::new(caret.y0 as f32);
                 let (page, piece) = self.fragment_at(block, top)?;
                 let at = self.to_screen(block, page, piece, Point::new(Px::<Doc>::ZERO, top));
@@ -404,9 +406,10 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
-    use crate::layout::run::{RunOffset, RunSpan};
-    use ambre_bus::app::prose::DocOffset;
+    use crate::layout::run::RunChar;
+    use ambre_bus::app::prose::DocChar;
     use ambre_core::id::{self, Comment, Id, User};
+    use ambre_core::index::{Pos, Span};
     use ambre_core::{Doc, Point, Px, View};
 
     fn px(value: f32) -> Px<View> {
@@ -418,6 +421,7 @@ mod tests {
     };
     use crate::ui::ProseUiState;
     use crate::view::tests::{down, laid_out};
+    use ambre_core::{Authored, Instant};
 
     fn view(paragraphs: usize) -> ProseUiState {
         let (_, shaped) = laid_out(paragraphs, 20);
@@ -447,8 +451,8 @@ mod tests {
             user_id: Id::<User>::from_bytes([3; 16]),
             spans: vec![SuggestionSpan {
                 block_id: block,
-                start: DocOffset::new(start),
-                end: DocOffset::new(end),
+                start: Pos::<DocChar>::new(start),
+                end: Pos::<DocChar>::new(end),
             }],
         }
     }
@@ -460,7 +464,10 @@ mod tests {
             .expect("laid out");
         let layout = &ui.shaped.layout.blocks[index.to_usize()];
         let run = ui.shaped.blocks[&layout.block_id].data();
-        let part = run.range_boxes(RunSpan::new(RunOffset::new(start), RunOffset::new(end)))[0];
+        let part = run.range_boxes(Span::<RunChar>::new(
+            Pos::<RunChar>::new(start),
+            Pos::<RunChar>::new(end),
+        ))[0];
         let piece = crate::view::hit::fragment(layout, layout.page_start, &run.line_tops())
             .expect("a fragment");
         ui.to_screen(
@@ -508,8 +515,8 @@ mod tests {
         let thread = |block, resolved| CommentThread {
             comment_id: Id::<Comment>::mint(),
             anchor_block: Some(block),
-            anchor_start: DocOffset::new(4),
-            anchor_end: DocOffset::new(9),
+            anchor_start: Pos::<DocChar>::new(4),
+            anchor_end: Pos::<DocChar>::new(9),
             orphaned: crate::events::AnchorState::Anchored,
             resolved,
             replies: Vec::new(),
@@ -549,8 +556,8 @@ mod tests {
         let thread = |block| CommentThread {
             comment_id: Id::<Comment>::mint(),
             anchor_block: Some(block),
-            anchor_start: DocOffset::ZERO,
-            anchor_end: DocOffset::new(3),
+            anchor_start: Pos::<DocChar>::ZERO,
+            anchor_end: Pos::<DocChar>::new(3),
             orphaned: crate::events::AnchorState::Anchored,
             resolved: ambre_core::ThreadState::Open,
             replies: Vec::new(),
@@ -578,8 +585,8 @@ mod tests {
             threads: vec![CommentThread {
                 comment_id: id,
                 anchor_block: Some(far),
-                anchor_start: DocOffset::ZERO,
-                anchor_end: DocOffset::new(3),
+                anchor_start: Pos::<DocChar>::ZERO,
+                anchor_end: Pos::<DocChar>::new(3),
                 orphaned: crate::events::AnchorState::Anchored,
                 resolved: ambre_core::ThreadState::Open,
                 replies: Vec::new(),
@@ -588,7 +595,7 @@ mod tests {
         assert_eq!(
             ui.take_intent(
                 AnnotationIntent::Focus { comment_id: id },
-                ambre_core::Timestamp::new(5)
+                Instant::<Authored>::new(5)
             ),
             None
         );
@@ -598,22 +605,22 @@ mod tests {
             text: "ok".to_owned(),
         };
         assert_eq!(
-            ui.take_intent(reply, ambre_core::Timestamp::new(5)),
+            ui.take_intent(reply, Instant::<Authored>::new(5)),
             Some(ProseCommand::ReplyToComment {
                 comment_id: id,
                 text: "ok".to_owned(),
-                now: ambre_core::Timestamp::new(5)
+                now: Instant::<Authored>::new(5)
             })
         );
         let blank = AnnotationIntent::Reply {
             comment_id: id,
             text: "  ".to_owned(),
         };
-        assert_eq!(ui.take_intent(blank, ambre_core::Timestamp::new(5)), None);
+        assert_eq!(ui.take_intent(blank, Instant::<Authored>::new(5)), None);
         assert_eq!(
             ui.take_intent(
                 AnnotationIntent::Resolve { comment_id: id },
-                ambre_core::Timestamp::new(5)
+                Instant::<Authored>::new(5)
             ),
             Some(ProseCommand::ResolveComment { comment_id: id })
         );
@@ -623,7 +630,7 @@ mod tests {
                 AnnotationIntent::Accept {
                     suggestion_id: suggestion
                 },
-                ambre_core::Timestamp::new(5)
+                Instant::<Authored>::new(5)
             ),
             Some(ProseCommand::AcceptSuggestion {
                 suggestion_id: suggestion
@@ -634,7 +641,7 @@ mod tests {
                 AnnotationIntent::Reject {
                     suggestion_id: suggestion
                 },
-                ambre_core::Timestamp::new(5)
+                Instant::<Authored>::new(5)
             ),
             Some(ProseCommand::RejectSuggestion {
                 suggestion_id: suggestion
@@ -650,8 +657,8 @@ mod tests {
         let thread = || CommentThread {
             comment_id: Id::<Comment>::mint(),
             anchor_block: Some(a),
-            anchor_start: DocOffset::new(4),
-            anchor_end: DocOffset::new(9),
+            anchor_start: Pos::<DocChar>::new(4),
+            anchor_end: Pos::<DocChar>::new(9),
             orphaned: crate::events::AnchorState::Anchored,
             resolved: ambre_core::ThreadState::Open,
             replies: Vec::new(),
@@ -680,7 +687,7 @@ mod tests {
         // A scroll and a peer's text above move the thread: its draft stays.
         ui.scroll_by(down(120.0));
         let mut shifted = all.clone();
-        shifted[0].anchor_start = DocOffset::new(7);
+        shifted[0].anchor_start = Pos::<DocChar>::new(7);
         ui.apply_event(&ProseEvent::CommentsUpdated { threads: shifted });
         assert!(ui.lost_drafts(&drafts).is_empty(), "a move keeps the draft");
 

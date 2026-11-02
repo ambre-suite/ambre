@@ -10,14 +10,15 @@
 //! The page hands it the pane, the name of a member and the time as closures.
 //! So the view holds no signal, and a host test drives it with plain values.
 
+use ambre_core::index::{Delta, IdxVec, Pos};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    Attachment, Emoji, LogicCommand, MessageAt, MessageView, MurmureCommand, MurmureEvent,
-    ReplyEcho, Request, RestEvent, TextStyle, Timestamp, UiEvent,
+    Attachment, Authored, Emoji, Instant, LogicCommand, MessageAt, MessageView, MurmureCommand,
+    MurmureEvent, ReplyEcho, Request, RestEvent, TextStyle, UiEvent,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
@@ -37,18 +38,19 @@ use crate::commands::{
 use crate::composer::{Composer, Composition, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::drafts::DraftShelf;
 use crate::list::{
-    Conversations, JUMP_HINT, ListRow, ListRowDelta, ListRowVec, MessageList, OnScreen, ReadMarks,
-    Row, RowKey, UnreadLine, row_of,
+    Conversations, JUMP_HINT, ListRow, MessageList, OnScreen, ReadMarks, Row, RowKey, UnreadLine,
+    row_of,
 };
 use crate::markers::MarkBar;
+use crate::mention_list::MentionEntry;
 use crate::mention_list::MentionList;
-use crate::mention_list::OfferIndex;
 use crate::paint::{Painted, Pictured, RowBounds, Shown, paint_jump, paint_list};
 use crate::pictures::Pictures;
 use crate::select::Selecting;
 use crate::uploads::{PickedFile, Uploaded};
 use crate::watchers::TICK_PERIOD;
 use crate::{MessageRef, MurmurePane, Region};
+use ambre_core::PageLoad;
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
@@ -62,13 +64,13 @@ pub struct PageReads {
     /// The name of a member, `None` when the page knows none.
     pub name_of: Rc<dyn Fn(Id<User>) -> Option<ambre_core::DisplayName>>,
     /// A time, in the reader's language and zone (`MURMURE-418`).
-    pub time_of: Rc<dyn Fn(Timestamp) -> String>,
+    pub time_of: Rc<dyn Fn(Instant<Authored>) -> String>,
     /// The page's monotonic clock: the wheel and the pictures read it.
-    pub now: Rc<dyn Fn() -> ambre_core::PageTime>,
+    pub now: Rc<dyn Fn() -> Instant<PageLoad>>,
     /// The user's wall clock: it dates a message, an edit, a reaction and a
     /// typing sample. The page's clock restarts at every load, so it never
     /// dates anything a peer reads.
-    pub wall_clock: Rc<dyn Fn() -> Timestamp>,
+    pub wall_clock: Rc<dyn Fn() -> Instant<Authored>>,
     /// The motion the user asks for: under reduced motion an animated
     /// picture holds its first frame (`MURMURE-130`).
     pub motion: Rc<dyn Fn() -> crate::pictures::Motion>,
@@ -104,7 +106,7 @@ pub struct PageReads {
     pub show_mentions: Rc<dyn Fn(Region, Option<MentionList>)>,
     /// Take the entry a click picked in the `@` list. Given `true`, it takes
     /// a pick in the thread's list alone (`MURMURE-555`).
-    pub take_pick: Rc<dyn Fn(Region) -> Option<OfferIndex>>,
+    pub take_pick: Rc<dyn Fn(Region) -> Option<Pos<MentionEntry>>>,
     /// Hand the page the format bar to draw over a selection, or `None` to
     /// close it. The flag names the thread's region (`MURMURE-432`).
     pub show_bar: Rc<dyn Fn(Region, Option<MarkBar>)>,
@@ -295,7 +297,11 @@ pub struct MurmureView {
     reveal: Reveal,
     /// The list and the latest message this region last heard, so a new one
     /// is announced once (`MURMURE-208`).
-    heard: (Option<ListOf>, Option<(Id<Message>, Timestamp)>),
+    #[expect(
+        clippy::type_complexity,
+        reason = "the lint scores the generics nested in the pair, and no alias may hide them"
+    )]
+    heard: (Option<ListOf>, Option<(Id<Message>, Instant<Authored>)>),
     /// The text selected, and the points of a drag the next paint resolves
     /// (`MURMURE-425`).
     selecting: Selecting,
@@ -315,9 +321,9 @@ pub struct MurmureView {
     pictures: Rc<RefCell<Pictures>>,
     /// When the next frame of a picture this region shows is due, `None`
     /// when none plays (`MURMURE-136`).
-    next_frame: Option<ambre_core::PageTime>,
+    next_frame: Option<Instant<PageLoad>>,
     /// The channel on screen this region last ticked, and when.
-    ticked: Option<(Id<Channel>, ambre_core::PageTime)>,
+    ticked: Option<(Id<Channel>, Instant<PageLoad>)>,
     /// The `@` list this region last handed the page.
     listed: Option<MentionList>,
     /// The format bar this region last handed the page.
@@ -641,7 +647,7 @@ impl MurmureView {
 
     /// The message of the row `i` of the list on screen, as the target of
     /// its actions. `None` on a band.
-    fn target_of_row(&self, i: ListRow) -> Option<MessageTarget> {
+    fn target_of_row(&self, i: Pos<ListRow>) -> Option<MessageTarget> {
         let pane = (self.reads.pane)();
         let lists = self.lists.borrow();
         let list = self.shown(&lists.conversations, pane)?;
@@ -735,7 +741,7 @@ impl MurmureView {
         }
     }
 
-    fn press_chip(&self, i: ListRow, emoji: Emoji) {
+    fn press_chip(&self, i: Pos<ListRow>, emoji: Emoji) {
         let (Some(me), Some(target)) = ((self.reads.me)(), self.target_of_row(i)) else {
             return;
         };
@@ -914,7 +920,7 @@ impl MurmureView {
     /// Ask again for the row `pick` finds among the keys of the list shown,
     /// when it is a band whose cause may clear. Only the channel region shows
     /// bands.
-    fn retry_row(&self, pick: impl Fn(&ListRowVec<RowKey>) -> Option<ListRow>) -> bool {
+    fn retry_row(&self, pick: impl Fn(&IdxVec<ListRow, RowKey>) -> Option<Pos<ListRow>>) -> bool {
         let pane = (self.reads.pane)();
         let Some(channel_id) = pane
             .shown_channel()
@@ -966,7 +972,7 @@ impl MurmureView {
     /// focus off screen starts again from the last row on screen. No read
     /// cursor moves: only a paint that shows a message reads it
     /// (`MURMURE-206`).
-    fn move_focus(&mut self, by: ListRowDelta) {
+    fn move_focus(&mut self, by: Delta<ListRow>) {
         let lists = Rc::clone(&self.lists);
         let lists = lists.borrow();
         let Some(list) = self.shown(&lists.conversations, (self.reads.pane)()) else {
@@ -980,7 +986,7 @@ impl MurmureView {
                 .as_ref()
                 .is_some_and(|painted| painted.focus.is_some());
         let from = self.focus.and_then(|key| row_of(&keys, key));
-        let last = keys.len().as_end().prev();
+        let last = keys.len().last();
         let at = match from {
             Some(i) if on_screen => i
                 .checked_offset(by)
@@ -988,7 +994,7 @@ impl MurmureView {
                 .unwrap_or(i),
             _ => match (self.last.as_ref().and_then(|painted| painted.bottom), last) {
                 (Some(bottom), Some(last)) => bottom.min(last),
-                (Some(_), None) => ListRow::ZERO,
+                (Some(_), None) => Pos::<ListRow>::ZERO,
                 (None, _) => return,
             },
         };
@@ -1003,7 +1009,12 @@ impl MurmureView {
 
     /// Bring the focused row into view, once the paint placed it. A row off
     /// screen comes to rest at the top, and the next paint checks it again.
-    fn reveal_focus(&mut self, painted: &Painted, at: Option<ListRow>, keys: &ListRowVec<RowKey>) {
+    fn reveal_focus(
+        &mut self,
+        painted: &Painted,
+        at: Option<Pos<ListRow>>,
+        keys: &IdxVec<ListRow, RowKey>,
+    ) {
         let Some(key) = at.and_then(|i| keys.get(i).copied()) else {
             self.reveal = Reveal::Settled;
             return;
@@ -1035,17 +1046,13 @@ impl MurmureView {
     }
 
     /// A finger went down: it stops any motion left.
-    pub fn touch_down(&mut self, at: ambre_core::Point<Px<View>>, now: ambre_core::PageTime) {
+    pub fn touch_down(&mut self, at: ambre_core::Point<Px<View>>, now: Instant<PageLoad>) {
         self.kinetic.press(at, now);
     }
 
     /// A finger moved: past the tap slop the list follows it. Answers
     /// whether the list moved.
-    pub fn touch_move(
-        &mut self,
-        at: ambre_core::Point<Px<View>>,
-        now: ambre_core::PageTime,
-    ) -> bool {
+    pub fn touch_move(&mut self, at: ambre_core::Point<Px<View>>, now: Instant<PageLoad>) -> bool {
         let Some(step) = self.kinetic.sample(at, now) else {
             return false;
         };
@@ -1058,7 +1065,7 @@ impl MurmureView {
     /// to the latest message presses it, and one on a band asks for its
     /// segment again (`MURMURE-513`). A tap in the composer puts its caret
     /// there and gives it the keys.
-    pub fn touch_up(&mut self, now: ambre_core::PageTime) -> Option<ambre_core::Point<Px<View>>> {
+    pub fn touch_up(&mut self, now: Instant<PageLoad>) -> Option<ambre_core::Point<Px<View>>> {
         let tap = match self.kinetic.release(now) {
             Release::Tap { at } => Some(at),
             Release::Fling | Release::Rest => None,
@@ -1163,7 +1170,7 @@ impl MurmureView {
 
     pub fn plan_repaint(
         &mut self,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
         _hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         let theme = self.theme_ctl.get();
@@ -1512,7 +1519,7 @@ impl MurmureView {
     }
 
     /// The wall clock, as the engine dates a sample or a message.
-    fn now(&self) -> Timestamp {
+    fn now(&self) -> Instant<Authored> {
         (self.reads.wall_clock)()
     }
 
@@ -1526,7 +1533,7 @@ impl MurmureView {
         };
         let now = (self.reads.now)();
         let due = self.ticked.is_none_or(|(ticked, at)| {
-            ticked != channel_id || now - at >= TICK_PERIOD.to_page_millis()
+            ticked != channel_id || now - at >= TICK_PERIOD.to_fractional()
         });
         if due {
             self.ticked = Some((channel_id, now));
@@ -1578,9 +1585,10 @@ impl MurmureView {
 
     /// Keep where the paint left the list, and stop a motion that met an
     /// end of it.
-    fn settle(&mut self, painted: &Painted, keys: &ListRowVec<RowKey>) {
-        let key_of =
-            |(i, y): (ListRow, ambre_core::Px<ambre_core::View>)| keys.get(i).map(|&key| (key, y));
+    fn settle(&mut self, painted: &Painted, keys: &IdxVec<ListRow, RowKey>) {
+        let key_of = |(i, y): (Pos<ListRow>, ambre_core::Px<ambre_core::View>)| {
+            keys.get(i).map(|&key| (key, y))
+        };
         self.top_row = painted.top.and_then(key_of);
         if self.pending == RestRow::Listed {
             self.rest = painted
@@ -1590,7 +1598,7 @@ impl MurmureView {
         }
         let at_latest = painted.rest.is_none();
         let at_oldest = painted.rest.is_some_and(|(i, y)| {
-            i == ListRow::ZERO && y >= ambre_core::Px::<ambre_core::View>::ZERO
+            i == Pos::<ListRow>::ZERO && y >= ambre_core::Px::<ambre_core::View>::ZERO
         });
         let edge = if self.heading > Px::<View>::ZERO {
             at_latest
@@ -1749,8 +1757,8 @@ impl MurmureView {
                     Key::PageDown => self.page(PageStep::Down),
                     Key::PageUp => self.page(PageStep::Up),
                     Key::End => self.rest_at_latest(),
-                    Key::ArrowDown => self.move_focus(ListRowDelta::new(1)),
-                    Key::ArrowUp => self.move_focus(ListRowDelta::new(-1)),
+                    Key::ArrowDown => self.move_focus(Delta::<ListRow>::new(1)),
+                    Key::ArrowUp => self.move_focus(Delta::<ListRow>::new(-1)),
                     Key::Enter if self.retry_focus() => {}
                     Key::Escape if self.mark_shown_read() || self.close_thread() => {}
                     _ => return Consumed::No,
@@ -1895,7 +1903,8 @@ impl MurmureView {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::{ByteSize, ByteSpan, CharSpan};
+    use ambre_bus::{Byte, ByteSize, Char};
+    use ambre_core::index::Span;
     use std::cell::Cell;
 
     use ambre_bus::conduit::local;
@@ -1947,14 +1956,16 @@ mod tests {
             .map(|focus| (focus.top.get(), focus.bottom.get()))
     }
     use crate::list::tests::message;
+    use ambre_bus::Authored;
     use ambre_bus::ThreadHead;
+    use ambre_core::{Instant, Ms, PageLoad, TimeSpan};
 
     struct Page {
         view: MurmureView,
         pane: Rc<Cell<MurmurePane>>,
-        clock: Rc<Cell<ambre_core::PageTime>>,
+        clock: Rc<Cell<Instant<PageLoad>>>,
         /// The wall clock, when a test sets it apart from the page's clock.
-        wall: Rc<Cell<Option<Timestamp>>>,
+        wall: Rc<Cell<Option<Instant<Authored>>>>,
         /// The motion the user asks for.
         motion: Rc<Cell<crate::pictures::Motion>>,
         events: Sender<UiEvent>,
@@ -1976,7 +1987,11 @@ mod tests {
         /// Each `@` list the view handed the page, oldest first.
         lists: Rc<RefCell<Vec<Listed>>>,
         /// The entry a click picked, for the region it names.
-        picked: Rc<Cell<Option<(Region, OfferIndex)>>>,
+        #[expect(
+            clippy::type_complexity,
+            reason = "the axis argument of the index family lengthens a tuple shape that predates it"
+        )]
+        picked: Rc<Cell<Option<(Region, Pos<MentionEntry>)>>>,
         /// The send a cancelled `@channel` question gives back.
         returned: Rc<RefCell<Option<AskedAll>>>,
         /// Each address the view opened, oldest first.
@@ -2014,10 +2029,10 @@ mod tests {
         let pane = Rc::new(Cell::new(MurmurePane::default()));
         let shown = Rc::clone(&pane);
         let back = Rc::clone(&pane);
-        let clock = Rc::new(Cell::new(ambre_core::PageTime::new(0.0)));
+        let clock = Rc::new(Cell::new(Instant::<PageLoad>::new(0.0)));
         let now = Rc::clone(&clock);
         let follows = Rc::clone(&clock);
-        let wall_set = Rc::new(Cell::new(None::<Timestamp>));
+        let wall_set = Rc::new(Cell::new(None::<Instant<Authored>>));
         let wall = Rc::clone(&wall_set);
         let motion = Rc::new(Cell::new(crate::pictures::Motion::Full));
         let reduced = Rc::clone(&motion);
@@ -2033,7 +2048,7 @@ mod tests {
         let listed = Rc::clone(&members);
         let lists = Rc::new(RefCell::new(Vec::new()));
         let shown_lists = Rc::clone(&lists);
-        let picked = Rc::new(Cell::new(None::<(Region, OfferIndex)>));
+        let picked = Rc::new(Cell::new(None::<(Region, Pos<MentionEntry>)>));
         let pick = Rc::clone(&picked);
         let returned = Rc::new(RefCell::new(None::<AskedAll>));
         let given = Rc::clone(&returned);
@@ -2063,7 +2078,7 @@ mod tests {
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             wall_clock: Rc::new(move || {
                 wall.get()
-                    .unwrap_or(Timestamp::new(follows.get().get() as u64))
+                    .unwrap_or(Instant::<Authored>::new(follows.get().get() as u64))
             }),
             motion: Rc::new(move || reduced.get()),
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
@@ -2164,10 +2179,10 @@ mod tests {
 
     /// Plan a frame and paint it when the plan asks, as the frame loop does.
     fn frame(view: &mut MurmureView) -> bool {
-        frame_at(view, ambre_bus::PageTime::new(0.0))
+        frame_at(view, Instant::<PageLoad>::new(0.0))
     }
 
-    fn frame_at(view: &mut MurmureView, now: ambre_core::PageTime) -> bool {
+    fn frame_at(view: &mut MurmureView, now: Instant<PageLoad>) -> bool {
         view.update();
         let plan = view.plan_repaint(now, ambre_canvas::HudTick::Idle);
         let full = matches!(plan.content, ContentRepaint::Full);
@@ -2189,7 +2204,7 @@ mod tests {
         let messages = texts
             .iter()
             .enumerate()
-            .map(|(i, text)| message(ada, ambre_bus::Timestamp::new(i as u64), text))
+            .map(|(i, text)| message(ada, Instant::<Authored>::new(i as u64), text))
             .collect();
         let segment = Id::<Segment>::mint();
         send(page, channel, MurmureEvent::Messages { segment, messages });
@@ -2261,12 +2276,12 @@ mod tests {
         let mut page = page();
         let channel = Id::<Channel>::mint();
         let ada = Id::<User>::mint();
-        let root = message(ada, ambre_bus::Timestamp::new(0), "root");
+        let root = message(ada, Instant::<Authored>::new(0), "root");
         let segment = Id::<Segment>::mint();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         let replies =
-            ["one", "two", "three"].map(|text| message(ada, ambre_bus::Timestamp::new(1), text));
+            ["one", "two", "three"].map(|text| message(ada, Instant::<Authored>::new(1), text));
         let thread = Id::<Document>::mint();
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
@@ -2296,7 +2311,7 @@ mod tests {
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread,
-            messages: vec![message(ada, ambre_bus::Timestamp::new(4), "four")],
+            messages: vec![message(ada, Instant::<Authored>::new(4), "four")],
         };
         send(&page, channel, ev);
         page.view.update();
@@ -2313,8 +2328,8 @@ mod tests {
         let channel = Id::<Channel>::mint();
         let ada = Id::<User>::mint();
         let (read, unread) = (
-            message(ada, ambre_bus::Timestamp::new(0), "a"),
-            message(ada, ambre_bus::Timestamp::new(1), "b"),
+            message(ada, Instant::<Authored>::new(0), "a"),
+            message(ada, Instant::<Authored>::new(1), "b"),
         );
         let first = Some(unread.id);
         let segment = Id::<Segment>::mint();
@@ -2344,7 +2359,7 @@ mod tests {
     /// falls on the bytes a reader sees there.
     fn frame_with_fonts(view: &mut MurmureView) {
         view.update();
-        view.plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+        view.plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
@@ -2416,7 +2431,7 @@ mod tests {
         let mut page = page();
         let channel = Id::<Channel>::mint();
         let link = |text: &str, address: &str, range| {
-            let mut sent = message(Id::<User>::mint(), ambre_bus::Timestamp::new(0), text);
+            let mut sent = message(Id::<User>::mint(), Instant::<Authored>::new(0), text);
             sent.styles = vec![StyleMark {
                 style: TextStyle::Link(address.into()),
                 range,
@@ -2427,12 +2442,12 @@ mod tests {
             link(
                 "bad x",
                 "javascript:alert(1)",
-                CharSpan::from_usize_range(0..3),
+                Span::<Char>::from_usize_range(0..3),
             ),
             link(
                 "see site now",
                 "https://ambre.dev",
-                CharSpan::from_usize_range(4..8),
+                Span::<Char>::from_usize_range(4..8),
             ),
         ];
         let segment = Id::<Segment>::mint();
@@ -2473,9 +2488,9 @@ mod tests {
         frame_with_fonts(&mut page.view);
         page.view.touch_down(
             pointer(on_link.0 as f32, on_link.1 as f32),
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
-        assert!(page.view.touch_up(ambre_bus::PageTime::new(50.0)).is_some());
+        assert!(page.view.touch_up(Instant::<PageLoad>::new(50.0)).is_some());
         frame_with_fonts(&mut page.view);
         let opened = page.opened.borrow().clone();
         assert_eq!(
@@ -2496,7 +2511,7 @@ mod tests {
         let (me, ada) = (Id::<User>::mint(), Id::<User>::mint());
         page.me.set(Some(me));
         let channel = Id::<Channel>::mint();
-        let mut reacted = message(ada, ambre_bus::Timestamp::new(1), "hello");
+        let mut reacted = message(ada, Instant::<Authored>::new(1), "hello");
         reacted.reactions = vec![
             ambre_bus::Reaction {
                 emoji: ambre_bus::Emoji::from("\u{1F44D}"),
@@ -2576,13 +2591,13 @@ mod tests {
             &mut page,
             Key::ArrowLeft,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert!(key(
             &mut page,
             Key::Char(KeyChar::new(';')),
             Modifiers::PRIMARY,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(*page.asked_emoji.borrow(), [Region::Channel]);
         *page.emoji.borrow_mut() = Some((Region::Thread, ambre_bus::Emoji::from("\u{1F680}")));
@@ -2615,7 +2630,7 @@ mod tests {
     }
 
     /// A wheel event at `now`, `delta_mode` as the browser names it.
-    fn wheel(page: &mut Page, dy: f64, delta_mode: u32, now: ambre_core::PageTime) -> bool {
+    fn wheel(page: &mut Page, dy: f64, delta_mode: u32, now: Instant<PageLoad>) -> bool {
         page.clock.set(now);
         let ev = InputEvent::Wheel {
             delta: ambre_canvas::WheelDelta::new(
@@ -2635,7 +2650,7 @@ mod tests {
     fn segment(page: &Page, channel: Id<Channel>, from: u64, count: u64) -> Vec<MessageView> {
         let ada = Id::<User>::mint();
         let messages: Vec<_> = (from..from + count)
-            .map(|ts| message(ada, ambre_bus::Timestamp::new(ts), "hello"))
+            .map(|ts| message(ada, Instant::<Authored>::new(ts), "hello"))
             .collect();
         let ev = MurmureEvent::Messages {
             segment: Id::<Segment>::mint(),
@@ -2696,7 +2711,7 @@ mod tests {
         frame(&mut page.view);
         reads(&page);
         assert!(
-            wheel(&mut page, -3.0, 1, ambre_bus::PageTime::new(10.0)),
+            wheel(&mut page, -3.0, 1, Instant::<PageLoad>::new(10.0)),
             "the wheel is taken"
         );
         assert!(frame(&mut page.view));
@@ -2716,7 +2731,7 @@ mod tests {
         let (mut page, channel, _) = long_channel(200);
         frame(&mut page.view);
         assert_eq!(older(&page), [], "the oldest row is far above");
-        wheel(&mut page, -100_000.0, 0, ambre_bus::PageTime::new(10.0));
+        wheel(&mut page, -100_000.0, 0, Instant::<PageLoad>::new(10.0));
         assert!(frame(&mut page.view));
         assert_eq!(shown(&page.view).oldest_shown, OnScreen::Shown);
         let oldest = page
@@ -2727,7 +2742,7 @@ mod tests {
             .channel(channel)
             .and_then(|l| l.oldest_segment());
         assert_eq!(older(&page), oldest.into_iter().collect::<Vec<_>>());
-        wheel(&mut page, -50.0, 0, ambre_bus::PageTime::new(20.0));
+        wheel(&mut page, -50.0, 0, Instant::<PageLoad>::new(20.0));
         assert!(frame(&mut page.view));
         assert_eq!(older(&page), [], "asked once for this segment");
         let rested = page.view.resting_on().expect("resting at the top");
@@ -2740,7 +2755,7 @@ mod tests {
             "the rows above move nothing"
         );
         assert_eq!(shown(&page.view).oldest_shown, OnScreen::Hidden);
-        wheel(&mut page, -100_000.0, 0, ambre_bus::PageTime::new(30.0));
+        wheel(&mut page, -100_000.0, 0, Instant::<PageLoad>::new(30.0));
         assert!(frame(&mut page.view));
         assert_eq!(older(&page).len(), 1, "the new oldest segment asks again");
     }
@@ -2751,25 +2766,25 @@ mod tests {
     fn a_paused_glide_coasts_and_a_notch_never_does() {
         let (mut page, _, _) = long_channel(400);
         frame(&mut page.view);
-        wheel(&mut page, -2_000.0, 0, ambre_bus::PageTime::new(10.0));
-        frame_at(&mut page.view, ambre_bus::PageTime::new(10.0));
+        wheel(&mut page, -2_000.0, 0, Instant::<PageLoad>::new(10.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(10.0));
         for (i, now) in [1_000.0, 1_010.0, 1_020.0].into_iter().enumerate() {
-            wheel(&mut page, -10.0, 0, ambre_bus::PageTime::new(now));
-            frame_at(&mut page.view, ambre_bus::PageTime::new(now + i as f64));
+            wheel(&mut page, -10.0, 0, Instant::<PageLoad>::new(now));
+            frame_at(&mut page.view, Instant::<PageLoad>::new(now + i as f64));
         }
         let paused = page.view.resting_on();
-        frame_at(&mut page.view, ambre_bus::PageTime::new(1_100.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(1_100.0));
         assert!(page.view.scrolling());
-        frame_at(&mut page.view, ambre_bus::PageTime::new(1_116.0));
-        frame_at(&mut page.view, ambre_bus::PageTime::new(1_132.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(1_116.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(1_132.0));
         assert_ne!(page.view.resting_on(), paused, "the glide coasts on");
 
         page.view.kinetic.stop();
-        wheel(&mut page, -1.0, 1, ambre_bus::PageTime::new(2_000.0));
-        frame_at(&mut page.view, ambre_bus::PageTime::new(2_000.0));
+        wheel(&mut page, -1.0, 1, Instant::<PageLoad>::new(2_000.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(2_000.0));
         let notched = page.view.resting_on();
         assert!(!page.view.scrolling());
-        frame_at(&mut page.view, ambre_bus::PageTime::new(2_200.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(2_200.0));
         assert_eq!(page.view.resting_on(), notched, "a notch leaves no motion");
     }
 
@@ -2778,14 +2793,14 @@ mod tests {
     fn a_motion_stops_at_the_latest_row() {
         let (mut page, _, _) = long_channel(400);
         frame(&mut page.view);
-        wheel(&mut page, -60.0, 0, ambre_bus::PageTime::new(10.0));
-        frame_at(&mut page.view, ambre_bus::PageTime::new(10.0));
+        wheel(&mut page, -60.0, 0, Instant::<PageLoad>::new(10.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(10.0));
         for now in [1_000.0, 1_010.0, 1_020.0] {
-            wheel(&mut page, 10.0, 0, ambre_bus::PageTime::new(now));
+            wheel(&mut page, 10.0, 0, Instant::<PageLoad>::new(now));
         }
         let mut now = 1_100.0;
         while now < 1_300.0 {
-            frame_at(&mut page.view, ambre_bus::PageTime::new(now));
+            frame_at(&mut page.view, Instant::<PageLoad>::new(now));
             now += 16.0;
         }
         assert_eq!(page.view.resting_on(), None);
@@ -2793,7 +2808,7 @@ mod tests {
     }
 
     /// A key pressed at `now`, with `mods` held.
-    fn key(page: &mut Page, key: Key, mods: Modifiers, now: ambre_core::PageTime) -> bool {
+    fn key(page: &mut Page, key: Key, mods: Modifiers, now: Instant<PageLoad>) -> bool {
         page.clock.set(now);
         let ev = InputEvent::Key { key, mods };
         page.view.handle_input(&ev).is_yes()
@@ -2812,11 +2827,11 @@ mod tests {
             &mut paged,
             Key::PageUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(10.0)
+            Instant::<PageLoad>::new(10.0)
         ));
-        assert!(wheel(&mut wheeled, -1.0, 2, ambre_bus::PageTime::new(10.0)));
-        frame_at(&mut paged.view, ambre_bus::PageTime::new(10.0));
-        frame_at(&mut wheeled.view, ambre_bus::PageTime::new(10.0));
+        assert!(wheel(&mut wheeled, -1.0, 2, Instant::<PageLoad>::new(10.0)));
+        frame_at(&mut paged.view, Instant::<PageLoad>::new(10.0));
+        frame_at(&mut wheeled.view, Instant::<PageLoad>::new(10.0));
         // The two lists hold the same rows under other ids: compare places.
         let place = |view: &MurmureView, rows: &[MessageView]| {
             let (key, y) = view.resting_on().expect("a page up leaves the latest row");
@@ -2833,16 +2848,16 @@ mod tests {
             &mut paged,
             Key::PageDown,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(20.0)
+            Instant::<PageLoad>::new(20.0)
         ));
-        frame_at(&mut paged.view, ambre_bus::PageTime::new(20.0));
+        frame_at(&mut paged.view, Instant::<PageLoad>::new(20.0));
         assert_eq!(shown(&paged.view).latest_shown, OnScreen::Shown);
         assert!(
             !key(
                 &mut paged,
                 Key::PageUp,
                 Modifiers::PRIMARY,
-                ambre_bus::PageTime::new(30.0)
+                Instant::<PageLoad>::new(30.0)
             ),
             "the browser's chord"
         );
@@ -2850,7 +2865,7 @@ mod tests {
             &mut paged,
             Key::Char(KeyChar::A),
             Modifiers::NONE,
-            ambre_bus::PageTime::new(30.0)
+            Instant::<PageLoad>::new(30.0)
         ));
     }
 
@@ -2868,7 +2883,7 @@ mod tests {
                 page,
                 Key::PageUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(10.0),
+                Instant::<PageLoad>::new(10.0),
             );
             frame(&mut page.view);
             assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
@@ -2879,7 +2894,7 @@ mod tests {
             &mut page,
             Key::End,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(20.0)
+            Instant::<PageLoad>::new(20.0)
         ));
         frame(&mut page.view);
         assert_eq!(shown(&page.view).latest_shown, OnScreen::Shown);
@@ -2904,10 +2919,10 @@ mod tests {
         let at = centre(&page.view);
         page.view.touch_down(
             pointer(at.x as f32, at.y as f32),
-            ambre_bus::PageTime::new(100.0),
+            Instant::<PageLoad>::new(100.0),
         );
         assert_eq!(
-            page.view.touch_up(ambre_bus::PageTime::new(150.0)),
+            page.view.touch_up(Instant::<PageLoad>::new(150.0)),
             None,
             "the tap is taken"
         );
@@ -2928,18 +2943,18 @@ mod tests {
                 &mut page,
                 Key::PageUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(now),
+                Instant::<PageLoad>::new(now),
             );
-            frame_at(&mut page.view, ambre_bus::PageTime::new(now));
+            frame_at(&mut page.view, Instant::<PageLoad>::new(now));
         }
         segment(&page, channel, 5_000, 1);
         key(
             &mut page,
             Key::PageDown,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(40.0),
+            Instant::<PageLoad>::new(40.0),
         );
-        frame_at(&mut page.view, ambre_bus::PageTime::new(40.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(40.0));
         assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
         assert_eq!(
             reads(&page).0,
@@ -2950,10 +2965,10 @@ mod tests {
             &mut page,
             Key::End,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(50.0),
+            Instant::<PageLoad>::new(50.0),
         );
         assert_eq!(reads(&page).0, 0, "nothing is read before it paints");
-        frame_at(&mut page.view, ambre_bus::PageTime::new(50.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(50.0));
         assert_eq!(reads(&page).0, 1, "the new message showed, and is read");
     }
 
@@ -2976,7 +2991,7 @@ mod tests {
                 &mut page,
                 Key::ArrowUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(10.0)
+                Instant::<PageLoad>::new(10.0)
             ),
             "the key is taken"
         );
@@ -2993,20 +3008,20 @@ mod tests {
             &mut page,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(20.0),
+            Instant::<PageLoad>::new(20.0),
         );
         assert_eq!(page.view.focused(), row(&rows, 398));
         key(
             &mut page,
             Key::ArrowDown,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(30.0),
+            Instant::<PageLoad>::new(30.0),
         );
         key(
             &mut page,
             Key::ArrowDown,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(40.0),
+            Instant::<PageLoad>::new(40.0),
         );
         assert_eq!(
             page.view.focused(),
@@ -3019,7 +3034,7 @@ mod tests {
                 &mut page,
                 Key::ArrowUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(50.0 + f64::from(step)),
+                Instant::<PageLoad>::new(50.0 + f64::from(step)),
             );
             frame(&mut page.view);
             frame(&mut page.view);
@@ -3045,9 +3060,9 @@ mod tests {
                 &mut page,
                 Key::PageUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(now),
+                Instant::<PageLoad>::new(now),
             );
-            frame_at(&mut page.view, ambre_bus::PageTime::new(now));
+            frame_at(&mut page.view, Instant::<PageLoad>::new(now));
         }
         segment(&page, channel, 5_000, 1);
         for (step, arrow) in [
@@ -3064,7 +3079,7 @@ mod tests {
                 &mut page,
                 arrow,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(30.0 + step as f64),
+                Instant::<PageLoad>::new(30.0 + step as f64),
             );
             frame(&mut page.view);
         }
@@ -3085,7 +3100,7 @@ mod tests {
             &mut page,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(10.0),
+            Instant::<PageLoad>::new(10.0),
         );
         frame(&mut page.view);
         let focus = page.view.focused();
@@ -3100,9 +3115,9 @@ mod tests {
             &mut page,
             Key::PageUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(20.0),
+            Instant::<PageLoad>::new(20.0),
         );
-        frame_at(&mut page.view, ambre_bus::PageTime::new(20.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(20.0));
         page.said.borrow_mut().clear();
         segment(&page, channel, 6_000, 1);
         frame(&mut page.view);
@@ -3123,32 +3138,32 @@ mod tests {
             &mut page,
             Key::PageUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(10.0),
+            Instant::<PageLoad>::new(10.0),
         );
-        frame_at(&mut page.view, ambre_bus::PageTime::new(10.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(10.0));
         key(
             &mut page,
             Key::PageUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(20.0),
+            Instant::<PageLoad>::new(20.0),
         );
-        frame_at(&mut page.view, ambre_bus::PageTime::new(20.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(20.0));
         assert_eq!(*page.said.borrow(), [JUMP_HINT]);
         assert!(JUMP_HINT.contains("End"));
         assert!(key(
             &mut page,
             Key::End,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(30.0)
+            Instant::<PageLoad>::new(30.0)
         ));
-        frame_at(&mut page.view, ambre_bus::PageTime::new(30.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(30.0));
         key(
             &mut page,
             Key::PageUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(40.0),
+            Instant::<PageLoad>::new(40.0),
         );
-        frame_at(&mut page.view, ambre_bus::PageTime::new(40.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(40.0));
         assert_eq!(*page.said.borrow(), [JUMP_HINT, JUMP_HINT]);
     }
 
@@ -3160,13 +3175,13 @@ mod tests {
         let mut page = page();
         let channel = Id::<Channel>::mint();
         let ada = Id::<User>::mint();
-        let root = message(ada, ambre_bus::Timestamp::new(0), "root");
+        let root = message(ada, Instant::<Authored>::new(0), "root");
         let segment = Id::<Segment>::mint();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         let thread = Id::<Document>::mint();
         let replies: Vec<_> = (1..=200)
-            .map(|ts| message(ada, ambre_bus::Timestamp::new(ts), "hello"))
+            .map(|ts| message(ada, Instant::<Authored>::new(ts), "hello"))
             .collect();
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
@@ -3188,7 +3203,7 @@ mod tests {
         assert!(page.said.borrow().is_empty(), "the first list is not news");
 
         let clock = Rc::clone(&page.clock);
-        let press = |view: &mut MurmureView, key: Key, now: ambre_core::PageTime| {
+        let press = |view: &mut MurmureView, key: Key, now: Instant<PageLoad>| {
             clock.set(now);
             let taken = view.handle_input(&InputEvent::Key {
                 key,
@@ -3200,16 +3215,16 @@ mod tests {
         assert!(press(
             &mut view,
             Key::ArrowUp,
-            ambre_bus::PageTime::new(10.0)
+            Instant::<PageLoad>::new(10.0)
         ));
         assert_eq!(view.focused(), row(&replies, 199), "the last reply");
         assert_eq!(*page.said.borrow(), ["Ada, t: hello"]);
         assert!(press(
             &mut view,
             Key::PageUp,
-            ambre_bus::PageTime::new(20.0)
+            Instant::<PageLoad>::new(20.0)
         ));
-        press(&mut view, Key::PageUp, ambre_bus::PageTime::new(30.0));
+        press(&mut view, Key::PageUp, Instant::<PageLoad>::new(30.0));
         assert_eq!(
             shown(&view).latest_shown,
             OnScreen::Hidden,
@@ -3219,7 +3234,7 @@ mod tests {
             page.said.borrow().last().map(String::as_str),
             Some(JUMP_HINT)
         );
-        assert!(press(&mut view, Key::End, ambre_bus::PageTime::new(40.0)));
+        assert!(press(&mut view, Key::End, Instant::<PageLoad>::new(40.0)));
         assert_eq!(
             shown(&view).latest_shown,
             OnScreen::Shown,
@@ -3231,7 +3246,7 @@ mod tests {
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread,
-            messages: vec![message(ada, ambre_bus::Timestamp::new(500), "hello")],
+            messages: vec![message(ada, Instant::<Authored>::new(500), "hello")],
         };
         send(&page, channel, ev);
         frame(&mut page.view);
@@ -3250,18 +3265,18 @@ mod tests {
         let (mut page, _, _) = long_channel(200);
         frame(&mut page.view);
         page.view
-            .touch_down(pointer(10.0, 100.0), ambre_bus::PageTime::new(0.0));
+            .touch_down(pointer(10.0, 100.0), Instant::<PageLoad>::new(0.0));
         assert!(
             !page
                 .view
-                .touch_move(pointer(10.0, 102.0), ambre_bus::PageTime::new(10.0)),
+                .touch_move(pointer(10.0, 102.0), Instant::<PageLoad>::new(10.0)),
             "inside the slop"
         );
         assert!(
             page.view
-                .touch_move(pointer(10.0, 300.0), ambre_bus::PageTime::new(20.0))
+                .touch_move(pointer(10.0, 300.0), Instant::<PageLoad>::new(20.0))
         );
-        frame_at(&mut page.view, ambre_bus::PageTime::new(20.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(20.0));
         assert!(
             page.view.resting_on().is_some(),
             "the list followed the finger"
@@ -3269,16 +3284,16 @@ mod tests {
         page.view.touch_cancel();
         assert!(!page.view.scrolling());
         page.view
-            .touch_down(pointer(10.0, 100.0), ambre_bus::PageTime::new(100.0));
+            .touch_down(pointer(10.0, 100.0), Instant::<PageLoad>::new(100.0));
         assert_eq!(
-            page.view.touch_up(ambre_bus::PageTime::new(150.0)),
+            page.view.touch_up(Instant::<PageLoad>::new(150.0)),
             Some(pointer(10.0, 100.0))
         );
         page.view
-            .touch_down(pointer(10.0, 100.0), ambre_bus::PageTime::new(200.0));
+            .touch_down(pointer(10.0, 100.0), Instant::<PageLoad>::new(200.0));
         page.view
-            .touch_move(pointer(10.0, 300.0), ambre_bus::PageTime::new(300.0));
-        assert_eq!(page.view.touch_up(ambre_bus::PageTime::new(1_000.0)), None);
+            .touch_move(pointer(10.0, 300.0), Instant::<PageLoad>::new(300.0));
+        assert_eq!(page.view.touch_up(Instant::<PageLoad>::new(1_000.0)), None);
     }
 
     /// The middle height of the row at `index`, as the last paint placed it.
@@ -3307,8 +3322,8 @@ mod tests {
         let channel = Id::<Channel>::mint();
         let ada = Id::<User>::mint();
         let messages = vec![
-            message(ada, ambre_bus::Timestamp::new(10), "a"),
-            message(ada, ambre_bus::Timestamp::new(11), "b"),
+            message(ada, Instant::<Authored>::new(10), "a"),
+            message(ada, Instant::<Authored>::new(11), "b"),
         ];
         let segment = Id::<Segment>::mint();
         send(&page, channel, MurmureEvent::Messages { segment, messages });
@@ -3316,8 +3331,8 @@ mod tests {
         let band = MurmureEvent::Unreadable {
             segment: older,
             cause,
-            from: Timestamp::new(0),
-            to: Some(Timestamp::new(10)),
+            from: Instant::<Authored>::new(0),
+            to: Some(Instant::<Authored>::new(10)),
         };
         send(&page, channel, band);
         page.pane.set(MurmurePane::channel(channel));
@@ -3362,9 +3377,9 @@ mod tests {
         assert!(retried(&page).is_empty(), "a message is no band");
 
         page.view
-            .touch_down(pointer(10.0, band_y), ambre_bus::PageTime::new(0.0));
+            .touch_down(pointer(10.0, band_y), Instant::<PageLoad>::new(0.0));
         assert_eq!(
-            page.view.touch_up(ambre_bus::PageTime::new(50.0)),
+            page.view.touch_up(Instant::<PageLoad>::new(50.0)),
             None,
             "the tap is taken"
         );
@@ -3375,7 +3390,7 @@ mod tests {
                 &mut page,
                 Key::Enter,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ),
             "no focus yet"
         );
@@ -3384,7 +3399,7 @@ mod tests {
                 &mut page,
                 Key::ArrowUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ));
             frame(&mut page.view);
         }
@@ -3393,7 +3408,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(retried(&page), [(channel, older)]);
     }
@@ -3405,9 +3420,9 @@ mod tests {
         let (mut page, _, _) = banded(Unreadable::BeforeHistoryBoundary);
         let band_y = middle_of(&page.view, 0);
         page.view
-            .touch_down(pointer(10.0, band_y), ambre_bus::PageTime::new(0.0));
+            .touch_down(pointer(10.0, band_y), Instant::<PageLoad>::new(0.0));
         assert_eq!(
-            page.view.touch_up(ambre_bus::PageTime::new(50.0)),
+            page.view.touch_up(Instant::<PageLoad>::new(50.0)),
             Some(pointer(10.0, band_y))
         );
         assert!(retried(&page).is_empty());
@@ -3423,8 +3438,8 @@ mod tests {
         let ada = Id::<User>::mint();
         let segment = Id::<Segment>::mint();
         let messages = vec![
-            message(ada, ambre_bus::Timestamp::new(0), "a"),
-            message(ada, ambre_bus::Timestamp::new(1), "b"),
+            message(ada, Instant::<Authored>::new(0), "a"),
+            message(ada, Instant::<Authored>::new(1), "b"),
         ];
         let second = messages[1].id;
         send(&page, channel, MurmureEvent::Messages { segment, messages });
@@ -3471,11 +3486,11 @@ mod tests {
         let mut page = page();
         let channel = Id::<Channel>::mint();
         let ada = Id::<User>::mint();
-        let root = message(ada, ambre_bus::Timestamp::new(0), "root");
+        let root = message(ada, Instant::<Authored>::new(0), "root");
         let segment = Id::<Segment>::mint();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
-        let reply = message(ada, ambre_bus::Timestamp::new(1), "one");
+        let reply = message(ada, Instant::<Authored>::new(1), "one");
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread: Id::<Document>::mint(),
@@ -3498,13 +3513,13 @@ mod tests {
         let _ = reads(&page);
 
         let y = middle_of(&thread_view, 0);
-        thread_view.touch_down(pointer(10.0, y), ambre_bus::PageTime::new(0.0));
+        thread_view.touch_down(pointer(10.0, y), Instant::<PageLoad>::new(0.0));
         frame_at(
             &mut thread_view,
-            ambre_bus::PageTime::new(LONG_PRESS.get() - 1.0),
+            Instant::<PageLoad>::new(LONG_PRESS.get() - 1.0),
         );
         assert!(page.acted.borrow().is_empty(), "not yet held");
-        frame_at(&mut thread_view, ambre_bus::PageTime::new(LONG_PRESS.get()));
+        frame_at(&mut thread_view, Instant::<PageLoad>::new(LONG_PRESS.get()));
         let target = MessageTarget {
             channel,
             at: MessageAt::Thread(root.id),
@@ -3521,13 +3536,13 @@ mod tests {
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
         assert_eq!(
-            thread_view.touch_up(ambre_bus::PageTime::new(LONG_PRESS.get() + 100.0)),
+            thread_view.touch_up(Instant::<PageLoad>::new(LONG_PRESS.get() + 100.0)),
             None,
             "no tap"
         );
         frame_at(
             &mut thread_view,
-            ambre_bus::PageTime::new(LONG_PRESS.get() + 200.0),
+            Instant::<PageLoad>::new(LONG_PRESS.get() + 200.0),
         );
         assert_eq!(page.acted.borrow().len(), 1, "said once");
         assert!(page.commands.try_recv().is_err(), "nothing was sent");
@@ -3544,7 +3559,7 @@ mod tests {
             &mut page,
             Key::ContextMenu,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(10.0)
+            Instant::<PageLoad>::new(10.0)
         ));
         assert_eq!(page.acted.borrow().as_slice(), [None], "no focus yet");
 
@@ -3552,7 +3567,7 @@ mod tests {
             &mut page,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(20.0)
+            Instant::<PageLoad>::new(20.0)
         ));
         frame(&mut page.view);
         let (_, bottom) = focus_of(&shown(&page.view)).expect("the focus on screen");
@@ -3562,7 +3577,7 @@ mod tests {
             &mut page,
             Key::ContextMenu,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(30.0)
+            Instant::<PageLoad>::new(30.0)
         ));
         let shift_f10 = InputEvent::Key {
             key: Key::F(FunctionKey::F10),
@@ -3574,7 +3589,7 @@ mod tests {
                 &mut page,
                 Key::F(FunctionKey::F10),
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(40.0)
+                Instant::<PageLoad>::new(40.0)
             ),
             "a plain F10 is the browser's"
         );
@@ -3616,11 +3631,7 @@ mod tests {
         assert!(at.is_some_and(|i| (14..20).contains(&i)), "{at:?}");
         assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
 
-        let later = message(
-            Id::<User>::mint(),
-            ambre_bus::Timestamp::new(9_000),
-            "later",
-        );
+        let later = message(Id::<User>::mint(), Instant::<Authored>::new(9_000), "later");
         let at = MessageRef {
             segment: Id::<Segment>::mint(),
             message: later.id,
@@ -3754,12 +3765,13 @@ mod tests {
 
         // The page's clock restarts at every load: the message is dated by the
         // wall clock, never by it.
-        page.wall.set(Some(Timestamp::new(1_700_000_000_000)));
+        page.wall
+            .set(Some(Instant::<Authored>::new(1_700_000_000_000)));
         assert!(key(
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(1_234.0)
+            Instant::<PageLoad>::new(1_234.0)
         ));
         frame_with_fonts(&mut page.view);
         assert_eq!(sent(&page), vec![("a\nb".to_owned(), 1_700_000_000_000)]);
@@ -3823,7 +3835,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert!(sent_files(&page).is_empty(), "the upload holds the send");
@@ -3840,7 +3852,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let sent = sent_files(&page);
@@ -3877,7 +3889,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(sent_files(&page), vec![Vec::new()]);
@@ -3922,7 +3934,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(sent_files(&page), vec![Vec::new()]);
@@ -3990,7 +4002,7 @@ mod tests {
         let mut messages: Vec<_> = texts
             .iter()
             .enumerate()
-            .map(|(i, text)| message(ada, ambre_bus::Timestamp::new(i as u64), text))
+            .map(|(i, text)| message(ada, Instant::<Authored>::new(i as u64), text))
             .collect();
         messages[0].attachments = vec![file.clone()];
         let segment = Id::<Segment>::mint();
@@ -4014,7 +4026,7 @@ mod tests {
 
         let frame = || PictureFrame {
             pixels: vec![0; 2 * 4].into(),
-            delay: ambre_core::Millis::new(100),
+            delay: TimeSpan::<Ms>::new(100),
         };
         let gif = Picture {
             size: ambre_core::Size::new(ambre_core::Px::new(2), ambre_core::Px::new(1)),
@@ -4026,15 +4038,15 @@ mod tests {
         frame_with_fonts(&mut page.view);
         assert_eq!(
             page.view.last_painted().and_then(|p| p.next_frame),
-            Some(ambre_core::PageTime::new(100.0))
+            Some(Instant::<PageLoad>::new(100.0))
         );
         assert!(
-            !frame_at(&mut page.view, ambre_bus::PageTime::new(50.0)),
+            !frame_at(&mut page.view, Instant::<PageLoad>::new(50.0)),
             "no frame is due yet"
         );
-        page.clock.set(ambre_bus::PageTime::new(100.0));
+        page.clock.set(Instant::<PageLoad>::new(100.0));
         assert!(
-            frame_at(&mut page.view, ambre_bus::PageTime::new(100.0)),
+            frame_at(&mut page.view, Instant::<PageLoad>::new(100.0)),
             "the next frame is due"
         );
     }
@@ -4052,7 +4064,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         let frame = || PictureFrame {
             pixels: vec![0; 4].into(),
-            delay: ambre_core::Millis::new(100),
+            delay: TimeSpan::<Ms>::new(100),
         };
         let picture = Some(Picture {
             size: ambre_core::Size::new(ambre_core::Px::new(1), ambre_core::Px::new(1)),
@@ -4062,7 +4074,7 @@ mod tests {
         send(&page, channel, MurmureEvent::Picture { media_ref, picture });
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.last_painted().and_then(|p| p.next_frame), None);
-        assert!(!frame_at(&mut page.view, ambre_bus::PageTime::new(1000.0)));
+        assert!(!frame_at(&mut page.view, Instant::<PageLoad>::new(1000.0)));
     }
 
     /// `MURMURE-131`: a picture scrolled off screen is not painted, so it is
@@ -4094,7 +4106,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
         assert!(sent(&page).is_empty());
@@ -4104,7 +4116,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert!(sent(&page).is_empty(), "white space is not a message");
@@ -4131,7 +4143,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(sent(&page), vec![("for b".to_owned(), 0)]);
@@ -4157,7 +4169,7 @@ mod tests {
         assert_eq!(page.view.list_height().get(), 400.0 - band);
         page.view.update();
         page.view
-            .plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+            .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
@@ -4196,7 +4208,7 @@ mod tests {
             &mut page,
             Key::ArrowLeft,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert!(shift_key(&mut page, Key::ArrowLeft));
         assert!(
@@ -4204,7 +4216,7 @@ mod tests {
                 &mut page,
                 Key::ArrowUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ),
             "the caret takes it"
         );
@@ -4219,7 +4231,7 @@ mod tests {
                 &mut page,
                 Key::F(FunctionKey::F5),
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ),
             "a key it does not use stays the page's"
         );
@@ -4228,7 +4240,7 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert!(!page.view.composer().focused());
         assert!(
@@ -4236,7 +4248,7 @@ mod tests {
                 &mut page,
                 Key::ArrowUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ),
             "the list takes it again"
         );
@@ -4257,7 +4269,7 @@ mod tests {
                 &mut page,
                 Key::Char(KeyChar::A),
                 Modifiers::PRIMARY,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ),
             "Ctrl+A selects the draft"
         );
@@ -4277,7 +4289,7 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(
             page.view.clipboard(ClipboardWrite::Cut),
@@ -4329,7 +4341,7 @@ mod tests {
             &mut page,
             Key::End,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert!(
             command(&mut page, Key::Char(KeyChar::Z)),
@@ -4394,7 +4406,7 @@ mod tests {
                 &mut page,
                 Key::Backspace,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0),
+                Instant::<PageLoad>::new(0.0),
             );
             frame_with_fonts(&mut page.view);
         }
@@ -4431,7 +4443,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(sent(&page).len(), 1);
@@ -4475,7 +4487,7 @@ mod tests {
         let at = MessageAt::Segment(Id::<Segment>::mint());
         let ada = ambre_bus::Mention {
             target: ambre_bus::MentionTarget::User(Id::<User>::mint()),
-            range: CharSpan::from_usize_range(3..7),
+            range: Span::<Char>::from_usize_range(3..7),
         };
         *page.editing.borrow_mut() = Some(PendingEdit {
             channel,
@@ -4510,7 +4522,7 @@ mod tests {
                 &mut page,
                 Key::Backspace,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0),
+                Instant::<PageLoad>::new(0.0),
             );
         }
         type_text(&mut page, "you");
@@ -4518,7 +4530,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
         let (sent_edits, messages) = edits(&page);
@@ -4537,19 +4549,19 @@ mod tests {
             &mut page,
             Key::Char(KeyChar::A),
             Modifiers::PRIMARY,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Backspace,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert!(page.view.composer().editing(channel), "a blank edit stays");
@@ -4558,7 +4570,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
         assert_eq!(
@@ -4584,7 +4596,7 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
         assert!(!page.view.composer().editing(channel));
@@ -4597,7 +4609,7 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert!(!page.view.composer().focused());
     }
@@ -4648,15 +4660,15 @@ mod tests {
             &mut page,
             Key::PageUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(10.0)
+            Instant::<PageLoad>::new(10.0)
         ));
-        frame_at(&mut page.view, ambre_bus::PageTime::new(10.0));
+        frame_at(&mut page.view, Instant::<PageLoad>::new(10.0));
         assert_eq!(reads(&page).0, 1, "the first paint read the latest");
         assert!(key(
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(20.0)
+            Instant::<PageLoad>::new(20.0)
         ));
         assert_eq!(reads(&page).0, 1, "Escape marks the channel read");
 
@@ -4668,7 +4680,7 @@ mod tests {
             &mut composing,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert!(!composing.view.composer().focused());
         assert_eq!(
@@ -4690,7 +4702,7 @@ mod tests {
                 &mut thread,
                 Key::Escape,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ),
             "the thread leaves it"
         );
@@ -4702,16 +4714,16 @@ mod tests {
         let mut page = page();
         let (me, bob) = (Id::<User>::mint(), Id::<User>::mint());
         page.me.set(Some(me));
-        let own = message(me, ambre_bus::Timestamp::new(0), "mine");
+        let own = message(me, Instant::<Authored>::new(0), "mine");
         let deleted = MessageView {
             deleted: ambre_bus::Deletion::Deleted,
             text: String::new(),
-            ..message(me, ambre_bus::Timestamp::new(1), "gone")
+            ..message(me, Instant::<Authored>::new(1), "gone")
         };
         let messages = vec![
             own.clone(),
             deleted,
-            message(bob, ambre_bus::Timestamp::new(2), "theirs"),
+            message(bob, Instant::<Authored>::new(2), "theirs"),
         ];
         let segment = Id::<Segment>::mint();
         send(&page, channel, MurmureEvent::Messages { segment, messages });
@@ -4733,7 +4745,7 @@ mod tests {
             &mut page,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("x"));
         assert!(!page.view.composer().editing(channel), "a draft keeps Up");
@@ -4742,7 +4754,7 @@ mod tests {
             &mut page,
             Key::Delete,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
 
@@ -4750,7 +4762,7 @@ mod tests {
             &mut page,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("mine"));
         assert!(page.view.composer().editing(channel));
@@ -4759,7 +4771,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let (sent_edits, messages) = edits(&page);
@@ -4784,7 +4796,7 @@ mod tests {
                 &mut page,
                 Key::ArrowUp,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ),
             "the caret takes it"
         );
@@ -4798,7 +4810,7 @@ mod tests {
             &mut signed_out,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut signed_out.view);
         assert!(!signed_out.view.composer().editing(channel));
@@ -4835,9 +4847,9 @@ mod tests {
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         page.view
-            .touch_down(pointer(40.0, 395.0), ambre_bus::PageTime::new(0.0));
+            .touch_down(pointer(40.0, 395.0), Instant::<PageLoad>::new(0.0));
         assert_eq!(
-            page.view.touch_up(ambre_bus::PageTime::new(50.0)),
+            page.view.touch_up(Instant::<PageLoad>::new(50.0)),
             None,
             "the tap is taken"
         );
@@ -4886,20 +4898,20 @@ mod tests {
             &mut page,
             Key::ArrowLeft,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         shift_key(&mut page, Key::ArrowLeft);
         key(
             &mut page,
             Key::Char(KeyChar::A),
             Modifiers::PRIMARY,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::End,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(
             samples(&page).0,
@@ -4910,7 +4922,7 @@ mod tests {
             &mut page,
             Key::Backspace,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(samples(&page).0, 1, "a deleted character");
         shift_key(&mut page, Key::Enter);
@@ -4921,7 +4933,7 @@ mod tests {
             &mut page,
             Key::Char(KeyChar::A),
             Modifiers::PRIMARY,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         samples(&page);
@@ -4939,13 +4951,13 @@ mod tests {
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         assert_eq!(samples(&page).1, 1, "the first paint ticks");
-        page.clock.set(ambre_bus::PageTime::new(
-            TICK_PERIOD.to_page_millis().get() - 1.0,
+        page.clock.set(Instant::<PageLoad>::new(
+            TICK_PERIOD.to_fractional().get() - 1.0,
         ));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 0, "inside the period");
         page.clock
-            .set(ambre_bus::PageTime::new(TICK_PERIOD.to_page_millis().get()));
+            .set(Instant::<PageLoad>::new(TICK_PERIOD.to_fractional().get()));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "one period later");
 
@@ -4960,8 +4972,8 @@ mod tests {
             ambre_core::Px::new(300),
             ambre_core::Px::new(400),
         ));
-        page.clock.set(ambre_bus::PageTime::new(
-            10.0 * TICK_PERIOD.to_page_millis().get(),
+        page.clock.set(Instant::<PageLoad>::new(
+            10.0 * TICK_PERIOD.to_fractional().get(),
         ));
         frame(&mut thread_view);
         assert_eq!(samples(&page).1, 0, "the thread's region ticks nothing");
@@ -4974,7 +4986,7 @@ mod tests {
     fn strip_runs(page: &mut Page) -> Vec<usize> {
         page.view.update();
         page.view
-            .plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+            .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
@@ -5086,17 +5098,17 @@ mod tests {
         let mut page = page();
         let (me, bob) = (Id::<User>::mint(), Id::<User>::mint());
         page.me.set(Some(me));
-        let root = message(me, ambre_bus::Timestamp::new(0), "root");
+        let root = message(me, Instant::<Authored>::new(0), "root");
         let segment = Id::<Segment>::mint();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
-        let own = message(me, ambre_bus::Timestamp::new(1), "mine");
+        let own = message(me, Instant::<Authored>::new(1), "mine");
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread: Id::<Document>::mint(),
             messages: vec![
                 own.clone(),
-                message(bob, ambre_bus::Timestamp::new(2), "theirs"),
+                message(bob, Instant::<Authored>::new(2), "theirs"),
             ],
         };
         send(&page, channel, ev);
@@ -5166,7 +5178,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(1_234.0)
+            Instant::<PageLoad>::new(1_234.0)
         ));
         frame_with_fonts(&mut page.view);
         assert_eq!(replies(&page), [(root, "ok".to_owned(), 1_234)]);
@@ -5215,7 +5227,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(replies(&page).len(), 1);
@@ -5257,7 +5269,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let (sent_edits, messages) = edits(&page);
@@ -5281,7 +5293,7 @@ mod tests {
             &mut page,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         let of = DraftOf::Thread(channel, root);
         assert_eq!(painted(&mut page, of).as_deref(), Some("mine"));
@@ -5301,7 +5313,7 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         assert!(!page.view.composer().focused());
         assert!(matches!(page.pane.get(), MurmurePane::Thread { .. }));
@@ -5309,7 +5321,7 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         let MurmurePane::Channel { channel: shown, at } = page.pane.get() else {
             panic!("the channel shows, got {:?}", page.pane.get());
@@ -5322,7 +5334,7 @@ mod tests {
                 &mut page,
                 Key::Escape,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(0.0)
             ),
             "no thread left to close"
         );
@@ -5339,7 +5351,7 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
         assert_eq!(reads(&page), (0, 0), "the Escape reads nothing");
@@ -5358,13 +5370,13 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         drop(std::mem::replace(&mut page.view, channel_view));
         page.view = page.view.region(ambre_core::Size::new(
@@ -5414,7 +5426,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [true]);
@@ -5427,7 +5439,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [false], "the next reply stays");
@@ -5447,9 +5459,9 @@ mod tests {
         let bottom = page.view.size().height.get() - ALSO_PX / 2.0;
         for checked in [true, false] {
             page.view
-                .touch_down(pointer(10.0, bottom), ambre_bus::PageTime::new(0.0));
+                .touch_down(pointer(10.0, bottom), Instant::<PageLoad>::new(0.0));
             assert_eq!(
-                page.view.touch_up(ambre_bus::PageTime::new(20.0)),
+                page.view.touch_up(Instant::<PageLoad>::new(20.0)),
                 None,
                 "the tap is taken"
             );
@@ -5485,7 +5497,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [true]);
@@ -5501,7 +5513,7 @@ mod tests {
     fn glyph_runs(page: &mut Page) -> Vec<usize> {
         page.view.update();
         page.view
-            .plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+            .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
@@ -5586,11 +5598,11 @@ mod tests {
                 replies: ambre_core::Tally::<ambre_bus::Replies>::new(1),
                 last_replier: Some(ada),
             }),
-            ..message(ada, ambre_bus::Timestamp::new(0), "root")
+            ..message(ada, Instant::<Authored>::new(0), "root")
         };
         let copy = MessageView {
             also_in_thread: Some(thread),
-            ..message(ada, ambre_bus::Timestamp::new(1), "ok")
+            ..message(ada, Instant::<Authored>::new(1), "ok")
         };
         let segment = Id::<Segment>::mint();
         let messages = vec![root.clone(), copy];
@@ -5702,7 +5714,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
         assert!(drafts_sent(&page).is_empty(), "the pick sent nothing");
@@ -5716,7 +5728,7 @@ mod tests {
             &mut page,
             Key::Tab,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
         type_text(&mut page, "hi");
@@ -5724,7 +5736,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
@@ -5752,14 +5764,14 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         key(
             &mut page,
             Key::Home,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         type_text(&mut page, "é ");
         frame_with_fonts(&mut page.view);
@@ -5767,7 +5779,7 @@ mod tests {
             &mut page,
             Key::End,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         type_text(&mut page, "@channel");
         frame_with_fonts(&mut page.view);
@@ -5775,7 +5787,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(
@@ -5787,19 +5799,19 @@ mod tests {
             &mut page,
             Key::Backspace,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Backspace,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
@@ -5816,7 +5828,7 @@ mod tests {
     fn styled(style: ambre_bus::TextStyle, range: std::ops::Range<usize>) -> ambre_bus::StyleMark {
         ambre_bus::StyleMark {
             style,
-            range: CharSpan::from_usize_range(range),
+            range: Span::<Char>::from_usize_range(range),
         }
     }
 
@@ -5840,7 +5852,7 @@ mod tests {
             &mut page,
             Key::End,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         type_slowly(&mut page, " _now_");
         assert_eq!(
@@ -5853,7 +5865,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
@@ -5872,7 +5884,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
@@ -5940,14 +5952,14 @@ mod tests {
         let spans = page.view.composer().spans(channel);
         assert_eq!(spans.len(), 4);
         assert_eq!(spans[3].italic, ambre_core::Slant::Italic);
-        assert_eq!(spans[3].range, ByteSpan::from_usize_range(9..10));
+        assert_eq!(spans[3].range, Span::<Byte>::from_usize_range(9..10));
         // A draft with no mark draws none.
         for _ in 0.."é b c d e".chars().count() {
             key(
                 &mut page,
                 Key::Backspace,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0),
+                Instant::<PageLoad>::new(0.0),
             );
         }
         frame_with_fonts(&mut page.view);
@@ -5968,7 +5980,7 @@ mod tests {
             &mut page,
             Key::ArrowLeft,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         type_slowly(&mut page, "**x**");
         assert_eq!(painted(&mut page, channel).as_deref(), Some("a **x**b"));
@@ -5984,7 +5996,7 @@ mod tests {
     fn margin_marks(page: &mut Page) -> u32 {
         page.view.update();
         page.view
-            .plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+            .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
@@ -6030,7 +6042,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
@@ -6079,7 +6091,7 @@ mod tests {
         type_slowly(&mut page, "plain");
         page.view.update();
         page.view
-            .plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+            .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
@@ -6153,7 +6165,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let sent = drafts_sent(&page);
@@ -6209,7 +6221,7 @@ mod tests {
             &mut page,
             Key::ArrowRight,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(
@@ -6242,7 +6254,7 @@ mod tests {
             &mut page,
             Key::ArrowLeft,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("o"));
@@ -6253,7 +6265,7 @@ mod tests {
             &mut page,
             Key::Backspace,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("space"));
@@ -6283,7 +6295,7 @@ mod tests {
             &mut page,
             Key::Home,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let line = last(&page).expect("the line said");
@@ -6373,7 +6385,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(drafts_sent(&page).len(), 1, "the message left");
@@ -6446,7 +6458,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(edits(&page), (Vec::new(), 0), "nothing changed");
@@ -6459,7 +6471,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         let (sent, messages) = edits(&page);
@@ -6487,7 +6499,7 @@ mod tests {
             &mut page,
             Key::ArrowDown,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
         assert_eq!(chosen(&page), Some(1));
@@ -6496,13 +6508,13 @@ mod tests {
             &mut page,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::ArrowUp,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(chosen(&page), Some(2), "Up from the first wraps");
@@ -6510,7 +6522,7 @@ mod tests {
             &mut page,
             Key::Escape,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0)
+            Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
         assert_eq!(listed(&page), None);
@@ -6533,11 +6545,13 @@ mod tests {
         let (mut page, ..) = mentioning(channel);
         type_text(&mut page, "@");
         frame_with_fonts(&mut page.view);
-        page.picked.set(Some((Region::Thread, OfferIndex::new(1))));
+        page.picked
+            .set(Some((Region::Thread, Pos::<MentionEntry>::new(1))));
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some("@"));
         assert!(page.picked.get().is_some(), "the thread's pick waits");
-        page.picked.set(Some((Region::Channel, OfferIndex::new(1))));
+        page.picked
+            .set(Some((Region::Channel, Pos::<MentionEntry>::new(1))));
         frame_with_fonts(&mut page.view);
         frame_with_fonts(&mut page.view);
         assert_eq!(
@@ -6561,11 +6575,11 @@ mod tests {
             mentions: vec![
                 Mention {
                     target: MentionTarget::Channel,
-                    range: CharSpan::from_usize_range(0..8),
+                    range: Span::<Char>::from_usize_range(0..8),
                 },
                 Mention {
                     target: MentionTarget::User(bob),
-                    range: CharSpan::from_usize_range(9..13),
+                    range: Span::<Char>::from_usize_range(9..13),
                 },
             ],
         };
@@ -6593,7 +6607,7 @@ mod tests {
                 &mut page,
                 Key::Backspace,
                 Modifiers::NONE,
-                ambre_bus::PageTime::new(0.0),
+                Instant::<PageLoad>::new(0.0),
             );
         }
         frame_with_fonts(&mut page.view);
@@ -6625,7 +6639,7 @@ mod tests {
             &mut page,
             Key::Enter,
             Modifiers::NONE,
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(drafts_sent(&page), vec![draft]);

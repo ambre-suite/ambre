@@ -3,9 +3,10 @@
 
 use super::{TrameOutcome, TrameState, col_to_alpha, default_sheet};
 use crate::model::Uid;
-use crate::{CellPos, Col, ColCount, Row, RowCount};
+use crate::{CellPos, Col, Row};
 use crate::{HeaderRow, SortKey, SortOrder, TrameCommand, TrameEvent};
 use ambre_bus::{FilterKind, FilterOp, SheetId};
+use ambre_core::index::Pos;
 
 use crate::test_support::{at, span};
 
@@ -43,10 +44,10 @@ fn bold_patch() -> crate::StylePatch {
 fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(999),
-        row_start: Row::new(row),
-        row_end: Row::new(row),
-        col_start: Col::new(col),
-        col_end: Col::new(col),
+        row_start: Pos::<Row>::new(row),
+        row_end: Pos::<Row>::new(row),
+        col_start: Pos::<Col>::new(col),
+        col_end: Pos::<Col>::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -59,10 +60,10 @@ fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
 fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(999),
-        row_start: Row::new(row),
-        row_end: Row::new(row),
-        col_start: Col::new(col),
-        col_end: Col::new(col),
+        row_start: Pos::<Row>::new(row),
+        row_end: Pos::<Row>::new(row),
+        col_start: Pos::<Col>::new(col),
+        col_end: Pos::<Col>::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -74,10 +75,10 @@ fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
 fn read_display(state: &mut TrameState, row: u32, col: u32) -> crate::DisplayCell {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(5000),
-        row_start: Row::new(row),
-        row_end: Row::new(row),
-        col_start: Col::new(col),
-        col_end: Col::new(col),
+        row_start: Pos::<Row>::new(row),
+        row_end: Pos::<Row>::new(row),
+        col_start: Pos::<Col>::new(col),
+        col_end: Pos::<Col>::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -98,10 +99,10 @@ fn second_sheet_id(state: &TrameState) -> SheetId {
 fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec<String> {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(version),
-        row_start: Row::new(0),
-        row_end: Row::new(row_end),
-        col_start: Col::new(0),
-        col_end: Col::new(col),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(row_end),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(col),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -110,7 +111,7 @@ fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec
         .map(|r| {
             cells
                 .iter()
-                .find(|c| c.row == Row::new(r) && c.col == Col::new(col))
+                .find(|c| c.row == Pos::<Row>::new(r) && c.col == Pos::<Col>::new(col))
                 .map(|c| c.text.clone())
                 .unwrap_or_default()
         })
@@ -126,8 +127,8 @@ fn is_filtered(state: &mut TrameState, row: u32, col: u32) -> bool {
 fn seed_col_a(state: &mut TrameState, values: &[&str]) {
     for (r, v) in values.iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(r as u32),
-            col: Col::new(0),
+            row: Pos::<Row>::new(r as u32),
+            col: Pos::<Col>::new(0),
             text: (*v).to_owned(),
         });
     }
@@ -145,23 +146,23 @@ fn find_query(
 /// Seed a few cells on the active sheet for the find/replace tests.
 fn seed_find(state: &mut TrameState) {
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "apple".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "Apple pie".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(2),
-        col: Col::new(0),
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(0),
         text: "banana".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(3),
-        col: Col::new(0),
+        row: Pos::<Row>::new(3),
+        col: Pos::<Col>::new(0),
         text: "APPLE".to_owned(),
     });
 }
@@ -175,7 +176,7 @@ fn find_result(out: &TrameOutcome) -> (Vec<(u32, u32)>, Option<usize>) {
                     .iter()
                     .map(|at| (at.row.get(), at.col.get()))
                     .collect(),
-                active.map(ambre_bus::app::find::MatchIndex::to_usize),
+                active.map(Pos::<ambre_bus::app::find::Match>::to_usize),
             )),
             _ => None,
         })
@@ -228,10 +229,10 @@ fn viewport_metrics(
 ) -> (Vec<f32>, Vec<f32>) {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(99),
-        row_start: Row::new(r0),
-        row_end: Row::new(r1),
-        col_start: Col::new(c0),
-        col_end: Col::new(c1),
+        row_start: Pos::<Row>::new(r0),
+        row_end: Pos::<Row>::new(r1),
+        col_start: Pos::<Col>::new(c0),
+        col_end: Pos::<Col>::new(c1),
     });
     let TrameEvent::ViewportData {
         col_widths,

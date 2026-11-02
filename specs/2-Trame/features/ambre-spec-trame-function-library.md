@@ -103,8 +103,8 @@ status values are normative in `ambre-spec-template.md`.
 #[derive(Clone, Copy)]
 pub struct FnCtx {
     pub now_serial: DateSerial,  // the recomputation clock, one instant per pass
-    pub cell_row: Option<Row>,   // the position of the cell being computed; None when unknown
-    pub cell_col: Option<Col>,
+    pub cell_row: Option<Pos<Row>>,   // the position of the cell being computed; None when unknown
+    pub cell_col: Option<Pos<Col>>,
 }
 
 pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue;

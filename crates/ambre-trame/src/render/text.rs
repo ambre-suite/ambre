@@ -5,6 +5,7 @@
 // the `use super::*` glob (the parent re-exports every renderer item).
 
 use super::*;
+use ambre_core::index::Pos;
 
 // -----------------------------------------------------------------------------
 // Text helper
@@ -112,11 +113,11 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
 }
 
 /// Spreadsheet column label for a 0-based column index (0 -> "A", 26 -> "AA").
-pub fn col_label(col: Col) -> String {
+pub fn col_label(col: Pos<Col>) -> String {
     crate::columns::col_to_alpha(col)
 }
 
 /// Row label for a 0-based row index: its one-based number (0 -> "1").
-pub fn row_label(row: Row) -> String {
+pub fn row_label(row: Pos<Row>) -> String {
     crate::columns::row_label(row)
 }

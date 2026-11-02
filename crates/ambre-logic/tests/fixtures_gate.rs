@@ -23,6 +23,7 @@
 )]
 
 use ambre_core::Version;
+use ambre_core::index::Pos;
 use std::path::{Path, PathBuf};
 
 use ambre_bus::{CellPos, Col, Row, TrameCommand};
@@ -66,7 +67,7 @@ impl FixtureGen for Gen {
             cells: (0..self.filler)
                 .map(|row| {
                     (
-                        CellPos::new(Row::new(row), Col::new(0)),
+                        CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(0)),
                         format!("row {row}"),
                     )
                 })

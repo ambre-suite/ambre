@@ -12,6 +12,7 @@
 
 use super::CellEditor;
 use crate::{CellPos, Col, Row};
+use ambre_core::index::Pos;
 
 use ambre_canvas::{EditIntent, TextEditor, TextEditorStyle};
 use ambre_draw::{Color, FontContext};
@@ -108,7 +109,7 @@ fn intent(op: &Op) -> EditIntent {
 fn assert_parity(seed: &str, ops: &[Op]) {
     let mut fcx = FontContext::default();
     let mut cell = CellEditor::new(
-        CellPos::new(Row::ZERO, Col::ZERO),
+        CellPos::new(Pos::<Row>::ZERO, Pos::<Col>::ZERO),
         ambre_bus::Token::FIRST,
         seed.to_owned(),
     );

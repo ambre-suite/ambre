@@ -12,7 +12,8 @@
 //! and a cross-paragraph delete are therefore one code path and one convergence
 //! case (`PROSE-039`).
 
-use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan, MarkKey};
+use ambre_bus::app::prose::{DocChar, MarkKey};
+use ambre_core::index::{Count, Pos, Span};
 use loro::{LoroText, TreeID, TreeParentId};
 
 use crate::doc;
@@ -56,11 +57,16 @@ impl ProseState {
     // -- the four editing commands -----------------------------------------
 
     /// Insert one committed run of text at one position in one block.
-    pub(super) fn insert_text(&mut self, id: &TreeID, pos: DocOffset, text: &str) -> ProseOutcome {
+    pub(super) fn insert_text(
+        &mut self,
+        id: &TreeID,
+        pos: Pos<DocChar>,
+        text: &str,
+    ) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
-        if pos > DocCount::from_len(body.len_unicode()).as_end() {
+        if pos > Count::<DocChar>::from_len(body.len_unicode()).as_end() {
             return Self::err_bad_range();
         }
         if text.is_empty() {
@@ -72,21 +78,22 @@ impl ProseState {
         }
         // Plain text typed inside a suggestion is no part of it
         // (`PROSE-FEAT-307`).
-        if let Err(e) =
-            crate::suggest::strip_inherited(&body, DocSpan::from_count(pos, DocCount::of(text)))
-        {
+        if let Err(e) = crate::suggest::strip_inherited(
+            &body,
+            Span::<DocChar>::from_count(pos, ambre_core::char_len(text).as_axis::<DocChar>()),
+        ) {
             return Self::err_write(e);
         }
         self.commit_with(Vec::new())
     }
 
     /// Delete a range inside one block.
-    pub(super) fn delete_text(&mut self, id: &TreeID, range: DocSpan) -> ProseOutcome {
+    pub(super) fn delete_text(&mut self, id: &TreeID, range: Span<DocChar>) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
         let range = normalize(range);
-        if range.end > DocCount::from_len(body.len_unicode()).as_end() {
+        if range.end > Count::<DocChar>::from_len(body.len_unicode()).as_end() {
             return Self::err_bad_range();
         }
         if range.is_empty() {
@@ -108,11 +115,11 @@ impl ProseState {
     /// and the one join operation there is (`PROSE-039`).
     pub(super) fn delete_range(
         &mut self,
-        anchor: (TreeID, DocOffset),
-        focus: (TreeID, DocOffset),
+        anchor: (TreeID, Pos<DocChar>),
+        focus: (TreeID, Pos<DocChar>),
     ) -> ProseOutcome {
         if anchor.0 == focus.0 {
-            return self.delete_text(&anchor.0, DocSpan::new(anchor.1, focus.1));
+            return self.delete_text(&anchor.0, Span::<DocChar>::new(anchor.1, focus.1));
         }
         let order = self.document_order();
         let anchor_at = order.iter().position(|id| *id == anchor.0);
@@ -132,19 +139,25 @@ impl ProseState {
         let (Some(head_body), Some(tail_body)) = (self.body_of(&head), self.body_of(&tail)) else {
             return Self::err_no_block(&head);
         };
-        let head_len = DocCount::from_len(head_body.len_unicode()).as_end();
-        let tail_len = DocCount::from_len(tail_body.len_unicode()).as_end();
+        let head_len = Count::<DocChar>::from_len(head_body.len_unicode()).as_end();
+        let tail_len = Count::<DocChar>::from_len(tail_body.len_unicode()).as_end();
         if head_off > head_len || tail_off > tail_len {
             return Self::err_bad_range();
         }
         // Neither endpoint cuts a cluster in two (`PROSE-124`).
-        let head_off =
-            whole_graphemes(&head_body.to_string(), DocSpan::new(head_off, head_off)).start;
-        let tail_off =
-            whole_graphemes(&tail_body.to_string(), DocSpan::new(tail_off, tail_off)).end;
+        let head_off = whole_graphemes(
+            &head_body.to_string(),
+            Span::<DocChar>::new(head_off, head_off),
+        )
+        .start;
+        let tail_off = whole_graphemes(
+            &tail_body.to_string(),
+            Span::<DocChar>::new(tail_off, tail_off),
+        )
+        .end;
         // What survives of the last paragraph, before anything is written
         // (`PROSE-037`), with the marks it carries (`PROSE-042`).
-        let surviving = marked_runs(&tail_body, DocSpan::new(tail_off, tail_len));
+        let surviving = marked_runs(&tail_body, Span::<DocChar>::new(tail_off, tail_len));
         if let Err(e) = head_body.delete(
             head_off.to_usize(),
             head_len.count_from(head_off).to_usize(),
@@ -198,7 +211,7 @@ impl ProseState {
     /// source keeps its identity (`PROSE-042`). The event names the new block,
     /// because the view cannot mint the id and needs it to place the caret
     /// (`PROSE-UI-141`).
-    pub(super) fn split_block(&mut self, id: &TreeID, pos: DocOffset) -> ProseOutcome {
+    pub(super) fn split_block(&mut self, id: &TreeID, pos: Pos<DocChar>) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
@@ -207,11 +220,11 @@ impl ProseState {
         if doc::is_aside(&doc::blocks(&self.doc), id) {
             return Self::err_nesting();
         }
-        let len = DocCount::from_len(body.len_unicode()).as_end();
+        let len = Count::<DocChar>::from_len(body.len_unicode()).as_end();
         if pos > len {
             return Self::err_bad_range();
         }
-        let tail = marked_runs(&body, DocSpan::new(pos, len));
+        let tail = marked_runs(&body, Span::<DocChar>::new(pos, len));
         let tree = doc::blocks(&self.doc);
         let Some(block_type) = doc::block_type_of(&tree, id) else {
             return Self::err_no_block(id);
@@ -239,7 +252,7 @@ impl ProseState {
                 return Self::err_write(e);
             }
             let new_body = doc::get_block_text(&self.doc, &new_block);
-            if let Err(e) = write_runs(&new_body, DocOffset::ZERO, &tail) {
+            if let Err(e) = write_runs(&new_body, Pos::<DocChar>::ZERO, &tail) {
                 return Self::err_write(e);
             }
         }
@@ -251,8 +264,11 @@ impl ProseState {
 }
 
 /// The span of every code point `body` holds.
-pub(super) fn body_span(body: &LoroText) -> DocSpan {
-    DocSpan::from_count(DocOffset::ZERO, DocCount::from_len(body.len_unicode()))
+pub(super) fn body_span(body: &LoroText) -> Span<DocChar> {
+    Span::<DocChar>::from_count(
+        Pos::<DocChar>::ZERO,
+        Count::<DocChar>::from_len(body.len_unicode()),
+    )
 }
 
 /// One run of body text and the marks it carries. The text is content, so
@@ -279,7 +295,7 @@ impl std::fmt::Debug for MarkedRun {
 /// blocks carry between them must be unchanged (`PROSE-042`), and a mark is
 /// part of it. This reads the rich-text value instead and keeps each run's
 /// attributes beside its text.
-pub(super) fn marked_runs(body: &LoroText, span: DocSpan) -> Vec<MarkedRun> {
+pub(super) fn marked_runs(body: &LoroText, span: Span<DocChar>) -> Vec<MarkedRun> {
     let (start, end) = (span.start.to_usize(), span.end.to_usize());
     let loro::LoroValue::List(runs) = body.get_richtext_value() else {
         return Vec::new();
@@ -330,7 +346,7 @@ pub(super) fn marked_runs(body: &LoroText, span: DocSpan) -> Vec<MarkedRun> {
 /// rejected attribute would be the worse answer.
 pub(super) fn write_runs(
     target: &LoroText,
-    dest: DocOffset,
+    dest: Pos<DocChar>,
     runs: &[MarkedRun],
 ) -> Result<(), doc::WriteError> {
     let dest = dest.to_usize();
@@ -356,13 +372,13 @@ pub(super) fn write_runs(
 /// (`PROSE-124`). The start moves back to the start of its cluster, and the
 /// end forward to the end of its own. A range that cuts none comes back as it
 /// was.
-fn whole_graphemes(text: &str, span: DocSpan) -> DocSpan {
+fn whole_graphemes(text: &str, span: Span<DocChar>) -> Span<DocChar> {
     use unicode_segmentation::UnicodeSegmentation;
     let (start, end) = (span.start, span.end);
     let (mut from, mut to) = (start, end);
-    let mut at = DocOffset::ZERO;
+    let mut at = Pos::<DocChar>::ZERO;
     for cluster in text.graphemes(true) {
-        let next = at + DocCount::of(cluster);
+        let next = at + ambre_core::char_len(cluster).as_axis::<DocChar>();
         if at < start && start < next {
             from = at;
         }
@@ -374,14 +390,18 @@ fn whole_graphemes(text: &str, span: DocSpan) -> DocSpan {
         }
         at = next;
     }
-    DocSpan::new(from, to)
+    Span::<DocChar>::new(from, to)
 }
 
 /// The two ends of a range, smaller first. A selection is dragged in either
 /// direction, and every caller wants the same pair.
-fn normalize(range: DocSpan) -> DocSpan {
+fn normalize(range: Span<DocChar>) -> Span<DocChar> {
     let (a, b) = (range.start, range.end);
-    if a <= b { range } else { DocSpan::new(b, a) }
+    if a <= b {
+        range
+    } else {
+        Span::<DocChar>::new(b, a)
+    }
 }
 
 #[cfg(test)]
@@ -390,8 +410,8 @@ mod tests {
     use crate::events::{BlockInit, ProseCommand};
     use crate::logic::ProseState;
     use ambre_bus::app::prose::CodeLang;
-    use ambre_bus::app::prose::DocOffset;
-    use ambre_bus::app::prose::DocSpan;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::{Pos, Span};
 
     #[test]
     fn a_marked_run_prints_its_text_by_length_alone() {
@@ -423,7 +443,7 @@ mod tests {
         for (id, text) in ids.iter().zip(texts) {
             state.handle_command(ProseCommand::InsertText {
                 block_id: *id,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: (*text).to_owned(),
             });
         }
@@ -437,12 +457,12 @@ mod tests {
         let (mut state, ids) = document_of(&["xe\u{301}z", "e\u{301}y"]);
         state.handle_command(ProseCommand::DeleteText {
             block_id: ids[0],
-            range: DocSpan::from_usize_range(1..2),
+            range: Span::<DocChar>::from_usize_range(1..2),
         });
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("xz"));
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[0], DocOffset::new(2)),
-            focus: (ids[1], DocOffset::new(1)),
+            anchor: (ids[0], Pos::<DocChar>::new(2)),
+            focus: (ids[1], Pos::<DocChar>::new(1)),
         });
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("xzy"));
     }
@@ -452,7 +472,7 @@ mod tests {
         let (mut state, ids) = document_of(&["abc"]);
         let outcome = state.handle_command(ProseCommand::InsertText {
             block_id: ids[0],
-            pos: DocOffset::new(99),
+            pos: Pos::<DocChar>::new(99),
             text: "x".to_owned(),
         });
         assert!(outcome.update.is_none());
@@ -463,8 +483,8 @@ mod tests {
     fn a_deletion_across_a_boundary_joins_the_two_paragraphs() {
         let (mut state, ids) = document_of(&["hello", "world"]);
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[0], DocOffset::new(5)),
-            focus: (ids[1], DocOffset::ZERO),
+            anchor: (ids[0], Pos::<DocChar>::new(5)),
+            focus: (ids[1], Pos::<DocChar>::ZERO),
         });
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("helloworld"));
         assert_eq!(state.root_blocks(), vec![ids[0]]);
@@ -474,8 +494,8 @@ mod tests {
     fn the_endpoints_arrive_in_either_order() {
         let (mut state, ids) = document_of(&["hello", "world"]);
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[1], DocOffset::ZERO),
-            focus: (ids[0], DocOffset::new(5)),
+            anchor: (ids[1], Pos::<DocChar>::ZERO),
+            focus: (ids[0], Pos::<DocChar>::new(5)),
         });
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("helloworld"));
     }
@@ -484,8 +504,8 @@ mod tests {
     fn a_deletion_removes_every_paragraph_it_emptied() {
         let (mut state, ids) = document_of(&["aaa", "bbb", "ccc"]);
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[0], DocOffset::new(1)),
-            focus: (ids[2], DocOffset::new(2)),
+            anchor: (ids[0], Pos::<DocChar>::new(1)),
+            focus: (ids[2], Pos::<DocChar>::new(2)),
         });
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("ac"));
         assert_eq!(state.root_blocks(), vec![ids[0]]);
@@ -498,8 +518,8 @@ mod tests {
     fn a_deletion_that_empties_the_first_paragraph_keeps_it() {
         let (mut state, ids) = document_of(&["head", "tail"]);
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[0], DocOffset::ZERO),
-            focus: (ids[1], DocOffset::new(4)),
+            anchor: (ids[0], Pos::<DocChar>::ZERO),
+            focus: (ids[1], Pos::<DocChar>::new(4)),
         });
         assert_eq!(state.root_blocks(), vec![ids[0]]);
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some(""));
@@ -513,8 +533,8 @@ mod tests {
             style_id: ambre_bus::app::prose::StyleId::new("quote".to_owned()),
         });
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[0], DocOffset::new(3)),
-            focus: (ids[1], DocOffset::ZERO),
+            anchor: (ids[0], Pos::<DocChar>::new(3)),
+            focus: (ids[1], Pos::<DocChar>::ZERO),
         });
         assert_eq!(state.root_blocks(), vec![ids[0]]);
         assert_eq!(
@@ -528,7 +548,7 @@ mod tests {
         let (mut state, ids) = document_of(&["hello world"]);
         let outcome = state.handle_command(ProseCommand::SplitBlock {
             block_id: ids[0],
-            pos: DocOffset::new(5),
+            pos: Pos::<DocChar>::new(5),
         });
         let new_block = outcome
             .display
@@ -558,7 +578,7 @@ mod tests {
         let heading = state.root_blocks()[1];
         state.handle_command(ProseCommand::InsertText {
             block_id: heading,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a title".to_owned(),
         });
         state.handle_command(ProseCommand::SetParagraphStyle {
@@ -570,7 +590,7 @@ mod tests {
         });
         let outcome = state.handle_command(ProseCommand::SplitBlock {
             block_id: heading,
-            pos: DocOffset::new(1),
+            pos: Pos::<DocChar>::new(1),
         });
         let new_block = outcome
             .display
@@ -622,12 +642,12 @@ mod tests {
             .expect("a paragraph in the cell");
         state.handle_command(ProseCommand::InsertText {
             block_id: inner,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "inside".to_owned(),
         });
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[0], DocOffset::new(1)),
-            focus: (inner, DocOffset::new(2)),
+            anchor: (ids[0], Pos::<DocChar>::new(1)),
+            focus: (inner, Pos::<DocChar>::new(2)),
         });
         assert!(state.root_blocks().contains(&table));
         assert_eq!(state.parent_of(&cell), Some(row));
@@ -641,13 +661,13 @@ mod tests {
         let (mut state, ids) = document_of(&["hello world"]);
         state.handle_command(ProseCommand::ApplyMark {
             block_id: ids[0],
-            range: DocSpan::from_usize_range(0..11),
+            range: Span::<DocChar>::from_usize_range(0..11),
             key: "b".into(),
             value: None,
         });
         let outcome = state.handle_command(ProseCommand::SplitBlock {
             block_id: ids[0],
-            pos: DocOffset::new(5),
+            pos: Pos::<DocChar>::new(5),
         });
         let new_block = outcome
             .display
@@ -672,14 +692,14 @@ mod tests {
         let (mut state, ids) = document_of(&["hello world"]);
         state.handle_command(ProseCommand::ApplyMark {
             block_id: ids[0],
-            range: DocSpan::from_usize_range(0..11),
+            range: Span::<DocChar>::from_usize_range(0..11),
             key: "b".into(),
             value: None,
         });
         crate::logic::marks::tests::anchor(&mut state, &ids[0], 0..11);
         let outcome = state.handle_command(ProseCommand::SplitBlock {
             block_id: ids[0],
-            pos: DocOffset::new(5),
+            pos: Pos::<DocChar>::new(5),
         });
         let new_block = outcome
             .display
@@ -704,13 +724,13 @@ mod tests {
         let (mut state, ids) = document_of(&["hello", "world"]);
         state.handle_command(ProseCommand::ApplyMark {
             block_id: ids[1],
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "i".into(),
             value: None,
         });
         state.handle_command(ProseCommand::DeleteRange {
-            anchor: (ids[0], DocOffset::new(5)),
-            focus: (ids[1], DocOffset::ZERO),
+            anchor: (ids[0], Pos::<DocChar>::new(5)),
+            focus: (ids[1], Pos::<DocChar>::ZERO),
         });
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("helloworld"));
         let rendered = format!("{:?}", state.marks_of(&ids[0]));
@@ -734,12 +754,12 @@ mod tests {
         let code = state.root_blocks()[1];
         state.handle_command(ProseCommand::InsertText {
             block_id: code,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "fn main".to_owned(),
         });
         let outcome = state.handle_command(ProseCommand::SplitBlock {
             block_id: code,
-            pos: DocOffset::new(2),
+            pos: Pos::<DocChar>::new(2),
         });
         let new_block = outcome
             .display

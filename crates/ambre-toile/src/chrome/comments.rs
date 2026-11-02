@@ -21,6 +21,7 @@ use leptos::prelude::*;
 
 use crate::ui::PanelState;
 use crate::ui::comments::{CommentDraft, CommentIntent, ThreadFilter};
+use ambre_core::{Authored, Instant};
 
 /// The comments panel. `state` says whether it shows; the View menu, a pin click and
 /// a fresh thread all set it. `list` and `open` are what the view read back
@@ -229,7 +230,7 @@ pub fn CommentComposer(
 
 /// The wall clock a message carries, rendered for the reader. Nothing orders by
 /// it (`TOILE-FEAT-012`): it is shown and used for nothing else.
-fn clock_label(ts: ambre_core::Timestamp) -> String {
+fn clock_label(ts: Instant<Authored>) -> String {
     let date = js_sys::Date::new(&(ts.get() as f64).into());
     date.to_locale_time_string("en-US")
         .as_string()

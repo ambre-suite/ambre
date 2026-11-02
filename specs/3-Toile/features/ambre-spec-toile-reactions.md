@@ -115,7 +115,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reaction {
     pub kind: ReactionKind, // an emoji or a vote
-    pub ts:   Timestamp,    // display only
+    pub ts:   Instant<Authored>,    // display only
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

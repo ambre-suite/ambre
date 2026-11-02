@@ -7,18 +7,19 @@ use super::*;
 use crate::logic::schema::{SheetContainer, SheetRoot};
 use crate::{BorderEdit, BorderPreset, BorderStyle, CellFormat, StylePatch};
 use ambre_core::Rgb;
+use ambre_core::index::{Count, Pos};
 use loro::LoroValue;
 
-const COL_1: Col = Col::new(1);
-const ROWS_1: RowCount = RowCount::new(1);
+const COL_1: Pos<Col> = Pos::<Col>::new(1);
+const ROWS_1: Count<Row> = Count::<Row>::new(1);
 
 /// Select the rectangle `(r1, c1)`-`(r2, c2)`, the active cell at its far corner.
 fn select(state: &mut TrameState, r1: u32, c1: u32, r2: u32, c2: u32) {
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(r2),
-        col: Col::new(c2),
-        anchor_row: Row::new(r1),
-        anchor_col: Col::new(c1),
+        row: Pos::<Row>::new(r2),
+        col: Pos::<Col>::new(c2),
+        anchor_row: Pos::<Row>::new(r1),
+        anchor_col: Pos::<Col>::new(c1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -26,8 +27,8 @@ fn select(state: &mut TrameState, r1: u32, c1: u32, r2: u32, c2: u32) {
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(row),
-        col: Col::new(col),
+        row: Pos::<Row>::new(row),
+        col: Pos::<Col>::new(col),
         text: text.to_owned(),
     });
 }
@@ -59,10 +60,10 @@ fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> 
     state.handle_command(TrameCommand::SortRange {
         sheet_id: default_sheet(),
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(rows.0), Col::new(0)),
-            crate::CellPos::new(Row::new(rows.1), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(rows.0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(rows.1), Pos::<Col>::new(1)),
         ),
-        sort_col: ColCount::new(col),
+        sort_col: Count::<Col>::new(col),
         order: if ascending {
             SortOrder::Ascending
         } else {
@@ -75,7 +76,7 @@ fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> 
 fn filter(state: &mut TrameState, col: u32, kind: FilterKind) -> TrameOutcome {
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: default_sheet(),
-        col: Col::new(col),
+        col: Pos::<Col>::new(col),
         kind,
     })
 }
@@ -197,8 +198,8 @@ fn a_covered_cell_takes_no_style() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
         ),
     });
     select(&mut state, 0, 0, 2, 2);
@@ -311,7 +312,7 @@ fn a_decimal_step_keeps_the_computed_value() {
         },
     );
     assert_eq!(read_cell(&mut state, 0, 0), "0.33");
-    let id = state.active_cell_id(CellPos::new(Row::new(0), Col::new(0)));
+    let id = state.active_cell_id(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)));
     let value = format!("{:?}", state.engine.evaluated_value(id));
     let before = cells(&state);
     style(
@@ -488,10 +489,10 @@ fn a_sort_of_fewer_than_two_rows_changes_nothing() {
         let out = state.handle_command(TrameCommand::SortRange {
             sheet_id: default_sheet(),
             rect: crate::CellRect::spanning(
-                crate::CellPos::new(Row::new(0), Col::new(0)),
-                crate::CellPos::new(Row::new(row_end), Col::new(0)),
+                crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+                crate::CellPos::new(Pos::<Row>::new(row_end), Pos::<Col>::new(0)),
             ),
-            sort_col: ColCount::new(0),
+            sort_col: Count::<Col>::new(0),
             order: SortOrder::Ascending,
             header,
         });

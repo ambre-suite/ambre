@@ -12,7 +12,8 @@ use super::*;
 use crate::formula::shift::shift_formula;
 use crate::formula::text::CellText;
 use ambre_bus::app::trame::CellNumber;
-use ambre_bus::{ColDelta, FillMode, RowDelta};
+use ambre_bus::{Col, FillMode, Row};
+use ambre_core::index::{Count, Delta};
 
 /// A cell's or a tile's place in its fill line's series, counted from the
 /// source origin. Signed: a fill runs either way.
@@ -28,12 +29,12 @@ impl Term {
     }
 
     /// The term of a row, `delta` rows from the source origin.
-    fn of_row(delta: RowDelta) -> Self {
+    fn of_row(delta: Delta<Row>) -> Self {
         Self(delta.get())
     }
 
     /// The term of a column, `delta` columns from the source origin.
-    fn of_col(delta: ColDelta) -> Self {
+    fn of_col(delta: Delta<Col>) -> Self {
         Self(delta.get())
     }
 }
@@ -60,13 +61,13 @@ impl Series {
 
 /// One tile of a merged fill along one axis (`TRAME-UI-134`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Tile<P: Line> {
+pub(super) struct Tile<L: Line> {
     /// The tile's signed block offset from the source.
     pub(super) term: Term,
     /// The tile's first line.
-    pub(super) first: P,
+    pub(super) first: Pos<L>,
     /// How many lines the tile covers, cut at the drag edge.
-    pub(super) len: P::Count,
+    pub(super) len: Count<L>,
 }
 
 impl TrameState {
@@ -306,7 +307,7 @@ impl TrameState {
                 // Signed: fill may go up or down.
                 let term = Term::of_row(row - origin);
                 let k = term.0.rem_euclid(sources.len().max(1) as i64) as u32;
-                let from = CellPos::new(origin + RowCount::new(k), col);
+                let from = CellPos::new(origin + Count::<Row>::new(k), col);
                 self.fill_one(CellPos::new(row, col), from, term, &sources, series);
             }
         }
@@ -328,7 +329,7 @@ impl TrameState {
                 }
                 let term = Term::of_col(col - origin);
                 let k = term.0.rem_euclid(sources.len().max(1) as i64) as u32;
-                let from = CellPos::new(row, origin + ColCount::new(k));
+                let from = CellPos::new(row, origin + Count::<Col>::new(k));
                 self.fill_one(CellPos::new(row, col), from, term, &sources, series);
             }
         }
@@ -405,22 +406,28 @@ impl TrameState {
 /// the source. A tile the destination edge cuts is kept, cut to that edge, so
 /// every line between the source and the edge is written. Source tiles are
 /// left out.
-pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count) -> Vec<Tile<P>> {
+pub(super) fn merged_tiles<L: Line>(
+    s1: Pos<L>,
+    s2: Pos<L>,
+    d1: Pos<L>,
+    d2: Pos<L>,
+    block: Count<L>,
+) -> Vec<Tile<L>> {
     let mut tiles = Vec::new();
     // Before the source, walking back from it one block at a time.
     // A tile that would start before the axis is cut at its first line.
     let mut term = -1;
     let mut next = s1;
-    while let Some(last) = next.before() {
+    while let Some(last) = next.prev() {
         if last < d1 {
             break;
         }
-        let first = next.back(block);
-        let lo = first.unwrap_or(P::FIRST).max(d1);
+        let first = next.checked_sub(block);
+        let lo = first.unwrap_or(Pos::ZERO).max(d1);
         tiles.push(Tile {
             term: Term(term),
             first: lo,
-            len: last.count_from(lo) + P::ONE,
+            len: last.count_from(lo) + Count::ONE,
         });
         let Some(first) = first else { break };
         next = first;
@@ -432,14 +439,14 @@ pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count)
     let mut first = s1;
     while first <= d2 {
         if first > s2 {
-            let last = first.forward(block).before().unwrap_or(first).min(d2);
+            let last = (first + block).prev().unwrap_or(first).min(d2);
             tiles.push(Tile {
                 term: Term(term),
                 first,
-                len: last.count_from(first) + P::ONE,
+                len: last.count_from(first) + Count::ONE,
             });
         }
-        let next = first.forward(block);
+        let next = first + block;
         if next <= first {
             break;
         }

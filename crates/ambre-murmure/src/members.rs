@@ -9,19 +9,19 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{MemberView, Presence, Timestamp};
-use ambre_core::Millis;
+use ambre_bus::{Authored, Instant, MemberView, Presence};
 use ambre_core::id::{Id, User};
+use ambre_core::{Ms, TimeSpan};
 
 /// How often a client that holds a space open sends its presence sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
-pub const REFRESH_PERIOD: Millis = Millis::new(60_000);
+pub const REFRESH_PERIOD: TimeSpan<Ms> = TimeSpan::<Ms>::new(60_000);
 
 /// How long a presence sample keeps its member online, in milliseconds
 /// (`ambre-spec-budgets.md section 8`). Three refresh periods: one for the
 /// tick that dates a sample, one for a sample lost on the way, and one for
 /// two drifting timers.
-pub const PRESENCE_EXPIRY: Millis = REFRESH_PERIOD.times(3);
+pub const PRESENCE_EXPIRY: TimeSpan<Ms> = REFRESH_PERIOD.times(3);
 
 /// The first byte of a presence sample. Another ephemeral of the space
 /// document takes another tag, so neither reads as the other.
@@ -97,9 +97,9 @@ pub struct Roster {
     /// The members heard from, with the tick that dates their last sample.
     /// `None` for a sample heard before the first tick: the next tick dates
     /// it.
-    heard: HashMap<Id<User>, Option<Timestamp>>,
+    heard: HashMap<Id<User>, Option<Instant<Authored>>>,
     /// The latest tick of the view, `None` before the first.
-    now: Option<Timestamp>,
+    now: Option<Instant<Authored>>,
     /// This user, online as long as the space is open.
     me: Option<Id<User>>,
 }
@@ -155,7 +155,7 @@ impl Roster {
     /// The view's tick: date the samples heard since the tick before, and turn
     /// offline every member whose last sample is older than the expiry
     /// (`MURMURE-445`). Returns whether a member turned offline.
-    pub fn tick(&mut self, now: Timestamp) -> bool {
+    pub fn tick(&mut self, now: Instant<Authored>) -> bool {
         self.now = Some(now);
         let before = self.heard.len();
         self.heard.retain(|_, stamp| {
@@ -214,10 +214,10 @@ mod tests {
         assert!(shown.contains("members: 1"), "{shown}");
     }
 
-    const T0: Timestamp = Timestamp::new(1_700_000_000_000);
+    const T0: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
-    fn at(offset: u64) -> Timestamp {
-        Timestamp::new(T0.get() + offset)
+    fn at(offset: u64) -> Instant<Authored> {
+        Instant::<Authored>::new(T0.get() + offset)
     }
 
     fn names(view: &[MemberView]) -> Vec<&str> {

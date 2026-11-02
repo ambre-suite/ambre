@@ -6,6 +6,7 @@
 
 use super::content::{TextFit, cell_alignment, cell_v_offset, rgb};
 use super::*;
+use ambre_core::index::Delta;
 use ambre_core::{Px, Surface, View};
 
 // -----------------------------------------------------------------------------
@@ -21,7 +22,7 @@ use ambre_core::{Px, Surface, View};
 pub(super) fn spill_width<E: Fn(CellPos) -> bool>(
     layout: &GridLayout<'_>,
     at: CellPos,
-    step: ColDelta,
+    step: Delta<Col>,
     need: Px<Surface>,
     is_empty: &E,
 ) -> Px<Surface> {
@@ -138,20 +139,24 @@ where
             match align {
                 Alignment::Center => {
                     let half = need / 2.0;
-                    let left = spill_width(layout, at, ColDelta::new(-1), half, &is_empty).get();
-                    let right = spill_width(layout, at, ColDelta::new(1), half, &is_empty).get();
+                    let left =
+                        spill_width(layout, at, Delta::<Col>::new(-1), half, &is_empty).get();
+                    let right =
+                        spill_width(layout, at, Delta::<Col>::new(1), half, &is_empty).get();
                     let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1 + right, rect.y1);
                     (-left, clip, true)
                 }
                 Alignment::End | Alignment::Right => {
-                    let left = spill_width(layout, at, ColDelta::new(-1), need, &is_empty).get();
+                    let left =
+                        spill_width(layout, at, Delta::<Col>::new(-1), need, &is_empty).get();
                     let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1, rect.y1);
                     // Right-anchored: keep the right edge inside the cell content
                     // box (negative offset), clipped on the left at the spill.
                     (avail - text_w, clip, true)
                 }
                 _ => {
-                    let right = spill_width(layout, at, ColDelta::new(1), need, &is_empty).get();
+                    let right =
+                        spill_width(layout, at, Delta::<Col>::new(1), need, &is_empty).get();
                     let clip = Rect::new(rect.x0, rect.y0, rect.x1 + right, rect.y1);
                     (0.0, clip, true)
                 }

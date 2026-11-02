@@ -48,6 +48,7 @@ pub use walk::DocumentWalk;
 /// The size of an image is an `ambre_core::Size`, which this crate does not
 /// re-export: its own `Size` is the kurbo one.
 pub use ambre_core::{Image, Payload, Px, RgbaPixels, Surface};
+use ambre_core::{Instant, PageLoad};
 
 #[cfg(feature = "testing")]
 pub mod testing;
@@ -118,7 +119,7 @@ impl ImageKey {
 pub trait Clock {
     /// The page's monotonic clock. Sub-millisecond precision is expected on
     /// screen but never relied upon for correctness.
-    fn now(&self) -> ambre_core::PageTime;
+    fn now(&self) -> Instant<PageLoad>;
 }
 
 /// GPU- and PDF-agnostic drawing interface.

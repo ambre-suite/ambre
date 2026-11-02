@@ -22,6 +22,7 @@ use ambre_canvas::{
 };
 use ambre_commands::ClipboardWrite;
 use ambre_core::id::{Document, Id};
+use ambre_core::index::{Count, Delta, Pos};
 use ambre_draw::{Clock, DrawSurface, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::RwSignal;
@@ -34,7 +35,8 @@ use super::grid::{
 };
 use super::renderer::{self, DrawStats};
 use crate::render::{CommitDirection, FormulaAction, TextPass};
-use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount, RowDelta};
+use crate::{CellPos, CellRect, Col, MergeSpan, Row};
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// The grid's logical `point` as a canvas point. The grid walks its
 /// geometry in f64; the canvas reads the pointer in f32.
@@ -46,7 +48,7 @@ fn view_point(point: ambre_draw::Point) -> ambre_core::Point<ambre_core::Px<ambr
 }
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
-const BLINK_PERIOD: ambre_core::PageMillis = ambre_core::PageMillis::new(530.0);
+const BLINK_PERIOD: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(530.0);
 
 /// The one-slot viewport queue (`TRAME-UI-025`). Every request source writes
 /// through [`coalesce`](Self::coalesce), so the slot holds at most one request
@@ -100,13 +102,13 @@ fn fill_dest(src: CellRect, at: CellPos, block: MergeSpan) -> CellRect {
     if drow.get() >= dcol.get() {
         // Vertical fill: extend rows toward the pointer, snapped to whole blocks.
         if at.row > last.row {
-            let grow = RowCount::new(snap(at.row.count_from(last.row).get(), bh));
+            let grow = Count::<Row>::new(snap(at.row.count_from(last.row).get(), bh));
             CellRect {
                 bottom_right: CellPos::new(last.row + grow, last.col),
                 ..src
             }
         } else if at.row < first.row {
-            let grow = RowCount::new(snap(first.row.count_from(at.row).get(), bh));
+            let grow = Count::<Row>::new(snap(first.row.count_from(at.row).get(), bh));
             CellRect {
                 top_left: CellPos::new(first.row - grow, first.col),
                 ..src
@@ -117,13 +119,13 @@ fn fill_dest(src: CellRect, at: CellPos, block: MergeSpan) -> CellRect {
     } else {
         // Horizontal fill: extend columns, snapped to whole blocks.
         if at.col > last.col {
-            let grow = ColCount::new(snap(at.col.count_from(last.col).get(), bw));
+            let grow = Count::<Col>::new(snap(at.col.count_from(last.col).get(), bw));
             CellRect {
                 bottom_right: CellPos::new(last.row, last.col + grow),
                 ..src
             }
         } else if at.col < first.col {
-            let grow = ColCount::new(snap(first.col.count_from(at.col).get(), bw));
+            let grow = Count::<Col>::new(snap(first.col.count_from(at.col).get(), bw));
             CellRect {
                 top_left: CellPos::new(first.row, first.col - grow),
                 ..src
@@ -303,7 +305,7 @@ fn trigger_download(
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PendingCommit {
     /// Commit and move the cursor by rows and columns (Enter, Tab, Up/Down).
-    Nav(RowDelta, ColDelta),
+    Nav(Delta<Row>, Delta<Col>),
     /// Commit in place, cursor unchanged (a click / right-click elsewhere; the
     /// click's own selection has already moved the active cell).
     Stay,
@@ -424,7 +426,7 @@ pub struct TrameView {
     /// A column auto-fit whose whole content the Logic thread returned
     /// (`TRAME-UI-128`), awaiting the font context like
     /// [`pending_autofit`](Self::pending_autofit).
-    pending_column_fit: Option<(Col, Vec<crate::DisplayCell>)>,
+    pending_column_fit: Option<(Pos<Col>, Vec<crate::DisplayCell>)>,
     /// In-progress autofill drag from the fill handle, or `None`
     /// (`trame-autofill`). Holds the source rectangle the drag started from and
     /// the source block granularity. That is [`MergeSpan::CELL`] for a plain
@@ -454,12 +456,12 @@ pub struct TrameView {
     /// pipe sits there while a cell is edited (`CHROME-007`).
     caret_drawn: Option<ambre_draw::Rect>,
     /// The clock's time of the last blink toggle (or blink reset).
-    last_blink: ambre_core::PageTime,
+    last_blink: Instant<PageLoad>,
     /// The clock's time of the input awaiting its caret paint, set by an edit
     /// interaction and consumed once the caret is next drawn. This is the
     /// keydown->caret latency probe, against the keystroke-to-draft budget of
     /// `ambre-spec-budgets.md`. `None` when idle.
-    pending_input_mark: Option<ambre_core::PageTime>,
+    pending_input_mark: Option<Instant<PageLoad>>,
 
     /// The one clock the view reads: the blink, the scroll, the latency probe
     /// and the renderer's sub-phase timings. The page's on screen, a test's
@@ -488,8 +490,8 @@ pub struct TrameView {
     /// New cell data landed; promotes to Full only when no scroll happened.
     data_dirty: bool,
     /// Last rendered scroll position, used to compute the scroll delta.
-    prev_top_row: Row,
-    prev_left_col: Col,
+    prev_top_row: Pos<Row>,
+    prev_left_col: Pos<Col>,
 
     // -- Wheel / touchpad scroll ------------------------------------------------
     /// The scroll motion, built apart from the browser so a native test drives
@@ -644,10 +646,10 @@ mod tests {
     fn two_scrolls_in_one_frame_flush_as_one_request() {
         let scroll = |version| TrameCommand::ScrollViewport {
             version,
-            row_start: Row::ZERO,
-            row_end: Row::new(10),
-            col_start: Col::ZERO,
-            col_end: Col::new(5),
+            row_start: Pos::<Row>::ZERO,
+            row_end: Pos::<Row>::new(10),
+            col_start: Pos::<Col>::ZERO,
+            col_end: Pos::<Col>::new(5),
         };
         let mut queue = ViewportQueue::default();
         queue.coalesce(scroll(ambre_core::Generation::nth(1)));
@@ -667,7 +669,7 @@ mod tests {
     /// its value, and says an empty cell is empty rather than nothing.
     #[test]
     fn the_active_cell_is_announced_by_reference_and_value() {
-        let at = |row, col| CellPos::new(Row::new(row), Col::new(col));
+        let at = |row, col| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
         assert_eq!(cell_announcement(at(1, 1), "42"), "B2, 42");
         assert_eq!(cell_announcement(at(0, 26), ""), "AA1, empty");
     }
@@ -709,10 +711,10 @@ mod tests {
     fn scroll_cmd(version: u64) -> TrameCommand {
         TrameCommand::ScrollViewport {
             version: ambre_core::Generation::nth(version),
-            row_start: Row::ZERO,
-            row_end: Row::ZERO,
-            col_start: Col::ZERO,
-            col_end: Col::ZERO,
+            row_start: Pos::<Row>::ZERO,
+            row_end: Pos::<Row>::ZERO,
+            col_start: Pos::<Col>::ZERO,
+            col_end: Pos::<Col>::ZERO,
         }
     }
 

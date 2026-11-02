@@ -8,6 +8,7 @@
 
 use super::*;
 use ambre_core::{CanvasCss, Px, View};
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// The container the shell mounts over the canvas for a board's web embeds
 /// (`TOILE-088`). `None` before the shell renders, and for a host page that does
@@ -206,15 +207,15 @@ pub struct FrameHost {
     /// canvas.
     cells: super::cell::Cells,
 
-    render_times: VecDeque<ambre_core::PageTime>,
+    render_times: VecDeque<Instant<PageLoad>>,
     render_fps: ambre_core::FrameRate,
-    last_frame: ambre_core::PageMillis,
-    last_drain: ambre_core::PageMillis,
-    last_draw: ambre_core::PageMillis,
-    last_gpu: ambre_core::PageMillis,
+    last_frame: TimeSpan<FracMs>,
+    last_drain: TimeSpan<FracMs>,
+    last_draw: TimeSpan<FracMs>,
+    last_gpu: TimeSpan<FracMs>,
     /// rAF timestamp of the last HUD rebuild. The overlay refreshes at most
     /// every 500 ms so idle frames never trigger a full vertex rebuild.
-    last_hud_update: ambre_core::PageTime,
+    last_hud_update: Instant<PageLoad>,
     /// Painted once the fatal terminal screen is up, so the static message
     /// is encoded a single time rather than every subsequent frame.
     fatal_screen: ambre_canvas::FatalScreen,
@@ -249,11 +250,11 @@ impl FrameHost {
             cells: super::cell::Cells::default(),
             render_times: VecDeque::with_capacity(120),
             render_fps: ambre_core::FrameRate::ZERO,
-            last_frame: ambre_core::PageMillis::ZERO,
-            last_drain: ambre_core::PageMillis::ZERO,
-            last_draw: ambre_core::PageMillis::ZERO,
-            last_gpu: ambre_core::PageMillis::ZERO,
-            last_hud_update: ambre_bus::PageTime::new(0.0),
+            last_frame: TimeSpan::<FracMs>::ZERO,
+            last_drain: TimeSpan::<FracMs>::ZERO,
+            last_draw: TimeSpan::<FracMs>::ZERO,
+            last_gpu: TimeSpan::<FracMs>::ZERO,
+            last_hud_update: Instant::<PageLoad>::new(0.0),
             fatal_screen: ambre_canvas::FatalScreen::Unpainted,
         }
     }
@@ -310,7 +311,7 @@ impl FrameHost {
     /// the route on its next send. Returns whether any child needs the board
     /// recomposited this frame (a fresh child, a resize, or a self-driven content
     /// change). A no-op when the launcher installed no child factory.
-    fn sync_children(&mut self, now: ambre_core::PageTime) -> bool {
+    fn sync_children(&mut self, now: Instant<PageLoad>) -> bool {
         let Some(make_child) = self.make_child.clone() else {
             return false;
         };
@@ -383,7 +384,7 @@ impl FrameHost {
         &mut self,
         phase: TouchPhase,
         at: ambre_core::Point<Px<View>>,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) -> Consumed {
         self.view.touch(phase, at, now)
     }
@@ -439,11 +440,11 @@ impl FrameHost {
     }
 
     pub(crate) fn tick_fps(
-        times: &mut VecDeque<ambre_core::PageTime>,
+        times: &mut VecDeque<Instant<PageLoad>>,
         fps: &mut ambre_core::FrameRate,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) {
-        const WINDOW: ambre_core::PageMillis = ambre_core::PageMillis::new(1000.0);
+        const WINDOW: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(1000.0);
         times.push_back(now);
         while times.front().is_some_and(|&t| now - t > WINDOW) {
             times.pop_front();
@@ -457,7 +458,7 @@ impl FrameHost {
     }
 
     /// Render one frame. Wired into [`start_raf_loop`] by [`run_with`].
-    pub fn render(&mut self, raf_timestamp: ambre_core::PageTime) {
+    pub fn render(&mut self, raf_timestamp: Instant<PageLoad>) {
         // Fatal latch first: once set, the Logic thread feeding the view may be
         // aborted, so we must not keep draining it. Paint the terminal screen a
         // single time and then idle (the rAF loop keeps ticking harmlessly).
@@ -483,9 +484,9 @@ impl FrameHost {
         self.cells.settle(&mut self.view);
         self.cells.render(raf_timestamp);
 
-        let t_drain = ambre_core::PageTime::new(self.perf.now());
+        let t_drain = Instant::<PageLoad>::new(self.perf.now());
         self.view.update();
-        let t_after_drain = ambre_core::PageTime::new(self.perf.now());
+        let t_after_drain = Instant::<PageLoad>::new(self.perf.now());
 
         // Service any Paste-button read the shell decoded. The shell read the
         // clipboard inside the click gesture. The host answers rung 2 by
@@ -532,7 +533,7 @@ impl FrameHost {
         Self::tick_fps(&mut self.render_times, &mut self.render_fps, raf_timestamp);
 
         let mut hud_tick = ambre_canvas::HudTick::Idle;
-        if raf_timestamp - self.last_hud_update >= ambre_core::PageMillis::new(500.0) {
+        if raf_timestamp - self.last_hud_update >= TimeSpan::<FracMs>::new(500.0) {
             self.last_hud_update = raf_timestamp;
             hud_tick = ambre_canvas::HudTick::Due;
         }
@@ -573,13 +574,13 @@ impl FrameHost {
             gpu: self.last_gpu,
         };
 
-        let t0 = ambre_core::PageTime::new(self.perf.now());
+        let t0 = Instant::<PageLoad>::new(self.perf.now());
 
         // -- Build CPU batches for whichever layers are being rebuilt. --------
         let t_draw = if any_dirty {
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.size);
-            let t_draw_start = ambre_core::PageTime::new(self.perf.now());
+            let t_draw_start = Instant::<PageLoad>::new(self.perf.now());
             {
                 let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
                 if content_active {
@@ -632,9 +633,9 @@ impl FrameHost {
                 }
             }
             gpu.text_cache.evict_if_oversized(5_000);
-            ambre_core::PageTime::new(self.perf.now()) - t_draw_start
+            Instant::<PageLoad>::new(self.perf.now()) - t_draw_start
         } else {
-            ambre_core::PageMillis::ZERO
+            TimeSpan::<FracMs>::ZERO
         };
 
         // -- GPU encoding + present. ------------------------------------------
@@ -642,12 +643,12 @@ impl FrameHost {
         if phases.present == ambre_canvas::Present::Skip {
             return;
         }
-        let t_gpu_start = ambre_core::PageTime::new(self.perf.now());
+        let t_gpu_start = Instant::<PageLoad>::new(self.perf.now());
         if !super::cell::present(gpu, &plan) {
             return;
         }
 
-        let t2 = ambre_core::PageTime::new(self.perf.now());
+        let t2 = Instant::<PageLoad>::new(self.perf.now());
         self.last_frame = t2 - t0;
         self.last_drain = t_after_drain - t_drain;
         self.last_draw = t_draw;

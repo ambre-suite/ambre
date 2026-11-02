@@ -15,4 +15,5 @@ mod line;
 mod sheet_index;
 
 pub use line::Line;
+pub(crate) use line::{delete_line, insert_line, move_line};
 pub use sheet_index::{CellKey, LineRead, SheetIndex, Uid, parse_cell_key};

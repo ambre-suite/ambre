@@ -13,6 +13,7 @@
 // implemented yet (no consumer wired), but the scaffolding is here per ARCH P1.
 // ============================================================================
 
+use ambre_bus::{Instant, Ms, PageLoad, TimeSpan};
 use ambre_bus::{LogicCommand, Request, RestCommand};
 use ambre_core::Generation;
 use rustc_hash::FxHashMap;
@@ -28,13 +29,13 @@ pub trait RequestTag {
     /// The `RestEvent` variant expected in response, for documentation only.
     type Event;
     /// Default timeout in milliseconds before the request is considered stale.
-    const DEFAULT_TIMEOUT: ambre_bus::Millis;
+    const DEFAULT_TIMEOUT: TimeSpan<Ms>;
 }
 
 /// A pending P3 request waiting for its `RestEvent` response.
 struct PendingEntry {
     /// Wall-clock deadline in milliseconds (`performance.now()` domain).
-    deadline: ambre_bus::PageTime,
+    deadline: Instant<PageLoad>,
 }
 
 /// Typed P3 request/response correlator for the UI thread.
@@ -78,7 +79,7 @@ impl<T: RequestTag> RequestRegistry<T> {
     /// downstream.
     ///
     /// `now` is a `performance.now()` timestamp in milliseconds.
-    pub fn prepare(&mut self, cmd: RestCommand, now: ambre_bus::PageTime) -> LogicCommand {
+    pub fn prepare(&mut self, cmd: RestCommand, now: Instant<PageLoad>) -> LogicCommand {
         self.prepare_with_timeout(cmd, now, T::DEFAULT_TIMEOUT)
     }
 
@@ -86,14 +87,14 @@ impl<T: RequestTag> RequestRegistry<T> {
     pub fn prepare_with_timeout(
         &mut self,
         cmd: RestCommand,
-        now: ambre_bus::PageTime,
-        timeout: ambre_bus::Millis,
+        now: Instant<PageLoad>,
+        timeout: TimeSpan<Ms>,
     ) -> LogicCommand {
         let id = ambre_bus::next_request();
         self.pending.insert(
             id,
             PendingEntry {
-                deadline: now.after(timeout.to_page_millis()),
+                deadline: now.after(timeout.to_fractional()),
             },
         );
         LogicCommand::Rest { id, cmd }
@@ -111,7 +112,7 @@ impl<T: RequestTag> RequestRegistry<T> {
     /// Drop all pending entries whose deadline has passed. Call once per frame
     /// before draining the inbound queue, so queued events don't match an
     /// already-expired id.
-    pub fn expire(&mut self, now: ambre_bus::PageTime) {
+    pub fn expire(&mut self, now: Instant<PageLoad>) {
         self.pending.retain(|_id, entry| entry.deadline > now);
     }
 }
@@ -125,12 +126,13 @@ impl<T: RequestTag> Default for RequestRegistry<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::{Instant, Ms, PageLoad, TimeSpan};
 
     /// Minimal tag for testing -- maps nothing, provides a default timeout.
     enum TestTag {}
     impl RequestTag for TestTag {
         type Event = ();
-        const DEFAULT_TIMEOUT: ambre_bus::Millis = ambre_bus::Millis::new(5000);
+        const DEFAULT_TIMEOUT: TimeSpan<Ms> = TimeSpan::<Ms>::new(5000);
     }
 
     type TestRegistry = RequestRegistry<TestTag>;
@@ -139,8 +141,8 @@ mod tests {
     fn prepare_allocates_unique_ids() {
         // Not wasm, but ambre_bus::next_request() compiles and runs on the host too.
         let mut reg = TestRegistry::new();
-        let cmd1 = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
-        let cmd2 = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
+        let cmd1 = reg.prepare(RestCommand::ListDocuments, Instant::<PageLoad>::new(0.0));
+        let cmd2 = reg.prepare(RestCommand::ListDocuments, Instant::<PageLoad>::new(0.0));
         let LogicCommand::Rest { id: id1, .. } = cmd1 else {
             panic!()
         };
@@ -154,7 +156,7 @@ mod tests {
     #[test]
     fn try_recv_matches_pending_id() {
         let mut reg = TestRegistry::new();
-        let cmd = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
+        let cmd = reg.prepare(RestCommand::ListDocuments, Instant::<PageLoad>::new(0.0));
         let LogicCommand::Rest { id, .. } = cmd else {
             panic!()
         };
@@ -175,8 +177,8 @@ mod tests {
         // Prepare with explicit 1000 ms timeout at t=0.
         let cmd = reg.prepare_with_timeout(
             RestCommand::ListDocuments,
-            ambre_bus::PageTime::new(0.0),
-            ambre_bus::Millis::new(1000),
+            Instant::<PageLoad>::new(0.0),
+            TimeSpan::<Ms>::new(1000),
         );
         let LogicCommand::Rest { id, .. } = cmd else {
             panic!()
@@ -184,11 +186,11 @@ mod tests {
         assert_eq!(reg.pending_count(), 1);
 
         // Just before timeout -- still alive.
-        reg.expire(ambre_bus::PageTime::new(999.9));
+        reg.expire(Instant::<PageLoad>::new(999.9));
         assert_eq!(reg.pending_count(), 1);
 
         // Past deadline -- removed.
-        reg.expire(ambre_bus::PageTime::new(1000.0));
+        reg.expire(Instant::<PageLoad>::new(1000.0));
         assert_eq!(reg.pending_count(), 0);
         assert!(!reg.try_recv(id));
     }
@@ -196,8 +198,8 @@ mod tests {
     #[test]
     fn clear_removes_all() {
         let mut reg = TestRegistry::new();
-        reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
-        reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
+        reg.prepare(RestCommand::ListDocuments, Instant::<PageLoad>::new(0.0));
+        reg.prepare(RestCommand::ListDocuments, Instant::<PageLoad>::new(0.0));
         assert_eq!(reg.pending_count(), 2);
         reg.clear();
         assert_eq!(reg.pending_count(), 0);
@@ -206,8 +208,8 @@ mod tests {
     #[test]
     fn concurrent_requests_independent() {
         let mut reg = TestRegistry::new();
-        let cmd_a = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
-        let cmd_b = reg.prepare(RestCommand::Logout, ambre_bus::PageTime::new(0.0));
+        let cmd_a = reg.prepare(RestCommand::ListDocuments, Instant::<PageLoad>::new(0.0));
+        let cmd_b = reg.prepare(RestCommand::Logout, Instant::<PageLoad>::new(0.0));
         let LogicCommand::Rest { id: id_a, .. } = cmd_a else {
             panic!()
         };

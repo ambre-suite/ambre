@@ -648,6 +648,7 @@ mod inner_tests {
     //! undo item, the invariant `apply_import` relies on.
 
     use ambre_core::Rgba;
+    use ambre_core::index::Pos;
     use kurbo::{Point, Size};
 
     use crate::logic::align::AlignOp;
@@ -658,6 +659,7 @@ mod inner_tests {
     use crate::logic::state::ToileState;
     use ambre_bus::Token;
     use ambre_core::id::{Element, Id, User};
+    use ambre_core::{Authored, Instant};
 
     fn rect_at(st: &mut ToileState, x: f64) -> Id<Element> {
         st.create_element_inner(
@@ -680,7 +682,7 @@ mod inner_tests {
             Point::ZERO,
             Size::new(10.0, 10.0),
             InitContent::Image(crate::logic::command::MediaRef::Pending(
-                crate::logic::command::ImportSlot::ZERO,
+                Pos::<crate::logic::command::ImportSlot>::ZERO,
             )),
             None,
         );
@@ -843,7 +845,7 @@ mod inner_tests {
                 ToileCommand::CreateComment {
                     anchor: CommentAnchor::Point(Point::new(1.0, 1.0)),
                     body: "late".to_owned(),
-                    ts: ambre_core::Timestamp::from_i64(1),
+                    ts: Instant::<Authored>::new(1),
                 },
             ),
         ];

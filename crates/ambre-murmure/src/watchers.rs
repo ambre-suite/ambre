@@ -8,24 +8,24 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::Timestamp;
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Id, Message, User};
-use ambre_core::{ByteSize, Millis};
+use ambre_core::{ByteSize, Ms, TimeSpan};
 
 use crate::{PRESENCE_EXPIRY, REFRESH_PERIOD};
 
 /// How often the view ticks an open channel, in milliseconds
 /// (`ambre-spec-budgets.md section 8`).
-pub const TICK_PERIOD: Millis = Millis::new(1_000);
+pub const TICK_PERIOD: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_000);
 
 /// How often a member who keeps typing sends a typing sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
-pub const TYPING_REFRESH: Millis = Millis::new(3_000);
+pub const TYPING_REFRESH: TimeSpan<Ms> = TimeSpan::<Ms>::new(3_000);
 
 /// How long a typing sample keeps its member typing, in milliseconds
 /// (`ambre-spec-budgets.md section 8`). Two refresh periods: one for the
 /// tick that dates a sample, one for a sample lost on the way.
-pub const TYPING_EXPIRY: Millis = TYPING_REFRESH.times(2);
+pub const TYPING_EXPIRY: TimeSpan<Ms> = TYPING_REFRESH.times(2);
 
 /// The first byte of a channel sample. A space sample takes another tag, so
 /// neither reads as the other.
@@ -136,15 +136,15 @@ type Place = Option<Id<Message>>;
 pub struct Watchers {
     /// The members heard watching, with the tick that dates their last
     /// sample. `None` for a sample heard before the first tick.
-    watching: HashMap<Id<User>, Option<Timestamp>>,
+    watching: HashMap<Id<User>, Option<Instant<Authored>>>,
     /// The members heard typing, dated the same way, with where they type.
     /// A member types in one place, the last their samples named.
-    typing: HashMap<Id<User>, (Option<Timestamp>, Place)>,
+    typing: HashMap<Id<User>, (Option<Instant<Authored>>, Place)>,
     /// The latest tick of the view, `None` before the first.
-    now: Option<Timestamp>,
+    now: Option<Instant<Authored>>,
     /// When this client last sent each sample, and where it typed.
-    sent_watching: Option<Timestamp>,
-    sent_typing: Option<(Timestamp, Place)>,
+    sent_watching: Option<Instant<Authored>>,
+    sent_typing: Option<(Instant<Authored>, Place)>,
 }
 
 impl Watchers {
@@ -177,9 +177,9 @@ impl Watchers {
     /// The view's tick: date the samples heard since the tick before, and
     /// drop every one older than its expiry. Returns whether the indicators
     /// changed.
-    pub fn tick(&mut self, now: Timestamp) -> bool {
+    pub fn tick(&mut self, now: Instant<Authored>) -> bool {
         self.now = Some(now);
-        let fresh = |stamp: &mut Option<Timestamp>, expiry: Millis| {
+        let fresh = |stamp: &mut Option<Instant<Authored>>, expiry: TimeSpan<Ms>| {
             let at = *stamp.get_or_insert(now);
             now.since(at) <= expiry
         };
@@ -194,7 +194,7 @@ impl Watchers {
     /// Whether this client owes its watching sample at `now`: none sent yet,
     /// or one refresh period since the last (`MURMURE-126`). Records it as
     /// sent when it is owed.
-    pub fn owes_watching(&mut self, now: Timestamp) -> bool {
+    pub fn owes_watching(&mut self, now: Instant<Authored>) -> bool {
         owed(&mut self.sent_watching, now, REFRESH_PERIOD)
     }
 
@@ -202,7 +202,7 @@ impl Watchers {
     /// thread under `thread`, or the channel with `None`. It is owed when
     /// none was sent, a typing refresh period after the last (`MURMURE-124`),
     /// or at once in a new place (`MURMURE-536`). Records it as sent when owed.
-    pub fn owes_typing(&mut self, now: Timestamp, thread: Option<Id<Message>>) -> bool {
+    pub fn owes_typing(&mut self, now: Instant<Authored>, thread: Option<Id<Message>>) -> bool {
         let moved = self.sent_typing.is_some_and(|(_, place)| place != thread);
         let mut sent = self.sent_typing.map(|(at, _)| at).filter(|_| !moved);
         let due = owed(&mut sent, now, TYPING_REFRESH);
@@ -247,7 +247,11 @@ impl Watchers {
 }
 
 /// Whether a sample last sent at `sent` is owed again at `now`, recording it.
-fn owed(sent: &mut Option<Timestamp>, now: Timestamp, period: Millis) -> bool {
+fn owed(
+    sent: &mut Option<Instant<Authored>>,
+    now: Instant<Authored>,
+    period: TimeSpan<Ms>,
+) -> bool {
     let due = sent.is_none_or(|at| now.since(at) >= period);
     if due {
         *sent = Some(now);
@@ -259,10 +263,10 @@ fn owed(sent: &mut Option<Timestamp>, now: Timestamp, period: Millis) -> bool {
 mod tests {
     use super::*;
 
-    const T0: Timestamp = Timestamp::new(1_700_000_000_000);
+    const T0: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
-    fn at(offset: u64) -> Timestamp {
-        Timestamp::new(T0.get() + offset)
+    fn at(offset: u64) -> Instant<Authored> {
+        Instant::<Authored>::new(T0.get() + offset)
     }
 
     fn ticked() -> Watchers {

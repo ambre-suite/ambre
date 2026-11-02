@@ -2,11 +2,12 @@
 //! the header check, the routing of a remote delta, and the send.
 
 use crate::Receipt;
-use ambre_bus::CharSpan;
+use ambre_bus::Char;
+use ambre_core::index::Span;
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp, Unreadable,
+    Authored, Instant, Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Unreadable,
 };
 use ambre_core::id::{Channel, Document, Id, Meta, Segment, User};
 use ambre_core::schema::SchemaError;
@@ -19,7 +20,7 @@ use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Query, SCHEMA_VERSION, Signer,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 /// The query a member searching for `text` sends.
 fn parse_query(text: &str) -> Option<Query> {
@@ -575,19 +576,19 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
         mentions: vec![
             Mention {
                 target: MentionTarget::User(bob),
-                range: CharSpan::from_usize_range(0..4),
+                range: Span::<Char>::from_usize_range(0..4),
             },
             Mention {
                 target: MentionTarget::User(carol),
-                range: CharSpan::from_usize_range(5..11),
+                range: Span::<Char>::from_usize_range(5..11),
             },
             Mention {
                 target: MentionTarget::User(bob),
-                range: CharSpan::from_usize_range(12..16),
+                range: Span::<Char>::from_usize_range(12..16),
             },
             Mention {
                 target: MentionTarget::Channel,
-                range: CharSpan::from_usize_range(17..25),
+                range: Span::<Char>::from_usize_range(17..25),
             },
         ],
     };
@@ -1364,7 +1365,7 @@ fn two_finals() -> (Stored, Id<Segment>, Id<Segment>) {
         (newer, 20, SegmentState::Final),
         (stored.active_id, 30, SegmentState::Active),
     ] {
-        push_segment_entry(&meta, id, Timestamp::new(from), state).expect("entry");
+        push_segment_entry(&meta, id, Instant::<Authored>::new(from), state).expect("entry");
     }
     meta.commit();
     stored.meta = snapshot(&meta);
@@ -1383,8 +1384,8 @@ fn a_band_spans_its_segment_up_to_the_next_one() {
         Some(MurmureEvent::Unreadable {
             segment: newer,
             cause: Unreadable::KeyNotReceived,
-            from: Timestamp::new(20),
-            to: Some(Timestamp::new(30)),
+            from: Instant::<Authored>::new(20),
+            to: Some(Instant::<Authored>::new(30)),
         })
     );
     assert!(matches!(

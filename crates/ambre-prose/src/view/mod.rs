@@ -21,23 +21,24 @@ pub mod slash;
 pub mod toolbar;
 pub mod walk;
 
+use ambre_core::index::{Count, Pos, Span};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use loro::TreeID;
 
-use ambre_bus::app::prose::{DocOffset, ProseCommand};
+use ambre_bus::app::prose::{DocChar, ProseCommand};
 use ambre_core::{Doc, Px, View};
 
 use ambre_draw::kinetic::ScrollStep;
 
-use crate::events::{BlockId, PageCount, TocEntry, tree_id};
-use crate::layout::run::{RunOffset, RunSpan, ShapedLayout};
+use crate::events::{BlockId, Page, TocEntry, tree_id};
+use crate::layout::run::{RunChar, ShapedLayout};
 use crate::ui::ProseUiState;
 
 /// The pages asked for beyond those a frame builds, on each side, so a
 /// scroll finds its next pages laid out (`PROSE-UI-211`).
-pub const WINDOW_SLACK: PageCount = PageCount::new(4);
+pub const WINDOW_SLACK: Count<Page> = Count::<Page>::new(4);
 
 /// What an inline highlight marks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,16 +53,16 @@ pub enum HighlightKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Highlight {
     pub kind: HighlightKind,
-    pub span: RunSpan,
+    pub span: Span<RunChar>,
 }
 
 /// The span `start..end` the Logic thread answered, on the laid run of its
 /// block. It answers the comments, suggestions, links, find matches and
 /// peers' positions. Those lists and the layout in force count the text it
-/// holds, so [`RunOffset::from_doc`] carries each end over. The local draft
+/// holds, so [`Pos::as_axis`] carries each end over. The local draft
 /// is not in either.
-pub(crate) const fn answered_span(start: DocOffset, end: DocOffset) -> RunSpan {
-    RunSpan::new(RunOffset::from_doc(start), RunOffset::from_doc(end))
+pub(crate) const fn answered_span(start: Pos<DocChar>, end: Pos<DocChar>) -> Span<RunChar> {
+    Span::<RunChar>::new(start.as_axis::<RunChar>(), end.as_axis::<RunChar>())
 }
 
 impl ProseUiState {
@@ -188,7 +189,7 @@ impl ProseUiState {
     }
 
     /// The position of a block in the flow of the layout in force.
-    pub(crate) fn flow_index(&self, block: &TreeID) -> Option<crate::layout::run::FlowIndex> {
+    pub(crate) fn flow_index(&self, block: &TreeID) -> Option<Pos<crate::layout::run::Flow>> {
         self.shaped.index_of(block)
     }
 
@@ -202,14 +203,15 @@ impl ProseUiState {
     /// the highlights of the blocks it draws and no other (`PROSE-UI-020`).
     pub(crate) fn index_highlights(&mut self) {
         let mut marks: HashMap<BlockId, Vec<Highlight>> = HashMap::new();
-        let mut push = |block: BlockId, kind: HighlightKind, start: DocOffset, end: DocOffset| {
-            if start < end {
-                marks.entry(block).or_default().push(Highlight {
-                    kind,
-                    span: answered_span(start, end),
-                });
-            }
-        };
+        let mut push =
+            |block: BlockId, kind: HighlightKind, start: Pos<DocChar>, end: Pos<DocChar>| {
+                if start < end {
+                    marks.entry(block).or_default().push(Highlight {
+                        kind,
+                        span: answered_span(start, end),
+                    });
+                }
+            };
         for thread in &self.comments {
             if let Some(block) = thread.anchor_block
                 && thread.orphaned == crate::events::AnchorState::Anchored
@@ -247,12 +249,12 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod tests {
-    use crate::layout::run::RunCount;
+    use crate::layout::run::RunChar;
     use std::sync::Arc;
 
     use super::*;
     use crate::events::block_id;
-    use crate::events::{BlockInit, PageIndex, ProseCommand};
+    use crate::events::{BlockInit, Page, ProseCommand};
     use crate::layout::pass::PageLayout;
     use crate::logic::ProseState;
 
@@ -283,7 +285,7 @@ pub(crate) mod tests {
         if !text.is_empty() {
             state.handle_command(ProseCommand::InsertText {
                 block_id: id,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: text.to_owned(),
             });
         }
@@ -321,8 +323,8 @@ pub(crate) mod tests {
     fn a_layout_carries_the_pages_asked_for_alone() {
         let (mut state, _) = laid_out(400, 60);
         let _ = state.handle_command(ProseCommand::ShowPages {
-            first: PageIndex::new(10),
-            last: PageIndex::new(12),
+            first: Pos::<Page>::new(10),
+            last: Pos::<Page>::new(12),
         });
         let Some(crate::events::ProseEvent::LayoutShaped { layout }) = state.layout_event() else {
             panic!("a new window is handed over");
@@ -331,13 +333,13 @@ pub(crate) mod tests {
         assert!(shaped.layout.page_count.get() > 20);
         assert_eq!(
             shaped.pages(),
-            PageIndex::new(10).through(PageIndex::new(12))
+            Pos::<Page>::new(10).through(Pos::<Page>::new(12))
         );
         assert!(!shaped.layout.blocks.is_empty());
         for block in &shaped.layout.blocks {
             let span = block.page_span();
             assert!(
-                block.last_page() >= PageIndex::new(10) && span.start <= PageIndex::new(12),
+                block.last_page() >= Pos::<Page>::new(10) && span.start <= Pos::<Page>::new(12),
                 "{span:?} is outside"
             );
         }
@@ -362,7 +364,7 @@ pub(crate) mod tests {
         ui.apply_event(&state.layout_event().expect("a layout"));
         assert_eq!(ui.window_request(), None, "the first pages are carried");
         ui.scroll_by(down(
-            ui.column.page_top_y(PageIndex::new(30)).get() * ui.viewport.scale(),
+            ui.column.page_top_y(Pos::<Page>::new(30)).get() * ui.viewport.scale(),
         ));
         let built = ui.column.built_pages(&ui.viewport).expect("a page");
         let Some(ProseCommand::ShowPages { first, last }) = ui.window_request() else {
@@ -490,10 +492,10 @@ pub(crate) mod tests {
         let last = *state.root_blocks().last().expect("a block");
         assert_eq!(
             ui.flow_index(&crate::events::tree_id(last)),
-            Some(crate::layout::run::FlowIndex::new(3))
+            Some(Pos::<crate::layout::run::Flow>::new(3))
         );
         assert_eq!(
-            ui.blocks_on(crate::events::PageIndex::new(0)).len(),
+            ui.blocks_on(Pos::<crate::events::Page>::new(0)).len(),
             4,
             "the page index came with it"
         );
@@ -514,7 +516,7 @@ pub(crate) mod tests {
         let first = Arc::downgrade(&ui.shaped);
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a".to_owned(),
         });
         hand(&mut state, &mut ui);
@@ -524,7 +526,7 @@ pub(crate) mod tests {
         );
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "b".to_owned(),
         });
         hand(&mut state, &mut ui);
@@ -537,7 +539,7 @@ pub(crate) mod tests {
             Arc::new(PageLayout {
                 page_width: Px::<Doc>::new(800.0),
                 page_height: Px::<Doc>::new(1000.0),
-                page_count: PageCount::new(pages),
+                page_count: Count::<Page>::new(pages),
                 ..PageLayout::default()
             }),
             HashMap::new(),
@@ -560,10 +562,10 @@ pub(crate) mod tests {
         assert_eq!(ui.layout_version, ambre_core::Generation::nth(2));
         assert_eq!(
             ui.shaped.layout.page_count,
-            crate::events::PageCount::new(7)
+            Count::<crate::events::Page>::new(7)
         );
         assert_eq!(ui.column, column::PageColumn::of(&ui.shaped.layout));
-        assert_eq!(ui.column.page_count, crate::events::PageCount::new(7));
+        assert_eq!(ui.column.page_count, Count::<crate::events::Page>::new(7));
     }
 
     #[test]
@@ -575,7 +577,7 @@ pub(crate) mod tests {
         assert_eq!(ui.layout_version, ambre_core::Generation::nth(5));
         assert_eq!(
             ui.shaped.layout.page_count,
-            crate::events::PageCount::new(9)
+            Count::<crate::events::Page>::new(9)
         );
     }
 
@@ -645,7 +647,7 @@ pub(crate) mod tests {
         let mut ui = a_view();
         ui.apply_layout(shaped);
         let far = ui.shaped.layout.blocks.last().expect("a block").clone();
-        assert!(far.page_start > PageIndex::ZERO);
+        assert!(far.page_start > Pos::<Page>::ZERO);
         let entry = TocEntry {
             block_id: block_id(far.block_id),
             level: crate::events::HeadingLevel::H1,
@@ -671,7 +673,7 @@ pub(crate) mod tests {
         let edited = *state.root_blocks().last().expect("a block");
         state.handle_command(ProseCommand::InsertText {
             block_id: edited,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "more ".to_owned(),
         });
         // No caller names the block: the document reports what it was written.
@@ -692,7 +694,7 @@ pub(crate) mod tests {
         bob.import_snapshot(&alice.export_snapshot())
             .expect("the seed imports");
         let edited = *alice.root_blocks().last().expect("a block");
-        let type_one = |alice: &mut ProseState, bob: &mut ProseState, pos: DocOffset| {
+        let type_one = |alice: &mut ProseState, bob: &mut ProseState, pos: Pos<DocChar>| {
             let delta = alice
                 .handle_command(ProseCommand::InsertText {
                     block_id: edited,
@@ -705,23 +707,26 @@ pub(crate) mod tests {
         };
         // Each peer grew a paragraph on opening. Until Alice holds Bob's
         // removal of his, every import rewinds the tree and names each block.
-        type_one(&mut alice, &mut bob, DocOffset::new(1));
+        type_one(&mut alice, &mut bob, Pos::<DocChar>::new(1));
         let back = bob
             .handle_command(ProseCommand::InsertText {
                 block_id: edited,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "y".to_owned(),
             })
             .update
             .expect("the edit exports");
         alice.apply_remote(&back);
-        type_one(&mut alice, &mut bob, DocOffset::new(2));
+        type_one(&mut alice, &mut bob, Pos::<DocChar>::new(2));
         let before = bob.shaped_layout();
-        type_one(&mut alice, &mut bob, DocOffset::new(3));
+        type_one(&mut alice, &mut bob, Pos::<DocChar>::new(3));
         let after = bob.shaped_layout();
         let edited = crate::events::tree_id(edited);
         let old = before.blocks[&edited].data().len();
-        assert_eq!(after.blocks[&edited].data().len(), old + RunCount::new(1));
+        assert_eq!(
+            after.blocks[&edited].data().len(),
+            old + Count::<RunChar>::new(1)
+        );
         for (id, run) in &before.blocks {
             if *id != edited {
                 assert!(after.blocks.get(id) == Some(run), "block {id:?}");

@@ -6,7 +6,8 @@
 // passes a decision.
 
 use ambre_bus::{
-    DirectMember, DirectMessageDraft, FixedBytes, LogicCommand, RestCommand, Role, Timestamp,
+    Authored, DirectMember, DirectMessageDraft, FixedBytes, Instant, LogicCommand, RestCommand,
+    Role,
 };
 use ambre_chrome::Dialog;
 use ambre_core::id::{Channel, Document, Id, User};
@@ -124,7 +125,7 @@ pub(crate) fn confirm(
 /// It names the user the key came with, and the instant it leaves, which the
 /// Logic thread cannot read for itself.
 fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
-    let now = Timestamp::new(js_sys::Date::now() as u64);
+    let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
     match &prompt.purpose {
         Purpose::Invite { document_id, email } => LogicCommand::Rest {
             id: ambre_bus::next_request(),

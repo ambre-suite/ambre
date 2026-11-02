@@ -102,7 +102,7 @@ any `DrawSurface`, so its host tests paint them on a recording surface.
 // inherent methods on each app view (for example ambre_trame::ui::TrameView),
 // dispatched by AppView's match arms:
 fn update(&mut self);                                   // drain inbound (link try_recv) -> dirty flags, no GPU
-fn plan_repaint(&mut self, now: PageTime, hud_tick: HudTick) -> RepaintPlan;
+fn plan_repaint(&mut self, now: Instant<PageLoad>, hud_tick: HudTick) -> RepaintPlan;
 fn paint_content<S: DrawSurface>(&mut self, s: &mut S, fc: &mut FontContext, tc: &mut TextCache, strip: Option<Rect>);
 fn paint_overlay<S: DrawSurface>(&mut self, s: &mut S, fc: &mut FontContext, tc: &mut TextCache, stats: &FrameStats);
 fn resize(&mut self, size: Size<Px<CanvasCss>>);        // logical pixels (`CANVAS-044`)
@@ -112,7 +112,8 @@ fn handle_input(&mut self, ev: &InputEvent) -> bool;   // true => host calls pre
 **The frame, in steps.** One `requestAnimationFrame` callback, no Winit and no retained scene
 graph. The figures are the phase budgets of `ambre-spec-budgets.md section 2`.
 
-* The page clock is `performance.now()`, a `PageTime`. It dates no write: a write takes a `Timestamp`.
+* The page clock is `performance.now()`, an `Instant<PageLoad>`. It dates no write: a write takes an
+  `Instant<Authored>`.
 
 1. `view.update()` -- drain `Receiver<UiEvent>` with `try_recv` until `Empty`, apply, raise the
    dirty flags. A `Disconnected` latches fatal (`CANVAS-013`).

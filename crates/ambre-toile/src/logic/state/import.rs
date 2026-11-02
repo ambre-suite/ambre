@@ -9,6 +9,7 @@
 //! (`TOILE-IO-028`). One Loro undo group spans every slice.
 
 use ambre_core::Tally;
+use ambre_core::index::Pos;
 use std::collections::HashMap;
 
 use ambre_bus::RestEvent;
@@ -36,7 +37,7 @@ use super::names::{Fields, MediaKey, Root};
 /// blob at `slot` and every `image` element that referenced it
 /// (`toile-media`). Called as each upload confirmation lands, so by the time
 /// the batch is applied no pending slot survives.
-fn rewrite_hash(batch: &mut ImportBatch, slot: ImportSlot, hash: &ContentHash) {
+fn rewrite_hash(batch: &mut ImportBatch, slot: Pos<ImportSlot>, hash: &ContentHash) {
     let pending = MediaRef::Pending(slot);
     let stored = MediaRef::Stored(hash.clone());
     if let Some(blob) = slot.to_index().and_then(|i| batch.media.get_mut(i)) {
@@ -61,7 +62,7 @@ fn rewrite_hash(batch: &mut ImportBatch, slot: ImportSlot, hash: &ContentHash) {
 pub(super) struct PendingImport {
     batch: ImportBatch,
     /// Outstanding `UploadMedia` request -> the `batch.media` index it fills.
-    outstanding: HashMap<Generation<Request>, ImportSlot>,
+    outstanding: HashMap<Generation<Request>, Pos<ImportSlot>>,
 }
 
 /// A number of import units. A unit is one create, one style, one group
@@ -249,7 +250,7 @@ impl ToileState {
         let mut requests = Vec::with_capacity(batch.media.len());
         for (slot, blob) in batch.media.iter().enumerate() {
             let id = ambre_bus::next_request();
-            outstanding.insert(id, ImportSlot::from_usize(slot));
+            outstanding.insert(id, Pos::<ImportSlot>::from_usize(slot));
             requests.push(ToileRequest::UploadMedia {
                 id,
                 data: blob.plaintext.clone(),
@@ -660,6 +661,7 @@ impl ToileState {
 
 #[cfg(test)]
 mod tests {
+    use ambre_core::index::Pos;
     use ambre_core::{Elements, Rgba, Tally};
     use kurbo::{Point, Size};
 
@@ -845,7 +847,7 @@ mod tests {
         // A blob Sync has not answered yet carries its pending slot instead.
         assert_eq!(ContentHash::parse(""), None);
         let pending = MediaBlob {
-            media: MediaRef::Pending(ImportSlot::ZERO),
+            media: MediaRef::Pending(Pos::<ImportSlot>::ZERO),
             ..blob("unused", 10, 10, "image/png")
         };
         let n = st.seed_media(&[pending]);
@@ -866,7 +868,7 @@ mod tests {
         let minted = decoded.media[0].clone();
         assert_eq!(minted.media.stored(), None, "{:?}", minted.media);
         let pending = MediaBlob {
-            media: MediaRef::Pending(ImportSlot::ZERO.next()),
+            media: MediaRef::Pending(Pos::<ImportSlot>::ZERO.next()),
             ..blob("unused", 1, 1, "image/png")
         };
         assert_eq!(

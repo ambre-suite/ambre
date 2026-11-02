@@ -2,7 +2,7 @@
 //! (`features/ambre-spec-murmure-unread.md section 3`).
 
 use crate::Receipt;
-use ambre_bus::{MessageDraft, Timestamp, UnreadCount};
+use ambre_bus::{Authored, Instant, MessageDraft, UnreadCount};
 use ambre_core::id::{Channel, Id, Segment, User};
 use ambre_core::{Payload, Seq, SnapshotBytes};
 use loro::{Container, ValueOrContainer};
@@ -12,7 +12,7 @@ use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Order, Position, Signer,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 /// Who signed what `from` wrote in `segment`: `user`, under its session.
 fn signer(from: &ChannelState, segment: Id<Segment>, user: Id<User>) -> Signer {

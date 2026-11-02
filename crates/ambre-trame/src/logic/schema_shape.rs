@@ -31,6 +31,7 @@
 //! is the reading belt's, in `schema_reading.rs`, over this same scenario.
 
 use ambre_core::Rgb;
+use ambre_core::index::Pos;
 use std::collections::BTreeSet;
 
 use ambre_bus::{
@@ -340,20 +341,20 @@ pub(super) fn declared_string_consts(source: &str) -> Vec<String> {
 pub(super) fn workbook_of_every_key() -> TrameState {
     let mut state = TrameState::with_peer(ambre_core::PeerId::new(1));
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "hello".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "=1+1".to_owned(),
     });
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(0),
-        anchor_row: Row::new(0),
-        anchor_col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(0),
+        anchor_col: Pos::<Col>::new(0),
         extra: Vec::new(),
         kind: SelectionKind::Cells,
     });
@@ -370,19 +371,19 @@ pub(super) fn workbook_of_every_key() -> TrameState {
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::ZERO,
         sheet_id: default_sheet(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
     });
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_core::Generation::ZERO,
         sheet_id: default_sheet(),
-        row: Row::new(0),
+        row: Pos::<Row>::new(0),
         height: ambre_core::Px::<ambre_core::Doc>::new(33.0),
     });
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(3), Col::new(0)),
-            crate::CellPos::new(Row::new(4), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(4), Pos::<Col>::new(1)),
         ),
     });
     state.handle_command(TrameCommand::DefineName {
@@ -391,7 +392,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: default_sheet(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Eq,
             value: "hello".to_owned(),
@@ -531,8 +532,8 @@ fn a_value_changing_leaves_the_shape_alone() {
     let first = workbook_of_every_key();
     let mut second = workbook_of_every_key();
     second.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "a different cell entirely".to_owned(),
     });
     assert_eq!(

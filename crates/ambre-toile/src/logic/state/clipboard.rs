@@ -3,14 +3,15 @@
 //! id-free [`ClipboardPayload`] (subtrees, slot-referenced connectors and
 //! membership) and rematerialized with fresh ids.
 
+use ambre_core::index::{IdxVec, Pos};
 use std::collections::{HashMap, HashSet};
 
 use kurbo::{Point, Rect, Vec2};
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use crate::logic::command::{
-    ClipConnector, ClipElement, ClipMembership, ClipSlot, ClipSlotVec, ClipboardPayload,
-    ToileEvent, ToileOutcome,
+    ClipConnector, ClipElement, ClipMembership, ClipSlot, ClipboardPayload, ToileEvent,
+    ToileOutcome,
 };
 use ambre_core::id::{Connector, Element, Id};
 
@@ -64,18 +65,18 @@ impl ToileState {
                 order.push(id.clone());
             }
         }
-        let slot_of: HashMap<Id<Element>, ClipSlot> = order
+        let slot_of: HashMap<Id<Element>, Pos<ClipSlot>> = order
             .iter()
             .cloned()
             .enumerate()
-            .map(|(i, id)| (id, ClipSlot::from_usize(i)))
+            .map(|(i, id)| (id, Pos::<ClipSlot>::from_usize(i)))
             .collect();
 
         let mut elements = Vec::with_capacity(order.len());
         let mut membership = Vec::new();
         let mut origin: Option<Rect> = None;
         for (slot, id) in order.iter().enumerate() {
-            let slot = ClipSlot::from_usize(slot);
+            let slot = Pos::<ClipSlot>::from_usize(slot);
             // `notes` reads as a plain string through the deep value. Writing
             // it back as one makes a frame whose notes are a scalar register,
             // so it is skipped here and carried beside the fields
@@ -96,7 +97,7 @@ impl ToileState {
                 .map(|frame| self.notes(&frame).unwrap_or_default());
             elements.push(ClipElement { fields, notes });
             // Group / frame membership -> child slots (captured children only).
-            let child_slots: Vec<ClipSlot> = self
+            let child_slots: Vec<Pos<ClipSlot>> = self
                 .children_of(id)
                 .iter()
                 .filter_map(|c| slot_of.get(c).copied())
@@ -159,7 +160,7 @@ impl ToileState {
         // Mint every fresh id up front so membership / connectors can remap slots
         // to new ids before anything is written. A session out of fresh ids
         // thus refuses the whole paste, and writes nothing.
-        let new_ids: ClipSlotVec<Id<Element>> = match (0..payload.elements.len())
+        let new_ids: IdxVec<ClipSlot, Id<Element>> = match (0..payload.elements.len())
             .map(|_| self.mint_element_id())
             .collect()
         {

@@ -8,7 +8,7 @@ use crate::Receipt;
 use ambre_core::Version;
 use std::collections::HashMap;
 
-use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
+use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent};
 use ambre_core::authorship::PeerEntry;
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{DeltaBytes, FixedBytes, Payload, PeerEntryBytes, Seq};
@@ -20,7 +20,7 @@ use crate::{
     OpeningChannel, Refusal, Signer,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {

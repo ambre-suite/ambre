@@ -228,8 +228,8 @@ pub struct ProseState {
     owe_greeting:     bool,
     paginator:        Option<Paginator>,
     faces:            Vec<FontBytes>,
-    handed:           Option<(loro::Frontiers, usize, PageSpan)>,
-    window:           PageSpan,
+    handed:           Option<(loro::Frontiers, usize, Span<Page>)>,
+    window:           Span<Page>,
     handed_version:   Generation<LayoutVersion>,
     in_view:          Vec<Arc<ShapedLayout>>,
     ids:              ids::IdSource,
@@ -315,7 +315,7 @@ The plane the UI thread writes on. Values move on an `ambre_bus::conduit` queue,
 below derives `serde`.
 
 > **The offset unit is the Unicode code point.** Every `pos`, every `range` and every
-> `(BlockId, DocOffset)` endpoint below is a count of code points into the target block's body text
+> `(BlockId, Pos<DocChar>)` endpoint below is a count of code points into the target block's body text
 > (`PROSE-FEAT-006`). That is the unit Loro indexes a text container and a cursor with, so a write
 > path converts nothing. A caret advances by **grapheme cluster**, which is a rule of the view. A
 > shaped run joins glyphs to **UTF-8 bytes**, and the view's hit-test converts the byte under a point
@@ -335,30 +335,30 @@ pub enum ProseCommand {
     Sync          { seen: Generation<TextChangeSeq> },
 
     // -- Text editing (`features/ambre-spec-prose-text-editing.md`) --
-    InsertText    { block_id: BlockId, pos: DocOffset, text: String },
-    DeleteText    { block_id: BlockId, range: DocSpan },
+    InsertText    { block_id: BlockId, pos: Pos<DocChar>, text: String },
+    DeleteText    { block_id: BlockId, range: Span<DocChar> },
     /// One arbitrary, possibly cross-block, selection deleted in one command. The endpoints
     /// arrive in either order and the dispatcher normalizes them; it is also the single join
     /// primitive (`PROSE-037`, `PROSE-039`). A content mark fully covered goes with the text;
     /// a partially covered comment, suggestion or footnote follows the orphan rule.
-    DeleteRange   { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset) },
+    DeleteRange   { anchor: (BlockId, Pos<DocChar>), focus: (BlockId, Pos<DocChar>) },
     /// The inverse of the join case above (`PROSE-038`).
-    SplitBlock    { block_id: BlockId, pos: DocOffset },
+    SplitBlock    { block_id: BlockId, pos: Pos<DocChar> },
 
     // -- Inline marks (`features/ambre-spec-prose-inline-styles.md`) --
     /// `value` is the mark's payload, a `MarkValue` checked by the value grammar of the registry
     /// of `ambre-spec-prose-schema.md section 3` (`PROSE-008`), which interop parses and emits
     /// unchanged. `None` is the value of a key whose presence alone is meaningful. The handler
     /// checks the value again under `key`.
-    ApplyMark     { block_id: BlockId, range: DocSpan, key: MarkKey, value: Option<MarkValue> },
-    RemoveMark    { block_id: BlockId, range: DocSpan, key: MarkKey },
-    ClearInlineMarks { block_id: BlockId, range: DocSpan },
+    ApplyMark     { block_id: BlockId, range: Span<DocChar>, key: MarkKey, value: Option<MarkValue> },
+    RemoveMark    { block_id: BlockId, range: Span<DocChar>, key: MarkKey },
+    ClearInlineMarks { block_id: BlockId, range: Span<DocChar> },
     /// Reading the styles of a selection for the format bar. It writes nothing; the answer is
     /// `SelectionMarks` (`features/ambre-spec-prose-toolbar.md`).
-    ReadMarks     { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset) },
+    ReadMarks     { anchor: (BlockId, Pos<DocChar>), focus: (BlockId, Pos<DocChar>) },
     /// One presence mark applied over a whole selection, or removed, in one commit: one
     /// gesture of the format bar is one undo item (`PROSE-UI-192`).
-    FormatSelection { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset), key: MarkKey,
+    FormatSelection { anchor: (BlockId, Pos<DocChar>), focus: (BlockId, Pos<DocChar>), key: MarkKey,
                       action: MarkAction },
 
     // -- Block structure --
@@ -385,15 +385,15 @@ pub enum ProseCommand {
 
     // -- Tables (`features/ambre-spec-prose-tables.md`) --
     /// A table of `rows` by `cols`, one empty paragraph per cell.
-    InsertTable      { parent_id: Option<BlockId>, after_id: Option<BlockId>, rows: RowCount,
-                       cols: ColCount },
+    InsertTable      { parent_id: Option<BlockId>, after_id: Option<BlockId>, rows: Count<Row>,
+                       cols: Count<Col> },
     InsertTableRow   { table_id: BlockId, after_row: Option<BlockId> },
     DeleteTableRow   { row_id: BlockId },
     /// `at_col` is the index the new column takes; `None` width takes the document default
     /// (`PROSE-FEAT-232`).
-    InsertTableCol   { table_id: BlockId, at_col: Col, width: Option<Pt> },
-    DeleteTableCol   { table_id: BlockId, col_index: Col },
-    ResizeTableCol   { table_id: BlockId, col_index: Col, width: Pt },
+    InsertTableCol   { table_id: BlockId, at_col: Pos<Col>, width: Option<Pt> },
+    DeleteTableCol   { table_id: BlockId, col_index: Pos<Col> },
+    ResizeTableCol   { table_id: BlockId, col_index: Pos<Col>, width: Pt },
     MergeTableCells  { table_id: BlockId, start: CellPos, end: CellPos },
     UnmergeTableCell { cell_id: BlockId },
     SetCellStyle     { cell_id: BlockId, bg: Option<Rgb>, valign: Option<VAlign>,
@@ -407,7 +407,7 @@ pub enum ProseCommand {
     UpdateTocConfig { block_id: BlockId, max_level: HeadingLevel, numbered: TocNumbering },
 
     // -- The pages the view holds (`features/ambre-spec-prose-viewport.md`). Neither writes. --
-    ShowPages { first: PageIndex, last: PageIndex },
+    ShowPages { first: Pos<Page>, last: Pos<Page> },
     ShowBlock { block_id: BlockId },
 
     // -- Word count (`features/ambre-spec-prose-word-count.md`) --
@@ -416,10 +416,10 @@ pub enum ProseCommand {
 
     // -- Clipboard (`features/ambre-spec-prose-clipboard.md`) --
     /// Build the full-fidelity payload from the selection; the answer is the clipboard event.
-    CopyRange { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset) },
+    CopyRange { anchor: (BlockId, Pos<DocChar>), focus: (BlockId, Pos<DocChar>) },
     /// Insert what the clipboard held, in one commit: this application's own bytes first,
     /// then the HTML, then the plain text (`PROSE-UI-042`).
-    Paste     { at: (BlockId, DocOffset), text: String, html: Option<String>,
+    Paste     { at: (BlockId, Pos<DocChar>), text: String, html: Option<String>,
                 payload: Option<ClipboardBytes> },
 
     // -- Headers and footers (`features/ambre-spec-prose-headers-footers.md`) --
@@ -429,11 +429,11 @@ pub enum ProseCommand {
     SetFooterEnabled      { shown: BandState },
     SetDifferentFirstPage { first_page: FirstPage },
     /// `target` names the regular band or the first page's own (`PROSE-FEAT-067`).
-    InsertHeaderField     { field: HeaderField, target: HfTarget, pos: DocOffset },
-    InsertFooterField     { field: HeaderField, target: HfTarget, pos: DocOffset },
+    InsertHeaderField     { field: HeaderField, target: HfTarget, pos: Pos<DocChar> },
+    InsertFooterField     { field: HeaderField, target: HfTarget, pos: Pos<DocChar> },
     SetBandAlign          { block_id: BlockId, align: Align },
     /// The view's wall clock, once a run of local changes stops (`PROSE-FEAT-066`).
-    StampModified         { now: Timestamp },
+    StampModified         { now: Instant<Authored> },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
     FindStart  { query: FindQuery },
@@ -444,16 +444,16 @@ pub enum ProseCommand {
     ReplaceAll { replacement: String },
 
     // -- Footnotes --
-    InsertFootnote  { block_id: BlockId, pos: DocOffset, note_text: String },
+    InsertFootnote  { block_id: BlockId, pos: Pos<DocChar>, note_text: String },
     EditFootnote    { footnote_id: Id<Footnote>, new_text: String },
     DeleteFootnote  { footnote_id: Id<Footnote> },
 
     // -- Comments (`features/ambre-spec-prose-comments.md`) --
     /// The author is stamped by the dispatcher from the session identity, never
     /// carried here (`PROSE-FEAT-077`). `now` is a display stamp.
-    AddComment       { block_id: BlockId, range: DocSpan, text: String, now: Timestamp },
+    AddComment       { block_id: BlockId, range: Span<DocChar>, text: String, now: Instant<Authored> },
     /// Reopens a resolved thread as a side effect (`PROSE-FEAT-079`).
-    ReplyToComment   { comment_id: Id<Comment>, text: String, now: Timestamp },
+    ReplyToComment   { comment_id: Id<Comment>, text: String, now: Instant<Authored> },
     ResolveComment   { comment_id: Id<Comment> },
     /// The explicit reopen, with no reply added (`PROSE-FEAT-079`).
     ReopenComment    { comment_id: Id<Comment> },
@@ -474,10 +474,10 @@ pub enum ProseCommand {
     /// (`ambre-spec-prose-schema.md section 3`): the CRDT identity survives a move and a
     /// concurrent edit, so a live reference is never stale. Interop maps it to the foreign
     /// format's own anchor and back.
-    InsertCrossRef  { block_id: BlockId, pos: DocOffset, target_block_id: BlockId,
+    InsertCrossRef  { block_id: BlockId, pos: Pos<DocChar>, target_block_id: BlockId,
                       kind: CrossRefKind },
     /// Bring the target into view; it writes nothing (`PROSE-UI-086`).
-    FollowCrossRef  { block_id: BlockId, pos: DocOffset },
+    FollowCrossRef  { block_id: BlockId, pos: Pos<DocChar> },
 
     // -- Presence (`1-Foundations/ambre-spec-presence.md`) --
     /// The handler builds the presence sample of section 3.D and returns it as the outcome's
@@ -509,7 +509,7 @@ pub enum ProseCommand {
 
     // -- Not built: spell check (`features/ambre-spec-prose-spell-check.md`) --
     SetSpellCheckLang     { lang: LangTag },
-    AcceptSpellSuggestion { block_id: BlockId, range: DocSpan, replacement: String },
+    AcceptSpellSuggestion { block_id: BlockId, range: Span<DocChar>, replacement: String },
     /// Writes the reader's own dictionary, never the document.
     AddToDictionary       { word: String },
 }
@@ -573,20 +573,20 @@ pub enum ProseEvent {
     /// (`features/ambre-spec-prose-clipboard.md`).
     Clipboard     { text: String, html: String, payload: ClipboardBytes },
     /// The marks of a selection, with the selection read (`PROSE-UI-057`).
-    SelectionMarks { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset),
+    SelectionMarks { anchor: (BlockId, Pos<DocChar>), focus: (BlockId, Pos<DocChar>),
                      marks: ActiveMarks },
     /// Where the caret lands after an undo, a redo or a paste (`PROSE-UI-045`).
-    CaretPlaced   { block: BlockId, offset: DocOffset },
+    CaretPlaced   { block: BlockId, offset: Pos<DocChar> },
     /// Bring a block into view, from its first page (`PROSE-UI-085`).
-    RevealBlock   { block: BlockId, page: PageIndex },
+    RevealBlock   { block: BlockId, page: Pos<Page> },
     /// What the local history holds after a command that wrote (`UNDO-006`, `UNDO-009`).
     UndoState     { undo: Availability, redo: Availability },
 
     // -- Features --
     TocUpdated         { block_id: BlockId, toc: TableOfContents },
     WordCountUpdated   { count: WordCount },
-    FindResults        { matches: Vec<FindMatch>, current: Option<MatchIndex> },
-    FindUpdated        { current: Option<MatchIndex> },
+    FindResults        { matches: Vec<FindMatch>, current: Option<Pos<Match>> },
+    FindUpdated        { current: Option<Pos<Match>> },
     FootnotesUpdated   { notes: Vec<FootnoteEntry> },
     CommentsUpdated    { threads: Vec<CommentThread> },
     SuggestionsUpdated { mode: EditMode, suggestions: Vec<Suggestion> },
@@ -677,8 +677,8 @@ carries no `serde`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CursorPosition {
     pub block_id: BlockId,
-    pub offset:   DocOffset,
-    pub anchor:   Option<(BlockId, DocOffset)>,
+    pub offset:   Pos<DocChar>,
+    pub anchor:   Option<(BlockId, Pos<DocChar>)>,
 }
 
 /// The peer-authored sample. A position and a self-asserted, cosmetic name -- and
@@ -765,7 +765,7 @@ pub struct ProseUiState {
     tocs:            Vec<(BlockId, TableOfContents)>,
     /// This peer's own search (`features/ambre-spec-prose-find-replace.md`).
     find_matches:    Vec<FindMatch>,
-    find_current:    Option<MatchIndex>,
+    find_current:    Option<Pos<Match>>,
     bands:           BandSet,
     footnotes:       Vec<FootnoteEntry>,
     /// Marked or orphaned (`features/ambre-spec-prose-comments.md`).
@@ -795,7 +795,7 @@ pub struct ProseUiState {
     x_goal:          Option<Px<Doc>>,
     /// A drag in flight, its last pointer and its autoscroll
     /// (`features/ambre-spec-prose-selection.md`).
-    dragging:        Option<(BlockId, DocOffset)>,
+    dragging:        Option<(BlockId, Pos<DocChar>)>,
     drag_pointer:    Option<Point<Px<View>>>,
     autoscroll:      EdgeScroll,
     /// A finger on the canvas, and the motion a flick left (`features/ambre-spec-prose-viewport.md`).

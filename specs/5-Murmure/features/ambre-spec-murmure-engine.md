@@ -117,7 +117,7 @@ pub enum MurmureCommand {
     SendMessage {
         draft: MessageDraft,
         attachments: Vec<Attachment>, // files the Sync worker answered uploaded (`MURMURE-132`)
-        now: Timestamp,
+        now: Instant<Authored>,
         confirmed: Confirmation,      // the `@channel` the author confirmed (`MURMURE-231`)
     },
     LoadOlder { segment: Id<Segment> },

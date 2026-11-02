@@ -13,6 +13,7 @@
 // `use super::*`.
 
 use super::*;
+use ambre_core::index::Pos;
 
 /// The size range of one axis, and the size of a line never resized.
 #[derive(Clone, Copy)]
@@ -75,7 +76,7 @@ impl TrameState {
     pub(super) fn resize_col(
         &mut self,
         sheet_id: &SheetId,
-        col: Col,
+        col: Pos<Col>,
         width: Px<Doc>,
     ) -> TrameOutcome {
         if *sheet_id != self.active_sheet {
@@ -84,7 +85,7 @@ impl TrameState {
         let width = COL_SIZES.clamp(width);
         // Materialize the column to mint/resolve its stable id (materialize keys
         // on a cell; row 0 is the cheapest anchor). Refused: say why.
-        let col_uid = match self.materialize(CellPos::new(Row::ZERO, col)) {
+        let col_uid = match self.materialize(CellPos::new(Pos::<Row>::ZERO, col)) {
             Ok((_, uid)) => uid,
             Err(why) => return TrameOutcome::display_only(vec![why.notice()]),
         };
@@ -108,14 +109,14 @@ impl TrameState {
     pub(super) fn resize_row(
         &mut self,
         sheet_id: &SheetId,
-        row: Row,
+        row: Pos<Row>,
         height: Px<Doc>,
     ) -> TrameOutcome {
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         let height = ROW_SIZES.clamp(height);
-        let row_uid = match self.materialize(CellPos::new(row, Col::ZERO)) {
+        let row_uid = match self.materialize(CellPos::new(row, Pos::<Col>::ZERO)) {
             Ok((uid, _)) => uid,
             Err(why) => return TrameOutcome::display_only(vec![why.notice()]),
         };
@@ -184,12 +185,12 @@ impl TrameState {
 
     /// Width (logical px) of column `col` on the active sheet: its resized value
     /// or the uniform [`COL_WIDTH`]. Used to pack the viewport slice.
-    pub(super) fn col_width(&self, col: Col) -> Px<Doc> {
+    pub(super) fn col_width(&self, col: Pos<Col>) -> Px<Doc> {
         self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH)
     }
     /// Height (logical px) of row `row`: its resized value or the uniform
     /// [`ROW_HEIGHT`].
-    pub(super) fn row_height(&self, row: Row) -> Px<Doc> {
+    pub(super) fn row_height(&self, row: Pos<Row>) -> Px<Doc> {
         self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT)
     }
 }

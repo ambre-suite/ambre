@@ -12,6 +12,7 @@
 
 use crate::formula::text::CellText;
 use ambre_core::Rgb;
+use ambre_core::index::{Count, Pos};
 use ambre_core::{Doc, Px, Surface, View};
 use std::collections::{HashMap, HashSet};
 
@@ -21,9 +22,8 @@ use ambre_draw::Color;
 use crate::formula::text::DisplayForm;
 use crate::render::BODY_SIZE;
 use crate::{
-    CellPos, CellRect, Col, ColCount, ColDelta, ColSpan, EditSession, LAST_COL, LAST_ROW,
-    MergeSpan, Row, RowCount, RowDelta, RowSpan, SelectionKind, TOTAL_COLS, TOTAL_ROWS,
-    TrameCommand, TrameEvent,
+    CellPos, CellRect, Col, EditSession, LAST_COL, LAST_ROW, MergeSpan, Row, SelectionKind,
+    TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent,
 };
 
 // Cell layout.
@@ -48,9 +48,9 @@ pub use crate::{
 /// edge (resp. a row's bottom edge) resizes instead of selecting.
 pub const RESIZE_BAND: Px<Surface> = Px::<Surface>::new(4.0);
 
-const PADDING_ROWS: RowCount = RowCount::new(20);
+const PADDING_ROWS: Count<Row> = Count::<Row>::new(20);
 
-const PADDING_COLS: ColCount = ColCount::new(5);
+const PADDING_COLS: Count<Col> = Count::<Col>::new(5);
 
 /// A cached cell ready to render: text plus its pinned formatting runs.
 #[derive(Clone, Default)]
@@ -235,9 +235,9 @@ pub enum SelKind {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AxisPos {
     /// A column.
-    Col(Col),
+    Col(Pos<Col>),
     /// A row.
-    Row(Row),
+    Row(Pos<Row>),
 }
 
 impl AxisPos {
@@ -252,8 +252,8 @@ impl AxisPos {
     /// The line's cell on the first row or the first column.
     pub const fn cell(self) -> CellPos {
         match self {
-            Self::Col(col) => CellPos::new(Row::ZERO, col),
-            Self::Row(row) => CellPos::new(row, Col::ZERO),
+            Self::Col(col) => CellPos::new(Pos::<Row>::ZERO, col),
+            Self::Row(row) => CellPos::new(row, Pos::<Col>::ZERO),
         }
     }
 }
@@ -295,17 +295,17 @@ pub enum CtxScope {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HeaderHit {
     /// Column header body -> select / drag-extend the whole column.
-    ColBody(Col),
+    ColBody(Pos<Col>),
     /// Row header body -> select the whole row.
-    RowBody(Row),
+    RowBody(Pos<Row>),
     /// Band around column `i`'s right border -> resize column `i`.
-    ColBorder(Col),
+    ColBorder(Pos<Col>),
     /// Band around row `i`'s bottom border -> resize row `i`.
-    RowBorder(Row),
+    RowBorder(Pos<Row>),
     /// Inline "+" affordance at a column boundary -> insert a column left of `i`.
-    ColInsert(Col),
+    ColInsert(Pos<Col>),
     /// Inline "+" affordance at a row boundary -> insert a row above `i`.
-    RowInsert(Row),
+    RowInsert(Pos<Row>),
     /// Top-left corner -> select the whole sheet.
     Corner,
 }
@@ -437,13 +437,13 @@ impl Selection {
 
     /// True if `col` is within the live rectangle's column span.
     #[allow(dead_code)]
-    pub fn contains_col(&self, col: Col) -> bool {
+    pub fn contains_col(&self, col: Pos<Col>) -> bool {
         self.live_rect().cols().contains(col)
     }
 
     /// True if `row` is within the live rectangle's row span.
     #[allow(dead_code)]
-    pub fn contains_row(&self, row: Row) -> bool {
+    pub fn contains_row(&self, row: Pos<Row>) -> bool {
         self.live_rect().rows().contains(row)
     }
 
@@ -468,18 +468,18 @@ pub struct CursorMove {
 /// All mutable UI state for the Trame grid on the UI Thread.
 pub struct TrameUiState {
     /// Top-left visible row (0-based).
-    pub top_row: Row,
+    pub top_row: Pos<Row>,
     /// Top-left visible column (0-based).
-    pub left_col: Col,
+    pub left_col: Pos<Col>,
 
     /// Current selection. Single-cell for now (`anchor == active`); the active
     /// cell drives the cursor, inline editor and formatting commands (`trame-selection`).
     pub selection: Selection,
 
     /// Number of full rows visible in the grid area (recomputed on resize).
-    pub viewport_rows: RowCount,
+    pub viewport_rows: Count<Row>,
     /// Number of full columns visible in the grid area.
-    pub viewport_cols: ColCount,
+    pub viewport_cols: Count<Col>,
 
     /// Canvas logical size in CSS pixels, set by ResizeObserver (`CANVAS-044`).
     pub canvas_width: Px<Surface>,
@@ -526,24 +526,24 @@ pub struct TrameUiState {
     /// Grid column carrying the active shared filter, drawn with a funnel badge on
     /// its header (`trame-shared-filter`). `None` when no filter is active. Tracked from
     /// `TrameEvent::FilterApplied` / `FilterCleared`; UI-only derived state.
-    pub filtered_col: Option<Col>,
+    pub filtered_col: Option<Pos<Col>>,
 
     /// Absolute grid rows hidden by the active shared filter, sorted ascending
     /// (`trame-shared-filter`). Derived from the `is_filtered` flag of cached cells and
     /// rebuilt whenever the cache changes. The row axis collapses over these (see
     /// [`visible_offset`](Self::visible_offset)); fed to the renderer's
     /// `GridLayout`. UI-only derived state.
-    pub hidden_rows: Vec<Row>,
+    pub hidden_rows: Vec<Pos<Row>>,
 
     /// Per-column widths (logical px) keyed by absolute grid column, fed by the
     /// Logic thread's `col_widths` viewport slice (`trame-resize`). A column
     /// with no entry uses the uniform [`COL_WIDTH`]. Drives every pixel mapping
     /// (the renderer's `GridLayout` and the hit-testing helpers below). UI-only
     /// derived state, mirrors the CRDT `col_widths_{sheet}` map.
-    pub col_widths: HashMap<Col, Px<Doc>>,
+    pub col_widths: HashMap<Pos<Col>, Px<Doc>>,
     /// Per-row heights (logical px) keyed by absolute grid row. Row analogue of
     /// [`col_widths`](Self::col_widths); absence uses [`ROW_HEIGHT`].
-    pub row_heights: HashMap<Row, Px<Doc>>,
+    pub row_heights: HashMap<Pos<Row>, Px<Doc>>,
 
     /// The range last copied/cut, drawn with animated marching-ants until the
     /// next copy or an Escape (`trame-clipboard`). `None` when nothing is on the
@@ -558,8 +558,8 @@ pub struct TrameUiState {
     pub fill_preview: Option<CellRect>,
 
     /// While a header boundary is being dragged (`trame-resize`), the live
-    /// guide line position. `Col(x)` for a column resize (a vertical guide at
-    /// logical x), `Row(y)` for a row resize (a horizontal guide at y). `None`
+    /// guide line position. `Pos<Col>(x)` for a column resize (a vertical guide at
+    /// logical x), `Pos<Row>(y)` for a row resize (a horizontal guide at y). `None`
     /// when no resize is in progress. UI-only view state.
     pub resize_preview: Option<ResizePreview>,
 
@@ -575,8 +575,8 @@ pub struct TrameUiState {
     pub hover_header: Option<HeaderHit>,
 
     /// While a selected column/row header is being dragged to a new position
-    /// (Excel-style reorder), the target insertion slot. `Col(i)` means the
-    /// grabbed column would land left of column `i`, `Row(i)` above row `i`.
+    /// (Excel-style reorder), the target insertion slot. `Pos<Col>(i)` means the
+    /// grabbed column would land left of column `i`, `Pos<Row>(i)` above row `i`.
     /// Drawn as a full-height/width guide line at that boundary. `None` when no
     /// reorder drag is in progress. UI-only view state.
     pub reorder_preview: Option<AxisPos>,

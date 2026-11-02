@@ -9,10 +9,11 @@
 //! never synced. This mirrors the durable-intent vs momentary-gesture split
 //! already used for presence (`toile-presence`).
 
+use ambre_core::index::{Count, Pos};
 use std::collections::HashSet;
 
 use ambre_core::id::{Element, Frame, Id, User};
-use ambre_core::{CharCount, char_len};
+use ambre_core::{Char, char_len};
 use loro::{LoroDoc, LoroMovableList, LoroText, LoroValue};
 
 #[cfg(feature = "pdf")]
@@ -25,8 +26,7 @@ use crate::ui::viewport::{FIT_PAD, ViewportTransform};
 
 use crate::logic::command::{
     Broadcast, DeckFrame, DeckView, PlaybackState, PresencePayload, PresentFocus, PresentMode,
-    SlideChange, SlideCount, SlideIndex, SlidePosition, TextDelta, ToileError, ToileEvent,
-    ToileOutcome,
+    Slide, SlideChange, SlidePosition, TextDelta, ToileError, ToileEvent, ToileOutcome,
 };
 use crate::logic::model::{ElementKind, NodeId};
 use crate::logic::text_merge::{Merge, merge_edits};
@@ -35,11 +35,12 @@ use super::codec::has_type;
 use super::codec::str_of;
 use super::names::{ConfigKey, ElementKey, Fields, Root, config};
 use super::{ToileState, write_edits};
+use ambre_core::{FracMs, TimeSpan};
 
 /// The slide transition length a fresh board is seeded with.
 /// The deck's `transition_ms` register carries an editable value over it, and a
 /// register holding anything else reads as this (`TOILE-FEAT-028`).
-pub const DEFAULT_TRANSITION: ambre_core::PageMillis = ambre_core::PageMillis::new(300.0);
+pub const DEFAULT_TRANSITION: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(300.0);
 
 impl ToileState {
     // -- sequence (CRDT,) -------------------------------------------------
@@ -79,7 +80,7 @@ impl ToileState {
         self.doc.commit();
 
         // Clamp the local cursor to the new deck length (empty deck -> 0).
-        self.playback.active = SlideCount::from_len(target.len()).clamp(self.playback.active);
+        self.playback.active = self.playback.active.within(Count::from_len(target.len()));
         self.emit_with_update(vec![ToileEvent::DeckChanged])
     }
 
@@ -162,15 +163,15 @@ impl ToileState {
     /// Takes control (clears any follow) and broadcasts, like [`next_slide`].
     pub(super) fn prev_slide(&mut self) -> ToileOutcome {
         let old = self.playback.active;
-        self.playback.active = old.prev().unwrap_or(SlideIndex::ZERO);
+        self.playback.active = old.prev().unwrap_or(Pos::<Slide>::ZERO);
         self.manual_nav_outcome(old)
     }
 
     /// Jump to `idx`, clamped to the deck length. Local only. Takes
     /// control (clears any follow) and broadcasts, like [`next_slide`].
-    pub(super) fn goto_slide(&mut self, idx: SlideIndex) -> ToileOutcome {
+    pub(super) fn goto_slide(&mut self, idx: Pos<Slide>) -> ToileOutcome {
         let old = self.playback.active;
-        self.playback.active = self.slide_len().clamp(idx);
+        self.playback.active = idx.within(self.slide_len());
         self.manual_nav_outcome(old)
     }
 
@@ -178,7 +179,7 @@ impl ToileState {
     /// `playback.active`. Emit the `SlideChanged` glide, clear any active
     /// follow first ("take control", prepending `FollowingChanged(None)`), and
     /// attach a broadcast sample when broadcasting.
-    fn manual_nav_outcome(&mut self, old: SlideIndex) -> ToileOutcome {
+    fn manual_nav_outcome(&mut self, old: Pos<Slide>) -> ToileOutcome {
         let mut display = Vec::new();
         if self.following.is_some() {
             self.following = None;
@@ -194,9 +195,9 @@ impl ToileState {
     pub(super) fn enter_present(&mut self, focus: PresentFocus) -> ToileOutcome {
         self.present = PresentMode::Presenting;
         self.playback.focus = focus;
-        self.playback.active = SlideIndex::ZERO;
+        self.playback.active = Pos::<Slide>::ZERO;
         // No source frame on entry: `from` is empty so slide 0's content fades in.
-        let change = self.slide_change(None, SlideIndex::ZERO);
+        let change = self.slide_change(None, Pos::<Slide>::ZERO);
         ToileOutcome::display_and_ephemeral(
             vec![
                 ToileEvent::PresentModeChanged(PresentMode::Presenting),
@@ -265,7 +266,7 @@ impl ToileState {
             && let Some(idx) = self.peer_presence(&u).and_then(|p| p.present_slide)
         {
             let old = self.playback.active;
-            let clamped = self.slide_len().clamp(idx);
+            let clamped = idx.within(self.slide_len());
             if clamped != old {
                 self.playback.active = clamped;
                 let change = self.slide_change(Some(old), clamped);
@@ -282,19 +283,19 @@ impl ToileState {
     /// so a missing frame degrades to a plain fade rather than a panic.
     pub(super) fn slide_change(
         &self,
-        from_idx: Option<SlideIndex>,
-        to_idx: SlideIndex,
+        from_idx: Option<Pos<Slide>>,
+        to_idx: Pos<Slide>,
     ) -> SlideChange {
         let order = self.slide_order();
-        let slide = |i: SlideIndex| i.to_index().and_then(|i| order.get(i));
-        let snap = |i: SlideIndex| {
+        let slide = |i: Pos<Slide>| i.to_index().and_then(|i| order.get(i));
+        let snap = |i: Pos<Slide>| {
             slide(i)
                 .map(|f| self.frame_snapshot(&f.clone().into()))
                 .unwrap_or_default()
         };
         let frame = slide(to_idx).cloned();
         SlideChange {
-            position: SlidePosition::new(to_idx, SlideCount::from_len(order.len())),
+            position: SlidePosition::new(to_idx, Count::<Slide>::from_len(order.len())),
             from: from_idx.map(snap).unwrap_or_default(),
             to: snap(to_idx),
             to_rect: slide(to_idx).and_then(|f| self.element_rect(&f.clone().into())),
@@ -329,8 +330,8 @@ impl ToileState {
 
     /// The `transition_ms` register as the document holds it, or the default
     /// (see [`Self::transition`]).
-    pub(super) fn transition_length(&self) -> ambre_core::PageMillis {
-        const MAX_TRANSITION: ambre_core::PageMillis = ambre_core::PageMillis::new(10_000.0);
+    pub(super) fn transition_length(&self) -> TimeSpan<FracMs> {
+        const MAX_TRANSITION: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(10_000.0);
         config(&self.doc)
             .value(ConfigKey::TransitionMs)
             .and_then(|v| match v {
@@ -338,10 +339,8 @@ impl ToileState {
                 LoroValue::I64(ms) => Some(ms as f64),
                 _ => None,
             })
-            .map(ambre_core::PageMillis::new)
-            .filter(|ms| {
-                ms.is_finite() && (ambre_core::PageMillis::ZERO..=MAX_TRANSITION).contains(ms)
-            })
+            .map(TimeSpan::<FracMs>::new)
+            .filter(|ms| ms.is_finite() && (TimeSpan::<FracMs>::ZERO..=MAX_TRANSITION).contains(ms))
             .unwrap_or(DEFAULT_TRANSITION)
     }
 
@@ -362,10 +361,10 @@ impl ToileState {
     }
 
     /// Number of slides in the shared deck (`0` if absent). Local read.
-    pub(super) fn slide_len(&self) -> SlideCount {
+    pub(super) fn slide_len(&self) -> Count<Slide> {
         match self.order_list().get_deep_value() {
-            LoroValue::List(items) => SlideCount::from_len(items.len()),
-            _ => SlideCount::ZERO,
+            LoroValue::List(items) => Count::<Slide>::from_len(items.len()),
+            _ => Count::<Slide>::ZERO,
         }
     }
 
@@ -434,7 +433,7 @@ impl ToileState {
         }
         // Clamp to the current length: `at` and the deletion span never run past
         // the end of the buffer.
-        let (at, del) = delta.clamped(CharCount::from_len(text.len_unicode()));
+        let (at, del) = delta.clamped(Count::<Char>::from_len(text.len_unicode()));
         if !del.is_zero() {
             let _ = text.delete(at.to_usize(), del.to_usize());
         }
@@ -554,7 +553,7 @@ impl ToileState {
             let _ = list.push(id.as_str());
         }
         // Clamp this viewer's cursor, as a shorter deck does anywhere else.
-        self.playback.active = SlideCount::from_len(kept.len()).clamp(self.playback.active);
+        self.playback.active = self.playback.active.within(Count::from_len(kept.len()));
         true
     }
 

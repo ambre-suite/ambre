@@ -14,7 +14,8 @@
 // (`0` = the selection's left column), matching the `SortRangeMulti` contract.
 // ============================================================================
 
-use ambre_bus::{Col, ColCount, HeaderRow, Row, SortKey, SortOrder};
+use ambre_bus::{Col, HeaderRow, Row, SortKey, SortOrder};
+use ambre_core::index::{Count, Pos};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -26,10 +27,10 @@ use crate::render::col_label;
 /// each time the dialog reopens).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SortDialogState {
-    pub r1: Row,
-    pub c1: Col,
-    pub r2: Row,
-    pub c2: Col,
+    pub r1: Pos<Row>,
+    pub c1: Pos<Col>,
+    pub r2: Pos<Row>,
+    pub c2: Pos<Col>,
 }
 
 /// A multi-column sort request. The launcher forwards it as the parameterless
@@ -54,7 +55,7 @@ pub fn SortDialog(
     // Ordered sort levels (decreasing priority). Reset to a single primary level
     // (the selection's first column, ascending) each time the dialog reopens.
     let levels = RwSignal::new(vec![SortKey {
-        col: ColCount::ZERO,
+        col: Count::<Col>::ZERO,
         order: SortOrder::Ascending,
     }]);
     let has_header = RwSignal::new(false);
@@ -62,7 +63,7 @@ pub fn SortDialog(
     Effect::new(move |_| {
         if state.get().is_some() {
             levels.set(vec![SortKey {
-                col: ColCount::ZERO,
+                col: Count::<Col>::ZERO,
                 order: SortOrder::Ascending,
             }]);
             has_header.set(false);
@@ -115,7 +116,7 @@ pub fn SortDialog(
         state.get().map(|st| {
             // The selection's columns, offered as range-relative options
             // (value = index within the range, label = absolute A1 column).
-            let cols: Vec<(ColCount, String)> = st
+            let cols: Vec<(Count<Col>, String)> = st
                 .c1
                 .through(st.c2)
                 .into_iter()
@@ -151,7 +152,7 @@ pub fn SortDialog(
                                     <select
                                         class="ambre-sort-col"
                                         on:change=move |ev| {
-                                            let v = ColCount::new(event_target_value(&ev).parse::<u32>().unwrap_or(0));
+                                            let v = Count::<Col>::new(event_target_value(&ev).parse::<u32>().unwrap_or(0));
                                             levels.update(|ls| {
                                                 if let Some(l) = ls.get_mut(i) { l.col = v; }
                                             });
@@ -202,9 +203,9 @@ pub fn SortDialog(
                             prop:disabled=move || levels.with(|ls| ls.len() >= cols.get_value().len())
                             on:click=move |_| levels.update(|ls| {
                                 // New level defaults to the first not-yet-used column.
-                                let used: Vec<ColCount> = ls.iter().map(|k| k.col).collect();
+                                let used: Vec<Count<Col>> = ls.iter().map(|k| k.col).collect();
                                 let next = cols.get_value().iter().map(|(rel, _)| *rel)
-                                    .find(|rel| !used.contains(rel)).unwrap_or(ColCount::ZERO);
+                                    .find(|rel| !used.contains(rel)).unwrap_or(Count::<Col>::ZERO);
                                 ls.push(SortKey { col: next, order: SortOrder::Ascending });
                             })
                         >

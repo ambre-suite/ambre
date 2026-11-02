@@ -1,6 +1,7 @@
 // The grid on the shared kinetic scroll (`TRAME-UI-175`).
 
 use super::*;
+use ambre_core::index::{Delta, Pos};
 use ambre_core::{Px, Surface};
 
 /// The canvas point at `(x, y)`.
@@ -17,7 +18,7 @@ fn view_point(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::Vi
 #[test]
 fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
-    state.scroll_by(RowDelta::new(10), ColDelta::new(3));
+    state.scroll_by(Delta::<Row>::new(10), Delta::<Col>::new(3));
     let (sx, sy) = state.edge_scroll_speed(pointer(400.0, 300.0));
     assert_eq!((sx.get().get(), sy.get().get()), (0.0, 0.0));
     let down = state.edge_scroll_speed(pointer(400.0, 900.0)).1.get().get();
@@ -32,7 +33,7 @@ fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
     let CellPos { row, col: _ } = state
         .drag_cell_at(pointer(400.0, 9_000.0))
         .expect("an edge cell");
-    assert!(row > Row::new(10));
+    assert!(row > Pos::<Row>::new(10));
 }
 
 /// `UI-THREAD-001`: a canvas point reaches a cell through the shared
@@ -41,11 +42,11 @@ fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
 fn a_canvas_point_reaches_its_cell_through_the_shared_hit_test() {
     use ambre_draw::HitTest;
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
-    state.scroll_by(RowDelta::new(10), ColDelta::new(3));
+    state.scroll_by(Delta::<Row>::new(10), Delta::<Col>::new(3));
     assert!(state.set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0)));
     for (row, col) in [(10, 3), (12, 4)] {
         let cell = state
-            .cell_pixel_rect(CellPos::new(Row::new(row), Col::new(col)))
+            .cell_pixel_rect(CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)))
             .expect("visible");
         let centre = cell.center();
         assert_eq!(

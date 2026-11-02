@@ -312,8 +312,8 @@ pub struct IrTableStyle {
 
 /// The fields below replace `styled`.
 pub struct IrTableCell {
-    pub rowspan:      RowCount,
-    pub colspan:      ColCount,
+    pub rowspan:      Count<Row>,
+    pub colspan:      Count<Col>,
     pub bg:           Option<Rgb>,
     pub borders:      bool,
     pub border_color: Option<Rgb>,
@@ -336,7 +336,7 @@ pub struct IrRun {
     pub suggest_ins:    Option<Uuid>,
     pub suggest_del:    Option<Uuid>,
     pub suggest_author: Option<DisplayName>,
-    pub suggest_date:   Option<Timestamp>,
+    pub suggest_date:   Option<Instant<Authored>>,
     /// Set inside a header or a footer alone.
     pub field:          Option<HeaderField>,
     /// Replaces `cross_ref`.
@@ -382,7 +382,7 @@ pub struct IrStyle {
 pub struct IrComment {
     pub id:         Uuid,
     pub resolved:   bool,
-    pub created_at: Timestamp,
+    pub created_at: Instant<Authored>,
     /// The opening body first, then the replies.
     pub replies:    Vec<IrReply>,
 }
@@ -390,7 +390,7 @@ pub struct IrComment {
 pub struct IrReply {
     pub id:         Uuid,
     pub author:     DisplayName,
-    pub created_at: Timestamp,
+    pub created_at: Instant<Authored>,
     pub text:       String,
 }
 

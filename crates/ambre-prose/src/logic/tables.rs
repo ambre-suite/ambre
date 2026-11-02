@@ -12,11 +12,13 @@
 //! (`PROSE-FEAT-229`). Every peer holds both once the documents converge, so
 //! every peer keeps the same regions without exchanging anything more.
 
+use ambre_core::StoredAsI64;
+use ambre_core::index::{Count, Pos};
 use ambre_core::{Pt, Rgb, StepDirection};
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID, TreeParentId};
 
 use crate::doc::{self, Region};
-use crate::events::grid::{CellPos, CellRect, Col, ColCount, Row, RowCount};
+use crate::events::grid::{CellPos, CellRect, Col, Row};
 use crate::events::{
     BlockType, CellBorder, ProseEvent, ProseOutcome, ProseRefusal, TableValue, VAlign, block_id,
 };
@@ -55,7 +57,7 @@ impl Grid {
             cells
                 .iter()
                 .position(|candidate| candidate == cell)
-                .map(|col| CellPos::new(Row::from_usize(row), Col::from_usize(col)))
+                .map(|col| CellPos::new(Pos::<Row>::from_usize(row), Pos::<Col>::from_usize(col)))
         })
     }
 
@@ -68,8 +70,8 @@ impl Grid {
     }
 
     /// How many rows the grid holds.
-    pub(crate) fn row_count(&self) -> RowCount {
-        RowCount::from_len(self.rows.len())
+    pub(crate) fn row_count(&self) -> Count<Row> {
+        Count::<Row>::from_len(self.rows.len())
     }
 
     /// The grid position of a cell, then the cell itself, in reading order.
@@ -77,7 +79,7 @@ impl Grid {
         self.cells.iter().enumerate().flat_map(|(row, cells)| {
             cells.iter().enumerate().map(move |(col, cell)| {
                 (
-                    CellPos::new(Row::from_usize(row), Col::from_usize(col)),
+                    CellPos::new(Pos::<Row>::from_usize(row), Pos::<Col>::from_usize(col)),
                     *cell,
                 )
             })
@@ -232,7 +234,7 @@ impl ProseState {
     }
 
     /// Mint one row at the end of a table, holding `cols` cells.
-    fn mint_row(&self, table: &TreeID, cols: ColCount) -> Option<TreeID> {
+    fn mint_row(&self, table: &TreeID, cols: Count<Col>) -> Option<TreeID> {
         let row = doc::create_block(&self.doc, Some(*table), BlockType::TableRow)?;
         for _ in 0..cols.get() {
             self.mint_cell(&row)?;
@@ -288,8 +290,8 @@ impl ProseState {
         &mut self,
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
-        rows: RowCount,
-        cols: ColCount,
+        rows: Count<Row>,
+        cols: Count<Col>,
     ) -> ProseOutcome {
         if rows.is_zero() || cols.is_zero() {
             // A table of no column paints nothing and accepts no text
@@ -308,8 +310,8 @@ impl ProseState {
         &self,
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
-        rows: RowCount,
-        cols: ColCount,
+        rows: Count<Row>,
+        cols: Count<Col>,
     ) -> Result<TreeID, ProseOutcome> {
         let table = self.mint_placed(parent_id, after_id, BlockType::Table)?;
         let Some(attrs) = self.table_attrs(&table) else {
@@ -366,7 +368,7 @@ impl ProseState {
         {
             return Err(Self::err_no_block(&after));
         }
-        let cols = ColCount::from_len(doc::col_widths(&tree, table).len());
+        let cols = Count::<Col>::from_len(doc::col_widths(&tree, table).len());
         let Some(row) = self.mint_row(table, cols) else {
             return Err(Self::err_write(doc::WriteError::Refused(
                 doc::RefusalCause::TreeRefusedRow,
@@ -391,7 +393,12 @@ impl ProseState {
         let Some(grid) = Self::table_of(&tree, row).and_then(|t| Grid::read(&tree, &t)) else {
             return Self::err_no_block(row);
         };
-        let Some(index) = grid.rows.iter().position(|r| r == row).map(Row::from_usize) else {
+        let Some(index) = grid
+            .rows
+            .iter()
+            .position(|r| r == row)
+            .map(Pos::<Row>::from_usize)
+        else {
             return Self::err_no_block(row);
         };
         let doomed = if grid.rows.len() == 1 {
@@ -413,7 +420,7 @@ impl ProseState {
     pub(super) fn insert_table_col(
         &mut self,
         table: &TreeID,
-        at_col: Col,
+        at_col: Pos<Col>,
         width: Option<Pt>,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
@@ -452,7 +459,7 @@ impl ProseState {
     /// Remove the cell at `col_index` in every row and the matching width
     /// entry (`PROSE-FEAT-235`). The last column takes the table with it
     /// (`PROSE-FEAT-045`).
-    pub(super) fn delete_table_col(&mut self, table: &TreeID, col: Col) -> ProseOutcome {
+    pub(super) fn delete_table_col(&mut self, table: &TreeID, col: Pos<Col>) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let Some(grid) = Grid::read(&tree, table) else {
             return Self::err_no_block(table);
@@ -472,7 +479,7 @@ impl ProseState {
         if let Err(e) = self.drop_regions_cornered_in(&grid, |at| at.col == col) {
             return Self::err_write(e);
         }
-        for row in (0..grid.rows.len()).map(Row::from_usize) {
+        for row in (0..grid.rows.len()).map(Pos::<Row>::from_usize) {
             if let Some(cell) = grid.cell(CellPos::new(row, col))
                 && let Err(e) = doc::hide_block(&self.doc, &tree, &cell)
             {
@@ -486,7 +493,12 @@ impl ProseState {
     }
 
     /// Rewrite one width entry, and never the count (`PROSE-FEAT-239`).
-    pub(super) fn resize_table_col(&mut self, table: &TreeID, col: Col, width: Pt) -> ProseOutcome {
+    pub(super) fn resize_table_col(
+        &mut self,
+        table: &TreeID,
+        col: Pos<Col>,
+        width: Pt,
+    ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         if Grid::read(&tree, table).is_none() {
             return Self::err_no_block(table);
@@ -524,7 +536,7 @@ impl ProseState {
             return Self::err_no_block(table);
         };
         let rect = CellRect::spanning(start, end);
-        let cols = ColCount::from_len(doc::col_widths(&tree, table).len());
+        let cols = Count::<Col>::from_len(doc::col_widths(&tree, table).len());
         if rect.bottom_right.row >= grid.row_count().as_end()
             || rect.bottom_right.col >= cols.as_end()
         {
@@ -786,7 +798,7 @@ impl ProseState {
 pub(crate) mod tests {
     use super::*;
     use crate::events::{ProseCommand, tree_id};
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
 
     /// The first table at the root of the document.
     pub(crate) fn the_table(state: &ProseState) -> TreeID {
@@ -801,7 +813,12 @@ pub(crate) mod tests {
     pub(crate) fn cell_at(state: &ProseState, table: TreeID, row: usize, col: usize) -> TreeID {
         state
             .grid_of(&table)
-            .and_then(|grid| grid.cell(CellPos::new(Row::from_usize(row), Col::from_usize(col))))
+            .and_then(|grid| {
+                grid.cell(CellPos::new(
+                    Pos::<Row>::from_usize(row),
+                    Pos::<Col>::from_usize(col),
+                ))
+            })
             .expect("the grid holds that cell")
     }
 
@@ -821,8 +838,8 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(root),
-            rows: RowCount::new(rows),
-            cols: ColCount::new(cols),
+            rows: Count::<Row>::new(rows),
+            cols: Count::<Col>::new(cols),
         });
         let table = the_table(&state);
         (state, table)
@@ -838,7 +855,7 @@ pub(crate) mod tests {
         state
             .handle_command(ProseCommand::InsertText {
                 block_id: block_id(block),
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: text.to_owned(),
             })
             .update
@@ -892,7 +909,7 @@ pub(crate) mod tests {
 
     /// The grid position at a row and a column.
     pub(crate) fn pos((row, col): (u32, u32)) -> CellPos {
-        CellPos::new(Row::new(row), Col::new(col))
+        CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col))
     }
 
     // -- the state -------------------------------------------------------
@@ -915,12 +932,12 @@ pub(crate) mod tests {
             },
             ProseCommand::InsertTableCol {
                 table_id: block_id(table),
-                at_col: Col::new(1),
+                at_col: Pos::<Col>::new(1),
                 width: None,
             },
             ProseCommand::DeleteTableCol {
                 table_id: block_id(table),
-                col_index: Col::new(0),
+                col_index: Pos::<Col>::new(0),
             },
             ProseCommand::DeleteTableRow {
                 row_id: block_id(first_row),
@@ -940,14 +957,14 @@ pub(crate) mod tests {
             let outcome = state.handle_command(ProseCommand::InsertTable {
                 parent_id: None,
                 after_id: None,
-                rows: RowCount::new(rows),
-                cols: ColCount::new(cols),
+                rows: Count::<Row>::new(rows),
+                cols: Count::<Col>::new(cols),
             });
             assert_eq!(
                 refusal(&outcome),
                 Some(ProseRefusal::BadTableValue(TableValue::Size {
-                    rows: RowCount::new(rows),
-                    cols: ColCount::new(cols),
+                    rows: Count::<Row>::new(rows),
+                    cols: Count::<Col>::new(cols),
                 }))
             );
             assert!(outcome.update.is_none());
@@ -1004,14 +1021,14 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: Col::new(1),
+            col_index: Pos::<Col>::new(1),
             width: ambre_core::Pt::new(100.0),
         });
         let first = cell_at(&state, table, 0, 0);
         type_in(&mut state, first, "kept");
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
-            at_col: Col::new(1),
+            at_col: Pos::<Col>::new(1),
             width: Some(ambre_core::Pt::new(50.0)),
         });
         assert_eq!(
@@ -1031,7 +1048,7 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 1);
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
-            at_col: Col::new(0),
+            at_col: Pos::<Col>::new(0),
             width: None,
         });
         assert_eq!(
@@ -1045,7 +1062,7 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let outcome = state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
-            at_col: Col::new(3),
+            at_col: Pos::<Col>::new(3),
             width: None,
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::OutsideTheGrid));
@@ -1071,7 +1088,7 @@ pub(crate) mod tests {
         assert_eq!(texts(&state, table)[3][2], "text");
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
-            at_col: Col::new(1),
+            at_col: Pos::<Col>::new(1),
             width: Some(ambre_core::Pt::new(10.0)),
         });
         assert_eq!(state.regions_of(&table), regions);
@@ -1089,12 +1106,12 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 3);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: Col::new(2),
+            col_index: Pos::<Col>::new(2),
             width: ambre_core::Pt::new(30.0),
         });
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: Col::new(1),
+            col_index: Pos::<Col>::new(1),
         });
         assert_eq!(
             state.column_widths(&table),
@@ -1131,7 +1148,7 @@ pub(crate) mod tests {
         merge(&mut state, table, (0, 0), (1, 1));
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: Col::new(1),
+            col_index: Pos::<Col>::new(1),
         });
         assert!(state.regions_of(&table).is_empty());
     }
@@ -1147,7 +1164,7 @@ pub(crate) mod tests {
         });
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: Col::new(1),
+            col_index: Pos::<Col>::new(1),
         });
         assert_eq!(state.regions_of(&table), regions);
         let (_, rect) = state.merged_rects(&table)[0];
@@ -1159,7 +1176,7 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 1);
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: Col::new(0),
+            col_index: Pos::<Col>::new(0),
         });
         assert!(state.grid_of(&table).is_none());
         assert_eq!(state.root_blocks().len(), 1);
@@ -1180,7 +1197,7 @@ pub(crate) mod tests {
         let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 3);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: Col::new(0),
+            col_index: Pos::<Col>::new(0),
             width: ambre_core::Pt::new(20.0),
         });
         let kept = cell_at(&state, table, 1, 2);
@@ -1191,7 +1208,7 @@ pub(crate) mod tests {
         });
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
-            col_index: Col::new(1),
+            col_index: Pos::<Col>::new(1),
         });
         assert_eq!(
             state.column_widths(&table),
@@ -1212,7 +1229,7 @@ pub(crate) mod tests {
         type_in(&mut state, cell, "x");
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: Col::new(1),
+            col_index: Pos::<Col>::new(1),
             width: ambre_core::Pt::new(144.0),
         });
         let d = doc::DEFAULT_COLUMN_WIDTH;
@@ -1223,7 +1240,7 @@ pub(crate) mod tests {
         assert_eq!(texts(&state, table)[0][1], "x");
         let outcome = state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: Col::new(3),
+            col_index: Pos::<Col>::new(3),
             width: ambre_core::Pt::new(10.0),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::OutsideTheGrid));
@@ -1376,12 +1393,12 @@ pub(crate) mod tests {
             style(Some(ambre_core::Pt::new(f32::NAN))),
             ProseCommand::ResizeTableCol {
                 table_id: block_id(table),
-                col_index: Col::new(0),
+                col_index: Pos::<Col>::new(0),
                 width: ambre_core::Pt::new(f32::INFINITY),
             },
             ProseCommand::InsertTableCol {
                 table_id: block_id(table),
-                at_col: Col::new(0),
+                at_col: Pos::<Col>::new(0),
                 width: Some(ambre_core::Pt::new(0.0)),
             },
         ];
@@ -1449,7 +1466,7 @@ pub(crate) mod tests {
         type_in(&mut state, last, "end");
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
-            col_index: Col::new(0),
+            col_index: Pos::<Col>::new(0),
             width: ambre_core::Pt::new(12.0),
         });
         merge(&mut state, table, (0, 0), (0, 1));

@@ -21,6 +21,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_core::index::Pos;
 use ambre_core::{
     DocType,
     docfile::{DocFileError, read_ambre_plaintext},
@@ -39,8 +40,8 @@ fn doc_id(tag: u8) -> Id<Document> {
 fn trame_file() -> ambre_core::Payload<ambre_core::PlaintextContainer> {
     let mut state = TrameState::new();
     state.handle_command(ambre_trame::TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "hello".to_owned(),
     });
     state

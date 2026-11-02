@@ -6,6 +6,7 @@
 
 use super::*;
 use ambre_core::id::{Id, User};
+use ambre_core::index::{Count, Pos};
 use ambre_core::{Redacted, Rule, Validated};
 
 // -----------------------------------------------------------------------------
@@ -140,7 +141,7 @@ pub struct SheetNameKey(Redacted<String>);
 
 impl SheetName {
     /// The most characters a sheet name holds.
-    pub const MAX_CHARS: ambre_core::CharCount = ambre_core::CharCount::new(31);
+    pub const MAX_CHARS: Count<ambre_core::Char> = Count::<ambre_core::Char>::new(31);
 
     /// The characters a sheet name cannot hold. A `:` or a bracket would read
     /// as reference syntax, and the rest are Excel's.
@@ -301,10 +302,10 @@ pub enum TrameCommand {
     /// whose version is older than the last accepted one.
     ScrollViewport {
         version: ambre_core::Generation<crate::ViewportVersion>,
-        row_start: Row,
-        row_end: Row,
-        col_start: Col,
-        col_end: Col,
+        row_start: Pos<Row>,
+        row_end: Pos<Row>,
+        col_start: Pos<Col>,
+        col_end: Pos<Col>,
     },
 
     /// Move the active cell to `(row, col)` and report the whole selection
@@ -325,10 +326,10 @@ pub enum TrameCommand {
     /// selection is local view state -- never persisted, never synced
     /// (`trame-selection`).
     SetActiveCell {
-        row: Row,
-        col: Col,
-        anchor_row: Row,
-        anchor_col: Col,
+        row: Pos<Row>,
+        col: Pos<Col>,
+        anchor_row: Pos<Row>,
+        anchor_col: Pos<Col>,
         /// Committed disjoint rectangles (Ctrl+click), each normalized. The live
         /// rectangle (`anchor..=active`) is not here; the full selection is these
         /// plus that rectangle.
@@ -344,7 +345,11 @@ pub enum TrameCommand {
     /// pipe. The Logic thread stores the text in the document CRDT (the source
     /// of truth); an empty `text` clears the cell. The UI updates its own cache
     /// optimistically, so no echo event is required.
-    SetCellText { row: Row, col: Col, text: String },
+    SetCellText {
+        row: Pos<Row>,
+        col: Pos<Col>,
+        text: String,
+    },
 
     /// Open edit session `session` on cell `(row, col)`. The Logic thread
     /// resolves the position once, to the sheet and the two lines under it, and
@@ -352,8 +357,8 @@ pub enum TrameCommand {
     /// A new session replaces the previous one.
     BeginCellEdit {
         session: crate::token::Token<EditSession>,
-        row: Row,
-        col: Col,
+        row: Pos<Row>,
+        col: Pos<Col>,
     },
 
     /// Commit session `session` with `text`, written to the cell it opened on.
@@ -412,21 +417,21 @@ pub enum TrameCommand {
     /// A row inserted within a range formula is naturally included; references
     /// are never rewritten (`trame-formula-engine`). A no-op past the
     /// materialized used range (virtual rows are already blank).
-    InsertRow { at: Row },
+    InsertRow { at: Pos<Row> },
 
     /// Delete the row at grid position `at`, shifting rows at `> at` up by one.
     /// Its cells/formatting are dropped and any formula referencing the now
     /// removed row id resolves to `#REF!` (`trame-formula-engine`). A no-op in
     /// virtual space.
-    DeleteRow { at: Row },
+    DeleteRow { at: Pos<Row> },
 
     /// Insert a blank column at grid position `at`, shifting existing columns at
     /// `>= at` right by one. Column analogue of [`InsertRow`](TrameCommand::InsertRow).
-    InsertColumn { at: Col },
+    InsertColumn { at: Pos<Col> },
 
     /// Delete the column at grid position `at`, shifting columns at `> at` left
     /// by one. Column analogue of [`DeleteRow`](TrameCommand::DeleteRow).
-    DeleteColumn { at: Col },
+    DeleteColumn { at: Pos<Col> },
 
     /// Move the row at grid position `from` to grid position `to` (Excel-style
     /// drag reorder), shifting the rows in between to fill the gap. Realized as a
@@ -436,12 +441,12 @@ pub enum TrameCommand {
     /// (`trame-formula-engine`, the same guarantee as sort). Concurrent moves
     /// converge by LWW on the list order. A no-op if `from == to` or either index
     /// is outside the materialized used range.
-    MoveRow { from: Row, to: Row },
+    MoveRow { from: Pos<Row>, to: Pos<Row> },
 
     /// Move the column at grid position `from` to grid position `to`. Column
     /// analogue of [`MoveRow`](TrameCommand::MoveRow): a single `mov` on
     /// `cols_{sheet}`.
-    MoveColumn { from: Col, to: Col },
+    MoveColumn { from: Pos<Col>, to: Pos<Col> },
 
     /// Merge the rectangle `rect` into a single cell, its top-left corner
     /// becoming the master (`trame-cell-merges`).
@@ -455,7 +460,7 @@ pub enum TrameCommand {
     /// the covered cells. Any value masked by the merge (a concurrent-edit
     /// conflict, `trame-cell-merges`) reappears. A no-op if `(row, col)` is not
     /// inside a merge.
-    UnmergeCells { row: Row, col: Col },
+    UnmergeCells { row: Pos<Row>, col: Pos<Col> },
 
     /// Set the width (document px) of column `col` on `sheet_id` (`trame-resize`,
     /// `trame-engine`). The Logic thread writes the value into the per-sheet
@@ -470,7 +475,7 @@ pub enum TrameCommand {
     ResizeCol {
         version: ambre_core::Generation<crate::ViewportVersion>,
         sheet_id: SheetId,
-        col: Col,
+        col: Pos<Col>,
         width: ambre_core::Px<ambre_core::Doc>,
     },
     /// Set the height (document px, before the zoom) of row `row` on `sheet_id`. Row analogue of
@@ -478,7 +483,7 @@ pub enum TrameCommand {
     ResizeRow {
         version: ambre_core::Generation<crate::ViewportVersion>,
         sheet_id: SheetId,
-        row: Row,
+        row: Pos<Row>,
         height: ambre_core::Px<ambre_core::Doc>,
     },
 
@@ -577,7 +582,7 @@ pub enum TrameCommand {
     /// column is measured whole or not resized. Replies with
     /// [`TrameEvent::ColumnContent`](super::TrameEvent::ColumnContent). A
     /// read-only query: no CRDT delta.
-    RequestColumnContent { col: Col },
+    RequestColumnContent { col: Pos<Col> },
     /// Build the clipboard payload for the tracked selection (`trame-clipboard`). The
     /// parameterless-geometry sibling of copy. The Logic thread is the only holder of
     /// document data, so it serializes the selected cells (never culled to a viewport) into
@@ -612,8 +617,8 @@ pub enum TrameCommand {
     ///
     /// [`DataReset`]: super::TrameEvent::DataReset
     PasteRange {
-        target_row: Row,
-        target_col: Col,
+        target_row: Pos<Row>,
+        target_col: Pos<Col>,
         payload: ClipboardPayload,
     },
 
@@ -747,7 +752,7 @@ pub enum TrameCommand {
     /// (`trame-sheets`). A no-op if the id is unknown or already at that position.
     MoveSheet {
         sheet_id: SheetId,
-        to_index: SheetTabPos,
+        to_index: Pos<TabStrip>,
     },
 
     /// Sort the rows of the rectangle `rect` by the values in its column
@@ -767,7 +772,7 @@ pub enum TrameCommand {
         sheet_id: SheetId,
         rect: CellRect,
         /// Column to sort on, as an index within the range (`0` = its left column).
-        sort_col: ColCount,
+        sort_col: Count<Col>,
         order: SortOrder,
         /// A first range row that is a header is not sorted.
         header: HeaderRow,
@@ -798,7 +803,7 @@ pub enum TrameCommand {
     ApplyFilter {
         sheet_id: SheetId,
         /// Grid column the filter is applied to (0-based).
-        col: Col,
+        col: Pos<Col>,
         kind: FilterKind,
     },
 
@@ -828,8 +833,8 @@ pub enum TrameCommand {
         header: HeaderRow,
         /// Target sheet; `None` creates a new "CSV Import" sheet.
         target_sheet_id: Option<SheetId>,
-        start_row: Row,
-        start_col: Col,
+        start_row: Pos<Row>,
+        start_col: Pos<Col>,
     },
 
     /// Export the **active** sheet to CSV (`trame-import-export`). Parameterless sibling of
@@ -901,7 +906,7 @@ pub enum TrameCommand {
         name: String,
         sheet_id: SheetId,
         /// Grid column the personal view filters on (0-based).
-        filter_col: Col,
+        filter_col: Pos<Col>,
         kind: FilterKind,
     },
 

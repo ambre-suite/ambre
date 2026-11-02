@@ -3,6 +3,7 @@
 //! container, so the input reaches the schema gate and the CRDT engine.
 #![no_main]
 
+use ambre_core::index::Pos;
 use ambre_core::id::{Document, Id};
 use ambre_core::{
     DeltaBytes, DocType, FileBytes, Payload, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
@@ -17,8 +18,8 @@ fuzz_target!(|data: &[u8]| {
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
-        start_row: Row::ZERO,
-        start_col: Col::ZERO,
+        start_row: Pos::<Row>::ZERO,
+        start_col: Pos::<Col>::ZERO,
     });
     let file = write_ambre_plaintext(
         DocType::Trame,

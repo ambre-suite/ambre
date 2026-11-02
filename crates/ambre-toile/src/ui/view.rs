@@ -70,6 +70,9 @@ use super::tool::{
     world_rect_to_screen,
 };
 use super::viewport::ViewportTransform;
+#[cfg(target_arch = "wasm32")]
+use ambre_core::Authored;
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 // Context-menu bridge (`toile-menus`): the DOM `ContextMenu` reads the
 // published selection scope and writes back the chosen `StaticKey<Commands>`. Both ends
@@ -212,7 +215,7 @@ const NUDGE_LARGE: ambre_core::BoardLength = ambre_core::BoardLength::new(10.0);
 /// Inline-edit caret blink half-period: the caret shows for one interval,
 /// hides for the next (`toile-tools`). ~530 ms is the familiar desktop
 /// cadence.
-const CARET_BLINK_PERIOD: ambre_core::PageMillis = ambre_core::PageMillis::new(530.0);
+const CARET_BLINK_PERIOD: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(530.0);
 
 /// How many trailing samples of an in-flight freehand stroke ride a presence
 /// sample (`TOILE-UI-217`). The relay forwards presence and forgets it, and a
@@ -672,7 +675,7 @@ pub struct ToileView {
     /// The latest frame timestamp (ms), captured in `plan_repaint`, used to blink
     /// the inline-edit caret (`toile-text-editing`). Paint has no clock of its own,
     /// so the per-frame hook stashes it here.
-    frame_now: ambre_core::PageTime,
+    frame_now: Instant<PageLoad>,
 }
 
 /// The topmost element under a canvas point, through the camera
@@ -862,7 +865,7 @@ impl ToileView {
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
             child_route: None,
-            frame_now: ambre_bus::PageTime::new(0.0),
+            frame_now: Instant::<PageLoad>::new(0.0),
         }
     }
 
@@ -1599,7 +1602,7 @@ impl ToileView {
     /// have stayed out past the debounce (`toile-embeds`, "Opening the
     /// child"). Driven from `plan_repaint`, the one per-frame hook carrying the
     /// frame clock.
-    fn drive_embed_lifecycle(&mut self, now: ambre_core::PageTime) {
+    fn drive_embed_lifecycle(&mut self, now: Instant<PageLoad>) {
         // The session set records only what the queue actually took, so the
         // next frame offers a refused command again rather than losing it
         // (`TOILE-UI-338`, `TOILE-UI-339`). `fatal` is the one case that
@@ -1636,10 +1639,10 @@ impl ToileView {
 
     /// The time on the frame clock's timeline, for an input that carries
     /// none.
-    fn clock(&self) -> ambre_core::PageTime {
+    fn clock(&self) -> Instant<PageLoad> {
         #[cfg(target_arch = "wasm32")]
         if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
-            return ambre_core::PageTime::new(perf.now());
+            return Instant::<PageLoad>::new(perf.now());
         }
         self.frame_now
     }
@@ -1660,7 +1663,7 @@ impl ToileView {
     pub fn touch_down(
         &mut self,
         at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) -> Consumed {
         self.kinetic.stop();
         let screen = on_screen(at);
@@ -1691,7 +1694,7 @@ impl ToileView {
     pub fn touch_move(
         &mut self,
         at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) -> Consumed {
         match self.finger {
             Some(FingerRole::Pans) => {
@@ -1712,7 +1715,7 @@ impl ToileView {
     pub fn touch_up(
         &mut self,
         at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) -> Consumed {
         match self.finger.take() {
             Some(FingerRole::Pans) => {
@@ -1762,7 +1765,7 @@ impl ToileView {
     /// Pan the board under a gesture held at an edge, once a frame, and let
     /// the gesture follow (`TOILE-UI-380`). The first tick only starts the
     /// clock.
-    fn step_edge_pan(&mut self, now: ambre_core::PageTime) {
+    fn step_edge_pan(&mut self, now: Instant<PageLoad>) {
         let held = self.machine.is_active() || self.arrow_drag.is_some();
         let speed = held.then(|| super::kinetic::edge_pan_speed(&self.cam, self.last_pointer));
         let Some(step) = self.edge.tick(speed, now) else {
@@ -2296,7 +2299,7 @@ impl ToileView {
     /// Send this peer's sample if it changed or the heartbeat is due
     /// (`TOILE-UI-073`). Lossy: a dropped sample is corrected by the next one,
     /// and presence must never displace an edit on a full queue.
-    fn broadcast_presence(&mut self, now: ambre_core::PageTime) {
+    fn broadcast_presence(&mut self, now: Instant<PageLoad>) {
         if let Some(payload) = self.presence_out.due(self.presence_sample(), now) {
             // A dropped sample is not re-offered: the next one carries a fresher
             // pointer, and a queue of stale samples is worse than a gap.
@@ -3642,7 +3645,7 @@ impl ToileView {
                 // Blink the caret on a ~1-second cycle so it visibly signals "you can
                 // type here" (`toile-text-editing`). `editor.is_some()` keeps the
                 // overlay redrawing every frame, so the toggle animates.
-                let caret_on = (self.frame_now.since_load() / CARET_BLINK_PERIOD) as i64 % 2 == 0;
+                let caret_on = (self.frame_now.since_epoch() / CARET_BLINK_PERIOD) as i64 % 2 == 0;
                 // The guard above found an editor, and nothing since closed it.
                 let Some(ed) = self.editor.as_mut() else {
                     return;
@@ -3851,7 +3854,7 @@ impl ToileView {
     /// with nothing in between.
     pub fn plan_repaint(
         &mut self,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
         hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         // Stash the frame clock for paint-time use (inline-edit caret blink,
@@ -4428,9 +4431,9 @@ impl ToileView {
 /// (`toile-comments` section 5). The Logic thread holds no clock, and nothing
 /// orders by this one (`TOILE-FEAT-012`): the reader sees it, and that is all.
 #[cfg(target_arch = "wasm32")]
-fn wall_clock() -> ambre_core::Timestamp {
+fn wall_clock() -> Instant<Authored> {
     // `Date.now()` is a whole, non-negative count of milliseconds.
-    ambre_core::Timestamp::new(js_sys::Date::now() as u64)
+    Instant::<Authored>::new(js_sys::Date::now() as u64)
 }
 
 /// The canvas element's top-left client offset (CSS px), so a canvas-local anchor

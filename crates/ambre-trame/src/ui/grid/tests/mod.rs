@@ -7,9 +7,10 @@ mod session;
 mod viewport;
 
 use super::{AxisPos, CellData, CellEditor, HeaderHit, SelKind, Selection, TrameUiState};
+use ambre_core::index::Pos;
 
 use crate::test_support::{at, rect, span};
-use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount, RowDelta};
+use crate::{CellPos, CellRect, Col, MergeSpan, Row};
 use crate::{DisplayCell, TrameEvent};
 
 /// A pointer at logical `(x, y)`, as the canvas hands it over.
@@ -29,7 +30,7 @@ fn view_px(v: f64) -> ambre_core::Px<ambre_core::View> {
 /// defaulted), so the current-region helpers see it as data.
 fn put(state: &mut TrameUiState, row: u32, col: u32, text: &str) {
     state.cell_cache.insert(
-        CellPos::new(Row::new(row), Col::new(col)),
+        CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)),
         CellData {
             text: text.to_owned(),
             ..Default::default()
@@ -50,15 +51,15 @@ fn seed_merge_2x2(state: &mut TrameUiState) {
     };
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_core::Generation::ZERO,
-        row_start: Row::new(0),
-        col_start: Col::new(0),
+        row_start: Pos::<Row>::new(0),
+        col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
-            cell(Row::new(1), Col::new(1), Some(span(2, 2))), // master
-            cell(Row::new(1), Col::new(2), None),
-            cell(Row::new(2), Col::new(1), None),
-            cell(Row::new(2), Col::new(2), None),
+            cell(Pos::<Row>::new(1), Pos::<Col>::new(1), Some(span(2, 2))), // master
+            cell(Pos::<Row>::new(1), Pos::<Col>::new(2), None),
+            cell(Pos::<Row>::new(2), Pos::<Col>::new(1), None),
+            cell(Pos::<Row>::new(2), Pos::<Col>::new(2), None),
         ],
     });
 }

@@ -7,11 +7,13 @@ use super::*;
 use crate::ui::kinetic::FingerRole;
 use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
+use ambre_bus::{Instant, PageLoad};
 use ambre_commands::{Commands, KeyChar, StaticKey};
 use ambre_core::Px;
 use ambre_core::Rgba;
 use ambre_core::Tally;
 use ambre_core::id::User;
+use ambre_core::index::Count;
 use kurbo::Rect;
 
 /// A pointer at screen `(x, y)`, as the canvas hands it over.
@@ -166,7 +168,7 @@ impl Rig {
     /// Plan one frame, where the view sends what a changed selection asks for.
     fn frame(&mut self) {
         self.view
-            .plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+            .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
     }
 
     /// Run one frame's paint into a recording surface. A deferred editor
@@ -292,17 +294,17 @@ fn an_untouched_editor_closes_without_a_write() {
 fn the_pipe_is_typed_text_only_while_an_editor_is_open() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.view
-        .plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+        .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
     assert!(!rig.view.pipe_typing(), "a board with no editor");
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
     rig.view
-        .plan_repaint(ambre_bus::PageTime::new(16.0), ambre_canvas::HudTick::Idle);
+        .plan_repaint(Instant::<PageLoad>::new(16.0), ambre_canvas::HudTick::Idle);
     assert!(rig.view.pipe_typing(), "an open editor takes the keys");
     rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     rig.view
-        .plan_repaint(ambre_bus::PageTime::new(32.0), ambre_canvas::HudTick::Idle);
+        .plan_repaint(Instant::<PageLoad>::new(32.0), ambre_canvas::HudTick::Idle);
     assert!(!rig.view.pipe_typing(), "a closed editor gives them back");
 }
 
@@ -1382,7 +1384,7 @@ fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
         let (x, y) = rig.screen(i as f64 * 10.0, 0.0);
         rig.input(InputEvent::PointerMove { at: pointer(x, y) });
         rig.view
-            .plan_repaint(ambre_bus::PageTime::new(t), ambre_canvas::HudTick::Idle);
+            .plan_repaint(Instant::<PageLoad>::new(t), ambre_canvas::HudTick::Idle);
         t += 16.0;
         seen.extend(live_strokes(&rig.sent()));
     }
@@ -1394,7 +1396,7 @@ fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
     let end = rig.screen(40.0, 0.0);
     rig.release(end);
     rig.view
-        .plan_repaint(ambre_bus::PageTime::new(t), ambre_canvas::HudTick::Idle);
+        .plan_repaint(Instant::<PageLoad>::new(t), ambre_canvas::HudTick::Idle);
     assert_eq!(live_strokes(&rig.sent()), [None], "the trail ends");
 }
 
@@ -1653,7 +1655,7 @@ fn the_caret_blinks() {
     rig.double_click(50.0, 50.0);
     let ops_at = |rig: &mut Rig, t: f64| {
         rig.view
-            .plan_repaint(ambre_bus::PageTime::new(t), ambre_canvas::HudTick::Idle);
+            .plan_repaint(Instant::<PageLoad>::new(t), ambre_canvas::HudTick::Idle);
         rig.paint().ops().len()
     };
     let on = ops_at(&mut rig, 0.0);
@@ -1833,18 +1835,18 @@ fn a_finger_pans_only_the_empty_board() {
     let empty = rig.screen(900.0, 600.0);
     assert!(
         rig.view
-            .touch_down(pointer(empty.0, empty.1), ambre_bus::PageTime::new(0.0))
+            .touch_down(pointer(empty.0, empty.1), Instant::<PageLoad>::new(0.0))
             .is_yes()
     );
     assert_eq!(rig.view.finger, Some(FingerRole::Pans));
     let centre = rig.view.cam.center;
     let _ = rig.view.touch_move(
         pointer(empty.0 - 60.0, empty.1),
-        ambre_bus::PageTime::new(16.0),
+        Instant::<PageLoad>::new(16.0),
     );
     let _ = rig.view.touch_move(
         pointer(empty.0 - 120.0, empty.1),
-        ambre_bus::PageTime::new(32.0),
+        Instant::<PageLoad>::new(32.0),
     );
     assert!(rig.view.cam.center.x > centre.x, "the finger pans");
     let _ = rig.view.touch_cancel();
@@ -1852,7 +1854,7 @@ fn a_finger_pans_only_the_empty_board() {
     let on_a = rig.screen(50.0, 50.0);
     let _ = rig
         .view
-        .touch_down(pointer(on_a.0, on_a.1), ambre_bus::PageTime::new(100.0));
+        .touch_down(pointer(on_a.0, on_a.1), Instant::<PageLoad>::new(100.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
@@ -1860,7 +1862,7 @@ fn a_finger_pans_only_the_empty_board() {
     );
     let _ = rig
         .view
-        .touch_up(pointer(on_a.0, on_a.1), ambre_bus::PageTime::new(110.0));
+        .touch_up(pointer(on_a.0, on_a.1), Instant::<PageLoad>::new(110.0));
     assert_eq!(rig.view.selection, [eid("a")]);
 
     let (x0, y0) = rig.screen(A.x0, A.y0);
@@ -1868,7 +1870,7 @@ fn a_finger_pans_only_the_empty_board() {
     let knob = crate::ui::tool::rotate_handle_point(Rect::new(x0, y0, x1, y1));
     let _ = rig
         .view
-        .touch_down(pointer(knob.x, knob.y), ambre_bus::PageTime::new(200.0));
+        .touch_down(pointer(knob.x, knob.y), Instant::<PageLoad>::new(200.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
@@ -1879,7 +1881,7 @@ fn a_finger_pans_only_the_empty_board() {
     rig.view.set_tool(Tool::Pen);
     let _ = rig
         .view
-        .touch_down(pointer(empty.0, empty.1), ambre_bus::PageTime::new(300.0));
+        .touch_down(pointer(empty.0, empty.1), Instant::<PageLoad>::new(300.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
@@ -1900,12 +1902,12 @@ fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
             at: pointer(1195.0, 400.0),
         });
         rig.view.plan_repaint(
-            ambre_bus::PageTime::new(1000.0),
+            Instant::<PageLoad>::new(1000.0),
             ambre_canvas::HudTick::Idle,
         );
         let x = rig.view.cam.center.x;
         rig.view.plan_repaint(
-            ambre_bus::PageTime::new(1016.0),
+            Instant::<PageLoad>::new(1016.0),
             ambre_canvas::HudTick::Idle,
         );
         let moved = rig.view.cam.center.x - x;
@@ -1987,7 +1989,7 @@ fn the_band_asks_once_per_selection_change() {
 fn plan(rig: &mut Rig) -> (bool, bool) {
     let p = rig
         .view
-        .plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+        .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
     (
         matches!(p.content, ContentRepaint::Full),
         matches!(p.overlay, LayerRepaint::Redraw),
@@ -2626,7 +2628,7 @@ fn a_shared_board(peer: Id<User>) -> Rig {
         pins: vec![ambre_bus::app::toile::CommentPin {
             thread: Id::<Thread>::from_text("t".to_owned()),
             at: kurbo::Point::new(50.0, 50.0),
-            messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
+            messages: Count::<ambre_bus::app::toile::ThreadMessage>::new(1),
             resolved: ambre_core::ThreadState::Open,
         }],
         reactions,

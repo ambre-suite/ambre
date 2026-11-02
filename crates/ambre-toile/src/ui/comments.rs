@@ -316,6 +316,7 @@ mod tests {
     use ambre_bus::app::toile::Viewport;
     use ambre_canvas::PointerButton;
     use ambre_canvas::theme::LIGHT;
+    use ambre_core::index::Count;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
     /// `TOILE-289`: an intent's debug form prints a body's length, none of it.
@@ -340,7 +341,7 @@ mod tests {
         CommentPin {
             thread: Id::<Thread>::from_text(id.to_owned()),
             at,
-            messages: ambre_bus::app::toile::ThreadMessageCount::new(messages),
+            messages: Count::<ambre_bus::app::toile::ThreadMessage>::new(messages),
             resolved,
         }
     }

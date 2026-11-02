@@ -115,7 +115,7 @@ pub struct FindOptions {
 pub enum PatternKind { #[default] Literal, Regex }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct FindMatch { pub block_id: BlockId, pub range: DocSpan }
+pub struct FindMatch { pub block_id: BlockId, pub range: Span<DocChar> }
 
 // ambre-prose/src/logic/find.rs
 impl ProseState {
@@ -133,7 +133,7 @@ impl ProseState {
 
 /// The match spans inside one block's text, honouring case and whole-word, and never
 /// overlapping (`PROSE-FEAT-035`).
-fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan>;
+fn match_offsets(hay: &str, query: &FindQuery) -> Vec<Span<DocChar>>;
 ```
 
 * **What is searched** -- the body blocks of the movable tree, in document order, and nothing else.

@@ -10,9 +10,9 @@
 //! sequenced comes back as a replay, so nothing is dropped (`MURMURE-077`).
 //! The engine reads no clock: each delay is stamped by the next tick.
 
-use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
+use ambre_bus::{Authored, FoldAnswer, Instant, MessageView, MurmureEvent, SnapshotVerdict};
 use ambre_core::id::{Channel, Document, Id, Lease, Segment};
-use ambre_core::{DeltaBytes, Failures, Millis, Payload, Seq, SnapshotBytes, Tally};
+use ambre_core::{DeltaBytes, Failures, Ms, Payload, Seq, SnapshotBytes, Tally, TimeSpan};
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
@@ -27,7 +27,7 @@ use crate::{mention, style};
 /// The delay before a fold lease is asked again once a fold left: the
 /// `FOLD_DELAY` row of `ambre-spec-budgets.md section 8`, which the relay
 /// holds. The relay answers sooner when a fold is owed earlier.
-pub const FOLD_DELAY: Millis = Millis::new(7 * 24 * 60 * 60 * 1000);
+pub const FOLD_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(7 * 24 * 60 * 60 * 1000);
 
 /// The fold of one final segment, as this client drives it.
 #[derive(Debug)]
@@ -43,15 +43,15 @@ pub(super) struct Folding {
 enum Step {
     /// Ask for the lease `after` milliseconds past the tick that stamps `at`.
     Due {
-        after: Millis,
-        at: Option<Timestamp>,
+        after: TimeSpan<Ms>,
+        at: Option<Instant<Authored>>,
     },
     /// A lease request or a commit is on its way.
     Asked,
     /// This client holds the lease until `until`, stamped by the next tick.
     Held {
         grant: Grant,
-        until: Option<Timestamp>,
+        until: Option<Instant<Authored>>,
     },
 }
 
@@ -62,7 +62,7 @@ struct Grant {
     horizon: Seq,
     amendments: Id<Document>,
     amendments_seq: Seq,
-    expires_in: ambre_core::Millis,
+    expires_in: TimeSpan<Ms>,
 }
 
 /// A fold snapshot to upload under a lease (`MURMURE-075`).
@@ -117,7 +117,7 @@ impl ChannelState {
             self.folding = Some(Folding {
                 segment,
                 step: Step::Due {
-                    after: Millis::new(0),
+                    after: TimeSpan::<Ms>::new(0),
                     at: None,
                 },
                 failures: Tally::<Failures>::ZERO,
@@ -135,7 +135,7 @@ impl ChannelState {
     /// The final segment whose fold lease to ask for at `now`. The first
     /// tick asks at once: the relay answers how long the fold delay still
     /// runs (`SRV-206`).
-    pub fn fold_lease_to_ask(&mut self, now: Timestamp) -> Option<Id<Segment>> {
+    pub fn fold_lease_to_ask(&mut self, now: Instant<Authored>) -> Option<Id<Segment>> {
         let folding = self.fold_step()?;
         match &mut folding.step {
             Step::Due { after, at } => {
@@ -219,7 +219,10 @@ impl ChannelState {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses the fold or the export.
-    pub fn fold_snapshot(&mut self, now: Timestamp) -> Result<Option<FoldSnapshot>, MurmureError> {
+    pub fn fold_snapshot(
+        &mut self,
+        now: Instant<Authored>,
+    ) -> Result<Option<FoldSnapshot>, MurmureError> {
         let Some(folding) = self.fold_step() else {
             return Ok(None);
         };
@@ -228,7 +231,7 @@ impl ChannelState {
             return Ok(None);
         };
         let grant = *grant;
-        let until = *until.get_or_insert(Timestamp::new(
+        let until = *until.get_or_insert(Instant::<Authored>::new(
             now.get().saturating_add(grant.expires_in.get()),
         ));
         let held = self.amendments.get(&segment).map(|held| held.id);

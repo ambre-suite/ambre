@@ -24,7 +24,7 @@ use crate::{
     Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush,
     Rect, Stroke,
 };
-use ambre_core::{Image, Px, Size, Surface, Tally};
+use ambre_core::{Image, Instant, PageLoad, Px, Size, Surface, Tally};
 
 /// How many glyphs one recorded run holds.
 pub enum Glyphs {}
@@ -273,18 +273,18 @@ impl DrawSurface for RecordingSurface {
 /// deterministic zero-deltas in headless tests, which never assert on them.
 #[derive(Clone, Copy, Default)]
 pub struct FixedClock {
-    at: ambre_core::PageTime,
+    at: Instant<PageLoad>,
 }
 
 impl FixedClock {
     /// The clock that reads `at` on every call.
-    pub fn new(at: ambre_core::PageTime) -> Self {
+    pub fn new(at: Instant<PageLoad>) -> Self {
         Self { at }
     }
 }
 
 impl Clock for FixedClock {
-    fn now(&self) -> ambre_core::PageTime {
+    fn now(&self) -> Instant<PageLoad> {
         self.at
     }
 }

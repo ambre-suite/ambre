@@ -109,7 +109,7 @@ impl SyncState {
                                         http::TokenPair {
                                             access_token: http::SecretToken::default(),
                                             refresh_token: http::SecretToken::default(),
-                                            access_expires_in: ambre_core::Seconds::new(0),
+                                            access_expires_in: ambre_core::TimeSpan::ZERO,
                                         },
                                     ),
                                 });
@@ -514,6 +514,7 @@ impl SyncState {
 mod provider_tests {
     use super::*;
     use crate::http::{SecretToken, TokenPair};
+    use ambre_core::{Sec, TimeSpan};
 
     fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
@@ -536,7 +537,7 @@ mod provider_tests {
             tokens: TokenPair {
                 access_token: SecretToken::from("access-s3cr3t".to_owned()),
                 refresh_token: SecretToken::from("refresh-s3cr3t".to_owned()),
-                access_expires_in: ambre_core::Seconds::new(60),
+                access_expires_in: TimeSpan::<Sec>::new(60),
             },
         }
     }

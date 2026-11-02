@@ -1,8 +1,7 @@
+use ambre_core::index::{Axis, Count, Pos, Span};
 use std::fmt;
 
-use ambre_bus::{
-    CellPos, Col, ColCount, ColSpan, DefinedName, Row, RowCount, RowSpan, SheetId, SheetName,
-};
+use ambre_bus::{CellPos, Col, DefinedName, Row, SheetId, SheetName};
 
 use crate::model::{Line, SheetIndex, Uid};
 
@@ -54,13 +53,13 @@ impl EngineSheet {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CellRef {
     pub sheet: EngineSheet,
-    pub row: Row,
-    pub col: Col,
+    pub row: Pos<Row>,
+    pub col: Pos<Col>,
 }
 
 impl CellRef {
     /// Cell on the default sheet (index 0). Used by single-sheet call sites.
-    pub const fn new(row: Row, col: Col) -> Self {
+    pub const fn new(row: Pos<Row>, col: Pos<Col>) -> Self {
         Self {
             sheet: EngineSheet::ACTIVE,
             row,
@@ -74,7 +73,7 @@ impl CellRef {
     }
 
     /// Cell on an explicit sheet index.
-    pub const fn with_sheet(sheet: EngineSheet, row: Row, col: Col) -> Self {
+    pub const fn with_sheet(sheet: EngineSheet, row: Pos<Row>, col: Pos<Col>) -> Self {
         Self { sheet, row, col }
     }
 
@@ -110,15 +109,20 @@ pub struct RangeDep {
     /// Local sheet index (see [`CellRef::sheet`]). Defaults to 0 via
     /// [`RangeDep::new`]; a cross-sheet range carries the resolved index.
     pub sheet: EngineSheet,
-    pub row_start: Row,
-    pub row_end: Row,
-    pub col_start: Col,
-    pub col_end: Col,
+    pub row_start: Pos<Row>,
+    pub row_end: Pos<Row>,
+    pub col_start: Pos<Col>,
+    pub col_end: Pos<Col>,
 }
 
 impl RangeDep {
     /// Range on the default sheet (index 0). Used by single-sheet call sites.
-    pub fn new(row_start: Row, row_end: Row, col_start: Col, col_end: Col) -> Self {
+    pub fn new(
+        row_start: Pos<Row>,
+        row_end: Pos<Row>,
+        col_start: Pos<Col>,
+        col_end: Pos<Col>,
+    ) -> Self {
         Self {
             sheet: EngineSheet::ACTIVE,
             row_start,
@@ -131,10 +135,10 @@ impl RangeDep {
     /// Range on an explicit sheet index.
     pub fn with_sheet(
         sheet: EngineSheet,
-        row_start: Row,
-        row_end: Row,
-        col_start: Col,
-        col_end: Col,
+        row_start: Pos<Row>,
+        row_end: Pos<Row>,
+        col_start: Pos<Col>,
+        col_end: Pos<Col>,
     ) -> Self {
         Self {
             sheet,
@@ -158,8 +162,8 @@ impl RangeDep {
 /// the first never comes after the last.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpanLines {
-    Rows { first: Row, last: Row },
-    Cols { first: Col, last: Col },
+    Rows { first: Pos<Row>, last: Pos<Row> },
+    Cols { first: Pos<Col>, last: Pos<Col> },
 }
 
 /// A range of whole lines: `A:C` takes three whole columns, `2:5` four whole
@@ -175,7 +179,7 @@ pub struct AxisSpan {
 
 impl AxisSpan {
     /// The rows between `a` and `b` on the default sheet, in either order.
-    pub fn rows(a: Row, b: Row) -> Self {
+    pub fn rows(a: Pos<Row>, b: Pos<Row>) -> Self {
         Self {
             sheet: EngineSheet::ACTIVE,
             lines: SpanLines::Rows {
@@ -186,7 +190,7 @@ impl AxisSpan {
     }
 
     /// The columns between `a` and `b` on the default sheet, in either order.
-    pub fn cols(a: Col, b: Col) -> Self {
+    pub fn cols(a: Pos<Col>, b: Pos<Col>) -> Self {
         Self {
             sheet: EngineSheet::ACTIVE,
             lines: SpanLines::Cols {
@@ -225,7 +229,7 @@ pub enum AxisId<P> {
     Virtual(P),
 }
 
-impl<P: Line> AxisId<P> {
+impl<L: Line> AxisId<Pos<L>> {
     /// The bound `Uid`, or `None` when the axis is virtual.
     pub fn uid(self) -> Option<Uid> {
         match self {
@@ -235,9 +239,9 @@ impl<P: Line> AxisId<P> {
     }
 
     /// The axis's position under `index`, or `None` for a deleted line.
-    pub fn pos(self, index: &SheetIndex) -> Option<P> {
+    pub fn pos(self, index: &SheetIndex) -> Option<Pos<L>> {
         match self {
-            Self::Bound(u) => P::pos(index, &u),
+            Self::Bound(u) => L::pos(index, &u),
             Self::Virtual(p) => Some(p),
         }
     }
@@ -248,12 +252,12 @@ impl<P: Line> AxisId<P> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CellId {
     pub sheet: EngineSheet,
-    pub row: AxisId<Row>,
-    pub col: AxisId<Col>,
+    pub row: AxisId<Pos<Row>>,
+    pub col: AxisId<Pos<Col>>,
 }
 
 impl CellId {
-    pub const fn new(sheet: EngineSheet, row: AxisId<Row>, col: AxisId<Col>) -> Self {
+    pub const fn new(sheet: EngineSheet, row: AxisId<Pos<Row>>, col: AxisId<Pos<Col>>) -> Self {
         Self { sheet, row, col }
     }
 
@@ -293,10 +297,10 @@ pub enum RangeEndpoint<P> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeId {
     pub sheet: EngineSheet,
-    pub row_start: RangeEndpoint<Row>,
-    pub row_end: RangeEndpoint<Row>,
-    pub col_start: RangeEndpoint<Col>,
-    pub col_end: RangeEndpoint<Col>,
+    pub row_start: RangeEndpoint<Pos<Row>>,
+    pub row_end: RangeEndpoint<Pos<Row>>,
+    pub col_start: RangeEndpoint<Pos<Col>>,
+    pub col_end: RangeEndpoint<Pos<Col>>,
 }
 
 impl RangeId {
@@ -304,10 +308,10 @@ impl RangeId {
     /// `None` when a `Specific(Bound(_))` endpoint refers to a deleted row
     /// (`#REF!`). A `Virtual` endpoint keeps its typed position even beyond the
     /// used range (the caller clamps iteration to the materialized rows).
-    pub fn row_range(&self, index: &SheetIndex) -> Option<(Row, Row)> {
+    pub fn row_range(&self, index: &SheetIndex) -> Option<(Pos<Row>, Pos<Row>)> {
         axis_range(&self.row_start, &self.row_end, index)
     }
-    pub fn col_range(&self, index: &SheetIndex) -> Option<(Col, Col)> {
+    pub fn col_range(&self, index: &SheetIndex) -> Option<(Pos<Col>, Pos<Col>)> {
         axis_range(&self.col_start, &self.col_end, index)
     }
 
@@ -325,14 +329,14 @@ impl RangeId {
 
 /// Resolve the two endpoints of one axis to an inclusive pair of positions. An
 /// unbounded start reads the first line, an unbounded end the last one.
-fn axis_range<P: Line>(
-    start: &RangeEndpoint<P>,
-    end: &RangeEndpoint<P>,
+fn axis_range<L: Line>(
+    start: &RangeEndpoint<Pos<L>>,
+    end: &RangeEndpoint<Pos<L>>,
     index: &SheetIndex,
-) -> Option<(P, P)> {
-    let last = P::last(index).unwrap_or(P::FIRST);
+) -> Option<(Pos<L>, Pos<L>)> {
+    let last = L::len(index).last().unwrap_or(Pos::ZERO);
     Some((
-        endpoint_pos(start, P::FIRST, index)?,
+        endpoint_pos(start, Pos::ZERO, index)?,
         endpoint_pos(end, last, index)?,
     ))
 }
@@ -340,7 +344,11 @@ fn axis_range<P: Line>(
 /// Resolve a single range endpoint to a grid position. `entire` is the position
 /// used for an unbounded `EntireAxis` endpoint. Returns `None` only when a
 /// bound `Uid` is missing from the index.
-fn endpoint_pos<P: Line>(ep: &RangeEndpoint<P>, entire: P, index: &SheetIndex) -> Option<P> {
+fn endpoint_pos<L: Line>(
+    ep: &RangeEndpoint<Pos<L>>,
+    entire: Pos<L>,
+    index: &SheetIndex,
+) -> Option<Pos<L>> {
     match ep {
         RangeEndpoint::EntireAxis => Some(entire),
         RangeEndpoint::Specific(axis) => axis.pos(index),
@@ -376,14 +384,14 @@ pub fn nearly_equal(x: f64, y: f64) -> bool {
 /// need a flat stream iterate `values` directly.
 #[derive(Debug, Clone)]
 pub struct RangeValue {
-    pub rows: RowCount,
-    pub cols: ColCount,
+    pub rows: Count<Row>,
+    pub cols: Count<Col>,
     /// Row-major, `len == rows * cols`.
     pub values: Vec<CellValue>,
 }
 
 impl RangeValue {
-    pub fn new(rows: RowCount, cols: ColCount, values: Vec<CellValue>) -> Self {
+    pub fn new(rows: Count<Row>, cols: Count<Col>, values: Vec<CellValue>) -> Self {
         debug_assert_eq!(values.len(), rows.to_usize() * cols.to_usize());
         Self { rows, cols, values }
     }
@@ -391,25 +399,25 @@ impl RangeValue {
     /// The single `#REF!` a range collapses to when it cannot be read.
     pub fn broken_ref() -> Self {
         Self::new(
-            RowCount::ONE,
-            ColCount::ONE,
+            Count::<Row>::ONE,
+            Count::<Col>::ONE,
             vec![CellValue::Error(FormulaError::BrokenRef)],
         )
     }
 
     /// The rows of the block, counted from its own top row.
-    pub fn row_offsets(&self) -> RowSpan {
-        RowSpan::from_count(Row::ZERO, self.rows)
+    pub fn row_offsets(&self) -> Span<Row> {
+        Span::<Row>::from_count(Pos::<Row>::ZERO, self.rows)
     }
 
     /// The columns of the block, counted from its own left column.
-    pub fn col_offsets(&self) -> ColSpan {
-        ColSpan::from_count(Col::ZERO, self.cols)
+    pub fn col_offsets(&self) -> Span<Col> {
+        Span::<Col>::from_count(Pos::<Col>::ZERO, self.cols)
     }
 
     /// Value at `(row, col)` from the block's top-left cell, or `None` if out
     /// of bounds. The offsets are relative to the block, not to the sheet.
-    pub fn get(&self, row: Row, col: Col) -> Option<&CellValue> {
+    pub fn get(&self, row: Pos<Row>, col: Pos<Col>) -> Option<&CellValue> {
         if row >= self.rows.as_end() || col >= self.cols.as_end() {
             return None;
         }
@@ -668,36 +676,26 @@ pub enum Op {
     /// built-in function; the result is pushed back.
     CallFn {
         name: FunctionName,
-        n_args: Arity,
+        n_args: Count<Arg>,
     },
 }
 
-ambre_core::define_index! {
-    /// The place of an argument in a formula call, from zero. Its own type,
-    /// so the place of a value inside a range argument cannot take it.
-    pub struct ArgIndex(u32);
-    /// How many arguments a formula call passes.
-    pub struct Arity;
-    /// The signed gap between two argument places.
-    pub struct ArgDelta(i64);
-    /// A run of argument places.
-    pub struct ArgSpan;
-    /// A list indexed by argument place.
-    pub struct ArgVec;
+/// The place of an argument in a formula call, from zero. Its own type,
+/// so the place of a value inside a range argument cannot take it.
+#[derive(PartialEq, Eq)]
+pub enum Arg {}
+
+impl Axis for Arg {
+    const NAME: &'static str = "Arg";
 }
 
-ambre_core::define_index! {
-    /// The place of a value among the values of a range argument, from zero.
-    /// Its own type, so the place of an argument in the call cannot take it.
-    pub struct ValueIndex(u32);
-    /// How many values a range argument holds.
-    pub struct ValueCount;
-    /// The signed gap between two value places.
-    pub struct ValueDelta(i64);
-    /// A run of value places.
-    pub struct ValueSpan;
-    /// A list indexed by value place.
-    pub struct ValueVec;
+/// The place of a value among the values of a range argument, from zero.
+/// Its own type, so the place of an argument in the call cannot take it.
+#[derive(PartialEq, Eq)]
+pub enum Value {}
+
+impl Axis for Value {
+    const NAME: &'static str = "Value";
 }
 
 // -----------------------------------------------------------------------------
@@ -739,8 +737,8 @@ pub enum StoredAxis<P> {
 /// `{row|col}` in the stored text, each axis either a uid or a position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StoredCell {
-    pub row: StoredAxis<Row>,
-    pub col: StoredAxis<Col>,
+    pub row: StoredAxis<Pos<Row>>,
+    pub col: StoredAxis<Pos<Col>>,
 }
 
 impl StoredCell {
@@ -977,19 +975,19 @@ mod tests {
 
     #[test]
     fn col_to_alpha_basics() {
-        assert_eq!(col_to_alpha(Col::new(0)), "A");
-        assert_eq!(col_to_alpha(Col::new(25)), "Z");
-        assert_eq!(col_to_alpha(Col::new(26)), "AA");
-        assert_eq!(col_to_alpha(Col::new(51)), "AZ");
-        assert_eq!(col_to_alpha(Col::new(52)), "BA");
-        assert_eq!(col_to_alpha(Col::new(701)), "ZZ");
+        assert_eq!(col_to_alpha(Pos::<Col>::new(0)), "A");
+        assert_eq!(col_to_alpha(Pos::<Col>::new(25)), "Z");
+        assert_eq!(col_to_alpha(Pos::<Col>::new(26)), "AA");
+        assert_eq!(col_to_alpha(Pos::<Col>::new(51)), "AZ");
+        assert_eq!(col_to_alpha(Pos::<Col>::new(52)), "BA");
+        assert_eq!(col_to_alpha(Pos::<Col>::new(701)), "ZZ");
     }
 
     #[test]
     fn alpha_to_col_roundtrip() {
         for col in [0, 1, 25, 26, 51, 52, 100, 701] {
-            let alpha = col_to_alpha(Col::new(col));
-            assert_eq!(alpha_to_col(&alpha).unwrap(), Col::new(col));
+            let alpha = col_to_alpha(Pos::<Col>::new(col));
+            assert_eq!(alpha_to_col(&alpha).unwrap(), Pos::<Col>::new(col));
         }
     }
 
@@ -1002,11 +1000,16 @@ mod tests {
 
     #[test]
     fn range_contains() {
-        let r = RangeDep::new(Row::new(0), Row::new(9), Col::new(0), Col::new(4));
-        assert!(r.contains(CellRef::new(Row::new(0), Col::new(0))));
-        assert!(r.contains(CellRef::new(Row::new(9), Col::new(4))));
-        assert!(!r.contains(CellRef::new(Row::new(10), Col::new(0))));
-        assert!(!r.contains(CellRef::new(Row::new(0), Col::new(5))));
+        let r = RangeDep::new(
+            Pos::<Row>::new(0),
+            Pos::<Row>::new(9),
+            Pos::<Col>::new(0),
+            Pos::<Col>::new(4),
+        );
+        assert!(r.contains(CellRef::new(Pos::<Row>::new(0), Pos::<Col>::new(0))));
+        assert!(r.contains(CellRef::new(Pos::<Row>::new(9), Pos::<Col>::new(4))));
+        assert!(!r.contains(CellRef::new(Pos::<Row>::new(10), Pos::<Col>::new(0))));
+        assert!(!r.contains(CellRef::new(Pos::<Row>::new(0), Pos::<Col>::new(5))));
     }
 
     #[test]
@@ -1101,8 +1104,14 @@ mod tests {
     fn range_id_resolves_bound_endpoints_to_positions() {
         let idx = index_with(10, 10);
         let r = bound_range(2, 5, 1, 3);
-        assert_eq!(r.row_range(&idx), Some((Row::new(2), Row::new(5))));
-        assert_eq!(r.col_range(&idx), Some((Col::new(1), Col::new(3))));
+        assert_eq!(
+            r.row_range(&idx),
+            Some((Pos::<Row>::new(2), Pos::<Row>::new(5)))
+        );
+        assert_eq!(
+            r.col_range(&idx),
+            Some((Pos::<Col>::new(1), Pos::<Col>::new(3)))
+        );
     }
 
     #[test]
@@ -1113,11 +1122,14 @@ mod tests {
         let r = RangeId {
             sheet: EngineSheet::ACTIVE,
             row_start: RangeEndpoint::Specific(AxisId::Bound(row_uid(0))),
-            row_end: RangeEndpoint::Specific(AxisId::Virtual(Row::new(999))),
+            row_end: RangeEndpoint::Specific(AxisId::Virtual(Pos::<Row>::new(999))),
             col_start: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
             col_end: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
         };
-        assert_eq!(r.row_range(&idx), Some((Row::ZERO, Row::new(999))));
+        assert_eq!(
+            r.row_range(&idx),
+            Some((Pos::<Row>::ZERO, Pos::<Row>::new(999)))
+        );
     }
 
     #[test]

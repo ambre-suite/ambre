@@ -17,11 +17,10 @@ pub use ambre_bus::app::prose::{
     DateFieldFormat, EditMode, FindMatch, FindOptions, FindQuery, FirstPage, FootnoteCall,
     FootnoteEntry, Graphemes, HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether,
     KeepWithNext, LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction,
-    OrderedStyle, Page, PageCount, PageIndex, PageSpan, ParagraphStyle, Paragraphs, PatternKind,
-    PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction,
-    RemoteCursor, ResolvedCrossRef, StyleId, Suggestion, SuggestionKind, SuggestionSpan,
-    TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering, TodoMark, TriState, VAlign,
-    WordCount, Words,
+    OrderedStyle, Page, ParagraphStyle, Paragraphs, PatternKind, PresencePayload, ProseCommand,
+    ProseError, ProseEvent, ProseRefusal, RefusedAction, RemoteCursor, ResolvedCrossRef, StyleId,
+    Suggestion, SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry,
+    TocNumbering, TodoMark, TriState, VAlign, WordCount, Words,
 };
 
 use loro::TreeID;

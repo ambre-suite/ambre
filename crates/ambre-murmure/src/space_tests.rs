@@ -1,14 +1,14 @@
 //! The space document and its catalogue
 //! (`features/ambre-spec-murmure-spaces.md`).
 
-use ambre_bus::{SealedChannelKey, Timestamp, Topic};
+use ambre_bus::{Authored, Instant, SealedChannelKey, Topic};
 use ambre_core::id::{Category, Channel, Id, Space};
 use loro::{LoroDoc, LoroValue};
 
 use crate::schema::{DocumentKind, HeaderKey, read_version};
 use crate::{ChannelState, ChannelType, Listing, MurmureError, SCHEMA_VERSION, SpaceState};
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 fn channel(channel_type: ChannelType, name: &str) -> ChannelState {
     ChannelState::create(

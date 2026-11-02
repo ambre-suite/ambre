@@ -8,6 +8,7 @@
 use super::*;
 use crate::formula::text::CellText;
 use crate::formula::types::SheetQualifier;
+use ambre_core::index::Pos;
 
 /// The target a defined name stores: a cell or range reference qualified by
 /// the id of a live sheet (`TRAME-062`). Only
@@ -618,7 +619,11 @@ impl TrameState {
     /// implicit default and unmerged entries are otherwise absent) so positions
     /// are well-defined, then issues one move op. A no-op if the id is unknown or
     /// already at the target position.
-    pub(super) fn move_sheet(&mut self, sheet_id: &SheetId, to_index: SheetTabPos) -> TrameOutcome {
+    pub(super) fn move_sheet(
+        &mut self,
+        sheet_id: &SheetId,
+        to_index: Pos<TabStrip>,
+    ) -> TrameOutcome {
         let order = self.sheet_order_ids();
         let Some(from) = order.iter().position(|id| id == sheet_id) else {
             return TrameOutcome::display_only(vec![]);

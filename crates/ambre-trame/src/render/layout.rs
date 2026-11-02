@@ -4,6 +4,7 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
+use ambre_core::index::{Count, Delta, Pos, Span};
 use std::collections::HashMap;
 
 use ambre_core::{Doc, Px, Surface};
@@ -32,7 +33,7 @@ pub struct GridLayout<'a> {
     /// (the common case and PDF export) means a plain uniform layout. The slice
     /// only needs to cover the visible window -- rows beyond it are treated as
     /// visible.
-    pub hidden_rows: &'a [Row],
+    pub hidden_rows: &'a [Pos<Row>],
     /// Width of the fixed row-number strip on the left.
     pub header_width: Px<Surface>,
     /// Height of the fixed column-letter strip on the top.
@@ -51,22 +52,22 @@ pub struct GridLayout<'a> {
     /// with no entry (the common case, and PDF export with an empty map) falls
     /// back to the uniform [`col_width`](Self::col_width). Fed by the Logic
     /// thread's `col_widths_{sheet}` map (`trame-resize`).
-    pub col_widths: &'a HashMap<Col, Px<Doc>>,
+    pub col_widths: &'a HashMap<Pos<Col>, Px<Doc>>,
     /// Per-row heights keyed by absolute grid row. Row analogue of
     /// [`col_widths`](Self::col_widths).
-    pub row_heights: &'a HashMap<Row, Px<Doc>>,
+    pub row_heights: &'a HashMap<Pos<Row>, Px<Doc>>,
     /// Absolute grid column at the content area's left edge.
-    pub origin_col: Col,
+    pub origin_col: Pos<Col>,
     /// Absolute grid row at the content area's top edge.
-    pub origin_row: Row,
+    pub origin_row: Pos<Row>,
     /// Full surface width in device pixels (header strip included).
     pub width: Px<Surface>,
     /// Full surface height in device pixels (header strip included).
     pub height: Px<Surface>,
     /// Total columns in the grid (iteration bound).
-    pub total_cols: ColCount,
+    pub total_cols: Count<Col>,
     /// Total rows in the grid (iteration bound).
-    pub total_rows: RowCount,
+    pub total_rows: Count<Row>,
     /// Application zoom factor (1.0 = 100%). Scales the content-area metrics
     /// (`col_width`/`row_height` and the per-axis maps, which store BASE px). The
     /// header strip sizes (`header_width`/`header_height`) are passed already
@@ -92,7 +93,7 @@ impl GridLayout<'_> {
 
     /// True if `row` is collapsed by the shared filter (binary search over the
     /// sorted [`hidden_rows`](Self::hidden_rows) slice).
-    pub fn is_hidden(&self, row: Row) -> bool {
+    pub fn is_hidden(&self, row: Pos<Row>) -> bool {
         self.hidden_rows.binary_search(&row).is_ok()
     }
 
@@ -103,7 +104,7 @@ impl GridLayout<'_> {
 
     /// Width (logical px) of column `col`: its per-column entry, else the
     /// uniform [`col_width`](Self::col_width).
-    pub fn col_w(&self, col: Col) -> Px<Surface> {
+    pub fn col_w(&self, col: Pos<Col>) -> Px<Surface> {
         let width = self.col_widths.get(&col).copied().unwrap_or(self.col_width);
         width.zoomed_on_surface(self.zoom)
     }
@@ -111,7 +112,7 @@ impl GridLayout<'_> {
     /// Height (logical px) of row `row`: its per-row entry, else the uniform
     /// [`row_height`](Self::row_height). A hidden row still reports its natural
     /// height (callers skip it explicitly).
-    pub fn row_h(&self, row: Row) -> Px<Surface> {
+    pub fn row_h(&self, row: Pos<Row>) -> Px<Surface> {
         let height = self
             .row_heights
             .get(&row)
@@ -124,14 +125,14 @@ impl GridLayout<'_> {
     /// variable widths from [`origin_col`](Self::origin_col). Columns left of the
     /// origin yield a coordinate smaller than [`header_width`](Self::header_width)
     /// (callers clip).
-    pub fn col_left(&self, col: Col) -> Px<Surface> {
+    pub fn col_left(&self, col: Pos<Col>) -> Px<Surface> {
         let mut x = self.header_width;
         if col >= self.origin_col {
-            for c in ColSpan::new(self.origin_col, col) {
+            for c in Span::<Col>::new(self.origin_col, col) {
                 x += self.col_w(c);
             }
         } else {
-            for c in ColSpan::new(col, self.origin_col) {
+            for c in Span::<Col>::new(col, self.origin_col) {
                 x -= self.col_w(c);
             }
         }
@@ -141,16 +142,16 @@ impl GridLayout<'_> {
     /// Y of row `row`'s top edge relative to the surface, summing the variable
     /// heights of the *visible* rows from [`origin_row`](Self::origin_row). The
     /// row axis collapses over filtered rows (`trame-shared-filter`).
-    pub fn row_top(&self, row: Row) -> Px<Surface> {
+    pub fn row_top(&self, row: Pos<Row>) -> Px<Surface> {
         let mut y = self.cells_top();
         if row >= self.origin_row {
-            for r in RowSpan::new(self.origin_row, row) {
+            for r in Span::<Row>::new(self.origin_row, row) {
                 if !self.is_hidden(r) {
                     y += self.row_h(r);
                 }
             }
         } else {
-            for r in RowSpan::new(row, self.origin_row) {
+            for r in Span::<Row>::new(row, self.origin_row) {
                 if !self.is_hidden(r) {
                     y -= self.row_h(r);
                 }
@@ -163,7 +164,7 @@ impl GridLayout<'_> {
     /// area), walking the variable widths from the origin. `None` left of the
     /// header strip or past the grid's last column, and for a coordinate that
     /// is not finite, which no band holds.
-    pub fn col_at(&self, px: Px<Surface>) -> Option<Col> {
+    pub fn col_at(&self, px: Px<Surface>) -> Option<Pos<Col>> {
         if !px.is_finite() || px < self.header_width {
             return None;
         }
@@ -184,7 +185,7 @@ impl GridLayout<'_> {
     /// area), walking the *visible* variable heights from the origin. `None`
     /// above the header strip or past the grid's last row, and for a
     /// coordinate that is not finite, which no band holds.
-    pub fn row_at(&self, py: Px<Surface>) -> Option<Row> {
+    pub fn row_at(&self, py: Px<Surface>) -> Option<Pos<Row>> {
         let cells_top = self.cells_top();
         if !py.is_finite() || py < cells_top {
             return None;
@@ -208,14 +209,14 @@ impl GridLayout<'_> {
     /// and `row`. This is the vertical offset (in `row_height` units) at which `row`
     /// is drawn, with the collapsed rows removed. Equals `row - origin_row` when no
     /// row in between is hidden.
-    pub fn visible_offset(&self, row: Row) -> RowDelta {
-        let between = RowSpan::new(row.min(self.origin_row), row.max(self.origin_row));
+    pub fn visible_offset(&self, row: Pos<Row>) -> Delta<Row> {
+        let between = Span::<Row>::new(row.min(self.origin_row), row.max(self.origin_row));
         let hidden = self
             .hidden_rows
             .iter()
             .filter(|&&r| between.contains(r))
             .count() as i64;
-        let slots = RowDelta::new((row - self.origin_row).get().abs() - hidden);
+        let slots = Delta::<Row>::new((row - self.origin_row).get().abs() - hidden);
         if row >= self.origin_row {
             slots
         } else {
@@ -225,15 +226,15 @@ impl GridLayout<'_> {
 
     /// The absolute grid row drawn at visible slot `slot` (0 = the row at
     /// `origin_row`, skipping hidden rows). `None` once the grid is exhausted.
-    pub fn row_at_slot(&self, slot: RowCount) -> Option<Row> {
+    pub fn row_at_slot(&self, slot: Count<Row>) -> Option<Pos<Row>> {
         let mut row = self.origin_row;
-        let mut seen = RowCount::ZERO;
+        let mut seen = Count::<Row>::ZERO;
         while row < self.total_rows.as_end() {
             if !self.is_hidden(row) {
                 if seen == slot {
                     return Some(row);
                 }
-                seen += RowCount::ONE;
+                seen += Count::<Row>::ONE;
             }
             row = row.next();
         }
@@ -265,16 +266,18 @@ impl GridLayout<'_> {
         let base = self.cell_rect(master);
         // Variable-metric span: sum the covered columns' widths and the visible
         // covered rows' heights (a merge across a filtered row shrinks).
-        let width: Px<Surface> = ColSpan::from_count(master.col, span.cols.max(ColCount::ONE))
-            .into_iter()
-            .map(|c| self.col_w(c))
-            .sum();
-        let height: Px<Surface> = RowSpan::from_count(master.row, span.rows.max(RowCount::ONE))
-            .into_iter()
-            .filter(|&r| !self.is_hidden(r))
-            .map(|r| self.row_h(r))
-            .sum::<Px<Surface>>()
-            .max(self.row_h(master.row));
+        let width: Px<Surface> =
+            Span::<Col>::from_count(master.col, span.cols.max(Count::<Col>::ONE))
+                .into_iter()
+                .map(|c| self.col_w(c))
+                .sum();
+        let height: Px<Surface> =
+            Span::<Row>::from_count(master.row, span.rows.max(Count::<Row>::ONE))
+                .into_iter()
+                .filter(|&r| !self.is_hidden(r))
+                .map(|r| self.row_h(r))
+                .sum::<Px<Surface>>()
+                .max(self.row_h(master.row));
         Rect::new(
             base.x0,
             base.y0,

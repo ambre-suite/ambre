@@ -24,8 +24,8 @@
 //!   kept explicit.
 
 use crate::{
-    DirectMember, DirectMessageDraft, DocType, MurmureCommand, Request, RestCommand, SpaceCommand,
-    Timestamp,
+    Authored, DirectMember, DirectMessageDraft, DocType, Instant, MurmureCommand, Request,
+    RestCommand, SpaceCommand,
 };
 use ambre_core::id::{Channel, Document, Id, Space};
 use ambre_core::{FixedBytes, Generation, SessionNonce};
@@ -168,7 +168,7 @@ pub enum LogicCommand {
     OpenDirectMessage {
         draft: DirectMessageDraft,
         /// The instant of a creation, stamped by the view.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
 
     /// Invite `invitee` into an open channel, as an editor, on its `meta`
@@ -179,7 +179,7 @@ pub enum LogicCommand {
         channel_id: Id<Channel>,
         invitee: DirectMember,
         /// The instant the user confirmed, which stamps a notice.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
 
     /// Create a space: a new space document, with the user as its owner and
@@ -188,7 +188,7 @@ pub enum LogicCommand {
         space_id: Id<Space>,
         name: ambre_core::Name,
         /// The instant of the creation, stamped by the view.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
 
     /// Open a space: its document, then its catalogue as a

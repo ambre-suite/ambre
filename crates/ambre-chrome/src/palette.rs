@@ -17,10 +17,23 @@
 
 use ambre_commands::{Command, Commands, Locale, StaticKey};
 use ambre_core::id::{Channel, Id, User};
+use ambre_core::index::{Axis, Circular, Count, Delta, Pos};
 use leptos::html;
 use leptos::prelude::*;
 
 use crate::shortcut::Kbd;
+
+/// The rows the palette lists, in the order it shows them: the focus moves
+/// along them.
+#[derive(PartialEq, Eq)]
+enum PaletteLine {}
+
+impl Axis for PaletteLine {
+    const NAME: &'static str = "PaletteLine";
+}
+
+/// The arrow keys wrap the focus: past the last row comes the first.
+impl Circular for PaletteLine {}
 
 /// Whether `label` answers `query`: a case-insensitive substring match.
 ///
@@ -137,7 +150,7 @@ pub fn CommandPalette(
     on_entry: Option<Callback<PaletteKey>>,
 ) -> impl IntoView {
     let query = RwSignal::new(String::new());
-    let focused = RwSignal::new(0usize);
+    let focused = RwSignal::new(Pos::<PaletteLine>::ZERO);
     let input_ref = NodeRef::<html::Input>::new();
 
     // Each open starts from a blank query on the first row, and takes the
@@ -146,7 +159,7 @@ pub fn CommandPalette(
     Effect::new(move |_| {
         if open.get() == crate::Openness::Open {
             query.set(String::new());
-            focused.set(0);
+            focused.set(Pos::ZERO);
             if let Some(el) = input_ref.get() {
                 let _ = el.focus();
             }
@@ -182,19 +195,25 @@ pub fn CommandPalette(
     };
 
     let on_keydown = move |ev: web_sys::KeyboardEvent| {
-        let len = rows.get_untracked().len();
+        let len = Count::<PaletteLine>::from_len(rows.get_untracked().len());
+        // An empty list has no row to wrap to, and the focus stays on the first.
+        let step = move |by: Delta<PaletteLine>| {
+            focused.update(|at| *at = at.wrapped(by, len).unwrap_or(Pos::ZERO));
+        };
         match ev.key().as_str() {
             "ArrowDown" => {
                 ev.prevent_default();
-                focused.update(|i| *i = (*i + 1) % len.max(1));
+                step(Delta::new(1));
             }
             "ArrowUp" => {
                 ev.prevent_default();
-                focused.update(|i| *i = (*i + len.saturating_sub(1)) % len.max(1));
+                step(Delta::new(-1));
             }
             "Enter" => {
                 ev.prevent_default();
-                if let Some((chosen, ..)) = rows.get_untracked().get(focused.get_untracked()) {
+                if let Some((chosen, ..)) =
+                    rows.get_untracked().get(focused.get_untracked().to_usize())
+                {
                     run(*chosen);
                 }
             }
@@ -219,7 +238,7 @@ pub fn CommandPalette(
                     prop:value=move || query.get()
                     on:input=move |ev| {
                         query.set(event_target_value(&ev));
-                        focused.set(0);
+                        focused.set(Pos::ZERO);
                     }
                     on:keydown=on_keydown
                 />
@@ -229,6 +248,7 @@ pub fn CommandPalette(
                             .into_iter()
                             .enumerate()
                             .map(|(i, (chosen, label, hint, chord))| {
+                                let i = Pos::<PaletteLine>::from_usize(i);
                                 view! {
                                     <li
                                         class="ambre-palette-row"

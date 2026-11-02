@@ -6,31 +6,32 @@
 
 use super::*;
 use crate::formula::text::CellText;
+use ambre_core::index::{Count, Pos};
 
 /// One axis of the cell an edit session opened on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Pin<P: Line> {
+enum Pin<L: Line> {
     /// A materialized line, followed wherever a peer moves it.
     At(Uid),
     /// A line past the used range, `offset` lines after the last materialized
     /// one, or at `offset` itself when the axis had none. A line a peer appends
     /// past `last` moves nothing, so the position holds.
-    Past { last: Option<Uid>, offset: P::Count },
+    Past { last: Option<Uid>, offset: Count<L> },
 }
 
-impl<P: Line> Pin<P> {
+impl<L: Line> Pin<L> {
     /// Pin grid position `pos` of `index`.
-    fn new(index: &SheetIndex, pos: P) -> Self {
-        if let Some(id) = P::uid(index, pos) {
+    fn new(index: &SheetIndex, pos: Pos<L>) -> Self {
+        if let Some(id) = L::uid(index, pos) {
             return Self::At(id);
         }
-        match P::last(index) {
+        match L::len(index).last() {
             None => Self::Past {
                 last: None,
-                offset: pos.count_from(P::FIRST),
+                offset: pos.count_from(Pos::ZERO),
             },
             Some(last) => Self::Past {
-                last: P::uid(index, last),
+                last: L::uid(index, last),
                 offset: pos.count_from(last),
             },
         }
@@ -40,16 +41,16 @@ impl<P: Line> Pin<P> {
     ///
     /// A `Past` line whose `last` was deleted keeps its distance from the end
     /// of the used range. That is exact unless a peer also appended lines.
-    fn locate(self, index: &SheetIndex) -> Option<P> {
+    fn locate(self, index: &SheetIndex) -> Option<Pos<L>> {
         match self {
-            Self::At(id) => P::pos(index, &id),
-            Self::Past { last: None, offset } => Some(P::FIRST.forward(offset)),
+            Self::At(id) => L::pos(index, &id),
+            Self::Past { last: None, offset } => Some(Pos::ZERO + offset),
             Self::Past {
                 last: Some(id),
                 offset,
-            } => match P::pos(index, &id) {
-                Some(p) => Some(p.forward(offset)),
-                None => P::end(index).forward(offset).before(),
+            } => match L::pos(index, &id) {
+                Some(p) => Some(p + offset),
+                None => (L::len(index).as_end() + offset).prev(),
             },
         }
     }

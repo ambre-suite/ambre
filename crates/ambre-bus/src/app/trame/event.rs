@@ -5,9 +5,10 @@
 //! value types it reuses (`CellStyle`, `HAlign`, `VAlign`, `Borders`, ...) arrive
 //! by glob from the sibling command modules of `crate::app::trame`.
 
-use super::{CellPos, CellRect, Col, ColCount, EditSession, MergeSpan, Row, RowCount, SheetName};
+use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
 use crate::token::Token;
 use ambre_core::id::{Id, User};
+use ambre_core::index::{Axis, Count, Pos};
 use ambre_core::{Doc, Px, Rgb};
 
 // -----------------------------------------------------------------------------
@@ -154,8 +155,8 @@ pub enum TrameEvent {
     /// so stale responses can be dropped.
     ViewportData {
         version: ambre_core::Generation<crate::ViewportVersion>,
-        row_start: Row,
-        col_start: Col,
+        row_start: Pos<Row>,
+        col_start: Pos<Col>,
         cells: Vec<DisplayCell>,
         /// Per-column widths (document px, before the zoom) for the requested column window,
         /// `col_widths[i]` being the width of column `col_start + i`
@@ -215,10 +216,10 @@ pub enum TrameEvent {
     /// destroyed) while the merge is active; it reappears on unmerge. Purely
     /// informational for the UI.
     MergeConflictDetected {
-        master_row: Row,
-        master_col: Col,
-        covered_row: Row,
-        covered_col: Col,
+        master_row: Pos<Row>,
+        master_col: Pos<Col>,
+        covered_row: Pos<Row>,
+        covered_col: Pos<Col>,
     },
 
     /// Availability of undo/redo after a local
@@ -253,8 +254,8 @@ pub enum TrameEvent {
     /// cell it shows is the cell its commit reaches.
     EditTargetMoved {
         session: Token<EditSession>,
-        row: Row,
-        col: Col,
+        row: Pos<Row>,
+        col: Pos<Col>,
     },
 
     /// A peer deleted the sheet, row or column under edit `session`. The Logic
@@ -285,12 +286,20 @@ pub enum TrameEvent {
     /// The range a parameterless sort would order, replying to
     /// [`RequestSortRange`](super::TrameCommand::RequestSortRange): `(r1,c1)`-`(r2,c2)`,
     /// inclusive, corners ordered. The sort dialog opens over it (`TRAME-UI-101`).
-    SortRange { r1: Row, c1: Col, r2: Row, c2: Col },
+    SortRange {
+        r1: Pos<Row>,
+        c1: Pos<Col>,
+        r2: Pos<Row>,
+        c2: Pos<Col>,
+    },
 
     /// Every non-empty cell of grid column `col`, all rows, replying to
     /// [`RequestColumnContent`](super::TrameCommand::RequestColumnContent). The
     /// canvas measures them for an auto-fit (`TRAME-UI-128`).
-    ColumnContent { col: Col, cells: Vec<DisplayCell> },
+    ColumnContent {
+        col: Pos<Col>,
+        cells: Vec<DisplayCell>,
+    },
 
     /// A local [`ApplyFilter`](super::TrameCommand::ApplyFilter) finished
     /// recomputing the hidden rows (`trame-shared-filter`).
@@ -301,8 +310,8 @@ pub enum TrameEvent {
     /// grid column the filter targets, so the UI can draw the funnel badge on its
     /// header (`trame-shared-filter`).
     FilterApplied {
-        hidden_row_count: RowCount,
-        col: Col,
+        hidden_row_count: Count<Row>,
+        col: Pos<Col>,
     },
 
     /// The distinct visible values of a column, replying to
@@ -310,7 +319,7 @@ pub enum TrameEvent {
     /// Feeds the shared filter popover's "by values" checkbox list
     /// (`trame-shared-filter`). `col` is the grid column the values belong to;
     /// `values` is the deduplicated, sorted display text of every non-hidden row.
-    ColumnValues { col: Col, values: Vec<String> },
+    ColumnValues { col: Pos<Col>, values: Vec<String> },
 
     /// Selection aggregates for the status bar (`trame-status-bar`), replying to
     /// [`RequestSelectionStats`](super::TrameCommand::RequestSelectionStats). `count` is
@@ -336,7 +345,7 @@ pub enum TrameEvent {
     /// "not found".
     FindResult {
         matches: Vec<CellPos>,
-        active: Option<crate::app::find::MatchIndex>,
+        active: Option<Pos<crate::app::find::Match>>,
     },
 
     /// A [`ReplaceAll`](super::TrameCommand::ReplaceAll) finished, having
@@ -344,7 +353,7 @@ pub enum TrameEvent {
     /// [`DataReset`](Self::DataReset) that prompts the viewport re-fetch; the
     /// chrome surfaces the count as a toast.
     ReplaceDone {
-        replaced: crate::app::find::MatchCount,
+        replaced: Count<crate::app::find::Match>,
     },
 
     /// A local [`PasteRange`](super::TrameCommand::PasteRange) was refused
@@ -391,8 +400,8 @@ pub enum TrameEvent {
     /// [`ValidationOnInvalid::Reject`]: super::ValidationOnInvalid::Reject
     ValidationError {
         version: ambre_core::Generation<crate::ViewportVersion>,
-        row: Row,
-        col: Col,
+        row: Pos<Row>,
+        col: Pos<Col>,
         message: String,
     },
 
@@ -403,8 +412,8 @@ pub enum TrameEvent {
     /// [`ValidationOnInvalid::Warn`]: super::ValidationOnInvalid::Warn
     ValidationWarning {
         version: ambre_core::Generation<crate::ViewportVersion>,
-        row: Row,
-        col: Col,
+        row: Pos<Row>,
+        col: Pos<Col>,
         message: String,
     },
 
@@ -413,8 +422,8 @@ pub enum TrameEvent {
     /// produced; the chrome surfaces `description`.
     ProtectionDenied {
         version: ambre_core::Generation<crate::ViewportVersion>,
-        row: Row,
-        col: Col,
+        row: Pos<Row>,
+        col: Pos<Col>,
         description: String,
     },
 
@@ -425,8 +434,8 @@ pub enum TrameEvent {
     /// `sheet_id` is the (possibly freshly created) target sheet.
     ImportComplete {
         sheet_id: SheetId,
-        rows: RowCount,
-        cols: ColCount,
+        rows: Count<Row>,
+        cols: Count<Col>,
     },
 
     /// An export ([`ExportCsv`](super::TrameCommand::ExportCsv)) produced
@@ -445,8 +454,8 @@ pub enum TrameEvent {
     /// stable
     /// [`Id<User>`](Id).
     ProtectionViolationWarning {
-        row: Row,
-        col: Col,
+        row: Pos<Row>,
+        col: Pos<Col>,
         from_user_id: Id<User>,
         description: String,
     },
@@ -696,18 +705,13 @@ impl CondFormatPriority {
 
 pub use ambre_core::CellCount;
 
-ambre_core::define_index! {
-    /// A place in the sheet tab strip, 0-based from the left. It orders the
-    /// tabs and names no sheet.
-    pub struct SheetTabPos(u32);
-    /// A number of tabs.
-    pub struct SheetTabCount;
-    /// The signed gap between two tabs.
-    pub struct SheetTabDelta(i64);
-    /// A run of tabs.
-    pub struct SheetTabSpan;
-    /// A list indexed by tab.
-    pub struct SheetTabVec;
+/// A place in the sheet tab strip, 0-based from the left. It orders the
+/// tabs and names no sheet.
+#[derive(PartialEq, Eq)]
+pub enum TabStrip {}
+
+impl Axis for TabStrip {
+    const NAME: &'static str = "SheetTab";
 }
 
 /// One tab of the sheet strip: the sheet's id and its display name.
@@ -726,8 +730,8 @@ pub struct SheetTab {
 /// none of the cell's content.
 #[derive(Clone, Default)]
 pub struct DisplayCell {
-    pub row: Row,
-    pub col: Col,
+    pub row: Pos<Row>,
+    pub col: Pos<Col>,
     /// Display text (formula result or raw string).
     pub text: String,
     /// Raw cell text as stored in the CRDT (for example `=SUM(A1:B1)` for a formula).
@@ -876,7 +880,7 @@ mod tests {
             SourceForm, TrameCommand, ValidationKind,
         };
         let secret = "Q3 layoffs".to_owned();
-        let at = (Row::ZERO, Col::ZERO);
+        let at = (Pos::<Row>::ZERO, Pos::<Col>::ZERO);
         let payload = ClipboardPayload {
             cells: vec![ClipboardCell {
                 raw: secret.clone(),

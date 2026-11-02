@@ -6,6 +6,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_bus::{Authored, Instant};
 use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelMatches, DocumentActivity,
     HeldReply, HeldSend, MessageAt, MurmureCommand, MurmureEvent,
@@ -81,7 +82,7 @@ fn change_ask(
     channel: &mut ChannelState,
     channel_id: Id<Channel>,
     segment: Id<Segment>,
-    now: ambre_bus::Timestamp,
+    now: Instant<Authored>,
 ) -> Result<(Id<Document>, Option<SyncCommand>), MurmureError> {
     Ok(match channel.change_target(segment, now)? {
         ChangeTarget::Write(id) => (id, None),
@@ -2100,15 +2101,18 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, Attachment, ByteSize, ContentHash, FoldAnswer, LeaseAnswer, MediaType,
-        Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand, RestEvent, Timestamp,
+        ActivityKind, Attachment, Authored, ByteSize, ContentHash, FoldAnswer, Instant,
+        LeaseAnswer, MediaType, Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand,
+        RestEvent,
     };
-    use ambre_core::CharSpan;
+    use ambre_core::Char;
     use ambre_core::Px;
     use ambre_core::id::Lease;
+    use ambre_core::index::Span;
+    use ambre_core::{Ms, TimeSpan};
     use ambre_murmure::ChannelType;
 
-    const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+    const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
         let (state, ui, sync, store) = harness_with_store();
@@ -2185,7 +2189,7 @@ mod tests {
                 "hi @bob",
                 vec![Mention {
                     target: MentionTarget::User(bob),
-                    range: CharSpan::from_usize_range(3..7),
+                    range: Span::<Char>::from_usize_range(3..7),
                 }],
             ),
         });
@@ -2394,7 +2398,7 @@ mod tests {
             let mentions = if mention {
                 vec![Mention {
                     target: MentionTarget::User(bob_id),
-                    range: CharSpan::from_usize_range(3..7),
+                    range: Span::<Char>::from_usize_range(3..7),
                 }]
             } else {
                 Vec::new()
@@ -3705,19 +3709,22 @@ mod tests {
                 text: "lunch @bob @eve?".to_owned(),
                 styles: Vec::new(),
                 mentions: vec![
-                    mention(MentionTarget::User(bob), CharSpan::from_usize_range(6..10)),
+                    mention(
+                        MentionTarget::User(bob),
+                        Span::<Char>::from_usize_range(6..10),
+                    ),
                     mention(
                         MentionTarget::User(Id::<User>::mint()),
-                        CharSpan::from_usize_range(11..15),
+                        Span::<Char>::from_usize_range(11..15),
                     ),
                 ],
             },
-            now: Timestamp::new(1),
+            now: Instant::<Authored>::new(1),
         };
         let delete = MurmureCommand::DeleteMessage {
             at: segment.into(),
             message,
-            now: Timestamp::new(2),
+            now: Instant::<Authored>::new(2),
         };
 
         for command in [edit, delete.clone()] {
@@ -3768,7 +3775,7 @@ mod tests {
             edited[0].mentions,
             [mention(
                 MentionTarget::User(bob),
-                CharSpan::from_usize_range(6..10)
+                Span::<Char>::from_usize_range(6..10)
             )],
             "no mark for a user outside the channel"
         );
@@ -3892,7 +3899,7 @@ mod tests {
             MurmureCommand::DeleteMessage {
                 at: segment.into(),
                 message,
-                now: Timestamp::new(2),
+                now: Instant::<Authored>::new(2),
             },
         );
         let asked = erases(&drain(&sync));
@@ -4050,8 +4057,8 @@ mod tests {
 
     // --- Who watches a channel, and who types in it ---
 
-    fn at(offset: u64) -> Timestamp {
-        Timestamp::new(NOW.get() + offset)
+    fn at(offset: u64) -> Instant<Authored> {
+        Instant::<Authored>::new(NOW.get() + offset)
     }
 
     fn command(state: &mut LogicState, channel_id: Id<Channel>, command: MurmureCommand) {
@@ -4342,8 +4349,14 @@ mod tests {
         let draft = send(
             "@bob @eve",
             vec![
-                mention(MentionTarget::User(bob), CharSpan::from_usize_range(0..4)),
-                mention(MentionTarget::User(eve), CharSpan::from_usize_range(5..9)),
+                mention(
+                    MentionTarget::User(bob),
+                    Span::<Char>::from_usize_range(0..4),
+                ),
+                mention(
+                    MentionTarget::User(eve),
+                    Span::<Char>::from_usize_range(5..9),
+                ),
             ],
         );
         command(&mut state, channel_id, draft);
@@ -4372,7 +4385,7 @@ mod tests {
         drain(&sync);
         let all = vec![Mention {
             target: MentionTarget::Channel,
-            range: CharSpan::from_usize_range(0..8),
+            range: Span::<Char>::from_usize_range(0..8),
         }];
 
         command(&mut state, channel_id, send("@channel", all.clone()));
@@ -4600,7 +4613,7 @@ mod tests {
             channel_id,
             segment: closing,
             answer: LeaseAnswer::Deferred {
-                retry_in: ambre_core::Millis::new(5_000),
+                retry_in: TimeSpan::<Ms>::new(5_000),
             },
         });
         command(
@@ -4627,7 +4640,7 @@ mod tests {
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
                 horizon: ambre_core::Seq::new(1),
-                expires_in: ambre_core::Millis::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
         command(
@@ -4662,7 +4675,7 @@ mod tests {
         sync: &Receiver<SyncCommand>,
         channel_id: Id<Channel>,
         segment: Id<Segment>,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) {
         command(state, channel_id, MurmureCommand::Tick { now });
         assert_eq!(finalizes(sync), [(segment, None)], "the lease is asked");
@@ -4672,7 +4685,7 @@ mod tests {
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
                 horizon: ambre_core::Seq::new(1),
-                expires_in: ambre_core::Millis::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
         command(state, channel_id, MurmureCommand::Tick { now });
@@ -5028,7 +5041,7 @@ mod tests {
         segment: Id<Segment>,
         message: Id<Message>,
         text: &str,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> MurmureCommand {
         MurmureCommand::EditMessage {
             at: segment.into(),
@@ -5299,7 +5312,7 @@ mod tests {
                 horizon: ambre_core::Seq::new(1),
                 amendments,
                 amendments_seq: ambre_core::Seq::new(0),
-                expires_in: ambre_core::Millis::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
         command(
@@ -5621,7 +5634,7 @@ mod tests {
             message: "no update yet".to_owned(),
         });
         let tick = |ms: u64| MurmureCommand::Tick {
-            now: Timestamp::new(NOW.get() + ms),
+            now: Instant::<Authored>::new(NOW.get() + ms),
         };
         command(&mut state, channel_id, tick(0));
         command(&mut state, channel_id, tick(999));
@@ -6266,7 +6279,7 @@ mod tests {
             styles: Vec::new(),
             mentions: vec![ambre_bus::Mention {
                 target: ambre_bus::MentionTarget::User(bob),
-                range: CharSpan::from_usize_range(0..4),
+                range: Span::<Char>::from_usize_range(0..4),
             }],
         };
         m.alice

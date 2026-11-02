@@ -8,7 +8,7 @@
 //! (`MURMURE-157`).
 
 use ambre_bus::{
-    CatalogPosition, CatalogueEntry, CategoryView, SealedChannelKey, Timestamp, Topic,
+    Authored, CatalogPosition, CatalogueEntry, CategoryView, Instant, SealedChannelKey, Topic,
 };
 use ambre_core::id::{Category, Channel, Document, Id, Space};
 use ambre_core::{DeltaBytes, LoroPayloadRef, Name, Payload, PeerEntryBytes, SnapshotBytes};
@@ -43,7 +43,7 @@ pub struct SpaceState {
     /// The name and the creation time of a space created here, written again
     /// under its PeerID once the session lands. `None` for a space the relay
     /// served.
-    created: Option<(Name, Timestamp)>,
+    created: Option<(Name, Instant<Authored>)>,
 }
 
 impl SpaceState {
@@ -60,7 +60,11 @@ impl SpaceState {
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses a write. A name past its
     /// cap makes no [`Name`], so it never reaches here (`MURMURE-579`).
-    pub fn create(space_id: Id<Space>, name: &Name, now: Timestamp) -> Result<Self, MurmureError> {
+    pub fn create(
+        space_id: Id<Space>,
+        name: &Name,
+        now: Instant<Authored>,
+    ) -> Result<Self, MurmureError> {
         let doc = LoroDoc::new();
         write_created(&doc, space_id, name, now)?;
         Ok(Self {
@@ -398,7 +402,7 @@ fn write_created(
     doc: &LoroDoc,
     space_id: Id<Space>,
     name: &Name,
-    now: Timestamp,
+    now: Instant<Authored>,
 ) -> Result<(), MurmureError> {
     schema::write_space_header(doc, space_id, now)?;
     if !name.is_empty() {

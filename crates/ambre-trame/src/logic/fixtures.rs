@@ -22,6 +22,7 @@
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
 use crate::formula::text::CellText;
+use ambre_core::index::Pos;
 use std::collections::BTreeMap;
 
 use ambre_core::{
@@ -313,7 +314,7 @@ impl FixtureGen for TrameFixture {
 /// index, not a grid whose positions and ids still agree.
 fn build_grid_literals(state: &mut TrameState) {
     let header = ["region", "q1", "q2", "q3", "q4", "target", "owner", "note"];
-    let at = |row: u32, col: u32| CellPos::new(Row::new(row), Col::new(col));
+    let at = |row: u32, col: u32| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
     let mut cells: Vec<(CellPos, String)> = header
         .iter()
         .zip(0..)
@@ -334,11 +335,13 @@ fn build_grid_literals(state: &mut TrameState) {
     // A merged title band over the header, then a row inserted under it.
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::ZERO, Col::new(1)),
-            crate::CellPos::new(Row::ZERO, Col::new(4)),
+            crate::CellPos::new(Pos::<Row>::ZERO, Pos::<Col>::new(1)),
+            crate::CellPos::new(Pos::<Row>::ZERO, Pos::<Col>::new(4)),
         ),
     });
-    state.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
+    state.handle_command(TrameCommand::InsertRow {
+        at: Pos::<Row>::new(1),
+    });
 }
 
 /// A 40-deep dependency chain plus three aggregates.
@@ -347,7 +350,7 @@ fn build_grid_literals(state: &mut TrameState) {
 /// one wrong link changes every cell below it in the dump.
 fn build_formula_dag(state: &mut TrameState) {
     const DEPTH: u32 = 40;
-    let at = |row: u32, col: u32| CellPos::new(Row::new(row), Col::new(col));
+    let at = |row: u32, col: u32| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
     let mut cells: Vec<(CellPos, String)> = (0..DEPTH)
         .map(|row| (at(row, 0), (row + 1).to_string()))
         .collect();
@@ -366,7 +369,7 @@ fn build_formula_dag(state: &mut TrameState) {
 /// reference binds to the display name, a known gap (`trame-sheets`). The
 /// fixture would record a parse error rather than a feature.
 fn build_multi_sheet(state: &mut TrameState) {
-    let at = |row: u32| CellPos::new(Row::new(row), Col::ZERO);
+    let at = |row: u32| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::ZERO);
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: (0..6)
             .map(|row| (at(row), format!("summary {row}")))
@@ -399,15 +402,15 @@ fn build_multi_sheet(state: &mut TrameState) {
                 reference: "Data!A1:A8".to_owned(),
             });
             state.handle_command(TrameCommand::SetCellText {
-                row: Row::ZERO,
-                col: Col::new(2),
+                row: Pos::<Row>::ZERO,
+                col: Pos::<Col>::new(2),
                 text: "=SUM(readings)".to_owned(),
             });
             // The tab order stops matching the creation order, so a dump that
             // walked the `sheets` map instead of the order list is visible.
             state.handle_command(TrameCommand::MoveSheet {
                 sheet_id,
-                to_index: SheetTabPos::ZERO,
+                to_index: Pos::<TabStrip>::ZERO,
             });
         }
     }
@@ -429,7 +432,7 @@ fn build_two_peer_merge(state: &mut TrameState, seed: FixtureSeed) {
         cells: (0..10)
             .map(|row| {
                 (
-                    CellPos::new(Row::new(row), Col::ZERO),
+                    CellPos::new(Pos::<Row>::new(row), Pos::<Col>::ZERO),
                     format!("local {row}"),
                 )
             })
@@ -439,7 +442,7 @@ fn build_two_peer_merge(state: &mut TrameState, seed: FixtureSeed) {
         cells: (0..10)
             .map(|row| {
                 (
-                    CellPos::new(Row::new(row), Col::new(3)),
+                    CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(3)),
                     format!("remote {row}"),
                 )
             })
@@ -455,8 +458,8 @@ fn build_two_peer_merge(state: &mut TrameState, seed: FixtureSeed) {
     // rather than only ops that precede one. The formula reads one cell from each
     // peer, so a reload that lost either side's ops changes the result.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::ZERO,
-        col: Col::new(5),
+        row: Pos::<Row>::ZERO,
+        col: Pos::<Col>::new(5),
         text: "=A1&E11".to_owned(),
     });
 }
@@ -585,7 +588,10 @@ fn build_literal_grid(state: &mut TrameState, rows: u32, cols: u32) {
                     7 => format!("owner {}", row % 37),
                     _ => (row * 31 + col * 7).to_string(),
                 };
-                (CellPos::new(Row::new(row), Col::new(col)), text)
+                (
+                    CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)),
+                    text,
+                )
             })
         })
         .collect();
@@ -603,7 +609,7 @@ fn build_literal_grid(state: &mut TrameState, rows: u32, cols: u32) {
 /// measures that kind rather than a workbook.
 fn build_formula_grid(state: &mut TrameState) {
     const ROWS: u32 = 12_500;
-    let at = |row: u32, col: u32| CellPos::new(Row::new(row), Col::new(col));
+    let at = |row: u32, col: u32| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
     let mut cells: Vec<(CellPos, String)> = Vec::with_capacity(125_000);
     for row in 0..ROWS {
         let line = row + 1;
@@ -629,7 +635,7 @@ fn build_formula_grid(state: &mut TrameState) {
 fn build_formula_cascade(state: &mut TrameState) {
     const ROWS: u32 = 2_000;
     const CASCADE: u32 = 5;
-    let at = |row: u32, col: u32| CellPos::new(Row::new(row), Col::new(col));
+    let at = |row: u32, col: u32| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
     let mut cells: Vec<(CellPos, String)> = Vec::with_capacity(12_000);
     for row in 0..ROWS {
         let line = row + 1;
@@ -637,11 +643,11 @@ fn build_formula_cascade(state: &mut TrameState) {
         // Every later column reads the one beside it and the row above, so a
         // wrong walk order changes the whole cascade rather than one cell.
         for col in 1..=CASCADE {
-            let previous = crate::columns::col_to_alpha(Col::new(col - 1));
+            let previous = crate::columns::col_to_alpha(Pos::<Col>::new(col - 1));
             let text = if row == 0 {
                 format!("={previous}{line}")
             } else {
-                let here = crate::columns::col_to_alpha(Col::new(col));
+                let here = crate::columns::col_to_alpha(Pos::<Col>::new(col));
                 format!("={previous}{line}+{here}{row}")
             };
             cells.push((at(row, col), text));

@@ -9,7 +9,7 @@
 
 use super::*;
 use ambre_bus::{
-    DirectMember, DirectMessageDraft, DirectMessageEvent, MurmureEvent, Role, Timestamp,
+    Authored, DirectMember, DirectMessageDraft, DirectMessageEvent, Instant, MurmureEvent, Role,
 };
 use ambre_murmure::{ChannelState, ChannelType};
 
@@ -19,7 +19,11 @@ impl LogicState {
     /// Ask the relay for the direct message of this user and the draft's
     /// members. The channel it would create is built now, unnamed, and held
     /// until the relay answers.
-    pub(crate) fn open_direct_message(&mut self, draft: DirectMessageDraft, now: Timestamp) {
+    pub(crate) fn open_direct_message(
+        &mut self,
+        draft: DirectMessageDraft,
+        now: Instant<Authored>,
+    ) {
         let DirectMessageDraft {
             channel_id,
             members,
@@ -160,7 +164,7 @@ impl LogicState {
         id: Generation<Request>,
         channel_id: Id<Channel>,
         invitee: DirectMember,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) {
         let Some(meta) = self.channels.get(&channel_id).map(|c| c.meta_id()) else {
             return self.refuse_invite(id, "the channel is not open".to_owned());
@@ -200,7 +204,7 @@ mod tests {
     use super::*;
     use ambre_bus::{DirectMember, MurmureCommand, Notice};
 
-    const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+    const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
         let (to_ui, ui_rx) = test_link();
@@ -526,9 +530,10 @@ mod tests {
                     invitee,
                     role: ambre_bus::Role::Editor,
                     expect_exchange_pub_key,
-                    now: NOW,
+                    now,
                 },
             } if *sent == id
+                && *now == NOW
                 && *document_id == meta.document_id()
                 && *invitee == carol.user_id
                 && *expect_exchange_pub_key == carol.exchange_pub_key)

@@ -136,7 +136,7 @@ pub struct PageLayout {
     pub content_height:    Px<Doc>,
     pub margin_left:       Px<Doc>,
     pub margin_top:        Px<Doc>,
-    pub page_count:        PageCount,
+    pub page_count:        Count<Page>,
     pub blocks:            Vec<BlockLayout>,
     pub header_height:     Px<Doc>,
     pub header_first_height: Px<Doc>,
@@ -144,7 +144,7 @@ pub struct PageLayout {
     pub footer_first_height: Px<Doc>,
     /// The first page this layout differs from the one it replaces on (`PROSE-067`).
     /// `None` when nothing moved.
-    pub first_dirty_page: Option<PageIndex>,
+    pub first_dirty_page: Option<Pos<Page>>,
     /// The scripts this document uses that no loaded face covered when it was measured
     /// (`PROSE-110`). Empty is the settled case.
     pub missing_scripts: ScriptSet,
@@ -159,11 +159,11 @@ pub struct BlockLayout {
     /// The height of the portion on `page_start` alone -- never the whole block when
     /// `is_split()`. The later fragments are in `continuation_heights`.
     pub height:      Px<Doc>,
-    pub page_start:  PageIndex,
+    pub page_start:  Pos<Page>,
     pub y_in_page:   Px<Doc>,
     /// The first line carried by each page after `page_start`. `is_split()` reads
     /// whether it holds one.
-    pub split_points: Vec<BlockLine>,
+    pub split_points: Vec<Pos<BlockLine>>,
     /// The height of each fragment after `page_start`, one per split point. A
     /// continuation starts at y = 0 (`PROSE-018`) and carries no leading margin
     /// (`PROSE-070`).
@@ -181,18 +181,18 @@ pub struct FootnoteLayout {
     pub block_id:     TreeID,
     /// Sequential across the whole document, assigned in pass 0.
     pub ordinal:      Ordinal<FootnoteCall>,
-    pub page:         PageIndex,
+    pub page:         Pos<Page>,
     pub height:       Px<Doc>,
 }
 
 impl PageLayout {
     /// The header and the footer drawn on a page, each with its block and its
     /// alignment. `None` for a hidden side.
-    pub fn bands_on_page(&self, page: PageIndex) -> (Option<doc::Band>, Option<doc::Band>);
+    pub fn bands_on_page(&self, page: Pos<Page>) -> (Option<doc::Band>, Option<doc::Band>);
     /// Every fragment visible on a page, continuations of split blocks included.
-    pub fn blocks_on_page(&self, page: PageIndex) -> impl Iterator<Item = &BlockLayout>;
+    pub fn blocks_on_page(&self, page: Pos<Page>) -> impl Iterator<Item = &BlockLayout>;
     /// The notes at the foot of a page, in ordinal order. Empty where it carries none.
-    pub fn footnotes_on_page(&self, page: PageIndex) -> Vec<&FootnoteLayout>;
+    pub fn footnotes_on_page(&self, page: Pos<Page>) -> Vec<&FootnoteLayout>;
 }
 ```
 

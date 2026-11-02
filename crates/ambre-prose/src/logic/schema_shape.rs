@@ -19,9 +19,9 @@
 //! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
 //! is the reading belt's, in `schema_reading.rs`, over this same scenario.
 
-use ambre_bus::app::prose::DocOffset;
-use ambre_bus::app::prose::DocSpan;
+use ambre_bus::app::prose::DocChar;
 use ambre_bus::app::prose::MarkKey;
+use ambre_core::index::{Count, Pos, Span};
 use std::collections::BTreeSet;
 
 use ambre_core::schema::{migration_peer, step_fingerprint};
@@ -35,6 +35,7 @@ use crate::events::{
 };
 use crate::logic::ProseState;
 use crate::schema::{MIGRATIONS, SCHEMA_VERSION};
+use ambre_core::{Authored, Instant};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/shapes.txt");
@@ -339,7 +340,7 @@ pub(super) fn document_of_every_key() -> ProseState {
     let root = state.root_blocks()[0];
     state.handle_command(ProseCommand::InsertText {
         block_id: root,
-        pos: DocOffset::ZERO,
+        pos: Pos::<DocChar>::ZERO,
         text: "The shape of a paragraph.".to_owned(),
     });
     state.handle_command(ProseCommand::SetBlockStyle {
@@ -423,7 +424,7 @@ pub(super) fn document_of_every_key() -> ProseState {
         }
         state.handle_command(ProseCommand::ApplyMark {
             block_id: root,
-            range: DocSpan::from_usize_range(0..3),
+            range: Span::<DocChar>::from_usize_range(0..3),
             key: key.clone(),
             value: mark_value_for(key.as_str()),
         });
@@ -454,10 +455,10 @@ fn write_the_bands(state: &mut ProseState) {
     state.handle_command(ProseCommand::InsertHeaderField {
         field: HeaderField::Date(DateFieldFormat::Iso),
         target: HfTarget::FirstPage,
-        pos: DocOffset::ZERO,
+        pos: Pos::<DocChar>::ZERO,
     });
     state.handle_command(ProseCommand::StampModified {
-        now: ambre_core::Timestamp::new(1),
+        now: Instant::<Authored>::new(1),
     });
 }
 
@@ -478,9 +479,9 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
     state.set_user_id(ambre_core::Id::from_bytes([7; 16]));
     state.handle_command(ProseCommand::AddComment {
         block_id: root,
-        range: DocSpan::from_usize_range(0..1),
+        range: Span::<DocChar>::from_usize_range(0..1),
         text: "A comment.".to_owned(),
-        now: ambre_core::Timestamp::new(1),
+        now: Instant::<Authored>::new(1),
     });
     let Some(thread) = state.comments().into_iter().next() else {
         panic!("the scenario opened a thread");
@@ -488,7 +489,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::ReplyToComment {
         comment_id: thread.comment_id,
         text: "A reply.".to_owned(),
-        now: ambre_core::Timestamp::new(2),
+        now: Instant::<Authored>::new(2),
     });
 }
 
@@ -500,12 +501,12 @@ fn write_a_suggestion(state: &mut ProseState, root: crate::events::BlockId) {
     });
     state.handle_command(ProseCommand::InsertText {
         block_id: root,
-        pos: DocOffset::ZERO,
+        pos: Pos::<DocChar>::ZERO,
         text: "S".to_owned(),
     });
     state.handle_command(ProseCommand::DeleteText {
         block_id: root,
-        range: DocSpan::from_usize_range(3..4),
+        range: Span::<DocChar>::from_usize_range(3..4),
     });
     state.handle_command(ProseCommand::EnableTrackChanges {
         mode: crate::events::EditMode::Editing,
@@ -516,12 +517,12 @@ fn write_a_suggestion(state: &mut ProseState, root: crate::events::BlockId) {
 fn write_a_note_and_a_reference(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::InsertFootnote {
         block_id: root,
-        pos: DocOffset::ZERO,
+        pos: Pos::<DocChar>::ZERO,
         note_text: "A note.".to_owned(),
     });
     state.handle_command(ProseCommand::InsertCrossRef {
         block_id: root,
-        pos: DocOffset::ZERO,
+        pos: Pos::<DocChar>::ZERO,
         target_block_id: root,
         kind: crate::events::CrossRefKind::PageNumber,
     });
@@ -533,8 +534,8 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::InsertTable {
         parent_id: None,
         after_id: Some(root),
-        rows: crate::events::grid::RowCount::new(2),
-        cols: crate::events::grid::ColCount::new(2),
+        rows: Count::<crate::events::grid::Row>::new(2),
+        cols: Count::<crate::events::grid::Col>::new(2),
     });
     let Some(table) = state
         .root_blocks()
@@ -720,7 +721,7 @@ fn a_value_changing_leaves_the_shape_alone() {
     let block = second.root_blocks()[0];
     second.handle_command(ProseCommand::InsertText {
         block_id: block,
-        pos: DocOffset::ZERO,
+        pos: Pos::<DocChar>::ZERO,
         text: "A different sentence entirely.".to_owned(),
     });
     assert_eq!(

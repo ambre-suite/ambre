@@ -11,14 +11,14 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelDocument, ChannelDocumentKind, FoldAnswer, LeaseAnswer, MurmureCommand, MurmureEvent,
-    Timestamp,
+    Authored, ChannelDocument, ChannelDocumentKind, FoldAnswer, Instant, LeaseAnswer,
+    MurmureCommand, MurmureEvent,
 };
 
 impl LogicState {
     /// Ask the Sync worker to close the active segment of `channel_id` once
     /// a send filled it. The engine asks once, until an answer.
-    pub(crate) fn close_if_full(&mut self, channel_id: Id<Channel>, now: Timestamp) {
+    pub(crate) fn close_if_full(&mut self, channel_id: Id<Channel>, now: Instant<Authored>) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -115,7 +115,7 @@ impl LogicState {
     /// Drive the finalization of the closing segment of `channel_id` at
     /// `now`: ask for its lease when due. The final snapshot goes to the
     /// Sync worker once this copy holds every delta up to the horizon.
-    pub(crate) fn drive_finalization(&mut self, channel_id: Id<Channel>, now: Timestamp) {
+    pub(crate) fn drive_finalization(&mut self, channel_id: Id<Channel>, now: Instant<Authored>) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -215,7 +215,7 @@ impl LogicState {
     /// Drive the fold of the amendments of a final segment of `channel_id` at
     /// `now`: ask for its lease when due. The fold snapshot goes to the Sync
     /// worker once this copy holds the amendments the lease names.
-    pub(crate) fn drive_fold(&mut self, channel_id: Id<Channel>, now: Timestamp) {
+    pub(crate) fn drive_fold(&mut self, channel_id: Id<Channel>, now: Instant<Authored>) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -449,7 +449,7 @@ impl LogicState {
 
     /// Write again, as amendments stamped `now`, the edits and deletes the
     /// lock of a segment refused (the Murmure messages spec).
-    pub(crate) fn replay_owed(&mut self, channel_id: Id<Channel>, now: Timestamp) {
+    pub(crate) fn replay_owed(&mut self, channel_id: Id<Channel>, now: Instant<Authored>) {
         for replay in self.owed_replays.remove(&channel_id).unwrap_or_default() {
             let command = match replay.draft {
                 Some(draft) => MurmureCommand::EditMessage {

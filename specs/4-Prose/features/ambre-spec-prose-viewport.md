@@ -92,20 +92,20 @@ pub struct PageColumn {
     pub page_height:     Px<Doc>,
     pub gutter:          Px<Doc>,
     /// Zero for a layout that has not arrived yet.
-    pub page_count:      PageCount,
+    pub page_count:      Count<Page>,
     pub total_height:    Px<Doc>,
 }
 
 impl PageColumn {
     /// The pages intersecting the viewport. `None` for an empty layout, and never
     /// inverted for any scroll offset (`PROSE-UI-021`).
-    pub fn visible_pages(&self, viewport: &Viewport) -> Option<PageSpan>;
+    pub fn visible_pages(&self, viewport: &Viewport) -> Option<Span<Page>>;
     /// Where a page starts, measured from the top of the column.
-    pub fn page_top_y(&self, page: PageIndex) -> Px<Doc>;
+    pub fn page_top_y(&self, page: Pos<Page>) -> Px<Doc>;
     /// The inverse: the page a document Y belongs to, and the Y within that page. A Y in
     /// a gutter is assigned to the nearer page edge (`PROSE-UI-022`). `None` only for an
     /// empty layout.
-    pub fn doc_y_to_page(&self, doc_y: Px<Doc>) -> Option<(PageIndex, Px<Doc>)>;
+    pub fn doc_y_to_page(&self, doc_y: Px<Doc>) -> Option<(Pos<Page>, Px<Doc>)>;
     /// The left edge of the column on the canvas (`PROSE-UI-026`).
     pub fn left(&self, viewport: &Viewport) -> Px<View>;
 }
@@ -137,7 +137,7 @@ impl PageColumn {
 }
 
 pub enum DocPos {
-    OnPage { page: PageIndex, x_in_page: Px<Doc>, y_in_page: Px<Doc> },
+    OnPage { page: Pos<Page>, x_in_page: Px<Doc>, y_in_page: Px<Doc> },
     /// The layout has no page at all.
     Empty,
 }

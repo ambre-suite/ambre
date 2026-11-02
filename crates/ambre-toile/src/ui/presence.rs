@@ -36,6 +36,7 @@ use ambre_draw::{
 };
 
 use super::viewport::ViewportTransform;
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// Maximum laser-trail samples kept per peer. The painter strokes the ring
 /// buffer as a fading polyline, and older samples decay to transparent. The
@@ -52,13 +53,13 @@ const LABEL_FONT_SIZE: ambre_core::Px<ambre_core::View> =
 /// How long a laser sample stays visible. Long enough to read a
 /// gesture across the board, short enough that a highlighter held still leaves
 /// nothing behind (`TOILE-UI-077`).
-const LASER_FADE: ambre_core::PageMillis = ambre_core::PageMillis::new(1_200.0);
+const LASER_FADE: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(1_200.0);
 
 /// How often the local peer sends a sample while nothing changes. The heartbeat keeps this client in the others' live set
 /// (`PRESENCE-009`), and it advances the Logic thread's only clock. It MUST
 /// stay well under `PRESENCE_TTL`, since the network may drop several
 /// heartbeats before a peer ages out.
-pub const PRESENCE_HEARTBEAT: ambre_core::PageMillis = ambre_core::PageMillis::new(2_000.0);
+pub const PRESENCE_HEARTBEAT: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(2_000.0);
 
 /// The broadcast schedule for this peer's own presence (`TOILE-UI-073`). Pure:
 /// it decides whether the sample built this frame is worth sending, and holds
@@ -71,7 +72,7 @@ pub const PRESENCE_HEARTBEAT: ambre_core::PageMillis = ambre_core::PageMillis::n
 #[derive(Default)]
 pub struct PresenceSender {
     last: Option<PresencePayload>,
-    last_sent: ambre_core::PageTime,
+    last_sent: Instant<PageLoad>,
 }
 
 impl PresenceSender {
@@ -80,7 +81,7 @@ impl PresenceSender {
     pub fn due(
         &mut self,
         sample: PresencePayload,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) -> Option<PresencePayload> {
         let changed = self.last.as_ref() != Some(&sample);
         let heartbeat = now - self.last_sent >= PRESENCE_HEARTBEAT;
@@ -97,7 +98,7 @@ impl PresenceSender {
     /// is about to paint.
     pub fn reset(&mut self) {
         self.last = None;
-        self.last_sent = ambre_bus::PageTime::new(0.0);
+        self.last_sent = Instant::<PageLoad>::new(0.0);
     }
 }
 
@@ -115,7 +116,7 @@ struct PeerState {
     /// Laser samples with the frame clock each arrived at. The trail therefore
     /// fades by age rather than by rank (`TOILE-UI-077`): a highlighter held
     /// still melts away instead of freezing its tail.
-    laser_trail: VecDeque<(Point, ambre_core::PageTime)>,
+    laser_trail: VecDeque<(Point, Instant<PageLoad>)>,
 }
 
 impl PeerCursors {
@@ -128,7 +129,7 @@ impl PeerCursors {
     /// [`LASER_TRAIL_MAX`] whose samples each carry `now`. `laser = None`
     /// clears it, so the trail vanishes as soon as the peer lifts the
     /// highlighter.
-    pub fn adopt(&mut self, peers: Vec<PresenceUpdate>, now: ambre_core::PageTime) {
+    pub fn adopt(&mut self, peers: Vec<PresenceUpdate>, now: Instant<PageLoad>) {
         self.peers
             .retain(|id, _| peers.iter().any(|p| &p.user_id == id));
         for PresenceUpdate { user_id, presence } in peers {
@@ -171,7 +172,7 @@ impl PeerCursors {
         cam: &ViewportTransform,
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) {
         let w2s = cam.world_to_screen();
         // Deterministic peer order so the overlay draw log is stable for tests
@@ -198,7 +199,7 @@ fn paint_peer<S: DrawSurface>(
     w2s: &Affine,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    now: ambre_core::PageTime,
+    now: Instant<PageLoad>,
 ) {
     let p = &state.presence;
 
@@ -245,10 +246,10 @@ fn paint_peer<S: DrawSurface>(
 /// (`TOILE-UI-077`).
 fn paint_laser<S: DrawSurface>(
     surface: &mut S,
-    trail: &VecDeque<(Point, ambre_core::PageTime)>,
+    trail: &VecDeque<(Point, Instant<PageLoad>)>,
     color: &Color,
     w2s: &Affine,
-    now: ambre_core::PageTime,
+    now: Instant<PageLoad>,
 ) {
     if trail.len() < 2 {
         return;
@@ -274,10 +275,10 @@ fn paint_laser<S: DrawSurface>(
 /// opaque when fresh, zero once [`LASER_FADE`] has passed. A sample from the
 /// future (a clock that stepped back) reads as fresh rather than as invisible.
 pub fn laser_alpha(
-    sampled_at: ambre_core::PageTime,
-    now: ambre_core::PageTime,
+    sampled_at: Instant<PageLoad>,
+    now: Instant<PageLoad>,
 ) -> ambre_core::Bounded<ambre_core::Opacity> {
-    let age = (now - sampled_at).max(ambre_core::PageMillis::ZERO);
+    let age = (now - sampled_at).max(TimeSpan::<FracMs>::ZERO);
     if age >= LASER_FADE {
         return ambre_core::Bounded::<ambre_core::Opacity>::TRANSPARENT;
     }
@@ -389,6 +390,7 @@ mod tests {
     use ambre_bus::app::toile::{
         DisplayElement, DisplayGeom, ElementKind, ElementStyle, ShapeKind, StrokePoint,
     };
+    use ambre_bus::{Instant, PageLoad};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
     fn user(seed: u8) -> Id<User> {
@@ -425,14 +427,14 @@ mod tests {
     }
 
     fn paint(cursors: &PeerCursors, vp: &DisplayViewport) -> RecordingSurface {
-        paint_at(cursors, vp, ambre_bus::PageTime::new(0.0))
+        paint_at(cursors, vp, Instant::<PageLoad>::new(0.0))
     }
 
     /// Paint at a frame clock, for the trail's age fade.
     fn paint_at(
         cursors: &PeerCursors,
         vp: &DisplayViewport,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) -> RecordingSurface {
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
@@ -446,7 +448,7 @@ mod tests {
     fn adopt_one(cursors: &mut PeerCursors, user_id: Id<User>, presence: PresencePayload) {
         cursors.adopt(
             vec![PresenceUpdate { user_id, presence }],
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
     }
 
@@ -625,7 +627,7 @@ mod tests {
                     presence: at(10.0),
                 },
             ],
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(
             paint(&cursors, &vp_with(vec![]))
@@ -641,7 +643,7 @@ mod tests {
                 user_id: a,
                 presence: at(0.0),
             }],
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         let s = paint(&cursors, &vp_with(vec![]));
         assert_eq!(
@@ -651,7 +653,7 @@ mod tests {
         );
 
         // And an empty set paints nothing at all.
-        cursors.adopt(Vec::new(), ambre_bus::PageTime::new(0.0));
+        cursors.adopt(Vec::new(), Instant::<PageLoad>::new(0.0));
         assert!(cursors.is_empty());
         assert!(paint(&cursors, &vp_with(vec![])).ops().is_empty());
     }
@@ -670,12 +672,12 @@ mod tests {
                         ..Default::default()
                     },
                 }],
-                ambre_bus::PageTime::new(0.0),
+                Instant::<PageLoad>::new(0.0),
             );
         }
         // Read at the sample clock: the segments are there.
         assert_eq!(
-            paint_at(&cursors, &vp_with(vec![]), ambre_bus::PageTime::new(0.0))
+            paint_at(&cursors, &vp_with(vec![]), Instant::<PageLoad>::new(0.0))
                 .count(|o| matches!(o, DrawOp::StrokeLine { .. }))
                 .get(),
             2
@@ -685,7 +687,7 @@ mod tests {
             paint_at(
                 &cursors,
                 &vp_with(vec![]),
-                ambre_bus::PageTime::new(LASER_FADE.get() + 1.0)
+                Instant::<PageLoad>::new(LASER_FADE.get() + 1.0)
             )
             .count(|o| matches!(o, DrawOp::StrokeLine { .. }))
             .get(),
@@ -693,21 +695,21 @@ mod tests {
             "an aged trail is not painted"
         );
         assert_eq!(
-            laser_alpha(ambre_bus::PageTime::new(0.0), ambre_bus::PageTime::new(0.0)),
+            laser_alpha(Instant::<PageLoad>::new(0.0), Instant::<PageLoad>::new(0.0)),
             ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE
         );
         assert_eq!(
             laser_alpha(
-                ambre_bus::PageTime::new(0.0),
-                ambre_bus::PageTime::new(LASER_FADE.get())
+                Instant::<PageLoad>::new(0.0),
+                Instant::<PageLoad>::new(LASER_FADE.get())
             ),
             ambre_core::Bounded::<ambre_core::Opacity>::TRANSPARENT
         );
         // A sample from the future reads as fresh, never as invisible.
         assert_eq!(
             laser_alpha(
-                ambre_bus::PageTime::new(100.0),
-                ambre_bus::PageTime::new(0.0)
+                Instant::<PageLoad>::new(100.0),
+                Instant::<PageLoad>::new(0.0)
             ),
             ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE
         );
@@ -718,10 +720,10 @@ mod tests {
     /// fresh.
     #[test]
     fn a_laser_alpha_stays_in_range_on_a_nan_clock() {
-        let nan = ambre_bus::PageTime::new(f64::NAN);
+        let nan = Instant::<PageLoad>::new(f64::NAN);
         for (at, now) in [
-            (nan, ambre_bus::PageTime::new(0.0)),
-            (ambre_bus::PageTime::new(0.0), nan),
+            (nan, Instant::<PageLoad>::new(0.0)),
+            (Instant::<PageLoad>::new(0.0), nan),
         ] {
             assert_eq!(
                 laser_alpha(at, now),
@@ -751,22 +753,22 @@ mod tests {
             ..Default::default()
         };
         assert!(
-            sender.due(at(0.0), ambre_bus::PageTime::new(0.0)).is_some(),
+            sender.due(at(0.0), Instant::<PageLoad>::new(0.0)).is_some(),
             "the first sample sends"
         );
         assert!(
-            sender.due(at(0.0), ambre_bus::PageTime::new(1.0)).is_none(),
+            sender.due(at(0.0), Instant::<PageLoad>::new(1.0)).is_none(),
             "an unchanged sample waits for the heartbeat"
         );
         assert!(
-            sender.due(at(1.0), ambre_bus::PageTime::new(2.0)).is_some(),
+            sender.due(at(1.0), Instant::<PageLoad>::new(2.0)).is_some(),
             "a moved pointer sends at once"
         );
         assert!(
             sender
                 .due(
                     at(1.0),
-                    ambre_bus::PageTime::new(2.0 + PRESENCE_HEARTBEAT.get())
+                    Instant::<PageLoad>::new(2.0 + PRESENCE_HEARTBEAT.get())
                 )
                 .is_some(),
             "an idle peer still says it is there"
@@ -778,7 +780,7 @@ mod tests {
             sender
                 .due(
                     at(1.0),
-                    ambre_bus::PageTime::new(2.0 + PRESENCE_HEARTBEAT.get())
+                    Instant::<PageLoad>::new(2.0 + PRESENCE_HEARTBEAT.get())
                 )
                 .is_some()
         );
@@ -799,7 +801,7 @@ mod tests {
         };
         let painted = |peers: Vec<PresenceUpdate>| {
             let mut cursors = PeerCursors::default();
-            cursors.adopt(peers, ambre_bus::PageTime::new(0.0));
+            cursors.adopt(peers, Instant::<PageLoad>::new(0.0));
             paint(&cursors, &vp_with(vec![]))
         };
 
@@ -838,7 +840,7 @@ mod tests {
                     },
                 },
             ],
-            ambre_bus::PageTime::new(0.0),
+            Instant::<PageLoad>::new(0.0),
         );
         let s = paint(&cursors, &vp_with(vec![]));
         // Two arrows, each its own peer colour.

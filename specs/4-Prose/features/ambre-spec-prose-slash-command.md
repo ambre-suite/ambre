@@ -103,8 +103,8 @@ pub struct SlashMenuState {
     pub anchor:   Option<Point<Px<View>>>,
     pub query:    String,
     /// The labels the query keeps (`PROSE-UI-194`).
-    pub items:    SlashChoiceVec<&'static str>,
-    pub selected: SlashChoice,
+    pub items:    IdxVec<SlashChoice, &'static str>,
+    pub selected: Pos<SlashChoice>,
 }
 
 /// What the view keeps while the menu is open. Never published, never written. `Debug` prints
@@ -115,7 +115,7 @@ struct SlashMenu {
     /// moves the offset with the text (`PROSE-UI-193`).
     origin:   Spot,
     query:    String,
-    selected: SlashChoice,
+    selected: Pos<SlashChoice>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

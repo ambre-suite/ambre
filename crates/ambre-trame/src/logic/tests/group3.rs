@@ -4,6 +4,7 @@
 
 use super::*;
 use ambre_bus::{SheetId, SheetTab};
+use ambre_core::index::{Count, Pos};
 
 /// `UnmergeActive` over a selection spanning several merges splits every one of
 /// them, not just the merge under the active cell. Regression: only the last
@@ -14,14 +15,14 @@ fn unmerge_active_splits_every_merge_in_selection() {
     // Build two separate merges: A1:B1 and A3:B3.
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(0), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)),
         ),
     });
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(2), Col::new(0)),
-            crate::CellPos::new(Row::new(2), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(1)),
         ),
     });
     assert_eq!(read_display(&mut state, 0, 0).merge_span, Some(span(1, 2)));
@@ -29,10 +30,10 @@ fn unmerge_active_splits_every_merge_in_selection() {
 
     // Select A1:B3, covering both merges, then unmerge.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(0),
-        anchor_row: Row::new(2),
-        anchor_col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(2),
+        anchor_col: Pos::<Col>::new(1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -71,16 +72,16 @@ fn unmerge_selection_grows_to_cover_straddling_merge() {
     // A merge B2:C3 (rows 1..2, cols 1..2).
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(1), Col::new(1)),
-            crate::CellPos::new(Row::new(2), Col::new(2)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(2)),
         ),
     });
     // Select only A1:B2 -- it clips the merge's top-left corner.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(0),
-        anchor_row: Row::new(1),
-        anchor_col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(1),
+        anchor_col: Pos::<Col>::new(1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -108,23 +109,23 @@ fn unmerge_two_vertical_merges_selected_by_masters() {
     // A1:A2 (rows 0..1, col 0).
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
     });
     // B1:B2 (rows 0..1, col 1).
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(1)),
-            crate::CellPos::new(Row::new(1), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
         ),
     });
     // Selection spans the two masters only: A1:B1 (row 0).
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(1),
-        anchor_row: Row::new(0),
-        anchor_col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
+        anchor_row: Pos::<Row>::new(0),
+        anchor_col: Pos::<Col>::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -143,10 +144,10 @@ fn unmerge_two_vertical_merges_selected_by_masters() {
 fn merge_selection_single_cell_is_noop() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(2),
-        col: Col::new(2),
-        anchor_row: Row::new(2),
-        anchor_col: Col::new(2),
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(2),
+        anchor_row: Pos::<Row>::new(2),
+        anchor_col: Pos::<Col>::new(2),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -166,13 +167,13 @@ fn concurrent_value_under_merge_is_masked_then_restored() {
     // value behind.
     let mut base = TrameState::new();
     base.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "seed".to_owned(),
     });
     base.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: String::new(),
     });
     let base_snap = base.export_snapshot();
@@ -187,16 +188,16 @@ fn concurrent_value_under_merge_is_masked_then_restored() {
     // Peer A merges A1:A2 (both empty on its side).
     a.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
     });
     let merge_delta = a.export_snapshot();
 
     // Peer B concurrently writes A2, then receives A's merge.
     b.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "concurrent".to_owned(),
     });
     let conflicts = b
@@ -213,8 +214,8 @@ fn concurrent_value_under_merge_is_masked_then_restored() {
 
     // Unmerge restores the masked value.
     b.handle_command(TrameCommand::UnmergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
     });
     assert_eq!(
         read_display(&mut b, 1, 0).text,
@@ -234,13 +235,13 @@ fn overlapping_merges_resolve_to_the_lowest_master_key() {
     // value behind.
     let mut base = TrameState::new();
     base.handle_command(TrameCommand::SetCellText {
-        row: Row::new(2),
-        col: Col::new(2),
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(2),
         text: "seed".to_owned(),
     });
     base.handle_command(TrameCommand::SetCellText {
-        row: Row::new(2),
-        col: Col::new(2),
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(2),
         text: String::new(),
     });
     let base_snap = base.export_snapshot();
@@ -255,14 +256,14 @@ fn overlapping_merges_resolve_to_the_lowest_master_key() {
     // A merges A1:B2, B merges B2:C3 concurrently: they overlap at B2.
     a.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
         ),
     });
     b.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(1), Col::new(1)),
-            crate::CellPos::new(Row::new(2), Col::new(2)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(2)),
         ),
     });
     let (delta_a, delta_b) = (a.export_snapshot(), b.export_snapshot());
@@ -305,20 +306,22 @@ fn overlapping_merges_resolve_to_the_lowest_master_key() {
 fn merge_follows_structural_insert() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "x".to_owned(),
     });
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(1), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
         ),
     });
     assert_eq!(read_display(&mut state, 1, 0).merge_span, Some(span(1, 2)));
 
     // Insert a row at the top: the merge shifts from row 1 to row 2.
-    state.handle_command(TrameCommand::InsertRow { at: Row::new(0) });
+    state.handle_command(TrameCommand::InsertRow {
+        at: Pos::<Row>::new(0),
+    });
     assert_eq!(
         read_display(&mut state, 1, 0).merge_span,
         None,
@@ -345,8 +348,8 @@ fn edit_emits_send_update_through_sink() {
     let doc = Id::<Document>::mint();
 
     let outcome = state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "hi".to_owned(),
     });
     sync.absorb(doc, &outcome);
@@ -376,8 +379,8 @@ fn two_peers_converge_via_mock_sync() {
 
     // A writes A1; the mock absorbs the emitted delta.
     let outcome = a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "shared".to_owned(),
     });
     sync.absorb(doc, &outcome);
@@ -403,8 +406,8 @@ fn a_remote_change_is_never_re_broadcast() {
     let mut a = TrameState::new();
     let mut b = TrameState::new();
     let set = |text: &str| TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: text.to_owned(),
     };
     // B's own genesis goes out with its first edit, before any import.
@@ -417,8 +420,8 @@ fn a_remote_change_is_never_re_broadcast() {
 
     let from_b = b
         .handle_command(TrameCommand::SetCellText {
-            row: Row::new(1),
-            col: Col::new(0),
+            row: Pos::<Row>::new(1),
+            col: Pos::<Col>::new(0),
             text: "next".to_owned(),
         })
         .update
@@ -449,16 +452,16 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
         sheet_id: s2.clone(),
     });
     a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "5".to_owned(),
     });
     a.handle_command(TrameCommand::ActivateSheet {
         sheet_id: SheetId::new("s0".to_owned()),
     });
     a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=Sheet2!A1*2".to_owned(),
     });
 
@@ -564,8 +567,8 @@ fn create_sheet_lists_and_isolates() {
     let s1 = sheets[1].id.as_str().to_owned();
     // Write on the default sheet, switch to the new one: it is blank.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "on_s0".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
@@ -574,8 +577,8 @@ fn create_sheet_lists_and_isolates() {
     assert_eq!(read_cell(&mut state, 0, 0), "", "new sheet starts empty");
     // Write here, switch back: each sheet keeps its own value.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "on_s1".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "on_s1");
@@ -593,10 +596,10 @@ fn first_scroll_viewport_hydrates_sheet_list_once() {
     let mut state = TrameState::new();
     let scroll = || TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(1),
-        row_start: Row::new(0),
-        row_end: Row::new(4),
-        col_start: Col::new(0),
-        col_end: Col::new(4),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(4),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(4),
     };
 
     let first = state.handle_command(scroll());
@@ -644,8 +647,8 @@ fn cross_sheet_formula_evaluates_end_to_end() {
     // Put 5 into Sheet2!A1.
     state.handle_command(TrameCommand::ActivateSheet { sheet_id: s2 });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "5".to_owned(),
     });
 
@@ -654,8 +657,8 @@ fn cross_sheet_formula_evaluates_end_to_end() {
         sheet_id: SheetId::new("s0".to_owned()),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=Sheet2!A1*2".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 1), "10", "B1 = Sheet2!A1 * 2");
@@ -682,19 +685,19 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
         sheet_id: s2.clone(),
     });
     base.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "seed".to_owned(),
     });
     base.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: String::new(),
     });
     // Same-sheet reader on Sheet2 (read while Sheet2 is the active tab).
     base.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(2),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(2),
         text: "=A2".to_owned(),
     });
     // Cross-sheet reader on Sheet1 (read while Sheet1 is the active tab, so the
@@ -703,8 +706,8 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
         sheet_id: SheetId::new("s0".to_owned()),
     });
     base.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=Sheet2!A2".to_owned(),
     });
     let base_snap = base.export_snapshot();
@@ -722,8 +725,8 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     });
     a.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
     });
     let merge_delta = a.export_snapshot();
@@ -734,8 +737,8 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
         sheet_id: s2.clone(),
     });
     b.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "77".to_owned(),
     });
     let conflicts = b
@@ -780,8 +783,8 @@ fn rename_sheet_keeps_id_and_cells() {
         sheet_id: s1.clone(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "v".to_owned(),
     });
 
@@ -812,7 +815,7 @@ fn move_sheet_reorders_tabs() {
     // Order is [s0, B]; move B to the front.
     let evts = state.handle_command(TrameCommand::MoveSheet {
         sheet_id: b.clone(),
-        to_index: crate::SheetTabPos::ZERO,
+        to_index: Pos::<crate::TabStrip>::ZERO,
     });
     let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else {
         panic!()
@@ -872,23 +875,23 @@ fn sort_range_ascending_moves_whole_rows() {
     // A: 3,1,2  B: "c","a","b" (paired with A so we can check rows move whole)
     for (r, (a, b)) in [("3", "c"), ("1", "a"), ("2", "b")].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(r as u32),
-            col: Col::new(0),
+            row: Pos::<Row>::new(r as u32),
+            col: Pos::<Col>::new(0),
             text: a.to_string(),
         });
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(r as u32),
-            col: Col::new(1),
+            row: Pos::<Row>::new(r as u32),
+            col: Pos::<Col>::new(1),
             text: b.to_string(),
         });
     }
     let evts = state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(2), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(1)),
         ),
-        sort_col: ColCount::new(0),
+        sort_col: Count::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -912,18 +915,18 @@ fn sort_range_descending_keeps_header() {
     let mut state = TrameState::new();
     for (r, a) in ["Header", "1", "3", "2"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(r as u32),
-            col: Col::new(0),
+            row: Pos::<Row>::new(r as u32),
+            col: Pos::<Col>::new(0),
             text: a.to_string(),
         });
     }
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(3), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(0)),
         ),
-        sort_col: ColCount::new(0),
+        sort_col: Count::<Col>::new(0),
         order: SortOrder::Descending,
         header: HeaderRow::Present,
     });
@@ -1122,8 +1125,8 @@ fn a_stored_name_the_rule_refuses_reads_as_its_fallback() {
     );
 
     let evts = state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "=Sheet2!A1*2".to_owned(),
     });
     assert!(
@@ -1162,8 +1165,8 @@ fn a_qualifier_resolves_whatever_its_case() {
         name: crate::test_support::sheet("Data"),
     });
     let evts = state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "=data!A1*2".to_owned(),
     });
     assert!(
@@ -1191,26 +1194,26 @@ fn deleted_sheet_leaves_no_data() {
     });
     for (row, text) in ["a", "b"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(row as u32),
-            col: Col::new(0),
+            row: Pos::<Row>::new(row as u32),
+            col: Pos::<Col>::new(0),
             text: text.to_string(),
         });
     }
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::nth(1),
         sheet_id: gone.clone(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
     });
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_core::Generation::nth(2),
         sheet_id: gone.clone(),
-        row: Row::new(0),
+        row: Pos::<Row>::new(0),
         height: ambre_core::Px::<ambre_core::Doc>::new(40.0),
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: gone.clone(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: ambre_bus::FilterKind::Values(vec!["a".to_owned()]),
     });
     let filled = |state: &TrameState, name: &SheetContainer| !matches!(state.doc.get_map(name.as_str()).get_value(), LoroValue::Map(m) if m.is_empty());
@@ -1263,8 +1266,8 @@ fn deleted_sheet_leaves_no_data() {
 fn formula_naming_a_missing_sheet_is_refused() {
     let mut state = TrameState::new();
     let evts = state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "=Nowhere!A1*2".to_owned(),
     });
     assert!(
@@ -1278,8 +1281,8 @@ fn formula_naming_a_missing_sheet_is_refused() {
         name: crate::test_support::sheet("Nowhere"),
     });
     let evts = state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "=Nowhere!A1*2".to_owned(),
     });
     assert!(
@@ -1298,8 +1301,8 @@ fn write_beyond_the_cap_is_refused_and_said() {
     let mut state = TrameState::new();
     let row = crate::logic::schema::MATERIALIZE_ROWS.get() + 5;
     let evts = state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(row),
-        col: Col::new(0),
+        row: Pos::<Row>::new(row),
+        col: Pos::<Col>::new(0),
         text: "far".to_owned(),
     });
     assert!(
@@ -1319,8 +1322,8 @@ fn write_beyond_the_cap_is_refused_and_said() {
 fn a_new_sheet_leaves_a_cross_sheet_formula_on_its_sheet() {
     let mut a = TrameState::new();
     a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "5".to_owned(),
     });
     a.handle_command(TrameCommand::CreateSheet {
@@ -1330,13 +1333,13 @@ fn a_new_sheet_leaves_a_cross_sheet_formula_on_its_sheet() {
     a.handle_command(TrameCommand::ActivateSheet { sheet_id: s2 });
     // B1 exists before the formula reads it, so the formula depends on it.
     a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "0".to_owned(),
     });
     a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "=Sheet1!A1+B1".to_owned(),
     });
     assert_eq!(read_cell(&mut a, 0, 0), "5");
@@ -1346,8 +1349,8 @@ fn a_new_sheet_leaves_a_cross_sheet_formula_on_its_sheet() {
     });
     // A recompute of A1 reads Sheet1!A1 again, through the compiled index.
     a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "1".to_owned(),
     });
     assert_eq!(

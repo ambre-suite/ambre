@@ -93,6 +93,15 @@ impl<K: OrdinalKind> Ordinal<K> {
     }
 }
 
+impl<K: OrdinalKind + crate::index::Axis> Ordinal<K> {
+    /// The position this ordinal numbers, on the axis its marker also
+    /// counts: the inverse of [`Pos::number`](crate::index::Pos::number).
+    #[must_use]
+    pub const fn index(self) -> crate::index::Pos<K> {
+        crate::index::Pos::new(self.position())
+    }
+}
+
 // By hand, every impl below: a derive would bound the marker, which has no
 // value to clone, compare or hash.
 
@@ -168,5 +177,22 @@ mod tests {
             u32::MAX
         );
         assert_eq!(format!("{:?}", Ordinal::<Nth>::FIRST), "Nth(1)");
+    }
+
+    /// A test axis that a reader also numbers.
+    #[derive(PartialEq, Eq)]
+    enum Shelf {}
+    impl OrdinalKind for Shelf {
+        const NAME: &'static str = "ShelfNumber";
+    }
+    impl crate::index::Axis for Shelf {
+        const NAME: &'static str = "Shelf";
+    }
+
+    #[test]
+    fn an_ordinal_maps_back_to_the_position_it_numbers() {
+        let third = Ordinal::<Shelf>::from_position(2);
+        assert_eq!(third.index(), crate::index::Pos::<Shelf>::new(2));
+        assert_eq!(Ordinal::<Shelf>::FIRST.index(), crate::index::Pos::new(0));
     }
 }

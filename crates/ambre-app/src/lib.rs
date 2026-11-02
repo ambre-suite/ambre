@@ -1089,7 +1089,7 @@ pub fn main() {
     if boot_is_murmure {
         let presence_tx = ui_to_logic_tx.clone();
         let refresh = Closure::<dyn FnMut()>::new(move || {
-            let now = ambre_bus::Timestamp::new(js_sys::Date::now() as u64);
+            let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
             for command in murmure_relay.refresh_presence(now) {
                 if let Err(e) = presence_tx.try_send(command) {
                     tracing::warn!("Presence refresh dropped, Logic channel full ({e:?})");
@@ -1958,6 +1958,7 @@ pub fn main() {
 mod platform;
 mod shell;
 
+use ambre_bus::{Authored, Instant};
 use platform::*;
 use shell::mount_shell;
 

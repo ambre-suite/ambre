@@ -6,22 +6,24 @@
 //! read, so every reader resolves one date (`PROSE-FEAT-066`). Nothing here
 //! writes to the document.
 
-use ambre_core::{LangTag, Millis, Month, Timestamp, Year};
+use ambre_core::StoredAsI64;
+use ambre_core::index::{Count, Pos};
+use ambre_core::{Authored, Instant, LangTag, Month, Ms, TimeSpan, Year};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
-use crate::events::{DateFieldFormat, HeaderField, PageCount, PageIndex};
+use crate::events::{DateFieldFormat, HeaderField, Page};
 
 /// The span of one day.
-const DAY: Millis = Millis::new(86_400_000);
+const DAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(86_400_000);
 
 /// The text of `block` as drawn on `page` of `page_count`.
 #[must_use]
 pub fn resolve(
     document: &LoroDoc,
     block: &TreeID,
-    page: PageIndex,
-    page_count: PageCount,
+    page: Pos<Page>,
+    page_count: Count<Page>,
 ) -> String {
     let text = doc::get_block_text(document, block);
     let mut out = String::new();
@@ -109,8 +111,8 @@ pub fn field_of(key: &str, value: &LoroValue) -> Option<HeaderField> {
 fn field_value(
     document: &LoroDoc,
     field: HeaderField,
-    page: PageIndex,
-    count: PageCount,
+    page: Pos<Page>,
+    count: Count<Page>,
 ) -> String {
     match field {
         HeaderField::PageNumber => page.number().to_string(),
@@ -192,7 +194,7 @@ impl std::fmt::Display for CivilDate {
 /// UTC and not the reader's zone, so two readers in two zones draw one date
 /// (`PROSE-FEAT-066`). The civil-from-days algorithm of H. Hinnant.
 #[must_use]
-pub fn civil_date(at: Timestamp) -> CivilDate {
+pub fn civil_date(at: Instant<Authored>) -> CivilDate {
     let day_ms = i64::try_from(DAY.get()).unwrap_or(i64::MAX);
     let days = at.to_i64_saturating().div_euclid(day_ms) + 719_468;
     let era = days.div_euclid(146_097);
@@ -327,7 +329,11 @@ fn months(lang: &LangTag) -> Option<[&'static str; 12]> {
 /// (`PROSE-FEAT-282`). The language is read from the tag's primary subtag; a
 /// document with no language draws the calendar form.
 #[must_use]
-pub fn format_date(at: Timestamp, format: DateFieldFormat, lang: Option<&LangTag>) -> String {
+pub fn format_date(
+    at: Instant<Authored>,
+    format: DateFieldFormat,
+    lang: Option<&LangTag>,
+) -> String {
     let date = civil_date(at);
     let (year, month, day) = (date.year, date.month, date.day);
     let iso = date.to_string();
@@ -356,9 +362,9 @@ mod tests {
     use super::*;
 
     /// 2026-03-05T12:00:00Z.
-    const MARCH_FIFTH: Timestamp = Timestamp::new(1_772_712_000_000);
+    const MARCH_FIFTH: Instant<Authored> = Instant::<Authored>::new(1_772_712_000_000);
 
-    fn ymd(at: Timestamp) -> (i64, u32, u32) {
+    fn ymd(at: Instant<Authored>) -> (i64, u32, u32) {
         let date = civil_date(at);
         (
             date.year().get(),
@@ -423,10 +429,13 @@ mod tests {
 
     #[test]
     fn a_stamp_reads_as_its_utc_calendar_date() {
-        assert_eq!(ymd(Timestamp::new(0)), (1970, 1, 1));
+        assert_eq!(ymd(Instant::<Authored>::new(0)), (1970, 1, 1));
         assert_eq!(ymd(MARCH_FIFTH), (2026, 3, 5));
-        assert_eq!(ymd(Timestamp::new(86_399_999)), (1970, 1, 1));
-        assert_eq!(ymd(Timestamp::new(951_782_400_000)), (2000, 2, 29));
+        assert_eq!(ymd(Instant::<Authored>::new(86_399_999)), (1970, 1, 1));
+        assert_eq!(
+            ymd(Instant::<Authored>::new(951_782_400_000)),
+            (2000, 2, 29)
+        );
         assert_eq!(civil_date(MARCH_FIFTH).to_string(), "2026-03-05");
     }
 

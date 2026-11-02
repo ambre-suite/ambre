@@ -25,7 +25,8 @@
 // every geometry is read from it (`CANVAS-078`).
 // ============================================================================
 
-use ambre_bus::{ByteOffset, ByteSpan};
+use ambre_bus::Byte;
+use ambre_core::index::{Pos, Span};
 use ambre_core::{Doc, Px, Scale, View};
 use ambre_draw::{
     Affine, Alignment, BezPath, BoundingBox, Brush, Color, DrawSurface, FontContext, FontFamily,
@@ -120,8 +121,8 @@ pub enum EditIntent {
     /// Replace the bytes `start..end` of the buffer with `text`, the caret
     /// after it. A range off a char boundary changes nothing.
     Replace {
-        start: ByteOffset,
-        end: ByteOffset,
+        start: Pos<Byte>,
+        end: Pos<Byte>,
         text: String,
     },
 }
@@ -169,7 +170,7 @@ impl Caret {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TextSpan {
     /// The bytes of the buffer the span covers.
-    pub range: ByteSpan,
+    pub range: Span<Byte>,
     /// A weight in place of the pinned one.
     pub weight: Option<ambre_core::Bounded<ambre_core::FontWeight>>,
     pub italic: ambre_core::Slant,
@@ -464,18 +465,18 @@ impl TextEditor {
 
     /// The bytes the selection covers, or `None` while it is collapsed or a
     /// composition holds. Font-free, and as of the last flush.
-    pub fn selection(&self) -> Option<ByteSpan> {
+    pub fn selection(&self) -> Option<Span<Byte>> {
         let selection = self.editor.raw_selection();
         let held = !selection.is_collapsed() && self.editor.raw_compose().is_none();
-        held.then(|| ByteSpan::from_usize_range(selection.text_range()))
+        held.then(|| Span::<Byte>::from_usize_range(selection.text_range()))
     }
 
     /// The byte offset of the caret, or `None` while a selection or a
     /// composition holds. Font-free, and as of the last flush.
-    pub fn caret(&self) -> Option<ByteOffset> {
+    pub fn caret(&self) -> Option<Pos<Byte>> {
         let selection = self.editor.raw_selection();
         let collapsed = selection.is_collapsed() && self.editor.raw_compose().is_none();
-        collapsed.then(|| ByteOffset::new(selection.focus().index()))
+        collapsed.then(|| Pos::<Byte>::from_usize(selection.focus().index()))
     }
 
     /// Push the pinned style + geometry onto the editor for this paint, then apply
@@ -583,8 +584,10 @@ impl TextEditor {
                     EditIntent::Replace { start, end, text } => {
                         // The driver selects nothing off a char boundary, so
                         // only a selection of the exact range is replaced.
-                        drv.select_byte_range(start.get(), end.get());
-                        if drv.editor.raw_selection().text_range() == (start.get()..end.get()) {
+                        drv.select_byte_range(start.to_usize(), end.to_usize());
+                        if drv.editor.raw_selection().text_range()
+                            == (start.to_usize()..end.to_usize())
+                        {
                             drv.insert_or_replace_selection(&text);
                         }
                     }
@@ -734,7 +737,7 @@ impl TextEditor {
     /// The bytes of the line drawn around the caret: a wrapped line, not the
     /// text between two breaks. `None` while a selection or a composition
     /// holds, or before the first layout. Call after [`flush`](Self::flush).
-    pub fn caret_line(&mut self) -> Option<ByteSpan> {
+    pub fn caret_line(&mut self) -> Option<Span<Byte>> {
         self.caret()?;
         // The caret's own box, so a caret at a wrap reads the line it is
         // drawn on, whichever side of the wrap its affinity holds.
@@ -745,7 +748,7 @@ impl TextEditor {
             .lines()
             .find(|line| mid < line.metrics().block_max_coord)
             .or_else(|| layout.lines().last())?;
-        Some(ByteSpan::from_usize_range(line.text_range()))
+        Some(Span::<Byte>::from_usize_range(line.text_range()))
     }
 
     /// The total laid-out text height in local (screen) pixels, or `None` before
@@ -916,10 +919,10 @@ fn on_its_line(layout: &Layout<Brush>, caret: BoundingBox) -> BoundingBox {
 }
 
 /// The selection that covers the bytes `range` of `layout`.
-fn covered(layout: &Layout<Brush>, range: ByteSpan) -> Selection {
+fn covered(layout: &Layout<Brush>, range: Span<Byte>) -> Selection {
     Selection::new(
-        Cursor::from_byte_index(layout, range.start.get(), Affinity::Downstream),
-        Cursor::from_byte_index(layout, range.end.get(), Affinity::Upstream),
+        Cursor::from_byte_index(layout, range.start.to_usize(), Affinity::Downstream),
+        Cursor::from_byte_index(layout, range.end.to_usize(), Affinity::Upstream),
     )
 }
 
@@ -1118,17 +1121,20 @@ mod tests {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("hé @bo x", style());
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
-        assert_eq!(ed.caret().map(ByteOffset::get), Some("hé @bo x".len()));
+        assert_eq!(
+            ed.caret().map(Pos::<Byte>::to_usize),
+            Some("hé @bo x".len())
+        );
         let replace = |start, end, text: &str| EditIntent::Replace {
-            start: ByteOffset::new(start),
-            end: ByteOffset::new(end),
+            start: Pos::<Byte>::new(start),
+            end: Pos::<Byte>::new(end),
             text: text.to_owned(),
         };
         ed.push(replace(4, 7, "@Bob"));
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "hé @Bob x");
         assert_eq!(
-            ed.caret().map(ByteOffset::get),
+            ed.caret().map(Pos::<Byte>::get),
             Some(8),
             "the caret follows the new text"
         );
@@ -1220,7 +1226,7 @@ mod tests {
 
     fn span(range: std::ops::Range<usize>) -> TextSpan {
         TextSpan {
-            range: ByteSpan::from_usize_range(range),
+            range: Span::<Byte>::from_usize_range(range),
             ..TextSpan::default()
         }
     }
@@ -1250,11 +1256,11 @@ mod tests {
             ed.move_left();
         }
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
-        assert_eq!(ed.caret().map(ByteOffset::get), Some(16));
+        assert_eq!(ed.caret().map(Pos::<Byte>::get), Some(16));
         let sixteenth = ed.caret_local().expect("a caret");
         ed.move_end();
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
-        assert_eq!(ed.caret().map(ByteOffset::get), Some(20));
+        assert_eq!(ed.caret().map(Pos::<Byte>::get), Some(20));
         assert!(
             (caret_x(&mut ed) - wide).abs() < 0.5,
             "End read the plain line"
@@ -1263,7 +1269,7 @@ mod tests {
         ed.point_down(doc_point(sixteenth.x0 as f32, y as f32));
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(
-            ed.caret().map(ByteOffset::get),
+            ed.caret().map(Pos::<Byte>::get),
             Some(16),
             "the click read the plain layout"
         );
@@ -1306,7 +1312,7 @@ mod tests {
         );
         assert_eq!(
             ed.caret(),
-            Some(ByteOffset::new(4)),
+            Some(Pos::<Byte>::new(4)),
             "a click past the indent lands at the start"
         );
         assert!(
@@ -1368,9 +1374,9 @@ mod tests {
             Scale::<Doc, View>::ONE,
         );
         assert_eq!(ed.layout().expect("a layout").len(), 3, "three lines drawn");
-        assert_eq!(ed.caret().map(ByteOffset::get), Some(14));
+        assert_eq!(ed.caret().map(Pos::<Byte>::get), Some(14));
         assert_eq!(
-            ed.caret_line().map(ByteSpan::to_usize_range),
+            ed.caret_line().map(Span::<Byte>::to_usize_range),
             Some(10..14),
             "the last line drawn"
         );
@@ -1381,7 +1387,7 @@ mod tests {
             Scale::<Doc, View>::ONE,
         );
         assert_eq!(
-            ed.caret_line().map(ByteSpan::to_usize_range),
+            ed.caret_line().map(Span::<Byte>::to_usize_range),
             Some(5..10),
             "the middle line"
         );
@@ -1392,7 +1398,7 @@ mod tests {
             Scale::<Doc, View>::ONE,
         );
         assert_eq!(
-            ed.caret_line().map(ByteSpan::to_usize_range),
+            ed.caret_line().map(Span::<Byte>::to_usize_range),
             Some(5..10),
             "End stays on its line"
         );
@@ -1415,18 +1421,18 @@ mod tests {
         let mut ed = TextEditor::new(&format!("{ten}\nw\n{ten}"), style());
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.set_spans(&mut fcx, vec![span(0..23)]);
-        assert_eq!(ed.caret().map(ByteOffset::get), Some(23));
+        assert_eq!(ed.caret().map(Pos::<Byte>::get), Some(23));
         ed.move_up();
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(
-            ed.caret().map(ByteOffset::get),
+            ed.caret().map(Pos::<Byte>::get),
             Some(12),
             "the short line holds the caret"
         );
         ed.move_up();
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(
-            ed.caret().map(ByteOffset::get),
+            ed.caret().map(Pos::<Byte>::get),
             Some(10),
             "the column survived the short line"
         );
@@ -1434,7 +1440,7 @@ mod tests {
         ed.move_down();
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(
-            ed.caret().map(ByteOffset::get),
+            ed.caret().map(Pos::<Byte>::get),
             Some(23),
             "two moves in one flush keep it too"
         );
@@ -1445,7 +1451,7 @@ mod tests {
         ed.move_up();
         ed.move_up();
         ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
-        assert_eq!(ed.caret().map(ByteOffset::get), Some(1));
+        assert_eq!(ed.caret().map(Pos::<Byte>::get), Some(1));
     }
 
     /// Each span draws its range in its own look. That is a face of its
@@ -1547,6 +1553,6 @@ mod tests {
             style().color,
             Caret::Shown,
         );
-        assert_eq!(ed.caret().map(ByteOffset::get), Some(2));
+        assert_eq!(ed.caret().map(Pos::<Byte>::get), Some(2));
     }
 }

@@ -2,6 +2,8 @@
 // TrameView: document binding, event dispatch, per-frame update and paint.
 
 use super::*;
+use ambre_core::index::Pos;
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 impl TrameView {
     /// Swap the active document in place (SPA route change). Drop every
@@ -22,8 +24,8 @@ impl TrameView {
         self.needs_full = true;
         self.viewport_changed = false;
         self.data_dirty = false;
-        self.prev_top_row = Row::ZERO;
-        self.prev_left_col = Col::ZERO;
+        self.prev_top_row = Pos::<Row>::ZERO;
+        self.prev_left_col = Pos::<Col>::ZERO;
         self.cut_pending = false;
         // Retract any floating-toolbar anchor from the previous document.
         self.last_anchor = None;
@@ -128,7 +130,7 @@ impl TrameView {
                 #[cfg(target_arch = "wasm32")]
                 self.find_result.set(Some(crate::chrome::FindPosition::new(
                     active,
-                    ambre_bus::app::find::MatchCount::from_len(matches.len()),
+                    Count::<ambre_bus::app::find::Match>::from_len(matches.len()),
                 )));
                 self.state.find_matches = matches.clone();
                 self.needs_full = true;
@@ -344,7 +346,7 @@ impl TrameView {
 
     pub fn plan_repaint(
         &mut self,
-        _now: ambre_core::PageTime,
+        _now: Instant<PageLoad>,
         hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         // Formatting lives per-cell in the persistent cell layer, so a cursor
@@ -444,8 +446,8 @@ impl TrameView {
         // When the content layer is reused the renderer won't run; zero its HUD
         // sub-phase timings so they read 0 instead of stale values.
         if matches!(content, ContentRepaint::Reuse) {
-            self.draw_stats.background = ambre_core::PageMillis::ZERO;
-            self.draw_stats.cells = ambre_core::PageMillis::ZERO;
+            self.draw_stats.background = TimeSpan::<FracMs>::ZERO;
+            self.draw_stats.cells = TimeSpan::<FracMs>::ZERO;
             self.draw_stats.cells_drawn = ambre_core::Tally::<ambre_canvas::CellsDrawn>::ZERO;
         }
 

@@ -229,8 +229,9 @@ mod tests {
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
     use crate::view::tests::{append, laid_out};
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
     use ambre_core::Pt;
+    use ambre_core::index::Pos;
     use ambre_core::{Px, View};
 
     /// A length in points, on the canvas.
@@ -261,7 +262,7 @@ mod tests {
     fn caret_in(ui: &mut ProseUiState, block_id: crate::events::BlockId) {
         ui.cursor = Some(CursorPosition {
             block_id,
-            offset: DocOffset::ZERO,
+            offset: Pos::<DocChar>::ZERO,
             anchor: None,
         });
     }

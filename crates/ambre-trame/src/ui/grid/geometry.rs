@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::formula::text::CellText;
+use ambre_core::index::{Pos, Span};
 use ambre_core::{Doc, Point, Px, Surface, View};
 
 use super::{in_view, on_grid};
@@ -72,12 +73,12 @@ impl TrameUiState {
     }
 
     /// Width (logical px) of column `col`: its resized entry, else [`COL_WIDTH`].
-    pub fn col_width_of(&self, col: Col) -> Px<Surface> {
+    pub fn col_width_of(&self, col: Pos<Col>) -> Px<Surface> {
         self.scaled(self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH))
     }
 
     /// Height (logical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
-    pub fn row_height_of(&self, row: Row) -> Px<Surface> {
+    pub fn row_height_of(&self, row: Pos<Row>) -> Px<Surface> {
         self.scaled(self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT))
     }
 
@@ -96,14 +97,14 @@ impl TrameUiState {
     /// X of column `col`'s left edge relative to the canvas, summing the variable
     /// widths from [`left_col`](Self::left_col). Columns left of the scroll origin
     /// yield a value smaller than [`HEADER_WIDTH`] (callers clip).
-    pub fn col_x(&self, col: Col) -> Px<Surface> {
+    pub fn col_x(&self, col: Pos<Col>) -> Px<Surface> {
         let mut x = self.header_w();
         if col >= self.left_col {
-            for c in ColSpan::new(self.left_col, col) {
+            for c in Span::<Col>::new(self.left_col, col) {
                 x += self.col_width_of(c);
             }
         } else {
-            for c in ColSpan::new(col, self.left_col) {
+            for c in Span::<Col>::new(col, self.left_col) {
                 x -= self.col_width_of(c);
             }
         }
@@ -113,17 +114,17 @@ impl TrameUiState {
     /// Y of row `row`'s top edge relative to the canvas, summing the *visible*
     /// rows' variable heights from [`top_row`](Self::top_row) (collapsing hidden
     /// rows, `trame-shared-filter`). Mirrors `GridLayout::row_top`.
-    pub fn row_y(&self, row: Row) -> Px<Surface> {
+    pub fn row_y(&self, row: Pos<Row>) -> Px<Surface> {
         let cells_top = self.header_h();
         let mut y = cells_top;
         if row >= self.top_row {
-            for r in RowSpan::new(self.top_row, row) {
+            for r in Span::<Row>::new(self.top_row, row) {
                 if !self.is_row_hidden(r) {
                     y += self.row_height_of(r);
                 }
             }
         } else {
-            for r in RowSpan::new(row, self.top_row) {
+            for r in Span::<Row>::new(row, self.top_row) {
                 if !self.is_row_hidden(r) {
                     y -= self.row_height_of(r);
                 }
@@ -135,13 +136,13 @@ impl TrameUiState {
     /// Absolute grid column whose band contains logical `x` (>= the row
     /// header strip), walking the variable widths. Used by a whole-axis drag,
     /// where the pointer may be below the header strip. `None` left of the grid.
-    pub fn col_at_x(&self, x: Px<View>) -> Option<Col> {
+    pub fn col_at_x(&self, x: Px<View>) -> Option<Pos<Col>> {
         let px = on_grid(x);
         if px < self.header_w() {
             return None;
         }
         let mut cx = self.header_w();
-        for col in ColSpan::new(self.left_col, TOTAL_COLS.as_end()) {
+        for col in Span::<Col>::new(self.left_col, TOTAL_COLS.as_end()) {
             let w = self.col_width_of(col);
             if px < cx + w {
                 return Some(col);
@@ -157,7 +158,7 @@ impl TrameUiState {
     /// next one past its midpoint. That last option keeps the final position
     /// reachable. `None` left of the grid. The returned index may equal the
     /// column count (drop at the end).
-    pub fn col_drop_slot(&self, x: Px<View>) -> Option<Col> {
+    pub fn col_drop_slot(&self, x: Px<View>) -> Option<Pos<Col>> {
         let col = self.col_at_x(x)?;
         let px = on_grid(x);
         let mid = self.col_x(col) + self.col_width_of(col) / 2.0;
@@ -167,7 +168,7 @@ impl TrameUiState {
     /// Insertion slot for a row reorder drop at logical `y`: the row index
     /// the grabbed row would land *above*. It snaps to the nearer horizontal
     /// boundary. Row analogue of [`col_drop_slot`](Self::col_drop_slot).
-    pub fn row_drop_slot(&self, y: Px<View>) -> Option<Row> {
+    pub fn row_drop_slot(&self, y: Px<View>) -> Option<Pos<Row>> {
         let row = self.row_at_y(y)?;
         let py = on_grid(y);
         let mid = self.row_y(row) + self.row_height_of(row) / 2.0;
@@ -177,13 +178,13 @@ impl TrameUiState {
     /// Absolute *visible* grid row whose band contains logical `y` (>= the
     /// column header strip), walking the variable heights and skipping hidden
     /// rows. `None` above the grid.
-    pub fn row_at_y(&self, y: Px<View>) -> Option<Row> {
+    pub fn row_at_y(&self, y: Px<View>) -> Option<Pos<Row>> {
         let py = on_grid(y);
         if py < self.header_h() {
             return None;
         }
         let mut cy = self.header_h();
-        for row in RowSpan::new(self.top_row, TOTAL_ROWS.as_end()) {
+        for row in Span::<Row>::new(self.top_row, TOTAL_ROWS.as_end()) {
             if !self.is_row_hidden(row) {
                 let h = self.row_height_of(row);
                 if py < cy + h {
@@ -291,7 +292,7 @@ impl TrameUiState {
         // border arming a resize.
         if in_col_strip && x >= self.header_w() && x < self.canvas_width {
             let mut cx = self.header_w();
-            for col in ColSpan::new(self.left_col, TOTAL_COLS.as_end()) {
+            for col in Span::<Col>::new(self.left_col, TOTAL_COLS.as_end()) {
                 let right = cx + self.col_width_of(col);
                 // Boundary band: the top sliver hosts the inline "+" insert
                 // (insert left of the next column); the rest arms a resize.
@@ -313,7 +314,7 @@ impl TrameUiState {
         // bottom border arming a resize.
         if in_row_strip && y >= self.header_h() && y < self.grid_bottom() {
             let mut cy = self.header_h();
-            for row in RowSpan::new(self.top_row, TOTAL_ROWS.as_end()) {
+            for row in Span::<Row>::new(self.top_row, TOTAL_ROWS.as_end()) {
                 if self.is_row_hidden(row) {
                     continue;
                 }

@@ -2,12 +2,13 @@
 //! reply writes, what a root shows of its thread, and the one field of a
 //! root another member may write.
 
-use ambre_bus::CharSpan;
+use ambre_bus::Char;
+use ambre_core::index::Span;
 use std::collections::HashMap;
 
 use ambre_bus::{
-    ActivityKind, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
-    MurmureEvent, Timestamp,
+    ActivityKind, Authored, Instant, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft,
+    MessageView, MurmureEvent,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
@@ -21,7 +22,7 @@ use crate::{
     ChannelState, ChannelType, MurmureError, Refusal, SeekStep, Sent, Signer, ThreadTarget,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {
@@ -810,7 +811,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
         styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(alice),
-            range: CharSpan::from_usize_range(0..6),
+            range: Span::<Char>::from_usize_range(0..6),
         }],
     };
     let replied = state
@@ -884,7 +885,7 @@ fn far_copy(alice: &ChannelState, oldest: Option<Id<Segment>>) -> (ChannelState,
         Some((active, 30, SegmentState::Active)),
     ];
     for (id, from, state) in entries.into_iter().flatten() {
-        push_segment_entry(&meta, id, Timestamp::new(from), state).expect("entry");
+        push_segment_entry(&meta, id, Instant::<Authored>::new(from), state).expect("entry");
     }
     meta.commit();
     let meta = Payload::<SnapshotBytes>::new(meta.export(ExportMode::Snapshot).expect("snapshot"));

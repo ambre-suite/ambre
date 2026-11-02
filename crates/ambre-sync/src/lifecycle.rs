@@ -5,18 +5,18 @@
 
 use std::rc::Rc;
 
-use ambre_core::{Millis, UnixMillis};
+use ambre_core::{Instant, Ms, TimeSpan, UnixMs};
 
 use ambre_protocol::ws::CloseCode;
 
 /// The first reconnect delay.
-const BASE_DELAY: Millis = Millis::new(250);
+const BASE_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(250);
 
 /// The longest reconnect delay before jitter.
-const MAX_DELAY: Millis = Millis::new(10_000);
+const MAX_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(10_000);
 
 /// The worker's wall clock. A host test swaps in one it advances by hand.
-pub(crate) type Clock = Rc<dyn Fn() -> UnixMillis>;
+pub(crate) type Clock = Rc<dyn Fn() -> Instant<UnixMs>>;
 
 /// The clock of the running worker: the browser's wall clock.
 #[cfg(target_arch = "wasm32")]
@@ -24,18 +24,18 @@ pub(crate) fn system_clock() -> Clock {
     // The wall clock is a positive count of milliseconds well below 2^53, so
     // the conversion is exact.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    Rc::new(|| UnixMillis::new(js_sys::Date::now() as u64))
+    Rc::new(|| Instant::<UnixMs>::new(js_sys::Date::now() as u64))
 }
 
 /// The clock of a native build: the system's wall clock.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn system_clock() -> Clock {
     Rc::new(|| {
-        UnixMillis::new(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
-        )
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(Instant::EPOCH, |d| {
+                Instant::<UnixMs>::after_epoch(TimeSpan::from_duration(d))
+            })
     })
 }
 
@@ -60,7 +60,7 @@ pub(crate) enum Next {
     /// Arm a timer for `delay`, then report it fired.
     Wait {
         /// How long the timer waits.
-        delay: Millis,
+        delay: TimeSpan<Ms>,
     },
     /// The account owes its key setup: stay closed until a session with keys.
     SetupOwed,
@@ -73,14 +73,14 @@ pub(crate) struct Lifecycle {
     /// Attempts since the last frame, which set the next delay.
     attempts: u32,
     /// When the armed reconnect is due, on the worker's clock.
-    deadline: Option<UnixMillis>,
+    deadline: Option<Instant<UnixMs>>,
 }
 
 impl Lifecycle {
     /// The delay before jitter after `attempts` failures in a row. It starts at
     /// 250 ms and doubles, capped at 10 s.
-    pub(crate) fn delay(attempts: u32) -> Millis {
-        Millis::new(
+    pub(crate) fn delay(attempts: u32) -> TimeSpan<Ms> {
+        TimeSpan::<Ms>::new(
             BASE_DELAY
                 .get()
                 .saturating_mul(1 << attempts.min(6))
@@ -95,7 +95,7 @@ impl Lifecycle {
         &mut self,
         code: Option<CloseCode>,
         demand: Demand,
-        now: UnixMillis,
+        now: Instant<UnixMs>,
         jitter: f64,
     ) -> Next {
         if code == Some(CloseCode::SETUP_REQUIRED) {
@@ -116,7 +116,7 @@ impl Lifecycle {
 
     /// Arms the next reconnect. The delay grows with each attempt until a
     /// frame arrives (`SYNC-064`).
-    pub(crate) fn back_off(&mut self, now: UnixMillis, jitter: f64) -> Next {
+    pub(crate) fn back_off(&mut self, now: Instant<UnixMs>, jitter: f64) -> Next {
         let capped = Self::delay(self.attempts).get();
         self.attempts = self.attempts.saturating_add(1);
         // `capped` is at most 10 s, so the product fits and is not negative.
@@ -126,7 +126,7 @@ impl Lifecycle {
             clippy::cast_precision_loss
         )]
         let spread = (capped as f64 * jitter.clamp(0.0, 1.0)) as u64;
-        let delay = Millis::new(capped.saturating_add(spread));
+        let delay = TimeSpan::<Ms>::new(capped.saturating_add(spread));
         self.deadline = Some(now.plus(delay));
         Next::Wait { delay }
     }
@@ -146,7 +146,7 @@ impl Lifecycle {
 
     /// The timer fired at `now`. Opens once the deadline has passed, and
     /// arms again for what remains when the timer fired early.
-    pub(crate) fn poll(&mut self, now: UnixMillis) -> Next {
+    pub(crate) fn poll(&mut self, now: Instant<UnixMs>) -> Next {
         match self.deadline {
             None => Next::Idle,
             Some(due) if now >= due => {
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn the_wait_grows_while_no_frame_arrives() {
         let mut lifecycle = Lifecycle::default();
-        let mut now = UnixMillis::new(0);
+        let mut now = Instant::<UnixMs>::new(0);
         let mut waits = Vec::new();
         for _ in 0..8 {
             let Next::Wait { delay } =
@@ -187,9 +187,9 @@ mod tests {
             };
             waits.push(delay.get());
             assert_eq!(
-                lifecycle.poll(UnixMillis::new(now.get() + delay.get() - 1)),
+                lifecycle.poll(Instant::<UnixMs>::new(now.get() + delay.get() - 1)),
                 Next::Wait {
-                    delay: Millis::new(1)
+                    delay: TimeSpan::<Ms>::new(1)
                 }
             );
             now = now.plus(delay);
@@ -207,33 +207,33 @@ mod tests {
         lifecycle.closed(
             CloseCode::new(1006),
             Demand::Needed,
-            UnixMillis::new(0),
+            Instant::<UnixMs>::new(0),
             0.0,
         );
-        lifecycle.poll(UnixMillis::new(250));
+        lifecycle.poll(Instant::<UnixMs>::new(250));
         // Opened and closed again with no frame between.
         assert_eq!(
             lifecycle.closed(
                 CloseCode::new(1006),
                 Demand::Needed,
-                UnixMillis::new(250),
+                Instant::<UnixMs>::new(250),
                 0.0
             ),
             Next::Wait {
-                delay: Millis::new(500)
+                delay: TimeSpan::<Ms>::new(500)
             }
         );
-        lifecycle.poll(UnixMillis::new(750));
+        lifecycle.poll(Instant::<UnixMs>::new(750));
         lifecycle.frame();
         assert_eq!(
             lifecycle.closed(
                 CloseCode::new(1006),
                 Demand::Needed,
-                UnixMillis::new(800),
+                Instant::<UnixMs>::new(800),
                 0.0
             ),
             Next::Wait {
-                delay: Millis::new(250)
+                delay: TimeSpan::<Ms>::new(250)
             }
         );
     }
@@ -246,21 +246,21 @@ mod tests {
         lifecycle.closed(
             CloseCode::new(1006),
             Demand::Needed,
-            UnixMillis::new(0),
+            Instant::<UnixMs>::new(0),
             0.0,
         );
         assert_eq!(
             lifecycle.closed(
                 Some(CloseCode::UNAUTHORIZED),
                 Demand::Needed,
-                UnixMillis::new(10),
+                Instant::<UnixMs>::new(10),
                 0.0
             ),
             Next::Renew
         );
         assert_eq!(lifecycle.renewed(), Next::Open);
         assert_eq!(
-            lifecycle.poll(UnixMillis::new(10_000)),
+            lifecycle.poll(Instant::<UnixMs>::new(10_000)),
             Next::Idle,
             "the old deadline is gone"
         );
@@ -268,11 +268,11 @@ mod tests {
             lifecycle.closed(
                 CloseCode::new(1006),
                 Demand::Needed,
-                UnixMillis::new(20),
+                Instant::<UnixMs>::new(20),
                 0.0
             ),
             Next::Wait {
-                delay: Millis::new(250)
+                delay: TimeSpan::<Ms>::new(250)
             }
         );
     }
@@ -284,18 +284,18 @@ mod tests {
         let mut errored = Lifecycle::default();
         let mut closed = Lifecycle::default();
         assert_eq!(
-            errored.closed(None, Demand::Needed, UnixMillis::new(0), 0.5),
+            errored.closed(None, Demand::Needed, Instant::<UnixMs>::new(0), 0.5),
             closed.closed(
                 CloseCode::new(1006),
                 Demand::Needed,
-                UnixMillis::new(0),
+                Instant::<UnixMs>::new(0),
                 0.5
             )
         );
         assert_eq!(
-            errored.closed(None, Demand::Needed, UnixMillis::new(0), 0.0),
+            errored.closed(None, Demand::Needed, Instant::<UnixMs>::new(0), 0.0),
             Next::Wait {
-                delay: Millis::new(500)
+                delay: TimeSpan::<Ms>::new(500)
             }
         );
 
@@ -303,20 +303,20 @@ mod tests {
         lifecycle.closed(
             CloseCode::new(1006),
             Demand::Needed,
-            UnixMillis::new(0),
+            Instant::<UnixMs>::new(0),
             0.0,
         );
         assert_eq!(
             lifecycle.closed(
                 Some(CloseCode::SETUP_REQUIRED),
                 Demand::Needed,
-                UnixMillis::new(0),
+                Instant::<UnixMs>::new(0),
                 0.0
             ),
             Next::SetupOwed
         );
         assert_eq!(
-            lifecycle.poll(UnixMillis::new(u64::MAX)),
+            lifecycle.poll(Instant::<UnixMs>::new(u64::MAX)),
             Next::Idle,
             "no timer reopens it"
         );
@@ -324,7 +324,7 @@ mod tests {
             lifecycle.closed(
                 CloseCode::new(1006),
                 Demand::Unneeded,
-                UnixMillis::new(0),
+                Instant::<UnixMs>::new(0),
                 0.0
             ),
             Next::Idle

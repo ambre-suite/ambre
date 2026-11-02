@@ -13,6 +13,7 @@
 // (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
 // ============================================================================
 
+use ambre_core::index::Pos;
 use ambre_core::{Doc, Px};
 use std::collections::{HashMap, HashSet};
 
@@ -29,9 +30,9 @@ use crate::model::{CellKey, Line, SheetIndex, Uid, parse_cell_key};
 use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
     BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, CellValueKind,
-    ClipboardCell, ClipboardPayload, Col, ColCount, Decimals, FilterKind, FilterOp, Merge,
-    MergeSpan, Row, RowCount, RowFilter, RowSpan, SelectionKind, SheetId, SheetName, SheetNameKey,
-    SheetTab, SheetTabPos, Slant, SortKey, StylePatch, Weight,
+    ClipboardCell, ClipboardPayload, Col, Decimals, FilterKind, FilterOp, Merge, MergeSpan, Row,
+    RowFilter, SelectionKind, SheetId, SheetName, SheetNameKey, SheetTab, Slant, SortKey,
+    StylePatch, TabStrip, Weight,
 };
 pub(crate) use ambre_bus::{HeaderRow, SortOrder};
 pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
@@ -185,16 +186,16 @@ pub struct TrameState {
     /// rebuilt by [`Self::rebuild_filter`] after any import or structural op.
     /// Cells in these rows are flagged [`DisplayCell::is_filtered`] but still
     /// participate in calculations.
-    hidden_rows: HashSet<Row>,
+    hidden_rows: HashSet<Pos<Row>>,
     /// Active-sheet column widths (logical px) per grid column position,
     /// derived cache of `col_widths_{sheet}` (a `{col_uid -> width}` map),
     /// rebuilt by [`Self::reseed_metrics`] after any import or structural op.
     /// Absence means the uniform [`COL_WIDTH`]; the viewport response
     /// fills the gap so the UI gets a complete slice (`trame-resize`).
-    col_widths: HashMap<Col, Px<Doc>>,
+    col_widths: HashMap<Pos<Col>, Px<Doc>>,
     /// Active-sheet row heights (logical px) per grid row position. Row analogue
     /// of [`col_widths`](Self::col_widths); derived from `row_heights_{sheet}`.
-    row_heights: HashMap<Row, Px<Doc>>,
+    row_heights: HashMap<Pos<Row>, Px<Doc>>,
     /// Stable cell keys of covered cells that still hold a non-empty value -- a
     /// concurrent-edit conflict (`trame-cell-merges`). Masked: excluded from the
     /// formula engine
@@ -455,16 +456,26 @@ impl TrameState {
                 rects
             }
             SelectionKind::Cols => {
-                let row_end = self.index.row_len().as_end().prev().unwrap_or(Row::ZERO);
+                let row_end = self
+                    .index
+                    .row_len()
+                    .as_end()
+                    .prev()
+                    .unwrap_or(Pos::<Row>::ZERO);
                 vec![CellRect::spanning(
-                    CellPos::new(Row::ZERO, live.top_left.col),
+                    CellPos::new(Pos::<Row>::ZERO, live.top_left.col),
                     CellPos::new(row_end, live.bottom_right.col),
                 )]
             }
             SelectionKind::Rows => {
-                let col_end = self.index.col_len().as_end().prev().unwrap_or(Col::ZERO);
+                let col_end = self
+                    .index
+                    .col_len()
+                    .as_end()
+                    .prev()
+                    .unwrap_or(Pos::<Col>::ZERO);
                 vec![CellRect::spanning(
-                    CellPos::new(live.top_left.row, Col::ZERO),
+                    CellPos::new(live.top_left.row, Pos::<Col>::ZERO),
                     CellPos::new(live.bottom_right.row, col_end),
                 )]
             }

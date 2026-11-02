@@ -5,13 +5,14 @@
 // pushes its camera before the call; the walk knows no scroll position, no
 // zoom, no header strip and no dirty cell.
 
+use ambre_core::index::{Pos, Span};
 use std::collections::HashMap;
 
 use ambre_core::{Doc, Px, Surface};
 use ambre_draw::DocumentWalk;
 
 use super::*;
-use crate::{ColSpan, LAST_COL, LAST_ROW, RowSpan, TOTAL_COLS, TOTAL_ROWS};
+use crate::{Col, LAST_COL, LAST_ROW, Row, TOTAL_COLS, TOTAL_ROWS};
 
 /// One cell as the walk reads it.
 #[derive(Clone, Copy)]
@@ -44,21 +45,21 @@ pub struct SheetAxes<'v> {
     /// Height of a row with no entry in `row_heights`.
     pub row_height: Px<Doc>,
     /// Explicit column widths, keyed by column.
-    pub col_widths: &'v HashMap<Col, Px<Doc>>,
+    pub col_widths: &'v HashMap<Pos<Col>, Px<Doc>>,
     /// Explicit row heights, keyed by row.
-    pub row_heights: &'v HashMap<Row, Px<Doc>>,
+    pub row_heights: &'v HashMap<Pos<Row>, Px<Doc>>,
     /// Rows hidden by the shared filter, sorted ascending.
-    pub hidden_rows: &'v [Row],
+    pub hidden_rows: &'v [Pos<Row>],
 }
 
 impl SheetAxes<'_> {
     /// True if `row` is hidden by the shared filter.
-    pub fn is_hidden(&self, row: Row) -> bool {
+    pub fn is_hidden(&self, row: Pos<Row>) -> bool {
         self.hidden_rows.binary_search(&row).is_ok()
     }
 
     /// X of column `col`'s left edge.
-    pub fn col_x(&self, col: Col) -> Px<Surface> {
+    pub fn col_x(&self, col: Pos<Col>) -> Px<Surface> {
         let resized: f64 = self
             .col_widths
             .iter()
@@ -69,7 +70,7 @@ impl SheetAxes<'_> {
     }
 
     /// Y of row `row`'s top edge. The hidden rows above it take no height.
-    pub fn row_y(&self, row: Row) -> Px<Surface> {
+    pub fn row_y(&self, row: Pos<Row>) -> Px<Surface> {
         let hidden = self.hidden_rows.partition_point(|&r| r < row) as f64;
         let resized: f64 = self
             .row_heights
@@ -83,15 +84,15 @@ impl SheetAxes<'_> {
     }
 
     /// The column whose band holds `x`, clamped to the grid.
-    pub fn col_at(&self, x: Px<Surface>) -> Col {
-        ColSpan::from_count(Col::ZERO, TOTAL_COLS)
+    pub fn col_at(&self, x: Px<Surface>) -> Pos<Col> {
+        Span::<Col>::from_count(Pos::<Col>::ZERO, TOTAL_COLS)
             .first_where(|c| self.col_x(c.next()) > x)
             .min(LAST_COL)
     }
 
     /// The row whose band holds `y`, clamped to the grid.
-    pub fn row_at(&self, y: Px<Surface>) -> Row {
-        RowSpan::from_count(Row::ZERO, TOTAL_ROWS)
+    pub fn row_at(&self, y: Px<Surface>) -> Pos<Row> {
+        Span::<Row>::from_count(Pos::<Row>::ZERO, TOTAL_ROWS)
             .first_where(|r| self.row_y(r.next()) > y)
             .min(LAST_ROW)
     }
@@ -148,7 +149,7 @@ impl DocumentWalk for SheetWalk<'_> {
             .row_at(Px::<Surface>::new(region.y1))
             .next()
             .min(TOTAL_ROWS.as_end());
-        let (cols, rows) = (ColSpan::new(c0, c1), RowSpan::new(r0, r1));
+        let (cols, rows) = (Span::<Col>::new(c0, c1), Span::<Row>::new(r0, r1));
         // The primitives lay out from an origin cell: pin it at its own sheet
         // position, so every rect they produce is in sheet coordinates.
         let layout = GridLayout {

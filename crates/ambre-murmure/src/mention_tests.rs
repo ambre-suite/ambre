@@ -2,10 +2,13 @@
 //! (`features/ambre-spec-murmure-mentions.md`).
 
 use crate::Receipt;
-use ambre_bus::CharSpan;
-use ambre_bus::{Mention, MentionCount, MentionTarget, MessageDraft, MessageView, Timestamp};
+use ambre_bus::Char;
+use ambre_bus::{
+    Authored, Instant, Mention, MentionCount, MentionTarget, MessageDraft, MessageView,
+};
 use ambre_core::Seq;
 use ambre_core::id::{Channel, Id, User};
+use ambre_core::index::Span;
 use loro::{Container, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{Mark, MessageKey, Root};
@@ -14,7 +17,7 @@ use crate::{
     Screened, Sent, Signer, screen,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 /// Alice's channel, created empty, and the user she writes for.
 fn alice() -> (ChannelState, Id<User>) {
@@ -49,7 +52,7 @@ fn open_from(state: &ChannelState) -> ChannelState {
 fn at(target: MentionTarget, range: std::ops::Range<usize>) -> Mention {
     Mention {
         target,
-        range: CharSpan::from_usize_range(range),
+        range: Span::<Char>::from_usize_range(range),
     }
 }
 

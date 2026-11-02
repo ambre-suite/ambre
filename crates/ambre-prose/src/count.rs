@@ -89,7 +89,8 @@ mod tests {
     use super::*;
     use crate::events::{BlockInit, ProseCommand, block_id};
     use crate::logic::ProseState;
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::{Count, Pos};
 
     /// A document of one paragraph per string, in order.
     fn document_of(paragraphs: &[&str]) -> ProseState {
@@ -108,7 +109,7 @@ mod tests {
             }
             state.handle_command(ProseCommand::InsertText {
                 block_id: last,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: (*text).to_owned(),
             });
         }
@@ -167,15 +168,15 @@ mod tests {
         state.handle_command(ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(root),
-            rows: crate::events::grid::RowCount::new(1),
-            cols: crate::events::grid::ColCount::new(1),
+            rows: Count::<crate::events::grid::Row>::new(1),
+            cols: Count::<crate::events::grid::Col>::new(1),
         });
         let table = crate::logic::tables::tests::the_table(&state);
         let cell = crate::logic::tables::tests::cell_at(&state, table, 0, 0);
         let paragraph = crate::logic::tables::tests::first_block_of(&state, cell);
         state.handle_command(ProseCommand::InsertText {
             block_id: block_id(paragraph),
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "inside".to_owned(),
         });
         let count = compute_word_count(state.document());

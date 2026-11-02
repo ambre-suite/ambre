@@ -10,8 +10,9 @@
 // DOM names no command queue, and the panel keeps no order of its own.
 // ============================================================================
 
-use ambre_bus::app::toile::{DeckView, SlideCount, SlideIndex};
+use ambre_bus::app::toile::{DeckView, Slide};
 use ambre_core::id::{Frame, Id};
+use ambre_core::index::{Count, Pos};
 use leptos::prelude::*;
 use wasm_bindgen::JsCast as _;
 
@@ -63,11 +64,11 @@ pub fn DeckPanel(
                     <ol class="ambre-deck-list">
                         {move || {
                             let slides = view.get().slides;
-                            let last = SlideCount::from_len(slides.len()).clamp(SlideIndex::MAX);
+                            let last = Pos::<Slide>::MAX.within(Count::from_len(slides.len()));
                             slides
                                 .into_iter()
                                 .enumerate()
-                                .map(|(rank, frame)| (SlideIndex::from_usize(rank), frame))
+                                .map(|(rank, frame)| (Pos::<Slide>::from_usize(rank), frame))
                                 .map(|(rank, frame)| view! {
                                     <li class="ambre-deck-row">
                                         <button
@@ -87,7 +88,7 @@ pub fn DeckPanel(
                                         <button
                                             class="ambre-deck-up"
                                             aria-label="Move up"
-                                            disabled=rank == SlideIndex::ZERO
+                                            disabled=rank == Pos::ZERO
                                             on:click=move |_| {
                                                 on_intent.run(DeckIntent::Shift(rank, Move::Up))
                                             }
@@ -129,7 +130,7 @@ pub fn DeckPanel(
                                         .map(|(rank, frame)| {
                                             // The pool numbers its unnamed
                                             // frames the way the deck does.
-                                            let rank = SlideIndex::from_usize(rank);
+                                            let rank = Pos::<Slide>::from_usize(rank);
                                             let id = frame.id.clone();
                                             view! {
                                                 <li class="ambre-deck-pool-row">

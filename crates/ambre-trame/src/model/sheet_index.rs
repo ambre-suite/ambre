@@ -20,9 +20,10 @@
 // `SheetIndex` is the *only* translation layer between grid positions and uids.
 // ============================================================================
 
+use ambre_core::index::{Count, IdxVec, Pos};
 use std::collections::HashMap;
 
-use ambre_bus::{CellPos, CellRect, Col, ColCount, ColVec, Row, RowCount, RowVec};
+use ambre_bus::{CellPos, CellRect, Col, Row};
 use loro::{LoroMovableList, LoroValue};
 
 /// Our own, move-invariant row/column identity (`trame-rows-and-columns`).
@@ -112,10 +113,10 @@ pub fn parse_cell_key(key: &str) -> Option<(Uid, Uid)> {
 /// Bidirectional position <-> uid cache for one sheet's rows and columns.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SheetIndex {
-    row_by_pos: RowVec<Uid>,
-    col_by_pos: ColVec<Uid>,
-    row_to_pos: HashMap<Uid, Row>,
-    col_to_pos: HashMap<Uid, Col>,
+    row_by_pos: IdxVec<Row, Uid>,
+    col_by_pos: IdxVec<Col, Uid>,
+    row_to_pos: HashMap<Uid, Pos<Row>>,
+    col_to_pos: HashMap<Uid, Pos<Col>>,
     read: LineRead,
 }
 
@@ -136,8 +137,8 @@ impl SheetIndex {
     pub fn build(rows: &LoroMovableList, cols: &LoroMovableList) -> Self {
         let (rows, rows_read) = collect_ids(rows);
         let (cols, cols_read) = collect_ids(cols);
-        let row_by_pos: RowVec<Uid> = rows.into();
-        let col_by_pos: ColVec<Uid> = cols.into();
+        let row_by_pos: IdxVec<Row, Uid> = rows.into();
+        let col_by_pos: IdxVec<Col, Uid> = cols.into();
         let row_to_pos = row_by_pos
             .iter_enumerated()
             .map(|(p, id)| (*id, p))
@@ -162,17 +163,17 @@ impl SheetIndex {
     }
 
     /// Number of materialized rows / columns (the used-range high-water mark).
-    pub fn row_len(&self) -> RowCount {
+    pub fn row_len(&self) -> Count<Row> {
         self.row_by_pos.len()
     }
-    pub fn col_len(&self) -> ColCount {
+    pub fn col_len(&self) -> Count<Col> {
         self.col_by_pos.len()
     }
 
     /// The rectangle of materialized cells, or `None` while an axis is empty.
     pub fn used_range(&self) -> Option<CellRect> {
-        let last_row = self.row_len().as_end().prev()?;
-        let last_col = self.col_len().as_end().prev()?;
+        let last_row = self.row_len().last()?;
+        let last_col = self.col_len().last()?;
         Some(CellRect::spanning(
             CellPos::ORIGIN,
             CellPos::new(last_row, last_col),
@@ -202,26 +203,26 @@ impl SheetIndex {
     /// Unlike [`resolve`](Self::resolve) this needs only one axis. So it works
     /// even when the other axis has zero materialized elements, as in the
     /// structural delete path that identifies the row/column being removed.
-    pub fn row_id(&self, pos: Row) -> Option<Uid> {
+    pub fn row_id(&self, pos: Pos<Row>) -> Option<Uid> {
         self.row_by_pos.get(pos).copied()
     }
-    pub fn col_id(&self, pos: Col) -> Option<Uid> {
+    pub fn col_id(&self, pos: Pos<Col>) -> Option<Uid> {
         self.col_by_pos.get(pos).copied()
     }
 
     /// The full materialized row order, position 0..hwm. Used by the sort path
     /// to compute a row permutation and replay it as `LoroMovableList` moves.
-    pub fn row_ids(&self) -> &RowVec<Uid> {
+    pub fn row_ids(&self) -> &IdxVec<Row, Uid> {
         &self.row_by_pos
     }
 
     /// Grid position of a row/column id, if it is materialized. Inverse of
     /// [`resolve`](Self::resolve), used to map a stored cell key back to its
     /// `(row, col)` grid position when reseeding the formula engine.
-    pub fn row_pos(&self, id: &Uid) -> Option<Row> {
+    pub fn row_pos(&self, id: &Uid) -> Option<Pos<Row>> {
         self.row_to_pos.get(id).copied()
     }
-    pub fn col_pos(&self, id: &Uid) -> Option<Col> {
+    pub fn col_pos(&self, id: &Uid) -> Option<Pos<Col>> {
         self.col_to_pos.get(id).copied()
     }
 
@@ -244,12 +245,12 @@ impl SheetIndex {
     /// op: shift every row at position `>= pos` down by one. O(N_used) in RAM;
     /// the CRDT side stays a single Loro op. A position past the end inserts
     /// nothing, as the list refuses it too.
-    pub fn apply_insert_row(&mut self, pos: Row, id: Uid) {
+    pub fn apply_insert_row(&mut self, pos: Pos<Row>, id: Uid) {
         if self.row_by_pos.insert(pos, id).is_ok() {
             self.reindex_rows_from(pos);
         }
     }
-    pub fn apply_insert_col(&mut self, pos: Col, id: Uid) {
+    pub fn apply_insert_col(&mut self, pos: Pos<Col>, id: Uid) {
         if self.col_by_pos.insert(pos, id).is_ok() {
             self.reindex_cols_from(pos);
         }
@@ -258,13 +259,13 @@ impl SheetIndex {
     /// Incremental update mirroring a `rows_{sheet}.delete(pos, 1)` structural
     /// op. Returns the removed id so the caller can drop its cells / detect
     /// `#REF!`, and `None` for a position past the end.
-    pub fn apply_delete_row(&mut self, pos: Row) -> Option<Uid> {
+    pub fn apply_delete_row(&mut self, pos: Pos<Row>) -> Option<Uid> {
         let removed = self.row_by_pos.remove(pos)?;
         self.row_to_pos.remove(&removed);
         self.reindex_rows_from(pos);
         Some(removed)
     }
-    pub fn apply_delete_col(&mut self, pos: Col) -> Option<Uid> {
+    pub fn apply_delete_col(&mut self, pos: Pos<Col>) -> Option<Uid> {
         let removed = self.col_by_pos.remove(pos)?;
         self.col_to_pos.remove(&removed);
         self.reindex_cols_from(pos);
@@ -275,7 +276,7 @@ impl SheetIndex {
     /// reorder). The uid is move-invariant, so cells keyed by it follow for
     /// free; only the position mapping shifts. No-op if either index is out of
     /// range. See `trame-rows-and-columns` and `trame-formula-engine`.
-    pub fn apply_move_row(&mut self, from: Row, to: Row) {
+    pub fn apply_move_row(&mut self, from: Pos<Row>, to: Pos<Row>) {
         let len = self.row_by_pos.len().as_end();
         if from >= len || to >= len {
             return;
@@ -287,7 +288,7 @@ impl SheetIndex {
         }
     }
 
-    fn reindex_rows_from(&mut self, from: Row) {
+    fn reindex_rows_from(&mut self, from: Pos<Row>) {
         for (at, id) in self
             .row_by_pos
             .iter_enumerated()
@@ -296,7 +297,7 @@ impl SheetIndex {
             self.row_to_pos.insert(*id, at);
         }
     }
-    fn reindex_cols_from(&mut self, from: Col) {
+    fn reindex_cols_from(&mut self, from: Pos<Col>) {
         for (at, id) in self
             .col_by_pos
             .iter_enumerated()
@@ -390,7 +391,7 @@ mod tests {
             (701, "ZZ"),
             (702, "AAA"),
         ] {
-            let col = Col::new(idx);
+            let col = Pos::<Col>::new(idx);
             assert_eq!(crate::columns::col_to_alpha(col), letters, "idx {idx}");
             assert_eq!(
                 crate::columns::alpha_to_col(letters),
@@ -403,19 +404,19 @@ mod tests {
     #[test]
     fn build_maps_positions_to_stable_ids() {
         let (_doc, idx) = index_with(5, 3);
-        assert_eq!(idx.row_len(), RowCount::new(5));
-        assert_eq!(idx.col_len(), ColCount::new(3));
+        assert_eq!(idx.row_len(), Count::<Row>::new(5));
+        assert_eq!(idx.col_len(), Count::<Col>::new(3));
 
         // Every resolvable position round-trips through contains_*.
         let (r2, c1) = idx
-            .resolve(CellPos::new(Row::new(2), Col::new(1)))
+            .resolve(CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(1)))
             .expect("in range");
         assert!(idx.contains_row(&r2));
         assert!(idx.contains_col(&c1));
         // Distinct positions have distinct ids.
         assert_ne!(
-            idx.resolve(CellPos::new(Row::new(0), Col::new(0))),
-            idx.resolve(CellPos::new(Row::new(1), Col::new(0)))
+            idx.resolve(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0))),
+            idx.resolve(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)))
         );
     }
 
@@ -423,16 +424,16 @@ mod tests {
     fn resolve_returns_none_in_virtual_space() {
         let (_doc, idx) = index_with(4, 2);
         assert!(
-            idx.resolve(CellPos::new(Row::new(3), Col::new(1)))
+            idx.resolve(CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(1)))
                 .is_some()
         );
         assert!(
-            idx.resolve(CellPos::new(Row::new(4), Col::new(1)))
+            idx.resolve(CellPos::new(Pos::<Row>::new(4), Pos::<Col>::new(1)))
                 .is_none(),
             "row beyond used range is virtual"
         );
         assert!(
-            idx.resolve(CellPos::new(Row::new(3), Col::new(2)))
+            idx.resolve(CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(2)))
                 .is_none(),
             "col beyond used range is virtual"
         );
@@ -442,7 +443,7 @@ mod tests {
     fn apply_insert_and_delete_row_shift_positions() {
         let (_doc, mut idx) = index_with(3, 1);
         let original_first = idx
-            .resolve(CellPos::new(Row::new(0), Col::new(0)))
+            .resolve(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
             .unwrap()
             .0;
 
@@ -451,27 +452,27 @@ mod tests {
             peer: ambre_core::PeerId::new(999),
             counter: ambre_core::IdCounter::new(7),
         };
-        idx.apply_insert_row(Row::new(0), new_id);
-        assert_eq!(idx.row_len(), RowCount::new(4));
+        idx.apply_insert_row(Pos::<Row>::new(0), new_id);
+        assert_eq!(idx.row_len(), Count::<Row>::new(4));
         assert_eq!(
-            idx.resolve(CellPos::new(Row::new(0), Col::new(0)))
+            idx.resolve(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
                 .unwrap()
                 .0,
             new_id
         );
         assert_eq!(
-            idx.resolve(CellPos::new(Row::new(1), Col::new(0)))
+            idx.resolve(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)))
                 .unwrap()
                 .0,
             original_first
         );
 
         // Delete it again: positions restore.
-        let removed = idx.apply_delete_row(Row::new(0));
+        let removed = idx.apply_delete_row(Pos::<Row>::new(0));
         assert_eq!(removed, Some(new_id));
         assert!(!idx.contains_row(&new_id));
         assert_eq!(
-            idx.resolve(CellPos::new(Row::new(0), Col::new(0)))
+            idx.resolve(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
                 .unwrap()
                 .0,
             original_first
@@ -507,16 +508,18 @@ mod tests {
     #[test]
     fn apply_move_row_permutes_order_and_reindexes() {
         let (_doc, mut idx) = index_with(4, 1);
-        let ids: Vec<Uid> = (0..4).map(|p| idx.row_id(Row::new(p)).unwrap()).collect();
+        let ids: Vec<Uid> = (0..4)
+            .map(|p| idx.row_id(Pos::<Row>::new(p)).unwrap())
+            .collect();
 
         // Move row 0 down to position 2: order becomes [1, 2, 0, 3].
-        idx.apply_move_row(Row::new(0), Row::new(2));
+        idx.apply_move_row(Pos::<Row>::new(0), Pos::<Row>::new(2));
         assert_eq!(idx.row_ids().as_slice(), &[ids[1], ids[2], ids[0], ids[3]]);
         // Position cache is consistent both ways for every moved id.
-        assert_eq!(idx.row_pos(&ids[0]), Some(Row::new(2)));
-        assert_eq!(idx.row_pos(&ids[1]), Some(Row::new(0)));
-        assert_eq!(idx.row_pos(&ids[2]), Some(Row::new(1)));
-        assert_eq!(idx.row_pos(&ids[3]), Some(Row::new(3)));
+        assert_eq!(idx.row_pos(&ids[0]), Some(Pos::<Row>::new(2)));
+        assert_eq!(idx.row_pos(&ids[1]), Some(Pos::<Row>::new(0)));
+        assert_eq!(idx.row_pos(&ids[2]), Some(Pos::<Row>::new(1)));
+        assert_eq!(idx.row_pos(&ids[3]), Some(Pos::<Row>::new(3)));
         // No id is lost; the cell-key identity of each row is preserved.
         for id in &ids {
             assert!(idx.contains_row(id));
@@ -524,8 +527,8 @@ mod tests {
 
         // Out-of-range indices are a no-op (defends the sort replay loop).
         let snapshot = idx.row_ids().as_slice().to_vec();
-        idx.apply_move_row(Row::new(0), Row::new(9));
-        idx.apply_move_row(Row::new(9), Row::new(0));
+        idx.apply_move_row(Pos::<Row>::new(0), Pos::<Row>::new(9));
+        idx.apply_move_row(Pos::<Row>::new(9), Pos::<Row>::new(0));
         assert_eq!(idx.row_ids().as_slice(), snapshot.as_slice());
     }
 
@@ -592,8 +595,8 @@ mod tests {
                     let id = Uid { peer: ambre_core::PeerId::new(9), counter: ambre_core::IdCounter::new(n as u32) };
                     let key = id.to_key_part();
                     let (nr, nc) = (idx.row_len().get() as usize, idx.col_len().get() as usize);
-                    let row = |p: usize| Row::from_index(p).expect("a row in range");
-                    let col = |p: usize| Col::from_index(p).expect("a column in range");
+                    let row = |p: usize| Pos::<Row>::from_index(p).expect("a row in range");
+                    let col = |p: usize| Pos::<Col>::from_index(p).expect("a column in range");
                     match op {
                         Op::PushRow => {
                             rows.push(key.as_str()).unwrap();

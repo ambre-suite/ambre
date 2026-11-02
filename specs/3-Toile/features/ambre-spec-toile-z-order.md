@@ -80,7 +80,7 @@ element kinds and connectors; the encoding is that document's section 2.
 
 ```rust
 #[derive(Clone, Copy, Debug)]
-pub enum ZTarget { Front, Back, Forward, Backward, Index(ZOrderIndex) }
+pub enum ZTarget { Front, Back, Forward, Backward, Index(Pos<ZOrder>) }
 ```
 
 **Steps, when a node is reordered:**

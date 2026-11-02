@@ -7,7 +7,8 @@
 //! refused here rather than left to the CRDT engine, so the refusal names the
 //! registry.
 
-use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan, MarkKey};
+use ambre_bus::app::prose::{DocChar, MarkKey};
+use ambre_core::index::{Count, Pos, Span};
 
 use loro::TreeID;
 
@@ -33,7 +34,7 @@ impl ProseState {
     pub(super) fn apply_mark(
         &mut self,
         id: &TreeID,
-        range: DocSpan,
+        range: Span<DocChar>,
         key: &MarkKey,
         value: Option<&str>,
     ) -> ProseOutcome {
@@ -75,7 +76,7 @@ impl ProseState {
     pub(super) fn remove_mark(
         &mut self,
         id: &TreeID,
-        range: DocSpan,
+        range: Span<DocChar>,
         key: &MarkKey,
     ) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
@@ -103,7 +104,7 @@ impl ProseState {
     /// The formatting keys alone (`ambre-spec-prose-schema.md section 3`). A
     /// comment, a suggestion, a footnote and a cross reference are anchors
     /// rather than formatting, and each has a feature that owns its removal.
-    pub(super) fn clear_inline_marks(&mut self, id: &TreeID, range: DocSpan) -> ProseOutcome {
+    pub(super) fn clear_inline_marks(&mut self, id: &TreeID, range: Span<DocChar>) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
@@ -172,15 +173,15 @@ impl ProseState {
     /// mixed, whichever end carries it (`PROSE-UI-096`).
     pub(super) fn read_marks(
         &self,
-        anchor: (BlockId, DocOffset),
-        focus: (BlockId, DocOffset),
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
     ) -> ProseOutcome {
         let mut fold = MarkFold::default();
         for (block, span) in self.selected_spans(anchor, focus) {
             let Some(LoroValue::List(runs)) = self.marks_of(&block) else {
                 continue;
             };
-            let mut at = DocOffset::ZERO;
+            let mut at = Pos::<DocChar>::ZERO;
             for run in runs.iter() {
                 let LoroValue::Map(fields) = run else {
                     continue;
@@ -188,7 +189,7 @@ impl ProseState {
                 let Some(LoroValue::String(text)) = fields.get(RUN_TEXT) else {
                     continue;
                 };
-                let len = DocCount::of(text);
+                let len = ambre_core::char_len(text).as_axis::<DocChar>();
                 let covered = span.end.min(at + len).count_from(span.start.max(at));
                 if !covered.is_zero() {
                     fold.take(&marks_of_run(run));
@@ -212,8 +213,8 @@ impl ProseState {
     /// refused, since only a presence mark needs no value.
     pub(super) fn format_selection(
         &mut self,
-        anchor: (BlockId, DocOffset),
-        focus: (BlockId, DocOffset),
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
         key: &MarkKey,
         action: ambre_bus::app::prose::MarkAction,
     ) -> ProseOutcome {
@@ -251,15 +252,15 @@ impl ProseState {
 
     pub(super) fn selected_spans(
         &self,
-        anchor: (BlockId, DocOffset),
-        focus: (BlockId, DocOffset),
-    ) -> Vec<(BlockId, DocSpan)> {
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
+    ) -> Vec<(BlockId, Span<DocChar>)> {
         if anchor.0 == focus.0 {
             let (a, b) = (anchor.1.min(focus.1), anchor.1.max(focus.1));
-            return vec![(anchor.0, DocSpan::new(a, b))];
+            return vec![(anchor.0, Span::<DocChar>::new(a, b))];
         }
         let order = self.document_order();
-        let at = |spot: (BlockId, DocOffset)| order.iter().position(|id| *id == tree_id(spot.0));
+        let at = |spot: (BlockId, Pos<DocChar>)| order.iter().position(|id| *id == tree_id(spot.0));
         let (Some(a), Some(f)) = (at(anchor), at(focus)) else {
             return Vec::new();
         };
@@ -273,15 +274,15 @@ impl ProseState {
             .unwrap_or_default()
             .iter()
             .filter_map(|id| {
-                let len = DocCount::from_len(self.body_of(id)?.len_unicode()).as_end();
+                let len = Count::<DocChar>::from_len(self.body_of(id)?.len_unicode()).as_end();
                 let block = crate::events::block_id(*id);
                 let start = if block == head.0 {
                     head.1
                 } else {
-                    DocOffset::ZERO
+                    Pos::<DocChar>::ZERO
                 };
                 let end = if block == tail.0 { tail.1 } else { len };
-                Some((block, DocSpan::new(start, end.min(len))))
+                Some((block, Span::<DocChar>::new(start, end.min(len))))
             })
             .collect()
     }
@@ -415,17 +416,21 @@ fn marks_of_run(fields: &LoroValue) -> MarkSet {
 }
 
 /// The two ends of a range, smaller first.
-fn ordered(range: DocSpan) -> DocSpan {
+fn ordered(range: Span<DocChar>) -> Span<DocChar> {
     let (a, b) = (range.start, range.end);
-    if a <= b { range } else { DocSpan::new(b, a) }
+    if a <= b {
+        range
+    } else {
+        Span::<DocChar>::new(b, a)
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::events::{Align, ParagraphStyle, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
-    use ambre_bus::app::prose::DocOffset;
-    use ambre_bus::app::prose::DocSpan;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::{Pos, Span};
 
     /// The fold of one key reads as the count of the runs that carry it and
     /// of the runs that lack it. Every order of up to four runs holds it.
@@ -456,7 +461,7 @@ pub(crate) mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: text.to_owned(),
         });
         (state, block)
@@ -493,7 +498,7 @@ pub(crate) mod tests {
         for key in ["b", "i"] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..4),
+                range: Span::<DocChar>::from_usize_range(0..4),
                 key: key.into(),
                 value: None,
             });
@@ -501,7 +506,7 @@ pub(crate) mod tests {
             assert!((marked - plain).abs() > 0.5, "{key} changes the glyphs");
             state.handle_command(ProseCommand::RemoveMark {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..4),
+                range: Span::<DocChar>::from_usize_range(0..4),
                 key: key.into(),
             });
             let back = laid_width(&mut state, block);
@@ -514,7 +519,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "fs".into(),
             value: Some(crate::mark::test_value("11.0")),
         });
@@ -527,7 +532,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "no-such-key".into(),
             value: None,
         });
@@ -539,14 +544,14 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "b".into(),
             value: None,
         });
         anchor(&mut state, &block, 0..5);
         state.handle_command(ProseCommand::ClearInlineMarks {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
         });
         assert!(carries_mark(&state, &block, "cm"));
         assert!(!carries_mark(&state, &block, "\"b\""));
@@ -557,7 +562,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(2..2),
+            range: Span::<DocChar>::from_usize_range(2..2),
             key: "b".into(),
             value: None,
         });
@@ -605,7 +610,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("one two");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..3),
+            range: Span::<DocChar>::from_usize_range(0..3),
             key: "b".into(),
             value: None,
         });
@@ -624,7 +629,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "fg".into(),
             // The opaque eight-digit spelling of the same colour.
             value: Some(crate::mark::test_value("#3366CCFF")),
@@ -668,7 +673,7 @@ pub(crate) mod tests {
         ] {
             let outcome = state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..5),
+                range: Span::<DocChar>::from_usize_range(0..5),
                 key: key.into(),
                 value: value.map(crate::mark::test_value),
             });
@@ -688,7 +693,7 @@ pub(crate) mod tests {
         for key in ["cm", thread.as_str(), "si", "sd", "fn", "ref", "f:pn"] {
             let outcome = state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..5),
+                range: Span::<DocChar>::from_usize_range(0..5),
                 key: key.into(),
                 value: Some(crate::mark::test_value("x")),
             });
@@ -703,7 +708,7 @@ pub(crate) mod tests {
         assert_eq!(state.export_snapshot(), before);
         let link = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "a".into(),
             value: Some(crate::mark::test_value("https://example.org")),
         });
@@ -717,13 +722,13 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::InsertFootnote {
             block_id: block,
-            pos: DocOffset::new(5),
+            pos: Pos::<DocChar>::new(5),
             note_text: "A note.".to_owned(),
         });
         let before = state.export_snapshot();
         let outcome = state.handle_command(ProseCommand::RemoveMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..6),
+            range: Span::<DocChar>::from_usize_range(0..6),
             key: "fn".into(),
         });
         assert!(matches!(
@@ -740,7 +745,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "b".into(),
             value: None,
         });
@@ -754,7 +759,7 @@ pub(crate) mod tests {
 
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "i".into(),
             value: None,
         });
@@ -774,7 +779,7 @@ pub(crate) mod tests {
         for key in ["b", "i"] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..7),
+                range: Span::<DocChar>::from_usize_range(0..7),
                 key: key.into(),
                 value: None,
             });
@@ -782,7 +787,7 @@ pub(crate) mod tests {
 
         state.handle_command(ProseCommand::RemoveMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..3),
+            range: Span::<DocChar>::from_usize_range(0..3),
             key: "b".into(),
         });
 
@@ -815,7 +820,7 @@ pub(crate) mod tests {
         ] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..5),
+                range: Span::<DocChar>::from_usize_range(0..5),
                 key: key.into(),
                 value: value.map(crate::mark::test_value),
             });
@@ -824,7 +829,7 @@ pub(crate) mod tests {
         anchor(&mut state, &block, 0..5);
         state.handle_command(ProseCommand::ClearInlineMarks {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
         });
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "hello");
@@ -845,7 +850,7 @@ pub(crate) mod tests {
         let (mut state, block) = document_with_text("hello");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "b".into(),
             value: None,
         });
@@ -900,13 +905,13 @@ pub(crate) mod tests {
             let (mut state, block) = document_with_text("one");
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..3),
+                range: Span::<DocChar>::from_usize_range(0..3),
                 key: key.into(),
                 value: value.map(crate::mark::test_value),
             });
             state.handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::new(3),
+                pos: Pos::<DocChar>::new(3),
                 text: "X".to_owned(),
             });
             let covered: String = runs(&state, &block)

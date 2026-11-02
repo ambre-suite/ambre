@@ -7,13 +7,18 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{MentionCount, MurmureEvent, Seq, Timestamp};
+use ambre_bus::{Authored, Instant, MentionCount, MurmureEvent, Seq};
 use ambre_murmure::{ChannelState, Replied};
 
 impl LogicState {
     /// Hand the Sync worker what a reply wrote, and the view what it shows.
     /// That is the thread, the copy in the channel, and the root's new head.
-    pub(crate) fn send_reply(&mut self, channel_id: Id<Channel>, replied: Replied, now: Timestamp) {
+    pub(crate) fn send_reply(
+        &mut self,
+        channel_id: Id<Channel>,
+        replied: Replied,
+        now: Instant<Authored>,
+    ) {
         let Replied { reply, copy, head } = replied;
         self.send_to_sync(SyncCommand::SendUpdate {
             document_id: reply.document,

@@ -14,6 +14,7 @@
 
 use super::*;
 use ambre_chrome::commands::{Key, KeyState, Modifiers};
+use ambre_core::{Instant, PageLoad};
 
 /// The listeners a cell takes its input from, on its own canvas. The canvas
 /// takes the focus, so its keys reach its own view (the Murmure message list
@@ -152,7 +153,7 @@ impl Cells {
     }
 
     /// Render every bound cell, each under its own plan (`CANVAS-070`).
-    pub(super) fn render(&mut self, now: ambre_core::PageTime) {
+    pub(super) fn render(&mut self, now: Instant<PageLoad>) {
         for cell in self.bound.values_mut() {
             cell.render(now);
         }
@@ -243,7 +244,7 @@ impl Bound {
                     if let Some((phase, at)) = touch_of(&event) {
                         if view
                             .borrow_mut()
-                            .touch(phase, at, ambre_bus::PageTime::new(event.time_stamp()))
+                            .touch(phase, at, Instant::<PageLoad>::new(event.time_stamp()))
                             .is_yes()
                         {
                             event.prevent_default();
@@ -340,7 +341,7 @@ impl Bound {
     /// Plan, paint and present this cell. Nothing runs before its GPU is up,
     /// so a plan is never spent on a canvas that cannot show it. Answers the
     /// plan it presented.
-    fn render(&mut self, now: ambre_core::PageTime) -> Option<RepaintPlan<Px<Device>>> {
+    fn render(&mut self, now: Instant<PageLoad>) -> Option<RepaintPlan<Px<Device>>> {
         let mut view = self.view.borrow_mut();
         view.update();
         let mut slot = self.gpu.borrow_mut();
@@ -436,7 +437,7 @@ fn plan_frame(
     view: &mut AppView,
     size: SurfaceSize,
     relayout: Relayout,
-    now: ambre_core::PageTime,
+    now: Instant<PageLoad>,
 ) -> RepaintPlan<Px<Device>> {
     if relayout == Relayout::Again {
         view.resize(size.logical());
@@ -570,6 +571,7 @@ pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan<Px<Device>>) -> boo
 mod tests {
     use super::*;
     use crate::host::{MurmureView, THREAD_CANVAS};
+    use ambre_bus::{Instant, PageLoad};
     use ambre_canvas::ThemeControl;
     use ambre_chrome::commands::KeyChar;
     use ambre_core::{Device, Point, Px, Size, View};
@@ -781,7 +783,7 @@ mod tests {
         let mut cache = ambre_canvas::TextCache::new();
         let mut surface = ambre_draw::testing::RecordingSurface::new();
         view.update();
-        view.plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
+        view.plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
         view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
     }
 
@@ -971,11 +973,11 @@ mod tests {
         cells.sync(&page);
         let bound = cells.bound.get_mut(&THREAD_CANVAS).unwrap();
         assert!(
-            bound.render(ambre_bus::PageTime::new(0.0)).is_none(),
+            bound.render(Instant::<PageLoad>::new(0.0)).is_none(),
             "no GPU yet"
         );
 
-        let plan = |bound: &Bound, now: ambre_core::PageTime| {
+        let plan = |bound: &Bound, now: Instant<PageLoad>| {
             plan_frame(
                 &mut bound.view.borrow_mut(),
                 bound.size.get(),
@@ -985,16 +987,16 @@ mod tests {
             .content
         };
         assert!(matches!(
-            plan(bound, ambre_bus::PageTime::new(0.0)),
+            plan(bound, Instant::<PageLoad>::new(0.0)),
             ContentRepaint::Full
         ));
         assert!(matches!(
-            plan(bound, ambre_bus::PageTime::new(16.0)),
+            plan(bound, Instant::<PageLoad>::new(16.0)),
             ContentRepaint::Reuse
         ));
         assert!(
             matches!(
-                page.plan_repaint(ambre_bus::PageTime::new(16.0), ambre_canvas::HudTick::Idle)
+                page.plan_repaint(Instant::<PageLoad>::new(16.0), ambre_canvas::HudTick::Idle)
                     .content,
                 ContentRepaint::Full
             ),
@@ -1005,11 +1007,11 @@ mod tests {
         sleep(50).await;
         let bound = &cells.bound[&THREAD_CANVAS];
         assert!(matches!(
-            plan(bound, ambre_bus::PageTime::new(32.0)),
+            plan(bound, Instant::<PageLoad>::new(32.0)),
             ContentRepaint::Full
         ));
         assert!(matches!(
-            page.plan_repaint(ambre_bus::PageTime::new(32.0), ambre_canvas::HudTick::Idle)
+            page.plan_repaint(Instant::<PageLoad>::new(32.0), ambre_canvas::HudTick::Idle)
                 .content,
             ContentRepaint::Reuse
         ));
