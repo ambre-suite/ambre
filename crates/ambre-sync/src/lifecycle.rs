@@ -119,11 +119,6 @@ impl Lifecycle {
         let capped = Self::delay(self.attempts).get();
         self.attempts = self.attempts.saturating_add(1);
         // `capped` is at most 10 s, so the product fits and is not negative.
-        #[allow(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            clippy::cast_precision_loss
-        )]
         let spread = (capped as f64 * jitter.clamp(0.0, 1.0)) as u64;
         let delay = TimeSpan::<Ms>::new(capped.saturating_add(spread));
         self.deadline = Some(now.plus(delay));
