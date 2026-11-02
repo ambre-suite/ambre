@@ -5,7 +5,7 @@
 
 use crate::error::ValidationError;
 use crate::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-use ambre_core::FixedBytes;
+use ambre_core::{FixedBytes, Payload};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -13,9 +13,9 @@ use std::collections::HashSet;
 // Newtype wrappers for binary buffers
 // -----------------------------------------------------------------------------
 
-use ambre_core::Payload;
-/// The envelope byte newtypes. `ambre-crypto` builds them too, so they live in
-/// `ambre-core`, the one crate both depend on.
+/// The envelope byte roles and fixed-size types: `Payload<Ciphertext>`,
+/// `FixedBytes<Nonce>` and the others. `ambre-crypto` builds them too, so
+/// they live in `ambre-core`, the one crate both depend on.
 pub use ambre_core::envelope::{Ciphertext, CommitmentTag, Nonce, Signature};
 
 // -----------------------------------------------------------------------------

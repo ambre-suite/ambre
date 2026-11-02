@@ -82,13 +82,12 @@ impl<K: PayloadKind> Payload<K> {
 }
 
 /// A role whose bytes may go on under the role `B`, through
-/// [`Payload::into_role`]. Each pair of roles opts in by its own `impl`. No
-/// blanket `impl` exists: an answer body becomes a fetched blob, and nothing
-/// else becomes one.
+/// [`Payload::into_role`]. Each pair of roles opts in by its own `impl`, and
+/// only the pairs that declare it change role. No blanket `impl` exists.
 ///
 /// A pair that declares nothing does not compile:
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// use ambre_core::{DeltaBytes, Payload, SnapshotBytes};
 /// let delta = Payload::<DeltaBytes>::new(vec![1]);
 /// let _: Payload<SnapshotBytes> = delta.into_role();
@@ -163,15 +162,18 @@ impl<K: PayloadKind> fmt::Debug for Payload<K> {
     }
 }
 
+/// Serde sees a byte string, so postcard copies the bytes as one block rather
+/// than one element at a time. Postcard and JSON write the same bytes as a
+/// `Vec<u8>` does, and a JSON reader still takes the array of numbers.
 impl<K: PayloadKind> Serialize for Payload<K> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.bytes.serialize(serializer)
+        serde_bytes::Bytes::new(&self.bytes).serialize(serializer)
     }
 }
 
 impl<'de, K: PayloadKind> Deserialize<'de> for Payload<K> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Vec::<u8>::deserialize(deserializer).map(Self::new)
+        serde_bytes::ByteBuf::deserialize(deserializer).map(|bytes| Self::new(bytes.into_vec()))
     }
 }
 
@@ -437,9 +439,9 @@ mod tests {
 
     impl Becomes<Arrived> for Received {}
 
-    /// A declared pair changes role and keeps every byte. The reverse pair
-    /// declares nothing, so `crate::payload::Becomes`'s doctest proves it
-    /// does not compile.
+    /// A declared pair changes role and keeps every byte. The doctest of
+    /// `crate::payload::Becomes` proves that an undeclared pair does not
+    /// compile.
     #[test]
     fn a_declared_pair_changes_role_and_keeps_its_bytes() {
         let received = Payload::<Received>::new(vec![7, 8, 9]);
@@ -507,6 +509,8 @@ mod tests {
         assert_eq!(json, serde_json::to_string(&bytes).unwrap());
         let back: Payload<SnapshotBytes> = serde_json::from_str(&json).unwrap();
         assert_eq!(back, snapshot);
+        let array: Payload<SnapshotBytes> = serde_json::from_str("[171,205]").unwrap();
+        assert_eq!(array, snapshot);
         let wire = postcard::to_allocvec(&snapshot).unwrap();
         assert_eq!(wire, postcard::to_allocvec(&bytes).unwrap());
         let back: Payload<SnapshotBytes> = postcard::from_bytes(&wire).unwrap();

@@ -817,7 +817,6 @@ class CrateBoundaries(unittest.TestCase):
         log = 'fn put() {\n    tracing::info!(seq, "stored");\n}\n'
         for read in (
             "fn r() { let x = frame.expose_bytes(); }\n",
-            "fn r() { let x = &update.ciphertext.0; }\n",
             "fn keep(c: &ambre_protocol::messages::Ciphertext) {}\n",
             "fn keep(c: &ambre_core::Payload<ambre_protocol::messages::Ciphertext>) {}\n",
         ):
