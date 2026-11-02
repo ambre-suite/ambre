@@ -58,7 +58,6 @@ impl SurfaceSize {
     /// The same size in view pixels, which a surface paints in. A view pixel
     /// is a CSS pixel in size (`CANVAS-032`).
     pub fn view(&self) -> Size<Px<View>> {
-        #[allow(clippy::cast_precision_loss)]
         let (width, height) = (
             self.logical.width.get() as f32,
             self.logical.height.get() as f32,

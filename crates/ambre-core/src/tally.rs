@@ -207,7 +207,6 @@ impl CellCount {
     }
 
     /// The count as a divisor of a sum, for an average.
-    #[allow(clippy::cast_precision_loss)]
     pub const fn as_f64(self) -> f64 {
         self.0 as f64
     }
