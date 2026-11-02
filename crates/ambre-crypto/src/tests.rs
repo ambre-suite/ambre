@@ -20,12 +20,15 @@ fn secret(bytes: &[u8]) -> ambre_core::SecretBytes {
 }
 
 /// The ciphertext with the byte at `at` XORed by `mask`, as an attacker
-/// tampers with it on the wire. An index past the end changes nothing.
+/// tampers with it on the wire. An index past the end, or a zero mask,
+/// changes no byte and fails the test. A tamper test never passes on an
+/// untouched ciphertext.
 fn flipped(ciphertext: &Ciphertext, at: usize, mask: u8) -> Ciphertext {
     let mut bytes = ciphertext.as_bytes().to_vec();
     if let Some(byte) = bytes.get_mut(at) {
         *byte ^= mask;
     }
+    assert_ne!(bytes, ciphertext.as_bytes(), "the flip changed no byte");
     Ciphertext::new(bytes)
 }
 
@@ -340,9 +343,7 @@ fn a_store_row_opens_only_where_it_was_sealed() {
     assert!(aead::open_row(&row, &Aad::of(b"doc:0a"), &stranger).is_err());
     assert!(aead::open_row(&row, &Aad::of(b"doc:0b"), &key).is_err());
     let mut flipped = row.clone().into_bytes();
-    if let Some(last) = flipped.last_mut() {
-        *last ^= 1;
-    }
+    *flipped.last_mut().expect("a sealed row holds bytes") ^= 1;
     let flipped = Payload::<SealedRowBytes>::new(flipped);
     assert!(aead::open_row(&flipped, &Aad::of(b"doc:0a"), &key).is_err());
     // A row the store held in the clear, or a stub, opens as nothing.

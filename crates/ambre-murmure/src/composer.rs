@@ -1733,7 +1733,6 @@ impl Composer {
         let caret = editor.caret_local().filter(|_| self.focused())?;
         // The surface takes the caret in the same logical pixels; only the
         // float narrows.
-        #[allow(clippy::cast_possible_truncation)]
         let (x, y, tall) = (
             (origin.x + caret.x0) as f32,
             (origin.y + caret.y0) as f32,

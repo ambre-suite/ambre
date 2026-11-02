@@ -159,7 +159,6 @@ fn fit(size: Size<Px<Image>>) -> Size<Px<Image>> {
     let scale = (f64::from(max_w) / f64::from(width.max(1)))
         .min(f64::from(max_h) / f64::from(height.max(1)))
         .min(1.0);
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let to = |edge: u32| Px::new(((f64::from(edge) * scale).round() as u32).max(1));
     Size::new(to(width), to(height))
 }
@@ -196,7 +195,6 @@ mod tests {
             let mut encoder = GifEncoder::new(&mut bytes);
             encoder.set_repeat(Repeat::Infinite).expect("repeat");
             for i in 0..frames {
-                #[allow(clippy::cast_possible_truncation)]
                 let shade = (i * 40) as u8;
                 let buffer = RgbaImage::from_pixel(width, height, Rgba([shade, 0, 0, 255]));
                 let delay = Delay::from_numer_denom_ms(delay_ms, 1);

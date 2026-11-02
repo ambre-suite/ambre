@@ -68,7 +68,6 @@ impl GlyphId {
 /// a bitmap of the size they cover on the screen, never a stretched one
 /// (`CANVAS-074`). The atlas keys a raster by this size, so a density change
 /// never draws a raster made for the previous screen (`CANVAS-034`).
-#[allow(clippy::cast_possible_truncation)]
 pub(crate) fn raster_of_layout(
     font_size: Px<Parley>,
     scale: f64,
