@@ -129,13 +129,16 @@ A PeerID of `u64::MAX` is moved to the value below it, because Loro reserves tha
 
 ```rust
 pub struct PeerId(u64);
-pub struct SessionNonce(pub [u8; 16]);
+pub enum SessionNonce {}  // the role of `FixedBytes<SessionNonce>`, 16 bytes
 pub struct PeerEntry {
     pub user: Id<User>,
-    pub nonce: SessionNonce,
-    pub signature: Signature,  // by `user`, over the document, the PeerID and the nonce
+    pub nonce: FixedBytes<SessionNonce>,
+    pub signature: FixedBytes<Signature>,  // by `user`, over the document, the PeerID and the nonce
 }
-pub fn derive_peer_id(signing_pub: &PublicKey, nonce: &SessionNonce) -> PeerId;
+pub fn derive_peer_id(
+    signing_pub: &FixedBytes<PublicKey>,
+    nonce: &FixedBytes<SessionNonce>,
+) -> PeerId;
 ```
 
 **Sync derives, Logic compares.** The Sync worker holds the signing key and the directory, so it

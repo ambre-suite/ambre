@@ -216,7 +216,6 @@ pub fn frame_at(
     if motion == Motion::Reduced || picture.frames.len() < 2 || total == 0 {
         return (Pos::<AnimationFrame>::ZERO, None);
     }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let at = now.get().max(0.0) as u64 % total;
     let mut until = 0;
     for (i, frame) in picture.frames.iter().enumerate() {

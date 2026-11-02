@@ -20,8 +20,8 @@
 // `unsafe` block breaks the build rather than silently landing.
 #![forbid(unsafe_code)]
 
-/// The serde paths the `define_flag!` and `define_tally!` macros name, so a
-/// crate that expands one needs no serde dependency of its own.
+/// The serde paths the `define_flag!` macro names, so a crate that expands
+/// it needs no serde dependency of its own.
 #[doc(hidden)]
 pub mod __serde {
     pub use serde::{Deserialize, Deserializer, Serialize, Serializer};
