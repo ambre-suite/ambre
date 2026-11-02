@@ -23,7 +23,6 @@ pub(crate) type Clock = Rc<dyn Fn() -> Instant<UnixMs>>;
 pub(crate) fn system_clock() -> Clock {
     // The wall clock is a positive count of milliseconds well below 2^53, so
     // the conversion is exact.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     Rc::new(|| Instant::<UnixMs>::new(js_sys::Date::now() as u64))
 }
 

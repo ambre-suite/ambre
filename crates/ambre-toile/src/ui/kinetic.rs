@@ -87,7 +87,6 @@ pub fn move_view(cam: &mut ViewportTransform, step: ScrollStep) {
 /// millisecond, on each axis (`KINETIC-007`). Zero away from the edges.
 pub fn edge_pan_speed(cam: &ViewportTransform, at: Point) -> (EdgeSpeed, EdgeSpeed) {
     // A screen point of the board is a view pixel, in the `f64` kurbo takes.
-    #[allow(clippy::cast_possible_truncation)]
     let screen_px = |at: f64| Px::<View>::new(at as f32);
     (
         EdgeSpeed::at(screen_px(at.x), screen_px(cam.size.width)),

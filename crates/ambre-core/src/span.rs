@@ -97,7 +97,6 @@ impl Tick for u64 {
 impl Tick for f64 {
     const ZERO: Self = 0.0;
 
-    #[allow(clippy::cast_precision_loss)]
     fn of_duration<U: TimeUnit<Repr = Self>>(duration: Duration) -> Self {
         duration.as_secs_f64() * U::PER_SECOND as Self
     }
@@ -258,7 +257,6 @@ impl<U: TimeUnit<Repr = u64>> TimeSpan<U> {
     /// The span in the unit `V`, rounded down to a whole tick of `V` and
     /// saturating at `u64::MAX` ticks.
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub const fn to_floor<V: TimeUnit<Repr = u64>>(self) -> TimeSpan<V> {
         let wide = (self.ticks as u128) * (V::PER_SECOND as u128) / (U::PER_SECOND as u128);
         TimeSpan::new(if wide > u64::MAX as u128 {
@@ -271,7 +269,6 @@ impl<U: TimeUnit<Repr = u64>> TimeSpan<U> {
     /// The span, as the standard library counts it. The unit divides a
     /// billion, so the conversion is exact.
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub const fn to_duration(self) -> Duration {
         let secs = self.ticks / U::PER_SECOND;
         let rest = self.ticks % U::PER_SECOND;
@@ -308,7 +305,6 @@ impl TimeSpan<Ms> {
 
     /// The span as a distance between two instants of the page clock.
     #[must_use]
-    #[allow(clippy::cast_precision_loss)]
     pub const fn to_fractional(self) -> TimeSpan<FracMs> {
         TimeSpan::new(self.ticks as f64)
     }
@@ -318,7 +314,6 @@ impl TimeSpan<Ns> {
     /// The span of a measured mean, a float of nanoseconds. A negative or NaN
     /// mean reads as zero, and a mean past `u64::MAX` saturates there.
     #[must_use]
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn from_mean(mean: f64) -> Self {
         Self::new(mean.max(0.0) as u64)
     }

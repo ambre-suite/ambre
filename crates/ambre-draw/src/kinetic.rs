@@ -375,7 +375,6 @@ impl Kinetic {
             y: motion.speed.dy.over(elapsed),
         };
         let decay = (-(elapsed / DECAY)).exp();
-        #[allow(clippy::cast_possible_truncation)]
         let decay = decay as f32;
         motion.speed = motion.speed.scaled(decay);
         if motion.speed.magnitude() < STOP_SPEED {

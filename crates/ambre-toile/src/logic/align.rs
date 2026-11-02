@@ -106,7 +106,7 @@ fn distribute(boxes: &[Rect], union: Rect, axis: Axis) -> Vec<Vec2> {
     });
     let span = axis.extent(&union);
     let occupied: Px<Board> = boxes.iter().map(|b| axis.extent(b)).sum();
-    #[allow(clippy::cast_precision_loss)] // a selection is far below 2^53 boxes
+    // A selection is far below 2^53 boxes, so the count is exact as a float.
     let gap = (span - occupied) / (boxes.len() - 1) as f64;
 
     let mut out = vec![Vec2::ZERO; boxes.len()];
