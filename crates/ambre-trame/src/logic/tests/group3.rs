@@ -3,7 +3,8 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
-use ambre_bus::{SheetId, SheetTab};
+use ambre_bus::SheetTab;
+use ambre_core::id::Sheet;
 use ambre_core::index::{Count, Pos};
 
 /// `UnmergeActive` over a selection spanning several merges splits every one of
@@ -457,7 +458,7 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
         text: "5".to_owned(),
     });
     a.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
     a.handle_command(TrameCommand::SetCellText {
         row: Pos::<Row>::new(0),
@@ -557,7 +558,7 @@ fn create_sheet_lists_and_isolates() {
     assert_eq!(
         sheets[0],
         SheetTab {
-            id: SheetId::new("s0".to_owned()),
+            id: Id::<Sheet>::from_text("s0".to_owned()),
             name: crate::test_support::sheet("Sheet1")
         },
         "default tab first"
@@ -572,7 +573,7 @@ fn create_sheet_lists_and_isolates() {
         text: "on_s0".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new(s1.clone()),
+        sheet_id: Id::<Sheet>::from_text(s1.clone()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "", "new sheet starts empty");
     // Write here, switch back: each sheet keeps its own value.
@@ -583,7 +584,7 @@ fn create_sheet_lists_and_isolates() {
     });
     assert_eq!(read_cell(&mut state, 0, 0), "on_s1");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "on_s0");
 }
@@ -618,7 +619,7 @@ fn first_scroll_viewport_hydrates_sheet_list_once() {
     assert_eq!(
         sheets,
         &vec![SheetTab {
-            id: SheetId::new("s0".to_owned()),
+            id: Id::<Sheet>::from_text("s0".to_owned()),
             name: crate::test_support::sheet("Sheet1")
         }]
     );
@@ -654,7 +655,7 @@ fn cross_sheet_formula_evaluates_end_to_end() {
 
     // Back on Sheet1, B1 references it.
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: Pos::<Row>::new(0),
@@ -703,7 +704,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     // Cross-sheet reader on Sheet1 (read while Sheet1 is the active tab, so the
     // masked cell lives on a *non-active* sheet).
     base.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
     base.handle_command(TrameCommand::SetCellText {
         row: Pos::<Row>::new(0),
@@ -756,7 +757,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
 
     // Switch to Sheet1: the cross-sheet reader now targets a *non-active* sheet.
     b.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
     let target_inactive = read_cell(&mut b, 0, 1);
 
@@ -829,7 +830,7 @@ fn move_sheet_reorders_tabs() {
 fn delete_last_sheet_rejected() {
     let mut state = TrameState::new();
     let evts = state.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
     assert!(matches!(evts.display[0], TrameEvent::Error { .. }));
     assert!(evts.update.is_none());
@@ -886,7 +887,7 @@ fn sort_range_ascending_moves_whole_rows() {
         });
     }
     let evts = state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(1)),
@@ -921,7 +922,7 @@ fn sort_range_descending_keeps_header() {
         });
     }
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(0)),
@@ -934,7 +935,7 @@ fn sort_range_descending_keeps_header() {
 }
 
 /// The tab label of `sheet_id`, as the strip shows it.
-fn tab_name(state: &TrameState, sheet_id: &SheetId) -> String {
+fn tab_name(state: &TrameState, sheet_id: &Id<Sheet>) -> String {
     match state.sheet_list_event() {
         TrameEvent::SheetList { sheets, .. } => sheets
             .into_iter()
@@ -1010,7 +1011,7 @@ fn concurrent_duplicate_names_read_apart() {
         name: crate::test_support::sheet("Budget"),
     });
     b.handle_command(TrameCommand::RenameSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         name: crate::test_support::sheet("Budget"),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
@@ -1081,7 +1082,7 @@ fn concurrent_names_differing_in_case_read_apart() {
         name: crate::test_support::sheet("Budget"),
     });
     b.handle_command(TrameCommand::RenameSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         name: crate::test_support::sheet("BUDGET"),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());

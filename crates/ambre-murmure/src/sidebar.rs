@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{
     CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace,
-    DirectPeers, MemberChannel, MentionCount, UnreadCount,
+    DirectPeers, MemberChannel, Mentions, Unread,
 };
 use ambre_core::StepDirection;
 use ambre_core::id::{Category, Channel, Id, Space};
@@ -41,8 +41,8 @@ pub enum Activity {
     Some,
     /// The count a loaded document gives.
     Count {
-        messages: UnreadCount,
-        mentions: MentionCount,
+        messages: ambre_core::Tally<Unread>,
+        mentions: ambre_core::Tally<Mentions>,
     },
 }
 
@@ -53,9 +53,9 @@ impl Activity {
             (None, None) if answer.active == ambre_bus::Activity::Active => Self::Some,
             (None, None) => Self::None,
             (messages, mentions) => {
-                let messages = messages.unwrap_or(UnreadCount::ZERO);
-                let mentions = mentions.unwrap_or(MentionCount::ZERO);
-                if messages.is_zero() && mentions == MentionCount::ZERO {
+                let messages = messages.unwrap_or(ambre_core::Tally::<Unread>::ZERO);
+                let mentions = mentions.unwrap_or(ambre_core::Tally::<Mentions>::ZERO);
+                if messages.is_zero() && mentions == ambre_core::Tally::<Mentions>::ZERO {
                     Self::None
                 } else {
                     Self::Count { messages, mentions }
@@ -1023,8 +1023,8 @@ mod tests {
             |channel_id, active, unread: Option<u32>, mentions: Option<u32>| ChannelActivity {
                 channel_id,
                 active,
-                unread: unread.map(UnreadCount::new),
-                mentions: mentions.map(MentionCount::new),
+                unread: unread.map(ambre_core::Tally::<Unread>::new),
+                mentions: mentions.map(ambre_core::Tally::<Mentions>::new),
             };
         let of = |sidebar: &Sidebar, id| sidebar.entry(id).activity;
         assert_eq!(of(&sidebar, a), Activity::None);
@@ -1040,8 +1040,8 @@ mod tests {
         assert_eq!(
             of(&sidebar, a),
             Activity::Count {
-                messages: UnreadCount::new(3),
-                mentions: MentionCount::new(1)
+                messages: ambre_core::Tally::<Unread>::new(3),
+                mentions: ambre_core::Tally::<Mentions>::new(1)
             }
         );
         sidebar.set_activity(&[answer(b, ambre_bus::Activity::Active, None, None)]);

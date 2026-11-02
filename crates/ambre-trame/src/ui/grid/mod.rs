@@ -12,6 +12,7 @@
 
 use crate::formula::text::CellText;
 use ambre_core::Rgb;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 use ambre_core::{Doc, Px, Surface, View};
 use std::collections::{HashMap, HashSet};
@@ -518,7 +519,7 @@ pub struct TrameUiState {
     /// until the first one arrives. Tags the view's edit commands so they target
     /// the right sheet. The tab strip itself is DOM chrome (`SheetTabs`), fed by
     /// the same event -- the canvas only needs the active id, not the full list.
-    pub active_sheet: ambre_bus::SheetId,
+    pub active_sheet: Id<Sheet>,
 
     /// Monotonically increasing version counter for outgoing `ScrollViewport` commands.
     next_version: ambre_core::Generation<ambre_bus::ViewportVersion>,

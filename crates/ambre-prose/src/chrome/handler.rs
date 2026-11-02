@@ -11,7 +11,8 @@
 use ambre_bus::AppCommand;
 use ambre_bus::app::prose::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
-use ambre_commands::{ClipboardWrite, Commands, PasteForm, StaticKey};
+use ambre_commands::{ClipboardWrite, PasteForm};
+use ambre_core::{Commands, StaticKey};
 use leptos::prelude::*;
 
 use crate::commands::{

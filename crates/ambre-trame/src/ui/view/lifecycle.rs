@@ -35,7 +35,9 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<
             ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
         >,
-        #[cfg(target_arch = "wasm32")] active_sheet: RwSignal<ambre_bus::SheetId>,
+        #[cfg(target_arch = "wasm32")] active_sheet: RwSignal<
+            ambre_core::id::Id<ambre_core::id::Sheet>,
+        >,
         #[cfg(target_arch = "wasm32")] filter_active: RwSignal<crate::chrome::SheetFilter>,
         #[cfg(target_arch = "wasm32")] find_result: RwSignal<Option<crate::chrome::FindPosition>>,
     ) -> Self {

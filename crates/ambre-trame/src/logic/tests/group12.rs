@@ -6,6 +6,7 @@
 use super::*;
 use crate::formula::types::CellValue;
 use crate::logic::schema::{SheetContainer, SheetRoot};
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 use loro::LoroValue;
 
@@ -21,7 +22,7 @@ fn with_one_edit() -> TrameState {
     state
 }
 
-fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<SheetId>) -> TrameOutcome {
+fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<Id<Sheet>>) -> TrameOutcome {
     state.handle_command(TrameCommand::ImportCsv {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(data.to_vec()),
         delimiter: None,

@@ -51,8 +51,8 @@ use usvg::tiny_skia_path::PathSegment;
 
 use super::raster::decode_media;
 use super::{
-    ImportBatch, ImportDepth, ImportElementSlot, ImportError, ImportGroup, ImportGroupSlot,
-    ImportRef, Limits,
+    ImportBatch, ImportDepth, ImportElement, ImportError, ImportGroup, ImportGroupRank, ImportRef,
+    Limits,
 };
 use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
 use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
@@ -246,7 +246,7 @@ fn walk_group(
                         members.extend(child_members);
                     }
                     _ => {
-                        let group_idx = ImportGroupSlot::from_usize(batch.groups.len());
+                        let group_idx = Pos::<ImportGroupRank>::from_usize(batch.groups.len());
                         batch.groups.push(ImportGroup {
                             members: child_members,
                         });
@@ -359,8 +359,8 @@ fn push_element(
     rect: Rect,
     content: InitContent,
     style: Option<ElementStyle>,
-) -> ImportElementSlot {
-    let slot = ImportElementSlot::from_usize(batch.commands.len());
+) -> Pos<ImportElement> {
+    let slot = Pos::<ImportElement>::from_usize(batch.commands.len());
     batch.commands.push(ToileCommand::CreateElement {
         kind,
         at: rect.origin(),

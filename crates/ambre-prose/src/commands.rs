@@ -6,9 +6,8 @@
 //! table names them. Undo and redo are described here for their menu rows,
 //! and the view decodes their chords too: the shell binds none of them.
 
-use ambre_commands::{
-    Categories, Command, Commands, Icons, KeyBinding, KeyChar, Keymap, Locale, StaticKey,
-};
+use ambre_commands::{Command, KeyBinding, KeyChar, Keymap, Locale};
+use ambre_core::{Categories, Commands, Icons, StaticKey};
 
 use crate::mark::MarkRoot;
 

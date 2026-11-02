@@ -14,7 +14,8 @@
 use crate::ui::commands as registry;
 use crate::ui::menu::{CtxScope, context_menu_ids};
 use ambre_chrome::MenuEntry;
-use ambre_chrome::commands::{Commands, Locale, StaticKey};
+use ambre_chrome::commands::Locale;
+use ambre_core::{Commands, StaticKey};
 
 use super::icons;
 

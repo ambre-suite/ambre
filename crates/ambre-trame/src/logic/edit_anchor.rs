@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::formula::text::CellText;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 
 /// One axis of the cell an edit session opened on.
@@ -62,7 +63,7 @@ pub(super) struct EditAnchor {
     /// The UI's token for the session, echoed in every event about it.
     session: ambre_bus::Token<crate::EditSession>,
     /// The sheet the session opened on.
-    sheet: SheetId,
+    sheet: Id<Sheet>,
     row: Pin<Row>,
     col: Pin<Col>,
     /// The position the UI last heard of, so a move is reported once.

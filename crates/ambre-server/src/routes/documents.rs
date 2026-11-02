@@ -182,7 +182,7 @@ pub struct DocumentSummaryJson {
     /// its own key.
     pub wrapper_exchange_pub_key: Option<FixedBytes<ExchangePublicKey>>,
     /// Total member count (routing metadata). `> 1` => shared.
-    pub member_count: ambre_core::MemberCount,
+    pub member_count: ambre_core::Tally<ambre_core::Members>,
     pub updated_at: ambre_core::Rfc3339,
 }
 /// Response wrapper for the document listing.

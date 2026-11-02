@@ -149,11 +149,11 @@ pub enum AxisId<P> {    // P is `Pos<Row>` or `Pos<Col>`
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CellId { pub sheet: EngineSheet, pub row: AxisId<Pos<Row>>, pub col: AxisId<Pos<Col>> }
+pub struct CellId { pub sheet: Pos<EngineSheet>, pub row: AxisId<Pos<Row>>, pub col: AxisId<Pos<Col>> }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeId {
-    pub sheet: EngineSheet,
+    pub sheet: Pos<EngineSheet>,
     pub row_start: RangeEndpoint<Pos<Row>>, pub row_end: RangeEndpoint<Pos<Row>>,
     pub col_start: RangeEndpoint<Pos<Col>>, pub col_end: RangeEndpoint<Pos<Col>>,
 }
@@ -198,7 +198,7 @@ pub struct DependencyGraph {
     pub cell_dag: StableGraph<CellId, ()>,          // level 1: cycles are static
     pub cell_to_node: HashMap<CellId, NodeIndex>,
     pub range_deps: HashMap<CellId, Vec<RangeId>>,  // level 2: cycles are dynamic
-    pub range_index: HashMap<EngineSheet, Vec<(CellId, RangeId)>>,
+    pub range_index: HashMap<Pos<EngineSheet>, Vec<(CellId, RangeId)>>,
 }
 ```
 

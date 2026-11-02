@@ -13,9 +13,10 @@
 // ============================================================================
 
 use ambre_bus::{
-    AppCommand, AppEvent, FilterKind, SheetId, SheetName, SheetTab, StylePatch, TrameCommand,
-    TrameEvent, UiEvent,
+    AppCommand, AppEvent, FilterKind, SheetName, SheetTab, StylePatch, TrameCommand, TrameEvent,
+    UiEvent,
 };
+use ambre_core::id::{Id, Sheet};
 use leptos::prelude::*;
 
 use super::find_replace::{FindQuery, ReplaceRequest};
@@ -39,13 +40,13 @@ pub enum TrameIntent {
     /// Replace every match.
     ReplaceAll(ReplaceRequest),
     /// Show this sheet (`trame-sheets`).
-    ActivateSheet(SheetId),
+    ActivateSheet(Id<Sheet>),
     /// Add a sheet after the last one.
     CreateSheet,
     /// Rename a sheet, as `(id, name)`.
-    RenameSheet(SheetId, SheetName),
+    RenameSheet(Id<Sheet>, SheetName),
     /// Delete a sheet.
-    DeleteSheet(SheetId),
+    DeleteSheet(Id<Sheet>),
     /// Move a sheet to another position.
     ReorderSheet(ReorderSheet),
 }

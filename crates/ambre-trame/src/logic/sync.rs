@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use ambre_core::LoroPayloadRef;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::schema::SchemaError;
 
 use super::*;
@@ -216,7 +217,7 @@ impl TrameState {
     /// Resolve a sheet name to its stable sheet id (for example `"Sheet1"` -> `"s0"`).
     /// Groundwork for cross-sheet formula references (`Sheet2!A1`). Linear scan
     /// over the `sheets` map -- there are only a handful of sheets.
-    pub fn sheet_name_to_id(&self, name: &SheetName) -> Option<SheetId> {
+    pub fn sheet_name_to_id(&self, name: &SheetName) -> Option<Id<Sheet>> {
         let key = name.key();
         self.sheet_names()
             .into_iter()
@@ -286,7 +287,7 @@ impl TrameState {
     pub(super) fn reseed_after_merge(
         &mut self,
         origin: MergeOrigin,
-        order: &[SheetId],
+        order: &[Id<Sheet>],
     ) -> Vec<TrameEvent> {
         // A peer may have deleted the sheet this reader is on (`TRAME-075`).
         // Leave it before any cache is rebuilt from it.

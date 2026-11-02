@@ -104,7 +104,7 @@ impl ShellRegion {
 #[component]
 pub fn CanvasCell(
     /// Id of the canvas element, the one the canvas host looks up.
-    id: ambre_core::CanvasId,
+    id: ambre_core::StaticKey<ambre_core::Canvases>,
     /// The name a screen reader gives the region.
     label: &'static str,
 ) -> impl IntoView {
@@ -120,9 +120,9 @@ pub fn CanvasCell(
 /// whose `id` defaults to `"ambre-canvas"` (the id the canvas host looks up).
 #[component]
 pub fn AppShell(
-    /// Id of the central canvas element. Defaults to [`ambre_core::CanvasId::CONTENT`].
+    /// Id of the central canvas element. Defaults to [`ambre_core::StaticKey::CONTENT`].
     #[prop(optional)]
-    canvas_id: Option<ambre_core::CanvasId>,
+    canvas_id: Option<ambre_core::StaticKey<ambre_core::Canvases>>,
     header: Header,
     toolbar: Toolbar,
     #[prop(optional)] formula_bar: Option<FormulaBar>,
@@ -138,7 +138,7 @@ pub fn AppShell(
     #[prop(optional, into)]
     panel_open: Option<Signal<crate::Openness>>,
 ) -> impl IntoView {
-    let canvas_id = canvas_id.unwrap_or(ambre_core::CanvasId::CONTENT);
+    let canvas_id = canvas_id.unwrap_or(ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT);
     let focus = focus.unwrap_or_else(|| Signal::stored(ShellRegion::Content));
     let panel_open = panel_open.unwrap_or_else(|| Signal::stored(crate::Openness::Open));
     let folded = RwSignal::new(false);

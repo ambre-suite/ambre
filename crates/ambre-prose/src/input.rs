@@ -295,8 +295,12 @@ impl ProseUiState {
         for note in sent {
             match note {
                 Sent::Text(edit, text) => {
-                    // The number the Logic thread will acknowledge it by.
-                    let seq = self.popped.plus(self.inflight.len() as u64 + 1);
+                    // The number the Logic thread will acknowledge it by: one
+                    // past the last taken, and past each command in flight.
+                    let seq = self
+                        .inflight
+                        .iter()
+                        .fold(self.popped.next(), |seq, _| seq.next());
                     match text {
                         Some(text) => self.draft.push_str(seq, &text, &edit.block_id, edit.at),
                         None => {

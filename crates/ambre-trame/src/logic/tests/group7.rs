@@ -3,6 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 
 const COL_1: Pos<Col> = Pos::<Col>::new(1);
@@ -46,7 +47,7 @@ fn csv_export_evaluates_formulas() {
         text: "=A1*3".to_owned(),
     });
     let out = state.handle_command(TrameCommand::ExportCsv {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         delimiter: None,
         range: None,
     });
@@ -78,7 +79,7 @@ fn autofill_series_survives_incremental_delta_replay() {
     // Autofill A1 down to A4: Auto mode on a single number -> 1,2,3,4.
     let u2 = author
         .handle_command(TrameCommand::FillRange {
-            sheet_id: SheetId::new("s0".to_owned()),
+            sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
             src: crate::CellRect::spanning(
                 crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
                 crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
@@ -462,7 +463,7 @@ fn find_matches_the_formatted_value() {
 fn csv_export_writes_the_formatted_value() {
     let mut state = percent_sheet();
     let out = state.handle_command(TrameCommand::ExportCsv {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         delimiter: None,
         range: None,
     });
@@ -478,7 +479,7 @@ fn import_reports_unreadable_records() {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\n\xff\xfe,c\nd,e\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
-        target_sheet_id: Some(SheetId::new("s0".to_owned())),
+        target_sheet_id: Some(Id::<Sheet>::from_text("s0".to_owned())),
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
     });
@@ -507,7 +508,7 @@ fn an_import_past_the_grid_edge_is_cut_and_said() {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
         delimiter: None,
         header: HeaderRow::Absent,
-        target_sheet_id: Some(SheetId::new("s0".to_owned())),
+        target_sheet_id: Some(Id::<Sheet>::from_text("s0".to_owned())),
         start_row: Pos::<Row>::new(0),
         start_col: crate::LAST_COL.prev().expect("a column before the last"),
     });
@@ -569,7 +570,7 @@ fn export_with_nothing_to_write_says_so() {
     let mut state = TrameState::new();
     for sheet_id in ["s0", "nope"] {
         let out = state.handle_command(TrameCommand::ExportCsv {
-            sheet_id: SheetId::new(sheet_id.to_owned()),
+            sheet_id: Id::<Sheet>::from_text(sheet_id.to_owned()),
             delimiter: None,
             range: None,
         });

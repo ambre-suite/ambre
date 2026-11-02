@@ -11,8 +11,8 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
     ActivityKind, ActivitySummary, Attachment, Authored, ChannelMatches, ContentHash, Deletion,
-    Emoji, Instant, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
-    Messages, MurmureEvent, Notice, Revision, SearchMatch, StyleMark, ThreadHead, UnreadCount,
+    Emoji, Instant, Mention, MentionTarget, Mentions, MessageAt, MessageDraft, MessageView,
+    Messages, MurmureEvent, Notice, Revision, SearchMatch, StyleMark, ThreadHead, Unread,
     Unreadable,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
@@ -757,9 +757,9 @@ impl ChannelState {
         segment: Id<Segment>,
         read: Seq,
         me: Id<User>,
-    ) -> Result<UnreadCount, MurmureError> {
+    ) -> Result<ambre_core::Tally<Unread>, MurmureError> {
         self.count_in(segment.document_id(), read, me, |_| true)
-            .map(UnreadCount::of_messages)
+            .map(ambre_core::Tally::<Unread>::recount)
     }
 
     /// The messages [`ChannelState::unread`] counts that mention `me` or the
@@ -773,7 +773,7 @@ impl ChannelState {
         segment: Id<Segment>,
         read: Seq,
         me: Id<User>,
-    ) -> Result<MentionCount, MurmureError> {
+    ) -> Result<ambre_core::Tally<Mentions>, MurmureError> {
         self.mentions_in(segment.document_id(), read, me)
     }
 
@@ -788,7 +788,7 @@ impl ChannelState {
         thread: Id<Document>,
         read: Seq,
         me: Id<User>,
-    ) -> Result<MentionCount, MurmureError> {
+    ) -> Result<ambre_core::Tally<Mentions>, MurmureError> {
         if !self.is_thread(thread) {
             return Err(MurmureError::NotHeld(thread));
         }
@@ -802,13 +802,13 @@ impl ChannelState {
         document_id: Id<Document>,
         read: Seq,
         me: Id<User>,
-    ) -> Result<MentionCount, MurmureError> {
+    ) -> Result<ambre_core::Tally<Mentions>, MurmureError> {
         let channel = self.channel_id;
         self.count_in(document_id, read, me, |message| {
             content_of(message)
                 .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
         })
-        .map(MentionCount::of_messages)
+        .map(ambre_core::Tally::<Mentions>::recount)
     }
 
     /// The messages of a held segment or thread past `read`, written by

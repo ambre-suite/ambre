@@ -32,7 +32,7 @@ pub struct DocumentSummaryRow {
     pub wrapper_exchange_pubkey: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
     /// Total number of members on the document (routing metadata, plaintext).
     /// `> 1` means the document is shared.
-    pub member_count: ambre_core::MemberCount,
+    pub member_count: ambre_core::Tally<ambre_core::Members>,
 }
 
 /// Fetches a document by id.

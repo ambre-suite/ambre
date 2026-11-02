@@ -23,7 +23,9 @@ use std::rc::Rc;
 
 use ambre_bus::DraftKey;
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{FixedBytes, Payload, SealedRowBytes, SessionNonce};
+use ambre_core::{
+    FixedBytes, OpenRange, Payload, SealedRowBytes, SessionNonce, Version, VersionKind,
+};
 use futures_channel::oneshot;
 
 use crate::store_ledger::Meta;
@@ -65,14 +67,21 @@ struct DbName<'a>(&'a str);
 /// The database every session opens.
 const DB_NAME: DbName<'static> = DbName("ambre-persistence");
 
-/// The version of the database's shape. The browser runs the upgrade when it
-/// rises, and the upgrade adds every store the version holds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct DbVersion(u32);
+/// The versions of the database's shape. The browser runs the upgrade when
+/// the version rises, and the upgrade adds every store the version holds.
+/// IndexedDB reads any `u32` as a version.
+enum IdbShape {}
+
+impl VersionKind for IdbShape {
+    type Repr = u32;
+    const NAME: &'static str = "DbVersion";
+}
+
+impl OpenRange for IdbShape {}
 
 // The upgrade handler creates each store only if absent, so a later version
 // adds its new store without touching the ones a browser already holds.
-const DB_VERSION: DbVersion = DbVersion(1);
+const DB_VERSION: Version<IdbShape> = Version::new(1);
 
 /// The object stores of the database, one variant each.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -233,7 +242,10 @@ impl PersistenceStore {
 
     /// Open a named database at a given version. Only a test passes a version
     /// other than [`DB_VERSION`], to run the upgrade a later version runs.
-    fn open_at(db_name: DbName<'_>, version: DbVersion) -> oneshot::Receiver<Result<Self, String>> {
+    fn open_at(
+        db_name: DbName<'_>,
+        version: Version<IdbShape>,
+    ) -> oneshot::Receiver<Result<Self, String>> {
         let (tx, rx) = answer();
 
         let factory = match web_sys::window().and_then(|w| w.indexed_db().ok().flatten()) {
@@ -244,7 +256,7 @@ impl PersistenceStore {
             }
         };
 
-        let open_request: IdbOpenDbRequest = match factory.open_with_u32(db_name.0, version.0) {
+        let open_request: IdbOpenDbRequest = match factory.open_with_u32(db_name.0, version.get()) {
             Ok(req) => req,
             Err(e) => {
                 tx.send(Err(format!("open request failed: {e:?}")));
@@ -1109,7 +1121,7 @@ mod wasm_tests {
     async fn seed_snapshots_only(name: &str, doc_id: Id<Document>, bytes: &[u8]) {
         let (tx, rx) = answer::<()>();
         let req = factory()
-            .open_with_u32(name, DB_VERSION.0)
+            .open_with_u32(name, DB_VERSION.get())
             .expect("open at the current version");
 
         // An upgrade that creates `snapshots` alone, unconditionally.
@@ -1225,7 +1237,7 @@ mod wasm_tests {
 
         // Open at the next version: the guarded onupgradeneeded must add
         // `trusted_keys` without throwing ConstraintError on `snapshots`.
-        let store = PersistenceStore::open_at(DbName(name), DbVersion(DB_VERSION.0 + 1))
+        let store = PersistenceStore::open_at(DbName(name), DB_VERSION.next())
             .await
             .expect("channel")
             .expect("the database upgrades to the next version cleanly");
@@ -1407,7 +1419,7 @@ mod wasm_tests {
         delete_db(name).await;
         let doc = Id::<Document>::from_bytes([8; 16]);
         seed_snapshots_only(name, doc, &[1, 2]).await;
-        let store = PersistenceStore::open_at(DbName(name), DbVersion(DB_VERSION.0 + 1))
+        let store = PersistenceStore::open_at(DbName(name), DB_VERSION.next())
             .await
             .expect("channel")
             .expect("the database upgrades cleanly");

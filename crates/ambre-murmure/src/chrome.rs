@@ -9,8 +9,9 @@
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
 // ============================================================================
 
-use ambre_commands::{Commands, Locale, StaticKey};
+use ambre_commands::Locale;
 use ambre_core::index::{Count, Pos};
+use ambre_core::{Commands, StaticKey};
 use std::collections::{HashMap, HashSet};
 
 use crate::commands::{

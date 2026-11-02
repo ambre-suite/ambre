@@ -25,10 +25,11 @@
 //! here, so a command added to it lands with a raised version, like a new key.
 
 use ambre_core::Rgb;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use std::collections::BTreeSet;
 
-use ambre_bus::{CellBorder, CellStyle, SheetId, TrameCommand};
+use ambre_bus::{CellBorder, CellStyle, TrameCommand};
 use ambre_core::schema::verdict;
 use loro::{ExportMode, LoroValue};
 
@@ -219,12 +220,12 @@ fn target_reading(target: &NameTarget) -> String {
     match target {
         NameTarget::Cell(at) => format!(
             "sheet {} {}",
-            at.sheet.index() + 1,
+            at.sheet.number(),
             cell(CellPos::new(at.row, at.col))
         ),
         NameTarget::Range(range) => format!(
             "sheet {} {}:{}",
-            range.sheet.index() + 1,
+            range.sheet.number(),
             cell(CellPos::new(range.row_start, range.col_start)),
             cell(CellPos::new(range.row_end, range.col_end))
         ),
@@ -255,7 +256,9 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
                 .sheet_order_ids()
                 .iter()
                 .position(|id| id.as_str() == key)?;
-            let name = reader.sheet_names().remove(&SheetId::new(key.to_owned()))?;
+            let name = reader
+                .sheet_names()
+                .remove(&Id::<Sheet>::from_text(key.to_owned()))?;
             Some(format!("tab {} named {:?}", tab + 1, name.as_str()))
         }
         Root::SheetOrder => {

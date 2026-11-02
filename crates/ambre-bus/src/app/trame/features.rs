@@ -11,8 +11,9 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{CellNumber, CellRect, Col, DateSerial, SheetId, SourceForm};
+use super::{CellNumber, CellRect, Col, DateSerial, SourceForm};
 use crate::app::trame::CellText;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Count;
 use ambre_core::{Bounded, Bounds, Refusal, Rgb, Tally};
 
@@ -242,7 +243,7 @@ pub enum ValidationKind {
     /// A1 reference once, at input (the engine-level `RangeDep` is not
     /// visible from the bus).
     ListRange {
-        sheet: SheetId,
+        sheet: Id<Sheet>,
         range: CellRect,
     },
     /// Numbers between two limits, each end admitted or refused by `bounds`.

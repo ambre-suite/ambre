@@ -6,13 +6,14 @@ use super::*;
 /// The name an organization is created or renamed with: trimmed, never blank,
 /// at most [`ambre_core::NAME_MAX_CHARS`] characters (`SRV-233`). A row read
 /// back keeps its name as text, so a name stored before the rule still lists.
-/// A request body decodes it through [`OrgName::new`], so a body naming a
-/// name that breaks the rule does not decode.
+/// A request body decodes it through [`OrgNameRule`], so a body naming a
+/// name that breaks the rule does not decode. `Debug` prints the length
+/// alone.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(try_from = "String")]
-pub struct OrgName(String);
+#[serde(transparent)]
+pub struct OrgName(ambre_core::Validated<OrgNameRule>);
 
-/// The error of a name [`OrgName::new`] refuses.
+/// The error of a name [`OrgNameRule`] refuses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error(
     "an organization name is blank or past {} characters",
@@ -20,23 +21,37 @@ pub struct OrgName(String);
 )]
 pub struct InvalidOrgName;
 
+/// The rule of an [`OrgName`]: trimmed, never blank, at most
+/// [`ambre_core::NAME_MAX_CHARS`] characters. The rule keeps the trimmed
+/// text.
+pub enum OrgNameRule {}
+
+impl ambre_core::Rule for OrgNameRule {
+    type Error = InvalidOrgName;
+
+    fn admit(text: String) -> Result<String, InvalidOrgName> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() || !ambre_core::name_fits(trimmed) {
+            Err(InvalidOrgName)
+        } else if trimmed.len() == text.len() {
+            Ok(text)
+        } else {
+            Ok(trimmed.to_owned())
+        }
+    }
+}
+
 impl TryFrom<String> for OrgName {
     type Error = InvalidOrgName;
 
     fn try_from(text: String) -> Result<Self, InvalidOrgName> {
-        Self::new(&text).ok_or(InvalidOrgName)
+        ambre_core::Validated::parse(text).map(Self)
     }
 }
 
 impl OrgName {
-    /// The name `text` is once trimmed, or `None` when it breaks the rule.
-    pub fn new(text: &str) -> Option<Self> {
-        let text = text.trim();
-        (!text.is_empty() && ambre_core::name_fits(text)).then(|| Self(text.to_owned()))
-    }
-
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 

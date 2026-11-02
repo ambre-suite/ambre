@@ -387,7 +387,7 @@ pub struct TrameView {
     /// the chrome. The view keeps each of them, so it alone writes these
     /// signals (`UI-THREAD-003`). Browser-only, like the formula signals.
     #[cfg(target_arch = "wasm32")]
-    active_sheet: RwSignal<ambre_bus::SheetId>,
+    active_sheet: RwSignal<Id<ambre_core::id::Sheet>>,
     #[cfg(target_arch = "wasm32")]
     filter_active: RwSignal<crate::chrome::SheetFilter>,
     #[cfg(target_arch = "wasm32")]

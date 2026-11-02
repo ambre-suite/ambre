@@ -27,8 +27,8 @@ use ambre_chrome::{
     FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, StatusBar, ToastHost,
     ToastKind, Toasts, Toolbar, ZoomChip,
 };
-use ambre_commands::{Categories, Commands, StaticKey};
 use ambre_core::FontSize;
+use ambre_core::{Categories, Commands, StaticKey};
 use ambre_core::{Doc, Scale, View};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -166,7 +166,7 @@ fn app_shell_owns_the_named_canvas_cell() {
     owner.set();
     let root = mount_in_container(|| {
         view! {
-            <AppShell canvas_id=ambre_core::CanvasId::CONTENT>
+            <AppShell canvas_id=ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT>
                 <Header slot>"H"</Header>
                 <Toolbar slot>"T"</Toolbar>
                 <StatusBar slot>"S"</StatusBar>

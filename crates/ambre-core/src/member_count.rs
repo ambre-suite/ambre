@@ -1,41 +1,28 @@
 //! How many members a document has: routing metadata the relay counts.
 
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// The number of members on a document, as the relay counts them. More than
-/// one means the document is shared.
+use crate::tally::{Tally, TallyKind};
+
+/// The members on a document, as the relay counts them. More than one means
+/// the document is shared.
 ///
-/// Transparent to serde, so the wire carries the bare 32-bit count. A store
-/// counts in 64 bits; [`TryFrom<i64>`] is the one checked way in from there.
-#[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
-#[serde(transparent)]
-pub struct MemberCount(u32);
+/// The wire carries the bare 32-bit count. A store counts in 64 bits;
+/// [`TryFrom<i64>`] is the one checked way in from there.
+pub enum Members {}
 
-impl MemberCount {
+impl TallyKind for Members {
+    const NAME: &'static str = "MemberCount";
+}
+
+impl Tally<Members> {
     /// The count of a document no one shares.
-    pub const ONE: Self = Self(1);
-
-    /// A count of `n` members.
-    pub const fn new(n: u32) -> Self {
-        Self(n)
-    }
-
-    /// A count of `len` members, held at the top past 32 bits.
-    pub fn of_len(len: usize) -> Self {
-        Self(u32::try_from(len).unwrap_or(u32::MAX))
-    }
-
-    /// The count itself.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
+    pub const ONE: Self = Self::new(1);
 
     /// Whether more than one member holds the document.
+    #[must_use]
     pub const fn is_shared(self) -> bool {
-        self.0 > 1
+        self.get() > 1
     }
 }
 
@@ -56,11 +43,13 @@ impl MemberCountError {
     }
 }
 
-impl TryFrom<i64> for MemberCount {
+impl TryFrom<i64> for Tally<Members> {
     type Error = MemberCountError;
 
     fn try_from(n: i64) -> Result<Self, Self::Error> {
-        u32::try_from(n).map(Self).map_err(|_| MemberCountError(n))
+        u32::try_from(n)
+            .map(Self::new)
+            .map_err(|_| MemberCountError(n))
     }
 }
 
@@ -70,12 +59,19 @@ mod tests {
 
     #[test]
     fn a_count_reads_from_the_store_checked_and_crosses_the_wire_bare() {
-        assert_eq!(MemberCount::try_from(3), Ok(MemberCount::new(3)));
-        assert_eq!(MemberCount::try_from(-1), Err(MemberCountError(-1)));
+        assert_eq!(Tally::<Members>::try_from(3), Ok(Tally::<Members>::new(3)));
+        assert_eq!(Tally::<Members>::try_from(-1), Err(MemberCountError(-1)));
         let past = i64::from(u32::MAX) + 1;
-        assert_eq!(MemberCount::try_from(past), Err(MemberCountError(past)));
-        assert!(MemberCount::new(2).is_shared());
-        assert!(!MemberCount::ONE.is_shared());
-        assert_eq!(serde_json::to_string(&MemberCount::new(7)).unwrap(), "7");
+        assert_eq!(
+            Tally::<Members>::try_from(past),
+            Err(MemberCountError(past))
+        );
+        assert!(Tally::<Members>::new(2).is_shared());
+        assert!(!Tally::<Members>::ONE.is_shared());
+        assert_eq!(
+            serde_json::to_string(&Tally::<Members>::new(7)).unwrap(),
+            "7"
+        );
+        assert_eq!(format!("{:?}", Tally::<Members>::new(7)), "MemberCount(7)");
     }
 }

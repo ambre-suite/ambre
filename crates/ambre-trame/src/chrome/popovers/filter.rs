@@ -2,8 +2,8 @@
 // The shared autofilter popover and its state.
 
 use super::*;
-use ambre_commands::{Commands, StaticKey};
 use ambre_core::index::Pos;
+use ambre_core::{Commands, StaticKey};
 
 /// Open state of the shared filter popover: which grid column it targets and the
 /// viewport (client-space) anchor point under which it is drawn. `None` means

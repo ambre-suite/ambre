@@ -19,8 +19,9 @@
 // shared `zoom` signal the canvas view publishes each frame.
 // ============================================================================
 
-use ambre_chrome::commands::{Commands, Locale, StaticKey};
+use ambre_chrome::commands::Locale;
 use ambre_chrome::{Availability, ContextMenu, MenuEntry};
+use ambre_core::{Commands, StaticKey};
 use ambre_core::{Doc, Scale, View};
 use leptos::prelude::*;
 use leptos_icons::Icon;

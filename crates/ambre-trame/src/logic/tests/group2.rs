@@ -3,6 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 
 /// A multi-cell batch (Ctrl+Enter fill / Delete over a range) is a SINGLE
@@ -62,7 +63,7 @@ fn filtered_column_edit_is_one_undo_item() {
     seed_col_a(&mut state, &["1", "2", "3"]);
     // Hide every row whose column-A value is < 3 -> rows 0 and 1 hidden.
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         col: Pos::<Col>::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gte,

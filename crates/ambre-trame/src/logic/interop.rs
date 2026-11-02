@@ -7,8 +7,10 @@
 // plaintext file ever transits to the Blind Relay (Zero-Knowledge invariant).
 
 use super::*;
+use crate::formula::ACTIVE_SHEET;
 use crate::formula::text::CellText;
 use crate::{CsvDelimiter, TOTAL_COLS, TOTAL_ROWS};
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 
 impl TrameState {
@@ -21,7 +23,7 @@ impl TrameState {
         data: ambre_core::Payload<ambre_core::FileBytes>,
         delimiter: Option<CsvDelimiter>,
         header: HeaderRow,
-        target_sheet_id: Option<SheetId>,
+        target_sheet_id: Option<Id<Sheet>>,
         start: CellPos,
     ) -> TrameOutcome {
         let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
@@ -180,7 +182,7 @@ impl TrameState {
     /// included). Returns an [`TrameEvent::ExportComplete`] carrying the bytes.
     pub(super) fn export_csv(
         &self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         delimiter: Option<CsvDelimiter>,
         range: Option<CellRect>,
     ) -> TrameOutcome {
@@ -193,7 +195,7 @@ impl TrameState {
         let Some(&idx) = self.engine_sheet_by_id.get(sheet_id) else {
             return nothing("the sheet to export no longer exists");
         };
-        let index = if idx == EngineSheet::ACTIVE {
+        let index = if idx == ACTIVE_SHEET {
             self.index.clone()
         } else {
             self.build_sheet_index(sheet_id)
@@ -247,7 +249,7 @@ impl TrameState {
     /// materialized at their high-water mark after a scroll or a since-cleared
     /// edit. Using their length would therefore export a rectangle padded with
     /// empty trailing rows/columns.
-    fn used_extent(&self, sheet_id: &SheetId, index: &SheetIndex) -> Option<CellPos> {
+    fn used_extent(&self, sheet_id: &Id<Sheet>, index: &SheetIndex) -> Option<CellPos> {
         let LoroValue::Map(cells) = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str())
@@ -279,8 +281,8 @@ impl TrameState {
     /// The cell's number format then applies (`TRAME-108`).
     fn export_cell_text(
         &self,
-        sheet_id: &SheetId,
-        idx: EngineSheet,
+        sheet_id: &Id<Sheet>,
+        idx: Pos<EngineSheet>,
         index: &SheetIndex,
         at: CellPos,
     ) -> String {

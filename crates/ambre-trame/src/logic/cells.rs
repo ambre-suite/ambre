@@ -5,7 +5,9 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
+use crate::formula::ACTIVE_SHEET;
 use crate::formula::text::CellText;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Count;
 use std::cell::OnceCell;
 
@@ -84,7 +86,7 @@ impl TrameState {
     pub(super) fn canonicalize_input(
         &self,
         text: &CellText<SourceForm>,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         lines: &SheetLines<'_>,
     ) -> Result<CellText<StoredForm>, SheetName> {
         let verbatim = || CellText::<StoredForm>::new(text.as_str().to_owned());
@@ -94,7 +96,7 @@ impl TrameState {
         let name_to_id = |name: &SheetName| {
             self.engine_sheet_by_name
                 .get(&name.key())
-                .and_then(|idx| self.sheets_by_idx.get(idx.position()))
+                .and_then(|idx| self.sheets_by_idx.get(idx.to_usize()))
                 .cloned()
         };
         let Ok(ast) = parse_formula(body) else {
@@ -118,7 +120,7 @@ impl TrameState {
     pub(super) fn formula_source(
         &self,
         stored: &CellText<StoredForm>,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         lines: &SheetLines<'_>,
     ) -> CellText<SourceForm> {
         let verbatim = || CellText::<SourceForm>::new(stored.as_str().to_owned());
@@ -149,7 +151,7 @@ impl TrameState {
     pub(super) fn formula_display(
         &self,
         stored: &CellText<StoredForm>,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         lines: &SheetLines<'_>,
     ) -> CellText<DisplayForm> {
         let source = self.formula_source(stored, sheet_id, lines);
@@ -161,7 +163,7 @@ impl TrameState {
         if !body.contains('#') {
             return verbatim();
         }
-        let id_to_name = |id: &SheetId| self.sheet_id_to_name.get(id).cloned();
+        let id_to_name = |id: &Id<Sheet>| self.sheet_id_to_name.get(id).cloned();
         match parse_formula(body) {
             Ok(ast) => CellText::<DisplayForm>::new(format!(
                 "={}",
@@ -297,12 +299,12 @@ impl TrameState {
     pub(super) fn engine_indices(&self) -> SheetIndices {
         let mut m = SheetIndices::new();
         for (idx, id) in self.sheets_by_idx.iter().enumerate() {
-            let index = if idx == EngineSheet::ACTIVE.position() {
+            let index = if idx == ACTIVE_SHEET.to_usize() {
                 self.index.clone()
             } else {
                 self.build_sheet_index(id)
             };
-            m.insert(EngineSheet::new(idx as u16), index);
+            m.insert(Pos::<EngineSheet>::from_usize(idx), index);
         }
         m
     }
@@ -320,7 +322,7 @@ impl TrameState {
             None => AxisId::Virtual(at.col),
         };
         CellId {
-            sheet: EngineSheet::ACTIVE,
+            sheet: ACTIVE_SHEET,
             row: r,
             col: c,
         }
@@ -388,7 +390,7 @@ impl TrameState {
                 .doc
                 .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())
                 .insert(CellKey::of(rl, cl).as_str(), stored.as_str());
-            let cell = CellId::bound(EngineSheet::ACTIVE, rl, cl);
+            let cell = CellId::bound(ACTIVE_SHEET, rl, cl);
             let indices = self.engine_indices();
             let ctx = TrameCtx {
                 engine_sheet_by_name: &self.engine_sheet_by_name,
@@ -544,7 +546,11 @@ pub(super) struct SheetLines<'a> {
 impl SheetLines<'_> {
     /// The index a reference of a formula on `sheet_id` reads: its qualifier's
     /// sheet, else the formula's own. `None` for a sheet that does not exist.
-    pub(super) fn of(&self, sheet_id: &SheetId, q: Option<&SheetQualifier>) -> Option<&SheetIndex> {
+    pub(super) fn of(
+        &self,
+        sheet_id: &Id<Sheet>,
+        q: Option<&SheetQualifier>,
+    ) -> Option<&SheetIndex> {
         let state = self.state;
         let idx = match q {
             None => state.engine_sheet_by_id.get(sheet_id),
@@ -552,11 +558,11 @@ impl SheetLines<'_> {
             Some(SheetQualifier::Name(name)) => state.engine_sheet_by_name.get(&name.key()),
         }
         .copied()?;
-        if idx == EngineSheet::ACTIVE {
+        if idx == ACTIVE_SHEET {
             return Some(&state.index);
         }
-        let id = state.sheets_by_idx.get(idx.position())?;
-        let cell = self.built.get(idx.position())?;
+        let id = state.sheets_by_idx.get(idx.to_usize())?;
+        let cell = self.built.get(idx.to_usize())?;
         Some(cell.get_or_init(|| state.build_sheet_index(id)))
     }
 }

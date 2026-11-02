@@ -77,36 +77,16 @@ impl ambre_core::generation::Wire for TextChangeSeq {}
 
 /// How many text commands of the view the Logic thread has taken: the number
 /// a draft entry waits on. Apart from [`TextChangeSeq`], which counts the
-/// other direction.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
-)]
-#[serde(transparent)]
-pub struct TextAck(u64);
+/// other direction. The view and the Logic thread each count it on, so the
+/// family is open, and it crosses the bus as a bare `u64`.
+pub enum TextAck {}
 
-impl TextAck {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-
-    /// The count after one more command is taken.
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
-
-    /// The count `n` commands later.
-    #[must_use]
-    pub const fn plus(self, n: u64) -> Self {
-        Self(self.0.saturating_add(n))
-    }
+impl ambre_core::GenerationKind for TextAck {
+    type IssueRight = ();
+    const NAME: &'static str = "TextAck";
 }
+
+impl ambre_core::generation::Wire for TextAck {}
 
 // =============================================================================
 // Pages (`features/ambre-spec-prose-viewport.md`)
@@ -2513,7 +2493,7 @@ pub enum ProseEvent {
         seq: ambre_core::Generation<TextChangeSeq>,
         /// How many insertions and deletions of text the Logic thread has
         /// taken from the view so far.
-        acked: TextAck,
+        acked: ambre_core::Generation<TextAck>,
         /// One run after another, each in the text the previous one left.
         edits: Vec<TextEdit>,
         /// The blocks the change deleted.
@@ -2525,7 +2505,9 @@ pub enum ProseEvent {
     BlockSplit { source: BlockId, new_block: BlockId },
     /// Every command sent before the [`ProseCommand::Sync`] it answers has
     /// landed, and `acked` counts the text commands among them.
-    Synced { acked: TextAck },
+    Synced {
+        acked: ambre_core::Generation<TextAck>,
+    },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
     /// A picture finished decrypting, and the blocks that show it are stale

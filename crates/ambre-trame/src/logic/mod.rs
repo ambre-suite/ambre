@@ -13,6 +13,7 @@
 // (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
 // ============================================================================
 
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use ambre_core::{Doc, Px};
 use std::collections::{HashMap, HashSet};
@@ -31,8 +32,8 @@ use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
     BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, CellValueKind,
     ClipboardCell, ClipboardPayload, Col, Decimals, FilterKind, FilterOp, Merge, MergeSpan, Row,
-    RowFilter, SelectionKind, SheetId, SheetName, SheetNameKey, SheetTab, Slant, SortKey,
-    StylePatch, TabStrip, Weight,
+    RowFilter, SelectionKind, SheetName, SheetNameKey, SheetTab, Slant, SortKey, StylePatch,
+    TabStrip, Weight,
 };
 pub(crate) use ambre_bus::{HeaderRow, SortOrder};
 pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
@@ -47,18 +48,18 @@ pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 /// borrowing the whole state. The engine, a sibling field, is mutated in the
 /// same call.
 struct TrameCtx<'a> {
-    engine_sheet_by_name: &'a HashMap<SheetNameKey, EngineSheet>,
-    engine_sheet_by_id: &'a HashMap<SheetId, EngineSheet>,
+    engine_sheet_by_name: &'a HashMap<SheetNameKey, Pos<EngineSheet>>,
+    engine_sheet_by_id: &'a HashMap<Id<Sheet>, Pos<EngineSheet>>,
     named: &'a HashMap<DefinedName, NameTarget>,
 }
 
 impl FormulaCtx for TrameCtx<'_> {
     /// A qualifier resolves whatever its case, as uniqueness ignores case
     /// (`TRAME-236`).
-    fn resolve_sheet(&self, name: &SheetName) -> Option<EngineSheet> {
+    fn resolve_sheet(&self, name: &SheetName) -> Option<Pos<EngineSheet>> {
         self.engine_sheet_by_name.get(&name.key()).copied()
     }
-    fn resolve_sheet_id(&self, id: &SheetId) -> Option<EngineSheet> {
+    fn resolve_sheet_id(&self, id: &Id<Sheet>) -> Option<Pos<EngineSheet>> {
         self.engine_sheet_by_id.get(id).copied()
     }
     fn resolve_name(&self, name: &DefinedName) -> Option<NameTarget> {
@@ -146,7 +147,7 @@ pub struct TrameState {
     selection: TrackedSelection,
     /// Id of the sheet the UI is currently looking at. Step 1 always holds the
     /// implicit [`default_sheet`]; multi-sheet switching arrives with the tabs.
-    active_sheet: SheetId,
+    active_sheet: Id<Sheet>,
     /// Cells carrying a bold run on the active sheet. Keyed by grid position;
     /// absence means regular weight. Mirrors the persisted `format_{sheet}` map
     /// (the CRDT source of truth) for fast lookup; reseeded on import.
@@ -205,19 +206,19 @@ pub struct TrameState {
     /// The **active sheet is always index 0**, so single-sheet code paths keep
     /// using [`CellRef::new`] (sheet 0); other sheets take 1.. in sorted-id
     /// order. Rebuilt by [`Self::rebuild_sheet_maps`].
-    sheets_by_idx: Vec<SheetId>,
+    sheets_by_idx: Vec<Id<Sheet>>,
     /// Sheet *display name* -> local engine index, for resolving `Sheet2!A1`
     /// references in formulas. Keyed by the case-folded name, so `sheet2!A1`
     /// resolves too (`TRAME-236`). Derived alongside [`Self::sheets_by_idx`].
-    engine_sheet_by_name: HashMap<SheetNameKey, EngineSheet>,
+    engine_sheet_by_name: HashMap<SheetNameKey, Pos<EngineSheet>>,
     /// Stable `sheet_id` -> local engine index, for resolving the canonical
     /// `#s0!A1` form persisted in the CRDT `v` text (rename-stable,
     /// `trame-sheets`).
     /// Derived alongside [`Self::sheets_by_idx`].
-    engine_sheet_by_id: HashMap<SheetId, EngineSheet>,
+    engine_sheet_by_id: HashMap<Id<Sheet>, Pos<EngineSheet>>,
     /// Stable `sheet_id` -> current display name, for reconstructing formula-bar
     /// text from the canonical id form. Derived alongside [`Self::sheets_by_idx`].
-    sheet_id_to_name: HashMap<SheetId, SheetName>,
+    sheet_id_to_name: HashMap<Id<Sheet>, SheetName>,
     /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
     /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
     named: HashMap<DefinedName, NameTarget>,

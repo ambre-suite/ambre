@@ -24,7 +24,8 @@
 // Tool map, the swatch set) lives in the always-compiled, host-tested `ui::palette`.
 // ============================================================================
 
-use ambre_chrome::commands::{Commands, Locale, StaticKey};
+use ambre_chrome::commands::Locale;
+use ambre_core::{Commands, StaticKey};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;

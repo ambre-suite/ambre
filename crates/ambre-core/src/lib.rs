@@ -33,7 +33,6 @@ pub mod activity;
 pub mod authorship;
 pub mod bounded;
 pub mod calendar;
-pub mod canvas_id;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
 pub mod color;
@@ -96,6 +95,7 @@ pub mod serde_enums;
 pub mod serde_id;
 pub mod space;
 pub mod span;
+pub mod static_key;
 pub mod status;
 pub mod tally;
 pub mod text_offset;
@@ -111,7 +111,6 @@ pub use authorship::{
 };
 pub use bounded::{Bounded, BoundedRepr, Bounds, Defaulted, OutOfRange, Refusal, UnitFraction};
 pub use calendar::{Month, Year};
-pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
 pub use credential::ProviderUrl;
@@ -152,7 +151,7 @@ pub use media::{
     ByteSize, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress,
     MediaType,
 };
-pub use member_count::{MemberCount, MemberCountError};
+pub use member_count::{MemberCountError, Members};
 pub use mode::{
     AfterDrop, Availability, CaseMatch, Creation, DocumentScope, FinalizeEnd, HistoryStep,
     LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle, Visibility, WordMatch,
@@ -178,7 +177,7 @@ pub use schema::{
     SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
     migration_peer, scaffold_peer, verdict,
 };
-pub use search::{SearchQuery, UserSearch};
+pub use search::{SearchQuery, SearchQueryRule, UserSearch, UserSearchRule};
 pub use secret::{
     AccessToken, Credential, CredentialKind, OidcCode, OidcState, Passphrase, PresignedUrl,
     RefreshToken, Secret, SecretBytes, SecretString, WireCredential,
@@ -191,11 +190,12 @@ pub use span::{
     Authored, Failures, FracMs, FrameRate, Instant, LamportStamp, Ms, Ns, PageLoad, Rfc3339, Sec,
     StoredAsI64, Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
 };
+pub use static_key::{Canvases, Categories, Commands, Icons, KeyKind, StaticKey};
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
 };
-pub use tally::{CellCount, Elements, Tally, TallyKind};
+pub use tally::{CellCount, Elements, Recounts, Tally, TallyKind};
 pub use text_offset::{
     Byte, Char, RedactedChars, Utf16, byte_span_to_chars, byte_to_char, char_len,
     char_span_to_bytes, char_to_byte, char_to_utf16, utf16_to_char,

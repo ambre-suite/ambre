@@ -3,6 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 
 /// Autofill of a merged-cell source fills block by block and re-merges every
@@ -289,7 +290,7 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
         text: "apple".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
@@ -445,7 +446,7 @@ fn replace_all_spans_sheets() {
         text: "foo".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
@@ -469,7 +470,7 @@ fn replace_all_spans_sheets() {
     state.handle_command(TrameCommand::Undo);
     assert_eq!(read_cell(&mut state, 0, 0), "foo");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "foo");
 }

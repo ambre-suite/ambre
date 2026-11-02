@@ -8,7 +8,7 @@
 
 use ambre_core::StoredAsI64;
 use ambre_core::index::{Count, Pos};
-use ambre_core::{Authored, Instant, LangTag, Month, Ms, TimeSpan, Year};
+use ambre_core::{Authored, Bounded, Bounds, Instant, LangTag, Month, Ms, Refusal, TimeSpan, Year};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
@@ -132,7 +132,7 @@ fn field_value(
 pub struct CivilDate {
     year: Year,
     month: Month,
-    day: Day,
+    day: Bounded<MonthDay>,
 }
 
 impl CivilDate {
@@ -150,36 +150,23 @@ impl CivilDate {
 
     /// The day of the month, from one.
     #[must_use]
-    pub const fn day(self) -> Day {
+    pub const fn day(self) -> Bounded<MonthDay> {
         self.day
     }
 }
 
 /// A day of the month, the first being one. No value past 31 builds one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Day(u8);
+///
+/// Apart from Trame's `DayOfMonth`, which runs past either end of its month
+/// as `DATE` reads it.
+pub enum MonthDay {}
 
-impl Day {
-    /// The day `value`, `None` outside `1 ..= 31`.
-    #[must_use]
-    pub fn new(value: u32) -> Option<Self> {
-        u8::try_from(value)
-            .ok()
-            .filter(|day| (1..=31).contains(day))
-            .map(Self)
-    }
-
-    /// The day as a number from one, for the text a date prints.
-    #[must_use]
-    pub const fn get(self) -> u8 {
-        self.0
-    }
-}
-
-impl std::fmt::Display for Day {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
-    }
+impl Bounds for MonthDay {
+    type Repr = u8;
+    const MIN: u8 = 1;
+    const MAX: u8 = 31;
+    const NAME: &'static str = "Day";
+    const REFUSAL: Refusal = Refusal::new("a day of the month lies in 1..=31, not ", "");
 }
 
 impl std::fmt::Display for CivilDate {
@@ -215,7 +202,10 @@ pub fn civil_date(at: Instant<Authored>) -> CivilDate {
     CivilDate {
         year: Year::new(year),
         month: Month::new(month).unwrap_or(Month::JANUARY),
-        day: u32::try_from(day).ok().and_then(Day::new).unwrap_or(Day(1)),
+        day: u8::try_from(day)
+            .ok()
+            .and_then(Bounded::new)
+            .unwrap_or(Bounded::MIN),
     }
 }
 
@@ -379,10 +369,9 @@ mod tests {
         assert_eq!(Month::new(0), None);
         assert_eq!(Month::new(13), None);
         assert_eq!(Month::new(12).map(Month::get), Some(12));
-        assert_eq!(Day::new(0), None);
-        assert_eq!(Day::new(32), None);
-        assert_eq!(Day::new(256), None);
-        assert_eq!(Day::new(31).map(Day::get), Some(31));
+        assert_eq!(Bounded::<MonthDay>::new(0), None);
+        assert_eq!(Bounded::<MonthDay>::new(32), None);
+        assert_eq!(Bounded::<MonthDay>::new(31).map(Bounded::get), Some(31));
     }
 
     /// The stored marks are document bytes: each field keeps the pair it

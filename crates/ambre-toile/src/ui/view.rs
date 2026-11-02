@@ -13,7 +13,8 @@
 // the Logic thread (`toile-board-rendering`).
 // ============================================================================
 
-use ambre_commands::{ClipboardWrite, Commands, Key, KeyChar, Modifiers, StaticKey};
+use ambre_commands::{ClipboardWrite, Key, KeyChar, Modifiers};
+use ambre_core::{Commands, StaticKey};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 

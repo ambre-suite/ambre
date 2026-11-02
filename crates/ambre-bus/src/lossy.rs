@@ -99,7 +99,7 @@ mod tests {
             },
             TrameCommand::ResizeCol {
                 version: ambre_core::Generation::nth(1),
-                sheet_id: crate::SheetId::new("s1".to_string()),
+                sheet_id: ambre_core::id::Id::<ambre_core::id::Sheet>::from_text("s1".to_string()),
                 col: Pos::<Col>::new(0),
                 width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
             },

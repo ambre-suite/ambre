@@ -421,8 +421,10 @@ pub(crate) fn apply_theme_attr(theme: ambre_canvas::Theme) {
 
 /// The canvases a right-click opens the DOM menu on: the content's, and the
 /// thread's of a Murmure page.
-pub(crate) const MENU_CANVASES: [ambre_core::CanvasId; 2] =
-    [ambre_core::CanvasId::CONTENT, crate::host::THREAD_CANVAS];
+pub(crate) const MENU_CANVASES: [ambre_core::StaticKey<ambre_core::Canvases>; 2] = [
+    ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
+    crate::host::THREAD_CANVAS,
+];
 
 /// Listen for `contextmenu` on the document. A right-click on one of the
 /// `MENU_CANVASES` opens the DOM context menu at the click point, and the
@@ -478,8 +480,8 @@ pub(crate) fn install_board_file_drop(
     toasts: Toasts,
 ) {
     Effect::new(move |_| {
-        let Some(canvas) =
-            leptos::prelude::document().get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
+        let Some(canvas) = leptos::prelude::document()
+            .get_element_by_id(ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT.as_str())
         else {
             return;
         };
@@ -514,8 +516,8 @@ pub(crate) fn install_board_file_drop(
 /// takes no file, so its canvas takes no drop.
 pub(crate) fn install_murmure_file_drop(relay: ambre_murmure::chrome::MurmureRelay) {
     Effect::new(move |_| {
-        let Some(canvas) =
-            leptos::prelude::document().get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
+        let Some(canvas) = leptos::prelude::document()
+            .get_element_by_id(ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT.as_str())
         else {
             return;
         };

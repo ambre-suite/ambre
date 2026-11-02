@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::formula::identity::{AxisEdit, LineEdit};
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos, Span};
 
 impl TrameState {
@@ -34,7 +35,7 @@ impl TrameState {
     /// or an empty/virtual range, is a no-op.
     pub(super) fn sort_range(
         &mut self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         rect: CellRect,
         sort_col: Count<Col>,
         order: SortOrder,
@@ -104,7 +105,7 @@ impl TrameState {
     /// data (`trame-formula-engine`); LWW resolves concurrent sorts.
     pub(super) fn sort_range_multi(
         &mut self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         rect: CellRect,
         sort_keys: &[SortKey],
         header: HeaderRow,

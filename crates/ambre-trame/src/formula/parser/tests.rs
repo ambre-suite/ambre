@@ -2,7 +2,9 @@
 // Parser unit tests (descendant module: sees the private combinators).
 
 use super::*;
+use crate::formula::ACTIVE_SHEET;
 use crate::{Col, Row};
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 
 fn parse(input: &str) -> Expr {
@@ -213,16 +215,16 @@ const ROW_4: Pos<Row> = Pos::<Row>::new(4);
 const ROW_9: Pos<Row> = Pos::<Row>::new(9);
 const ROW_99: Pos<Row> = Pos::<Row>::new(99);
 
-const S0: EngineSheet = EngineSheet::ACTIVE;
-const S2: EngineSheet = EngineSheet::new(2);
-const S3: EngineSheet = EngineSheet::new(3);
-const S5: EngineSheet = EngineSheet::new(5);
+const S0: Pos<EngineSheet> = ACTIVE_SHEET;
+const S2: Pos<EngineSheet> = Pos::<EngineSheet>::new(2);
+const S3: Pos<EngineSheet> = Pos::<EngineSheet>::new(3);
+const S5: Pos<EngineSheet> = Pos::<EngineSheet>::new(5);
 
 /// Test context: `Sheet2` -> index 2, name `TOTAL` -> `B1:B3` on sheet 2,
 /// canonical id `#s2` -> index 2 (`#gone` resolves to nothing).
 struct TestCtx;
 impl FormulaCtx for TestCtx {
-    fn resolve_sheet(&self, name: &ambre_bus::SheetName) -> Option<EngineSheet> {
+    fn resolve_sheet(&self, name: &ambre_bus::SheetName) -> Option<Pos<EngineSheet>> {
         match name.as_str() {
             "Sheet1" => Some(S0),
             "Sheet2" => Some(S2),
@@ -230,7 +232,7 @@ impl FormulaCtx for TestCtx {
             _ => None,
         }
     }
-    fn resolve_sheet_id(&self, id: &ambre_bus::SheetId) -> Option<EngineSheet> {
+    fn resolve_sheet_id(&self, id: &Id<Sheet>) -> Option<Pos<EngineSheet>> {
         match id.as_str() {
             "s2" => Some(S2),
             _ => None,
@@ -255,7 +257,7 @@ impl FormulaCtx for TestCtx {
     }
 }
 
-fn resolve(src: &str, default_sheet: EngineSheet) -> Result<Expr, ParseError> {
+fn resolve(src: &str, default_sheet: Pos<EngineSheet>) -> Result<Expr, ParseError> {
     resolve_refs(parse(src), default_sheet, &TestCtx)
 }
 

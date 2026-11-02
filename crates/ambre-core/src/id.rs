@@ -269,6 +269,14 @@ impl<E: Entity<Repr = String>> Id<E> {
     }
 }
 
+/// A map keyed by a text identifier answers a lookup by the bare text. The
+/// identifier and its text hash and compare as the same bytes.
+impl<E: Entity<Repr = String>> std::borrow::Borrow<str> for Id<E> {
+    fn borrow(&self) -> &str {
+        &self.raw
+    }
+}
+
 // The markers. Each one is an uninhabited `enum` that states its `Debug` name
 // and its representation, and nothing else.
 
@@ -449,6 +457,33 @@ impl Entity for Thread {
     type Repr = String;
 }
 
+/// A Trame sheet, minted by the peer that adds it. A rename leaves the
+/// identifier unchanged (`trame-sheets`).
+pub enum Sheet {}
+impl sealed::Sealed for Sheet {}
+impl Entity for Sheet {
+    const NAME: &'static str = "SheetId";
+    type Repr = String;
+}
+
+/// A personal filter view of a Trame sheet, minted where the view is saved
+/// and never shared (`trame-shared-filter`).
+pub enum FilterView {}
+impl sealed::Sealed for FilterView {}
+impl Entity for FilterView {
+    const NAME: &'static str = "FilterViewId";
+    type Repr = String;
+}
+
+/// One conditional-formatting rule of a Trame sheet, which an update or a
+/// removal names (`trame-cell-styles`).
+pub enum CondFormat {}
+impl sealed::Sealed for CondFormat {}
+impl Entity for CondFormat {
+    const NAME: &'static str = "CondFormatId";
+    type Repr = String;
+}
+
 impl From<Id<Frame>> for Id<Element> {
     fn from(frame: Id<Frame>) -> Self {
         Self::from_raw(frame.raw)
@@ -511,6 +546,22 @@ mod tests {
         let frame = postcard::to_allocvec(&id).unwrap();
         assert_eq!(frame, postcard::to_allocvec(id.as_str()).unwrap());
         assert_eq!(postcard::from_bytes::<Id<Element>>(&frame).unwrap(), id);
+    }
+
+    /// A map keyed by a text identifier finds an entry by the bare text.
+    #[test]
+    fn a_text_id_keys_a_map_by_its_bare_text() {
+        let mut names = std::collections::HashMap::new();
+        names.insert(Id::<Sheet>::from_text("s0".to_owned()), 1);
+        assert_eq!(names.get("s0"), Some(&1));
+        let mut sorted = std::collections::BTreeMap::new();
+        sorted.insert(Id::<Sheet>::from_text("b".to_owned()), 2);
+        sorted.insert(Id::<Sheet>::from_text("a".to_owned()), 1);
+        assert_eq!(sorted.get("a"), Some(&1));
+        assert_eq!(
+            format!("{:?}", Id::<CondFormat>::from_text("c".to_owned())),
+            "CondFormatId(\"c\")"
+        );
     }
 
     /// A frame becomes the element it is, with the same text.

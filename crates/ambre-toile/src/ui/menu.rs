@@ -25,10 +25,10 @@ use ambre_bus::app::toile::{
     NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
 };
 use ambre_bus::{Authored, Instant};
-use ambre_commands::{Commands, StaticKey};
 use ambre_core::Tally;
 use ambre_core::id::{Element, Id};
 use ambre_core::{Board, Px};
+use ambre_core::{Commands, StaticKey};
 use kurbo::{Rect, Vec2};
 
 /// Diagonal offset, on each axis, of a duplicate so the copy is visibly

@@ -13,7 +13,8 @@
 // signals, mirrored from `TrameEvent::SheetList`.
 // ============================================================================
 
-use ambre_bus::{SheetId, SheetName, SheetTab, TabStrip};
+use ambre_bus::{SheetName, SheetTab, TabStrip};
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use leptos::prelude::*;
 use leptos::web_sys;
@@ -21,7 +22,7 @@ use leptos::web_sys;
 /// Reorder intent emitted on drop: move sheet `id` so it lands at `to_index`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReorderSheet {
-    pub id: SheetId,
+    pub id: Id<Sheet>,
     pub to_index: Pos<TabStrip>,
 }
 
@@ -31,19 +32,19 @@ pub struct ReorderSheet {
 #[component]
 pub fn SheetTabs(
     sheets: RwSignal<Vec<SheetTab>>,
-    active: RwSignal<SheetId>,
-    on_activate: Callback<SheetId>,
+    active: RwSignal<Id<Sheet>>,
+    on_activate: Callback<Id<Sheet>>,
     on_create: Callback<()>,
-    on_rename: Callback<(SheetId, SheetName)>,
-    on_delete: Callback<SheetId>,
+    on_rename: Callback<(Id<Sheet>, SheetName)>,
+    on_delete: Callback<Id<Sheet>>,
     on_reorder: Callback<ReorderSheet>,
 ) -> impl IntoView {
     // Id of the tab being renamed in place, or `None`.
-    let renaming = RwSignal::new(None::<SheetId>);
+    let renaming = RwSignal::new(None::<Id<Sheet>>);
     // Open per-tab context menu: `(sheet_id, client_x, client_y)`, or `None`.
-    let menu = RwSignal::new(None::<(SheetId, f64, f64)>);
+    let menu = RwSignal::new(None::<(Id<Sheet>, f64, f64)>);
     // Id of the tab currently being dragged, or `None`.
-    let dragging = RwSignal::new(None::<SheetId>);
+    let dragging = RwSignal::new(None::<Id<Sheet>>);
     // Index a drop would land on (the tab currently hovered during a drag).
     let drop_idx = RwSignal::new(None::<Pos<TabStrip>>);
 
@@ -56,7 +57,7 @@ pub fn SheetTabs(
     on_cleanup(move || menu_handle.remove());
 
     // Begin an in-place rename of `id`, closing any open menu first.
-    let start_rename = move |id: SheetId| {
+    let start_rename = move |id: Id<Sheet>| {
         menu.set(None);
         renaming.set(Some(id));
     };

@@ -34,7 +34,7 @@ use ambre_bus::{Instant, PageLoad};
     reason = "the boot wires the page it was served with, which has no fallback page"
 )]
 pub fn run_with<F, C, P>(
-    canvas_id: ambre_core::CanvasId,
+    canvas_id: ambre_core::StaticKey<ambre_core::Canvases>,
     make_view: F,
     make_child_fn: C,
     pre_frame: P,

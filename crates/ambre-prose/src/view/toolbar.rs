@@ -7,8 +7,8 @@
 //! (`PROSE-UI-057`). Nothing here remembers a mark across a selection change
 //! (`PROSE-UI-097`).
 
-use ambre_commands::{Commands, StaticKey};
 use ambre_core::index::Span;
+use ambre_core::{Commands, StaticKey};
 use ambre_core::{Doc, Point, Px, View};
 
 use crate::events::{ActiveMarks, MarkAction, ProseCommand, TriState};

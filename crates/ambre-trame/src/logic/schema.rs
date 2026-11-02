@@ -10,6 +10,7 @@
 // how a reader walks a registry. What lives here is what only Trame can know:
 // which version its containers are at today, and what each past layout has to
 // become.
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 use std::borrow::Cow;
 
@@ -18,7 +19,7 @@ use ambre_core::{Payload, SnapshotBytes, Version};
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::{CellRect, Col, FilterKind, Row, SheetId};
+use ambre_bus::{CellRect, Col, FilterKind, Row};
 use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
     migration_peer, verdict,
@@ -36,8 +37,8 @@ use crate::model::{Line, Uid};
 /// and populate `sheet_order`. With one sheet, `sheet_order` stays empty to
 /// avoid a duplicate `push` on merge (see `trame-schema`).
 #[must_use]
-pub(crate) fn default_sheet() -> SheetId {
-    SheetId::new("s0".to_owned())
+pub(crate) fn default_sheet() -> Id<Sheet> {
+    Id::<Sheet>::from_text("s0".to_owned())
 }
 
 ambre_core::loro_fields!(pub(crate));
@@ -127,7 +128,7 @@ pub(crate) struct SheetContainer(String);
 impl SheetContainer {
     /// The container of the family `root` that belongs to `sheet`.
     #[must_use]
-    pub(crate) fn of(root: SheetRoot, sheet: &SheetId) -> Self {
+    pub(crate) fn of(root: SheetRoot, sheet: &Id<Sheet>) -> Self {
         Self(format!("{}_{sheet}", root.as_str()))
     }
 

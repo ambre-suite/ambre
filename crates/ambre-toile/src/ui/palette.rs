@@ -16,8 +16,9 @@
 // palette (and the keyboard) write a shared `RwSignal<Tool>` the view applies.
 // ============================================================================
 
-use ambre_commands::{Commands, Keymap, StaticKey};
+use ambre_commands::Keymap;
 use ambre_core::Rgba;
+use ambre_core::{Commands, StaticKey};
 use std::borrow::Cow;
 
 use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};

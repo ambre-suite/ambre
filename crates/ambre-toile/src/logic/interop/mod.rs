@@ -16,6 +16,7 @@
 //! board.
 
 use ambre_core::Tally;
+use ambre_core::index::{Axis, Pos};
 use kurbo::{BezPath, Point, Rect};
 
 use crate::logic::command::{MediaRef, ToileCommand};
@@ -54,59 +55,27 @@ pub use svg_import::import_svg;
 /// [`ImportBatch::groups`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportRef {
-    Slot(ImportElementSlot),
-    Group(ImportGroupSlot),
+    Slot(Pos<ImportElement>),
+    Group(Pos<ImportGroupRank>),
 }
 
-/// The rank of a `CreateElement` in [`ImportBatch::commands`]. It means
-/// nothing outside that batch, and no arithmetic applies to it. The importer
-/// takes the next rank from the batch's length, and the resolver reads the
-/// create at that rank.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ImportElementSlot(u32);
+/// The ranks of the `CreateElement`s in [`ImportBatch::commands`]. A rank
+/// means nothing outside its batch. The importer takes the next rank from
+/// the batch's length, and the resolver reads the create at that rank.
+#[derive(PartialEq, Eq)]
+pub enum ImportElement {}
 
-impl ImportElementSlot {
-    /// The first create of a batch.
-    pub const ZERO: Self = Self(0);
-
-    /// The create at `rank`.
-    pub const fn new(rank: u32) -> Self {
-        Self(rank)
-    }
-
-    /// The rank of the create a batch of `len` creates appends next. It
-    /// saturates at `u32::MAX`, which the element limit keeps a batch far
-    /// below.
-    pub fn from_usize(len: usize) -> Self {
-        Self(u32::try_from(len).unwrap_or(u32::MAX))
-    }
-
-    /// The rank as an index into [`ImportBatch::commands`].
-    pub fn to_usize(self) -> usize {
-        usize::try_from(self.0).unwrap_or(usize::MAX)
-    }
+impl Axis for ImportElement {
+    const NAME: &'static str = "ImportElement";
 }
 
-/// The rank of a group in [`ImportBatch::groups`]. It means nothing outside
-/// that batch, and no arithmetic applies to it, as for [`ImportElementSlot`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ImportGroupSlot(u32);
+/// The ranks of the groups in [`ImportBatch::groups`]. A rank means nothing
+/// outside its batch, as for [`ImportElement`].
+#[derive(PartialEq, Eq)]
+pub enum ImportGroupRank {}
 
-impl ImportGroupSlot {
-    /// The first group of a batch.
-    pub const ZERO: Self = Self(0);
-
-    /// The rank of the group a batch of `len` groups appends next. It
-    /// saturates at `u32::MAX`, which the element limit keeps a batch far
-    /// below.
-    pub fn from_usize(len: usize) -> Self {
-        Self(u32::try_from(len).unwrap_or(u32::MAX))
-    }
-
-    /// The rank as an index into [`ImportBatch::groups`].
-    pub fn to_usize(self) -> usize {
-        usize::try_from(self.0).unwrap_or(usize::MAX)
-    }
+impl Axis for ImportGroupRank {
+    const NAME: &'static str = "ImportGroup";
 }
 
 /// A `<g>` (or a Figma/Miro group) to rebuild via `GroupElements` after the

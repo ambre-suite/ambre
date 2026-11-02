@@ -15,9 +15,10 @@
 // the DOM half, tested under wasm.
 // ============================================================================
 
-use ambre_commands::{Command, Commands, Locale, StaticKey};
+use ambre_commands::{Command, Locale};
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::{Axis, Circular, Count, Delta, Pos};
+use ambre_core::{Commands, StaticKey};
 use leptos::html;
 use leptos::prelude::*;
 
@@ -289,7 +290,8 @@ pub fn CommandPalette(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_commands::{Categories, Icons, KeyBinding, KeyChar};
+    use ambre_commands::{KeyBinding, KeyChar};
+    use ambre_core::{Categories, Icons};
 
     fn bold(_: &Locale) -> String {
         "Bold".into()

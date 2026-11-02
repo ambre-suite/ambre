@@ -25,6 +25,7 @@
 // ============================================================================
 
 use ambre_core::Rgb;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 use proptest::prelude::*;
 
@@ -151,7 +152,7 @@ impl Op {
                 to: Pos::<Col>::new(to),
             },
             Op::Sort { ascending } => TrameCommand::SortRange {
-                sheet_id: ambre_bus::SheetId::new(SHEET.to_owned()),
+                sheet_id: Id::<Sheet>::from_text(SHEET.to_owned()),
                 rect: crate::CellRect::spanning(
                     crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
                     crate::CellPos::new(Pos::<Row>::new(ROWS - 1), Pos::<Col>::new(COLS - 1)),
@@ -180,7 +181,7 @@ impl Op {
                 col: Pos::<Col>::new(col),
             },
             Op::Filter { op, value } => TrameCommand::ApplyFilter {
-                sheet_id: ambre_bus::SheetId::new(SHEET.to_owned()),
+                sheet_id: Id::<Sheet>::from_text(SHEET.to_owned()),
                 col: Pos::<Col>::new(0),
                 kind: FilterKind::Condition {
                     op,
@@ -188,10 +189,10 @@ impl Op {
                 },
             },
             Op::ClearFilter => TrameCommand::ClearFilter {
-                sheet_id: ambre_bus::SheetId::new(SHEET.to_owned()),
+                sheet_id: Id::<Sheet>::from_text(SHEET.to_owned()),
             },
             Op::Fill => TrameCommand::FillRange {
-                sheet_id: ambre_bus::SheetId::new(SHEET.to_owned()),
+                sheet_id: Id::<Sheet>::from_text(SHEET.to_owned()),
                 src: crate::CellRect::spanning(
                     crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
                     crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
@@ -725,9 +726,10 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
 /// The tab order the strip shows: the ids of the `SheetList` event.
 fn tab_order(state: &TrameState) -> Vec<String> {
     match state.sheet_list_event() {
-        TrameEvent::SheetList { sheets, .. } => {
-            sheets.into_iter().map(|t| t.id.into_inner()).collect()
-        }
+        TrameEvent::SheetList { sheets, .. } => sheets
+            .into_iter()
+            .map(|t| t.id.as_str().to_owned())
+            .collect(),
         other => panic!("expected SheetList, got {other:?}"),
     }
 }
@@ -752,11 +754,11 @@ fn concurrent_tab_moves_converge_on_one_order() {
     assert_eq!(ids.len(), 3);
 
     a.handle_command(TrameCommand::MoveSheet {
-        sheet_id: ambre_bus::SheetId::new(ids[2].clone()),
+        sheet_id: Id::<Sheet>::from_text(ids[2].clone()),
         to_index: Pos::<crate::TabStrip>::ZERO,
     });
     b.handle_command(TrameCommand::MoveSheet {
-        sheet_id: ambre_bus::SheetId::new(ids[0].clone()),
+        sheet_id: Id::<Sheet>::from_text(ids[0].clone()),
         to_index: Pos::<crate::TabStrip>::new(2),
     });
 

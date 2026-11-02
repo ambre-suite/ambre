@@ -553,14 +553,14 @@ pub enum ProseEvent {
     DocUpdated    { payload: LoroPayload },
     /// What that change did to the text, in code points, for a view that holds no document
     /// (`PROSE-UI-001`). The draft and the caret follow it.
-    TextChanged   { origin: ChangeOrigin, seq: Generation<TextChangeSeq>, acked: TextAck,
+    TextChanged   { origin: ChangeOrigin, seq: Generation<TextChangeSeq>, acked: Generation<TextAck>,
                     edits: Vec<TextEdit>, removed: Vec<BlockId> },
     /// The paragraph that parted, and the one that carries its tail. The view needs the new
     /// block's identity to leave the caret at its start (`PROSE-UI-141`): it cannot mint the
     /// id and it holds no document to read it from.
     BlockSplit    { source: BlockId, new_block: BlockId },
     /// Every command sent before the `ProseCommand::Sync` it answers has landed.
-    Synced        { acked: TextAck },
+    Synced        { acked: Generation<TextAck> },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
     /// A picture finished decrypting, and the blocks that show it are stale (`PROSE-059`,

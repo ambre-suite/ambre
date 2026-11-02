@@ -26,14 +26,16 @@
 
 use ambre_bus::app::find::Match;
 use ambre_bus::{
-    AppCommand, AppEvent, CellFormat, CellStyle, Col, HAlign, Row, SheetId, SheetName, SheetTab,
+    AppCommand, AppEvent, CellFormat, CellStyle, Col, HAlign, Row, SheetName, SheetTab,
     TrameCommand, TrameEvent, UiEvent, VAlign,
 };
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
-use ambre_commands::{Commands, Locale, StaticKey};
+use ambre_commands::Locale;
+use ambre_core::id::Sheet;
 use ambre_core::id::{Document, Id};
 use ambre_core::index::{Count, Pos};
+use ambre_core::{Commands, StaticKey};
 use ambre_trame::chrome::{
     self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindQuery, FindReplace, FindReplaceState,
     FormatBar, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE,
@@ -444,7 +446,7 @@ fn sort_dialog_adds_levels_and_emits_on_apply() {
 /// Collect the command labels of an entry list, skipping separators.
 fn item_commands(
     entries: &[ambre_chrome::MenuEntry],
-) -> Vec<ambre_commands::StaticKey<ambre_chrome::commands::Commands>> {
+) -> Vec<ambre_core::StaticKey<ambre_core::Commands>> {
     entries
         .iter()
         .filter_map(|e| match e {
@@ -565,24 +567,24 @@ fn filter_entry_toggles_with_filter_state() {
 /// strip.
 #[wasm_bindgen_test]
 fn sheet_tabs_render_active_and_emit_intents() {
-    let activated = RwSignal::new(None::<SheetId>);
+    let activated = RwSignal::new(None::<Id<Sheet>>);
     let created = RwSignal::new(0_u32);
 
     let container = mount_in_container(move || {
         let tab = |id: &str, name: &str| SheetTab {
-            id: SheetId::new(id.to_owned()),
+            id: Id::<Sheet>::from_text(id.to_owned()),
             name: SheetName::new(name).unwrap(),
         };
         let sheets = RwSignal::new(vec![tab("s0", "One"), tab("s1", "Two")]);
-        let active = RwSignal::new(SheetId::new("s1".to_owned()));
+        let active = RwSignal::new(Id::<Sheet>::from_text("s1".to_owned()));
         view! {
             <SheetTabs
                 sheets=sheets
                 active=active
                 on_activate=Callback::new(move |id| activated.set(Some(id)))
                 on_create=Callback::new(move |()| created.update(|n| *n += 1))
-                on_rename=Callback::new(move |_: (SheetId, SheetName)| {})
-                on_delete=Callback::new(move |_: SheetId| {})
+                on_rename=Callback::new(move |_: (Id<Sheet>, SheetName)| {})
+                on_delete=Callback::new(move |_: Id<Sheet>| {})
                 on_reorder=Callback::new(move |_: ReorderSheet| {})
             />
         }
@@ -602,7 +604,7 @@ fn sheet_tabs_render_active_and_emit_intents() {
     first.click();
     assert_eq!(
         activated.get_untracked(),
-        Some(SheetId::new("s0".to_owned()))
+        Some(Id::<Sheet>::from_text("s0".to_owned()))
     );
 
     // Clicking the trailing "+" emits `on_create`.
@@ -622,20 +624,20 @@ fn sheet_tabs_render_active_and_emit_intents() {
 /// the field, and sends nothing. A valid name is sent (`TRAME-234`).
 #[wasm_bindgen_test]
 async fn sheet_tabs_refuse_a_name_the_rule_refuses() {
-    let renamed = RwSignal::new(None::<(SheetId, SheetName)>);
+    let renamed = RwSignal::new(None::<(Id<Sheet>, SheetName)>);
     let container = mount_in_container(move || {
         let sheets = RwSignal::new(vec![SheetTab {
-            id: SheetId::new("s0".to_owned()),
+            id: Id::<Sheet>::from_text("s0".to_owned()),
             name: SheetName::new("One").unwrap(),
         }]);
         view! {
             <SheetTabs
                 sheets=sheets
-                active=RwSignal::new(SheetId::new("s0".to_owned()))
-                on_activate=Callback::new(move |_: SheetId| {})
+                active=RwSignal::new(Id::<Sheet>::from_text("s0".to_owned()))
+                on_activate=Callback::new(move |_: Id<Sheet>| {})
                 on_create=Callback::new(move |()| {})
                 on_rename=Callback::new(move |pair| renamed.set(Some(pair)))
-                on_delete=Callback::new(move |_: SheetId| {})
+                on_delete=Callback::new(move |_: Id<Sheet>| {})
                 on_reorder=Callback::new(move |_: ReorderSheet| {})
             />
         }
@@ -681,7 +683,7 @@ async fn sheet_tabs_refuse_a_name_the_rule_refuses() {
     assert_eq!(
         renamed.get_untracked(),
         Some((
-            SheetId::new("s0".to_owned()),
+            Id::<Sheet>::from_text("s0".to_owned()),
             SheetName::new("Data").unwrap()
         ))
     );

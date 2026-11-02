@@ -6,8 +6,8 @@
 use super::app_root::MurmureShell;
 use ambre_bus::{
     Authored, CatalogueEntry, CategoryView, ChannelActivity, ChannelMatches, ChannelName,
-    ChannelPlace, DirectPeers, Instant, LogicCommand, MemberChannel, MemberView, MentionCount,
-    MessageView, Presence, SearchMatch, SpaceCommand, SpaceEvent, UiEvent, UnreadCount,
+    ChannelPlace, DirectPeers, Instant, LogicCommand, MemberChannel, MemberView, Mentions,
+    MessageView, Presence, SearchMatch, SpaceCommand, SpaceEvent, UiEvent, Unread,
 };
 use ambre_core::id::{Category, Channel, Id, Message, Segment, Space, User};
 use ambre_murmure::chrome::MurmureRelay;
@@ -245,8 +245,8 @@ fn activity(
         channels: vec![ChannelActivity {
             channel_id,
             active,
-            unread: counts.map(|(m, _)| UnreadCount::new(m)),
-            mentions: counts.map(|(_, n)| MentionCount::new(n)),
+            unread: counts.map(|(m, _)| ambre_core::Tally::<Unread>::new(m)),
+            mentions: counts.map(|(_, n)| ambre_core::Tally::<Mentions>::new(n)),
         }],
     }
 }

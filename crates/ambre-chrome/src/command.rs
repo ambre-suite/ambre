@@ -17,7 +17,8 @@
 // toggle state optimistically.
 // ============================================================================
 
-use ambre_commands::{Commands, Key, KeyBinding, KeyState, Modifiers, StaticKey};
+use ambre_commands::{Key, KeyBinding, KeyState, Modifiers};
+use ambre_core::{Commands, StaticKey};
 use leptos::prelude::*;
 use std::collections::HashMap;
 use std::rc::Rc;

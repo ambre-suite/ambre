@@ -9,8 +9,8 @@
 // one `AnnotationIntent`: the DOM holds no command channel.
 // ============================================================================
 
-use ambre_commands::{Commands, StaticKey};
 use ambre_core::index::Pos;
+use ambre_core::{Commands, StaticKey};
 use std::collections::HashMap;
 
 use ambre_core::id::{Comment, Id};

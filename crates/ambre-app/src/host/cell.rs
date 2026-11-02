@@ -33,13 +33,13 @@ type Listener = (&'static str, Closure<dyn FnMut(web_sys::Event)>);
 
 /// The id of the cell whose field last took the keys, shared with the
 /// listeners of every cell.
-type Typist = Rc<std::cell::Cell<Option<CanvasId>>>;
+type Typist = Rc<std::cell::Cell<Option<StaticKey<Canvases>>>>;
 
 /// A cell's claim on the text pipe. A press, a tap or an edit loaded from a
 /// menu focuses its field. Whoever takes the pipe back lets that field go.
 #[derive(Clone)]
 struct Claim {
-    id: CanvasId,
+    id: StaticKey<Canvases>,
     typist: Typist,
 }
 
@@ -55,7 +55,7 @@ impl Claim {
 /// The cells a view shows beside its content canvas, keyed by canvas id.
 #[derive(Default)]
 pub(super) struct Cells {
-    bound: HashMap<CanvasId, Bound>,
+    bound: HashMap<StaticKey<Canvases>, Bound>,
     typist: Typist,
     /// Whether the content view's field held the keys at the last settle.
     content_held: bool,
@@ -74,7 +74,7 @@ impl Cells {
         let Some(document) = web_sys::window().and_then(|w| w.document()) else {
             return;
         };
-        let lookup = |id: CanvasId| -> Option<HtmlCanvasElement> {
+        let lookup = |id: StaticKey<Canvases>| -> Option<HtmlCanvasElement> {
             document.get_element_by_id(id.as_str())?.dyn_into().ok()
         };
         self.bound.retain(|id, cell| {
@@ -191,7 +191,7 @@ impl Bound {
     /// A press that focuses the view's field names `id` the `typist`. `None`
     /// when the page cannot observe the canvas box.
     fn bind(
-        id: CanvasId,
+        id: StaticKey<Canvases>,
         canvas: HtmlCanvasElement,
         size: SurfaceSize,
         view: AppView,

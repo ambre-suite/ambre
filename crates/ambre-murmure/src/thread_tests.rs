@@ -7,7 +7,7 @@ use ambre_core::index::Span;
 use std::collections::HashMap;
 
 use ambre_bus::{
-    ActivityKind, Authored, Instant, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft,
+    ActivityKind, Authored, Instant, Mention, MentionTarget, Mentions, MessageAt, MessageDraft,
     MessageView, MurmureEvent,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
@@ -843,15 +843,15 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
         .expect("echo");
     assert_eq!(
         state.thread_mentions(thread, Seq::new(3), alice),
-        Ok(MentionCount::new(1))
+        Ok(ambre_core::Tally::<Mentions>::new(1))
     );
     assert_eq!(
         state.thread_mentions(thread, Seq::new(4), alice),
-        Ok(MentionCount::new(0))
+        Ok(ambre_core::Tally::<Mentions>::new(0))
     );
     assert_eq!(
         state.thread_mentions(thread, Seq::new(3), bob),
-        Ok(MentionCount::new(0))
+        Ok(ambre_core::Tally::<Mentions>::new(0))
     );
     assert_eq!(state.held_threads(), [thread]);
     let segment = state.active_id().document_id();

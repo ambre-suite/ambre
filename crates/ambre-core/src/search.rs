@@ -1,21 +1,37 @@
 //! The texts a search carries: a message search, which reads only what the
 //! client holds, and a user search, which the relay answers.
 
-use crate::Redacted;
+use crate::{Rule, Validated};
 use serde::{Deserialize, Serialize};
 
 /// The text of a message search, as typed, holding at least one character
 /// that is not white space. The box sends no search for a blank text.
 /// `Debug` prints the length alone, so a log carries none of the text.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct SearchQuery(Redacted<String>);
+#[serde(transparent)]
+pub struct SearchQuery(Validated<SearchQueryRule>);
+
+/// The rule of a [`SearchQuery`]: one character at least that is not white
+/// space. The text stays as typed.
+pub enum SearchQueryRule {}
+
+impl Rule for SearchQueryRule {
+    type Error = &'static str;
+
+    fn admit(text: String) -> Result<String, Self::Error> {
+        if text.trim().is_empty() {
+            Err("a search is never blank")
+        } else {
+            Ok(text)
+        }
+    }
+}
 
 impl SearchQuery {
     /// The search for `text`, kept as typed; `None` when it is blank.
     #[must_use]
     pub fn new(text: String) -> Option<Self> {
-        (!text.trim().is_empty()).then_some(Self(Redacted::new(text)))
+        Validated::parse(text).ok().map(Self)
     }
 
     /// The text as typed.
@@ -29,13 +45,13 @@ impl TryFrom<String> for SearchQuery {
     type Error = &'static str;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
-        Self::new(text).ok_or("a search is never blank")
+        Validated::parse(text).map(Self)
     }
 }
 
 impl From<SearchQuery> for String {
     fn from(query: SearchQuery) -> Self {
-        query.0.into_inner()
+        query.0.into_string()
     }
 }
 
@@ -44,16 +60,34 @@ impl From<SearchQuery> for String {
 /// sharing lookup would then list the directory, each email and key with it.
 /// `Debug` prints the length alone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct UserSearch(Redacted<String>);
+#[serde(transparent)]
+pub struct UserSearch(Validated<UserSearchRule>);
+
+/// The rule of a [`UserSearch`]: two characters at least once trimmed. The
+/// rule keeps the trimmed text.
+pub enum UserSearchRule {}
+
+impl Rule for UserSearchRule {
+    type Error = &'static str;
+
+    fn admit(text: String) -> Result<String, Self::Error> {
+        let trimmed = text.trim();
+        if trimmed.chars().count() < 2 {
+            Err("a user search holds at least two characters")
+        } else if trimmed.len() == text.len() {
+            Ok(text)
+        } else {
+            Ok(trimmed.to_owned())
+        }
+    }
+}
 
 impl UserSearch {
     /// The search for `text`, `None` when its trimmed text is shorter than two
     /// characters.
     #[must_use]
     pub fn new(text: &str) -> Option<Self> {
-        let text = text.trim();
-        (text.chars().count() >= 2).then(|| Self(Redacted::new(text.to_owned())))
+        Validated::parse(text).ok().map(Self)
     }
 
     /// The trimmed text.
@@ -67,13 +101,13 @@ impl TryFrom<String> for UserSearch {
     type Error = &'static str;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
-        Self::new(&text).ok_or("a user search holds at least two characters")
+        Validated::parse(text).map(Self)
     }
 }
 
 impl From<UserSearch> for String {
     fn from(search: UserSearch) -> Self {
-        search.0.into_inner()
+        search.0.into_string()
     }
 }
 
@@ -104,6 +138,15 @@ mod tests {
                 "{blank:?}"
             );
         }
+        let bytes = postcard::to_allocvec(" bud ").expect("a string encodes");
+        assert_eq!(
+            postcard::to_allocvec(&query).expect("a query encodes"),
+            bytes
+        );
+        let refused = serde_json::from_str::<SearchQuery>("\" \"")
+            .expect_err("blank")
+            .to_string();
+        assert!(refused.starts_with("a search is never blank"), "{refused}");
     }
 
     /// A search keeps its trimmed text, and refuses one shorter than two
@@ -111,7 +154,7 @@ mod tests {
     #[test]
     fn a_search_is_two_characters_or_none() {
         assert_eq!(
-            UserSearch::new("  al ").map(|s| s.0.into_inner()),
+            UserSearch::new("  al ").map(String::from),
             Some("al".to_owned())
         );
         for short in ["", "   ", "a", " é "] {

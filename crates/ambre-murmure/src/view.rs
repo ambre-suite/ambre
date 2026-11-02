@@ -54,7 +54,8 @@ use ambre_core::PageLoad;
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
-pub const THREAD_CANVAS: ambre_core::CanvasId = ambre_core::CanvasId::new("murmure-thread-canvas");
+pub const THREAD_CANVAS: ambre_core::StaticKey<ambre_core::Canvases> =
+    ambre_core::StaticKey::<ambre_core::Canvases>::new("murmure-thread-canvas");
 
 /// What the page tells a region: the pane, a member's name, a time.
 #[derive(Clone)]
@@ -144,7 +145,8 @@ pub type SaveFile = Rc<dyn Fn(&Attachment, ambre_core::Payload<ambre_core::Media
 
 /// The id of the content canvas, which the channel's region paints. The
 /// shell names it.
-pub const CHANNEL_CANVAS: ambre_core::CanvasId = ambre_core::CanvasId::CONTENT;
+pub const CHANNEL_CANVAS: ambre_core::StaticKey<ambre_core::Canvases> =
+    ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT;
 
 /// How far down the viewport a message the pane names comes to rest.
 const AT_FRACTION: f32 = 0.25;
@@ -6585,7 +6587,7 @@ mod tests {
         };
         let asked = AskedAll {
             channel,
-            members: ambre_core::MemberCount::new(12),
+            members: ambre_core::Tally::<ambre_core::Members>::new(12),
             held: HeldSend {
                 draft: draft.clone(),
                 attachments: Vec::new(),
