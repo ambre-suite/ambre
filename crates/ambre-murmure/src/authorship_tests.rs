@@ -32,8 +32,8 @@ fn draft(text: &str) -> MessageDraft {
 
 /// A registry entry naming `user`. The signature is Sync's to check, so the
 /// engine reads only the user.
-fn entry(user: Id<User>) -> PeerEntryBytes {
-    PeerEntryBytes::from(&PeerEntry {
+fn entry(user: Id<User>) -> Payload<PeerEntryBytes> {
+    Payload::<PeerEntryBytes>::from(&PeerEntry {
         user,
         nonce: FixedBytes::from_array([7; 16]),
         signature: FixedBytes::from_array([9; 64]),

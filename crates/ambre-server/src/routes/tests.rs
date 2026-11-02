@@ -624,7 +624,8 @@ mod handler_tests {
             )
             .await
         ));
-        let sample = ambre_protocol::messages::Ciphertext::new(b"blob".to_vec());
+        let sample =
+            ambre_core::Payload::<ambre_protocol::messages::Ciphertext>::new(b"blob".to_vec());
         assert!(gone(
             crate::redis_ops::doc_presence_update(
                 redis,
@@ -2110,7 +2111,7 @@ mod handler_tests {
             panic!("expected an answer, got {reply:?}");
         };
         let answer =
-            ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(bytes.to_vec()))
+            ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(bytes.to_vec()))
                 .unwrap();
         assert!(
             matches!(
@@ -2399,7 +2400,7 @@ mod handler_tests {
                 .ok()?;
             match frame {
                 Message::Binary(bytes) => {
-                    return ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+                    return ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
                         bytes.to_vec(),
                     ))
                     .ok();
@@ -3305,7 +3306,7 @@ mod handler_tests {
             .unwrap()
             .unwrap();
         assert!(matches!(
-            decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec())).unwrap(),
+            decode_server_msg(&ambre_core::Payload::new(heard.payload().to_vec())).unwrap(),
             WsServerMsg::SnapshotAvailable { snapshot_id, .. } if snapshot_id.to_string() == snap
         ));
         assert!(served_snapshot(&app, &owner, &doc_id).await.is_none());
@@ -3413,7 +3414,7 @@ mod handler_tests {
             .unwrap()
             .unwrap();
         assert!(matches!(
-            decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec())).unwrap(),
+            decode_server_msg(&ambre_core::Payload::new(heard.payload().to_vec())).unwrap(),
             WsServerMsg::SnapshotRequired { .. }
         ));
 
@@ -3548,9 +3549,10 @@ mod handler_tests {
                 continue;
             }
             let topic = m.channel_str().unwrap().to_owned();
-            heard.entry(topic).or_default().push(
-                decode_server_msg(&ambre_protocol::WireFrame::new(m.payload().to_vec())).unwrap(),
-            );
+            heard
+                .entry(topic)
+                .or_default()
+                .push(decode_server_msg(&ambre_core::Payload::new(m.payload().to_vec())).unwrap());
         }
 
         assert!(matches!(
@@ -3934,7 +3936,7 @@ mod handler_tests {
             .unwrap()
             .unwrap();
         assert!(matches!(
-            ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
                 heard.expose_bytes().to_vec()
             )),
             Ok(WsServerMsg::KeyRotationRequired { .. })
@@ -4068,10 +4070,8 @@ mod handler_tests {
             .expect("a broadcast within a second")
             .expect("an open stream")
             .expect("a message");
-        ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
-            msg.payload().to_vec(),
-        ))
-        .expect("a server message")
+        ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(msg.payload().to_vec()))
+            .expect("a server message")
     }
 
     /// SRV-177: an invitation, a change of role and a removal each tell the

@@ -65,7 +65,7 @@ fn close_created(
         .adopt_session(
             successor.document_id(),
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt")
         .expect("the successor's first update");
@@ -411,7 +411,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     bob.adopt_session(
         successor.document_id(),
         peer,
-        PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+        Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
     )
     .expect("adopt");
 

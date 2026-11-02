@@ -5,7 +5,7 @@
 //! message to a specific key, defeating inter-document substitution by a
 //! compromised relay. Distinct from the Poly1305 tag carried inside the AEAD.
 
-use ambre_core::{Ciphertext, CommitmentTag, FixedBytes, Nonce, Secret};
+use ambre_core::{Ciphertext, CommitmentTag, FixedBytes, Nonce, Payload, Secret};
 use hmac::digest::FixedOutput;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -36,7 +36,7 @@ fn keyed(key: &[u8]) -> HmacSha256 {
 fn mac(
     key: &DocumentKey,
     nonce: &FixedBytes<Nonce>,
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
     aad: &ambre_core::Aad,
 ) -> HmacSha256 {
     let mut m = keyed(key.as_bytes());
@@ -50,7 +50,7 @@ fn mac(
 pub fn commitment_tag(
     key: &DocumentKey,
     nonce: &FixedBytes<Nonce>,
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
     aad: &ambre_core::Aad,
 ) -> FixedBytes<CommitmentTag> {
     FixedBytes::from_array(
@@ -103,7 +103,7 @@ const _: () = assert!(ambre_core::MEDIA_ADDRESS_LEN == TAG_LEN);
 pub fn verify_commitment(
     key: &DocumentKey,
     nonce: &FixedBytes<Nonce>,
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
     aad: &ambre_core::Aad,
     tag: &FixedBytes<CommitmentTag>,
 ) -> Result<(), CryptoError> {

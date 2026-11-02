@@ -29,7 +29,7 @@ pub struct Sealed {
     /// XChaCha20 nonce.
     pub nonce: FixedBytes<Nonce>,
     /// AEAD ciphertext (Poly1305 tag appended).
-    pub ciphertext: Ciphertext,
+    pub ciphertext: Payload<Ciphertext>,
     /// HMAC-SHA256 key-commitment tag.
     pub commitment_tag: FixedBytes<CommitmentTag>,
     /// Ed25519 signature over `nonce || ciphertext || aad || commitment_tag`.
@@ -39,7 +39,7 @@ pub struct Sealed {
 impl core::fmt::Debug for Sealed {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Sealed")
-            .field("ciphertext_len", &self.ciphertext.len())
+            .field("ciphertext_len", &self.ciphertext.len().get())
             .finish_non_exhaustive()
     }
 }
@@ -82,7 +82,7 @@ pub fn seal_media(
 /// signature over all of it.
 fn envelope_of(
     nonce: FixedBytes<Nonce>,
-    ciphertext: Ciphertext,
+    ciphertext: Payload<Ciphertext>,
     aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,

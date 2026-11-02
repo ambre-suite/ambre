@@ -86,7 +86,7 @@ fn threaded(
         .adopt_session(
             thread,
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt")
         .expect("the header travels");
@@ -144,7 +144,7 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
         .adopt_session(
             thread,
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
     state
@@ -202,7 +202,7 @@ fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
         .adopt_session(
             successor.document_id(),
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
     state
@@ -523,7 +523,7 @@ fn a_reply_takes_no_thread_field_from_another_member() {
     bob.adopt_session(
         thread,
         peer,
-        PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+        Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
     )
     .expect("adopt");
     let bob_doc = bob.doc(thread).expect("held");
@@ -569,7 +569,7 @@ fn peer_with_thread(
     bob.adopt_session(
         thread,
         peer,
-        PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+        Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
     )
     .expect("adopt");
     bob

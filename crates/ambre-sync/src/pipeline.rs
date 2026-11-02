@@ -411,7 +411,7 @@ fn aad_of<T: serde::Serialize>(public_data: &T) -> Result<Aad, PipelineError> {
 
 /// Rebuilds a [`Sealed`] from a wire message's envelope fields.
 fn sealed_from(
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
     nonce: &FixedBytes<Nonce>,
     commitment_tag: &FixedBytes<CommitmentTag>,
     signature: &FixedBytes<Signature>,
@@ -427,7 +427,7 @@ fn sealed_from(
 fn message_parts(
     sealed: Sealed,
 ) -> (
-    Ciphertext,
+    Payload<Ciphertext>,
     FixedBytes<Nonce>,
     FixedBytes<CommitmentTag>,
     FixedBytes<Signature>,
@@ -522,7 +522,7 @@ pub fn seal_snapshot(
 /// [`PipelineError::Postcard`] for bytes that are not a snapshot, and
 /// [`PipelineError::WrongDocument`] for another document's.
 pub fn decode_snapshot_blob(
-    blob: &FetchedBlob,
+    blob: &Payload<FetchedBlob>,
     document_id: Id<Document>,
 ) -> Result<Snapshot, PipelineError> {
     let snapshot: Snapshot =
@@ -615,30 +615,16 @@ impl SealedFrame {
     }
 }
 
-/// A blob as object storage returned it: sealed by some writer, and neither
-/// verified nor opened yet. Distinct from [`SealedBlob`], which only the
-/// local seal builds, so a download never stands in for an upload.
-/// [`decode_snapshot_blob`] reads a snapshot from it, and [`open_object`] a
-/// media blob. `Debug` prints the length and none of the bytes.
-#[derive(Clone, PartialEq, Eq)]
-pub struct FetchedBlob(Vec<u8>);
+/// The role of a blob as object storage returned it: sealed by some writer,
+/// and neither verified nor opened yet. `Payload<FetchedBlob>`. Distinct from
+/// [`SealedBlob`], which only the local seal builds, so a download never
+/// stands in for an upload. [`decode_snapshot_blob`] reads a snapshot from
+/// it, and [`open_object`] a media blob. `Debug` prints the length and none
+/// of the bytes.
+pub enum FetchedBlob {}
 
-impl FetchedBlob {
-    /// The bytes as the download returned them.
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    /// The bytes, for the decoder.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for FetchedBlob {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "FetchedBlob({} bytes)", self.0.len())
-    }
+impl ambre_core::PayloadKind for FetchedBlob {
+    const NAME: &'static str = "FetchedBlob";
 }
 
 /// Bytes bound for object storage, built by the seal and by nothing else. The
@@ -655,8 +641,8 @@ impl SealedBlob {
     }
 
     /// The body of the upload that sends it.
-    pub(crate) fn to_body(&self) -> crate::http::HttpBody {
-        crate::http::HttpBody::new(self.0.clone())
+    pub(crate) fn to_body(&self) -> Payload<crate::http::HttpBody> {
+        Payload::new(self.0.clone())
     }
 
     /// The sealed bytes, moved out, for a test that tampers with them or
@@ -701,7 +687,7 @@ pub trait StoredObject: stored_object::Sealed {
 mod stored_object {
     pub trait Sealed {}
     impl Sealed for super::SealedBlob {}
-    impl Sealed for super::FetchedBlob {}
+    impl Sealed for ambre_core::Payload<super::FetchedBlob> {}
     impl Sealed for ambre_core::Encoded<ambre_core::SealedName> {}
     impl Sealed for ambre_core::Payload<ambre_core::SealedPreviousKey> {}
 }
@@ -712,9 +698,9 @@ impl StoredObject for SealedBlob {
     }
 }
 
-impl StoredObject for FetchedBlob {
+impl StoredObject for Payload<FetchedBlob> {
     fn object(&self) -> &[u8] {
-        &self.0
+        self.as_bytes()
     }
 }
 
@@ -895,7 +881,7 @@ fn object_bytes(
 ) -> SealedBlob {
     let mut out = Vec::with_capacity(
         OBJECT_HEADER
-            .saturating_add(ByteSize::of_len(sealed.ciphertext.len()))
+            .saturating_add(sealed.ciphertext.len())
             .as_len(),
     );
     out.push(ObjectLayout::CURRENT.byte());
@@ -929,7 +915,7 @@ fn object_parts(
     check_key(key_id, doc_key)?;
     let sealed = Sealed {
         nonce,
-        ciphertext: Ciphertext::new(ciphertext.to_vec()),
+        ciphertext: Payload::<Ciphertext>::new(ciphertext.to_vec()),
         commitment_tag,
         signature,
     };
@@ -1080,8 +1066,8 @@ mod tests {
     }
 
     /// Object bytes as a download returns them.
-    fn fetched(bytes: &[u8]) -> FetchedBlob {
-        FetchedBlob::new(bytes.to_vec())
+    fn fetched(bytes: &[u8]) -> Payload<FetchedBlob> {
+        Payload::<FetchedBlob>::new(bytes.to_vec())
     }
 
     /// Bytes sealed as a frame as they stand, framed or not.
@@ -1166,7 +1152,7 @@ mod tests {
     /// it, the public metadata and the shape around it.
     fn readable_part(update: &Update) -> Vec<u8> {
         let mut blank = update.clone();
-        blank.ciphertext = Ciphertext::new(Vec::new());
+        blank.ciphertext = Payload::<Ciphertext>::new(Vec::new());
         blank.nonce = FixedBytes::from_array([0u8; 24]);
         blank.commitment_tag = FixedBytes::from_array([0u8; 32]);
         blank.signature = FixedBytes::from_array([0u8; 64]);
@@ -1337,9 +1323,11 @@ mod tests {
         let snapshot =
             snapshot_blob(&Payload::new(plaintext.to_vec()), pd, &doc_key, &signing).unwrap();
         assert!(!contains(snapshot.as_bytes()));
-        let decoded =
-            decode_snapshot_blob(&FetchedBlob::new(snapshot.as_bytes().to_vec()), document_id)
-                .unwrap();
+        let decoded = decode_snapshot_blob(
+            &Payload::<FetchedBlob>::new(snapshot.as_bytes().to_vec()),
+            document_id,
+        )
+        .unwrap();
         assert_eq!(open_snapshot(&decoded, &doc_key).unwrap(), plaintext);
 
         let aad = name_aad(document_id);
@@ -1563,7 +1551,7 @@ mod tests {
         moved[tag_at] ^= 1;
         let tag = FixedBytes::<CommitmentTag>::from_slice(&moved[tag_at..nonce_at]).unwrap();
         let nonce = FixedBytes::<Nonce>::from_slice(&moved[nonce_at..header_len]).unwrap();
-        let body = ambre_core::Ciphertext::new(moved[header_len..].to_vec());
+        let body = Payload::<ambre_core::Ciphertext>::new(moved[header_len..].to_vec());
         let bound = object_aad(doc_key.id(), aad);
         let resigned = signature::sign(&signing, &nonce, &body, &bound, &tag);
         moved[signature_at..tag_at].copy_from_slice(resigned.as_slice());
@@ -1615,7 +1603,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(sealed.first(), Some(&1));
-        let sealed = FetchedBlob::new(sealed);
+        let sealed = Payload::<FetchedBlob>::new(sealed);
         assert_eq!(object_key(&sealed).unwrap(), doc_key.id());
         assert_eq!(object_author(&sealed).unwrap(), author);
         assert_eq!(
@@ -1634,7 +1622,7 @@ mod tests {
         let (doc_key, _, author) = keys();
         let id = Id::<Document>::from_bytes([7; 16]);
         let address = FixedBytes::<ambre_core::MediaAddress>::from_array([0xab; 32]);
-        let sealed = FetchedBlob::new(
+        let sealed = Payload::<FetchedBlob>::new(
             hex::decode(
                 "01b6e14f706ce523ebafb9bf6eb3cbeb9a9baf2dea5ae773139d2499db2dd2ac\
                  92bbc3240f24e943973cea139eed5162b6955be778488e42b9ef1c4243d0d692\

@@ -650,7 +650,9 @@ fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::Channe
             .adopt_session(
                 document_id,
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+                ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(
+                    peer.get().to_le_bytes().to_vec(),
+                ),
             )
             .expect("adopt");
     }

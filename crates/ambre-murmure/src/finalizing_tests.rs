@@ -52,7 +52,7 @@ fn closed_with(texts: &[&str]) -> (ChannelState, Id<Segment>) {
         .adopt_session(
             successor.document_id(),
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
     (state, closing)

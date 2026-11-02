@@ -107,7 +107,7 @@ impl SpaceState {
     pub fn adopt_session(
         &mut self,
         peer: ambre_core::PeerId,
-        entry: PeerEntryBytes,
+        entry: Payload<PeerEntryBytes>,
     ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         if self.session.map(Session::peer) == Some(peer) {
             return Ok(None);
@@ -130,8 +130,11 @@ impl SpaceState {
     #[cfg(test)]
     pub(crate) fn identify(mut self) -> Self {
         let peer = crate::session::next_peer();
-        self.adopt_session(peer, PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()))
-            .expect("adopt");
+        self.adopt_session(
+            peer,
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
+        )
+        .expect("adopt");
         self
     }
 

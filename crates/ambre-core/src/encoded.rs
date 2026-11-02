@@ -219,7 +219,10 @@ impl Encoded<WrappedDocKey> {
     /// The wire form of a wrapped key: its nonce, then its ciphertext. The
     /// parts fix the length; nothing checks it against [`Self::LENGTHS`] here.
     #[must_use]
-    pub fn from_parts(nonce: &FixedBytes<Nonce>, ciphertext: &crate::Ciphertext) -> Self {
+    pub fn from_parts(
+        nonce: &FixedBytes<Nonce>,
+        ciphertext: &crate::Payload<crate::Ciphertext>,
+    ) -> Self {
         let mut bytes = Vec::with_capacity(NONCE_LEN + ciphertext.as_bytes().len());
         nonce.push_to(&mut bytes);
         bytes.extend_from_slice(ciphertext.as_bytes());
@@ -229,9 +232,12 @@ impl Encoded<WrappedDocKey> {
     /// The nonce and the ciphertext [`Self::from_parts`] joined. `None` when
     /// the bytes are shorter than a nonce.
     #[must_use]
-    pub fn parts(&self) -> Option<(FixedBytes<Nonce>, crate::Ciphertext)> {
+    pub fn parts(&self) -> Option<(FixedBytes<Nonce>, crate::Payload<crate::Ciphertext>)> {
         let (nonce, ciphertext) = FixedBytes::<Nonce>::split_from(&self.bytes)?;
-        Some((nonce, crate::Ciphertext::new(ciphertext.to_vec())))
+        Some((
+            nonce,
+            crate::Payload::<crate::Ciphertext>::new(ciphertext.to_vec()),
+        ))
     }
 }
 
@@ -376,7 +382,7 @@ mod tests {
     #[test]
     fn a_wrapped_key_is_its_nonce_then_its_ciphertext() {
         let nonce = FixedBytes::<crate::Nonce>::from_array([1; NONCE_LEN]);
-        let ciphertext = crate::Ciphertext::new(vec![2; KEY_LEN + TAG_LEN]);
+        let ciphertext = crate::Payload::<crate::Ciphertext>::new(vec![2; KEY_LEN + TAG_LEN]);
         let key = Encoded::<WrappedDocKey>::from_parts(&nonce, &ciphertext);
         assert_eq!(&key.as_bytes()[..NONCE_LEN], &[1; NONCE_LEN]);
         assert_eq!(&key.as_bytes()[NONCE_LEN..], ciphertext.as_bytes());

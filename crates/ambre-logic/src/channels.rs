@@ -380,7 +380,11 @@ impl LogicState {
         };
         let adopted =
             if let Some(channel) = self.channels.values_mut().find(|c| c.holds(document_id)) {
-                channel.adopt_session(document_id, peer, ambre_core::PeerEntryBytes::from(&entry))
+                channel.adopt_session(
+                    document_id,
+                    peer,
+                    ambre_core::Payload::<ambre_core::PeerEntryBytes>::from(&entry),
+                )
             } else if let Some(adopted) = self.adopt_space_session(document_id, peer, &entry) {
                 adopted
             } else {
@@ -4991,7 +4995,9 @@ mod tests {
             .adopt_session(
                 successor.document_id(),
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+                ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(
+                    peer.get().to_le_bytes().to_vec(),
+                ),
             )
             .expect("adopt");
         drain(&sync);
@@ -6053,7 +6059,9 @@ mod tests {
             .adopt_session(
                 thread,
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+                ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(
+                    peer.get().to_le_bytes().to_vec(),
+                ),
             )
             .expect("adopt");
         let named = m
@@ -6116,7 +6124,9 @@ mod tests {
             .adopt_session(
                 thread,
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+                ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(
+                    peer.get().to_le_bytes().to_vec(),
+                ),
             )
             .expect("adopt");
         channel.thread_linked(closed, root, thread).expect("link");
@@ -6264,7 +6274,9 @@ mod tests {
             .adopt_session(
                 thread,
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+                ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(
+                    peer.get().to_le_bytes().to_vec(),
+                ),
             )
             .expect("adopt");
         let named = m

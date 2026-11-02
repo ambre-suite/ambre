@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::envelope::Signature;
 use crate::fixed_bytes::{FixedBytes, FixedRole};
 use crate::id::{Id, User};
+use crate::payload::Payload;
 
 /// Length of a session nonce, in bytes.
 pub const SESSION_NONCE_LEN: usize = 16;
@@ -181,37 +182,28 @@ impl<'de> Deserialize<'de> for PeerEntry {
     }
 }
 
-/// A registry entry as a snapshot holds it, not read yet. The snapshot came
-/// from another writer, so its bytes may not be an entry at all. The reader
-/// that verifies the entry is the one that reads it (`AUTHOR-021`), and a
-/// malformed one fails there. `#[serde(transparent)]`: the bare byte string.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PeerEntryBytes(Vec<u8>);
+/// The role of a registry entry as a snapshot holds it, not read yet:
+/// `Payload<PeerEntryBytes>`. The snapshot came from another writer, so its
+/// bytes may not be an entry at all. The reader that verifies the entry is
+/// the one that reads it (`AUTHOR-021`), and a malformed one fails there.
+/// Serde sees the bare byte string.
+pub enum PeerEntryBytes {}
 
-impl PeerEntryBytes {
-    /// The bytes as the registry stores them.
-    #[must_use]
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
+impl crate::PayloadKind for PeerEntryBytes {
+    const NAME: &'static str = "PeerEntryBytes";
+}
 
+impl Payload<PeerEntryBytes> {
     /// The entry, or `None` when the bytes are not exactly one.
     #[must_use]
     pub fn read(&self) -> Option<PeerEntry> {
-        PeerEntry::from_bytes(&self.0)
-    }
-
-    /// The bytes, owned, for the registry map that stores them.
-    #[must_use]
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.0
+        PeerEntry::from_bytes(self.as_bytes())
     }
 }
 
-impl From<&PeerEntry> for PeerEntryBytes {
+impl From<&PeerEntry> for Payload<PeerEntryBytes> {
     fn from(entry: &PeerEntry) -> Self {
-        Self(entry.to_bytes())
+        Self::new(entry.to_bytes())
     }
 }
 
@@ -283,7 +275,27 @@ mod tests {
         assert_eq!(postcard::from_bytes::<PeerEntry>(&wire).unwrap(), entry);
         let short = postcard::to_allocvec(&entry.to_bytes()[1..].to_vec()).unwrap();
         assert!(postcard::from_bytes::<PeerEntry>(&short).is_err());
-        assert_eq!(PeerEntryBytes::from(&entry).read(), Some(entry));
-        assert_eq!(PeerEntryBytes::new(vec![7; 4]).read(), None);
+        assert_eq!(Payload::<PeerEntryBytes>::from(&entry).read(), Some(entry));
+        assert_eq!(Payload::<PeerEntryBytes>::new(vec![7; 4]).read(), None);
+    }
+
+    /// Unread registry bytes write the bytes the transparent `Vec<u8>` form
+    /// wrote, in postcard and in JSON, and read back.
+    #[test]
+    fn unread_entry_bytes_keep_their_serde_bytes() {
+        let bytes = vec![3, 0, 0xff];
+        let unread = Payload::<PeerEntryBytes>::new(bytes.clone());
+        let wire = postcard::to_allocvec(&unread).unwrap();
+        assert_eq!(wire, postcard::to_allocvec(&bytes).unwrap());
+        assert_eq!(
+            postcard::from_bytes::<Payload<PeerEntryBytes>>(&wire).unwrap(),
+            unread
+        );
+        let json = serde_json::to_string(&unread).unwrap();
+        assert_eq!(json, serde_json::to_string(&bytes).unwrap());
+        assert_eq!(
+            serde_json::from_str::<Payload<PeerEntryBytes>>(&json).unwrap(),
+            unread
+        );
     }
 }

@@ -55,7 +55,7 @@ use ambre_bus::{
     SnapshotVerdict, SyncCommand, UserInfo,
 };
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
-use ambre_core::{FixedBytes, Generation, KeyId, PublicKey, SessionNonce};
+use ambre_core::{FixedBytes, Generation, KeyId, Payload, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -311,7 +311,7 @@ enum SyncEvent {
     OpenDocumentReady {
         document_id: Id<Document>,
         doc_key: DocumentKey,
-        snapshot_payload: Option<pipeline::FetchedBlob>,
+        snapshot_payload: Option<Payload<pipeline::FetchedBlob>>,
         snapshot_id: Id<Snapshot>,
         /// Highest delta `seq` folded into `snapshot_payload`, 0 when no snapshot
         /// was downloaded. The post-open `RequestMissing` starts after this seq,
@@ -628,7 +628,7 @@ enum SyncEvent {
         snapshot_id: Id<Snapshot>,
         /// The last delta its author says it folds in.
         covered_seq: Seq,
-        blob: Option<pipeline::FetchedBlob>,
+        blob: Option<Payload<pipeline::FetchedBlob>>,
     },
     /// Media download completed: the encrypted blob was fetched from S3 and
     /// decrypted. `data` is the raw plaintext bytes ready for display.
@@ -796,7 +796,7 @@ pub(crate) enum Existence {
 pub(crate) struct HeldSnapshot {
     pub snapshot_id: Id<Snapshot>,
     pub covered_seq: Seq,
-    pub blob: pipeline::FetchedBlob,
+    pub blob: Payload<pipeline::FetchedBlob>,
 }
 
 impl SyncDocumentState {
@@ -969,7 +969,7 @@ impl SyncDocumentState {
     /// before a rotation opens with a key the chain recovers (`SYNC-119`).
     fn open_snapshot_blob(
         &self,
-        blob: &pipeline::FetchedBlob,
+        blob: &Payload<pipeline::FetchedBlob>,
     ) -> Result<ambre_core::Payload<ambre_core::SnapshotBytes>, pipeline::PipelineError> {
         self.open_signed_snapshot(blob).map(|(payload, _)| payload)
     }
@@ -978,7 +978,7 @@ impl SyncDocumentState {
     /// member who built it, which the snapshot check needs (`AUTHOR-021`).
     fn open_signed_snapshot(
         &self,
-        blob: &pipeline::FetchedBlob,
+        blob: &Payload<pipeline::FetchedBlob>,
     ) -> Result<
         (
             ambre_core::Payload<ambre_core::SnapshotBytes>,
@@ -1115,7 +1115,7 @@ pub struct SyncState {
     inbound_held: bool,
     /// Updates sealed while the socket is held closed, as wire frames in order.
     /// Sent once it reopens, so a hold loses no edit of this user.
-    held_outbox: RefCell<Vec<ambre_protocol::WireFrame>>,
+    held_outbox: RefCell<Vec<Payload<ambre_protocol::WireFrame>>>,
     /// The stops of each document's replay since the socket last opened.
     /// Cleared on every open (`SYNC-153`, `SYNC-154`).
     replay_stops: HashMap<Id<Document>, websocket::ReplayStops>,
@@ -1142,7 +1142,7 @@ pub struct SyncState {
     new_spaces: HashSet<Id<Document>>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
-    mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>>,
+    mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>>,
 
     // -- Internal event queue (carries WS frames + HTTP results into the     --
     // -- non-blocking select loop; producer and consumer are the same worker)  --
@@ -1298,7 +1298,7 @@ impl SyncState {
     /// JS / WASM APIs.
     pub fn set_mock_ws(
         &mut self,
-        tx: ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>,
+        tx: ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>,
     ) {
         self.mock_ws_tx = Some(tx);
     }
@@ -1363,7 +1363,7 @@ impl SyncState {
         tracing::debug!(
             "[Sync->Server] ws_send {:?} -> {} bytes wire",
             std::mem::discriminant(msg),
-            wire.len()
+            wire.len().get()
         );
         self.send_wire(ws, wire);
     }
@@ -1384,12 +1384,12 @@ impl SyncState {
     }
 
     /// Pushes one encoded frame onto the socket.
-    fn send_wire(&self, ws: &WebSocket, wire: ambre_protocol::WireFrame) {
+    fn send_wire(&self, ws: &WebSocket, wire: Payload<ambre_protocol::WireFrame>) {
         // `wire` lives in the wasm heap, which is a SharedArrayBuffer under the
         // shared-memory threading model. Browsers reject `WebSocket.send` on a
         // view backed by a SharedArrayBuffer, so copy into a fresh (non-shared)
         // ArrayBuffer first.
-        let buf = js_sys::Uint8Array::new_with_length(wire.len() as u32);
+        let buf = js_sys::Uint8Array::new_with_length(wire.len().as_len() as u32);
         buf.copy_from(wire.as_bytes());
         if let Err(e) = ws.send_with_array_buffer(&buf.buffer()) {
             tracing::warn!("[Sync->Server] WebSocket send failed ({e:?}); reconnect will retry");
@@ -2021,7 +2021,7 @@ mod seal_tests {
     fn with_socket() -> (
         SyncState,
         Id<Document>,
-        ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
+        ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
     ) {
         let (sink, _rx) = LogicSink::channel();
         let mut state = SyncState::new(
@@ -2046,7 +2046,9 @@ mod seal_tests {
     }
 
     /// The frames the socket was handed, decoded.
-    fn sent(wire: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>) -> Vec<WsClientMsg> {
+    fn sent(
+        wire: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
+    ) -> Vec<WsClientMsg> {
         wire.try_iter()
             .map(|bytes| decode_client_msg(&bytes).expect("decode"))
             .collect()
@@ -2093,7 +2095,7 @@ mod seal_tests {
         let pub_key = FixedBytes::<PublicKey>::from_array([2u8; 32]);
         let key_id = FixedBytes::<KeyId>::from_array([4u8; 16]);
         state.ws_send(&WsClientMsg::Update(Update {
-            ciphertext: Ciphertext::new(typed.clone()),
+            ciphertext: Payload::<Ciphertext>::new(typed.clone()),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: id,
@@ -2106,7 +2108,7 @@ mod seal_tests {
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         }));
         state.ws_send(&WsClientMsg::Ephemeral(Ephemeral {
-            ciphertext: Ciphertext::new(typed.clone()),
+            ciphertext: Payload::<Ciphertext>::new(typed.clone()),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: id,

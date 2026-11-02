@@ -146,11 +146,10 @@ impl LogicState {
         let space = self
             .spaces
             .get_mut(&Id::<Space>::from_document(document_id))?;
-        Some(
-            space
-                .state
-                .adopt_session(peer, ambre_core::PeerEntryBytes::from(entry)),
-        )
+        Some(space.state.adopt_session(
+            peer,
+            ambre_core::Payload::<ambre_core::PeerEntryBytes>::from(entry),
+        ))
     }
 
     /// The document of a space is ready. Returns `false` when no space asked
@@ -1051,7 +1050,9 @@ mod tests {
         space
             .adopt_session(
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+                ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(
+                    peer.get().to_le_bytes().to_vec(),
+                ),
             )
             .expect("adopt");
         space

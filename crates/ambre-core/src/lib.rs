@@ -166,7 +166,7 @@ pub use name::{
 pub use object_key::ObjectKey;
 pub use ordinal::{Ordinal, OrdinalKind};
 pub use payload::{
-    ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,
+    Becomes, ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,
     LoroPayloadRef, MediaBytes, Payload, PayloadKind, PickedContainer, PickedFile,
     PlaintextContainer, RgbaPixels, SealedContainer, SealedPreviousKey, SealedRowBytes,
     SnapshotBytes, ThumbnailPng,

@@ -272,7 +272,7 @@ pub fn sealed_aad(salt: &FileSalt) -> Aad;
 pub fn write_ambre_sealed(
     salt: &FileSalt,
     nonce: &Nonce,
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
 ) -> SealedContainer;
 
 /// The current sealed layout exactly, with no recovery walk behind it.
@@ -284,7 +284,7 @@ pub struct SealedAmbre {
     pub salt: FileSalt,
     pub nonce: Nonce,
     /// Offset 45 onward. Opens to a whole plaintext container.
-    pub ciphertext: Ciphertext,
+    pub ciphertext: Payload<Ciphertext>,
 }
 
 impl SealedAmbre {

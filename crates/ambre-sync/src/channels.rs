@@ -1325,7 +1325,7 @@ pub(crate) mod tests {
         let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
             nonce,
-            ciphertext: ambre_core::Ciphertext::new(ciphertext.to_vec()),
+            ciphertext: Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
         };
         let own_pub = crate::sharing::own_exchange_key(exchange_key);
         let (key, anchor) =
@@ -2031,7 +2031,7 @@ pub(crate) mod tests {
         let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
             nonce,
-            ciphertext: ambre_core::Ciphertext::new(ciphertext.to_vec()),
+            ciphertext: Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
         };
         let sender_pub = crate::sharing::own_exchange_key(sender);
         let (key, root) =

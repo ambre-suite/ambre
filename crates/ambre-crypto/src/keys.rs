@@ -179,7 +179,7 @@ impl MasterSeed {
             .ok_or(CryptoError::InvalidKeyLength)?;
         let opened = aead::open(
             &FixedBytes::from_array(*nonce),
-            &ambre_core::Ciphertext::new(ciphertext.to_vec()),
+            &ambre_core::Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
             aad,
             &key.document_key(),
         )?;

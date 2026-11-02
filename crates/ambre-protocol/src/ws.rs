@@ -11,7 +11,7 @@ use crate::messages::{Clock, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::id::{Document, Id, Snapshot};
-use ambre_core::{DocType, FixedBytes, KeyId, PublicKey, RefusalCode};
+use ambre_core::{DocType, FixedBytes, KeyId, Payload, PublicKey, RefusalCode};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -271,55 +271,14 @@ pub enum WsServerMsg {
 // Wire encoding (postcard + version byte)
 // ---------------------------------------------------------------------------
 
-/// One socket frame: the version byte, then a postcard message. The encoders
-/// write one and the decoders read one, so a byte string from elsewhere does
-/// not reach a decoder untyped. It holds sealed envelopes, so `Debug` prints
-/// the length alone (`ZK-006`).
-#[derive(Clone, PartialEq, Eq)]
-pub struct WireFrame(Vec<u8>);
+/// The role of one socket frame: the version byte, then a postcard message.
+/// `Payload<WireFrame>`. The encoders write one and the decoders read one, so
+/// a byte string from elsewhere does not reach a decoder untyped. It holds
+/// sealed envelopes, so `Debug` prints the length alone (`ZK-006`).
+pub enum WireFrame {}
 
-impl WireFrame {
-    /// The frame a socket delivered.
-    #[must_use]
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    /// The bytes the socket carries.
-    #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-
-    /// The bytes, owned, for the socket that sends them.
-    #[must_use]
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.0
-    }
-
-    /// The length in bytes.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Whether the frame holds no byte, not even the version.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl From<Vec<u8>> for WireFrame {
-    fn from(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-}
-
-impl std::fmt::Debug for WireFrame {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "WireFrame({} bytes)", self.0.len())
-    }
+impl ambre_core::PayloadKind for WireFrame {
+    const NAME: &'static str = "WireFrame";
 }
 
 /// Encode a client message for the wire.
@@ -332,9 +291,9 @@ impl std::fmt::Debug for WireFrame {
     clippy::expect_used,
     reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
 )]
-pub fn encode_client_msg(msg: &WsClientMsg) -> WireFrame {
+pub fn encode_client_msg(msg: &WsClientMsg) -> Payload<WireFrame> {
     let buf = vec![CURRENT_VERSION.get()];
-    WireFrame(postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg"))
+    Payload::new(postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg"))
 }
 
 /// Decode a client message from the wire.
@@ -345,8 +304,8 @@ pub fn encode_client_msg(msg: &WsClientMsg) -> WireFrame {
 /// * [`WireDecodeError::UnsupportedVersion`] when the first byte is not the
 ///   wire version.
 /// * [`WireDecodeError::Postcard`] when the body does not decode.
-pub fn decode_client_msg(frame: &WireFrame) -> Result<WsClientMsg, WireDecodeError> {
-    let Some((&version, body)) = frame.0.split_first() else {
+pub fn decode_client_msg(frame: &Payload<WireFrame>) -> Result<WsClientMsg, WireDecodeError> {
+    let Some((&version, body)) = frame.as_bytes().split_first() else {
         return Err(WireDecodeError::Empty);
     };
     match version {
@@ -365,9 +324,9 @@ pub fn decode_client_msg(frame: &WireFrame) -> Result<WsClientMsg, WireDecodeErr
     clippy::expect_used,
     reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
 )]
-pub fn encode_server_msg(msg: &WsServerMsg) -> WireFrame {
+pub fn encode_server_msg(msg: &WsServerMsg) -> Payload<WireFrame> {
     let buf = vec![CURRENT_VERSION.get()];
-    WireFrame(postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg"))
+    Payload::new(postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg"))
 }
 
 /// Decode a server message from the wire.
@@ -375,8 +334,8 @@ pub fn encode_server_msg(msg: &WsServerMsg) -> WireFrame {
 /// # Errors
 ///
 /// The three errors [`decode_client_msg`] raises, on the same three inputs.
-pub fn decode_server_msg(frame: &WireFrame) -> Result<WsServerMsg, WireDecodeError> {
-    let Some((&version, body)) = frame.0.split_first() else {
+pub fn decode_server_msg(frame: &Payload<WireFrame>) -> Result<WsServerMsg, WireDecodeError> {
+    let Some((&version, body)) = frame.as_bytes().split_first() else {
         return Err(WireDecodeError::Empty);
     };
     match version {

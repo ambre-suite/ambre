@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use ambre_core::Payload;
 use ambre_core::id::{Document, Id, Snapshot, User};
 use ambre_protocol::messages::{Seq, Update};
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
@@ -53,10 +54,11 @@ impl MockBlindRelay {
         &mut self,
         user_id: Id<User>,
     ) -> (
-        ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>,
+        ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>,
         ambre_bus::conduit::Receiver<WsServerMsg>,
     ) {
-        let (client_tx, _relay_rx) = ambre_bus::conduit::unbounded::<ambre_protocol::WireFrame>();
+        let (client_tx, _relay_rx) =
+            ambre_bus::conduit::unbounded::<Payload<ambre_protocol::WireFrame>>();
         let (relay_tx, client_rx) = ambre_bus::conduit::unbounded::<WsServerMsg>();
         self.clients.insert(user_id, relay_tx);
         (client_tx, client_rx)
@@ -69,7 +71,7 @@ impl MockBlindRelay {
     ///
     /// When the document entry it just inserted is absent, which no execution
     /// reaches.
-    pub fn handle_message(&mut self, wire: &ambre_protocol::WireFrame) -> bool {
+    pub fn handle_message(&mut self, wire: &Payload<ambre_protocol::WireFrame>) -> bool {
         let msg = match ambre_protocol::ws::decode_client_msg(wire) {
             Ok(m) => m,
             Err(_) => return false,
@@ -155,7 +157,7 @@ impl MockBlindRelay {
     /// Drain all pending client messages and process them through the relay.
     pub fn drain_client(
         &mut self,
-        client_rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
+        client_rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
     ) -> usize {
         let mut count: usize = 0;
         while let Ok(wire) = client_rx.try_recv() {
@@ -213,7 +215,7 @@ mod tests {
         let (_tx_b, rx_b) = relay.connect(user_b);
 
         let update = Update {
-            ciphertext: ambre_protocol::messages::Ciphertext::new(b"cipher".to_vec()),
+            ciphertext: Payload::<ambre_protocol::messages::Ciphertext>::new(b"cipher".to_vec()),
             nonce: ambre_core::FixedBytes::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc,

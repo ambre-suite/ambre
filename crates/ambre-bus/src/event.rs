@@ -528,7 +528,10 @@ pub enum SnapshotVerdict {
     /// only the snapshot holds, with its registry entry. The snapshot passes
     /// only if each entry resolves to its author (`AUTHOR-021`).
     Match {
-        extras: Vec<(ambre_core::PeerId, ambre_core::PeerEntryBytes)>,
+        extras: Vec<(
+            ambre_core::PeerId,
+            ambre_core::Payload<ambre_core::PeerEntryBytes>,
+        )>,
     },
     /// The snapshot contradicts a delta it covers (`AUTHOR-017`).
     Mismatch,
