@@ -361,6 +361,10 @@ pub struct MurmureRelay {
     /// The members of each open channel by name, as the Logic thread last
     /// listed them. The invite control offers none of them, and the `@`
     /// list offers them all (`MURMURE-551`).
+    #[expect(
+        clippy::type_complexity,
+        reason = "each `Id<_>` names its kind, and no alias may hide it"
+    )]
     channel_members: RwSignal<HashMap<Id<Channel>, HashMap<Id<User>, ambre_core::DisplayName>>>,
     /// The `@` list a region of the page shows, `None` while none is open
     /// (`MURMURE-555`).

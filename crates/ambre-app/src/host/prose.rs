@@ -20,7 +20,6 @@
 // formatting id a control or a chord left in its signal (`PROSE-UI-056`).
 // ============================================================================
 
-use ambre_core::index::Count;
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 

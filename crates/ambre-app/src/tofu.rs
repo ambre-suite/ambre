@@ -134,7 +134,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
                 invitee_email: Some(email.clone()),
                 invitee: prompt.user_id,
                 role,
-                expect_exchange_pub_key: prompt.exchange_pub_key.clone(),
+                expect_exchange_pub_key: prompt.exchange_pub_key,
                 now,
             },
         },
@@ -143,7 +143,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
                 channel_id: *channel_id,
                 members: vec![DirectMember {
                     user_id: prompt.user_id,
-                    exchange_pub_key: prompt.exchange_pub_key.clone(),
+                    exchange_pub_key: prompt.exchange_pub_key,
                 }],
             },
             now,
@@ -153,7 +153,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
             channel_id: *channel_id,
             invitee: DirectMember {
                 user_id: prompt.user_id,
-                exchange_pub_key: prompt.exchange_pub_key.clone(),
+                exchange_pub_key: prompt.exchange_pub_key,
             },
             now,
         },

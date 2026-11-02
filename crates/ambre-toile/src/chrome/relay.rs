@@ -15,7 +15,7 @@
 
 use ambre_bus::app::toile::{Broadcast, SlidePosition, StatsRequestKind, ToileCommand, ToileEvent};
 use ambre_bus::{AppCommand, AppEvent, UiEvent};
-use ambre_core::id::{Element, Frame, Id, User};
+use ambre_core::id::{Frame, Id, User};
 use leptos::prelude::*;
 
 use super::find::FindRequest;

@@ -1535,7 +1535,7 @@ pub fn main() {
                         },
                         user_id: *user_id,
                         display_name: Some(display_name.clone()),
-                        exchange_pub_key: exchange_pub_key.clone(),
+                        exchange_pub_key: *exchange_pub_key,
                         fingerprint: fingerprint.clone(),
                         contact: tofu::KeyContact::New,
                     };
@@ -1564,7 +1564,7 @@ pub fn main() {
                         purpose,
                         user_id: *user_id,
                         display_name,
-                        exchange_pub_key: exchange_pub_key.clone(),
+                        exchange_pub_key: *exchange_pub_key,
                         fingerprint: fingerprint.clone(),
                         contact: tofu::KeyContact::New,
                     });
