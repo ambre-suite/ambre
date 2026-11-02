@@ -705,7 +705,8 @@ pub(crate) async fn handle_request_missing(
     // client more than PAGE_SIZE deltas behind. The client applies the batch and
     // declares itself hydrated, never re-requesting the tail. Paging replays the
     // full history in order across several messages instead.
-    const PAGE_SIZE: db::QueryLimit = db::QueryLimit::MAX;
+    const PAGE_SIZE: ambre_core::Bounded<db::QueryLimit> =
+        ambre_core::Bounded::<db::QueryLimit>::MAX;
     let mut cursor = after_seq;
     let mut first_page = true;
     let mut batches = crate::hot_tail::BatchCache::default();
@@ -826,7 +827,7 @@ pub(crate) async fn handle_request_missing(
         }
 
         // A short page means the index is exhausted.
-        if page_len < PAGE_SIZE.as_usize() {
+        if u32::try_from(page_len).is_ok_and(|len| len < PAGE_SIZE.get()) {
             return;
         }
         cursor = next_cursor;
@@ -1133,7 +1134,7 @@ mod ephemeral_binding_tests {
             redis,
             pubsub,
             s3,
-            s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
+            s3_bucket: crate::s3::StoreText::<crate::s3::BucketName>::new("test-bucket".to_owned()),
             config: Arc::new(crate::state::Config::default()),
             jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
                 &crate::jwt::JwtSeed::from_array([7u8; 32]),
@@ -1460,7 +1461,7 @@ mod delta_size_cap_tests {
             redis,
             pubsub,
             s3,
-            s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
+            s3_bucket: crate::s3::StoreText::<crate::s3::BucketName>::new("test-bucket".to_owned()),
             config: Arc::new(config),
             jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
                 &crate::jwt::JwtSeed::from_array([7u8; 32]),
@@ -1665,7 +1666,7 @@ mod delta_size_cap_tests {
             redis,
             pubsub,
             s3,
-            s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
+            s3_bucket: crate::s3::StoreText::<crate::s3::BucketName>::new("test-bucket".to_owned()),
             config: Arc::new(crate::state::Config::default()),
             jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
                 &crate::jwt::JwtSeed::from_array([7u8; 32]),
@@ -1729,7 +1730,7 @@ mod access_tests {
             redis,
             pubsub,
             s3: aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build()),
-            s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
+            s3_bucket: crate::s3::StoreText::<crate::s3::BucketName>::new("test-bucket".to_owned()),
             config: Arc::new(crate::state::Config::default()),
             jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
                 &crate::jwt::JwtSeed::from_array([7u8; 32]),
@@ -2001,7 +2002,7 @@ mod access_tests {
                 &pool,
                 &doc_id,
                 ambre_core::Seq::new(0),
-                crate::db::QueryLimit::saturating(10)
+                ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>()
             )
             .await
             .unwrap()
@@ -2572,7 +2573,7 @@ mod hot_tail_tests {
             &state.db,
             &doc_id,
             ambre_core::Seq::new(0),
-            crate::db::QueryLimit::saturating(10),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
         )
         .await
         .unwrap();
@@ -2592,7 +2593,7 @@ mod hot_tail_tests {
             &state.db,
             &doc_id,
             ambre_core::Seq::new(1),
-            crate::db::QueryLimit::saturating(10),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
         )
         .await
         .unwrap();
@@ -2633,7 +2634,7 @@ mod hot_tail_tests {
                 &state.db,
                 &doc_id,
                 ambre_core::Seq::new(0),
-                crate::db::QueryLimit::saturating(10),
+                ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
             )
             .await
             .unwrap()

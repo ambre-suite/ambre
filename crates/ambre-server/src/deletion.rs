@@ -7,7 +7,8 @@ use ambre_core::id::{Document, Id};
 use ambre_core::{Instant, Sec, TimeSpan, UnixSec};
 
 /// How many marked deletes one pass works through.
-const PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100);
+const PASS_LIMIT: ambre_core::Bounded<crate::db::QueryLimit> =
+    ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>();
 
 /// Begins the delete of a document, then runs it. The mark in the register
 /// goes first, so a failure at any later step leaves a delete the pass finishes

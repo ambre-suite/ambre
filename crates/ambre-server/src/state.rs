@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use crate::oidc::OidcClients;
-use ambre_core::{Sec, TimeSpan};
+use ambre_core::{Bounded, Bounds, Defaulted, Refusal, Sec, TimeSpan};
 
 /// Application state shared across all Axum handlers via `State<Arc<Self>>`.
 ///
@@ -21,7 +21,7 @@ pub struct AppState {
     /// the only model that supports several connections on the same topic.
     pub pubsub: crate::ws::PubSubHub,
     pub s3: S3Client,
-    pub s3_bucket: crate::s3::BucketName,
+    pub s3_bucket: crate::s3::StoreText<crate::s3::BucketName>,
     pub config: Arc<Config>,
     /// Server Ed25519 keys for minting/verifying access JWTs. Derived once at
     /// startup from `JWT_SIGNING_SEED` (shared across instances).
@@ -62,7 +62,7 @@ pub struct Config {
     /// path.
     pub delta_max_size: ambre_core::ByteSize,
     /// Prefix for S3 object keys (for example "dev-ambre").
-    pub s3_env_prefix: crate::s3::EnvPrefix,
+    pub s3_env_prefix: crate::s3::StoreText<crate::s3::EnvPrefix>,
     /// The registration with the `google` provider, `None` when provider
     /// sign-in is off.
     pub oidc_google: Option<crate::oidc::OidcRegistration>,
@@ -83,11 +83,11 @@ pub struct Config {
     /// pending write + PubSub fan-out. Without a per-connection bound, an
     /// authorized `editor` flooding updates is a storage/cost amplification.
     /// Enforced by an in-memory token bucket, so it costs no Redis round-trip.
-    pub ws_msg_rate_per_sec: RatePerSec,
+    pub ws_msg_rate_per_sec: Bounded<RatePerSec>,
     /// Burst allowance for the per-connection message bucket (default 120). Lets a
     /// client send a short batch without being throttled, such as the initial
     /// subscribes plus a rapid edit burst. The sustained rate stays capped.
-    pub ws_msg_burst: Burst,
+    pub ws_msg_burst: Bounded<Burst>,
     /// Maximum size in bytes of an `Ephemeral` (presence/cursor) ciphertext
     /// carried over the WebSocket (default 64 KiB). A presence blob is tiny: a
     /// cursor position and a display name. This bounds the fire-and-forget
@@ -127,53 +127,70 @@ pub enum LimitRefusal {
     TooLarge(u64),
 }
 
-/// A per-connection message limit: a positive count that fits 32 bits.
-/// Built from the 64-bit value an environment variable parses to. The
-/// conversion is checked: an oversized value is refused at startup, never
-/// truncated (`SRV-237`).
-macro_rules! message_limit {
-    ($(#[$doc:meta])* $name:ident, $default:literal) => {
-        $(#[$doc])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        pub struct $name(u32);
-
-        impl $name {
-            /// The value a deployment that sets nothing runs with.
-            pub const DEFAULT: Self = Self($default);
-
-            /// Reads the limit from the value its variable parsed to.
-            ///
-            /// # Errors
-            ///
-            /// [`LimitRefusal::Zero`] on zero, and [`LimitRefusal::TooLarge`]
-            /// past `u32::MAX`.
-            pub fn from_env(value: u64) -> Result<Self, LimitRefusal> {
-                match u32::try_from(value) {
-                    Ok(0) => Err(LimitRefusal::Zero),
-                    Ok(count) => Ok(Self(count)),
-                    Err(_) => Err(LimitRefusal::TooLarge(value)),
-                }
-            }
-
-            /// The count, for the token bucket's arithmetic.
-            pub const fn get(self) -> u32 {
-                self.0
-            }
-        }
-    };
+mod sealed {
+    /// Closes [`super::MessageLimit`]: [`super::limit_from_env`] reads a
+    /// refusal below the bound as zero, which holds for a bound of 1 alone.
+    pub trait Sealed {}
 }
 
-message_limit!(
-    /// The sustained inbound-message rate of one WebSocket, in messages per
-    /// second.
-    RatePerSec,
-    60
-);
-message_limit!(
-    /// The burst allowance of one WebSocket: the messages it may send at once.
-    Burst,
-    120
-);
+/// A per-connection message limit: a count from 1 to `u32::MAX`, which the
+/// token bucket counts in. A value is a `Bounded<K>` of one of the two
+/// markers below. Each marker states the value a deployment that sets
+/// nothing runs with, through [`Defaulted`]. Sealed: each marker has
+/// `MIN = 1` and `MAX = u32::MAX`, which [`limit_from_env`] relies on.
+pub trait MessageLimit: sealed::Sealed + Bounds<Repr = u32> + Defaulted {}
+
+/// Reads the limit `K` from the 64-bit value its environment variable parsed
+/// to. The conversion is checked: an oversized value is refused at startup,
+/// never truncated (`SRV-237`).
+///
+/// # Errors
+///
+/// [`LimitRefusal::Zero`] on zero, and [`LimitRefusal::TooLarge`] past
+/// `u32::MAX`.
+pub fn limit_from_env<K: MessageLimit>(value: u64) -> Result<Bounded<K>, LimitRefusal> {
+    let count = u32::try_from(value).map_err(|_| LimitRefusal::TooLarge(value))?;
+    // Every limit runs from 1 to `u32::MAX`, so a count that fits 32 bits
+    // and is refused is zero.
+    Bounded::new(count).ok_or(LimitRefusal::Zero)
+}
+
+/// The sustained inbound-message rate of one WebSocket, in messages per
+/// second.
+pub enum RatePerSec {}
+
+impl Bounds for RatePerSec {
+    type Repr = u32;
+    const MIN: u32 = 1;
+    const MAX: u32 = u32::MAX;
+    const NAME: &'static str = "RatePerSec";
+    const REFUSAL: Refusal = Refusal::new("a message rate is at least 1, not ", "");
+}
+
+impl Defaulted for RatePerSec {
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::of::<60>();
+}
+
+impl sealed::Sealed for RatePerSec {}
+impl MessageLimit for RatePerSec {}
+
+/// The burst allowance of one WebSocket: the messages it may send at once.
+pub enum Burst {}
+
+impl Bounds for Burst {
+    type Repr = u32;
+    const MIN: u32 = 1;
+    const MAX: u32 = u32::MAX;
+    const NAME: &'static str = "Burst";
+    const REFUSAL: Refusal = Refusal::new("a message burst is at least 1, not ", "");
+}
+
+impl Defaulted for Burst {
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::of::<120>();
+}
+
+impl sealed::Sealed for Burst {}
+impl MessageLimit for Burst {}
 
 impl Default for Config {
     fn default() -> Self {
@@ -184,12 +201,14 @@ impl Default for Config {
             media_max_size: ambre_core::ByteSize::new(100 * 1024 * 1024),
             snapshot_max_size: ambre_core::ByteSize::new(50 * 1024 * 1024),
             delta_max_size: ambre_core::ByteSize::new(4 * 1024 * 1024),
-            s3_env_prefix: crate::s3::EnvPrefix::new("dev-ambre".to_owned()),
+            s3_env_prefix: crate::s3::StoreText::<crate::s3::EnvPrefix>::new(
+                "dev-ambre".to_owned(),
+            ),
             oidc_google: None,
             dev_mode: DevMode::Off,
             trust_proxy_headers: ProxyTrust::Direct,
-            ws_msg_rate_per_sec: RatePerSec::DEFAULT,
-            ws_msg_burst: Burst::DEFAULT,
+            ws_msg_rate_per_sec: Bounded::default(),
+            ws_msg_burst: Bounded::default(),
             ephemeral_max_size: ambre_core::ByteSize::new(64 * 1024),
         }
     }
@@ -197,23 +216,33 @@ impl Default for Config {
 
 #[cfg(test)]
 mod tests {
-    use super::{Burst, LimitRefusal, RatePerSec};
+    use super::{Bounded, Burst, LimitRefusal, RatePerSec, limit_from_env};
 
     #[test]
     fn a_message_limit_past_u32_is_refused_not_truncated() {
         // `u32::MAX + 61` used to truncate to 60 through `as u32`.
         let past = u64::from(u32::MAX) + 61;
         assert_eq!(
-            RatePerSec::from_env(past),
+            limit_from_env::<RatePerSec>(past),
             Err(LimitRefusal::TooLarge(past))
         );
-        assert_eq!(Burst::from_env(past), Err(LimitRefusal::TooLarge(past)));
-        assert_eq!(RatePerSec::from_env(0), Err(LimitRefusal::Zero));
-        assert_eq!(Burst::from_env(0), Err(LimitRefusal::Zero));
-        assert_eq!(RatePerSec::from_env(60).map(RatePerSec::get), Ok(60));
         assert_eq!(
-            Burst::from_env(u64::from(u32::MAX)).map(Burst::get),
+            limit_from_env::<Burst>(past),
+            Err(LimitRefusal::TooLarge(past))
+        );
+        assert_eq!(limit_from_env::<RatePerSec>(0), Err(LimitRefusal::Zero));
+        assert_eq!(limit_from_env::<Burst>(0), Err(LimitRefusal::Zero));
+        assert_eq!(limit_from_env::<RatePerSec>(60).map(Bounded::get), Ok(60));
+        assert_eq!(
+            limit_from_env::<Burst>(u64::from(u32::MAX)).map(Bounded::get),
             Ok(u32::MAX)
         );
+    }
+
+    #[test]
+    fn a_deployment_that_sets_nothing_runs_with_the_stated_limits() {
+        assert_eq!(Bounded::<RatePerSec>::default().get(), 60);
+        assert_eq!(Bounded::<Burst>::default().get(), 120);
+        assert_eq!(format!("{:?}", Bounded::<Burst>::default()), "Burst(120)");
     }
 }

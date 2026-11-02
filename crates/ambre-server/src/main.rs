@@ -56,10 +56,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let s3_endpoint = std::env::var("S3_ENDPOINT")
         .ok()
         .or_else(|| std::env::var("AWS_ENDPOINT_URL").ok());
-    let s3_bucket =
-        s3::BucketName::new(std::env::var("S3_BUCKET").unwrap_or_else(|_| "ambre-dev".into()));
-    let s3_env_prefix =
-        s3::EnvPrefix::new(std::env::var("S3_ENV_PREFIX").unwrap_or_else(|_| "dev-ambre".into()));
+    let s3_bucket = s3::StoreText::<s3::BucketName>::new(
+        std::env::var("S3_BUCKET").unwrap_or_else(|_| "ambre-dev".into()),
+    );
+    let s3_env_prefix = s3::StoreText::<s3::EnvPrefix>::new(
+        std::env::var("S3_ENV_PREFIX").unwrap_or_else(|_| "dev-ambre".into()),
+    );
     let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".into());
 
     let db = sqlx::postgres::PgPoolOptions::new()
@@ -210,14 +212,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             50 * 1024 * 1024,
         )),
         delta_max_size: ambre_core::ByteSize::new(env_ttl("DELTA_MAX_BYTES", 4 * 1024 * 1024)),
-        ws_msg_rate_per_sec: state::RatePerSec::from_env(env_ttl(
+        ws_msg_rate_per_sec: state::limit_from_env::<state::RatePerSec>(env_ttl(
             "WS_MSG_RATE_PER_SEC",
-            u64::from(state::RatePerSec::DEFAULT.get()),
+            u64::from(ambre_core::Bounded::<state::RatePerSec>::default().get()),
         ))
         .map_err(|e| format!("WS_MSG_RATE_PER_SEC: {e}"))?,
-        ws_msg_burst: state::Burst::from_env(env_ttl(
+        ws_msg_burst: state::limit_from_env::<state::Burst>(env_ttl(
             "WS_MSG_BURST",
-            u64::from(state::Burst::DEFAULT.get()),
+            u64::from(ambre_core::Bounded::<state::Burst>::default().get()),
         ))
         .map_err(|e| format!("WS_MSG_BURST: {e}"))?,
         ephemeral_max_size: ambre_core::ByteSize::new(env_ttl("EPHEMERAL_MAX_BYTES", 64 * 1024)),
