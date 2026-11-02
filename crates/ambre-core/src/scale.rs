@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use crate::space::Space;
+use crate::space::ScaleSpace;
 
 /// The pixels of the space `B` per pixel of the space `A`: finite and
 /// strictly positive, so a reader may divide by it.
@@ -13,11 +13,12 @@ use crate::space::Space;
 /// alone reads (`CANVAS-031`). A length of `A` times the scale is a length of
 /// `B`. A length of `B` divided by the scale is a length of `A` again.
 ///
-/// The scale converts between float spaces only. A conversion into an
+/// Both ends implement [`ScaleSpace`], so a board space joins no scale. The
+/// scale converts between float spaces only. A conversion into an
 /// integer space names its rounding at the call.
-pub struct Scale<A: Space, B: Space>(f64, PhantomData<fn() -> (A, B)>);
+pub struct Scale<A: ScaleSpace, B: ScaleSpace>(f64, PhantomData<fn() -> (A, B)>);
 
-impl<A: Space, B: Space> Scale<A, B> {
+impl<A: ScaleSpace, B: ScaleSpace> Scale<A, B> {
     /// One pixel of `B` per pixel of `A`.
     pub const ONE: Self = Self(1.0, PhantomData);
 
@@ -64,34 +65,34 @@ impl<A: Space, B: Space> Scale<A, B> {
 
 // By hand, as every impl below: a derive would ask the two markers for a
 // trait they have no use for.
-impl<A: Space, B: Space> Clone for Scale<A, B> {
+impl<A: ScaleSpace, B: ScaleSpace> Clone for Scale<A, B> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<A: Space, B: Space> Copy for Scale<A, B> {}
+impl<A: ScaleSpace, B: ScaleSpace> Copy for Scale<A, B> {}
 
-impl<A: Space, B: Space> PartialEq for Scale<A, B> {
+impl<A: ScaleSpace, B: ScaleSpace> PartialEq for Scale<A, B> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl<A: Space, B: Space> PartialOrd for Scale<A, B> {
+impl<A: ScaleSpace, B: ScaleSpace> PartialOrd for Scale<A, B> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.0.partial_cmp(&other.0)
     }
 }
 
 /// The two spaces and the number, as `Scale<Doc, View>(2.0)`.
-impl<A: Space, B: Space> std::fmt::Debug for Scale<A, B> {
+impl<A: ScaleSpace, B: ScaleSpace> std::fmt::Debug for Scale<A, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Scale<{}, {}>({:?})", A::NAME, B::NAME, self.0)
     }
 }
 
-impl<A: Space, B: Space> Default for Scale<A, B> {
+impl<A: ScaleSpace, B: ScaleSpace> Default for Scale<A, B> {
     fn default() -> Self {
         Self::ONE
     }

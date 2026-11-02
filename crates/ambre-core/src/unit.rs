@@ -29,7 +29,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::font::PX_PER_PT;
 use crate::scale::Scale;
-use crate::space::{Board, Css, Doc, Float, Rescale, Scalar, Space, StoredBoard, Surface, View};
+use crate::space::{
+    Board, Css, Doc, Float, Rescale, Scalar, ScaleSpace, Space, StoredBoard, Surface, View,
+};
 use crate::span::{FracMs, TimeSpan};
 
 /// CSS pixels per millimetre: a CSS pixel is 1/96 inch, an inch is 25.4 mm.
@@ -282,7 +284,7 @@ where
 }
 
 /// The length carried into the space `B` by `scale`.
-impl<A: Space, B: Space> Mul<Scale<A, B>> for Px<A>
+impl<A: ScaleSpace, B: ScaleSpace> Mul<Scale<A, B>> for Px<A>
 where
     A::Repr: Rescale<B::Repr>,
 {
@@ -293,7 +295,7 @@ where
 }
 
 /// The length carried back into the space `A`, before `scale`.
-impl<A: Space, B: Space> Div<Scale<A, B>> for Px<B>
+impl<A: ScaleSpace, B: ScaleSpace> Div<Scale<A, B>> for Px<B>
 where
     B::Repr: Rescale<A::Repr>,
 {

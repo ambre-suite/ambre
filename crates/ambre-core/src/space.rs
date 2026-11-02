@@ -235,10 +235,30 @@ pub trait Space: 'static {
     const NAME: &'static str;
 }
 
+/// A pixel space that a [`Scale`](crate::scale::Scale) may join: the zoom
+/// joins [`Doc`] and [`View`], and the density joins [`Css`] and [`Device`].
+///
+/// A board space implements no such trait, so no generic scale carries a
+/// view length into board units. The board camera's named conversions stand
+/// alone between the two:
+///
+/// ```compile_fail
+/// use ambre_core::{Board, Px, Scale, View};
+/// let _: Px<Board> = Px::<View>::new(4.0) * Scale::<View, Board>::ONE;
+/// ```
+///
+/// ```compile_fail
+/// use ambre_core::{Px, Scale, StoredBoard, View};
+/// let _: Px<View> = Px::<StoredBoard>::new(4.0) * Scale::<StoredBoard, View>::ONE;
+/// ```
+pub trait ScaleSpace: Space {}
+
 /// The pixels of the document, before the zoom: what a layout measures a
 /// page, a column or a run in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Doc {}
+
+impl ScaleSpace for Doc {}
 
 impl Space for Doc {
     type Repr = f32;
@@ -253,6 +273,8 @@ impl Space for Doc {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum View {}
 
+impl ScaleSpace for View {}
+
 impl Space for View {
     type Repr = f32;
     const NAME: &'static str = "View";
@@ -262,6 +284,8 @@ impl Space for View {
 /// place of an element fixed on the page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Css {}
+
+impl ScaleSpace for Css {}
 
 impl Space for Css {
     type Repr = f32;
@@ -298,6 +322,8 @@ impl Space for CanvasCss {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Device {}
 
+impl ScaleSpace for Device {}
+
 impl Space for Device {
     type Repr = i32;
     const NAME: &'static str = "Device";
@@ -328,8 +354,8 @@ impl Space for Image {
 ///
 /// A view length and a board length are both floats. A reach of four view
 /// pixels taken as four board units picks wrong at every zoom but 1. The
-/// camera's named conversion stands between the two. The `f64` is the one
-/// kurbo measures a board in.
+/// camera's named conversion stands between the two, and the space is no
+/// [`ScaleSpace`]. The `f64` is the one kurbo measures a board in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Board {}
 
@@ -343,8 +369,8 @@ impl Space for Board {
 /// A freehand sample keeps its coordinates in it, so a sample stays twelve
 /// bytes. A style keeps its stroke width and its corner radius in it. The
 /// camera scales it with the shape, and a screen length meets it only through
-/// the camera. `Px::widened` reads it as the [`Board`] length the board
-/// computes in.
+/// the camera: the space is no [`ScaleSpace`]. `Px::widened` reads it as the
+/// [`Board`] length the board computes in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StoredBoard {}
 

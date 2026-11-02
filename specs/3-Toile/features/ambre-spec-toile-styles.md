@@ -107,7 +107,7 @@ pub struct ElementStyle {
     pub stroke:     Option<Rgba>,
     pub stroke_w:   Px<StoredBoard>,
     pub opacity:    Bounded<Opacity>,    // 0.0 ..= 1.0
-    pub corner:     Px<StoredBoard>,   // corner radius
+    pub corner:     Px<StoredBoard>,     // corner radius
     pub font:       FontSpec,      // family, size (points), weight, italic, underline, strikethrough
     pub shadow:     Option<Shadow>,
     pub text_color: Option<Rgba>,  // None = the kind's default ink

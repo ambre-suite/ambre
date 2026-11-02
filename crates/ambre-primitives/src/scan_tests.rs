@@ -761,7 +761,7 @@ fn a_newtype_inner_line_holds_on_the_field_the_constructor_and_the_accessor() {
 fn a_newtype_inner_line_holds_on_a_type_a_define_macro_writes() {
     let scan = scanned(
         "define_index! { /// A row.\n pub struct Row(u32); }\n\
-         define_length! { /// A length.\n DocPx(f32) }\n\
+         define_quantity! { /// A length.\n DocPx(f32) }\n\
          impl Row { pub fn get(self) -> u32 { 0 } }\n\
          impl DocPx { pub fn new(value: f32) -> Self { x() } }",
     );

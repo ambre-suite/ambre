@@ -15,10 +15,10 @@
 //! would otherwise pull neighbouring board content into the page. The page
 //! draws no board grid and no frame title, so it shows only slide content.
 
-use ambre_core::{PrintLength, Pt};
 use std::collections::HashMap;
 
 use ambre_canvas::{Palette, TextCache};
+use ambre_core::{PrintLength, Pt};
 use ambre_draw::{DocumentWalk, DrawSurface, FontContext, Rect};
 
 use ambre_pdf::KrillaSurface;

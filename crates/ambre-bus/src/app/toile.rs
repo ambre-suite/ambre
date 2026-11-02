@@ -12,18 +12,16 @@
 //!   `DisplayViewport`, and the command / event enums.
 //! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 
-use ambre_core::index::{Axis, Count, Numbered, Pos, Shown};
-use ambre_core::{Board, Bounded, Px, Redacted};
 use std::collections::BTreeMap;
 use std::fmt;
 
-use ambre_core::DocType;
 pub use ambre_core::FontFamily;
-use ambre_core::FontSize;
-use ambre_core::Rgba;
-use ambre_core::StoredBoard;
 use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
-use ambre_core::{Slant, Strikethrough, Tally, Underline};
+use ambre_core::index::{Axis, Count, Numbered, Pos, Shown};
+use ambre_core::{
+    Board, Bounded, DocType, FontSize, Px, Redacted, Rgba, Slant, StoredBoard, Strikethrough,
+    Tally, Underline,
+};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
 
