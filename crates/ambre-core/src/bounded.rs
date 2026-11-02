@@ -26,12 +26,13 @@ use crate::space::Board;
 use crate::unit::Px;
 
 mod sealed {
-    /// Closes [`super::BoundedRepr`]: a bounded number is an `f32`, a `u8` or
-    /// a `u16`.
+    /// Closes [`super::BoundedRepr`]: a bounded number is an `f32`, a `u8`, a
+    /// `u16`, an `i16` or a `u32`.
     pub trait Sealed {}
 }
 
-/// The number a bounded value holds. Sealed: an `f32`, a `u8` or a `u16`.
+/// The number a bounded value holds. Sealed: an `f32`, a `u8`, a `u16`, an
+/// `i16` or a `u32`.
 pub trait BoundedRepr:
     sealed::Sealed
     + Copy
@@ -50,6 +51,10 @@ impl sealed::Sealed for u8 {}
 impl BoundedRepr for u8 {}
 impl sealed::Sealed for u16 {}
 impl BoundedRepr for u16 {}
+impl sealed::Sealed for i16 {}
+impl BoundedRepr for i16 {}
+impl sealed::Sealed for u32 {}
+impl BoundedRepr for u32 {}
 
 /// The words a refusal prints around the refused value, so each quantity
 /// keeps the message a person reads.
@@ -132,6 +137,46 @@ impl<K: Bounds> Bounded<K> {
     #[must_use]
     pub const fn get(self) -> K::Repr {
         self.raw
+    }
+}
+
+impl<K: Bounds> Bounded<K>
+where
+    K::Repr: Ord + TryFrom<i64> + Into<i64>,
+{
+    /// The value nearest `wide`: below the lowest is the lowest, past the
+    /// highest is the highest. A caller whose input may lie anywhere, such as
+    /// a request that names a page size, serves the nearest value instead of
+    /// a refusal.
+    #[must_use]
+    pub fn saturating_from(wide: i64) -> Self {
+        if wide <= K::MIN.into() {
+            return Self::MIN;
+        }
+        K::Repr::try_from(wide)
+            .ok()
+            .filter(|raw| *raw <= K::MAX)
+            .map_or(Self::MAX, Self::at)
+    }
+}
+
+/// The `const` door of a quantity outside this crate, which cannot call
+/// [`Bounded::at`]. A `const fn` compares a concrete integer only, and Rust
+/// refuses two inherent impls that differ by an associated type alone
+/// (rust-lang/rust#20400). So one representation carries the door: `u32`.
+impl<K: Bounds<Repr = u32>> Bounded<K> {
+    /// The value nearest `raw`: below the lowest is the lowest, past the
+    /// highest is the highest. A `const` item names a value through it, and
+    /// a misspelled constant clamps instead of breaking the bounds.
+    #[must_use]
+    pub const fn saturating(raw: u32) -> Self {
+        if raw < K::MIN {
+            Self::MIN
+        } else if raw > K::MAX {
+            Self::MAX
+        } else {
+            Self::at(raw)
+        }
     }
 }
 
@@ -331,5 +376,67 @@ mod tests {
         assert!(refused.starts_with("a fraction of a side lies in 0..=1, not 1.5"));
         let error: OutOfRange<Grade> = Bounded::<Grade>::try_new(9).expect_err("past");
         assert_eq!(error.refused(), 9);
+    }
+
+    /// A test quantity of 32 bits, for the `const` door.
+    enum Page {}
+    impl Bounds for Page {
+        type Repr = u32;
+        const MIN: u32 = 1;
+        const MAX: u32 = 1000;
+        const NAME: &'static str = "Page";
+        const REFUSAL: Refusal = Refusal::new("", " is no page size");
+    }
+
+    /// A test quantity of a signed 16-bit count.
+    enum Shares {}
+    impl Bounds for Shares {
+        type Repr = i16;
+        const MIN: i16 = 1;
+        const MAX: i16 = i16::MAX;
+        const NAME: &'static str = "Shares";
+        const REFUSAL: Refusal = Refusal::new("", " is no share count");
+    }
+
+    #[test]
+    fn a_saturating_door_serves_the_nearest_value_and_never_breaks_a_bound() {
+        const BELOW: Bounded<Page> = Bounded::<Page>::saturating(0);
+        const PAST: Bounded<Page> = Bounded::<Page>::saturating(u32::MAX);
+        const INSIDE: Bounded<Page> = Bounded::<Page>::saturating(250);
+        assert_eq!(BELOW, Bounded::MIN);
+        assert_eq!(PAST, Bounded::MAX);
+        assert_eq!(INSIDE.get(), 250);
+        for (wide, served) in [
+            (i64::MIN, 1),
+            (-3, 1),
+            (0, 1),
+            (1, 1),
+            (1000, 1000),
+            (1001, 1000),
+            (i64::from(u32::MAX) + 1, 1000),
+            (i64::MAX, 1000),
+        ] {
+            assert_eq!(
+                Bounded::<Page>::saturating_from(wide).get(),
+                served,
+                "{wide}"
+            );
+        }
+        assert_eq!(Bounded::<Shares>::saturating_from(-7), Bounded::MIN);
+        assert_eq!(Bounded::<Shares>::saturating_from(i64::MAX), Bounded::MAX);
+    }
+
+    #[test]
+    fn a_signed_count_keeps_its_bare_number_and_refuses_below_its_bound() {
+        let three = Bounded::<Shares>::new(3).expect("in range");
+        assert_eq!(serde_json::to_string(&three).expect("encode"), "3");
+        assert_eq!(
+            serde_json::from_str::<Bounded<Shares>>("3").ok(),
+            Some(three)
+        );
+        assert!(serde_json::from_str::<Bounded<Shares>>("0").is_err());
+        assert!(serde_json::from_str::<Bounded<Shares>>("-1").is_err());
+        assert!(serde_json::from_str::<Bounded<Shares>>("40000").is_err());
+        assert_eq!(format!("{three:?}"), "Shares(3)");
     }
 }
