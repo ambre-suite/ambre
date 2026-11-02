@@ -3716,7 +3716,6 @@
   {"edge": "verified-by", "from": "ZK-019", "to": "::a_secret_is_zeroize_on_drop"},
   {"edge": "verified-by", "from": "ZK-019", "to": "::a_credential_prints_no_byte_and_compares_in_constant_time"},
   {"edge": "verified-by", "from": "ZK-019", "to": "::a_cloned_access_token_is_the_same_wrapper"},
-  {"edge": "verified-by", "from": "ZK-019", "to": "::a_session_token_has_no_default"},
   {"edge": "verified-by", "from": "ZK-019", "to": "ambre_crypto::tests::a_shared_secret_is_wiped_and_never_printed"},
   {"edge": "verified-by", "from": "ZK-019", "to": "::a_stored_seed_opens_under_its_user_key_and_its_aad_alone"},
   {"edge": "verified-by", "from": "ZK-019", "to": "ambre_server::jwt::tests::a_jwt_seed_is_wiped_and_never_printed"},

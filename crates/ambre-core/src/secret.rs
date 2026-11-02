@@ -415,7 +415,7 @@ impl Credential<AccessToken> {
     /// here, and the primitive gate admits this name in the transport alone
     /// (`ARCH-049`).
     ///
-    /// ```compile_fail
+    /// ```compile_fail,E0599
     /// use ambre_core::{Credential, RefreshToken};
     /// let refresh = Credential::<RefreshToken>::new("ref".to_owned());
     /// refresh.present_bearer(str::to_owned);
@@ -423,7 +423,7 @@ impl Credential<AccessToken> {
     ///
     /// An access token and a refresh token never stand in for each other:
     ///
-    /// ```compile_fail
+    /// ```compile_fail,E0308
     /// use ambre_core::{AccessToken, Credential, RefreshToken};
     /// let refresh = Credential::<RefreshToken>::new("ref".to_owned());
     /// let access: Credential<AccessToken> = refresh;

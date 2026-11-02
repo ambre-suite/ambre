@@ -96,15 +96,12 @@ impl SyncState {
                             .await
                         {
                             Ok(me) => {
-                                // The request above presented the access
-                                // token, so only a sign-out during the await
-                                // empties the store. A session with no pair
-                                // fails: an empty token is no bearer.
-                                let Some(tokens) = auth.tokens.borrow().as_ref().cloned() else {
-                                    let _ = logic_tx.send(LogicEvent::AuthError {
-                                        message: "Unlock failed: the session ended".into(),
-                                    });
-                                    return;
+                                let tokens = match session_tokens(&auth.tokens) {
+                                    Ok(tokens) => tokens,
+                                    Err(failure) => {
+                                        let _ = logic_tx.send(*failure);
+                                        return;
+                                    }
                                 };
                                 let user_id = me.user_id;
                                 let _ = tx.send(SyncEvent::SessionReady {
@@ -511,6 +508,56 @@ impl SyncState {
                 evt: RestEvent::LoggedOut,
             });
         });
+    }
+}
+
+/// The token pair an unlock announces once `/auth/me` answered. That request
+/// presented the access token, so only a sign-out during the await empties
+/// the store. The unlock then fails and announces no session: an empty token
+/// is no bearer.
+fn session_tokens(store: &http::TokenStore) -> Result<http::TokenPair, Box<LogicEvent>> {
+    store.borrow().as_ref().cloned().ok_or_else(|| {
+        Box::new(LogicEvent::AuthError {
+            message: "Unlock failed: the session ended".into(),
+        })
+    })
+}
+
+#[cfg(test)]
+mod unlock_tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use super::*;
+    use crate::http::{Credential, TokenPair};
+    use ambre_core::{Sec, TimeSpan};
+
+    /// A sign-out during `/auth/me` empties the store: the unlock fails, and
+    /// no token pair reaches the session.
+    #[test]
+    fn an_unlock_whose_store_emptied_fails_with_no_session() {
+        let store: http::TokenStore = Rc::new(RefCell::new(None));
+        let Err(failure) = session_tokens(&store) else {
+            panic!("an empty store announced a session");
+        };
+        let LogicEvent::AuthError { message } = *failure else {
+            panic!("the failure is {failure:?}");
+        };
+        assert_eq!(message, "Unlock failed: the session ended");
+    }
+
+    /// A held pair is the one the session announces, shared with the store.
+    #[test]
+    fn an_unlock_announces_the_pair_the_store_holds() {
+        let pair = TokenPair {
+            access_token: Credential::new("acc-s3cr3t".to_owned()),
+            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
+            access_expires_in: TimeSpan::<Sec>::new(60),
+        };
+        let store: http::TokenStore = Rc::new(RefCell::new(Some(pair.clone())));
+        let announced = session_tokens(&store).expect("the store holds a pair");
+        assert!(announced.access_token.matches(&pair.access_token));
+        assert!(announced.refresh_token.matches(&pair.refresh_token));
     }
 }
 
