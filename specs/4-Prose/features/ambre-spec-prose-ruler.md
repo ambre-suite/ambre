@@ -82,9 +82,9 @@ pub struct RulerState {
     /// How wide one point is on the canvas, at the zoom the column is drawn at.
     pub point_width:   Px<View>,
     /// The indents of the block the caret is in, as laid out.
-    pub indent_first:  Pt,
-    pub indent_left:   Pt,
-    pub indent_right:  Pt,
+    pub indent_first:  PrintLength<Pt>,
+    pub indent_left:   PrintLength<Pt>,
+    pub indent_right:  PrintLength<Pt>,
 }
 
 pub enum RulerHandle { IndentFirst, IndentLeft, IndentRight }

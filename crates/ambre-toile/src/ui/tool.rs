@@ -17,7 +17,7 @@ use ambre_bus::app::toile::{
     InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
 use ambre_core::id::{Connector, Element, Id};
-use ambre_core::{BoardLength, Rgba, StoredBoardLength};
+use ambre_core::{Board, Px, Rgba, StoredBoard};
 use ambre_draw::{Affine, BezPath, Point, Rect, Size};
 use kurbo::Shape;
 
@@ -465,10 +465,10 @@ const STICKY_SIZE: Size = Size::new(120.0, 120.0);
 const TEXT_SIZE: Size = Size::new(200.0, 40.0);
 const CLICK_SHAPE_SIZE: Size = Size::new(120.0, 80.0);
 /// Below this drag extent (world units) a shape gesture counts as a click.
-const MIN_DRAG: ambre_core::BoardLength = ambre_core::BoardLength::new(3.0);
+const MIN_DRAG: ambre_core::Px<ambre_core::Board> = ambre_core::Px::<ambre_core::Board>::new(3.0);
 /// Trailing pen nodes closer than this (world units) are the closing
 /// double-click's duplicate press; dropped before the path commits.
-const PEN_DEDUP: ambre_core::BoardLength = ambre_core::BoardLength::new(2.0);
+const PEN_DEDUP: ambre_core::Px<ambre_core::Board> = ambre_core::Px::<ambre_core::Board>::new(2.0);
 
 /// What a pointer / keyboard event produced across all tools. Overlay previews
 /// (marquee, rubber-band, pen path, live stroke) are queried separately via
@@ -571,7 +571,7 @@ pub struct ToolMachine {
     cursor: Point,
     /// The pick floor in world units at the press (`hit::pick_floor`). The
     /// release reuses it, so a gesture picks under one reach.
-    pick: super::viewport::BoardLength,
+    pick: Px<Board>,
 }
 
 impl Default for ToolMachine {
@@ -986,8 +986,8 @@ fn map_select(out: SelectOutcome) -> ToolOutcome {
 /// A world point as a full-pressure stroke sample.
 fn stroke_point(world: Point) -> StrokePoint {
     StrokePoint::full_pressure(
-        StoredBoardLength::new(world.x as f32),
-        StoredBoardLength::new(world.y as f32),
+        Px::<StoredBoard>::new(world.x as f32),
+        Px::<StoredBoard>::new(world.y as f32),
     )
 }
 
@@ -996,7 +996,7 @@ fn draw_style() -> ambre_bus::app::toile::ElementStyle {
     ambre_bus::app::toile::ElementStyle {
         fill: None,
         stroke: Some(Rgba::from_bits(0x3333_33FF)),
-        stroke_w: StoredBoardLength::new(2.0),
+        stroke_w: Px::<StoredBoard>::new(2.0),
         ..Default::default()
     }
 }
@@ -1068,9 +1068,9 @@ fn anchor_point(b: Rect, a: Anchor) -> Point {
         Anchor::Right => Point::new(b.x1, c.y),
         Anchor::Center => c,
         Anchor::Free { u, v } => Point::new(
-            u.along(BoardLength::new(b.x0), BoardLength::new(b.x1))
+            u.along(Px::<Board>::new(b.x0), Px::<Board>::new(b.x1))
                 .get(),
-            v.along(BoardLength::new(b.y0), BoardLength::new(b.y1))
+            v.along(Px::<Board>::new(b.y0), Px::<Board>::new(b.y1))
                 .get(),
         ),
     }
@@ -1443,7 +1443,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::BoardLength::new(20.0),
+            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -2044,7 +2044,7 @@ mod tests {
             panic!("rect_elem builds an element")
         };
         e.geom = DisplayGeom::Path(line);
-        e.style.stroke_w = StoredBoardLength::new(0.5);
+        e.style.stroke_w = Px::<StoredBoard>::new(0.5);
         let disp = viewport(vec![DisplayNode::Element(e)]);
         let mut cam = cam();
         cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(4.0);

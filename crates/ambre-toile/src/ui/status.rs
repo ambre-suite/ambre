@@ -35,7 +35,7 @@ impl SelStats {
 
 /// Format a world coordinate / length for the band: no decimals when whole,
 /// otherwise one decimal (world units are coarse; sub-pixel noise is not useful).
-pub fn fmt_world(v: ambre_core::BoardLength) -> String {
+pub fn fmt_world(v: ambre_core::Px<ambre_core::Board>) -> String {
     let v = v.get();
     if v.fract() == 0.0 && v.abs() < 1e15 {
         format!("{v:.0}")
@@ -61,7 +61,7 @@ pub fn bounds_label(stats: &SelStats) -> Option<String> {
     if stats.count.get() < 2 {
         return None;
     }
-    let board = ambre_core::BoardLength::new;
+    let board = ambre_core::Px::<ambre_core::Board>::new;
     stats.bounds.map(|b| {
         format!(
             "x {}  y {}  w {}  h {}",

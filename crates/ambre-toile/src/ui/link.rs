@@ -13,8 +13,8 @@ use ambre_bus::app::toile::{
     DisplayElement, DisplayNode, DisplayViewport, LinkTarget, PresentMode,
 };
 use ambre_commands::Modifiers;
-use ambre_core::DocType;
 use ambre_core::id::{Document, Element, Id};
+use ambre_core::{Board, DocType, Px};
 use ambre_draw::{Point, Rect};
 
 /// Side of the link badge, in screen pixels. Painted in screen space so it is
@@ -133,7 +133,7 @@ pub fn badge_rect(screen_bounds: Rect) -> Rect {
 pub fn link_at(
     display: &DisplayViewport,
     world: Point,
-    pick: super::viewport::BoardLength,
+    pick: Px<Board>,
 ) -> Option<(Id<Element>, LinkTarget)> {
     display
         .nodes
@@ -180,7 +180,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::BoardLength::new(20.0),
+            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
             viewport: Viewport::default(),
             reactions: Default::default(),
             pins: Vec::new(),

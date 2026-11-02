@@ -8,7 +8,7 @@
 //! momentum; a wheel notch never does (`KINETIC-002`, `KINETIC-009`).
 
 use ambre_core::{Css, Point, Px, Vector, View};
-use ambre_core::{FracMs, TimeSpan, ViewSpeed, ViewSpeedVector};
+use ambre_core::{FracMs, TimeSpan, ViewSpeed};
 
 use crate::wheel::WheelDeltaMode;
 
@@ -187,7 +187,7 @@ pub struct Kinetic {
 /// A trackpad glide under way: its speed so far and its last event.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Glide {
-    speed: ViewSpeedVector,
+    speed: Vector<ViewSpeed>,
     last_at: ambre_core::Instant<ambre_core::PageLoad>,
 }
 
@@ -207,7 +207,7 @@ struct Pan {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Motion {
     /// Screen pixels per millisecond, on each axis.
-    speed: ViewSpeedVector,
+    speed: Vector<ViewSpeed>,
     last_at: Option<ambre_core::Instant<ambre_core::PageLoad>>,
 }
 
@@ -404,7 +404,7 @@ impl Kinetic {
     }
 
     /// The speed of the motion under way, in screen pixels per millisecond.
-    pub fn speed(&self) -> Option<ViewSpeedVector> {
+    pub fn speed(&self) -> Option<Vector<ViewSpeed>> {
         self.motion.map(|motion| motion.speed)
     }
 

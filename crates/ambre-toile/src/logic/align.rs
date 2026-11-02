@@ -25,7 +25,7 @@
 //!   what makes the operation idempotent, and a user who overlaps three shapes
 //!   gets an even overlap.
 
-use ambre_core::BoardLength;
+use ambre_core::{Board, Px};
 use kurbo::{Rect, Vec2};
 
 pub use ambre_bus::app::toile::AlignOp;
@@ -62,23 +62,23 @@ enum Axis {
 
 impl Axis {
     /// The near edge of a board box along the axis.
-    fn near(self, r: &Rect) -> BoardLength {
-        BoardLength::new(match self {
+    fn near(self, r: &Rect) -> Px<Board> {
+        Px::<Board>::new(match self {
             Self::Horizontal => r.x0,
             Self::Vertical => r.y0,
         })
     }
 
     /// The extent of a board box along the axis.
-    fn extent(self, r: &Rect) -> BoardLength {
-        BoardLength::new(match self {
+    fn extent(self, r: &Rect) -> Px<Board> {
+        Px::<Board>::new(match self {
             Self::Horizontal => r.width(),
             Self::Vertical => r.height(),
         })
     }
 
     /// The translation that moves `d` along the axis and not at all across it.
-    fn delta(self, d: BoardLength) -> Vec2 {
+    fn delta(self, d: Px<Board>) -> Vec2 {
         match self {
             Self::Horizontal => Vec2::new(d.get(), 0.0),
             Self::Vertical => Vec2::new(0.0, d.get()),
@@ -105,14 +105,14 @@ fn distribute(boxes: &[Rect], union: Rect, axis: Axis) -> Vec<Vec2> {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     let span = axis.extent(&union);
-    let occupied: BoardLength = boxes.iter().map(|b| axis.extent(b)).sum();
+    let occupied: Px<Board> = boxes.iter().map(|b| axis.extent(b)).sum();
     #[allow(clippy::cast_precision_loss)] // a selection is far below 2^53 boxes
     let gap = (span - occupied) / (boxes.len() - 1) as f64;
 
     let mut out = vec![Vec2::ZERO; boxes.len()];
     let mut cursor = order
         .first()
-        .map_or(BoardLength::ZERO, |(_, b)| axis.near(b));
+        .map_or(Px::<Board>::ZERO, |(_, b)| axis.near(b));
     for (i, b) in order {
         if let Some(slot) = out.get_mut(i) {
             *slot = axis.delta(cursor - axis.near(b));

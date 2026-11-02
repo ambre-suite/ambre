@@ -8,8 +8,8 @@
 //! [`RulerRelease`] and leaves as one command (`PROSE-UI-063`,
 //! `PROSE-UI-076`).
 
-use ambre_core::Pt;
 use ambre_core::{Doc, Px, View};
+use ambre_core::{PrintLength, Pt};
 
 use crate::events::{ParagraphStyle, ProseCommand, tree_id};
 use crate::ui::ProseUiState;
@@ -52,20 +52,20 @@ pub struct RulerState {
     /// How wide one point is on the canvas, at the zoom the column is drawn at.
     pub point_width: Px<View>,
     /// The caret block's indents as the page lays it out (`PROSE-UI-075`).
-    pub indent_first: Pt,
-    pub indent_left: Pt,
-    pub indent_right: Pt,
+    pub indent_first: PrintLength<Pt>,
+    pub indent_left: PrintLength<Pt>,
+    pub indent_right: PrintLength<Pt>,
 }
 
 impl RulerState {
     /// A length in points, on the canvas.
-    fn on_canvas(&self, length: Pt) -> Px<View> {
+    fn on_canvas(&self, length: PrintLength<Pt>) -> Px<View> {
         self.point_width * length.get()
     }
 
     /// A length on the canvas, in points.
-    fn in_points(&self, length: Px<View>) -> Pt {
-        Pt::new(length / self.point_width)
+    fn in_points(&self, length: Px<View>) -> PrintLength<Pt> {
+        PrintLength::<Pt>::new(length / self.point_width)
     }
 
     /// Where a handle sits on the canvas.
@@ -87,7 +87,7 @@ impl RulerState {
     /// no drag leaves a paragraph without room for its text (`PROSE-UI-228`,
     /// `PROSE-UI-229`).
     #[must_use]
-    pub fn points_at(&self, handle: RulerHandle, x: Px<View>) -> Pt {
+    pub fn points_at(&self, handle: RulerHandle, x: Px<View>) -> PrintLength<Pt> {
         let held = match handle {
             RulerHandle::IndentFirst => self.indent_first,
             RulerHandle::IndentLeft => self.indent_left,
@@ -112,13 +112,13 @@ impl RulerState {
         if !raw.is_finite() || !column.is_finite() {
             return held;
         }
-        let room = (column - other - MIN_TEXT).max(Pt::ZERO);
-        raw.round().clamp(Pt::ZERO, room.floor())
+        let room = (column - other - MIN_TEXT).max(PrintLength::<Pt>::ZERO);
+        raw.round().clamp(PrintLength::<Pt>::ZERO, room.floor())
     }
 }
 
 /// The narrowest text a drag may leave between the two handles.
-const MIN_TEXT: Pt = Pt::new(36.0);
+const MIN_TEXT: PrintLength<Pt> = PrintLength::<Pt>::new(36.0);
 
 /// A handle in motion, held by the element. It paints the handle at the
 /// pointer and writes nothing until [`RulerDrag::release`] (`PROSE-UI-076`).
@@ -155,7 +155,7 @@ impl RulerDrag {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RulerRelease {
     pub handle: RulerHandle,
-    pub points: Pt,
+    pub points: PrintLength<Pt>,
 }
 
 impl ProseUiState {
@@ -171,10 +171,10 @@ impl ProseUiState {
             visible: RulerHandles::Hidden,
             page_left: self.column.left(&self.viewport) + layout.margin_left.zoomed(zoom),
             content_width: layout.content_width.zoomed(zoom),
-            point_width: Pt::new(1.0).to_doc_px().zoomed(zoom),
-            indent_first: Pt::ZERO,
-            indent_left: Pt::ZERO,
-            indent_right: Pt::ZERO,
+            point_width: PrintLength::<Pt>::new(1.0).to_doc_px().zoomed(zoom),
+            indent_first: PrintLength::<Pt>::ZERO,
+            indent_left: PrintLength::<Pt>::ZERO,
+            indent_right: PrintLength::<Pt>::ZERO,
         };
         let style = self
             .cursor
@@ -230,7 +230,7 @@ mod tests {
     use crate::ui::ProseUiState;
     use crate::view::tests::{append, laid_out};
     use ambre_bus::app::prose::DocOffset;
-    use ambre_core::Pt;
+    use ambre_core::{PrintLength, Pt};
     use ambre_core::{Px, View};
 
     /// A length in points, on the canvas.
@@ -246,9 +246,9 @@ mod tests {
         state.handle_command(ProseCommand::SetParagraphStyle {
             block_id: quoted,
             style: ParagraphStyle {
-                indent_first: Some(ambre_core::Pt::new(24.0)),
-                indent_left: Some(ambre_core::Pt::new(36.0)),
-                indent_right: Some(ambre_core::Pt::new(18.0)),
+                indent_first: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(24.0)),
+                indent_left: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(36.0)),
+                indent_right: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(18.0)),
                 ..ParagraphStyle::default()
             },
         });
@@ -284,7 +284,11 @@ mod tests {
         assert_eq!(ruler.visible, RulerHandles::Visible);
         assert_eq!(
             (ruler.indent_first, ruler.indent_left, ruler.indent_right),
-            (Pt::ZERO, Pt::ZERO, Pt::ZERO)
+            (
+                PrintLength::<Pt>::ZERO,
+                PrintLength::<Pt>::ZERO,
+                PrintLength::<Pt>::ZERO
+            )
         );
     }
 
@@ -341,14 +345,14 @@ mod tests {
         // The motion touched nothing.
         assert_eq!(state.export_snapshot(), before);
         let release = drag.release(&ruler);
-        assert_eq!(release.points, Pt::new(72.0));
+        assert_eq!(release.points, PrintLength::<Pt>::new(72.0));
         let command = ui.ruler_release(release).expect("one command");
         assert_eq!(
             command,
             ProseCommand::SetParagraphStyle {
                 block_id: quoted,
                 style: ParagraphStyle {
-                    indent_left: Some(ambre_core::Pt::new(72.0)),
+                    indent_left: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(72.0)),
                     ..ParagraphStyle::default()
                 },
             }
@@ -372,14 +376,17 @@ mod tests {
         let (_, mut ui, [_, quoted]) = indented();
         caret_in(&mut ui, quoted);
         let ruler = ui.ruler();
-        let column_width = Pt::new(ruler.content_width / ruler.point_width);
-        let short = Pt::new(36.0 - 1e-3);
+        let column_width = PrintLength::<Pt>::new(ruler.content_width / ruler.point_width);
+        let short = PrintLength::<Pt>::new(36.0 - 1e-3);
         let far_right = ruler.page_left + ruler.content_width * 3.0;
         let far_left = ruler.page_left - ruler.content_width;
-        assert_eq!(ruler.points_at(RulerHandle::IndentLeft, far_left), Pt::ZERO);
+        assert_eq!(
+            ruler.points_at(RulerHandle::IndentLeft, far_left),
+            PrintLength::<Pt>::ZERO
+        );
         assert_eq!(
             ruler.points_at(RulerHandle::IndentRight, far_right),
-            Pt::ZERO
+            PrintLength::<Pt>::ZERO
         );
         let left = ruler.points_at(RulerHandle::IndentLeft, far_right);
         assert!(left + ruler.indent_right <= column_width - short);
@@ -388,7 +395,7 @@ mod tests {
         // The first line counts from the left indent, and stops as short.
         assert_eq!(
             ruler.points_at(RulerHandle::IndentFirst, far_left),
-            Pt::ZERO
+            PrintLength::<Pt>::ZERO
         );
         let first = ruler.points_at(RulerHandle::IndentFirst, far_right);
         assert!(first + ruler.indent_left + ruler.indent_right <= column_width - short);
@@ -396,7 +403,7 @@ mod tests {
         ui.cursor = None;
         let release = RulerRelease {
             handle: RulerHandle::IndentLeft,
-            points: Pt::new(10.0),
+            points: PrintLength::<Pt>::new(10.0),
         };
         assert_eq!(ui.ruler_release(release), None);
     }
@@ -423,7 +430,7 @@ mod tests {
             Some(ProseCommand::SetParagraphStyle {
                 block_id: quoted,
                 style: ParagraphStyle {
-                    indent_first: Some(ambre_core::Pt::new(48.0)),
+                    indent_first: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(48.0)),
                     ..ParagraphStyle::default()
                 },
             })

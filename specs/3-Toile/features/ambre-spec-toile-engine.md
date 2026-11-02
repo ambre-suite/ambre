@@ -340,7 +340,7 @@ pub struct DisplayViewport {
     pub version:   Generation<ViewportVersion>,
     pub viewport:  Viewport,
     /// The board's grid unit, in world units, as its `board` register holds it.
-    pub grid_unit: BoardLength,
+    pub grid_unit: Px<Board>,
     /// Elements and connectors interleaved in one paint order
     /// (`features/ambre-spec-toile-z-order.md`).
     pub nodes:     Vec<DisplayNode>,

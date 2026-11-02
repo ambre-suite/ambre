@@ -170,7 +170,9 @@ pub use secret::{
     RefreshToken, Secret, SecretBytes, SecretString, WireCredential,
 };
 pub use seq::{DeltaCount, Seq};
-pub use space::{CanvasCss, Css, Device, Doc, Image, Space, Surface, Texel, View};
+pub use space::{
+    Board, CanvasCss, Css, Device, Doc, Image, Space, StoredBoard, Surface, Texel, View,
+};
 pub use span::{
     Authored, FailureCount, FracMs, FrameRate, Instant, LamportStamp, Ms, Ns, PageLoad, Rfc3339,
     Sec, StoredAsI64, Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
@@ -187,8 +189,7 @@ pub use text_offset::{
     utf16_to_char,
 };
 pub use unit::{
-    BoardLength, Mm, PX_PER_MM, Point, Pt, Px, Radians, Size, StoredBoardLength, Vector, ViewSpeed,
-    ViewSpeedVector,
+    Mm, PX_PER_MM, Point, PrintLength, PrintUnit, Pt, Px, Radians, Size, Vector, ViewSpeed,
 };
 pub use uuid::Uuid;
 pub use version::Version;

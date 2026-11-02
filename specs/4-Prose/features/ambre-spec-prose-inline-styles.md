@@ -150,11 +150,11 @@ rather than a tie-break on arrival order, both peers resolve the same style from
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ParagraphStyle {
     pub align:          Option<Align>,
-    pub indent_first:   Option<Pt>,
-    pub indent_left:    Option<Pt>,
-    pub indent_right:   Option<Pt>,
-    pub space_before:   Option<Pt>,
-    pub space_after:    Option<Pt>,
+    pub indent_first:   Option<PrintLength<Pt>>,
+    pub indent_left:    Option<PrintLength<Pt>>,
+    pub indent_right:   Option<PrintLength<Pt>>,
+    pub space_before:   Option<PrintLength<Pt>>,
+    pub space_after:    Option<PrintLength<Pt>>,
     pub line_height:    Option<LineHeight>,
     /// Read by pagination: a block that must not be split, and one that must not be
     /// parted from the next (`features/ambre-spec-prose-pagination.md`).
@@ -168,7 +168,7 @@ pub enum Align { Left = 0, Center = 1, Right = 2, Justify = 3 }
 
 /// The mode decides the unit of its number, so each mode carries its own.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum LineHeight { Multiple(LineSpacingMultiple), Exact(Pt), AtLeast(Pt) }
+pub enum LineHeight { Multiple(LineSpacingMultiple), Exact(PrintLength<Pt>), AtLeast(PrintLength<Pt>) }
 ```
 
 The command carries every property, each optional; the handler compares what it names against

@@ -40,7 +40,7 @@ use ambre_canvas::{
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
     ThemeControl, WHEEL_LINE, WheelDelta,
 };
-use ambre_core::{Css, Px, Vector, View};
+use ambre_core::{Board, Css, Px, Vector, View};
 use ambre_draw::kinetic::{Release, ScrollStep};
 use ambre_draw::{Consumed, FontContext, Point, Rect, Vec2};
 
@@ -206,8 +206,10 @@ pub enum PointerMode {
 
 /// Keyboard-nudge step in world units: a fine 1-unit tap, or a coarse 10-unit
 /// jump with Shift held (`toile-elements`).
-const NUDGE_SMALL: ambre_core::BoardLength = ambre_core::BoardLength::new(1.0);
-const NUDGE_LARGE: ambre_core::BoardLength = ambre_core::BoardLength::new(10.0);
+const NUDGE_SMALL: ambre_core::Px<ambre_core::Board> =
+    ambre_core::Px::<ambre_core::Board>::new(1.0);
+const NUDGE_LARGE: ambre_core::Px<ambre_core::Board> =
+    ambre_core::Px::<ambre_core::Board>::new(10.0);
 
 /// Inline-edit caret blink half-period: the caret shows for one interval,
 /// hides for the next (`toile-tools`). ~530 ms is the familiar desktop
@@ -1646,7 +1648,7 @@ impl ToileView {
     }
 
     /// The pick floor in world units at the current zoom (`TOILE-UI-225`).
-    fn pick(&self) -> super::viewport::BoardLength {
+    fn pick(&self) -> Px<Board> {
         super::hit::pick_floor(&self.cam)
     }
 

@@ -3204,7 +3204,6 @@ ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	
 ambre-canvas | src/fonts.rs | crate::fonts | BASE_FONTS | const | [&str;6]	free-text	same-origin font paths the boot fetches
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_max | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_min | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
-ambre-core | src/unit.rs | crate::unit | ViewSpeedVector::scaled(factor) | param | f32	math	a decay or blend weight the velocity is multiplied by
 ambre-murmure | src/list.rs | crate::list | HeaderWords.author | field | String	free-text	header text a message row draws
 ambre-murmure | src/list.rs | crate::list | HeaderWords.time | field | String	free-text	header text a message row draws
 ambre-murmure | src/paint.rs | crate::paint | LaidRow::holds() | ret | bool	generic	predicate result
@@ -3892,3 +3891,30 @@ ambre-core | src/span.rs | crate::span | TimeSpan<FracMs>::is_finite() | ret | b
 ambre-core | src/span.rs | crate::span | TimeSpan<Ms>::to_timer_i32() | ret | i32	foreign-api	the span as the i32 of milliseconds a browser timer takes
 ambre-core | src/span.rs | crate::span | TimeSpan<Ns>::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
 ambre-core | src/span.rs | crate::span | TimeSpan<U>::times(n) | param | u64	math	a multiplier, not a span
+ambre-core | src/space.rs | crate::space | <Board as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <Board as Space>::Repr | assoc | f64	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <StoredBoard as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <StoredBoard as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/unit.rs | crate::unit | <Mm as PrintUnit>::DOC_PX | const | f32	math	unit conversion factor, document pixels per millimetre
+ambre-core | src/unit.rs | crate::unit | <Mm as PrintUnit>::NAME | const | &'static str	free-text	the unit name a length prints through Debug, for a log line
+ambre-core | src/unit.rs | crate::unit | <Pt as PrintUnit>::DOC_PX | const | f32	math	unit conversion factor, document pixels per point
+ambre-core | src/unit.rs | crate::unit | <Pt as PrintUnit>::NAME | const | &'static str	free-text	the unit name a length prints through Debug, for a log line
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div<f32>>::div(divisor) | param | f32	math	a bare factor a print length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Mul<f32>>::mul(factor) | param | f32	math	a bare factor a print length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div>::Output | assoc | f32	math	the bare ratio of two print lengths
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as Div>::div() | ret | f32	math	the bare ratio of two print lengths
+ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/unit.rs | crate::unit | PrintLength.0 | field | f32	newtype-inner	the number of points or millimetres a print length holds
+ambre-core | src/unit.rs | crate::unit | PrintLength<U>::get() | ret | f32	newtype-inner	the number of units, for a foreign API that takes the float
+ambre-core | src/unit.rs | crate::unit | PrintLength<U>::new(value) | param | f32	newtype-inner	the number of units a print length wraps
+ambre-core | src/unit.rs | crate::unit | PrintLength<U>::is_finite() | ret | bool	generic	predicate
+ambre-core | src/unit.rs | crate::unit | <Radians as Mul<f64>>::mul(factor) | param | f64	math	a bare factor an angle is scaled by
+ambre-core | src/unit.rs | crate::unit | Radians.0 | field | f64	newtype-inner	the number of radians an angle holds
+ambre-core | src/unit.rs | crate::unit | Radians::get() | ret | f64	newtype-inner	the number of radians, for a foreign API that takes the float
+ambre-core | src/unit.rs | crate::unit | Radians::new(value) | param | f64	newtype-inner	the number of radians an angle wraps
+ambre-core | src/unit.rs | crate::unit | Radians::is_finite() | ret | bool	generic	predicate
+ambre-core | src/unit.rs | crate::unit | <ViewSpeed as Mul<f32>>::mul(factor) | param | f32	math	a decay or blend weight the speed is multiplied by
+ambre-core | src/unit.rs | crate::unit | Vector<ViewSpeed>::scaled(factor) | param | f32	math	a decay or blend weight the velocity is multiplied by
+ambre-core | src/unit.rs | crate::unit | ViewSpeed.0 | field | f32	newtype-inner	the number of view pixels per millisecond a speed holds
+ambre-core | src/unit.rs | crate::unit | ViewSpeed::get() | ret | f32	newtype-inner	the number of view pixels per millisecond, for a foreign API that takes the float
+ambre-core | src/unit.rs | crate::unit | ViewSpeed::new(value) | param | f32	newtype-inner	the number of view pixels per millisecond a speed wraps

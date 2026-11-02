@@ -418,7 +418,7 @@ mod tests {
     fn vp_with(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::BoardLength::new(20.0),
+            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -573,8 +573,8 @@ mod tests {
         let mut cursors = PeerCursors::default();
         let sp = |x: f32, y: f32| {
             StrokePoint::full_pressure(
-                ambre_core::StoredBoardLength::new(x),
-                ambre_core::StoredBoardLength::new(y),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(x),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(y),
             )
         };
         adopt_one(

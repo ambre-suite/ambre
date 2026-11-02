@@ -99,7 +99,7 @@ mod tests {
     #[test]
     fn the_content_box_is_what_the_four_margins_leave() {
         let page = a4();
-        let margins = ambre_core::Mm::new(40.0).to_doc_px();
+        let margins = ambre_core::PrintLength::<ambre_core::Mm>::new(40.0).to_doc_px();
         assert!(
             (page.content_width - (page.page_width - margins))
                 .abs()
@@ -127,8 +127,8 @@ mod tests {
     #[test]
     fn a_margin_wider_than_the_sheet_leaves_a_content_box_of_zero() {
         let page = PageBox::from_mm(doc::PageFormat {
-            margin_left: ambre_core::Mm::new(500.0),
-            margin_top: ambre_core::Mm::new(500.0),
+            margin_left: ambre_core::PrintLength::<ambre_core::Mm>::new(500.0),
+            margin_top: ambre_core::PrintLength::<ambre_core::Mm>::new(500.0),
             ..doc::PageFormat::default()
         });
         assert_eq!(page.content_width, Px::<Doc>::ZERO);

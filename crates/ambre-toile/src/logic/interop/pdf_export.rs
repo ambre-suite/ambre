@@ -34,15 +34,18 @@ use crate::ui::walk::{BoardView, BoardWalk, ImageStore};
 /// straight onto the page with no extra scaling. Defaults to a 16:9 slide.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PageSize {
-    pub width: ambre_core::Pt,
-    pub height: ambre_core::Pt,
+    pub width: ambre_core::PrintLength<ambre_core::Pt>,
+    pub height: ambre_core::PrintLength<ambre_core::Pt>,
 }
 
 impl PageSize {
     /// A page of `width` x `height` points, each clamped to a positive minimum so
     /// `PageSettings::from_wh` never rejects it.
-    pub fn new(width: ambre_core::Pt, height: ambre_core::Pt) -> Self {
-        let least = ambre_core::Pt::new(1.0);
+    pub fn new(
+        width: ambre_core::PrintLength<ambre_core::Pt>,
+        height: ambre_core::PrintLength<ambre_core::Pt>,
+    ) -> Self {
+        let least = ambre_core::PrintLength::<ambre_core::Pt>::new(1.0);
         Self {
             width: width.max(least),
             height: height.max(least),
@@ -53,7 +56,10 @@ impl PageSize {
 impl Default for PageSize {
     fn default() -> Self {
         // 1280x720: a 16:9 slide, matching the default presentation aspect.
-        Self::new(ambre_core::Pt::new(1280.0), ambre_core::Pt::new(720.0))
+        Self::new(
+            ambre_core::PrintLength::<ambre_core::Pt>::new(1280.0),
+            ambre_core::PrintLength::<ambre_core::Pt>::new(720.0),
+        )
     }
 }
 
@@ -208,7 +214,7 @@ mod tests {
                 viewport: Default::default(),
                 nodes: vec![rect_node("a", Rect::new(10.0, 10.0, 90.0, 90.0))],
                 version: ambre_core::Generation::ZERO,
-                grid_unit: ambre_core::BoardLength::new(20.0),
+                grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
             },
             camera,
             clip: Some(frame),

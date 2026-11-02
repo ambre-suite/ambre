@@ -14,7 +14,7 @@ use ambre_bus::app::prose::{
     PageNumber, ParagraphStyle,
 };
 use ambre_core::id::{Footnote, Id};
-use ambre_core::{Doc, Pt, Px};
+use ambre_core::{Doc, PrintLength, Pt, Px};
 use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
@@ -833,11 +833,15 @@ fn table_metrics(
 /// Each column's width in pixels. The stored widths are points, one per
 /// column. A list that does not match the grid, or holds an unusable width,
 /// gives every column an equal share.
-pub(crate) fn column_widths(stored: &[Pt], cols: ColCount, content_width: Px<Doc>) -> Vec<Px<Doc>> {
+pub(crate) fn column_widths(
+    stored: &[PrintLength<Pt>],
+    cols: ColCount,
+    content_width: Px<Doc>,
+) -> Vec<Px<Doc>> {
     let usable = ColCount::from_len(stored.len()) == cols
         && stored
             .iter()
-            .all(|width| width.is_finite() && *width > Pt::ZERO);
+            .all(|width| width.is_finite() && *width > PrintLength::<Pt>::ZERO);
     if usable {
         stored.iter().map(|width| width.to_doc_px()).collect()
     } else {
@@ -859,7 +863,7 @@ pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
     let length = |key| {
         number_at(&attrs, key)
             .filter(|pt| pt.is_finite() && *pt >= 0.0)
-            .map(|pt| ambre_core::Pt::new(pt).to_doc_px())
+            .map(|pt| ambre_core::PrintLength::<ambre_core::Pt>::new(pt).to_doc_px())
     };
     let colour = |key| string_at(&attrs, key).and_then(|raw| crate::mark::parse_color(&raw).ok());
     let edges = [

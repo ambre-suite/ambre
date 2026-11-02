@@ -105,9 +105,9 @@ separate from the fill, because on a note the fill is the card:
 pub struct ElementStyle {
     pub fill:       Option<Rgba>,  // None = no fill
     pub stroke:     Option<Rgba>,
-    pub stroke_w:   StoredBoardLength,
+    pub stroke_w:   Px<StoredBoard>,
     pub opacity:    Opacity,             // 0.0 ..= 1.0
-    pub corner:     StoredBoardLength,   // corner radius
+    pub corner:     Px<StoredBoard>,   // corner radius
     pub font:       FontSpec,      // family, size (points), weight, italic, underline, strikethrough
     pub shadow:     Option<Shadow>,
     pub text_color: Option<Rgba>,  // None = the kind's default ink

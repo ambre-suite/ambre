@@ -14,13 +14,9 @@ use ambre_bus::app::toile::Viewport;
 /// Minimum / maximum zoom: the bounds the culling type clamps to
 /// (`TOILE-UI-281`), so the camera and the Logic thread share one range.
 pub use ambre_bus::app::toile::{MAX_ZOOM, MIN_ZOOM};
-use ambre_core::{Doc, Px, Scale, View};
+use ambre_core::{Board, Doc, Px, Scale, View};
 use ambre_draw::kinetic::ScrollStep;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
-
-/// A length on the board, in world units: the camera's named conversion,
-/// [`ViewportTransform::to_board`], is the way from a [`Px<View>`] in.
-pub use ambre_core::BoardLength;
 
 /// One press of the zoom-in / zoom-out button multiplies (or divides) the zoom
 /// by this factor. A discrete notch, coarser than a wheel tick.
@@ -73,15 +69,15 @@ impl ViewportTransform {
 
     /// The board length that `screen` pixels cover at this zoom.
     #[must_use]
-    pub fn to_board(&self, screen: Px<View>) -> BoardLength {
-        BoardLength::new(f64::from(screen.get()) / self.zoom.get())
+    pub fn to_board(&self, screen: Px<View>) -> Px<Board> {
+        Px::<Board>::new(f64::from(screen.get()) / self.zoom.get())
     }
 
     /// The screen length that the board length `board` covers at `zoom`, in
     /// the `f64` of the drawing surface, so a padding keeps its precision.
     #[must_use]
     pub fn to_surface(
-        board: BoardLength,
+        board: Px<Board>,
         zoom: Scale<Doc, View>,
     ) -> ambre_core::Px<ambre_core::Surface> {
         ambre_core::Px::<ambre_core::Surface>::new(board.get() * zoom.get())

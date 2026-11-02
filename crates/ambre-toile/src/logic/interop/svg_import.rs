@@ -451,7 +451,7 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
     let mut style = ElementStyle {
         fill: None,
         stroke: None,
-        stroke_w: ambre_core::StoredBoardLength::ZERO,
+        stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::ZERO,
         ..ElementStyle::default()
     };
     if let Some(fill) = path.fill() {
@@ -470,7 +470,8 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
         ) {
             Some(rgba) => {
                 style.stroke = Some(rgba);
-                style.stroke_w = ambre_core::StoredBoardLength::new(stroke.width().get());
+                style.stroke_w =
+                    ambre_core::Px::<ambre_core::StoredBoard>::new(stroke.width().get());
             }
             None => batch.report.skip("path stroke: non-solid paint dropped"),
         }

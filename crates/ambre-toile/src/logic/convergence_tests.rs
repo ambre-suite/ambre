@@ -536,7 +536,7 @@ fn an_arrow_carries_its_own_style() {
     let two = create_connector(&mut st);
     let red = ElementStyle {
         stroke: Some(Rgba::from_bits(0xCC22_22FF)),
-        stroke_w: ambre_core::StoredBoardLength::new(6.0),
+        stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(6.0),
         ..Default::default()
     };
 
@@ -712,12 +712,12 @@ fn commit_stroke_creates_drawing() {
     let out = st.handle_command(ToileCommand::CommitStroke {
         points: vec![
             StrokePoint::full_pressure(
-                ambre_core::StoredBoardLength::new(0.0),
-                ambre_core::StoredBoardLength::new(0.0),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(0.0),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(0.0),
             ),
             StrokePoint::full_pressure(
-                ambre_core::StoredBoardLength::new(10.0),
-                ambre_core::StoredBoardLength::new(5.0),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(10.0),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(5.0),
             ),
         ],
         style: ElementStyle::default(),
@@ -1416,13 +1416,13 @@ fn a_stroke_in_flight_reaches_the_other_users() {
     let mut drawer = ToileState::new();
     let tail = vec![
         StrokePoint {
-            x: ambre_core::StoredBoardLength::new(10.0),
-            y: ambre_core::StoredBoardLength::new(10.0),
+            x: ambre_core::Px::<ambre_core::StoredBoard>::new(10.0),
+            y: ambre_core::Px::<ambre_core::StoredBoard>::new(10.0),
             pressure: ambre_bus::app::toile::UnitFraction::HALF,
         },
         StrokePoint {
-            x: ambre_core::StoredBoardLength::new(12.0),
-            y: ambre_core::StoredBoardLength::new(14.0),
+            x: ambre_core::Px::<ambre_core::StoredBoard>::new(12.0),
+            y: ambre_core::Px::<ambre_core::StoredBoard>::new(14.0),
             pressure: ambre_bus::app::toile::UnitFraction::new(0.6)
                 .expect("a pressure inside 0 ..= 1"),
         },
@@ -1670,8 +1670,8 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
         cursor: Some(Point::new(7.0, 8.0)),
         selection: Vec::new(),
         live_stroke: Some(vec![StrokePoint::full_pressure(
-            ambre_core::StoredBoardLength::new(1.0),
-            ambre_core::StoredBoardLength::new(2.0),
+            ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
+            ambre_core::Px::<ambre_core::StoredBoard>::new(2.0),
         )]),
         laser: None,
         present_slide: None,
@@ -4441,8 +4441,10 @@ fn concurrent_notes_edits_converge() {
 fn a_layout(direction: Direction, gap: f64) -> AutoLayout {
     AutoLayout {
         direction,
-        gap: ambre_core::BoardLength::new(gap),
-        padding: ambre_bus::app::toile::Padding::uniform(ambre_core::BoardLength::new(4.0)),
+        gap: ambre_core::Px::<ambre_core::Board>::new(gap),
+        padding: ambre_bus::app::toile::Padding::uniform(ambre_core::Px::<ambre_core::Board>::new(
+            4.0,
+        )),
         align: Align::Start,
         sizing: Sizing::Hug,
     }
@@ -6270,12 +6272,12 @@ fn apply_local(
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
                 StrokePoint::full_pressure(
-                    ambre_core::StoredBoardLength::new(*x as f32),
-                    ambre_core::StoredBoardLength::new(*y as f32),
+                    ambre_core::Px::<ambre_core::StoredBoard>::new(*x as f32),
+                    ambre_core::Px::<ambre_core::StoredBoard>::new(*y as f32),
                 ),
                 StrokePoint::full_pressure(
-                    ambre_core::StoredBoardLength::new(*x as f32 + 10.0),
-                    ambre_core::StoredBoardLength::new(*y as f32 + 5.0),
+                    ambre_core::Px::<ambre_core::StoredBoard>::new(*x as f32 + 10.0),
+                    ambre_core::Px::<ambre_core::StoredBoard>::new(*y as f32 + 5.0),
                 ),
             ],
             style: ElementStyle::default(),
@@ -6962,7 +6964,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: Some(Rgba::from_bits(0xFF00_00FF)),
             stroke: None,
-            stroke_w: ambre_core::StoredBoardLength::new(4.0),
+            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(4.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
             text_color: Some(Rgba::from_bits(0x00FF_00FF)),
             ..ElementStyle::default()
@@ -6973,7 +6975,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: None,
             stroke: Some(Rgba::from_bits(0x0000_FFFF)),
-            stroke_w: ambre_core::StoredBoardLength::new(1.5),
+            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(1.5),
             opacity: ambre_core::Opacity::new(0.25).unwrap(),
             text_color: None,
             ..ElementStyle::default()
@@ -7408,8 +7410,8 @@ fn an_empty_combine_is_refused() {
 
 fn sample(x: f32, y: f32) -> StrokePoint {
     StrokePoint::full_pressure(
-        ambre_core::StoredBoardLength::new(x),
-        ambre_core::StoredBoardLength::new(y),
+        ambre_core::Px::<ambre_core::StoredBoard>::new(x),
+        ambre_core::Px::<ambre_core::StoredBoard>::new(y),
     )
 }
 

@@ -391,13 +391,13 @@ pub enum ProseCommand {
     DeleteTableRow   { row_id: BlockId },
     /// `at_col` is the index the new column takes; `None` width takes the document default
     /// (`PROSE-FEAT-232`).
-    InsertTableCol   { table_id: BlockId, at_col: Col, width: Option<Pt> },
+    InsertTableCol   { table_id: BlockId, at_col: Col, width: Option<PrintLength<Pt>> },
     DeleteTableCol   { table_id: BlockId, col_index: Col },
-    ResizeTableCol   { table_id: BlockId, col_index: Col, width: Pt },
+    ResizeTableCol   { table_id: BlockId, col_index: Col, width: PrintLength<Pt> },
     MergeTableCells  { table_id: BlockId, start: CellPos, end: CellPos },
     UnmergeTableCell { cell_id: BlockId },
     SetCellStyle     { cell_id: BlockId, bg: Option<Rgb>, valign: Option<VAlign>,
-                       border: Option<CellBorder>, padding: Option<Pt> },
+                       border: Option<CellBorder>, padding: Option<PrintLength<Pt>> },
     /// Tab and Shift-Tab; past the last cell, a row is appended (`PROSE-FEAT-251`).
     StepTableCell    { cell_id: BlockId, direction: StepDirection },
 

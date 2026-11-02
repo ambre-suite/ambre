@@ -82,7 +82,7 @@ impl Rig {
     fn show(&mut self, nodes: Vec<DisplayNode>) {
         self.answer(ToileEvent::ViewportData(DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::BoardLength::new(20.0),
+            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Viewport::default(),
@@ -538,7 +538,7 @@ fn a_board_change_refetches_the_selection_data_and_a_camera_move_does_not() {
     rig.sent();
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
         version: ambre_core::Generation::ZERO,
-        grid_unit: ambre_core::BoardLength::new(20.0),
+        grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -1080,7 +1080,7 @@ fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
 fn frame_at(version: u64, nodes: Vec<DisplayNode>) -> ToileEvent {
     ToileEvent::ViewportData(DisplayViewport {
         version: ambre_core::Generation::nth(version),
-        grid_unit: ambre_core::BoardLength::new(20.0),
+        grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -2525,7 +2525,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
     let b = DisplayElement {
         locked: ambre_bus::app::toile::LockState::Locked,
         style: ElementStyle {
-            stroke_w: ambre_core::StoredBoardLength::new(4.0),
+            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(4.0),
             ..ElementStyle::default()
         },
         ..sticky("b", B)
@@ -2638,7 +2638,7 @@ fn a_shared_board(peer: Id<User>) -> Rig {
     );
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
         version: ambre_core::Generation::ZERO,
-        grid_unit: ambre_core::BoardLength::new(20.0),
+        grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
         pins: vec![ambre_bus::app::toile::CommentPin {
             thread: Id::<Thread>::from_text("t".to_owned()),
             at: kurbo::Point::new(50.0, 50.0),

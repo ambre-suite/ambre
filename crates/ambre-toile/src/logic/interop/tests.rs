@@ -287,7 +287,10 @@ fn rect_import_preserves_fill_and_stroke_style() {
     // fill="#3366cc" -> opaque RGBA; stroke="#000000" width 2.
     assert_eq!(style.fill, Some(Rgba::from_bits(0x3366_CCFF)));
     assert_eq!(style.stroke, Some(Rgba::from_bits(0x0000_00FF)));
-    assert_eq!(style.stroke_w, ambre_core::StoredBoardLength::new(2.0));
+    assert_eq!(
+        style.stroke_w,
+        ambre_core::Px::<ambre_core::StoredBoard>::new(2.0)
+    );
 }
 
 #[test]
@@ -354,8 +357,10 @@ fn coordinates_are_clamped_to_the_world_bound() {
     let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\">\
         <rect x=\"0\" y=\"0\" width=\"100000\" height=\"100000\"/></svg>";
     let limits = Limits {
-        coord_clamp: super::limits::CoordBound::new(ambre_core::BoardLength::new(500.0))
-            .expect("a valid bound"),
+        coord_clamp: super::limits::CoordBound::new(ambre_core::Px::<ambre_core::Board>::new(
+            500.0,
+        ))
+        .expect("a valid bound"),
         ..Limits::default()
     };
     let batch = import_svg(svg.as_bytes(), &limits).unwrap();

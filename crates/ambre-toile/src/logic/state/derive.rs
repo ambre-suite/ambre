@@ -37,8 +37,8 @@ use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
 /// pressure thus loses no stroke over a field the board never draws.
 #[derive(serde::Deserialize)]
 struct StoredPoint {
-    x: ambre_core::StoredBoardLength,
-    y: ambre_core::StoredBoardLength,
+    x: ambre_core::Px<ambre_core::StoredBoard>,
+    y: ambre_core::Px<ambre_core::StoredBoard>,
     #[serde(deserialize_with = "clamped_pressure")]
     pressure: UnitFraction,
 }
@@ -135,7 +135,7 @@ impl ToileState {
             // One map lookup per frame: the register is board scaffolding,
             // and a peer can rewrite it at any time (`TOILE-UI-279`).
             // A board that holds none sends zero, which the view replaces.
-            grid_unit: ambre_core::BoardLength::new(
+            grid_unit: ambre_core::Px::<ambre_core::Board>::new(
                 f64_of(&board(&self.doc), BoardKey::GridSize).unwrap_or(0.0),
             ),
             reactions: self.reaction_tallies(&visible),
@@ -469,8 +469,8 @@ mod tests {
         let mut st = ToileState::new();
         let sample = |x: f32| {
             StrokePoint::full_pressure(
-                ambre_core::StoredBoardLength::new(x),
-                ambre_core::StoredBoardLength::new(x),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(x),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(x),
             )
         };
         let id = st

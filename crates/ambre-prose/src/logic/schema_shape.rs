@@ -350,11 +350,11 @@ pub(super) fn document_of_every_key() -> ProseState {
         block_id: root,
         style: ParagraphStyle {
             align: Some(Align::Center),
-            indent_first: Some(ambre_core::Pt::new(1.0)),
-            indent_left: Some(ambre_core::Pt::new(2.0)),
-            indent_right: Some(ambre_core::Pt::new(3.0)),
-            space_before: Some(ambre_core::Pt::new(4.0)),
-            space_after: Some(ambre_core::Pt::new(5.0)),
+            indent_first: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(1.0)),
+            indent_left: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(2.0)),
+            indent_right: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(3.0)),
+            space_before: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(4.0)),
+            space_after: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(5.0)),
             line_height: Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_HALF)),
             keep_together: Some(crate::events::KeepTogether::Together),
             keep_with_next: Some(crate::events::KeepWithNext::WithNext),
@@ -555,10 +555,10 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
         bg: Some(ambre_core::Rgb::from_bits(0x00ff_8800)),
         valign: Some(VAlign::Middle),
         border: Some(CellBorder {
-            width: ambre_core::Pt::new(0.5),
+            width: ambre_core::PrintLength::<ambre_core::Pt>::new(0.5),
             color: ambre_core::Rgb::from_bits(0x0000_0000),
         }),
-        padding: Some(ambre_core::Pt::new(4.0)),
+        padding: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(4.0)),
     });
 }
 

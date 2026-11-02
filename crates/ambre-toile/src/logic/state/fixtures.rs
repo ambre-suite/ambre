@@ -23,8 +23,9 @@ use std::collections::{BTreeMap, HashMap};
 
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{
-    BoardFrameCount, BoardLength, ConnectorCount, DocType, ElementCount, FixtureGen, FixtureName,
-    FixtureSeed, FixtureShape, GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
+    Board, BoardFrameCount, ConnectorCount, DocType, ElementCount, FixtureGen, FixtureName,
+    FixtureSeed, FixtureShape, GeneratorVersion, Px, ShapeBody, fixture_peer_count,
+    seeded_document_id,
 };
 use loro::LoroValue;
 
@@ -504,16 +505,16 @@ impl FixtureGen for ToileBenchFixture {
             Self::Board50k => build_spread_board(
                 &mut state,
                 TileCount::new(100),
-                BoardLength::new(4_000.0),
-                BoardLength::new(160.0),
+                Px::<Board>::new(4_000.0),
+                Px::<Board>::new(160.0),
             ),
             // One tile of 500, then three more inside the 1280 by 800 default
             // camera, so every element of this board is a visible element.
             Self::DenseViewport2k => build_spread_board(
                 &mut state,
                 TileCount::new(4),
-                BoardLength::new(600.0),
-                BoardLength::new(24.0),
+                Px::<Board>::new(600.0),
+                Px::<Board>::new(24.0),
             ),
             Self::Deck50 => build_deck(&mut state, ambre_bus::app::toile::SlideCount::new(50)),
         }
@@ -546,8 +547,8 @@ ambre_core::define_tally! {
 fn build_spread_board(
     state: &mut ToileState,
     tiles: TileCount,
-    tile_pitch: BoardLength,
-    element_pitch: BoardLength,
+    tile_pitch: Px<Board>,
+    element_pitch: Px<Board>,
 ) {
     const COLS: u32 = 25;
     const ROWS: u32 = 20;
@@ -604,7 +605,7 @@ fn copy_payload(state: &mut ToileState, ids: Vec<Id<Element>>) -> Option<Clipboa
 /// The frames declare their children and the deck declares its order. The
 /// export walks that order and that membership, never the spatial overlap.
 fn build_deck(state: &mut ToileState, slides: ambre_bus::app::toile::SlideCount) {
-    const PITCH: BoardLength = BoardLength::new(1_400.0);
+    const PITCH: Px<Board> = Px::<Board>::new(1_400.0);
     let mut order = Vec::with_capacity(slides.to_usize());
     for slide in 0..slides.get() {
         let origin = f64::from(slide) * PITCH.get();

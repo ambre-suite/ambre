@@ -851,7 +851,7 @@ pub(crate) mod tests {
         });
         let wanted = ParagraphStyle {
             align: Some(Align::Center),
-            space_before: Some(ambre_core::Pt::new(4.0)),
+            space_before: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(4.0)),
             ..ParagraphStyle::default()
         };
         state.handle_command(ProseCommand::SetParagraphStyle {

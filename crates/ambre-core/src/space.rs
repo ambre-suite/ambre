@@ -11,6 +11,8 @@
 //! | [`View`] | `f32` | a pointer, a caret |
 //! | [`Css`] | `f32` | a wheel delta, a fixed element |
 //! | [`Surface`] | `f64` | an absolute sheet position |
+//! | [`Board`] | `f64` | a frame's padding, a hit reach on a board |
+//! | [`StoredBoard`] | `f32` | a freehand sample, a stroke width |
 //! | [`CanvasCss`] | `u32` | the CSS box of a canvas element |
 //! | [`Device`] | `i32` | a shift of the drawing buffer |
 //! | [`Texel`] | `u32` | an edge of the drawing buffer, a glyph in the atlas |
@@ -319,4 +321,34 @@ pub enum Image {}
 impl Space for Image {
     type Repr = u32;
     const NAME: &'static str = "Image";
+}
+
+/// The world units of a board, before the zoom: what a board's camera scales
+/// into view pixels.
+///
+/// A view length and a board length are both floats. A reach of four view
+/// pixels taken as four board units picks wrong at every zoom but 1. The
+/// camera's named conversion stands between the two. The `f64` is the one
+/// kurbo measures a board in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Board {}
+
+impl Space for Board {
+    type Repr = f64;
+    const NAME: &'static str = "Board";
+}
+
+/// The world units of a board, held in the `f32` that an element stores.
+///
+/// A freehand sample keeps its coordinates in it, so a sample stays twelve
+/// bytes. A style keeps its stroke width and its corner radius in it. The
+/// camera scales it with the shape, and a screen length meets it only through
+/// the camera. `Px::widened` reads it as the [`Board`] length the board
+/// computes in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StoredBoard {}
+
+impl Space for StoredBoard {
+    type Repr = f32;
+    const NAME: &'static str = "StoredBoard";
 }

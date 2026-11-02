@@ -12,21 +12,21 @@
 // ============================================================================
 
 use ambre_bus::app::toile::DisplayNode;
-use ambre_core::BoardLength;
 use ambre_core::id::{Connector, Id};
+use ambre_core::{Board, Px};
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurve, ParamCurveArclen, PathSeg};
 
 /// Arc-length accuracy for the mid-point search, in world units. A caption that
 /// sits a tenth of a pixel off centre is a caption in the right place.
-const ARCLEN_ACCURACY: BoardLength = BoardLength::new(0.1);
+const ARCLEN_ACCURACY: Px<Board> = Px::<Board>::new(0.1);
 
 /// The caption box, in world units. Fixed rather than text-derived: the box is
 /// the wrap width and the click target. Both must be knowable before the font
 /// context exists (the editor opens outside the paint pass).
-pub const LABEL_W: BoardLength = BoardLength::new(160.0);
+pub const LABEL_W: Px<Board> = Px::<Board>::new(160.0);
 /// The height of the caption box, in world units.
-pub const LABEL_H: BoardLength = BoardLength::new(24.0);
+pub const LABEL_H: Px<Board> = Px::<Board>::new(24.0);
 
 /// Caption font size in world units, scaled by the camera at paint time like
 /// every other body on the board.
@@ -77,7 +77,7 @@ pub fn label_rect(path: &BezPath) -> Option<Rect> {
 pub fn connector_at(
     nodes: &[DisplayNode],
     world_pt: Point,
-    pick: super::viewport::BoardLength,
+    pick: Px<Board>,
 ) -> Option<Id<Connector>> {
     nodes
         .iter()
@@ -101,10 +101,11 @@ mod tests {
     use ambre_bus::app::toile::{DisplayConnector, ElementStyle, EndCaps};
 
     use super::*;
-    use crate::ui::viewport::{BoardLength, ViewportTransform};
+    use crate::ui::viewport::ViewportTransform;
+    use ambre_core::{Board, Px};
 
     /// The pointer's reach under a camera at zoom 1.
-    fn pick() -> BoardLength {
+    fn pick() -> Px<Board> {
         crate::ui::hit::pick_floor(&ViewportTransform::default())
     }
 

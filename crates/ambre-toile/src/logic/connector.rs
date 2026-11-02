@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::BoardLength;
+use ambre_core::{Board, Px};
 use kurbo::{BezPath, Point, Rect};
 
 use ambre_core::id::{self, Element, Id};
@@ -34,9 +34,9 @@ pub fn anchor_point(r: &Rect, anchor: Anchor) -> Point {
         Anchor::Right => Point::new(r.x1, r.y0 + r.height() / 2.0),
         Anchor::Center => Point::new(r.x0 + r.width() / 2.0, r.y0 + r.height() / 2.0),
         Anchor::Free { u, v } => Point::new(
-            u.along(BoardLength::new(r.x0), BoardLength::new(r.x1))
+            u.along(Px::<Board>::new(r.x0), Px::<Board>::new(r.x1))
                 .get(),
-            v.along(BoardLength::new(r.y0), BoardLength::new(r.y1))
+            v.along(Px::<Board>::new(r.y0), Px::<Board>::new(r.y1))
                 .get(),
         ),
     }

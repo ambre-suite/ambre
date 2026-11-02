@@ -12,7 +12,7 @@
 //! (`PROSE-FEAT-229`). Every peer holds both once the documents converge, so
 //! every peer keeps the same regions without exchanging anything more.
 
-use ambre_core::StoredAsI64;
+use ambre_core::{PrintLength, StoredAsI64};
 use ambre_core::{Pt, Rgb, StepDirection};
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID, TreeParentId};
 
@@ -164,8 +164,10 @@ fn first_text_block(tree: &LoroTree, block: &TreeID) -> Option<TreeID> {
 
 /// A width or a padding the format holds: finite, and not negative. A column
 /// width must also be above zero.
-fn usable(value: Pt, floor: Floor) -> bool {
-    value.is_finite() && (value > Pt::ZERO || (floor == Floor::ZeroAllowed && value == Pt::ZERO))
+fn usable(value: PrintLength<Pt>, floor: Floor) -> bool {
+    value.is_finite()
+        && (value > PrintLength::<Pt>::ZERO
+            || (floor == Floor::ZeroAllowed && value == PrintLength::<Pt>::ZERO))
 }
 
 /// The least a width or a padding may be.
@@ -189,7 +191,7 @@ impl ProseState {
 
     /// The column widths a table carries, in points.
     #[must_use]
-    pub(crate) fn column_widths(&self, table: &TreeID) -> Vec<Pt> {
+    pub(crate) fn column_widths(&self, table: &TreeID) -> Vec<PrintLength<Pt>> {
         doc::col_widths(&doc::blocks(&self.doc), table)
     }
 
@@ -415,7 +417,7 @@ impl ProseState {
         &mut self,
         table: &TreeID,
         at_col: Col,
-        width: Option<Pt>,
+        width: Option<PrintLength<Pt>>,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let Some(grid) = Grid::read(&tree, table) else {
@@ -487,7 +489,12 @@ impl ProseState {
     }
 
     /// Rewrite one width entry, and never the count (`PROSE-FEAT-239`).
-    pub(super) fn resize_table_col(&mut self, table: &TreeID, col: Col, width: Pt) -> ProseOutcome {
+    pub(super) fn resize_table_col(
+        &mut self,
+        table: &TreeID,
+        col: Col,
+        width: PrintLength<Pt>,
+    ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         if Grid::read(&tree, table).is_none() {
             return Self::err_no_block(table);
@@ -623,7 +630,7 @@ impl ProseState {
         bg: Option<Rgb>,
         valign: Option<VAlign>,
         border: Option<CellBorder>,
-        padding: Option<Pt>,
+        padding: Option<PrintLength<Pt>>,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         if doc::block_type_of(&tree, cell) != Some(BlockType::TableCell) {
@@ -1006,21 +1013,21 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(1),
-            width: ambre_core::Pt::new(100.0),
+            width: ambre_core::PrintLength::<ambre_core::Pt>::new(100.0),
         });
         let first = cell_at(&state, table, 0, 0);
         type_in(&mut state, first, "kept");
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
             at_col: Col::new(1),
-            width: Some(ambre_core::Pt::new(50.0)),
+            width: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(50.0)),
         });
         assert_eq!(
             state.column_widths(&table),
             vec![
                 doc::DEFAULT_COLUMN_WIDTH,
-                ambre_core::Pt::new(50.0),
-                ambre_core::Pt::new(100.0)
+                ambre_core::PrintLength::<ambre_core::Pt>::new(50.0),
+                ambre_core::PrintLength::<ambre_core::Pt>::new(100.0)
             ]
         );
         assert_eq!(row_lengths(&state, table), vec![3, 3]);
@@ -1073,7 +1080,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
             at_col: Col::new(1),
-            width: Some(ambre_core::Pt::new(10.0)),
+            width: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(10.0)),
         });
         assert_eq!(state.regions_of(&table), regions);
         assert_eq!(texts(&state, table)[3][3], "text");
@@ -1091,7 +1098,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(2),
-            width: ambre_core::Pt::new(30.0),
+            width: ambre_core::PrintLength::<ambre_core::Pt>::new(30.0),
         });
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
@@ -1099,7 +1106,10 @@ pub(crate) mod tests {
         });
         assert_eq!(
             state.column_widths(&table),
-            vec![doc::DEFAULT_COLUMN_WIDTH, ambre_core::Pt::new(30.0)]
+            vec![
+                doc::DEFAULT_COLUMN_WIDTH,
+                ambre_core::PrintLength::<ambre_core::Pt>::new(30.0)
+            ]
         );
         assert_eq!(row_lengths(&state, table), vec![2, 2]);
     }
@@ -1182,7 +1192,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(0),
-            width: ambre_core::Pt::new(20.0),
+            width: ambre_core::PrintLength::<ambre_core::Pt>::new(20.0),
         });
         let kept = cell_at(&state, table, 1, 2);
         type_in(&mut state, kept, "kept");
@@ -1196,7 +1206,10 @@ pub(crate) mod tests {
         });
         assert_eq!(
             state.column_widths(&table),
-            vec![ambre_core::Pt::new(20.0), doc::DEFAULT_COLUMN_WIDTH]
+            vec![
+                ambre_core::PrintLength::<ambre_core::Pt>::new(20.0),
+                doc::DEFAULT_COLUMN_WIDTH
+            ]
         );
         assert_eq!(
             texts(&state, table),
@@ -1214,18 +1227,18 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(1),
-            width: ambre_core::Pt::new(144.0),
+            width: ambre_core::PrintLength::<ambre_core::Pt>::new(144.0),
         });
         let d = doc::DEFAULT_COLUMN_WIDTH;
         assert_eq!(
             state.column_widths(&table),
-            vec![d, ambre_core::Pt::new(144.0), d]
+            vec![d, ambre_core::PrintLength::<ambre_core::Pt>::new(144.0), d]
         );
         assert_eq!(texts(&state, table)[0][1], "x");
         let outcome = state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(3),
-            width: ambre_core::Pt::new(10.0),
+            width: ambre_core::PrintLength::<ambre_core::Pt>::new(10.0),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::OutsideTheGrid));
         assert_eq!(state.column_widths(&table).len(), 3);
@@ -1336,10 +1349,10 @@ pub(crate) mod tests {
             bg: Some(Rgb::from_bits(0x00ff_8800)),
             valign: Some(VAlign::Middle),
             border: Some(CellBorder {
-                width: ambre_core::Pt::new(1.5),
+                width: ambre_core::PrintLength::<ambre_core::Pt>::new(1.5),
                 color: Rgb::from_bits(0x0012_3456),
             }),
-            padding: Some(ambre_core::Pt::new(4.0)),
+            padding: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(4.0)),
         });
         let tree = doc::blocks(state.document());
         let attrs = doc::attrs_read(&tree, &styled).expect("the cell carries its style");
@@ -1373,17 +1386,19 @@ pub(crate) mod tests {
             padding,
         };
         let commands = [
-            style(Some(ambre_core::Pt::new(-1.0))),
-            style(Some(ambre_core::Pt::new(f32::NAN))),
+            style(Some(ambre_core::PrintLength::<ambre_core::Pt>::new(-1.0))),
+            style(Some(ambre_core::PrintLength::<ambre_core::Pt>::new(
+                f32::NAN,
+            ))),
             ProseCommand::ResizeTableCol {
                 table_id: block_id(table),
                 col_index: Col::new(0),
-                width: ambre_core::Pt::new(f32::INFINITY),
+                width: ambre_core::PrintLength::<ambre_core::Pt>::new(f32::INFINITY),
             },
             ProseCommand::InsertTableCol {
                 table_id: block_id(table),
                 at_col: Col::new(0),
-                width: Some(ambre_core::Pt::new(0.0)),
+                width: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(0.0)),
             },
         ];
         for command in commands {
@@ -1451,7 +1466,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(0),
-            width: ambre_core::Pt::new(12.0),
+            width: ambre_core::PrintLength::<ambre_core::Pt>::new(12.0),
         });
         merge(&mut state, table, (0, 0), (0, 1));
         let widths = state.column_widths(&table);

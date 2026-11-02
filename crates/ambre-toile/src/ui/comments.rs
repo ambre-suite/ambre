@@ -348,7 +348,7 @@ mod tests {
     fn viewport(pins: Vec<CommentPin>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::BoardLength::new(20.0),
+            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
             viewport: Viewport::default(),
             nodes: Vec::new(),
             reactions: Default::default(),

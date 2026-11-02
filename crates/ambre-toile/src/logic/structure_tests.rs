@@ -779,8 +779,8 @@ fn every_id_the_board_writes_has_the_minted_width() {
         points: [0.0f32, 10.0]
             .map(|x| {
                 StrokePoint::full_pressure(
-                    ambre_core::StoredBoardLength::new(x),
-                    ambre_core::StoredBoardLength::new(x),
+                    ambre_core::Px::<ambre_core::StoredBoard>::new(x),
+                    ambre_core::Px::<ambre_core::StoredBoard>::new(x),
                 )
             })
             .to_vec(),

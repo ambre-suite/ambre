@@ -12,11 +12,9 @@
 use ambre_bus::app::toile::{DisplayNode, DisplayViewport, End, NodeId, ToileCommand, ZTarget};
 use ambre_commands::CommandId;
 use ambre_core::id::{Connector, Element, Id};
-use ambre_core::{Px, View};
+use ambre_core::{Board, Px, View};
 use ambre_draw::{BezPath, Point};
 use kurbo::ParamCurve;
-
-use super::viewport::BoardLength;
 
 /// Endpoint handle radius in screen pixels. The grab tolerance is this radius
 /// taken back into world units, so a handle stays equally easy to hit at every
@@ -34,10 +32,10 @@ pub fn endpoints(path: &BezPath) -> Option<(Point, Point)> {
 
 /// Which endpoint handle `world` grabs, within `tol` world units. The nearer
 /// handle wins when both are in range, so a zero-length arrow still answers.
-pub fn handle_at(path: &BezPath, world: Point, tol: BoardLength) -> Option<End> {
+pub fn handle_at(path: &BezPath, world: Point, tol: Px<Board>) -> Option<End> {
     let (from, to) = endpoints(path)?;
     let (df, dt) = (from.distance(world), to.distance(world));
-    if BoardLength::new(df.min(dt)) > tol {
+    if Px::<Board>::new(df.min(dt)) > tol {
         return None;
     }
     Some(if df <= dt { End::From } else { End::To })
@@ -53,7 +51,7 @@ pub fn retarget_on_release(
     endpoint: End,
     display: &DisplayViewport,
     world: Point,
-    pick: BoardLength,
+    pick: Px<Board>,
 ) -> Option<ToileCommand> {
     let to = super::hit::hit_topmost(&display.nodes, world, pick)?;
     let bounds = super::tool::element_bounds(display, &to)?;
@@ -153,7 +151,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::BoardLength::new(20.0),
+            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
             viewport: Viewport::default(),
             reactions: Default::default(),
             pins: Vec::new(),
@@ -180,15 +178,15 @@ mod tests {
     fn a_press_grabs_the_nearer_end() {
         let p = line((0.0, 0.0), (100.0, 0.0));
         assert_eq!(
-            handle_at(&p, Point::new(2.0, 1.0), BoardLength::new(6.0)),
+            handle_at(&p, Point::new(2.0, 1.0), Px::<Board>::new(6.0)),
             Some(End::From)
         );
         assert_eq!(
-            handle_at(&p, Point::new(98.0, 1.0), BoardLength::new(6.0)),
+            handle_at(&p, Point::new(98.0, 1.0), Px::<Board>::new(6.0)),
             Some(End::To)
         );
         assert_eq!(
-            handle_at(&p, Point::new(50.0, 0.0), BoardLength::new(6.0)),
+            handle_at(&p, Point::new(50.0, 0.0), Px::<Board>::new(6.0)),
             None
         );
     }

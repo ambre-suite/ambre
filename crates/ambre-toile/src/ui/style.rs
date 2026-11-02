@@ -188,7 +188,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::BoardLength::new(20.0),
+            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             nodes,
@@ -293,12 +293,12 @@ mod tests {
     #[test]
     fn differing_stroke_width_and_opacity_flag_both() {
         let a = ElementStyle {
-            stroke_w: ambre_core::StoredBoardLength::new(1.0),
+            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
             opacity: ambre_core::Opacity::new(1.0).unwrap(),
             ..ElementStyle::default()
         };
         let b = ElementStyle {
-            stroke_w: ambre_core::StoredBoardLength::new(3.0),
+            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(3.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
             ..ElementStyle::default()
         };

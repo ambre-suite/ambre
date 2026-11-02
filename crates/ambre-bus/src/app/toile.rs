@@ -15,12 +15,12 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use ambre_core::DocType;
 pub use ambre_core::FontFamily;
 use ambre_core::FontSize;
 use ambre_core::Rgba;
-use ambre_core::StoredBoardLength;
+use ambre_core::StoredBoard;
 use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
+use ambre_core::{DocType, Px};
 use ambre_core::{Slant, Strikethrough, Underline};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
@@ -223,9 +223,9 @@ impl FontSpec {
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Shadow {
     pub color: Rgba,
-    pub dx: StoredBoardLength,
-    pub dy: StoredBoardLength,
-    pub blur: StoredBoardLength,
+    pub dx: Px<StoredBoard>,
+    pub dy: Px<StoredBoard>,
+    pub blur: Px<StoredBoard>,
 }
 
 /// The whole visual style of an element, held as **one** postcard-encoded LWW
@@ -241,10 +241,10 @@ pub struct Shadow {
 pub struct ElementStyle {
     pub fill: Option<Rgba>, // None = no fill
     pub stroke: Option<Rgba>,
-    pub stroke_w: StoredBoardLength,
+    pub stroke_w: Px<StoredBoard>,
     pub opacity: ambre_core::Opacity,
     /// The corner radius of a rectangle or a sticky.
-    pub corner: StoredBoardLength,
+    pub corner: Px<StoredBoard>,
     pub font: FontSpec,
     pub shadow: Option<Shadow>,
     /// Text (foreground) colour, RGBA. `None` = the kind's default ink (a
@@ -258,9 +258,9 @@ impl Default for ElementStyle {
         Self {
             fill: Some(Rgba::from_bits(0xFFFF_FFFF)),
             stroke: Some(Rgba::from_bits(0x3333_33FF)),
-            stroke_w: StoredBoardLength::new(1.0),
+            stroke_w: Px::<StoredBoard>::new(1.0),
             opacity: ambre_core::Opacity::OPAQUE,
-            corner: StoredBoardLength::ZERO,
+            corner: Px::<StoredBoard>::ZERO,
             font: FontSpec::default(),
             shadow: None,
             text_color: None,
@@ -282,7 +282,7 @@ pub const STICKY_DEFAULT_FILL: Rgba = Rgba::from_bits(0xFEF0_8AFF);
 /// Corner radius (world units) of a sticky-note card. A sticky is a plain
 /// rectangle (Miro-style), so this is zero. A named constant keeps the card's
 /// shape spec-anchored and easy to revisit.
-pub const STICKY_CORNER: StoredBoardLength = StoredBoardLength::ZERO;
+pub const STICKY_CORNER: Px<StoredBoard> = Px::<StoredBoard>::ZERO;
 
 /// The size of a text body: automatic, or a positive size the style names.
 ///
@@ -392,7 +392,7 @@ impl ElementStyle {
             ElementKind::Sticky => Self {
                 fill: Some(STICKY_DEFAULT_FILL),
                 stroke: None,
-                stroke_w: StoredBoardLength::ZERO,
+                stroke_w: Px::<StoredBoard>::ZERO,
                 corner: STICKY_CORNER,
                 font: FontSpec {
                     size: FontSizeChoice::AUTO,
@@ -674,8 +674,8 @@ impl std::fmt::Display for WebAddress {
 /// `f32`s, the coordinates in board units then the pressure.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StrokePoint {
-    pub x: StoredBoardLength,
-    pub y: StoredBoardLength,
+    pub x: Px<StoredBoard>,
+    pub y: Px<StoredBoard>,
     /// How hard the pen pressed, [`UnitFraction::ONE`] when the input device
     /// reports none. The type refuses a value outside `0 ..= 1`; the board
     /// reader clamps a stored one (`TOILE-268`).
@@ -686,7 +686,7 @@ impl StrokePoint {
     /// A sample at `(x, y)` on the board, pressed as hard as a device that
     /// reports no pressure reads.
     #[must_use]
-    pub const fn full_pressure(x: StoredBoardLength, y: StoredBoardLength) -> Self {
+    pub const fn full_pressure(x: Px<StoredBoard>, y: Px<StoredBoard>) -> Self {
         Self {
             x,
             y,
@@ -729,9 +729,9 @@ impl UnitFraction {
     #[must_use]
     pub fn along(
         self,
-        start: ambre_core::BoardLength,
-        end: ambre_core::BoardLength,
-    ) -> ambre_core::BoardLength {
+        start: ambre_core::Px<ambre_core::Board>,
+        end: ambre_core::Px<ambre_core::Board>,
+    ) -> ambre_core::Px<ambre_core::Board> {
         start + (end - start) * f64::from(self.0)
     }
 }
@@ -1615,7 +1615,7 @@ pub struct AutoLayout {
     /// Main-axis flow.
     pub direction: Direction,
     /// Space between consecutive children on the main axis.
-    pub gap: ambre_core::BoardLength,
+    pub gap: ambre_core::Px<ambre_core::Board>,
     /// The inset of the content box inside the frame.
     pub padding: Padding,
     /// Main-axis distribution of children in the free space.
@@ -1631,19 +1631,19 @@ pub struct AutoLayout {
 /// `[f64; 4]` the register held before.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Padding {
-    pub top: ambre_core::BoardLength,
-    pub right: ambre_core::BoardLength,
-    pub bottom: ambre_core::BoardLength,
-    pub left: ambre_core::BoardLength,
+    pub top: ambre_core::Px<ambre_core::Board>,
+    pub right: ambre_core::Px<ambre_core::Board>,
+    pub bottom: ambre_core::Px<ambre_core::Board>,
+    pub left: ambre_core::Px<ambre_core::Board>,
 }
 
 impl Padding {
     /// No inset.
-    pub const ZERO: Self = Self::uniform(ambre_core::BoardLength::ZERO);
+    pub const ZERO: Self = Self::uniform(ambre_core::Px::<ambre_core::Board>::ZERO);
 
     /// The same inset on all four sides.
     #[must_use]
-    pub const fn uniform(side: ambre_core::BoardLength) -> Self {
+    pub const fn uniform(side: ambre_core::Px<ambre_core::Board>) -> Self {
         Self {
             top: side,
             right: side,
@@ -2989,7 +2989,7 @@ pub struct DisplayViewport {
     /// The grid step is a power-of-two multiple of it (`TOILE-UI-279`). The
     /// value rides each frame as written: the view replaces a unit that is
     /// not finite and positive.
-    pub grid_unit: ambre_core::BoardLength,
+    pub grid_unit: ambre_core::Px<ambre_core::Board>,
     /// Back-to-front sequence mirroring the `layers` walk
     /// (`toile-z-order`): elements and connectors interleaved by
     /// z-order, painted in one pass.
@@ -3332,8 +3332,8 @@ mod tests {
     #[test]
     fn a_stroke_sample_keeps_three_floats_and_refuses_a_pressure_past_one() {
         let sample = StrokePoint {
-            x: StoredBoardLength::new(1.5),
-            y: StoredBoardLength::new(-2.0),
+            x: Px::<StoredBoard>::new(1.5),
+            y: Px::<StoredBoard>::new(-2.0),
             pressure: UnitFraction::HALF,
         };
         let encoded = postcard::to_allocvec(&sample).expect("a sample encodes");
@@ -3465,12 +3465,12 @@ mod tests {
     fn a_style_round_trips_through_its_version() {
         let style = ElementStyle {
             fill: Some(Rgba::from_bits(0xaabb_ccff)),
-            corner: StoredBoardLength::new(8.0),
+            corner: Px::<StoredBoard>::new(8.0),
             shadow: Some(Shadow {
                 color: Rgba::from_bits(0x0000_00ff),
-                dx: StoredBoardLength::new(1.0),
-                dy: StoredBoardLength::new(2.0),
-                blur: StoredBoardLength::new(3.0),
+                dx: Px::<StoredBoard>::new(1.0),
+                dy: Px::<StoredBoard>::new(2.0),
+                blur: Px::<StoredBoard>::new(3.0),
             }),
             font: FontSpec {
                 family: Some(FontFamily::Serif),

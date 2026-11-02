@@ -156,7 +156,7 @@ impl GridScroll {
 
     /// The speed of the motion in flight, px per ms, or `None` at rest.
     #[cfg(test)]
-    pub(crate) fn speed(&self) -> Option<ambre_core::ViewSpeedVector> {
+    pub(crate) fn speed(&self) -> Option<ambre_core::Vector<ambre_core::ViewSpeed>> {
         self.kinetic.speed()
     }
 }

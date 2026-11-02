@@ -12,9 +12,9 @@
 //! renders as two decimal numbers joined by `@`, so neither half carries the
 //! separator (`PROSE-088`).
 
-use ambre_core::StoredAsI64;
 use ambre_core::crdt::FieldKey;
 use ambre_core::{FontSize, LangTag, Mm, Pt};
+use ambre_core::{PrintLength, StoredAsI64};
 use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
 };
@@ -471,7 +471,7 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
 
 /// The width a column takes when the command that makes it names none
 /// (`PROSE-FEAT-232`): one inch.
-pub const DEFAULT_COLUMN_WIDTH: Pt = Pt::new(72.0);
+pub const DEFAULT_COLUMN_WIDTH: PrintLength<Pt> = PrintLength::<Pt>::new(72.0);
 
 /// The nine built-in styles. A document written by an older client renders
 /// them from the client rather than from stale copies of its own
@@ -786,15 +786,15 @@ pub(crate) fn col_widths_read(tree: &LoroTree, table: &TreeID) -> Option<LoroMov
 /// A table's column widths, in points, in column order. A stored width that
 /// is not a finite number reads as absent, and takes the default width.
 #[must_use]
-pub(crate) fn col_widths(tree: &LoroTree, table: &TreeID) -> Vec<Pt> {
+pub(crate) fn col_widths(tree: &LoroTree, table: &TreeID) -> Vec<PrintLength<Pt>> {
     let Some(list) = col_widths_read(tree, table) else {
         return Vec::new();
     };
     (0..list.len())
         .map(|index| {
             let stored = match list.get(index).and_then(|v| v.into_value().ok()) {
-                Some(LoroValue::Double(n)) => Some(Pt::new(n as f32)),
-                Some(LoroValue::I64(n)) => Some(Pt::new(n as f32)),
+                Some(LoroValue::Double(n)) => Some(PrintLength::<Pt>::new(n as f32)),
+                Some(LoroValue::I64(n)) => Some(PrintLength::<Pt>::new(n as f32)),
                 _ => None,
             };
             stored
@@ -1155,7 +1155,7 @@ impl Orientation {
     /// Whether the two dimensions agree with the orientation. A square page
     /// agrees with both, because neither dimension is the greater one.
     #[must_use]
-    pub fn agrees_with(self, width: Mm, height: Mm) -> bool {
+    pub fn agrees_with(self, width: PrintLength<Mm>, height: PrintLength<Mm>) -> bool {
         match self {
             Self::Portrait => width <= height,
             Self::Landscape => width >= height,
@@ -1164,10 +1164,10 @@ impl Orientation {
 }
 
 /// A4 portrait: the page a fresh document opens on.
-const A4_WIDTH: Mm = Mm::new(210.0);
-const A4_HEIGHT: Mm = Mm::new(297.0);
+const A4_WIDTH: PrintLength<Mm> = PrintLength::<Mm>::new(210.0);
+const A4_HEIGHT: PrintLength<Mm> = PrintLength::<Mm>::new(297.0);
 /// The four margins of a fresh document.
-const DEFAULT_MARGIN: Mm = Mm::new(20.0);
+const DEFAULT_MARGIN: PrintLength<Mm> = PrintLength::<Mm>::new(20.0);
 
 /// The two text defaults of a fresh document that carry a number.
 ///
@@ -1183,12 +1183,12 @@ const DEFAULT_LINE_HEIGHT: LineSpacingMultiple = LineSpacingMultiple::ONE_AND_HA
 /// one place a page number or a measured height exists (`PROSE-065`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PageFormat {
-    pub width: Mm,
-    pub height: Mm,
-    pub margin_top: Mm,
-    pub margin_bottom: Mm,
-    pub margin_left: Mm,
-    pub margin_right: Mm,
+    pub width: PrintLength<Mm>,
+    pub height: PrintLength<Mm>,
+    pub margin_top: PrintLength<Mm>,
+    pub margin_bottom: PrintLength<Mm>,
+    pub margin_left: PrintLength<Mm>,
+    pub margin_right: PrintLength<Mm>,
 }
 
 impl Default for PageFormat {
@@ -1276,20 +1276,20 @@ pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
     else {
         return fallback;
     };
-    let read = |key: PageKey, default: Mm| -> Mm {
+    let read = |key: PageKey, default: PrintLength<Mm>| -> PrintLength<Mm> {
         read_f32(&page, key)
             .filter(|number| number.is_finite() && *number >= 0.0)
-            .map_or(default, Mm::new)
+            .map_or(default, PrintLength::<Mm>::new)
     };
     let width = read(PageKey::WidthMm, fallback.width);
     let height = read(PageKey::HeightMm, fallback.height);
     PageFormat {
-        width: if width > Mm::ZERO {
+        width: if width > PrintLength::<Mm>::ZERO {
             width
         } else {
             fallback.width
         },
-        height: if height > Mm::ZERO {
+        height: if height > PrintLength::<Mm>::ZERO {
             height
         } else {
             fallback.height
@@ -1313,10 +1313,14 @@ pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
 pub(crate) fn write_page_format(
     doc: &LoroDoc,
     orientation: Orientation,
-    width: Mm,
-    height: Mm,
+    width: PrintLength<Mm>,
+    height: PrintLength<Mm>,
 ) -> bool {
-    if !width.is_finite() || !height.is_finite() || width <= Mm::ZERO || height <= Mm::ZERO {
+    if !width.is_finite()
+        || !height.is_finite()
+        || width <= PrintLength::<Mm>::ZERO
+        || height <= PrintLength::<Mm>::ZERO
+    {
         return false;
     }
     if !orientation.agrees_with(width, height) {
@@ -1657,9 +1661,9 @@ fn read_f32<K: FieldKey>(map: &Fields<K>, key: K) -> Option<f32> {
 
 /// A length in points stored under `key`. A value that is not a finite number
 /// reads as absent, so the default style applies and the document still opens.
-fn read_pt<K: FieldKey>(map: &Fields<K>, key: K) -> Option<Pt> {
+fn read_pt<K: FieldKey>(map: &Fields<K>, key: K) -> Option<PrintLength<Pt>> {
     read_f32(map, key)
-        .map(Pt::new)
+        .map(PrintLength::<Pt>::new)
         .filter(|points| points.is_finite())
 }
 
@@ -1805,7 +1809,7 @@ mod tests {
             .expect("the register takes a double");
         let format = read_page_format(&doc);
         assert_eq!(format.width, PageFormat::default().width);
-        assert_eq!(format.margin_left, Mm::new(5.0));
+        assert_eq!(format.margin_left, PrintLength::<Mm>::new(5.0));
     }
 
     /// A default size a peer stored past the cap reads as the cap
@@ -1862,14 +1866,14 @@ mod tests {
         assert!(!write_page_format(
             &doc,
             Orientation::Portrait,
-            Mm::new(297.0),
-            Mm::new(210.0)
+            PrintLength::<Mm>::new(297.0),
+            PrintLength::<Mm>::new(210.0)
         ));
         assert!(write_page_format(
             &doc,
             Orientation::Landscape,
-            Mm::new(297.0),
-            Mm::new(210.0)
+            PrintLength::<Mm>::new(297.0),
+            PrintLength::<Mm>::new(210.0)
         ));
     }
 
@@ -1916,7 +1920,7 @@ mod tests {
         assert_eq!(style.indent_left, None);
         assert_eq!(style.space_after, None);
         assert_eq!(style.space_before, None, "past the largest f32");
-        assert_eq!(style.indent_right, Some(Pt::new(6.0)));
+        assert_eq!(style.indent_right, Some(PrintLength::<Pt>::new(6.0)));
     }
 
     /// A write refuses a length that is not a finite number, and writes no
@@ -1932,7 +1936,7 @@ mod tests {
                 &node,
                 &ParagraphStyle {
                     align: Some(Align::Center),
-                    space_before: Some(Pt::new(bad)),
+                    space_before: Some(PrintLength::<Pt>::new(bad)),
                     ..ParagraphStyle::default()
                 },
             );
@@ -1949,7 +1953,7 @@ mod tests {
                 &node,
                 &ParagraphStyle {
                     align: Some(Align::Center),
-                    line_height: Some(LineHeight::Exact(Pt::new(bad))),
+                    line_height: Some(LineHeight::Exact(PrintLength::<Pt>::new(bad))),
                     ..ParagraphStyle::default()
                 },
             );
@@ -1986,14 +1990,14 @@ mod tests {
             write_paragraph_style(
                 &node,
                 &ParagraphStyle {
-                    line_height: Some(mode(Pt::new(12.0))),
+                    line_height: Some(mode(PrintLength::<Pt>::new(12.0))),
                     ..ParagraphStyle::default()
                 },
             )
             .expect("the write lands");
             assert_eq!(
                 read_paragraph_style(&tree, &root).line_height,
-                Some(mode(Pt::new(12.0)))
+                Some(mode(PrintLength::<Pt>::new(12.0)))
             );
             let map = map_at(&node, NodeKey::LineHeight)
                 .map(Fields::<LineHeightKey>::of)
@@ -2028,7 +2032,7 @@ mod tests {
                 DEFAULT_COLUMN_WIDTH,
                 DEFAULT_COLUMN_WIDTH,
                 DEFAULT_COLUMN_WIDTH,
-                Pt::new(72.0)
+                PrintLength::<Pt>::new(72.0)
             ]
         );
     }
@@ -2051,8 +2055,8 @@ mod tests {
         assert!(write_page_format(
             &doc,
             Orientation::Landscape,
-            Mm::new(297.0),
-            Mm::new(210.0)
+            PrintLength::<Mm>::new(297.0),
+            PrintLength::<Mm>::new(210.0)
         ));
         doc.commit();
         let page = map_at(&meta(&doc), MetaKey::Page)

@@ -78,8 +78,8 @@ drawing kind, carrying its samples in one binary field
 /// `f32`s, the coordinates in board units then the pressure.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StrokePoint {
-    pub x:        StoredBoardLength,
-    pub y:        StoredBoardLength,
+    pub x:        Px<StoredBoard>,
+    pub y:        Px<StoredBoard>,
     /// `UnitFraction::ONE` when the input device reports none. A writer
     /// refuses a value outside `0 ..= 1`; the reader clamps it (`TOILE-268`).
     pub pressure: UnitFraction,

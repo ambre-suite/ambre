@@ -31,7 +31,7 @@ use ambre_bus::{Col, ColCount, Decimals, DecimalsStep, Row, RowCount};
 use ambre_core::id::{
     Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
-use ambre_core::{BoardLength, Generation};
+use ambre_core::{Board, Generation, Px};
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
 
@@ -176,8 +176,8 @@ fn a_fraction_of_a_side_lies_between_zero_and_one() {
         assert_eq!(UnitFraction::new(refused), None);
     }
     assert_eq!(
-        UnitFraction::HALF.along(BoardLength::new(10.0), BoardLength::new(30.0)),
-        BoardLength::new(20.0)
+        UnitFraction::HALF.along(Px::<Board>::new(10.0), Px::<Board>::new(30.0)),
+        Px::<Board>::new(20.0)
     );
     let past: Result<UnitFraction, _> =
         postcard::from_bytes(&postcard::to_allocvec(&2.0_f32).unwrap());

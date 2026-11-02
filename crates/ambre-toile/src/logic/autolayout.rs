@@ -236,7 +236,7 @@ mod tests {
     fn layout(direction: Direction, gap: f64, align: Align, sizing: Sizing) -> AutoLayout {
         AutoLayout {
             direction,
-            gap: ambre_core::BoardLength::new(gap),
+            gap: ambre_core::Px::<ambre_core::Board>::new(gap),
             padding: Padding::ZERO,
             align,
             sizing,
@@ -274,12 +274,12 @@ mod tests {
         let frame = rect(0.0, 0.0, 200.0, 100.0);
         let l = AutoLayout {
             direction: Direction::Horizontal,
-            gap: ambre_core::BoardLength::ZERO,
+            gap: ambre_core::Px::<ambre_core::Board>::ZERO,
             padding: Padding {
-                top: ambre_core::BoardLength::new(5.0),
-                right: ambre_core::BoardLength::new(10.0),
-                bottom: ambre_core::BoardLength::new(15.0),
-                left: ambre_core::BoardLength::new(20.0),
+                top: ambre_core::Px::<ambre_core::Board>::new(5.0),
+                right: ambre_core::Px::<ambre_core::Board>::new(10.0),
+                bottom: ambre_core::Px::<ambre_core::Board>::new(15.0),
+                left: ambre_core::Px::<ambre_core::Board>::new(20.0),
             },
             align: Align::Start,
             sizing: Sizing::Fixed,
@@ -445,10 +445,10 @@ mod tests {
         let frame = rect(0.0, 0.0, 200.0, 100.0);
         let mut l = layout(Direction::Horizontal, 0.0, Align::End, Sizing::Fixed);
         l.padding = Padding {
-            top: ambre_core::BoardLength::new(10.0),
-            right: ambre_core::BoardLength::new(20.0),
-            bottom: ambre_core::BoardLength::new(10.0),
-            left: ambre_core::BoardLength::new(30.0),
+            top: ambre_core::Px::<ambre_core::Board>::new(10.0),
+            right: ambre_core::Px::<ambre_core::Board>::new(20.0),
+            bottom: ambre_core::Px::<ambre_core::Board>::new(10.0),
+            left: ambre_core::Px::<ambre_core::Board>::new(30.0),
         };
         let out = solve_layout(frame, &l, &[size(40.0, 10.0), size(40.0, 10.0)]);
         assert_eq!(out[1].x1, 180.0, "the run stops at the inner edge");

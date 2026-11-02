@@ -7,7 +7,7 @@
 //! merely large (not malicious) drawing still imports, just bounded to the world.
 
 use ambre_core::Px;
-use ambre_core::{BoardLength, ElementCount};
+use ambre_core::{Board, ElementCount};
 use kurbo::{Point, Rect};
 
 use super::ImportError;
@@ -22,16 +22,16 @@ ambre_core::define_tally! {
 /// finite and not negative, so the range `-bound..=bound` it clamps to is
 /// never empty and never NaN.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CoordBound(BoardLength);
+pub struct CoordBound(Px<Board>);
 
 impl CoordBound {
     /// `None` unless `bound` is finite and not negative.
-    pub fn new(bound: BoardLength) -> Option<Self> {
-        (bound.is_finite() && bound >= BoardLength::ZERO).then_some(Self(bound))
+    pub fn new(bound: Px<Board>) -> Option<Self> {
+        (bound.is_finite() && bound >= Px::<Board>::ZERO).then_some(Self(bound))
     }
 
     /// `v` held inside `[-bound, bound]`.
-    pub fn clamp(self, v: BoardLength) -> BoardLength {
+    pub fn clamp(self, v: Px<Board>) -> Px<Board> {
         v.clamp(-self.0, self.0)
     }
 }
@@ -62,7 +62,7 @@ impl Default for Limits {
             max_depth: ImportDepth::new(64),
             // +/- 1e6 world units: far past any real board, safely inside f32 range
             // for the CRDT geometry fields.
-            coord_clamp: CoordBound(BoardLength::new(1_000_000.0)),
+            coord_clamp: CoordBound(Px::<Board>::new(1_000_000.0)),
             // 8192 px: a 8K texture edge; above this the decode cost is abusive.
             max_image: ambre_core::Size::new(Px::new(8_192), Px::new(8_192)),
         }
@@ -72,9 +72,9 @@ impl Default for Limits {
 impl Limits {
     /// Clamp one coordinate to `[-coord_clamp, coord_clamp]`. Non-finite input
     /// (NaN/inf from a crafted file) collapses to 0.0 rather than poisoning the geometry.
-    pub fn clamp_coord(&self, v: BoardLength) -> BoardLength {
+    pub fn clamp_coord(&self, v: Px<Board>) -> Px<Board> {
         if !v.is_finite() {
-            return BoardLength::ZERO;
+            return Px::<Board>::ZERO;
         }
         self.coord_clamp.clamp(v)
     }
@@ -82,8 +82,8 @@ impl Limits {
     /// Clamp a point to the world bound.
     pub fn clamp_point(&self, p: Point) -> Point {
         Point::new(
-            self.clamp_coord(BoardLength::new(p.x)).get(),
-            self.clamp_coord(BoardLength::new(p.y)).get(),
+            self.clamp_coord(Px::<Board>::new(p.x)).get(),
+            self.clamp_coord(Px::<Board>::new(p.y)).get(),
         )
     }
 
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn coord_clamp_bounds_and_sanitizes() {
         let l = bounded(100.0);
-        let at = |v: f64| l.clamp_coord(BoardLength::new(v)).get();
+        let at = |v: f64| l.clamp_coord(Px::<Board>::new(v)).get();
         assert_eq!(at(50.0), 50.0);
         assert_eq!(at(999.0), 100.0);
         assert_eq!(at(-999.0), -100.0);
@@ -167,15 +167,15 @@ mod tests {
     #[test]
     fn a_coord_bound_is_finite_and_not_negative() {
         for bad in [-1.0, f64::NAN, f64::INFINITY] {
-            assert_eq!(CoordBound::new(BoardLength::new(bad)), None, "{bad}");
+            assert_eq!(CoordBound::new(Px::<Board>::new(bad)), None, "{bad}");
         }
-        let zero = CoordBound::new(BoardLength::ZERO).expect("zero is a bound");
-        assert_eq!(zero.clamp(BoardLength::new(7.0)), BoardLength::ZERO);
+        let zero = CoordBound::new(Px::<Board>::ZERO).expect("zero is a bound");
+        assert_eq!(zero.clamp(Px::<Board>::new(7.0)), Px::<Board>::ZERO);
     }
 
     fn bounded(bound: f64) -> Limits {
         Limits {
-            coord_clamp: CoordBound::new(BoardLength::new(bound)).expect("a valid bound"),
+            coord_clamp: CoordBound::new(Px::<Board>::new(bound)).expect("a valid bound"),
             ..Limits::default()
         }
     }

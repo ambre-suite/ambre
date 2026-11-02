@@ -9,7 +9,7 @@
 // ============================================================================
 
 use ambre_canvas::Palette;
-use ambre_core::BoardLength;
+use ambre_core::{Board, Px};
 use ambre_draw::{DrawSurface, Point};
 
 use super::viewport::ViewportTransform;
@@ -17,7 +17,7 @@ use super::viewport::ViewportTransform;
 /// The grid unit in world units of a board whose register holds no usable one.
 /// A power-of-two multiple of the unit is the smallest step the adaptive grid
 /// shows.
-pub const BASE_GRID: BoardLength = BoardLength::new(20.0);
+pub const BASE_GRID: Px<Board> = Px::<Board>::new(20.0);
 
 /// The unit a grid steps by: a finite, positive board length.
 ///
@@ -25,7 +25,7 @@ pub const BASE_GRID: BoardLength = BoardLength::new(20.0);
 /// a NaN unit would stall the step search of [`grid_step`], so no such unit
 /// is representable.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct GridUnit(BoardLength);
+pub struct GridUnit(Px<Board>);
 
 impl GridUnit {
     /// The unit of a board whose register holds no usable one.
@@ -33,20 +33,20 @@ impl GridUnit {
 
     /// The unit `length`, or `None` when it is not finite and positive.
     #[must_use]
-    pub fn new(length: BoardLength) -> Option<Self> {
-        (length.is_finite() && length > BoardLength::ZERO).then_some(Self(length))
+    pub fn new(length: Px<Board>) -> Option<Self> {
+        (length.is_finite() && length > Px::<Board>::ZERO).then_some(Self(length))
     }
 
     /// The unit a board paints its grid on: its `board` register when that
     /// holds a usable unit, else [`GridUnit::BASE`] (`TOILE-UI-279`).
     #[must_use]
-    pub fn of_register(register: BoardLength) -> Self {
+    pub fn of_register(register: Px<Board>) -> Self {
         Self::new(register).unwrap_or(Self::BASE)
     }
 
     /// The unit as a board length.
     #[must_use]
-    pub fn length(self) -> BoardLength {
+    pub fn length(self) -> Px<Board> {
         self.0
     }
 }
@@ -65,7 +65,7 @@ const MAX_SPACING: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_cor
 pub fn grid_step(
     zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
     base: GridUnit,
-) -> BoardLength {
+) -> Px<Board> {
     let zoom = zoom.get();
     // The band, in the f64 of the board's screen geometry.
     let (min, max) = (f64::from(MIN_SPACING.get()), f64::from(MAX_SPACING.get()));
@@ -83,7 +83,7 @@ pub fn grid_step(
 }
 
 /// Quantize a world point to the nearest multiple of `step` on each axis.
-pub fn snap_world(p: Point, step: BoardLength) -> Point {
+pub fn snap_world(p: Point, step: Px<Board>) -> Point {
     let step = step.get();
     Point::new((p.x / step).round() * step, (p.y / step).round() * step)
 }
@@ -109,7 +109,7 @@ pub fn paint_grid<S: DrawSurface>(
     surface: &mut S,
     cam: &ViewportTransform,
     palette: &Palette,
-    unit: BoardLength,
+    unit: Px<Board>,
 ) {
     // Board background fills the whole canvas.
     paint_background(surface, cam, palette);
@@ -202,7 +202,7 @@ mod tests {
 
     fn grid_ops(cam: &ViewportTransform, unit: f64) -> Vec<DrawOp> {
         let mut surface = RecordingSurface::new();
-        paint_grid(&mut surface, cam, &palette(), BoardLength::new(unit));
+        paint_grid(&mut surface, cam, &palette(), Px::<Board>::new(unit));
         surface.ops().to_vec()
     }
 
@@ -223,8 +223,8 @@ mod tests {
         let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         // At 1x a unit of 20 doubles to stay legible; 32 and 50 already are.
         for (unit, step) in [(20.0, 40.0), (32.0, 32.0), (50.0, 50.0)] {
-            let typed = GridUnit::of_register(BoardLength::new(unit));
-            assert_eq!(grid_step(cam.zoom, typed), BoardLength::new(step));
+            let typed = GridUnit::of_register(Px::<Board>::new(unit));
+            assert_eq!(grid_step(cam.zoom, typed), Px::<Board>::new(step));
             let xs = columns(&grid_ops(&cam, unit));
             assert!(xs.len() > 2, "unit {unit}: {xs:?}");
             for pair in xs.windows(2) {
@@ -234,7 +234,7 @@ mod tests {
             assert!(xs.iter().any(|x| (x - 500.0).abs() < 1e-9));
         }
         for unusable in [0.0, -8.0, f64::NAN, f64::INFINITY] {
-            let length = BoardLength::new(unusable);
+            let length = Px::<Board>::new(unusable);
             assert_eq!(GridUnit::new(length), None, "{unusable}");
             assert_eq!(GridUnit::of_register(length), GridUnit::BASE, "{unusable}");
             assert_eq!(
@@ -249,14 +249,14 @@ mod tests {
     #[test]
     fn a_grid_unit_is_finite_and_positive() {
         for refused in [0.0, -0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            assert_eq!(GridUnit::new(BoardLength::new(refused)), None, "{refused}");
+            assert_eq!(GridUnit::new(Px::<Board>::new(refused)), None, "{refused}");
         }
-        let tiny = GridUnit::new(BoardLength::new(f64::MIN_POSITIVE)).map(GridUnit::length);
-        assert_eq!(tiny, Some(BoardLength::new(f64::MIN_POSITIVE)));
+        let tiny = GridUnit::new(Px::<Board>::new(f64::MIN_POSITIVE)).map(GridUnit::length);
+        assert_eq!(tiny, Some(Px::<Board>::new(f64::MIN_POSITIVE)));
         let zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0);
         let step = grid_step(
             zoom,
-            GridUnit::of_register(BoardLength::new(f64::MIN_POSITIVE)),
+            GridUnit::of_register(Px::<Board>::new(f64::MIN_POSITIVE)),
         );
         assert!(step.get() >= f64::from(MIN_SPACING.get()));
     }
@@ -306,10 +306,10 @@ mod tests {
     /// the grid step on each axis.
     #[test]
     fn snap_quantizes_to_step() {
-        let s = snap_world(Point::new(23.0, -31.0), BoardLength::new(20.0));
+        let s = snap_world(Point::new(23.0, -31.0), Px::<Board>::new(20.0));
         assert_eq!(s, Point::new(20.0, -40.0));
         // Past the half step, the point goes up: rounding down would answer 20.
-        let up = snap_world(Point::new(31.0, 9.0), BoardLength::new(20.0));
+        let up = snap_world(Point::new(31.0, 9.0), Px::<Board>::new(20.0));
         assert_eq!(up, Point::new(40.0, 0.0));
     }
 }

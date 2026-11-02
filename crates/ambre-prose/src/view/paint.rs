@@ -1244,7 +1244,7 @@ mod tests {
             if let ProseCommand::SetCellStyle { bg, border, .. } = command {
                 *bg = Some(ambre_core::Rgb::from_bits(0x00ff_8800));
                 *border = Some(CellBorder {
-                    width: ambre_core::Pt::new(3.0),
+                    width: ambre_core::PrintLength::<ambre_core::Pt>::new(3.0),
                     color: ambre_core::Rgb::from_bits(0x0012_3456),
                 });
             }
@@ -1295,12 +1295,16 @@ mod tests {
 
         style(&mut state, first, |command| {
             if let ProseCommand::SetCellStyle { padding, .. } = command {
-                *padding = Some(ambre_core::Pt::new(12.0));
+                *padding = Some(ambre_core::PrintLength::<ambre_core::Pt>::new(12.0));
             }
         });
         let mut ui = view_of(&mut state);
         let (x1, y1) = first_text_at(&paint(&mut ui));
-        let pad = f64::from(ambre_core::Pt::new(12.0).to_doc_px().get());
+        let pad = f64::from(
+            ambre_core::PrintLength::<ambre_core::Pt>::new(12.0)
+                .to_doc_px()
+                .get(),
+        );
         assert!(
             (x1 - x0 - pad).abs() < 0.5,
             "the text moves in by the padding"
@@ -1314,7 +1318,7 @@ mod tests {
         // The neighbour pads more, so the first cell has room below its text.
         style(&mut state, second, |command| {
             if let ProseCommand::SetCellStyle { padding, .. } = command {
-                *padding = Some(ambre_core::Pt::new(48.0));
+                *padding = Some(ambre_core::PrintLength::<ambre_core::Pt>::new(48.0));
             }
         });
         style(&mut state, first, |command| {
@@ -1324,7 +1328,12 @@ mod tests {
         });
         let mut ui = view_of(&mut state);
         let (_, y2) = first_text_at(&paint(&mut ui));
-        let room = 2.0 * f64::from(ambre_core::Pt::new(36.0).to_doc_px().get());
+        let room = 2.0
+            * f64::from(
+                ambre_core::PrintLength::<ambre_core::Pt>::new(36.0)
+                    .to_doc_px()
+                    .get(),
+            );
         assert!((y2 - y1 - room).abs() < 0.5, "the text sits at the bottom");
     }
 

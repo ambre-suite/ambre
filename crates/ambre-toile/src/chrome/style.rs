@@ -225,7 +225,7 @@ pub fn StyleInspector(
                             on:input=move |ev| {
                                 if let Ok(v) = event_target_value(&ev).parse::<f32>() {
                                     stroke_w.set(v.max(0.0));
-                                    commit(StyleEdit::StrokeWidth(ambre_core::StoredBoardLength::new(v)));
+                                    commit(StyleEdit::StrokeWidth(ambre_core::Px::<ambre_core::StoredBoard>::new(v)));
                                 }
                             }
                         />

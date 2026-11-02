@@ -253,9 +253,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let style = ElementStyle {
         fill: Some(Rgba::from_bits(0x0203_0401)),
         stroke: Some(Rgba::from_bits(0x0607_0805)),
-        stroke_w: ambre_core::StoredBoardLength::new(1.5),
+        stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(1.5),
         opacity: ambre_core::Opacity::new(0.25).unwrap(),
-        corner: ambre_core::StoredBoardLength::new(3.5),
+        corner: ambre_core::Px::<ambre_core::StoredBoard>::new(3.5),
         font: FontSpec {
             family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
             size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
@@ -266,27 +266,27 @@ fn postcard_layouts() -> Vec<(String, String)> {
         },
         shadow: Some(Shadow {
             color: Rgba::from_bits(0x0a0b_0c09),
-            dx: ambre_core::StoredBoardLength::new(11.5),
-            dy: ambre_core::StoredBoardLength::new(12.5),
-            blur: ambre_core::StoredBoardLength::new(13.5),
+            dx: ambre_core::Px::<ambre_core::StoredBoard>::new(11.5),
+            dy: ambre_core::Px::<ambre_core::StoredBoard>::new(12.5),
+            blur: ambre_core::Px::<ambre_core::StoredBoard>::new(13.5),
         }),
         text_color: Some(Rgba::from_bits(0x0e0f_100d)),
     };
     let layout = AutoLayout {
         direction: Direction::Vertical,
-        gap: ambre_core::BoardLength::new(1.5),
+        gap: ambre_core::Px::<ambre_core::Board>::new(1.5),
         padding: ambre_bus::app::toile::Padding {
-            top: ambre_core::BoardLength::new(2.5),
-            right: ambre_core::BoardLength::new(3.5),
-            bottom: ambre_core::BoardLength::new(4.5),
-            left: ambre_core::BoardLength::new(5.5),
+            top: ambre_core::Px::<ambre_core::Board>::new(2.5),
+            right: ambre_core::Px::<ambre_core::Board>::new(3.5),
+            bottom: ambre_core::Px::<ambre_core::Board>::new(4.5),
+            left: ambre_core::Px::<ambre_core::Board>::new(5.5),
         },
         align: Align::End,
         sizing: Sizing::Fill,
     };
     let points = vec![StrokePoint {
-        x: ambre_core::StoredBoardLength::new(1.5),
-        y: ambre_core::StoredBoardLength::new(2.5),
+        x: ambre_core::Px::<ambre_core::StoredBoard>::new(1.5),
+        y: ambre_core::Px::<ambre_core::StoredBoard>::new(2.5),
         pressure: ambre_bus::app::toile::UnitFraction::HALF,
     }];
     vec![
@@ -570,8 +570,10 @@ pub(super) fn board_of_every_key() -> ToileState {
         frame: slide.clone(),
         layout: Some(AutoLayout {
             direction: Direction::Horizontal,
-            gap: ambre_core::BoardLength::new(8.0),
-            padding: ambre_bus::app::toile::Padding::uniform(ambre_core::BoardLength::new(4.0)),
+            gap: ambre_core::Px::<ambre_core::Board>::new(8.0),
+            padding: ambre_bus::app::toile::Padding::uniform(
+                ambre_core::Px::<ambre_core::Board>::new(4.0),
+            ),
             align: Align::Start,
             sizing: Sizing::Hug,
         }),
@@ -591,12 +593,12 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.handle_command(ToileCommand::CommitStroke {
         points: vec![
             StrokePoint::full_pressure(
-                ambre_core::StoredBoardLength::new(0.0),
-                ambre_core::StoredBoardLength::new(0.0),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(0.0),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(0.0),
             ),
             StrokePoint::full_pressure(
-                ambre_core::StoredBoardLength::new(1.0),
-                ambre_core::StoredBoardLength::new(1.0),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
+                ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
             ),
         ],
         style: ElementStyle::default(),

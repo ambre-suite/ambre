@@ -31,7 +31,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
-use ambre_core::{Pt, Rgb};
+use ambre_core::{PrintLength, Pt, Rgb};
 
 use super::grid::{CellPos, Col, ColCount, RowCount};
 
@@ -724,9 +724,9 @@ pub enum LineHeight {
     /// A multiple of the font size.
     Multiple(LineSpacingMultiple),
     /// An exact height.
-    Exact(Pt),
+    Exact(PrintLength<Pt>),
     /// A floor on the height.
-    AtLeast(Pt),
+    AtLeast(PrintLength<Pt>),
 }
 
 impl LineHeight {
@@ -734,7 +734,7 @@ impl LineHeight {
     /// that is not finite and above zero, and for a height that is not finite.
     #[must_use]
     pub fn from_stored(mode: LineHeightMode, value: f32) -> Option<Self> {
-        let height = || Some(Pt::new(value)).filter(|points| points.is_finite());
+        let height = || Some(PrintLength::<Pt>::new(value)).filter(|points| points.is_finite());
         Some(match mode {
             LineHeightMode::Multiple => Self::Multiple(LineSpacingMultiple::new(value)?),
             LineHeightMode::Exact => Self::Exact(height()?),
@@ -791,11 +791,11 @@ ambre_core::define_flag! {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ParagraphStyle {
     pub align: Option<Align>,
-    pub indent_first: Option<Pt>,
-    pub indent_left: Option<Pt>,
-    pub indent_right: Option<Pt>,
-    pub space_before: Option<Pt>,
-    pub space_after: Option<Pt>,
+    pub indent_first: Option<PrintLength<Pt>>,
+    pub indent_left: Option<PrintLength<Pt>>,
+    pub indent_right: Option<PrintLength<Pt>>,
+    pub space_before: Option<PrintLength<Pt>>,
+    pub space_after: Option<PrintLength<Pt>>,
     pub line_height: Option<LineHeight>,
     pub keep_together: Option<KeepTogether>,
     pub keep_with_next: Option<KeepWithNext>,
@@ -912,7 +912,7 @@ impl VAlign {
 /// uses.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellBorder {
-    pub width: Pt,
+    pub width: PrintLength<Pt>,
     pub color: Rgb,
 }
 
@@ -1604,7 +1604,7 @@ pub enum ProseCommand {
     InsertTableCol {
         table_id: BlockId,
         at_col: Col,
-        width: Option<Pt>,
+        width: Option<PrintLength<Pt>>,
     },
     DeleteTableCol {
         table_id: BlockId,
@@ -1613,7 +1613,7 @@ pub enum ProseCommand {
     ResizeTableCol {
         table_id: BlockId,
         col_index: Col,
-        width: Pt,
+        width: PrintLength<Pt>,
     },
     /// Two grid positions in either order. The handler resolves them to two
     /// block ids before it writes (`PROSE-FEAT-241`).
@@ -1631,7 +1631,7 @@ pub enum ProseCommand {
         bg: Option<Rgb>,
         valign: Option<VAlign>,
         border: Option<CellBorder>,
-        padding: Option<Pt>,
+        padding: Option<PrintLength<Pt>>,
     },
     /// Tab and Shift-Tab: the next or the previous stop in reading order.
     /// Past the last cell, a row is appended (`PROSE-FEAT-251`).
@@ -2831,11 +2831,11 @@ pub enum TableValue {
     /// A table of no row or no column (`PROSE-FEAT-228`).
     Size { rows: RowCount, cols: ColCount },
     /// A column width.
-    Width(Pt),
+    Width(PrintLength<Pt>),
     /// A cell border's width.
-    Border(Pt),
+    Border(PrintLength<Pt>),
     /// A cell's padding.
-    Padding(Pt),
+    Padding(PrintLength<Pt>),
 }
 
 impl fmt::Display for TableValue {

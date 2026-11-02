@@ -215,8 +215,8 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
 /// zoom.
 #[wasm_bindgen_test]
 async fn the_ruler_element_sits_on_the_column_it_was_given() {
-    use ambre_core::Pt;
     use ambre_core::{Css, Point, Px, View};
+    use ambre_core::{PrintLength, Pt};
     use ambre_prose::view::ruler::{RulerHandle, RulerHandles, RulerState};
     let origin = Point::new(Px::<Css>::new(40.0), Px::<Css>::new(30.0));
     for zoom in [0.5_f32, 1.0, 2.0] {
@@ -226,9 +226,9 @@ async fn the_ruler_element_sits_on_the_column_it_was_given() {
             page_left: Px::<View>::new(80.0),
             content_width: Px::<View>::new(451.0 * zoom),
             point_width: Px::<View>::new(4.0 / 3.0 * zoom),
-            indent_first: Pt::new(18.0),
-            indent_left: Pt::new(36.0),
-            indent_right: Pt::new(12.0),
+            indent_first: PrintLength::<Pt>::new(18.0),
+            indent_left: PrintLength::<Pt>::new(36.0),
+            indent_right: PrintLength::<Pt>::new(12.0),
         };
         signals.canvas_origin.set(origin);
         signals.ruler.set(ruler);

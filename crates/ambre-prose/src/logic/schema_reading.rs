@@ -788,7 +788,9 @@ fn a_stored_value_moving_moves_the_reading() {
     moved.handle_command(crate::events::ProseCommand::SetParagraphStyle {
         block_id: root,
         style: ParagraphStyle {
-            indent_left: Some(ambre_core::Pt::new(2.0 * 96.0 / 72.0)),
+            indent_left: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(
+                2.0 * 96.0 / 72.0,
+            )),
             ..ParagraphStyle::default()
         },
     });

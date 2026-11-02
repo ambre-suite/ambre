@@ -279,12 +279,12 @@ pub struct IrMeta {
 }
 
 pub struct IrPage {
-    pub width:         Mm,
-    pub height:        Mm,
-    pub margin_top:    Mm,
-    pub margin_bottom: Mm,
-    pub margin_left:   Mm,
-    pub margin_right:  Mm,
+    pub width:         PrintLength<Mm>,
+    pub height:        PrintLength<Mm>,
+    pub margin_top:    PrintLength<Mm>,
+    pub margin_bottom: PrintLength<Mm>,
+    pub margin_left:   PrintLength<Mm>,
+    pub margin_right:  PrintLength<Mm>,
     pub orientation:   Orientation,
 }
 
@@ -296,7 +296,7 @@ pub enum IrBlock {
     Paragraph { style_id: Option<StyleId>, para_style: IrParaStyle, runs: Vec<IrRun> },
     Heading   { level: StoredLevel, numbered: bool, runs: Vec<IrRun> },
     /// `col_widths` and `style` join `rows`; a cell's spans replace `merged`.
-    Table     { col_widths: Vec<Pt>, style: IrTableStyle, rows: Vec<IrTableRow> },
+    Table     { col_widths: Vec<PrintLength<Pt>>, style: IrTableStyle, rows: Vec<IrTableRow> },
     Image     { content_hash: Option<ContentHash>, src_url: Option<LinkUrl>, alt: String,
                 width: Option<Px<Image>>, height: Option<Px<Image>>,
                 align: Option<IrImageAlign>, caption: Option<String> },
@@ -317,7 +317,7 @@ pub struct IrTableCell {
     pub bg:           Option<Rgb>,
     pub borders:      bool,
     pub border_color: Option<Rgb>,
-    pub padding:      Option<Pt>,
+    pub padding:      Option<PrintLength<Pt>>,
     pub valign:       VAlign,
     // ...
 }
@@ -345,11 +345,11 @@ pub struct IrRun {
 
 pub struct IrParaStyle {
     pub align:          Option<Align>,
-    pub indent_first:   Option<Pt>,
-    pub indent_left:    Option<Pt>,
-    pub indent_right:   Option<Pt>,
-    pub space_before:   Option<Pt>,
-    pub space_after:    Option<Pt>,
+    pub indent_first:   Option<PrintLength<Pt>>,
+    pub indent_left:    Option<PrintLength<Pt>>,
+    pub indent_right:   Option<PrintLength<Pt>>,
+    pub space_before:   Option<PrintLength<Pt>>,
+    pub space_after:    Option<PrintLength<Pt>>,
     /// The three modes the document stores (`features/ambre-spec-prose-inline-styles.md`).
     pub line_height:    Option<LineHeight>,
     pub keep_together:  bool,

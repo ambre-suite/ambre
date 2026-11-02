@@ -15,9 +15,9 @@ use ambre_core::id::{Element, Id};
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurveNearest, Shape};
 
-use ambre_core::{Px, View};
+use ambre_core::{Board, Px, View};
 
-use super::viewport::{BoardLength, MIN_ZOOM, ViewportTransform};
+use super::viewport::{MIN_ZOOM, ViewportTransform};
 
 /// The screen distance within which a pointer reaches a thin stroke's
 /// outline. Keeps hair-thin lines and open paths clickable (`TOILE-UI-225`).
@@ -26,7 +26,7 @@ pub(crate) const PICK_REACH: Px<View> = Px::<View>::new(4.0);
 /// [`PICK_REACH`] in world units under `cam`: the reach of a pointer at this
 /// zoom. Every pointer hit test takes it, so the reach holds on screen. A zoom
 /// below the camera's floor reads as the floor.
-pub fn pick_floor(cam: &ViewportTransform) -> BoardLength {
+pub fn pick_floor(cam: &ViewportTransform) -> Px<Board> {
     let floored = ViewportTransform {
         zoom: if cam.zoom < MIN_ZOOM {
             MIN_ZOOM
@@ -41,7 +41,7 @@ pub fn pick_floor(cam: &ViewportTransform) -> BoardLength {
 /// Exact hit-test of one element against a world-space point. `pick` is the
 /// floor of a stroke's reach, in world units (see [`pick_floor`]). `false`
 /// for a `Group` (it paints nothing; selection resolves through membership,).
-pub fn exact_hit(elem: &DisplayElement, world_pt: Point, pick: BoardLength) -> bool {
+pub fn exact_hit(elem: &DisplayElement, world_pt: Point, pick: Px<Board>) -> bool {
     if elem.locked == ambre_bus::app::toile::LockState::Locked {
         return false;
     }
@@ -101,19 +101,19 @@ pub use super::walk::triangle_path;
 
 /// How far from its outline a stroke of width `stroke_w` is hit: half its
 /// width, and never less than the pointer's reach `pick`.
-pub(crate) fn stroke_reach(stroke_w: BoardLength, pick: BoardLength) -> BoardLength {
+pub(crate) fn stroke_reach(stroke_w: Px<Board>, pick: Px<Board>) -> Px<Board> {
     (stroke_w / 2.0).max(pick)
 }
 
 /// The stroke width of a style, as a board length. The style keeps the `f32`
 /// the bus and the document store carry.
-pub(crate) fn stroke_width(style: &ambre_bus::app::toile::ElementStyle) -> BoardLength {
+pub(crate) fn stroke_width(style: &ambre_bus::app::toile::ElementStyle) -> Px<Board> {
     style.stroke_w.widened()
 }
 
 /// A closed path hits on fill; either open or closed also hits within `tol`
 /// of its outline.
-fn path_hit(path: &BezPath, local: Point, tol: BoardLength) -> bool {
+fn path_hit(path: &BezPath, local: Point, tol: Px<Board>) -> bool {
     if path_contains(path, local) {
         return true;
     }
@@ -126,8 +126,8 @@ fn path_contains(path: &BezPath, local: Point) -> bool {
 }
 
 /// Minimum distance from `local` to any segment of `path`.
-pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> BoardLength {
-    BoardLength::new(
+pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> Px<Board> {
+    Px::<Board>::new(
         path.segments()
             .map(|seg| seg.nearest(local, 1e-3).distance_sq)
             .fold(f64::INFINITY, f64::min)
@@ -136,10 +136,10 @@ pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> BoardLength
 }
 
 /// A polyline (freehand stroke) hits within `tol` of any of its segments.
-fn polyline_hit(pts: &[Point], local: Point, tol: BoardLength) -> bool {
+fn polyline_hit(pts: &[Point], local: Point, tol: Px<Board>) -> bool {
     match pts {
         [] => false,
-        [only] => BoardLength::new(only.distance(local)) <= tol,
+        [only] => Px::<Board>::new(only.distance(local)) <= tol,
         _ => pts
             .windows(2)
             .any(|w| matches!(w, &[a, b] if point_segment_distance(local, a, b) <= tol)),
@@ -148,25 +148,21 @@ fn polyline_hit(pts: &[Point], local: Point, tol: BoardLength) -> bool {
 
 /// Euclidean distance from `p` to the segment `[a, b]`, in the element's
 /// local board units.
-fn point_segment_distance(p: Point, a: Point, b: Point) -> BoardLength {
+fn point_segment_distance(p: Point, a: Point, b: Point) -> Px<Board> {
     let ab = b - a;
     let len_sq = ab.hypot2();
     if len_sq <= f64::EPSILON {
-        return BoardLength::new(p.distance(a));
+        return Px::<Board>::new(p.distance(a));
     }
     let t = ((p - a).dot(ab) / len_sq).clamp(0.0, 1.0);
     let proj = a + ab * t;
-    BoardLength::new(p.distance(proj))
+    Px::<Board>::new(p.distance(proj))
 }
 
 /// The top-most element hit by `world_pt`: nodes are back-to-front, so the last
 /// element that passes `exact_hit` wins (first hit walking front-to-back).
 /// `pick` is the pointer's reach in world units (see [`pick_floor`]).
-pub fn hit_topmost(
-    nodes: &[DisplayNode],
-    world_pt: Point,
-    pick: BoardLength,
-) -> Option<Id<Element>> {
+pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point, pick: Px<Board>) -> Option<Id<Element>> {
     nodes
         .iter()
         .rev()
@@ -231,7 +227,7 @@ pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<Id<Element>> {
                 // counts as a touch. So does the element center inside the rect.
                 let c = b.center();
                 // The box's own geometry decides, with no pointer reach.
-                rect.contains(c) || exact_hit(e, c, BoardLength::ZERO)
+                rect.contains(c) || exact_hit(e, c, Px::<Board>::ZERO)
             } else {
                 false
             }
@@ -319,7 +315,7 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 0.0),
             Affine::IDENTITY,
         );
-        e.style.stroke_w = ambre_core::StoredBoardLength::new(2.0);
+        e.style.stroke_w = ambre_core::Px::<ambre_core::StoredBoard>::new(2.0);
         assert!(hit(&e, Point::new(50.0, 1.0))); // on the line
         assert!(!hit(&e, Point::new(50.0, 40.0))); // far from it
     }
@@ -351,7 +347,7 @@ mod tests {
             Rect::new(0.0, 0.0, 1000.0, 0.0),
             Affine::IDENTITY,
         );
-        e.style.stroke_w = ambre_core::StoredBoardLength::new(0.5);
+        e.style.stroke_w = ambre_core::Px::<ambre_core::StoredBoard>::new(0.5);
         let mut cam = ViewportTransform::default();
         use super::super::viewport::{MAX_ZOOM, MIN_ZOOM};
         for zoom in [MIN_ZOOM.get(), 0.5, 1.0, 4.0, MAX_ZOOM.get()] {

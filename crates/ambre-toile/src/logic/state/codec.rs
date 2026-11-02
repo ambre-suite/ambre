@@ -5,8 +5,8 @@
 //! is stateless and shared by both the mutation and derivation impls via `use
 //! super::codec::*`.
 
-use ambre_core::BoardLength;
 use ambre_core::crdt::FieldKey;
+use ambre_core::{Board, Px};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use loro::{Container, LoroText, LoroValue, ValueOrContainer};
 
@@ -121,7 +121,7 @@ pub(super) fn write_clip_fields<'a, K: FieldKey>(
             ClipValue::F64(d) => {
                 // A pasted box is held inside the world bound, as every
                 // other write of one is (`TOILE-274`).
-                let bounded = |v| on_board(BoardLength::new(v)).get();
+                let bounded = |v| on_board(Px::<Board>::new(v)).get();
                 let d = match ElementKey::parse(k.as_str()) {
                     Some(ElementKey::X) => bounded(d + offset.x),
                     Some(ElementKey::Y) => bounded(d + offset.y),
@@ -208,7 +208,7 @@ pub(super) fn path_of(em: &Fields<ElementKey>) -> Option<BezPath> {
 /// coordinate or a size the map lacks reads as zero, so an element written
 /// in part still draws at the origin.
 pub(super) fn stored_rect(em: &Fields<ElementKey>) -> Rect {
-    let read = |key| on_board(BoardLength::new(f64_of(em, key).unwrap_or(0.0))).get();
+    let read = |key| on_board(Px::<Board>::new(f64_of(em, key).unwrap_or(0.0))).get();
     let (x, y) = (read(ElementKey::X), read(ElementKey::Y));
     Rect::new(x, y, x + read(ElementKey::W), y + read(ElementKey::H))
 }
@@ -225,22 +225,22 @@ pub(super) fn rotation_of(em: &Fields<ElementKey>) -> ambre_core::Radians {
 /// bound the readers apply, so a value read back is the value written
 /// (`TOILE-274`).
 pub(super) fn store_corner(em: &Fields<ElementKey>, at: Point) {
-    let _ = em.insert(ElementKey::X, on_board(BoardLength::new(at.x)).get());
-    let _ = em.insert(ElementKey::Y, on_board(BoardLength::new(at.y)).get());
+    let _ = em.insert(ElementKey::X, on_board(Px::<Board>::new(at.x)).get());
+    let _ = em.insert(ElementKey::Y, on_board(Px::<Board>::new(at.y)).get());
 }
 
 /// Write the size of an element's box, each side held inside the same bound
 /// as [`store_corner`].
 pub(super) fn store_size(em: &Fields<ElementKey>, size: Size) {
-    let _ = em.insert(ElementKey::W, on_board(BoardLength::new(size.width)).get());
-    let _ = em.insert(ElementKey::H, on_board(BoardLength::new(size.height)).get());
+    let _ = em.insert(ElementKey::W, on_board(Px::<Board>::new(size.width)).get());
+    let _ = em.insert(ElementKey::H, on_board(Px::<Board>::new(size.height)).get());
 }
 
 /// One coordinate or size of a stored box, as the geometry reads it. A peer
 /// can store any number there. A value that is not finite reads as zero, and
 /// a finite one is held inside the import world bound (`TOILE-274`). The
 /// spatial index and the group bounds then never see a NaN.
-fn on_board(v: BoardLength) -> BoardLength {
+fn on_board(v: Px<Board>) -> Px<Board> {
     Limits::default().clamp_coord(v)
 }
 
@@ -500,7 +500,7 @@ pub(super) fn map_str<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> Option<String
 
 /// [`stored_rect`] and [`rotation_of`], for an element map read whole.
 pub(super) fn map_placement(fields: FieldValues<'_, ElementKey>) -> (Rect, ambre_core::Radians) {
-    let read = |key| on_board(BoardLength::new(map_f64(fields, key).unwrap_or(0.0))).get();
+    let read = |key| on_board(Px::<Board>::new(map_f64(fields, key).unwrap_or(0.0))).get();
     let (x, y) = (read(ElementKey::X), read(ElementKey::Y));
     let rect = Rect::new(x, y, x + read(ElementKey::W), y + read(ElementKey::H));
     let rot = ambre_core::Radians::new(map_f64(fields, ElementKey::Rot).unwrap_or(0.0));

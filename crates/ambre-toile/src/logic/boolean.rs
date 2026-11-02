@@ -25,7 +25,7 @@
 //!
 //! Fills use the non-zero rule, matching how shapes are painted.
 
-use ambre_core::BoardLength;
+use ambre_core::{Board, Px};
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::single::SingleFloatOverlay;
@@ -42,12 +42,12 @@ type Shape = Vec<Contour>;
 /// and positive: kurbo derives the segment count from it, so a zero, negative
 /// or NaN tolerance asks for an unbounded number of points.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FlattenTol(BoardLength);
+pub struct FlattenTol(Px<Board>);
 
 impl FlattenTol {
     /// `None` unless `tol` is finite and positive.
-    pub fn new(tol: BoardLength) -> Option<Self> {
-        (tol.is_finite() && tol > BoardLength::ZERO).then_some(Self(tol))
+    pub fn new(tol: Px<Board>) -> Option<Self> {
+        (tol.is_finite() && tol > Px::<Board>::ZERO).then_some(Self(tol))
     }
 
     /// The tolerance in the bare form kurbo takes.
@@ -60,7 +60,7 @@ impl FlattenTol {
 /// runs. Sub-pixel at typical board zoom, and small enough that the result
 /// tracks the source outline. It is large enough to keep the contour point
 /// count, and so the solve cost, bounded.
-pub const FLATTEN_TOL: FlattenTol = FlattenTol(BoardLength::new(0.25));
+pub const FLATTEN_TOL: FlattenTol = FlattenTol(Px::<Board>::new(0.25));
 
 /// Combine world-space `paths` with a boolean `op`. Each path is flattened to
 /// closed contours at `tol`, then the paths fold left to right via [`i_overlay`].
@@ -302,8 +302,8 @@ mod tests {
     #[test]
     fn a_flatten_tolerance_is_finite_and_positive() {
         for bad in [0.0, -0.25, f64::NAN, f64::INFINITY] {
-            assert_eq!(FlattenTol::new(BoardLength::new(bad)), None, "{bad}");
+            assert_eq!(FlattenTol::new(Px::<Board>::new(bad)), None, "{bad}");
         }
-        assert_eq!(FlattenTol::new(BoardLength::new(0.25)), Some(FLATTEN_TOL));
+        assert_eq!(FlattenTol::new(Px::<Board>::new(0.25)), Some(FLATTEN_TOL));
     }
 }

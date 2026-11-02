@@ -13,7 +13,7 @@ use parley::{
 use ambre_bus::app::prose::{
     Align, DocOffset, KeepTogether, KeepWithNext, LineHeight as StoredLineHeight, ParagraphStyle,
 };
-use ambre_core::{ByteDelta, ByteOffset, ByteSpan, Pt, Weight, char_to_byte};
+use ambre_core::{ByteDelta, ByteOffset, ByteSpan, PrintLength, Pt, Weight, char_to_byte};
 use ambre_core::{Doc, Px};
 
 use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
@@ -152,11 +152,26 @@ impl EffectiveStyle {
             weight,
             slant: ambre_core::Slant::Upright,
             align: paragraph.align.unwrap_or(Align::Left),
-            indent_first: paragraph.indent_first.unwrap_or(Pt::ZERO).to_doc_px(),
-            indent_left: paragraph.indent_left.unwrap_or(Pt::ZERO).to_doc_px(),
-            indent_right: paragraph.indent_right.unwrap_or(Pt::ZERO).to_doc_px(),
-            space_before: paragraph.space_before.unwrap_or(Pt::ZERO).to_doc_px(),
-            space_after: paragraph.space_after.unwrap_or(Pt::ZERO).to_doc_px(),
+            indent_first: paragraph
+                .indent_first
+                .unwrap_or(PrintLength::<Pt>::ZERO)
+                .to_doc_px(),
+            indent_left: paragraph
+                .indent_left
+                .unwrap_or(PrintLength::<Pt>::ZERO)
+                .to_doc_px(),
+            indent_right: paragraph
+                .indent_right
+                .unwrap_or(PrintLength::<Pt>::ZERO)
+                .to_doc_px(),
+            space_before: paragraph
+                .space_before
+                .unwrap_or(PrintLength::<Pt>::ZERO)
+                .to_doc_px(),
+            space_after: paragraph
+                .space_after
+                .unwrap_or(PrintLength::<Pt>::ZERO)
+                .to_doc_px(),
             keep_together: paragraph.keep_together.unwrap_or_default(),
             keep_with_next: paragraph.keep_with_next.unwrap_or_default(),
         }
@@ -1179,8 +1194,8 @@ mod tests {
     fn a_font_size_in_points_is_measured_in_pixels() {
         // 96 DPI: twelve points is sixteen pixels, and nothing rounds on the
         // way (`features/ambre-spec-prose-pagination.md section 2`).
-        assert!((Pt::new(12.0).to_doc_px().get() - 16.0).abs() < 0.001);
-        assert!((Pt::new(72.0).to_doc_px().get() - 96.0).abs() < 0.001);
+        assert!((PrintLength::<Pt>::new(12.0).to_doc_px().get() - 16.0).abs() < 0.001);
+        assert!((PrintLength::<Pt>::new(72.0).to_doc_px().get() - 96.0).abs() < 0.001);
     }
 
     #[test]
