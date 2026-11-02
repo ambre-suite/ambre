@@ -7,11 +7,12 @@
 //! A subscription notes the block behind every container a commit or an import
 //! wrote to, and the next layout re-measures those (`PROSE-123`).
 
+use ambre_core::index::{Count, Delta, Pos};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset};
+use ambre_bus::app::prose::DocChar;
 use loro::TextDelta;
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, Index, LoroDoc, Subscription, TreeExternalDiff, TreeID, TreeParentId};
@@ -28,7 +29,7 @@ type Moved = Arc<Mutex<TextMoves>>;
 pub(crate) struct TextMoves {
     /// A block, where a run starts in the text the runs before it left, and
     /// its signed length in code points.
-    pub(crate) edits: Vec<(TreeID, DocOffset, DocDelta)>,
+    pub(crate) edits: Vec<(TreeID, Pos<DocChar>, Delta<DocChar>)>,
     pub(crate) removed: Vec<TreeID>,
 }
 
@@ -126,7 +127,7 @@ impl Touched {
             && moved
                 .edits
                 .iter()
-                .all(|&(_, _, delta)| delta > DocDelta::ZERO)
+                .all(|&(_, _, delta)| delta > Delta::<DocChar>::ZERO)
     }
 }
 
@@ -168,22 +169,24 @@ fn record(change: &ContainerDiff<'_>, moves: &mut TextMoves) {
             };
             // The walk counts positions in the text as the runs before
             // leave it, so each run reads after the previous one.
-            let mut at = DocOffset::ZERO;
+            let mut at = Pos::<DocChar>::ZERO;
             for item in delta {
                 match item {
                     TextDelta::Retain { retain, .. } => {
-                        at += DocCount::from_len(*retain);
+                        at += Count::<DocChar>::from_len(*retain);
                     }
                     TextDelta::Insert { insert, .. } => {
-                        let len = DocCount::of(insert);
-                        moves.edits.push((block, at, DocDelta::from_count(len)));
+                        let len = ambre_core::char_len(insert).as_axis::<DocChar>();
+                        moves
+                            .edits
+                            .push((block, at, Delta::<DocChar>::from_count(len)));
                         at += len;
                     }
                     TextDelta::Delete { delete } => {
-                        let len = DocCount::from_len(*delete);
+                        let len = Count::<DocChar>::from_len(*delete);
                         moves
                             .edits
-                            .push((block, at, DocDelta::from_count(len).reversed()));
+                            .push((block, at, Delta::<DocChar>::from_count(len).reversed()));
                     }
                 }
             }

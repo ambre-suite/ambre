@@ -19,13 +19,13 @@
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
 
+use ambre_core::{Px, index::Count};
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{
     Board, BoardFrameCount, ConnectorCount, DocType, ElementCount, FixtureGen, FixtureName,
-    FixtureSeed, FixtureShape, GeneratorVersion, Px, ShapeBody, fixture_peer_count,
-    seeded_document_id,
+    FixtureSeed, FixtureShape, GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
 };
 use loro::LoroValue;
 
@@ -516,7 +516,7 @@ impl FixtureGen for ToileBenchFixture {
                 Px::<Board>::new(600.0),
                 Px::<Board>::new(24.0),
             ),
-            Self::Deck50 => build_deck(&mut state, ambre_bus::app::toile::SlideCount::new(50)),
+            Self::Deck50 => build_deck(&mut state, Count::<ambre_bus::app::toile::Slide>::new(50)),
         }
         state
             .export_ambre_plaintext(seeded_document_id(seed))
@@ -604,7 +604,7 @@ fn copy_payload(state: &mut ToileState, ids: Vec<Id<Element>>) -> Option<Clipboa
 ///
 /// The frames declare their children and the deck declares its order. The
 /// export walks that order and that membership, never the spatial overlap.
-fn build_deck(state: &mut ToileState, slides: ambre_bus::app::toile::SlideCount) {
+fn build_deck(state: &mut ToileState, slides: Count<ambre_bus::app::toile::Slide>) {
     const PITCH: Px<Board> = Px::<Board>::new(1_400.0);
     let mut order = Vec::with_capacity(slides.to_usize());
     for slide in 0..slides.get() {

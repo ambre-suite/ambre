@@ -7,9 +7,10 @@
 //! the view writes its draft and its caret, and nothing else.
 
 use ambre_bus::PasteSource;
-use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
+use ambre_bus::app::prose::DocChar;
 use ambre_commands::{ClipboardWrite, Key, KeyChar, Modifiers, SelectionMode};
 use ambre_core::StepDirection;
+use ambre_core::index::{Delta, Pos, Span};
 use ambre_core::{Point, Px, View};
 use ambre_draw::Consumed;
 
@@ -17,10 +18,10 @@ use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::layout::run::Affinity;
 use crate::ui::{BlockWait, ProseUiState, SendResult, SyncHold};
 use crate::view::caret::{Direction, SelectUnit, Spot};
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
-pub const MULTI_PRESS_WINDOW: ambre_core::TimeSpan<ambre_core::FracMs> =
-    ambre_core::TimeSpan::<ambre_core::FracMs>::new(500.0);
+pub const MULTI_PRESS_WINDOW: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(500.0);
 
 /// How far a second press may land from the first and still be in place.
 const MULTI_PRESS: Px<View> = Px::<View>::new(4.0);
@@ -97,7 +98,7 @@ pub enum ProseInput {
         /// The modifiers held. A press with the primary one on a link follows
         /// the link (`PROSE-UI-071`); one with Shift extends the selection.
         mods: Modifiers,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     },
     Drag {
         at: Point<Px<View>>,
@@ -111,7 +112,7 @@ pub enum ProseInput {
     },
     /// An item of the slash menu picked with the pointer, by its place in
     /// the filtered list.
-    SlashPick(crate::view::slash::SlashChoice),
+    SlashPick(Pos<crate::view::slash::SlashChoice>),
     /// The input method's text in progress, replacing the previous one. It
     /// is drawn and never sent (`PROSE-UI-142`).
     Compose(String),
@@ -187,7 +188,9 @@ impl Sent {
                 TextEdit {
                     block_id: *block_id,
                     at: *pos,
-                    delta: DocDelta::from_count(DocCount::of(text)),
+                    delta: Delta::<DocChar>::from_count(
+                        ambre_core::char_len(text).as_axis::<DocChar>(),
+                    ),
                 },
                 Some(text.clone()),
             ),
@@ -197,7 +200,7 @@ impl Sent {
                     TextEdit {
                         block_id: *block_id,
                         at: start,
-                        delta: DocDelta::from_count(end.count_from(start)).reversed(),
+                        delta: Delta::<DocChar>::from_count(end.count_from(start)).reversed(),
                     },
                     None,
                 )
@@ -217,7 +220,7 @@ impl Sent {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Press {
     at: Point<Px<View>>,
-    pressed_at: ambre_core::Instant<ambre_core::PageLoad>,
+    pressed_at: Instant<PageLoad>,
     clicks: Clicks,
 }
 
@@ -588,11 +591,11 @@ impl ProseUiState {
             self.slash = Some(crate::view::slash::SlashMenu {
                 origin,
                 query: text.chars().skip(1).collect(),
-                selected: crate::view::slash::SlashChoice::ZERO,
+                selected: Pos::<crate::view::slash::SlashChoice>::ZERO,
             });
         } else if let Some(menu) = &mut self.slash {
             menu.query.push_str(&text);
-            menu.selected = crate::view::slash::SlashChoice::ZERO;
+            menu.selected = Pos::<crate::view::slash::SlashChoice>::ZERO;
         }
         consumed
     }
@@ -626,7 +629,7 @@ impl ProseUiState {
             // The Backspace over the slash closes the menu; one over the
             // query narrows it less. Both delete like any Backspace.
             ProseKey::Backspace if !mods.primary() && menu.query.pop().is_some() => {
-                menu.selected = crate::view::slash::SlashChoice::ZERO;
+                menu.selected = Pos::<crate::view::slash::SlashChoice>::ZERO;
                 None
             }
             _ => {
@@ -641,7 +644,7 @@ impl ProseUiState {
     /// menu closes (`PROSE-UI-175`).
     fn pick(
         &mut self,
-        index: crate::view::slash::SlashChoice,
+        index: Pos<crate::view::slash::SlashChoice>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Consumed {
         let Some(menu) = self.slash.take() else {
@@ -688,7 +691,7 @@ impl ProseUiState {
             text: text.clone(),
         };
         if send(command).accepted() {
-            self.advance_cursor(DocCount::of(&text));
+            self.advance_cursor(ambre_core::char_len(&text).as_axis::<DocChar>());
         }
         Consumed::Yes
     }
@@ -709,7 +712,7 @@ impl ProseUiState {
         let command = if start.0 == end.0 {
             ProseCommand::DeleteText {
                 block_id: start.0,
-                range: DocSpan::new(start.1, end.1),
+                range: Span::<DocChar>::new(start.1, end.1),
             }
         } else {
             ProseCommand::DeleteRange {
@@ -799,14 +802,14 @@ impl ProseUiState {
             Some(other) if forward => (
                 ProseCommand::DeleteText {
                     block_id: here.0,
-                    range: DocSpan::new(here.1, other),
+                    range: Span::<DocChar>::new(here.1, other),
                 },
                 here,
             ),
             Some(other) => (
                 ProseCommand::DeleteText {
                     block_id: here.0,
-                    range: DocSpan::new(other, here.1),
+                    range: Span::<DocChar>::new(other, here.1),
                 },
                 (here.0, other),
             ),
@@ -817,7 +820,7 @@ impl ProseUiState {
                 let edge = (
                     next,
                     if forward {
-                        DocOffset::ZERO
+                        Pos::<DocChar>::ZERO
                     } else {
                         self.block_len(next).as_end()
                     },
@@ -841,13 +844,19 @@ impl ProseUiState {
 
     /// The grapheme boundary beside a place, in document offsets, reading the
     /// text the view shows. `None` at the edge of the block.
-    fn grapheme_beside(&self, spot: Spot, direction: StepDirection) -> Option<DocOffset> {
+    fn grapheme_beside(&self, spot: Spot, direction: StepDirection) -> Option<Pos<DocChar>> {
         use unicode_segmentation::UnicodeSegmentation;
         let text = self.shown_text(spot.0)?;
         let boundaries = text
             .grapheme_indices(true)
-            .map(|(byte, _)| DocCount::of(text.get(..byte).unwrap_or("")).as_end())
-            .chain(std::iter::once(DocCount::of(&text).as_end()));
+            .map(|(byte, _)| {
+                ambre_core::char_len(text.get(..byte).unwrap_or(""))
+                    .as_axis::<DocChar>()
+                    .as_end()
+            })
+            .chain(std::iter::once(
+                ambre_core::char_len(&text).as_axis::<DocChar>().as_end(),
+            ));
         match direction {
             StepDirection::Forward => boundaries.into_iter().find(|b| *b > spot.1),
             StepDirection::Backward => boundaries.into_iter().rfind(|b| *b < spot.1),
@@ -889,7 +898,7 @@ impl ProseUiState {
         &mut self,
         at: Point<Px<View>>,
         mode: SelectionMode,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Consumed {
         let layout = &self.shaped.layout;
@@ -966,7 +975,7 @@ impl ProseUiState {
             .map(|(_, block)| crate::events::block_id(block.block_id));
         if let Some(block) = first {
             self.awaiting_block = BlockWait::Idle;
-            self.set_caret((block, DocOffset::ZERO));
+            self.set_caret((block, Pos::<DocChar>::ZERO));
         }
     }
 }

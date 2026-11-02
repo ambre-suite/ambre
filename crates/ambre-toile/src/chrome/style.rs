@@ -30,7 +30,7 @@ use std::time::Duration;
 use ambre_bus::app::toile::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::CommandId;
 use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
-use ambre_core::{FontSize, Rgba};
+use ambre_core::{FontSize, Px, Rgba, StoredBoard};
 use leptos::prelude::*;
 
 use crate::ui::floatbar::StyleEdit;
@@ -225,7 +225,7 @@ pub fn StyleInspector(
                             on:input=move |ev| {
                                 if let Ok(v) = event_target_value(&ev).parse::<f32>() {
                                     stroke_w.set(v.max(0.0));
-                                    commit(StyleEdit::StrokeWidth(ambre_core::Px::<ambre_core::StoredBoard>::new(v)));
+                                    commit(StyleEdit::StrokeWidth(Px::<StoredBoard>::new(v)));
                                 }
                             }
                         />

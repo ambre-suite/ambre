@@ -5,7 +5,8 @@
 //! reads the list to show the link cursor and to follow a target; nothing in
 //! it writes to the document.
 
-use ambre_bus::app::prose::{DocCount, DocOffset};
+use ambre_bus::app::prose::DocChar;
+use ambre_core::index::Pos;
 use loro::{LoroDoc, LoroValue, TextDelta};
 
 use crate::comment::text_blocks;
@@ -20,12 +21,12 @@ pub fn links(document: &LoroDoc) -> Vec<LinkSpan> {
     let mut out: Vec<LinkSpan> = Vec::new();
     for id in text_blocks(document) {
         let block = block_id(id);
-        let mut offset = DocOffset::ZERO;
+        let mut offset = Pos::<DocChar>::ZERO;
         for delta in doc::get_block_text(document, &id).to_delta() {
             let TextDelta::Insert { insert, attributes } = delta else {
                 continue;
             };
-            let length = DocCount::of(&insert);
+            let length = ambre_core::char_len(&insert).as_axis::<DocChar>();
             let end = offset + length;
             let url = attributes
                 .as_ref()
@@ -124,7 +125,8 @@ mod tests {
     use crate::events::{BlockInit, LinkSpan, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
     use crate::view::tests::append;
-    use ambre_bus::app::prose::{DocOffset, DocSpan};
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::{Pos, Span};
 
     fn mark(
         state: &mut ProseState,
@@ -136,7 +138,10 @@ mod tests {
         state
             .handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
+                range: Span::<DocChar>::new(
+                    Pos::<DocChar>::new(range.0),
+                    Pos::<DocChar>::new(range.1),
+                ),
                 key: key.into(),
                 value: Some(crate::mark::test_value(value)),
             })
@@ -151,8 +156,8 @@ mod tests {
         let events = mark(&mut state, block, (4, 12), "a", "https://example.org/");
         let expected = vec![LinkSpan {
             block_id: block,
-            start: DocOffset::new(4),
-            end: DocOffset::new(12),
+            start: Pos::<DocChar>::new(4),
+            end: Pos::<DocChar>::new(12),
             url: "https://example.org/".into(),
         }];
         assert!(events.contains(&ProseEvent::LinksUpdated {

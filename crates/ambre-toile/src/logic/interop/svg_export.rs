@@ -316,6 +316,7 @@ mod tests {
     use super::*;
     use crate::logic::model::ElementStyle;
     use ambre_bus::app::toile::FontSizeChoice;
+    use ambre_core::{Px, StoredBoard};
 
     fn rect_el() -> ExportElement {
         let mut el = ExportElement::new(
@@ -325,7 +326,7 @@ mod tests {
         el.style = ElementStyle {
             fill: Some(Rgba::from_bits(0x3366_CCFF)),
             stroke: Some(Rgba::from_bits(0x0000_00FF)),
-            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(2.0),
+            stroke_w: Px::<StoredBoard>::new(2.0),
             ..ElementStyle::default()
         };
         el

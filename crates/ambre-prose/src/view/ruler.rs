@@ -229,7 +229,8 @@ mod tests {
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
     use crate::view::tests::{append, laid_out};
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::Pos;
     use ambre_core::{PrintLength, Pt};
     use ambre_core::{Px, View};
 
@@ -246,9 +247,9 @@ mod tests {
         state.handle_command(ProseCommand::SetParagraphStyle {
             block_id: quoted,
             style: ParagraphStyle {
-                indent_first: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(24.0)),
-                indent_left: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(36.0)),
-                indent_right: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(18.0)),
+                indent_first: Some(PrintLength::<Pt>::new(24.0)),
+                indent_left: Some(PrintLength::<Pt>::new(36.0)),
+                indent_right: Some(PrintLength::<Pt>::new(18.0)),
                 ..ParagraphStyle::default()
             },
         });
@@ -261,7 +262,7 @@ mod tests {
     fn caret_in(ui: &mut ProseUiState, block_id: crate::events::BlockId) {
         ui.cursor = Some(CursorPosition {
             block_id,
-            offset: DocOffset::ZERO,
+            offset: Pos::<DocChar>::ZERO,
             anchor: None,
         });
     }
@@ -352,7 +353,7 @@ mod tests {
             ProseCommand::SetParagraphStyle {
                 block_id: quoted,
                 style: ParagraphStyle {
-                    indent_left: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(72.0)),
+                    indent_left: Some(PrintLength::<Pt>::new(72.0)),
                     ..ParagraphStyle::default()
                 },
             }
@@ -430,7 +431,7 @@ mod tests {
             Some(ProseCommand::SetParagraphStyle {
                 block_id: quoted,
                 style: ParagraphStyle {
-                    indent_first: Some(ambre_core::PrintLength::<ambre_core::Pt>::new(48.0)),
+                    indent_first: Some(PrintLength::<Pt>::new(48.0)),
                     ..ParagraphStyle::default()
                 },
             })

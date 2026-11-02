@@ -4,6 +4,7 @@
 use super::super::types::RangeValue;
 use super::*;
 use crate::formula::test_index::function;
+use ambre_core::index::{Count, Pos};
 
 #[test]
 fn sum_basic() {
@@ -149,8 +150,8 @@ fn txt(s: &str) -> CellValue {
 }
 fn range(rows: usize, cols: usize, vals: Vec<CellValue>) -> CellValue {
     CellValue::Range(RangeValue::new(
-        RowCount::from_len(rows),
-        ColCount::from_len(cols),
+        Count::<Row>::from_len(rows),
+        Count::<Col>::from_len(cols),
         vals,
     ))
 }
@@ -590,8 +591,8 @@ fn lookup_reference_functions() {
     // ROW()/COLUMN() with the evaluating cell at B7.
     let ctx = FnCtx {
         now_serial: DateSerial::new(0.0),
-        cell_row: Some(Row::new(6)),
-        cell_col: Some(Col::new(1)),
+        cell_row: Some(Pos::<Row>::new(6)),
+        cell_col: Some(Pos::<Col>::new(1)),
     };
     assert_eq!(call_builtin(&function("ROW"), &[], ctx).to_display(), "7");
     assert_eq!(

@@ -21,6 +21,7 @@ use ambre_bus::{
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteKey, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, KeyChar, Locale};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, Space, User};
+use ambre_core::index::Pos;
 use ambre_core::{Point, Px, View};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
@@ -1598,7 +1599,7 @@ fn the_channel_being_read_notifies_nothing_until_the_page_is_hidden() {
 /// region closes the list (`MURMURE-555`).
 #[wasm_bindgen_test]
 async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
-    use ambre_murmure::mention_list::{MentionList, OfferIndex};
+    use ambre_murmure::mention_list::{MentionEntry, MentionList};
     use wasm_bindgen::JsCast;
 
     let (_owner, relay, _) = shown_direct();
@@ -1614,7 +1615,7 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
         .collect();
     let list = MentionList {
         entries,
-        chosen: OfferIndex::ZERO,
+        chosen: Pos::<MentionEntry>::ZERO,
         at: Point::new(Px::<View>::new(10.0), Px::<View>::new(20.0)),
         region: Region::Channel,
     };
@@ -1640,7 +1641,10 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
         None,
         "the thread picked nothing"
     );
-    assert_eq!(relay.take_pick(Region::Channel), Some(OfferIndex::new(1)));
+    assert_eq!(
+        relay.take_pick(Region::Channel),
+        Some(Pos::<MentionEntry>::new(1))
+    );
     assert_eq!(
         relay.take_pick(Region::Channel),
         None,

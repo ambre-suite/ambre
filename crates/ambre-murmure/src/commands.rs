@@ -16,8 +16,9 @@ use ambre_commands::{
     Command, CommandCategory, CommandId, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale,
     Modifiers,
 };
-use ambre_core::ByteCount;
+use ambre_core::Byte;
 use ambre_core::id::{Channel, Document, Id, Message, User};
+use ambre_core::index::Count;
 
 use crate::{MessageRef, MurmurePane, Region};
 
@@ -256,7 +257,7 @@ impl std::fmt::Debug for MessageTarget {
             .field("at", &self.at)
             .field("message", &self.message)
             .field("author", &self.author)
-            .field("text", &ByteCount::from_len(self.text.len()))
+            .field("text", &Count::<Byte>::from_len(self.text.len()))
             .field("mentions", &self.mentions.len())
             .field("styles", &self.styles.len())
             .field("writer", &self.writer)
@@ -304,7 +305,7 @@ impl std::fmt::Debug for MessageAction {
             Self::Send(command) => f.debug_tuple("Send").field(command).finish(),
             Self::Copy(text) => f
                 .debug_tuple("Copy")
-                .field(&ByteCount::from_len(text.len()))
+                .field(&Count::<Byte>::from_len(text.len()))
                 .finish(),
             Self::ConfirmDelete(delete) => f.debug_tuple("ConfirmDelete").field(delete).finish(),
             Self::Edit(edit) => f.debug_tuple("Edit").field(edit).finish(),
@@ -377,7 +378,7 @@ impl std::fmt::Debug for PendingEdit {
             .field("channel", &self.channel)
             .field("at", &self.at)
             .field("message", &self.message)
-            .field("text", &ByteCount::from_len(self.text.len()))
+            .field("text", &Count::<Byte>::from_len(self.text.len()))
             .field("mentions", &self.mentions.len())
             .field("styles", &self.styles.len())
             .finish()

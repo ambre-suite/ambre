@@ -16,6 +16,7 @@
 // through the same `CommandSink` seam the dispatcher emits.
 // ============================================================================
 
+use ambre_core::index::{Count, Pos};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -109,7 +110,7 @@ impl MockSyncHandle {
 
 /// The cell at `row`, `col`.
 pub fn at(row: u32, col: u32) -> crate::CellPos {
-    crate::CellPos::new(crate::Row::new(row), crate::Col::new(col))
+    crate::CellPos::new(Pos::<crate::Row>::new(row), Pos::<crate::Col>::new(col))
 }
 
 /// The rectangle from `(r1, c1)` to `(r2, c2)`, both corners included.
@@ -119,7 +120,10 @@ pub fn rect(r1: u32, c1: u32, r2: u32, c2: u32) -> crate::CellRect {
 
 /// A merge block `rows` tall and `cols` wide.
 pub fn span(rows: u32, cols: u32) -> crate::MergeSpan {
-    crate::MergeSpan::new(crate::RowCount::new(rows), crate::ColCount::new(cols))
+    crate::MergeSpan::new(
+        Count::<crate::Row>::new(rows),
+        Count::<crate::Col>::new(cols),
+    )
 }
 
 /// The `n`-th edit session token a view mints, counting from one.

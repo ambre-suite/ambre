@@ -11,6 +11,7 @@
 // which version its containers are at today, and what each past layout has to
 // become.
 
+use ambre_core::index::{Count, Pos};
 use std::borrow::Cow;
 
 use ambre_core::{Payload, SnapshotBytes};
@@ -18,7 +19,7 @@ use ambre_core::{Payload, SnapshotBytes};
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::{CellRect, Col, ColCount, FilterKind, Row, RowCount, SheetId};
+use ambre_bus::{CellRect, Col, FilterKind, Row, SheetId};
 use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, verdict,
@@ -166,10 +167,10 @@ ambre_core::crdt_names! {
 /// used-range high-water mark. Bounds the pathological "lone value far down
 /// the grid" case that would otherwise create ~100k placeholder elements (see
 /// `trame-rows-and-columns`). The write path drops anything beyond it.
-pub(crate) const MATERIALIZE_ROWS: RowCount = RowCount::new(10_000);
+pub(crate) const MATERIALIZE_ROWS: Count<Row> = Count::<Row>::new(10_000);
 
 /// The same cap on the columns: one limit holds on both axes.
-pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(10_000);
+pub(crate) const MATERIALIZE_COLS: Count<Col> = Count::<Col>::new(10_000);
 
 // A row count and a column count are two types, so the build compares the
 // two caps: a change to one alone fails to compile.
@@ -214,7 +215,7 @@ pub(crate) trait SheetLine: Line {
     fn edit(edit: LineEdit<Self>) -> AxisEdit;
 
     /// The first and the last line `rect` covers on this axis.
-    fn bounds(rect: CellRect) -> (Self, Self);
+    fn bounds(rect: CellRect) -> (Pos<Self>, Pos<Self>);
 }
 
 impl SheetLine for Row {
@@ -223,7 +224,7 @@ impl SheetLine for Row {
     fn edit(edit: LineEdit<Self>) -> AxisEdit {
         AxisEdit::Rows(edit)
     }
-    fn bounds(rect: CellRect) -> (Self, Self) {
+    fn bounds(rect: CellRect) -> (Pos<Self>, Pos<Self>) {
         (rect.top_left.row, rect.bottom_right.row)
     }
 }
@@ -234,7 +235,7 @@ impl SheetLine for Col {
     fn edit(edit: LineEdit<Self>) -> AxisEdit {
         AxisEdit::Cols(edit)
     }
-    fn bounds(rect: CellRect) -> (Self, Self) {
+    fn bounds(rect: CellRect) -> (Pos<Self>, Pos<Self>) {
         (rect.top_left.col, rect.bottom_right.col)
     }
 }
@@ -528,8 +529,8 @@ mod tests {
     fn a_workbook_from_a_newer_client_is_refused_and_changes_nothing() {
         let mut st = TrameState::new();
         st.handle_command(ambre_bus::TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
             text: "kept".to_owned(),
         });
         let before = st.export_snapshot();
@@ -564,10 +565,10 @@ mod tests {
         // key before it attempts any decode, which would prove nothing.
         let mut source = TrameState::new();
         source.handle_command(TrameCommand::SetActiveCell {
-            row: Row::new(0),
-            col: Col::new(0),
-            anchor_row: Row::new(0),
-            anchor_col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
+            anchor_row: Pos::<Row>::new(0),
+            anchor_col: Pos::<Col>::new(0),
             extra: vec![],
             kind: crate::SelectionKind::Cells,
         });

@@ -16,6 +16,7 @@ use crate::error::{AppError, Resource};
 use crate::extract::{Json, OpaquePathId};
 use crate::routes::share::{Expected, checked_entry};
 use crate::state::AppState;
+use ambre_core::{Ms, TimeSpan};
 use ambre_protocol::MembershipAct;
 
 /// One document of a channel, as the listing answers it.
@@ -397,7 +398,7 @@ const FINALIZE_PENDING_RETRY: std::time::Duration = std::time::Duration::from_se
 pub struct FinalizeLeaseJson {
     pub lease: Option<GrantedLeaseJson>,
     /// Milliseconds before asking again, `0` with a lease.
-    pub retry_in: ambre_core::TimeSpan<ambre_core::Ms>,
+    pub retry_in: TimeSpan<Ms>,
 }
 
 /// A granted finalize lease (`SRV-113`).
@@ -408,7 +409,7 @@ pub struct GrantedLeaseJson {
     /// The last delta number the final snapshot covers.
     pub horizon: ambre_core::Seq,
     /// Milliseconds before the lease expires.
-    pub expires_in: ambre_core::TimeSpan<ambre_core::Ms>,
+    pub expires_in: TimeSpan<Ms>,
 }
 
 /// The body of a finalize commit: the lease, and the snapshot that covers
@@ -473,14 +474,14 @@ pub async fn take_finalize_lease(
                 lease: Some(GrantedLeaseJson {
                     lease_id,
                     horizon,
-                    expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::from_duration(expires_in),
+                    expires_in: TimeSpan::<Ms>::from_duration(expires_in),
                 }),
-                retry_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(0),
+                retry_in: TimeSpan::<Ms>::new(0),
             }
         }
         db::FinalizeLease::Wait { retry_in } => FinalizeLeaseJson {
             lease: None,
-            retry_in: ambre_core::TimeSpan::<ambre_core::Ms>::from_duration(retry_in),
+            retry_in: TimeSpan::<Ms>::from_duration(retry_in),
         },
     }))
 }
@@ -518,7 +519,7 @@ pub const FOLD_DELAY: std::time::Duration = std::time::Duration::from_secs(7 * 2
 pub struct FoldLeaseJson {
     pub lease: Option<GrantedFoldJson>,
     /// Milliseconds before asking again, `0` with a lease.
-    pub retry_in: ambre_core::TimeSpan<ambre_core::Ms>,
+    pub retry_in: TimeSpan<Ms>,
 }
 
 /// A granted fold lease (`SRV-204`).
@@ -534,7 +535,7 @@ pub struct GrantedFoldJson {
     /// The last delta number of the amendments the fold holds.
     pub amendments_seq: ambre_core::Seq,
     /// Milliseconds before the lease expires.
-    pub expires_in: ambre_core::TimeSpan<ambre_core::Ms>,
+    pub expires_in: TimeSpan<Ms>,
 }
 
 /// The body of a fold commit: the lease, the fold snapshot, and how far into
@@ -581,14 +582,14 @@ pub async fn take_fold_lease(
                     horizon,
                     amendments,
                     amendments_seq,
-                    expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::from_duration(expires_in),
+                    expires_in: TimeSpan::<Ms>::from_duration(expires_in),
                 }),
-                retry_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(0),
+                retry_in: TimeSpan::<Ms>::new(0),
             }
         }
         db::FoldLease::Wait { retry_in } => FoldLeaseJson {
             lease: None,
-            retry_in: ambre_core::TimeSpan::<ambre_core::Ms>::from_duration(retry_in),
+            retry_in: TimeSpan::<Ms>::from_duration(retry_in),
         },
     }))
 }
@@ -975,6 +976,7 @@ mod tests {
     use super::*;
     use crate::extract::PathId;
     use ambre_core::Creation;
+    use ambre_core::{Ms, TimeSpan};
 
     /// The signing key every test user registers, so an entry one signs
     /// checks against the row and the session alike.
@@ -3831,7 +3833,7 @@ mod tests {
         assert!(early.lease.is_none(), "the segment just closed");
         assert!(
             early.retry_in
-                > ambre_core::TimeSpan::<ambre_core::Ms>::from_duration(
+                > TimeSpan::<Ms>::from_duration(
                     FINALIZE_GRACE - std::time::Duration::from_secs(60)
                 )
         );
@@ -3864,7 +3866,7 @@ mod tests {
         assert_eq!(held.horizon, ambre_core::Seq::new(4));
         assert_eq!(
             held.expires_in,
-            ambre_core::TimeSpan::<ambre_core::Ms>::from_duration(FINALIZE_LEASE)
+            TimeSpan::<Ms>::from_duration(FINALIZE_LEASE)
         );
         assert!(
             db::segment_locked(&state.db, &segment)
@@ -3881,9 +3883,8 @@ mod tests {
         let second = lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one lease at a time");
         assert!(
-            second.retry_in > ambre_core::TimeSpan::<ambre_core::Ms>::new(0)
-                && second.retry_in
-                    <= ambre_core::TimeSpan::<ambre_core::Ms>::from_duration(FINALIZE_LEASE)
+            second.retry_in > TimeSpan::<Ms>::new(0)
+                && second.retry_in <= TimeSpan::<Ms>::from_duration(FINALIZE_LEASE)
         );
         forget_store(&state, &channel).await;
     }
@@ -4364,7 +4365,7 @@ mod tests {
         let early = fold_lease(&state, alice, &channel).await.expect("lease");
         assert!(early.lease.is_none());
         assert!(
-            early.retry_in > ambre_core::TimeSpan::<ambre_core::Ms>::new(6 * 24 * 3600 * 1000),
+            early.retry_in > TimeSpan::<Ms>::new(6 * 24 * 3600 * 1000),
             "{:?}",
             early.retry_in
         );
@@ -4386,7 +4387,7 @@ mod tests {
         );
         let second = fold_lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one writer at a time");
-        assert!(second.retry_in > ambre_core::TimeSpan::<ambre_core::Ms>::new(0));
+        assert!(second.retry_in > TimeSpan::<Ms>::new(0));
         forget_store(&state, &channel).await;
         set_seq(&state, amendments, 0).await;
     }
@@ -4438,7 +4439,7 @@ mod tests {
         set_seq(&state, amendments, 4).await;
         let waits = fold_lease(&state, bob, &channel).await.expect("lease");
         assert!(
-            waits.retry_in > ambre_core::TimeSpan::<ambre_core::Ms>::new(6 * 24 * 3600 * 1000),
+            waits.retry_in > TimeSpan::<Ms>::new(6 * 24 * 3600 * 1000),
             "the delay restarts"
         );
 

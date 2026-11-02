@@ -12,6 +12,8 @@
 //! position beyond it stays a [`AxisId::Virtual`] grid coordinate
 //! (`trame-formula-engine`).
 
+use ambre_core::index::Count;
+use ambre_core::index::Pos;
 use std::collections::HashMap;
 
 use crate::model::{Line, SheetIndex};
@@ -97,8 +99,8 @@ fn at<P>(pos: P) -> RangeEndpoint<P> {
 
 /// Bind a positional axis coordinate: the materialized `Uid` if present (a
 /// reference inside the used range, follows the data), else a virtual position.
-fn bind<P: Line>(index: Option<&SheetIndex>, pos: P) -> AxisId<P> {
-    match index.and_then(|i| P::uid(i, pos)) {
+fn bind<L: Line>(index: Option<&SheetIndex>, pos: Pos<L>) -> AxisId<Pos<L>> {
+    match index.and_then(|i| L::uid(i, pos)) {
         Some(u) => AxisId::Bound(u),
         None => AxisId::Virtual(pos),
     }
@@ -166,7 +168,7 @@ fn compile_into(
             }
             ops.push(Op::CallFn {
                 name: name.clone(),
-                n_args: super::types::Arity::from_len(args.len()),
+                n_args: Count::<super::types::Arg>::from_len(args.len()),
             });
         }
         // `SheetRef`/`Name` are eliminated by `parser::resolve_refs` before
@@ -185,8 +187,9 @@ mod tests {
     use super::super::parser::parse_formula;
     use super::super::test_index::index_with;
     use crate::Col;
+    use ambre_core::index::Pos;
 
-    const COL_25: Col = Col::new(25);
+    const COL_25: Pos<Col> = Pos::<Col>::new(25);
     use super::*;
 
     fn compile_str(input: &str) -> CellBytecode {
@@ -241,7 +244,7 @@ mod tests {
         assert_eq!(bc.ops.len(), 2); // EvalRange + CallFn
         assert!(matches!(&bc.ops[0], Op::EvalRange(_)));
         assert!(
-            matches!(&bc.ops[1], Op::CallFn { name, n_args } if name.as_str() == "SUM" && *n_args == super::super::types::Arity::new(1))
+            matches!(&bc.ops[1], Op::CallFn { name, n_args } if name.as_str() == "SUM" && *n_args == Count::<super::super::types::Arg>::new(1))
         );
     }
 

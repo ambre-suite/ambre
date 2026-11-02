@@ -3,6 +3,7 @@
 key	count	reason
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark::MarkRoot::of | MarkKey::root -> Self::parse	1	MarkRoot::parse is the crdt_names! decoder of any stored str; MarkRoot::of is the typed reader over it.
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark::canonical_number | FontSize::points -> spell	1	spell is the private kernel canonical_number shares with canonical_value, which spells the raw number a stored or command string reads as.
+ambre-bus | src/app/prose.rs | crate::app::prose::Page::number_of | Pos::to_usize -> PageNumber::from_position	1	number_of is the one conversion from a page position to the number a reader sees, the seam Numbered names; the ordinal reads a usize position.
 ambre-canvas | src/render/atlas.rs | crate::render::atlas::rasterize | Px::get -> .size	1	.size is the swash ScalerBuilder method, a foreign call on a receiver the report cannot type; Swash takes the raster size as a bare f32.
 ambre-crypto | src/aead.rs | crate::aead::open | Ciphertext::as_bytes -> open_under	1	open_under is the private AEAD kernel over bytes, so open_row can open a slice of its row in place; every public opener types its input.
 ambre-crypto | src/aead.rs | crate::aead::open_anchored_key | Ciphertext::as_bytes -> open_under	1	open_under is the private AEAD kernel over bytes, so open_row can open a slice of its row in place; every public opener types its input.

@@ -25,6 +25,7 @@
 //! (`MURMURE-523`). A box under its field sends the reply to the channel as
 //! well, and unchecks once sent (`MURMURE-531`).
 
+use ambre_core::index::{Count, Delta, IdxVec, Pos, Span};
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
@@ -36,8 +37,7 @@ use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, 
 use ambre_commands::{Key, KeyBinding, KeyChar, Modifiers};
 use ambre_core::id::{Channel, Id, Message, User};
 use ambre_core::{
-    ByteCount, ByteOffset, CharSpan, HistoryStep, byte_span_to_chars, byte_to_char, char_len,
-    char_span_to_bytes,
+    Byte, Char, HistoryStep, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
 };
 use ambre_core::{Doc, Px, Scale, Size, View};
 use ambre_draw::{Color, Consumed, DrawSurface, FontContext, Point, Rect};
@@ -47,10 +47,10 @@ use crate::commands::PendingEdit;
 use crate::drafts::{DraftShelf, Loss, LossCount};
 use crate::look;
 use crate::markers::{self, DraftEdit, MarkBar};
-use crate::mention_list::{MentionList, Offer, OfferIndex, OfferVec, offers, query_at};
+use crate::mention_list::{MentionEntry, MentionList, Offer, offers, query_at};
 use crate::paint::{RowBounds, draw, shape, surface_px, text_height, text_width, view_rect};
 use crate::read_aloud::{self, Say};
-use crate::uploads::{FileIndex, Uploads};
+use crate::uploads::{UploadFile, Uploads};
 use crate::view::WindowWidth;
 
 /// The strip above the field while the composer holds an edit.
@@ -352,11 +352,11 @@ impl Marks {
 struct Asking {
     of: DraftOf,
     /// The byte of its `@`, and what follows it up to the caret.
-    at: ByteOffset,
+    at: Pos<Byte>,
     query: String,
     /// The entries of the members the view last offered.
-    offers: OfferVec<Offer>,
-    chosen: OfferIndex,
+    offers: IdxVec<MentionEntry, Offer>,
+    chosen: Pos<MentionEntry>,
 }
 
 /// What the composer hands the view to send, once a paint read it.
@@ -446,7 +446,7 @@ fn kept_mentions(edit: DraftEdit<'_>, mentions: &[Mention]) -> Vec<Mention> {
                 let start = range.start + (after_end - before_end);
                 Some(Mention {
                     target: mention.target,
-                    range: CharSpan::from_count(start, range.len()),
+                    range: Span::<Char>::from_count(start, range.len()),
                 })
             } else {
                 None
@@ -527,9 +527,9 @@ pub struct Composer {
     asking: Option<Asking>,
     /// The `@` Escape closed the list of: it stays closed while its query
     /// lasts (`MURMURE-554`).
-    dismissed: Option<(DraftOf, ByteOffset)>,
+    dismissed: Option<(DraftOf, Pos<Byte>)>,
     /// The entry picked, which the next paint writes into the draft.
-    picked: Option<(DraftOf, OfferIndex)>,
+    picked: Option<(DraftOf, Pos<MentionEntry>)>,
     /// A key that can close a marker was typed in this draft: the next paint
     /// looks before the caret (`MURMURE-197`).
     closing: Option<DraftOf>,
@@ -553,7 +553,7 @@ pub struct Composer {
     uploads: Uploads,
     /// Each file chip of the last paint that a press takes off the draft, as
     /// its rectangle and its place in the draft's files.
-    file_chips: Vec<(Rect, FileIndex)>,
+    file_chips: Vec<(Rect, Pos<UploadFile>)>,
 }
 
 impl Composer {
@@ -574,7 +574,7 @@ impl Composer {
 
     /// The file whose chip the last paint drew under `(x, y)`, by its place
     /// in the files of the draft shown.
-    pub fn file_at(&self, at: ambre_core::Point<Px<View>>) -> Option<FileIndex> {
+    pub fn file_at(&self, at: ambre_core::Point<Px<View>>) -> Option<Pos<UploadFile>> {
         let at = Point::new(at.x.get().into(), at.y.get().into());
         self.file_chips
             .iter()
@@ -1013,8 +1013,19 @@ impl Composer {
         };
         let len = asking.offers.len();
         match key {
-            Key::ArrowDown => asking.chosen = asking.chosen.after(len),
-            Key::ArrowUp => asking.chosen = asking.chosen.before(len),
+            // The list is not empty, so a wrapped entry always exists.
+            Key::ArrowDown => {
+                asking.chosen = asking
+                    .chosen
+                    .wrapped(Delta::new(1), len)
+                    .unwrap_or(Pos::ZERO);
+            }
+            Key::ArrowUp => {
+                asking.chosen = asking
+                    .chosen
+                    .wrapped(Delta::new(-1), len)
+                    .unwrap_or(Pos::ZERO);
+            }
             Key::Enter | Key::Tab => {
                 let chosen = asking.chosen;
                 self.pick(of, chosen);
@@ -1031,7 +1042,7 @@ impl Composer {
     /// Pick the entry `index` of the `@` list of the draft `of`: the next
     /// paint writes it over the query (`MURMURE-552`). A pick is a step of
     /// its own in the history.
-    pub fn pick(&mut self, of: DraftOf, index: OfferIndex) {
+    pub fn pick(&mut self, of: DraftOf, index: Pos<MentionEntry>) {
         let shows = self
             .asking
             .as_ref()
@@ -1047,7 +1058,7 @@ impl Composer {
     /// the list. `me` is never offered (`MURMURE-551`).
     pub fn offer(&mut self, members: &[(Id<User>, ambre_core::DisplayName)], me: Option<Id<User>>) {
         if let Some(asking) = &mut self.asking {
-            asking.offers = OfferVec::from(offers(&asking.query, members, me));
+            asking.offers = IdxVec::<MentionEntry, _>::from(offers(&asking.query, members, me));
             asking.chosen = asking.chosen.within(asking.offers.len());
         }
     }
@@ -1096,8 +1107,8 @@ impl Composer {
         let editor = self.drafts.get(&of)?;
         let bytes = editor.selection()?;
         let text = editor.text();
-        text.get(..bytes.start.get())?;
-        text.get(..bytes.end.get())?;
+        text.get(..bytes.start.to_usize())?;
+        text.get(..bytes.end.to_usize())?;
         let range = byte_span_to_chars(&text, bytes);
         let styles = self
             .marks
@@ -1149,7 +1160,7 @@ impl Composer {
         let written = offer.written();
         editor.push(EditIntent::Replace {
             start: at,
-            end: at + ByteCount::from_len(1 + query.len()),
+            end: at + Count::<Byte>::from_len(1 + query.len()),
             text: format!("{written} "),
         });
         editor.flush(
@@ -1166,7 +1177,7 @@ impl Composer {
         marks.follow(&editor.text());
         marks.mentions.push(Mention {
             target: offer.target,
-            range: CharSpan::from_count(start, char_len(&written)),
+            range: Span::<Char>::from_count(start, char_len(&written)),
         });
         marks.mentions.sort_by_key(|mention| mention.range.start);
     }
@@ -1211,7 +1222,7 @@ impl Composer {
         editor: &mut TextEditor,
         font_cx: &mut FontContext,
         wrap: Px<View>,
-        found: impl FnOnce(&str, &[CharSpan]) -> Option<markers::Closed>,
+        found: impl FnOnce(&str, &[Span<Char>]) -> Option<markers::Closed>,
     ) {
         let text = editor.text();
         let marks = self.marks.entry(of).or_insert_with(|| Marks {
@@ -1337,8 +1348,8 @@ impl Composer {
                     of,
                     at,
                     query: query.to_owned(),
-                    offers: OfferVec::default(),
-                    chosen: OfferIndex::ZERO,
+                    offers: IdxVec::<MentionEntry, _>::default(),
+                    chosen: Pos::<MentionEntry>::ZERO,
                 });
             }
         }
@@ -1792,7 +1803,8 @@ impl Composer {
                 ink,
             );
             if removable {
-                self.file_chips.push((chip, FileIndex::from_usize(index)));
+                self.file_chips
+                    .push((chip, Pos::<UploadFile>::from_usize(index)));
             }
             x += chip_w + SPACE_4;
         }
@@ -1829,7 +1841,7 @@ mod tests {
     fn an_edit_keeps_the_mentions_it_leaves_whole() {
         let at = |range: std::ops::Range<usize>| Mention {
             target: ambre_bus::MentionTarget::Channel,
-            range: CharSpan::from_usize_range(range),
+            range: Span::<Char>::from_usize_range(range),
         };
         // "@a hi @b": "hi" becomes "hello".
         let mentions = [at(0..2), at(6..8)];

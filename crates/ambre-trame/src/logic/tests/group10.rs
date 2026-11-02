@@ -4,11 +4,12 @@
 
 use super::*;
 use crate::FillMode;
+use ambre_core::index::{Count, Pos};
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(row),
-        col: Col::new(col),
+        row: Pos::<Row>::new(row),
+        col: Pos::<Col>::new(col),
         text: text.to_owned(),
     });
     // Seal the edit as its own undo item, as the UI's cell exit does.
@@ -17,8 +18,8 @@ fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
 
 fn range(row: u32, col: u32, row_end: u32, col_end: u32) -> crate::CellRect {
     crate::CellRect::spanning(
-        crate::CellPos::new(Row::new(row), Col::new(col)),
-        crate::CellPos::new(Row::new(row_end), Col::new(col_end)),
+        crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)),
+        crate::CellPos::new(Pos::<Row>::new(row_end), Pos::<Col>::new(col_end)),
     )
 }
 
@@ -35,8 +36,8 @@ fn fill(state: &mut TrameState, src: crate::CellRect, dest: crate::CellRect) -> 
 fn merge(state: &mut TrameState, row: u32, col: u32, row_end: u32, col_end: u32) {
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(row), Col::new(col)),
-            crate::CellPos::new(Row::new(row_end), Col::new(col_end)),
+            crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)),
+            crate::CellPos::new(Pos::<Row>::new(row_end), Pos::<Col>::new(col_end)),
         ),
     });
 }
@@ -100,8 +101,13 @@ fn the_merged_tiles_cover_the_destination_outside_the_source() {
         (3, 5, 0, 10, 3),
         (2, 2, 0, 7, 1),
     ] {
-        let (r1, r2, rd1, rd2) = (Row::new(s1), Row::new(s2), Row::new(d1), Row::new(d2));
-        let mut covered: Vec<u32> = tiles(r1, r2, rd1, rd2, RowCount::new(b))
+        let (r1, r2, rd1, rd2) = (
+            Pos::<Row>::new(s1),
+            Pos::<Row>::new(s2),
+            Pos::<Row>::new(d1),
+            Pos::<Row>::new(d2),
+        );
+        let mut covered: Vec<u32> = tiles(r1, r2, rd1, rd2, Count::<Row>::new(b))
             .iter()
             .flat_map(|t| t.first.get()..t.first.get() + t.len.get())
             .collect();
@@ -199,8 +205,8 @@ fn a_paste_is_one_undo_item() {
     let payload = copied(&mut state);
     let before = state.undo_manager.undo_count();
     state.handle_command(TrameCommand::PasteRange {
-        target_row: Row::new(10),
-        target_col: Col::new(0),
+        target_row: Pos::<Row>::new(10),
+        target_col: Pos::<Col>::new(0),
         payload,
     });
     state.handle_command(TrameCommand::CommitEdit);
@@ -226,18 +232,18 @@ fn a_pasted_style_short_of_a_line_says_so() {
     set(&mut state, 0, 0, "a");
     state.uid_counter = None;
     let payload = crate::ClipboardPayload {
-        src_row: Row::new(0),
-        src_col: Col::new(0),
-        rows: RowCount::ONE,
-        cols: ColCount::ONE,
+        src_row: Pos::<Row>::new(0),
+        src_col: Pos::<Col>::new(0),
+        rows: Count::<Row>::ONE,
+        cols: Count::<Col>::ONE,
         cells: vec![crate::ClipboardCell {
             bold: ambre_bus::Weight::Bold,
             ..Default::default()
         }],
     };
     let out = state.handle_command(TrameCommand::PasteRange {
-        target_row: Row::new(3),
-        target_col: Col::new(0),
+        target_row: Pos::<Row>::new(3),
+        target_col: Pos::<Col>::new(0),
         payload,
     });
     assert!(says_ids_exhausted(&out), "the refused style says so");
@@ -254,8 +260,8 @@ fn a_blank_source_cell_leaves_its_destination() {
     select(&mut state, 0, 0, 0, 2);
     let payload = copied(&mut state);
     state.handle_command(TrameCommand::PasteRange {
-        target_row: Row::new(5),
-        target_col: Col::new(0),
+        target_row: Pos::<Row>::new(5),
+        target_col: Pos::<Col>::new(0),
         payload,
     });
     let row: Vec<String> = (0..3).map(|c| read_cell(&mut state, 5, c)).collect();
@@ -303,10 +309,10 @@ fn a_workbook_replace_keeps_the_active_sheet() {
 
 fn select(state: &mut TrameState, row: u32, col: u32, row_end: u32, col_end: u32) {
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(row),
-        col: Col::new(col),
-        anchor_row: Row::new(row_end),
-        anchor_col: Col::new(col_end),
+        row: Pos::<Row>::new(row),
+        col: Pos::<Col>::new(col),
+        anchor_row: Pos::<Row>::new(row_end),
+        anchor_col: Pos::<Col>::new(col_end),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -333,7 +339,7 @@ fn says_ids_exhausted(out: &TrameOutcome) -> bool {
 fn a_merged_tile_short_of_a_line_says_so() {
     let mut state = TrameState::new();
     set(&mut state, 0, 0, "1");
-    let at = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let at = |row| crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(0));
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(at(0), at(1)),
     });
@@ -364,7 +370,7 @@ fn a_carried_style_short_of_a_line_says_so() {
         },
     });
     state.uid_counter = Some(ambre_core::IdCounter::new(u32::MAX));
-    let at = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let at = |row| crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(0));
     let out = state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(at(0), at(0)),
@@ -385,7 +391,7 @@ fn an_empty_fill_onto_a_cell_short_of_a_line_says_nothing() {
     let mut state = TrameState::new();
     set(&mut state, 0, 1, "beside");
     state.uid_counter = Some(ambre_core::IdCounter::new(u32::MAX));
-    let at = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let at = |row| crate::CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(0));
     let out = state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(at(0), at(0)),

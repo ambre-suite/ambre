@@ -6,21 +6,18 @@ use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
 use ambre_canvas::PointerButton;
 use ambre_commands::{Key, KeyChar};
+use ambre_core::index::{Count, Delta, Pos};
 use ambre_core::{Doc, Point, Px, View};
 use ambre_draw::Consumed;
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
 /// when the drop leaves it in place. `LoroMovableList::mov` takes the index
 /// after the source is removed, so a slot past the origin shifts down by one.
-fn reorder_target<P: Line>(from: P, slot: P) -> Option<P> {
-    if slot == from || slot.before() == Some(from) {
+fn reorder_target<L: Line>(from: Pos<L>, slot: Pos<L>) -> Option<Pos<L>> {
+    if slot == from || slot.prev() == Some(from) {
         return None;
     }
-    if slot > from {
-        slot.before()
-    } else {
-        Some(slot)
-    }
+    if slot > from { slot.prev() } else { Some(slot) }
 }
 
 impl TrameView {
@@ -40,7 +37,7 @@ impl TrameView {
 
     /// Columns a column resize applies to: the whole-column selection's band when
     /// the dragged column is part of it, else just the dragged column.
-    pub(crate) fn resize_target_cols(&self, c: Col) -> Vec<Col> {
+    pub(crate) fn resize_target_cols(&self, c: Pos<Col>) -> Vec<Pos<Col>> {
         let sel = &self.state.selection;
         if sel.band_contains(AxisPos::Col(c)) {
             return sel.live_rect().cols().into_iter().collect();
@@ -49,7 +46,7 @@ impl TrameView {
     }
 
     /// Rows a row resize applies to (row analogue of [`resize_target_cols`]).
-    pub(crate) fn resize_target_rows(&self, r: Row) -> Vec<Row> {
+    pub(crate) fn resize_target_rows(&self, r: Pos<Row>) -> Vec<Pos<Row>> {
         let sel = &self.state.selection;
         if sel.band_contains(AxisPos::Row(r)) {
             return sel.live_rect().rows().into_iter().collect();
@@ -64,7 +61,7 @@ impl TrameView {
     /// holds it (`BUS-011`). The local map takes the width only once the outbox
     /// carries the command: a width the document never took hides the loss
     /// (`TRAME-UI-127`).
-    pub(crate) fn send_resize_col(&mut self, col: Col, width: Px<Doc>) {
+    pub(crate) fn send_resize_col(&mut self, col: Pos<Col>, width: Px<Doc>) {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeCol {
             version,
@@ -82,7 +79,7 @@ impl TrameView {
     }
 
     /// Emit a `ResizeRow` (row analogue of [`send_resize_col`]).
-    pub(crate) fn send_resize_row(&mut self, row: Row, height: Px<Doc>) {
+    pub(crate) fn send_resize_row(&mut self, row: Pos<Row>, height: Px<Doc>) {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeRow {
             version,
@@ -104,7 +101,7 @@ impl TrameView {
     /// content is asked of the Logic thread, and the paint after the answer
     /// measures it (`TRAME-UI-128`). A column is never resized from a part of
     /// its content.
-    pub(crate) fn auto_fit_col(&mut self, c: Col) {
+    pub(crate) fn auto_fit_col(&mut self, c: Pos<Col>) {
         if self
             .send_command_lossless(TrameCommand::RequestColumnContent { col: c })
             .is_err()
@@ -113,7 +110,7 @@ impl TrameView {
         }
     }
 
-    pub(crate) fn auto_fit_row(&mut self, r: Row) {
+    pub(crate) fn auto_fit_row(&mut self, r: Pos<Row>) {
         self.pending_autofit = Some(HeaderHit::RowBorder(r));
         self.edit_dirty = true;
     }
@@ -171,7 +168,7 @@ impl TrameView {
     /// The intent is a document mutation, so it goes out lossless (`BUS-023`).
     /// A command the outbox took nowhere selects no band: a whole-column
     /// selection would read as an insertion that never happened (`BUS-018`).
-    pub(crate) fn insert_col_at(&mut self, c: Col) {
+    pub(crate) fn insert_col_at(&mut self, c: Pos<Col>) {
         self.select_cell(CellPos::new(self.state.active_row(), c));
         if self
             .send_command_lossless(TrameCommand::InsertColLeft)
@@ -185,7 +182,7 @@ impl TrameView {
         self.select_axis(AxisPos::Col(c));
     }
 
-    pub(crate) fn insert_row_at(&mut self, r: Row) {
+    pub(crate) fn insert_row_at(&mut self, r: Pos<Row>) {
         self.select_cell(CellPos::new(r, self.state.active_col()));
         if self
             .send_command_lossless(TrameCommand::InsertRowAbove)
@@ -240,9 +237,9 @@ impl TrameView {
             };
             n == 1
         } else if vertical {
-            src.row_count() == RowCount::ONE
+            src.row_count() == Count::<Row>::ONE
         } else {
-            src.col_count() == ColCount::ONE
+            src.col_count() == Count::<Col>::ONE
         };
         let mode = match (mods.primary(), single_line) {
             (false, _) => FillMode::Auto,
@@ -370,7 +367,8 @@ impl TrameView {
     /// Select the whole sheet from the header corner (`trame-selection`): a column band
     /// spanning every column.
     pub(crate) fn select_all(&mut self) {
-        self.state.selection = Selection::axis(AxisPos::Col(Col::ZERO), AxisPos::Col(LAST_COL));
+        self.state.selection =
+            Selection::axis(AxisPos::Col(Pos::<Col>::ZERO), AxisPos::Col(LAST_COL));
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.axis_active_cmd()) {
             tracing::error!("Trame: the outbox is full, the select-all was dropped");
@@ -531,14 +529,14 @@ impl TrameView {
         let at = self.state.active_cell();
         let normalized = text.replace('\r', "");
         let mut cells = Vec::new();
-        let mut rows = RowCount::ZERO;
-        let mut cols = ColCount::ZERO;
+        let mut rows = Count::<Row>::ZERO;
+        let mut cols = Count::<Col>::ZERO;
         for (dr, line) in normalized.trim_end_matches('\n').split('\n').enumerate() {
-            let dr = RowCount::from_len(dr);
-            rows = rows.max(dr + RowCount::ONE);
+            let dr = Count::<Row>::from_len(dr);
+            rows = rows.max(dr + Count::<Row>::ONE);
             for (dc, field) in line.split('\t').enumerate() {
-                let dc = ColCount::from_len(dc);
-                cols = cols.max(dc + ColCount::ONE);
+                let dc = Count::<Col>::from_len(dc);
+                cols = cols.max(dc + Count::<Col>::ONE);
                 if field.is_empty() {
                     continue;
                 }
@@ -764,13 +762,13 @@ impl TrameView {
                     // before the buffer is read (`trame-cell-editing`).
                     Key::Enter => {
                         self.pending_commit =
-                            Some(PendingCommit::Nav(RowDelta::new(1), ColDelta::ZERO));
+                            Some(PendingCommit::Nav(Delta::<Row>::new(1), Delta::<Col>::ZERO));
                         self.edit_dirty = true;
                         Consumed::Yes
                     }
                     Key::Tab => {
                         self.pending_commit =
-                            Some(PendingCommit::Nav(RowDelta::ZERO, ColDelta::new(1)));
+                            Some(PendingCommit::Nav(Delta::<Row>::ZERO, Delta::<Col>::new(1)));
                         self.edit_dirty = true;
                         Consumed::Yes
                     }

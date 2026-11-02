@@ -13,6 +13,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::ElementCount;
+use ambre_core::{Board, Px};
 use ambre_draw::Rect;
 
 /// Selection aggregates rendered by the status bar, mirrored from
@@ -35,7 +36,7 @@ impl SelStats {
 
 /// Format a world coordinate / length for the band: no decimals when whole,
 /// otherwise one decimal (world units are coarse; sub-pixel noise is not useful).
-pub fn fmt_world(v: ambre_core::Px<ambre_core::Board>) -> String {
+pub fn fmt_world(v: Px<Board>) -> String {
     let v = v.get();
     if v.fract() == 0.0 && v.abs() < 1e15 {
         format!("{v:.0}")
@@ -61,7 +62,7 @@ pub fn bounds_label(stats: &SelStats) -> Option<String> {
     if stats.count.get() < 2 {
         return None;
     }
-    let board = ambre_core::Px::<ambre_core::Board>::new;
+    let board = Px::<Board>::new;
     stats.bounds.map(|b| {
         format!(
             "x {}  y {}  w {}  h {}",

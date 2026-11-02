@@ -8,6 +8,7 @@
 
 use super::*;
 use crate::{CsvDelimiter, TOTAL_COLS, TOTAL_ROWS};
+use ambre_core::index::{Count, Pos};
 
 impl TrameState {
     /// Import CSV bytes into the workbook (`trame-import-export`). Parses the
@@ -114,12 +115,12 @@ impl TrameState {
         self.active_sheet = sheet_id.clone();
         self.reseed_active_sheet();
 
-        let rows = RowCount::from_len(records.len());
-        let cols = ColCount::from_len(records.iter().map(Vec::len).max().unwrap_or(0));
+        let rows = Count::<Row>::from_len(records.len());
+        let cols = Count::<Col>::from_len(records.iter().map(Vec::len).max().unwrap_or(0));
         let land = |r: usize, c: usize| {
             CellPos::new(
-                start.row + RowCount::from_len(r),
-                start.col + ColCount::from_len(c),
+                start.row + Count::<Row>::from_len(r),
+                start.col + Count::<Col>::from_len(c),
             )
         };
 
@@ -265,8 +266,8 @@ impl TrameState {
                 continue;
             };
             if let Some(at) = index.pos_of(&rl, &cl) {
-                max_row = Some(max_row.map_or(at.row, |m: Row| m.max(at.row)));
-                max_col = Some(max_col.map_or(at.col, |m: Col| m.max(at.col)));
+                max_row = Some(max_row.map_or(at.row, |m: Pos<Row>| m.max(at.row)));
+                max_col = Some(max_col.map_or(at.col, |m: Pos<Col>| m.max(at.col)));
             }
         }
         Some(CellPos::new(max_row?, max_col?))

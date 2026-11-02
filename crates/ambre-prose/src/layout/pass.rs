@@ -6,12 +6,13 @@
 //! what its type is, and the result is the flat sequence placement consumes.
 //! Nothing here writes to the document it reads (`PROSE-079`).
 
+use ambre_core::index::{Count, IdxVec, Pos, Span};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{
-    BlockType, DocOffset, FootnoteOrdinal, KeepTogether, KeepWithNext, PageCount, PageIndex,
-    PageNumber, ParagraphStyle,
+    BlockType, DocChar, FootnoteOrdinal, KeepTogether, KeepWithNext, Page, PageNumber,
+    ParagraphStyle,
 };
 use ambre_core::id::{Footnote, Id};
 use ambre_core::{Doc, PrintLength, Pt, Px};
@@ -19,9 +20,9 @@ use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
-use crate::events::grid::{CellPos, Col, ColCount, Row, RowCount, RowSpan, RowVec};
+use crate::events::grid::{CellPos, Col, Row};
 use crate::layout::geometry::PageBox;
-use crate::layout::measure::{BlockLine, BlockLineCount, EffectiveStyle, Measurer, TextMetrics};
+use crate::layout::measure::{BlockLine, EffectiveStyle, Measurer, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
 use crate::layout::run::{CellBorderPx, CellShape, CellStyle, ShapedRun, TableShape};
 use crate::logic::tables::{Grid, surviving_regions};
@@ -45,7 +46,7 @@ pub struct PageLayout {
     /// Where the content box starts on the sheet.
     pub margin_left: Px<Doc>,
     pub margin_top: Px<Doc>,
-    pub page_count: PageCount,
+    pub page_count: Count<Page>,
     pub blocks: Vec<BlockLayout>,
     pub header_height: Px<Doc>,
     pub header_first_height: Px<Doc>,
@@ -54,7 +55,7 @@ pub struct PageLayout {
     /// The first page this layout differs from the one it replaces on
     /// (`PROSE-067`). `None` when nothing moved, and the first page for a layout
     /// that replaces nothing.
-    pub first_dirty_page: Option<PageIndex>,
+    pub first_dirty_page: Option<Pos<Page>>,
     /// The scripts the document uses that no loaded face covered when this
     /// layout was measured (`PROSE-110`).
     ///
@@ -72,21 +73,21 @@ impl PageLayout {
     /// its block and its alignment (`PROSE-FEAT-169`, `PROSE-UI-133`,
     /// `PROSE-FEAT-285`). `None` for a hidden side.
     #[must_use]
-    pub fn bands_on_page(&self, page: PageIndex) -> (Option<doc::Band>, Option<doc::Band>) {
+    pub fn bands_on_page(&self, page: Pos<Page>) -> (Option<doc::Band>, Option<doc::Band>) {
         self.bands.on_page(page)
     }
 
     /// Every fragment visible on a page, continuations of split blocks
     /// included (`PROSE-066`). Empty for a page that carries nothing, and for
     /// one out of range (`PROSE-011`).
-    pub fn blocks_on_page(&self, page: PageIndex) -> impl Iterator<Item = &BlockLayout> {
+    pub fn blocks_on_page(&self, page: Pos<Page>) -> impl Iterator<Item = &BlockLayout> {
         self.blocks.iter().filter(move |block| block.shows_on(page))
     }
 
     /// The footnotes drawn at the foot of `page`, in the order of their
     /// ordinals (`PROSE-015`). Empty for a page that carries none.
     #[must_use]
-    pub fn footnotes_on_page(&self, page: PageIndex) -> Vec<&FootnoteLayout> {
+    pub fn footnotes_on_page(&self, page: Pos<Page>) -> Vec<&FootnoteLayout> {
         let mut notes: Vec<&FootnoteLayout> = self
             .blocks
             .iter()
@@ -183,7 +184,11 @@ pub(crate) struct NotePlan {
     /// still holds.
     pub(crate) key: Vec<NoteKey>,
     /// The calls of each block: the code-point offset and the note.
-    calls: HashMap<TreeID, Vec<(DocOffset, Id<Footnote>)>>,
+    #[expect(
+        clippy::type_complexity,
+        reason = "the axis argument of the index family lengthens a tuple shape that predates it"
+    )]
+    calls: HashMap<TreeID, Vec<(Pos<DocChar>, Id<Footnote>)>>,
     /// Each note's ordinal, shaped height and block.
     notes: HashMap<Id<Footnote>, (FootnoteOrdinal, Px<Doc>, TreeID)>,
     /// Each note's number as it was shaped.
@@ -265,7 +270,11 @@ impl NotePlan {
             texts.push((block, run));
             notes.insert(*id, (*ordinal, height, block));
         }
-        let mut calls: HashMap<TreeID, Vec<(DocOffset, Id<Footnote>)>> = HashMap::new();
+        #[expect(
+            clippy::type_complexity,
+            reason = "the axis argument of the index family lengthens a tuple shape that predates it"
+        )]
+        let mut calls: HashMap<TreeID, Vec<(Pos<DocChar>, Id<Footnote>)>> = HashMap::new();
         for anchor in note::footnote_calls(document) {
             let id = anchor.value;
             if notes.contains_key(&id) {
@@ -291,12 +300,12 @@ impl NotePlan {
     }
 
     /// The calls of `block`, the line of each still to find.
-    fn calls_of(&self, block: &TreeID) -> &[(DocOffset, Id<Footnote>)] {
+    fn calls_of(&self, block: &TreeID) -> &[(Pos<DocChar>, Id<Footnote>)] {
         self.calls.get(block).map_or(&[], Vec::as_slice)
     }
 
     /// One call, placed on `line`.
-    fn call(&self, id: &Id<Footnote>, line: BlockLine) -> Option<NoteCall> {
+    fn call(&self, id: &Id<Footnote>, line: Pos<BlockLine>) -> Option<NoteCall> {
         let (ordinal, height, block_id) = *self.notes.get(id)?;
         Some(NoteCall {
             footnote_id: *id,
@@ -410,7 +419,7 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
         header_first_height: Px::<Doc>::ZERO,
         footer_height: Px::<Doc>::ZERO,
         footer_first_height: Px::<Doc>::ZERO,
-        first_dirty_page: Some(PageIndex::ZERO),
+        first_dirty_page: Some(Pos::<Page>::ZERO),
         // The caller knows what its measurer was missing; this one assembles
         // geometry and placement alone.
         missing_scripts: ScriptSet::new(),
@@ -616,7 +625,7 @@ fn measure_one(
             let (text, marks) =
                 crate::layout::measure::marked_text(&doc::get_block_text(document, id));
             let calls = scope.notes.calls_of(id);
-            let offsets: Vec<DocOffset> = calls.iter().map(|(offset, _)| *offset).collect();
+            let offsets: Vec<Pos<DocChar>> = calls.iter().map(|(offset, _)| *offset).collect();
             let previous = scope.previous.get(id).and_then(|block| block.run.as_ref());
             let (metrics, lines, shaped) = measurer.measure_with_lines(
                 (&text, &marks),
@@ -657,7 +666,7 @@ fn table_calls(scope: &Walk<'_>, table: &TreeID) -> Vec<NoteCall> {
         .iter()
         .enumerate()
     {
-        let line = BlockLine::from_usize(row_index);
+        let line = Pos::<BlockLine>::from_usize(row_index);
         for cell in doc::children_of(scope.tree, Some(*row)) {
             for block in doc::children_of(scope.tree, Some(cell)) {
                 out.extend(
@@ -725,7 +734,7 @@ fn table_metrics(
     let Some(grid) = Grid::read(tree, table) else {
         let empty = TextMetrics {
             text_height: Px::<Doc>::ZERO,
-            line_count: BlockLineCount::ZERO,
+            line_count: Count::<BlockLine>::ZERO,
             line_tops: vec![Px::<Doc>::ZERO],
         };
         return (empty, TableShape::default());
@@ -733,7 +742,7 @@ fn table_metrics(
     let cols = grid.cells.iter().map(Vec::len).max().unwrap_or(0);
     let widths = column_widths(
         &doc::col_widths(tree, table),
-        ColCount::from_len(cols),
+        Count::<Col>::from_len(cols),
         content_width,
     );
     let mut col_x = Vec::with_capacity(cols + 1);
@@ -751,7 +760,7 @@ fn table_metrics(
     let mut heights = Vec::new();
     for (row, row_cells) in grid.cells.iter().enumerate() {
         for (col, cell) in row_cells.iter().enumerate() {
-            let at = CellPos::new(Row::from_usize(row), Col::from_usize(col));
+            let at = CellPos::new(Pos::<Row>::from_usize(row), Pos::<Col>::from_usize(col));
             if covered.contains(&at) {
                 continue;
             }
@@ -779,7 +788,7 @@ fn table_metrics(
                 cell: *cell,
                 x,
                 width,
-                rows: RowSpan::new(at.row, last.row.next()),
+                rows: Span::<Row>::new(at.row, last.row.next()),
                 blocks: blocks.into(),
                 content_height: top,
                 style,
@@ -789,16 +798,16 @@ fn table_metrics(
 
     // Single-row cells first, then each region takes what it lacks from the
     // last row it spans.
-    let mut row_heights: RowVec<Px<Doc>> = vec![Px::<Doc>::ZERO; grid.rows.len()].into();
+    let mut row_heights: IdxVec<Row, Px<Doc>> = vec![Px::<Doc>::ZERO; grid.rows.len()].into();
     for (cell, height) in cells.iter().zip(&heights) {
-        if cell.rows.len() == RowCount::ONE
+        if cell.rows.len() == Count::<Row>::ONE
             && let Some(slot) = row_heights.get_mut(cell.rows.start)
         {
             *slot = slot.max(*height);
         }
     }
     for (cell, height) in cells.iter().zip(&heights) {
-        if cell.rows.len() > RowCount::ONE {
+        if cell.rows.len() > Count::<Row>::ONE {
             // A span the grid does not hold whole sums to nothing, as the
             // slice read gave before the rows were typed.
             let spanned: Px<Doc> = row_heights
@@ -810,7 +819,7 @@ fn table_metrics(
             }
         }
     }
-    let mut row_tops = RowVec::from(vec![Px::<Doc>::ZERO]);
+    let mut row_tops = IdxVec::<Row, _>::from(vec![Px::<Doc>::ZERO]);
     let mut height = Px::<Doc>::ZERO;
     for row_height in &row_heights {
         height += *row_height;
@@ -818,7 +827,7 @@ fn table_metrics(
     }
     let metrics = TextMetrics {
         text_height: height,
-        line_count: BlockLineCount::of_rows(row_heights.len()),
+        line_count: row_heights.len().as_axis::<BlockLine>(),
         line_tops: row_tops.as_slice().to_vec(),
     };
     (
@@ -835,10 +844,10 @@ fn table_metrics(
 /// gives every column an equal share.
 pub(crate) fn column_widths(
     stored: &[PrintLength<Pt>],
-    cols: ColCount,
+    cols: Count<Col>,
     content_width: Px<Doc>,
 ) -> Vec<Px<Doc>> {
-    let usable = ColCount::from_len(stored.len()) == cols
+    let usable = Count::<Col>::from_len(stored.len()) == cols
         && stored
             .iter()
             .all(|width| width.is_finite() && *width > PrintLength::<Pt>::ZERO);
@@ -863,7 +872,7 @@ pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
     let length = |key| {
         number_at(&attrs, key)
             .filter(|pt| pt.is_finite() && *pt >= 0.0)
-            .map(|pt| ambre_core::PrintLength::<ambre_core::Pt>::new(pt).to_doc_px())
+            .map(|pt| PrintLength::<Pt>::new(pt).to_doc_px())
     };
     let colour = |key| string_at(&attrs, key).and_then(|raw| crate::mark::parse_color(&raw).ok());
     let edges = [
@@ -1069,10 +1078,10 @@ mod tests {
         // A document with no register at all is the case a reader that mints
         // one would be caught by (`PROSE-079`).
         assert_eq!(format!("{:?}", document.get_deep_value()), before);
-        assert_eq!(layout.page_count, crate::events::PageCount::new(1));
+        assert_eq!(layout.page_count, Count::<crate::events::Page>::new(1));
         assert_eq!(
             layout
-                .blocks_on_page(crate::events::PageIndex::new(0))
+                .blocks_on_page(Pos::<crate::events::Page>::new(0))
                 .count(),
             0
         );
@@ -1092,14 +1101,14 @@ mod tests {
         }
         let mut measurer = crate::layout::measure::shipped_measurer();
         let layout = lay_out(&mut measurer, &document);
-        assert_eq!(layout.page_count, crate::events::PageCount::new(2));
+        assert_eq!(layout.page_count, Count::<crate::events::Page>::new(2));
         let Some(last) = layout.blocks.last() else {
             return;
         };
-        assert_eq!(last.page_start, crate::events::PageIndex::new(1));
+        assert_eq!(last.page_start, Pos::<crate::events::Page>::new(1));
         assert_eq!(
             layout
-                .blocks_on_page(crate::events::PageIndex::new(1))
+                .blocks_on_page(Pos::<crate::events::Page>::new(1))
                 .count(),
             1
         );

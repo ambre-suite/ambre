@@ -15,9 +15,10 @@
 //! document (`PROSE-IO-001`), and nothing reaches the relay but the one
 //! encrypted delta the commit produces (`PROSE-IO-043`).
 
+use ambre_core::index::{Axis, Count, Pos};
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::{DocOffset, FootnoteOrdinal, HeadingLevel};
+use ambre_bus::app::prose::{DocChar, FootnoteOrdinal, HeadingLevel};
 use ambre_core::id::{Footnote, Id};
 use loro::{LoroValue, TreeID};
 
@@ -30,7 +31,7 @@ use super::ProseState;
 use super::tables::Grid;
 use super::text::{MarkedRun, body_span, marked_runs, write_runs};
 use crate::doc::{self, StoredLevel};
-use crate::events::grid::{CellPos, Col, ColCount, Row, RowCount};
+use crate::events::grid::{CellPos, Col, Row};
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 use crate::interop::{
     Banding, Commenting, IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun,
@@ -39,18 +40,13 @@ use crate::interop::{
 };
 use crate::mark::MarkRoot;
 
-ambre_core::define_index! {
-    /// The place of one operation in the list an import builds. A later
-    /// operation names its parent by it, before any block exists.
-    pub struct OpIndex(u32);
-    /// A number of operations.
-    pub struct OpCount;
-    /// The signed gap between two operations.
-    pub struct OpDelta(i64);
-    /// A run of operations.
-    pub struct OpSpan;
-    /// A list indexed by operation.
-    pub struct OpVec;
+/// The place of one operation in the list an import builds. A later
+/// operation names its parent by it, before any block exists.
+#[derive(PartialEq, Eq)]
+pub enum Op {}
+
+impl Axis for Op {
+    const NAME: &'static str = "Op";
 }
 
 /// Where an operation's block goes. It sits at the root, under a block an
@@ -58,8 +54,8 @@ ambre_core::define_index! {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Parent {
     Root,
-    Op(OpIndex),
-    Cell { table: OpIndex, at: CellPos },
+    Op(Pos<Op>),
+    Cell { table: Pos<Op>, at: CellPos },
 }
 
 /// One write of an import. An operation names its parent by the index of the
@@ -73,8 +69,8 @@ pub(super) enum ImportOp {
     },
     Table {
         parent: Parent,
-        rows: RowCount,
-        cols: ColCount,
+        rows: Count<Row>,
+        cols: Count<Col>,
     },
 }
 
@@ -87,7 +83,7 @@ impl ImportOp {
 }
 
 /// The type an operation mints, for the nesting check.
-fn op_type(ops: &[ImportOp], index: OpIndex) -> Option<BlockType> {
+fn op_type(ops: &[ImportOp], index: Pos<Op>) -> Option<BlockType> {
     match ops.get(index.to_usize())? {
         ImportOp::Block { init, .. } => Some(init.block_type()),
         ImportOp::Table { .. } => Some(BlockType::Table),
@@ -178,15 +174,15 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
             if rows.is_empty() || cols == 0 {
                 return;
             }
-            let table = OpIndex::from_usize(ops.len());
+            let table = Pos::<Op>::from_usize(ops.len());
             ops.push(ImportOp::Table {
                 parent,
-                rows: RowCount::from_len(rows.len()),
-                cols: ColCount::from_len(cols),
+                rows: Count::<Row>::from_len(rows.len()),
+                cols: Count::<Col>::from_len(cols),
             });
             for (row, cells) in rows.iter().enumerate() {
                 for (col, cell) in cells.cells.iter().enumerate() {
-                    let at = CellPos::new(Row::from_usize(row), Col::from_usize(col));
+                    let at = CellPos::new(Pos::<Row>::from_usize(row), Pos::<Col>::from_usize(col));
                     let mut inner = chain.to_vec();
                     inner.push(Parent::Cell { table, at });
                     for child in &cell.blocks {
@@ -202,8 +198,8 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
     }
 }
 
-fn push(ops: &mut Vec<ImportOp>, parent: Parent, init: BlockInit, runs: &[IrRun]) -> OpIndex {
-    let index = OpIndex::from_usize(ops.len());
+fn push(ops: &mut Vec<ImportOp>, parent: Parent, init: BlockInit, runs: &[IrRun]) -> Pos<Op> {
+    let index = Pos::<Op>::from_usize(ops.len());
     ops.push(ImportOp::Block {
         parent,
         init,
@@ -553,7 +549,7 @@ impl ProseState {
             _ => None,
         };
         let mut minted: Vec<Option<TreeID>> = Vec::with_capacity(ops.len());
-        let mut grids: HashMap<OpIndex, Grid> = HashMap::new();
+        let mut grids: HashMap<Pos<Op>, Grid> = HashMap::new();
         // The last block each parent holds, so the next lands after it. A
         // cell starts at the empty paragraph the table minted in it.
         let mut last: HashMap<Parent, TreeID> = HashMap::new();
@@ -593,7 +589,7 @@ impl ProseState {
             {
                 if let Err(e) = write_runs(
                     &doc::get_block_text(&self.doc, &first),
-                    DocOffset::ZERO,
+                    Pos::<DocChar>::ZERO,
                     runs,
                 ) {
                     return Err(Self::err_write(e));
@@ -610,8 +606,11 @@ impl ProseState {
                         return Err(Self::err_write(e));
                     }
                     if init.block_type().has_body()
-                        && let Err(e) =
-                            write_runs(&doc::get_block_text(&self.doc, &id), DocOffset::ZERO, runs)
+                        && let Err(e) = write_runs(
+                            &doc::get_block_text(&self.doc, &id),
+                            Pos::<DocChar>::ZERO,
+                            runs,
+                        )
                     {
                         return Err(Self::err_write(e));
                     }
@@ -620,7 +619,7 @@ impl ProseState {
                 ImportOp::Table { rows, cols, .. } => {
                     let id = self.mint_table(parent_id, after, *rows, *cols)?;
                     if let Some(grid) = Grid::read(&doc::blocks(&self.doc), &id) {
-                        grids.insert(OpIndex::from_usize(minted.len()), grid);
+                        grids.insert(Pos::<Op>::from_usize(minted.len()), grid);
                     }
                     id
                 }
@@ -802,7 +801,7 @@ mod tests {
         let ops = [
             paragraph(Parent::Root, "first"),
             paragraph(Parent::Root, "second"),
-            paragraph(Parent::Op(OpIndex::new(1)), "refused"),
+            paragraph(Parent::Op(Pos::<Op>::new(1)), "refused"),
         ];
         let warnings = Warnings::new(ambre_bus::app::prose::ConversionFormat::Markdown);
         let outcome = state.apply_import(&ops, warnings);

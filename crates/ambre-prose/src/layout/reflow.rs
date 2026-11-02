@@ -12,21 +12,22 @@
 //! gave. Then [`Paginator::settle_toc`] is the bounded pass that brings the two
 //! into step, off the keystroke path (`PROSE-019`, `PROSE-084`).
 
+use ambre_core::index::{Count, Pos, Span};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use ambre_bus::app::prose::{BlockType, PageCount, PageIndex, PageNumber, PageSpan};
+use ambre_bus::app::prose::{BlockType, Page, PageNumber};
 use ambre_core::id::{Footnote, Id};
 use ambre_core::{Doc, Px};
 use loro::{LoroDoc, TreeID};
 
 use crate::doc;
 use crate::layout::geometry::PageBox;
-use crate::layout::measure::{BlockIndex, Measurer, ShapedCount};
+use crate::layout::measure::{Block, Measurer, ShapedCount};
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
 use crate::layout::run::LayoutVersion;
-use crate::layout::run::{FlowIndex, ShapedLayout, TextEnds, Window, text_ends};
+use crate::layout::run::{Flow, ShapedLayout, TextEnds, Window, text_ends};
 use crate::toc;
 
 /// The most layouts one settling of the tables of contents runs
@@ -66,7 +67,7 @@ pub struct Paginator {
     version: ambre_core::Generation<LayoutVersion>,
     /// Every block of the layout, by its place in the flow. Shared by every
     /// window handed over, and built again only when the blocks change.
-    order: Arc<HashMap<TreeID, FlowIndex>>,
+    order: Arc<HashMap<TreeID, Pos<Flow>>>,
     /// The first and the last block holding text.
     ends: Option<TextEnds>,
 }
@@ -129,7 +130,7 @@ impl Paginator {
     /// (`PROSE-UI-006`).
     #[must_use]
     pub fn shaped_layout(&self) -> ShapedLayout {
-        self.window(PageIndex::ZERO.through(PageIndex::MAX))
+        self.window(Pos::<Page>::ZERO.through(Pos::<Page>::MAX))
     }
 
     /// The layout of the pages `pages`, with the runs the view draws on them
@@ -140,11 +141,11 @@ impl Paginator {
     /// what the pages shown hold, not the document. Nothing is shaped here
     /// (`PROSE-UI-006`).
     #[must_use]
-    pub fn window(&self, pages: PageSpan) -> ShapedLayout {
+    pub fn window(&self, pages: Span<Page>) -> ShapedLayout {
         let last = pages
             .last()
             .unwrap_or(pages.start)
-            .min(self.layout.page_count.last().unwrap_or(PageIndex::ZERO));
+            .min(self.layout.page_count.last().unwrap_or(Pos::<Page>::ZERO));
         let first = pages.start.min(last);
         let all = &self.layout.blocks;
         let start = all.partition_point(|block| block.last_page() < first);
@@ -191,7 +192,7 @@ impl Paginator {
             tables,
         )
         .with_window(Window {
-            first_index: FlowIndex::from_usize(start),
+            first_index: Pos::<Flow>::from_usize(start),
             pages: first.through(last),
             order: Arc::clone(&self.order),
             ends: self.ends,
@@ -200,7 +201,7 @@ impl Paginator {
 
     /// The page a block starts on, when the layout holds it.
     #[must_use]
-    pub fn page_of(&self, block: &TreeID) -> Option<PageIndex> {
+    pub fn page_of(&self, block: &TreeID) -> Option<Pos<Page>> {
         let index = *self.order.get(block)?;
         Some(self.layout.blocks.get(index.to_usize())?.page_start)
     }
@@ -230,7 +231,7 @@ impl Paginator {
             &self.notes,
         );
         let placement = place::place(&measured, self.bands.body_height(&page_box));
-        self.commit(page_box, measured, placement, PageIndex::ZERO);
+        self.commit(page_box, measured, placement, Pos::<Page>::ZERO);
         &self.layout
     }
 
@@ -387,7 +388,7 @@ impl Paginator {
         &self,
         measured: &[MeasuredBlock],
         page_box: PageBox,
-        from: BlockIndex,
+        from: Pos<Block>,
     ) -> Placement {
         let body_height = self.bands.body_height(&page_box);
         let Some(resume) = self.cursor_before(from, body_height) else {
@@ -409,7 +410,7 @@ impl Paginator {
         let Some(stop) = stopped else {
             return Placement {
                 blocks: placed,
-                page_count: PageCount::through(cursor.page),
+                page_count: Count::<Page>::through(cursor.page),
             };
         };
         // From here the old layout is the answer, entry for entry
@@ -425,7 +426,7 @@ impl Paginator {
 
     /// The cursor the block before `from` left, or `None` when `from` is the
     /// first block or the old layout is too short to answer.
-    fn cursor_before(&self, from: BlockIndex, body_height: Px<Doc>) -> Option<place::Cursor> {
+    fn cursor_before(&self, from: Pos<Block>, body_height: Px<Doc>) -> Option<place::Cursor> {
         let index = from.prev()?.to_usize();
         let entry = self.layout.blocks.get(index)?;
         let block = self.measured.get(index)?;
@@ -437,19 +438,19 @@ impl Paginator {
         page_box: PageBox,
         measured: Vec<MeasuredBlock>,
         placement: Placement,
-        first_dirty: PageIndex,
+        first_dirty: Pos<Page>,
     ) {
         self.page_box = page_box;
         let same_blocks = self.order.len() == measured.len()
             && measured.iter().enumerate().all(|(index, block)| {
-                self.order.get(&block.block_id) == Some(&FlowIndex::from_usize(index))
+                self.order.get(&block.block_id) == Some(&Pos::<Flow>::from_usize(index))
             });
         if !same_blocks {
             self.order = Arc::new(
                 measured
                     .iter()
                     .enumerate()
-                    .map(|(index, block)| (block.block_id, FlowIndex::from_usize(index)))
+                    .map(|(index, block)| (block.block_id, Pos::<Flow>::from_usize(index)))
                     .collect(),
             );
         }
@@ -474,17 +475,17 @@ impl Paginator {
 /// A block added or removed moves the sequence from where it sits, so a
 /// length change answers at the first index that differs.
 #[must_use]
-fn first_difference(before: &[MeasuredBlock], after: &[MeasuredBlock]) -> Option<BlockIndex> {
+fn first_difference(before: &[MeasuredBlock], after: &[MeasuredBlock]) -> Option<Pos<Block>> {
     (0..before.len().max(after.len()))
         .find(|&index| before.get(index) != after.get(index))
-        .map(BlockIndex::from_usize)
+        .map(Pos::<Block>::from_usize)
 }
 
 /// The first page the new layout differs from the old one on (`PROSE-067`).
 ///
 /// The UI thread repaints from there rather than everywhere.
 #[must_use]
-fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> PageIndex {
+fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> Pos<Page> {
     for index in 0..before.len().max(after.len()) {
         match (before.get(index), after.get(index)) {
             (Some(old), Some(new)) if old == new => {}
@@ -494,11 +495,15 @@ fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> PageIndex 
                     old.map(|entry| entry.page_start),
                     new.map(|entry| entry.page_start),
                 ];
-                return pages.into_iter().flatten().min().unwrap_or(PageIndex::ZERO);
+                return pages
+                    .into_iter()
+                    .flatten()
+                    .min()
+                    .unwrap_or(Pos::<Page>::ZERO);
             }
         }
     }
-    PageIndex::ZERO
+    Pos::<Page>::ZERO
 }
 
 /// A paginator holding the faces the application ships.
@@ -647,7 +652,7 @@ mod tests {
             panic!("a layout that replaced another names a page");
         };
         // `PROSE-067`: the edit is at the end, so the early pages are clean.
-        assert!(dirty > PageIndex::ZERO);
+        assert!(dirty > Pos::<Page>::ZERO);
     }
 
     #[test]

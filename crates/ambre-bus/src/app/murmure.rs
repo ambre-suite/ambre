@@ -12,7 +12,8 @@
 //! [`LogicCommand::App`](crate::LogicCommand::App), whose address is a
 //! document (`BUS-027`).
 
-use ambre_core::{ByteOffset, CharCount, CharOffset, CharSpan, CharVec};
+use ambre_core::index::{Count, IdxVec, Pos, Span};
+use ambre_core::{Byte, Char};
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Category, Channel, Document, Id, Message, Meta, Segment, Space, User};
@@ -213,7 +214,7 @@ pub enum MentionTarget {
 pub struct Mention {
     pub target: MentionTarget,
     /// In chars of the body, as the composer drew the name.
-    pub range: CharSpan,
+    pub range: Span<Char>,
 }
 
 /// How a run of a message body reads (`MURMURE-194`).
@@ -239,7 +240,7 @@ pub enum TextStyle {
 pub struct StyleMark {
     pub style: TextStyle,
     /// In chars of the body.
-    pub range: CharSpan,
+    pub range: Span<Char>,
 }
 
 /// A message the view hands the engine to send.
@@ -343,7 +344,7 @@ pub struct Picture {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PictureFrame {
     pub pixels: ambre_core::Payload<ambre_core::RgbaPixels>,
-    pub delay: ambre_core::TimeSpan<ambre_core::Ms>,
+    pub delay: TimeSpan<Ms>,
 }
 
 impl Picture {
@@ -667,17 +668,17 @@ impl MessageView {
     pub fn shown_at(
         &self,
         name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
-    ) -> (String, CharVec<ByteOffset>) {
+    ) -> (String, IdxVec<Char, Pos<Byte>>) {
         let mut shown = String::with_capacity(self.text.len());
-        let mut bytes = CharVec::new();
-        let mut at = CharOffset::ZERO;
+        let mut bytes = IdxVec::<Char, _>::new();
+        let mut at = Pos::<Char>::ZERO;
         let chars = self.text.chars().enumerate();
-        for (i, c) in chars.map(|(i, c)| (CharCount::from_len(i).as_end(), c)) {
+        for (i, c) in chars.map(|(i, c)| (Count::<Char>::from_len(i).as_end(), c)) {
             if i < at {
-                bytes.push(ByteOffset::new(shown.len()));
+                bytes.push(Pos::<Byte>::from_usize(shown.len()));
                 continue;
             }
-            bytes.push(ByteOffset::new(shown.len()));
+            bytes.push(Pos::<Byte>::from_usize(shown.len()));
             let mention = self.mentions.iter().find(|m| m.range.start == i);
             let named = mention.and_then(|m| match m.target {
                 MentionTarget::User(user) => name_of(user).map(|name| (m, name)),
@@ -692,7 +693,7 @@ impl MessageView {
                 None => shown.push(c),
             }
         }
-        bytes.push(ByteOffset::new(shown.len()));
+        bytes.push(Pos::<Byte>::from_usize(shown.len()));
         (shown, bytes)
     }
 }
@@ -715,6 +716,7 @@ pub struct SearchMatch {
 /// Who registered the segment a close moves to. The Sync worker answers it,
 /// so it lives on the event plane, and the worker names no app message.
 pub use crate::event::Successor;
+use ambre_core::{Ms, TimeSpan};
 
 /// What a search found in one open channel, and which part of its history
 /// it read (the Murmure search spec).

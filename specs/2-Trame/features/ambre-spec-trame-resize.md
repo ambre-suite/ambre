@@ -97,8 +97,8 @@ sizes cover the screen, so a negative size would make the walk cover every line.
 plus the live guide:
 
 ```rust
-col_widths: HashMap<Col, Px<Doc>>,          // keyed by grid position, mirrors the container
-row_heights: HashMap<Row, Px<Doc>>,
+col_widths: HashMap<Pos<Col>, Px<Doc>>,          // keyed by grid position, mirrors the container
+row_heights: HashMap<Pos<Row>, Px<Doc>>,
 resize_preview: Option<ResizePreview>,    // Col(x) or Row(y), in physical px
 ```
 

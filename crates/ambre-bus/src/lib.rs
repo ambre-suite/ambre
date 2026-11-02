@@ -60,14 +60,13 @@ pub use event::{
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
-    CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan,
-    ColVec, CondFormatId, CondFormatKind, CondFormatPriority, CondStyle, CsvDelimiter, DateParts,
-    DateSerial, DayCount, DayOfMonth, DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell,
-    EditSession, FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, Merge, MergeSpan,
-    Month, MonthCount, Percent, Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec, SelectionKind,
-    SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos, Slant, SortKey,
-    SortOrder, Strikethrough, StylePatch, TrameCommand, TrameEvent, Underline, VAlign,
-    ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
+    CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, CondFormatId, CondFormatKind,
+    CondFormatPriority, CondStyle, CsvDelimiter, DateParts, DateSerial, DayCount, DayOfMonth,
+    DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell, EditSession, FillMode, FilterKind,
+    FilterOp, FilterViewId, HAlign, HeaderRow, Merge, MergeSpan, Month, MonthCount, Percent, Row,
+    RowFilter, SelectionKind, SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, Slant,
+    SortKey, SortOrder, Strikethrough, StylePatch, TabStrip, TrameCommand, TrameEvent, Underline,
+    VAlign, ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
 };
 pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};
@@ -239,8 +238,7 @@ impl std::fmt::Debug for CopyOutcome {
 /// The text offsets, one family per unit, for a crate that reaches the core
 /// through this one (`ambre-canvas`).
 pub use ambre_core::text_offset::{
-    ByteCount, ByteDelta, ByteOffset, ByteSpan, CharCount, CharDelta, CharOffset, CharSpan,
-    Utf16Offset, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte,
+    Byte, Char, Utf16, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte,
 };
 pub use ambre_core::{
     ApiFailure, ChannelDocumentKind, DocType, Email, FixedBytes, FracMs, HttpStatus, Instant,

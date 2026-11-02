@@ -42,12 +42,12 @@ pub mod test_support;
 
 pub use ambre_bus::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
-    CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
-    CondFormatKind, CondStyle, CsvDelimiter, Decimals, DecimalsStep, DefinedName, DisplayCell,
-    EditSession, FillMode, FilterKind, FilterOp, HAlign, HeaderRow, MergeSpan, Row, RowCount,
-    RowDelta, RowSpan, RowVec, SelectionKind, SheetTabPos, SortKey, SortOrder, StylePatch,
+    CellStyle, ClipboardCell, ClipboardPayload, Col, CondFormatKind, CondStyle, CsvDelimiter,
+    Decimals, DecimalsStep, DefinedName, DisplayCell, EditSession, FillMode, FilterKind, FilterOp,
+    HAlign, HeaderRow, MergeSpan, Row, SelectionKind, SortKey, SortOrder, StylePatch, TabStrip,
     TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
+use ambre_core::index::{Count, Pos};
 use ambre_core::{Doc, Px};
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 pub use logic::{
@@ -71,10 +71,10 @@ pub const MAX_COL_WIDTH: Px<Doc> = Px::<Doc>::new(4096.0);
 pub const MAX_ROW_HEIGHT: Px<Doc> = Px::<Doc>::new(2048.0);
 
 /// Total number of rows in a Trame grid (0-based indices `0..TOTAL_ROWS`).
-pub const TOTAL_ROWS: RowCount = RowCount::new(100_000);
+pub const TOTAL_ROWS: Count<Row> = Count::<Row>::new(100_000);
 /// Total number of columns in a Trame grid (0-based indices `0..TOTAL_COLS`).
-pub const TOTAL_COLS: ColCount = ColCount::new(1_000);
+pub const TOTAL_COLS: Count<Col> = Count::<Col>::new(1_000);
 /// The last row of a Trame grid.
-pub const LAST_ROW: Row = Row::new(TOTAL_ROWS.get() - 1);
+pub const LAST_ROW: Pos<Row> = Pos::<Row>::new(TOTAL_ROWS.get() - 1);
 /// The last column of a Trame grid.
-pub const LAST_COL: Col = Col::new(TOTAL_COLS.get() - 1);
+pub const LAST_COL: Pos<Col> = Pos::<Col>::new(TOTAL_COLS.get() - 1);

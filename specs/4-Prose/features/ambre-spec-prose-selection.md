@@ -118,10 +118,10 @@ status values are normative in `ambre-spec-template.md`.
 /// The caret, and the fixed end of the selection when there is one (`ambre-bus`).
 pub struct CursorPosition {
     pub block_id: BlockId,
-    pub offset:   DocOffset,
+    pub offset:   Pos<DocChar>,
     /// The fixed end, `None` for a collapsed caret. The caret is the moving end, and it
     /// may precede the anchor (`PROSE-UI-039`).
-    pub anchor:   Option<(BlockId, DocOffset)>,
+    pub anchor:   Option<(BlockId, Pos<DocChar>)>,
 }
 
 /// Which side of a soft wrap the caret sits on.
@@ -145,8 +145,8 @@ answer for a culled block (`PROSE-UI-031`).
 ```rust
 /// The block and offset under a canvas point. `None` only for a layout with no page.
 impl HitTest for ProseUiState {
-    type Target = (BlockId, DocOffset);
-    fn hit_test(&self, at: Point<Px<View>>) -> Option<(BlockId, DocOffset)>;
+    type Target = (BlockId, Pos<DocChar>);
+    fn hit_test(&self, at: Point<Px<View>>) -> Option<(BlockId, Pos<DocChar>)>;
 }
 ```
 
@@ -172,7 +172,7 @@ pub enum Direction {
 }
 
 /// A place in the text: a block and a code-point offset.
-type Spot = (BlockId, DocOffset);
+type Spot = (BlockId, Pos<DocChar>);
 
 impl ProseUiState {
     /// Move the caret, or grow the selection to it under `SelectionMode::Extend`. Vertical
@@ -188,7 +188,7 @@ impl ProseUiState {
 
     /// After a local insertion, advance the caret in the same block. Clears the column,
     /// because a horizontal edit invalidates it, and reveals the caret through the same rule.
-    fn advance_cursor(&mut self, n: DocCount);
+    fn advance_cursor(&mut self, n: Count<DocChar>);
 }
 ```
 

@@ -12,6 +12,7 @@ use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 use crate::schema::{MessageKey, Root};
 use crate::session::next_peer;
 use crate::{ChannelState, ChannelType, FINALIZE_RETRY, Order, Signer};
+use ambre_core::{Ms, TimeSpan};
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 const LEASE_MS: u64 = 30_000;
@@ -113,7 +114,7 @@ fn a_closing_segment_asks_for_its_lease_as_the_relay_says() {
     assert_eq!(state.lease_to_ask(NOW), None, "asked once");
 
     // The grace period runs: the relay says when to ask again.
-    state.lease_deferred(closing, ambre_core::TimeSpan::<ambre_core::Ms>::new(5_000));
+    state.lease_deferred(closing, TimeSpan::<Ms>::new(5_000));
     assert_eq!(state.lease_to_ask(NOW), None, "the tick dates it");
     assert_eq!(state.lease_to_ask(at(4_999)), None);
     assert_eq!(state.lease_to_ask(at(5_000)), Some(closing));
@@ -165,7 +166,7 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
         closing,
         lease,
         ambre_core::Seq::new(7),
-        ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+        TimeSpan::<Ms>::new(LEASE_MS),
     );
     let early = state
         .final_snapshot(NOW, ambre_core::Seq::new(6))
@@ -206,7 +207,7 @@ fn a_lease_that_runs_out_is_asked_again() {
         closing,
         Id::<Lease>::mint(),
         ambre_core::Seq::new(9),
-        ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+        TimeSpan::<Ms>::new(LEASE_MS),
     );
     assert!(
         state
@@ -237,7 +238,7 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
         closing,
         Id::<Lease>::mint(),
         ambre_core::Seq::new(2),
-        ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+        TimeSpan::<Ms>::new(LEASE_MS),
     );
     let snapshot = alice
         .final_snapshot(NOW, ambre_core::Seq::new(2))
@@ -294,7 +295,7 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
         closing,
         Id::<Lease>::mint(),
         ambre_core::Seq::new(2),
-        ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+        TimeSpan::<Ms>::new(LEASE_MS),
     );
     alice
         .final_snapshot(NOW, ambre_core::Seq::new(2))
@@ -317,7 +318,7 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
         closing,
         lease,
         ambre_core::Seq::new(2),
-        ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+        TimeSpan::<Ms>::new(LEASE_MS),
     );
     let snapshot = bob
         .final_snapshot(NOW, ambre_core::Seq::new(2))
@@ -385,7 +386,7 @@ fn finalized_for(
         closing,
         Id::<Lease>::mint(),
         ambre_core::Seq::new(2),
-        ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+        TimeSpan::<Ms>::new(LEASE_MS),
     );
     let snapshot = alice
         .final_snapshot(NOW, ambre_core::Seq::new(2))

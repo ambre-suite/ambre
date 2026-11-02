@@ -5,7 +5,8 @@
 //! the caret is this author's view state (`PROSE-UI-074`). The engine reads it
 //! because the view holds no document to read it from (`PROSE-UI-001`).
 
-use ambre_bus::app::prose::DocOffset;
+use ambre_bus::app::prose::DocChar;
+use ambre_core::index::Pos;
 use loro::event::Diff;
 use loro::{ContainerID, Frontiers, LoroDoc, TextDelta, TreeExternalDiff};
 
@@ -19,7 +20,10 @@ use crate::events::{BlockId, block_id};
 /// was put back, or to where text was taken out. A step that only created a
 /// block puts the caret at that block's start. `None` when the step touched no
 /// live block, which leaves the caret where it was.
-pub(super) fn edit_point(document: &LoroDoc, before: &Frontiers) -> Option<(BlockId, DocOffset)> {
+pub(super) fn edit_point(
+    document: &LoroDoc,
+    before: &Frontiers,
+) -> Option<(BlockId, Pos<DocChar>)> {
     let after = document.state_frontiers();
     let diff = document.diff(before, &after).ok()?;
     let tree = doc::blocks(document);
@@ -51,25 +55,25 @@ pub(super) fn edit_point(document: &LoroDoc, before: &Frontiers) -> Option<(Bloc
             _ => {}
         }
     }
-    created.map(|id| (block_id(id), DocOffset::ZERO))
+    created.map(|id| (block_id(id), Pos::<DocChar>::ZERO))
 }
 
 /// The offset one text diff leaves the caret at. That is after the first
 /// insertion, at the first deletion, or at the start of the first restyled run.
-fn text_point(deltas: &[TextDelta]) -> Option<DocOffset> {
+fn text_point(deltas: &[TextDelta]) -> Option<Pos<DocChar>> {
     let mut at: usize = 0;
     for delta in deltas {
         match delta {
             TextDelta::Retain { retain, attributes } => {
                 if attributes.is_some() {
-                    return DocOffset::from_index(at);
+                    return Pos::<DocChar>::from_index(at);
                 }
                 at = at.saturating_add(*retain);
             }
             TextDelta::Insert { insert, .. } => {
-                return DocOffset::from_index(at.saturating_add(insert.chars().count()));
+                return Pos::<DocChar>::from_index(at.saturating_add(insert.chars().count()));
             }
-            TextDelta::Delete { .. } => return DocOffset::from_index(at),
+            TextDelta::Delete { .. } => return Pos::<DocChar>::from_index(at),
         }
     }
     None
@@ -80,9 +84,10 @@ mod tests {
     use crate::events::{CursorPosition, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
-    use ambre_bus::app::prose::{DocOffset, DocSpan};
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::{Pos, Span};
 
-    fn placed(display: &[ProseEvent]) -> Option<(crate::events::BlockId, DocOffset)> {
+    fn placed(display: &[ProseEvent]) -> Option<(crate::events::BlockId, Pos<DocChar>)> {
         display.iter().find_map(|event| match event {
             ProseEvent::CaretPlaced { block, offset } => Some((*block, *offset)),
             _ => None,
@@ -94,7 +99,7 @@ mod tests {
         let block = *state.root_blocks().first().expect("a root block");
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "h\u{e9}llo".to_owned(),
         });
         (state, block)
@@ -105,13 +110,19 @@ mod tests {
         let (mut state, block) = typed();
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::new(2),
+            pos: Pos::<DocChar>::new(2),
             text: "XY".to_owned(),
         });
         let undone = state.handle_command(ProseCommand::Undo);
-        assert_eq!(placed(&undone.display), Some((block, DocOffset::new(2))));
+        assert_eq!(
+            placed(&undone.display),
+            Some((block, Pos::<DocChar>::new(2)))
+        );
         let redone = state.handle_command(ProseCommand::Redo);
-        assert_eq!(placed(&redone.display), Some((block, DocOffset::new(4))));
+        assert_eq!(
+            placed(&redone.display),
+            Some((block, Pos::<DocChar>::new(4)))
+        );
     }
 
     #[test]
@@ -119,10 +130,13 @@ mod tests {
         let (mut state, block) = typed();
         state.handle_command(ProseCommand::DeleteText {
             block_id: block,
-            range: DocSpan::from_usize_range(1..3),
+            range: Span::<DocChar>::from_usize_range(1..3),
         });
         let undone = state.handle_command(ProseCommand::Undo);
-        assert_eq!(placed(&undone.display), Some((block, DocOffset::new(3))));
+        assert_eq!(
+            placed(&undone.display),
+            Some((block, Pos::<DocChar>::new(3)))
+        );
     }
 
     #[test]
@@ -130,14 +144,14 @@ mod tests {
         let (mut state, block) = typed();
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::new(5),
+            pos: Pos::<DocChar>::new(5),
             text: "!".to_owned(),
         });
         let mut ui = ProseUiState::default();
         ui.cursor = Some(CursorPosition {
             block_id: block,
-            offset: DocOffset::ZERO,
-            anchor: Some((block, DocOffset::new(4))),
+            offset: Pos::<DocChar>::ZERO,
+            anchor: Some((block, Pos::<DocChar>::new(4))),
         });
         for event in &state.handle_command(ProseCommand::Undo).display {
             ui.apply_event(event);
@@ -146,7 +160,7 @@ mod tests {
             ui.cursor,
             Some(CursorPosition {
                 block_id: block,
-                offset: DocOffset::new(5),
+                offset: Pos::<DocChar>::new(5),
                 anchor: None,
             })
         );
@@ -157,7 +171,7 @@ mod tests {
         let (mut state, block) = typed();
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a".to_owned(),
         });
         let peer = loro::LoroDoc::new();

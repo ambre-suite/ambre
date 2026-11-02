@@ -34,7 +34,8 @@
 
 use ambre_core::Px;
 use ambre_core::Rgba;
-use ambre_core::{CharCount, CharOffset};
+use ambre_core::index::{Count, Pos};
+use ambre_core::{Board, Char, StoredBoard};
 use std::collections::BTreeSet;
 
 use kurbo::{BezPath, Point, Size};
@@ -60,6 +61,7 @@ use super::{
     BoardKey, ConfigKey, ConnectorKey, ElementKey, MediaKey, MessageKey, Root, ThreadKey,
     ToileState,
 };
+use ambre_bus::{Authored, Instant};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/shapes.txt");
@@ -253,9 +255,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let style = ElementStyle {
         fill: Some(Rgba::from_bits(0x0203_0401)),
         stroke: Some(Rgba::from_bits(0x0607_0805)),
-        stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(1.5),
+        stroke_w: Px::<StoredBoard>::new(1.5),
         opacity: ambre_core::Opacity::new(0.25).unwrap(),
-        corner: ambre_core::Px::<ambre_core::StoredBoard>::new(3.5),
+        corner: Px::<StoredBoard>::new(3.5),
         font: FontSpec {
             family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
             size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
@@ -266,27 +268,27 @@ fn postcard_layouts() -> Vec<(String, String)> {
         },
         shadow: Some(Shadow {
             color: Rgba::from_bits(0x0a0b_0c09),
-            dx: ambre_core::Px::<ambre_core::StoredBoard>::new(11.5),
-            dy: ambre_core::Px::<ambre_core::StoredBoard>::new(12.5),
-            blur: ambre_core::Px::<ambre_core::StoredBoard>::new(13.5),
+            dx: Px::<StoredBoard>::new(11.5),
+            dy: Px::<StoredBoard>::new(12.5),
+            blur: Px::<StoredBoard>::new(13.5),
         }),
         text_color: Some(Rgba::from_bits(0x0e0f_100d)),
     };
     let layout = AutoLayout {
         direction: Direction::Vertical,
-        gap: ambre_core::Px::<ambre_core::Board>::new(1.5),
+        gap: Px::<Board>::new(1.5),
         padding: ambre_bus::app::toile::Padding {
-            top: ambre_core::Px::<ambre_core::Board>::new(2.5),
-            right: ambre_core::Px::<ambre_core::Board>::new(3.5),
-            bottom: ambre_core::Px::<ambre_core::Board>::new(4.5),
-            left: ambre_core::Px::<ambre_core::Board>::new(5.5),
+            top: Px::<Board>::new(2.5),
+            right: Px::<Board>::new(3.5),
+            bottom: Px::<Board>::new(4.5),
+            left: Px::<Board>::new(5.5),
         },
         align: Align::End,
         sizing: Sizing::Fill,
     };
     let points = vec![StrokePoint {
-        x: ambre_core::Px::<ambre_core::StoredBoard>::new(1.5),
-        y: ambre_core::Px::<ambre_core::StoredBoard>::new(2.5),
+        x: Px::<StoredBoard>::new(1.5),
+        y: Px::<StoredBoard>::new(2.5),
         pressure: ambre_bus::app::toile::UnitFraction::HALF,
     }];
     vec![
@@ -326,14 +328,14 @@ fn postcard_layouts() -> Vec<(String, String)> {
             format!("reactions/{ANY}#emoji"),
             hex(&encode(&Reaction {
                 kind: ReactionKind::Emoji(ambre_bus::Emoji::from("e")),
-                ts: ambre_bus::Instant::<ambre_bus::Authored>::new(1),
+                ts: Instant::<Authored>::new(1),
             })),
         ),
         (
             format!("reactions/{ANY}#vote"),
             hex(&encode(&Reaction {
                 kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(2)),
-                ts: ambre_bus::Instant::<ambre_bus::Authored>::new(3),
+                ts: Instant::<Authored>::new(3),
             })),
         ),
     ]
@@ -570,10 +572,8 @@ pub(super) fn board_of_every_key() -> ToileState {
         frame: slide.clone(),
         layout: Some(AutoLayout {
             direction: Direction::Horizontal,
-            gap: ambre_core::Px::<ambre_core::Board>::new(8.0),
-            padding: ambre_bus::app::toile::Padding::uniform(
-                ambre_core::Px::<ambre_core::Board>::new(4.0),
-            ),
+            gap: Px::<Board>::new(8.0),
+            padding: ambre_bus::app::toile::Padding::uniform(Px::<Board>::new(4.0)),
             align: Align::Start,
             sizing: Sizing::Hug,
         }),
@@ -585,21 +585,15 @@ pub(super) fn board_of_every_key() -> ToileState {
         frame: slide,
         base: String::new(),
         delta: TextDelta {
-            at: CharOffset::ZERO,
-            delete: CharCount::ZERO,
+            at: Pos::<Char>::ZERO,
+            delete: Count::<Char>::ZERO,
             insert: "say this".to_owned(),
         },
     });
     st.handle_command(ToileCommand::CommitStroke {
         points: vec![
-            StrokePoint::full_pressure(
-                ambre_core::Px::<ambre_core::StoredBoard>::new(0.0),
-                ambre_core::Px::<ambre_core::StoredBoard>::new(0.0),
-            ),
-            StrokePoint::full_pressure(
-                ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
-                ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
-            ),
+            StrokePoint::full_pressure(Px::<StoredBoard>::new(0.0), Px::<StoredBoard>::new(0.0)),
+            StrokePoint::full_pressure(Px::<StoredBoard>::new(1.0), Px::<StoredBoard>::new(1.0)),
         ],
         style: ElementStyle::default(),
     });
@@ -632,13 +626,13 @@ pub(super) fn board_of_every_key() -> ToileState {
         target: rect.clone(),
         reaction: Some(Reaction {
             kind: ReactionKind::Emoji(ambre_bus::Emoji::from("+1")),
-            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(1),
+            ts: Instant::<Authored>::new(1),
         }),
     });
     let opened = st.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(rect),
         body: "a remark".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(2),
+        ts: Instant::<Authored>::new(2),
     });
     let thread = opened
         .display
@@ -651,7 +645,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.handle_command(ToileCommand::ReplyComment {
         thread: thread.clone(),
         body: "an answer".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(3),
+        ts: Instant::<Authored>::new(3),
     });
     st.handle_command(ToileCommand::ResolveThread {
         thread,

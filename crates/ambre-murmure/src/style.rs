@@ -7,7 +7,8 @@
 //! the truth: nothing here parses the text.
 
 use ambre_bus::{StyleMark, TextStyle};
-use ambre_core::{CharOffset, CharSpan, char_len};
+use ambre_core::index::{Pos, Span};
+use ambre_core::{Char, char_len};
 use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};
 
 use crate::error::MurmureError;
@@ -187,7 +188,7 @@ pub(crate) fn read(content: &LoroText) -> Vec<StyleMark> {
     let mut styles: Vec<StyleMark> = Vec::new();
     // The run each key holds open, as an index into `styles`.
     let mut open: [Option<usize>; KEYS.len()] = [None; KEYS.len()];
-    let mut at = CharOffset::ZERO;
+    let mut at = Pos::<Char>::ZERO;
     for span in content.to_delta() {
         let TextDelta::Insert { insert, attributes } = span else {
             continue;
@@ -208,7 +209,7 @@ pub(crate) fn read(content: &LoroText) -> Vec<StyleMark> {
                     *slot = Some(styles.len());
                     styles.push(StyleMark {
                         style,
-                        range: CharSpan::from_count(at, len),
+                        range: Span::<Char>::from_count(at, len),
                     });
                 }
             }

@@ -8,15 +8,16 @@
 
 use ambre_bus::{Authored, Deletion, Instant};
 use ambre_core::id::{Id, User};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, Point, Px, View};
+use ambre_core::index::{Count, IdxVec, Pos, Span};
+use ambre_core::{Byte, Point, Px, View};
 
-use crate::list::{ListRow, ListRowVec, MessageList, RowKey, UNKNOWN_MEMBER, row_of};
+use crate::list::{ListRow, MessageList, RowKey, UNKNOWN_MEMBER, row_of};
 
 /// One end of a selection: a row, and a byte of the body it paints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spot {
     pub row: RowKey,
-    pub byte: ByteOffset,
+    pub byte: Pos<Byte>,
 }
 
 /// A selection: the anchor stays where the drag began, and the focus
@@ -44,10 +45,14 @@ pub struct Selecting {
 impl TextSelection {
     /// The ends in the order of the list, as a row index and a byte each.
     /// `None` once a row of an end left the list.
+    #[expect(
+        clippy::type_complexity,
+        reason = "the axis argument of the index family lengthens a tuple shape that predates it"
+    )]
     fn ordered(
         &self,
-        keys: &ListRowVec<RowKey>,
-    ) -> Option<((ListRow, ByteOffset), (ListRow, ByteOffset))> {
+        keys: &IdxVec<ListRow, RowKey>,
+    ) -> Option<((Pos<ListRow>, Pos<Byte>), (Pos<ListRow>, Pos<Byte>))> {
         let at = |spot: Spot| {
             let row = row_of(keys, spot.row)?;
             Some((row, spot.byte))
@@ -64,10 +69,10 @@ impl TextSelection {
     /// long. `None` when it selects none of them, or `row` left the list.
     pub fn range_in(
         &self,
-        keys: &ListRowVec<RowKey>,
+        keys: &IdxVec<ListRow, RowKey>,
         row: RowKey,
-        len: ByteCount,
-    ) -> Option<ByteSpan> {
+        len: Count<Byte>,
+    ) -> Option<Span<Byte>> {
         let ((first, from), (last, to)) = self.ordered(keys)?;
         let i = row_of(keys, row)?;
         if i < first || i > last {
@@ -77,14 +82,14 @@ impl TextSelection {
         let start = if i == first {
             from.min(end_of_body)
         } else {
-            ByteOffset::ZERO
+            Pos::<Byte>::ZERO
         };
         let end = if i == last {
             to.min(end_of_body)
         } else {
             end_of_body
         };
-        let span = ByteSpan::new(start, end);
+        let span = Span::<Byte>::new(start, end);
         (!span.is_empty()).then_some(span)
     }
 
@@ -112,11 +117,11 @@ impl TextSelection {
             let text = message.shown(name_of).len();
             let Some(span) = keys
                 .get(i)
-                .and_then(|&key| self.range_in(&keys, key, ByteCount::from_len(body.len())))
+                .and_then(|&key| self.range_in(&keys, key, Count::<Byte>::from_len(body.len())))
             else {
                 continue;
             };
-            let (start, end) = (span.start.get(), span.end.get());
+            let (start, end) = (span.start.to_usize(), span.end.to_usize());
             let Some(words) = body.get(start..end.min(text)).filter(|w| !w.is_empty()) else {
                 continue;
             };
@@ -135,6 +140,7 @@ mod tests {
 
     use super::*;
     use crate::list::tests::message;
+    use ambre_bus::{Authored, Instant};
 
     fn list(bodies: &[&str]) -> MessageList {
         let ada = Id::<User>::mint();
@@ -142,13 +148,7 @@ mod tests {
         let messages = bodies
             .iter()
             .enumerate()
-            .map(|(i, body)| {
-                message(
-                    ada,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(i as u64 * 60_000),
-                    body,
-                )
-            })
+            .map(|(i, body)| message(ada, Instant::<Authored>::new(i as u64 * 60_000), body))
             .collect();
         list.absorb(Id::<Segment>::mint(), messages);
         list
@@ -156,8 +156,8 @@ mod tests {
 
     fn spot(list: &MessageList, row: u32, byte: usize) -> Spot {
         Spot {
-            row: list.keys()[ListRow::new(row)],
-            byte: ByteOffset::new(byte),
+            row: list.keys()[Pos::<ListRow>::new(row)],
+            byte: Pos::<Byte>::from_usize(byte),
         }
     }
 
@@ -183,16 +183,16 @@ mod tests {
         };
         for selection in [down, up] {
             assert_eq!(
-                selection.range_in(&keys, keys[ListRow::new(0)], ByteCount::new(5)),
-                Some(ByteSpan::from_usize_range(2..5))
+                selection.range_in(&keys, keys[Pos::<ListRow>::new(0)], Count::<Byte>::new(5)),
+                Some(Span::<Byte>::from_usize_range(2..5))
             );
             assert_eq!(
-                selection.range_in(&keys, keys[ListRow::new(1)], ByteCount::new(5)),
-                Some(ByteSpan::from_usize_range(0..5))
+                selection.range_in(&keys, keys[Pos::<ListRow>::new(1)], Count::<Byte>::new(5)),
+                Some(Span::<Byte>::from_usize_range(0..5))
             );
             assert_eq!(
-                selection.range_in(&keys, keys[ListRow::new(2)], ByteCount::new(5)),
-                Some(ByteSpan::from_usize_range(0..3))
+                selection.range_in(&keys, keys[Pos::<ListRow>::new(2)], Count::<Byte>::new(5)),
+                Some(Span::<Byte>::from_usize_range(0..3))
             );
         }
         let none = TextSelection {
@@ -200,12 +200,12 @@ mod tests {
             focus: spot(&list, 1, 2),
         };
         assert_eq!(
-            none.range_in(&keys, keys[ListRow::new(1)], ByteCount::new(5)),
+            none.range_in(&keys, keys[Pos::<ListRow>::new(1)], Count::<Byte>::new(5)),
             None,
             "a collapsed one"
         );
         assert_eq!(
-            none.range_in(&keys, keys[ListRow::new(0)], ByteCount::new(5)),
+            none.range_in(&keys, keys[Pos::<ListRow>::new(0)], Count::<Byte>::new(5)),
             None
         );
     }
@@ -238,15 +238,11 @@ mod tests {
         let mut list = list(&["hello", "", "again"]);
         let mut edited = message(
             Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(200_000),
+            Instant::<Authored>::new(200_000),
             "again",
         );
         edited.edited = ambre_bus::Revision::Edited;
-        let mut gone = message(
-            Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(100_000),
-            "",
-        );
+        let mut gone = message(Id::<User>::mint(), Instant::<Authored>::new(100_000), "");
         gone.deleted = ambre_bus::Deletion::Deleted;
         let segment = Id::<Segment>::mint();
         list.absorb(segment, vec![gone, edited]);
@@ -262,7 +258,7 @@ mod tests {
         let stale = TextSelection {
             anchor: Spot {
                 row: RowKey::Band(Id::<Segment>::mint()),
-                byte: ByteOffset::ZERO,
+                byte: Pos::<Byte>::ZERO,
             },
             focus: all.focus,
         };

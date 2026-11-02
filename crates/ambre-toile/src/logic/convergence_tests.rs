@@ -6,8 +6,9 @@
 //! derived caches (`bounds` / `layers`). The whiteboard has no computed values
 //! to compare, only state and derived structures.
 
-use ambre_core::Rgba;
-use ambre_core::{CharCount, CharOffset, ElementCount, StepDirection};
+use ambre_core::index::{Count, Pos};
+use ambre_core::{Board, Px, Rgba, StoredBoard};
+use ambre_core::{Char, ElementCount, StepDirection};
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
@@ -17,14 +18,16 @@ use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
     BoolOp, Broadcast, CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload,
-    PresentFocus, PresentMode, Reaction, ReactionKind, SlideIndex, Sources, StatsRequestKind,
-    TextDelta, ThreadMessageIndex, ToileCommand, ToileError, ToileEvent, ZTarget,
+    PresentFocus, PresentMode, Reaction, ReactionKind, Slide, Sources, StatsRequestKind, TextDelta,
+    ThreadMessage, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId, PathType, ShapeKind,
     StrokePoint,
 };
 use crate::logic::state::{PRESENCE_TTL, ToileState};
+use ambre_bus::Authored;
+use ambre_core::{Instant, PageLoad};
 
 // -----------------------------------------------------------------------------
 // Lifecycle unit tests
@@ -536,7 +539,7 @@ fn an_arrow_carries_its_own_style() {
     let two = create_connector(&mut st);
     let red = ElementStyle {
         stroke: Some(Rgba::from_bits(0xCC22_22FF)),
-        stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(6.0),
+        stroke_w: Px::<StoredBoard>::new(6.0),
         ..Default::default()
     };
 
@@ -711,14 +714,8 @@ fn commit_stroke_creates_drawing() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::CommitStroke {
         points: vec![
-            StrokePoint::full_pressure(
-                ambre_core::Px::<ambre_core::StoredBoard>::new(0.0),
-                ambre_core::Px::<ambre_core::StoredBoard>::new(0.0),
-            ),
-            StrokePoint::full_pressure(
-                ambre_core::Px::<ambre_core::StoredBoard>::new(10.0),
-                ambre_core::Px::<ambre_core::StoredBoard>::new(5.0),
-            ),
+            StrokePoint::full_pressure(Px::<StoredBoard>::new(0.0), Px::<StoredBoard>::new(0.0)),
+            StrokePoint::full_pressure(Px::<StoredBoard>::new(10.0), Px::<StoredBoard>::new(5.0)),
         ],
         style: ElementStyle::default(),
     });
@@ -1388,7 +1385,7 @@ fn sample_at(x: f64, y: f64) -> PresencePayload {
 fn presence_frame(
     st: &mut ToileState,
     payload: PresencePayload,
-    now: ambre_core::Instant<ambre_core::PageLoad>,
+    now: Instant<PageLoad>,
 ) -> ambre_core::Payload<ambre_core::EphemeralBytes> {
     st.handle_command(ToileCommand::Presence { payload, now })
         .ephemeral
@@ -1416,13 +1413,13 @@ fn a_stroke_in_flight_reaches_the_other_users() {
     let mut drawer = ToileState::new();
     let tail = vec![
         StrokePoint {
-            x: ambre_core::Px::<ambre_core::StoredBoard>::new(10.0),
-            y: ambre_core::Px::<ambre_core::StoredBoard>::new(10.0),
+            x: Px::<StoredBoard>::new(10.0),
+            y: Px::<StoredBoard>::new(10.0),
             pressure: ambre_bus::app::toile::UnitFraction::HALF,
         },
         StrokePoint {
-            x: ambre_core::Px::<ambre_core::StoredBoard>::new(12.0),
-            y: ambre_core::Px::<ambre_core::StoredBoard>::new(14.0),
+            x: Px::<StoredBoard>::new(12.0),
+            y: Px::<StoredBoard>::new(14.0),
             pressure: ambre_bus::app::toile::UnitFraction::new(0.6)
                 .expect("a pressure inside 0 ..= 1"),
         },
@@ -1436,7 +1433,7 @@ fn a_stroke_in_flight_reaches_the_other_users() {
             laser: None,
             present_slide: None,
         },
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0),
+        now: Instant::<PageLoad>::new(1_000.0),
     });
     assert!(out.update.is_none(), "a stroke in flight writes nothing");
     let frame = out.ephemeral.expect("the sample broadcasts");
@@ -1475,7 +1472,7 @@ fn presence_command_broadcasts_ephemeral_only() {
     };
     let out = st.handle_command(ToileCommand::Presence {
         payload,
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0),
+        now: Instant::<PageLoad>::new(1_000.0),
     });
     assert!(out.display.is_empty(), "presence emits no display event");
     assert!(out.update.is_none(), "presence is never a CRDT delta");
@@ -1503,7 +1500,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
     let frame = presence_frame(
         &mut sender,
         sample_at(1.0, 2.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        Instant::<PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
@@ -1517,7 +1514,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
     let frame = presence_frame(
         &mut anonymous,
         sample_at(3.0, 4.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        Instant::<PageLoad>::new(0.0),
     );
     let peers = live_set(rx.apply_ephemeral(Id::<User>::mint(), &frame));
     assert!(peers.iter().any(|p| p.presence.name.is_none()));
@@ -1533,14 +1530,14 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     let frame = presence_frame(
         &mut sender,
         sample_at(5.0, 5.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        Instant::<PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
     // The receiver's clock starts at the first local sample.
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0),
+        now: Instant::<PageLoad>::new(1_000.0),
     });
     let alice = Id::<User>::mint();
     assert_eq!(live_set(rx.apply_ephemeral(alice, &frame)).len(), 1);
@@ -1548,7 +1545,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Still inside the TTL: Alice is live, and the local sample says nothing new.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0 + PRESENCE_TTL.get() - 1.0),
+        now: Instant::<PageLoad>::new(1_000.0 + PRESENCE_TTL.get() - 1.0),
     });
     assert!(out.display.is_empty(), "nothing left the set yet");
     assert!(rx.peer_presence(&alice).is_some());
@@ -1556,7 +1553,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Past it: the set changes, and the event that announces it is empty.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0 + PRESENCE_TTL.get() + 1.0),
+        now: Instant::<PageLoad>::new(1_000.0 + PRESENCE_TTL.get() + 1.0),
     });
     assert!(
         live_set(out.display).is_empty(),
@@ -1574,7 +1571,7 @@ fn a_departure_message_drops_the_peer_at_once() {
     let frame = presence_frame(
         &mut sender,
         sample_at(3.0, 3.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        Instant::<PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
@@ -1605,20 +1602,20 @@ fn a_clock_that_steps_backwards_ages_nobody() {
     let frame = presence_frame(
         &mut sender,
         sample_at(1.0, 1.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        Instant::<PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(100_000.0),
+        now: Instant::<PageLoad>::new(100_000.0),
     });
     let alice = Id::<User>::mint();
     rx.apply_ephemeral(alice, &frame);
 
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        now: Instant::<PageLoad>::new(0.0),
     });
     assert!(
         rx.peer_presence(&alice).is_some(),
@@ -1638,15 +1635,11 @@ fn a_sample_replaces_the_peers_presence_whole() {
         laser: Some(Point::new(2.0, 2.0)),
         ..PresencePayload::default()
     };
-    let first = presence_frame(
-        &mut sender,
-        with_selection,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    let first = presence_frame(&mut sender, with_selection, Instant::<PageLoad>::new(0.0));
     let second = presence_frame(
         &mut sender,
         sample_at(9.0, 9.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        Instant::<PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
@@ -1670,17 +1663,13 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
         cursor: Some(Point::new(7.0, 8.0)),
         selection: Vec::new(),
         live_stroke: Some(vec![StrokePoint::full_pressure(
-            ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
-            ambre_core::Px::<ambre_core::StoredBoard>::new(2.0),
+            Px::<StoredBoard>::new(1.0),
+            Px::<StoredBoard>::new(2.0),
         )]),
         laser: None,
         present_slide: None,
     };
-    let frame = presence_frame(
-        &mut sender,
-        payload.clone(),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    let frame = presence_frame(&mut sender, payload.clone(), Instant::<PageLoad>::new(0.0));
 
     let mut rx = ToileState::new();
     let before = rx.export_snapshot();
@@ -1703,7 +1692,7 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     let bob_frame = presence_frame(
         &mut sender,
         PresencePayload::default(),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        Instant::<PageLoad>::new(0.0),
     );
     let peers = live_set(rx.apply_ephemeral(bob, &bob_frame));
     assert_eq!(peers.len(), 2, "the event carries the whole live set");
@@ -2703,8 +2692,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
         frame: st.frame(&frame).expect("a frame"),
         base: String::new(),
         delta: TextDelta {
-            at: CharOffset::ZERO,
-            delete: CharCount::ZERO,
+            at: Pos::<Char>::ZERO,
+            delete: Count::<Char>::ZERO,
             insert: "open on the budget".into(),
         },
     });
@@ -2735,8 +2724,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
             frame: copy_frame.clone(),
             base: "open on the budget".into(),
             delta: TextDelta {
-                at: CharOffset::ZERO,
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::ZERO,
+                delete: Count::<Char>::ZERO,
                 insert: "A: ".into(),
             },
         })
@@ -2747,8 +2736,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
             frame: copy_frame.clone(),
             base: "open on the budget".into(),
             delta: TextDelta {
-                at: CharOffset::new(18),
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::new(18),
+                delete: Count::<Char>::ZERO,
                 insert: " (B)".into(),
             },
         })
@@ -3457,7 +3446,7 @@ fn shorter_deck_clamps_the_active_slide() {
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b, c],
     });
-    st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)));
+    st.handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)));
     assert_eq!(st.playback().1.active.get(), 2);
 
     st.handle_command(ToileCommand::SetSlideOrder {
@@ -3479,7 +3468,7 @@ fn deleting_a_frame_drops_its_slide() {
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone(), c.clone()],
     });
-    st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)));
+    st.handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)));
 
     st.handle_command(ToileCommand::DeleteElements {
         ids: vec![b.clone().into()],
@@ -3545,7 +3534,7 @@ fn playback_bounds() {
     );
     // Goto clamps to the deck length.
     assert_eq!(
-        slide_changed(&st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(99)))),
+        slide_changed(&st.handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(99)))),
         Some(2)
     );
 }
@@ -3718,7 +3707,7 @@ fn leaving_the_presentation_stops_the_broadcast() {
     rx.apply_ephemeral(presenter, &frame);
     assert_eq!(
         rx.peer_presence(&presenter)
-            .and_then(|p| p.present_slide.map(SlideIndex::get)),
+            .and_then(|p| p.present_slide.map(Pos::<Slide>::get)),
         None
     );
 }
@@ -3795,7 +3784,7 @@ fn broadcast_slide(out: &crate::logic::command::ToileOutcome) -> Option<u32> {
     let bytes = out.ephemeral.as_ref()?;
     let p: PresencePayload =
         postcard::from_bytes(bytes.as_bytes()).expect("decodable presence sample");
-    p.present_slide.map(SlideIndex::get)
+    p.present_slide.map(Pos::<Slide>::get)
 }
 
 /// A three-frame deck shared by the follow-presenter tests.
@@ -3928,8 +3917,8 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
             frame: frame.clone(),
             base: String::new(),
             delta: TextDelta {
-                at: CharOffset::ZERO,
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::ZERO,
+                delete: Count::<Char>::ZERO,
                 insert: "open on the budget".into(),
             },
         })
@@ -3976,7 +3965,7 @@ fn stopping_a_broadcast_sends_a_sample_naming_no_slide() {
     rx.apply_ephemeral(presenter, &frame);
     assert_eq!(
         rx.peer_presence(&presenter)
-            .and_then(|p| p.present_slide.map(SlideIndex::get)),
+            .and_then(|p| p.present_slide.map(Pos::<Slide>::get)),
         None,
         "the peer is still offered as a presenter"
     );
@@ -3997,7 +3986,7 @@ fn follower_adopts_presenter_slide() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
+        .handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
@@ -4033,7 +4022,7 @@ fn non_follower_ignores_broadcast() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
+        .handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
@@ -4061,7 +4050,7 @@ fn following_other_peer_ignores_broadcast() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
+        .handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
@@ -4086,7 +4075,7 @@ fn adopted_slide_is_clamped_to_deck() {
     let alice = Id::<User>::mint();
     rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
     let frame = postcard::to_allocvec(&PresencePayload {
-        present_slide: Some(SlideIndex::new(99)),
+        present_slide: Some(Pos::<Slide>::new(99)),
         ..Default::default()
     })
     .unwrap();
@@ -4126,7 +4115,7 @@ fn follow_snaps_to_last_known_slide() {
     let alice = Id::<User>::mint();
     // Store a broadcast frame from alice before following her.
     let frame = postcard::to_allocvec(&PresencePayload {
-        present_slide: Some(SlideIndex::new(2)),
+        present_slide: Some(Pos::<Slide>::new(2)),
         ..Default::default()
     })
     .unwrap();
@@ -4201,8 +4190,8 @@ fn follow_state_is_not_synced() {
 /// A single-splice insertion at `at` (no deletion), the common editor edit.
 fn insert_notes(at: usize, s: &str) -> TextDelta {
     TextDelta {
-        at: CharOffset::from_usize(at),
-        delete: CharCount::ZERO,
+        at: Pos::<Char>::from_usize(at),
+        delete: Count::<Char>::ZERO,
         insert: s.to_owned(),
     }
 }
@@ -4339,8 +4328,8 @@ fn edit_notes_clamps_out_of_range_splice() {
         frame: f.clone(),
         base: "abcZ".into(),
         delta: TextDelta {
-            at: CharOffset::ZERO,
-            delete: CharCount::new(999),
+            at: Pos::<Char>::ZERO,
+            delete: Count::<Char>::new(999),
             insert: String::new(),
         },
     });
@@ -4441,10 +4430,8 @@ fn concurrent_notes_edits_converge() {
 fn a_layout(direction: Direction, gap: f64) -> AutoLayout {
     AutoLayout {
         direction,
-        gap: ambre_core::Px::<ambre_core::Board>::new(gap),
-        padding: ambre_bus::app::toile::Padding::uniform(ambre_core::Px::<ambre_core::Board>::new(
-            4.0,
-        )),
+        gap: Px::<Board>::new(gap),
+        padding: ambre_bus::app::toile::Padding::uniform(Px::<Board>::new(4.0)),
         align: Align::Start,
         sizing: Sizing::Hug,
     }
@@ -4579,14 +4566,14 @@ fn concurrent_auto_layout_edits_converge() {
 fn emoji(s: &str) -> Reaction {
     Reaction {
         kind: ReactionKind::Emoji(ambre_bus::Emoji::from(s)),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     }
 }
 
 fn vote(w: i32) -> Reaction {
     Reaction {
         kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(w)),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     }
 }
 
@@ -5233,7 +5220,7 @@ fn comment_on(
     st: &mut ToileState,
     anchor: CommentAnchor,
     body: &str,
-    ts: ambre_core::Instant<ambre_core::Authored>,
+    ts: Instant<Authored>,
 ) -> Id<Thread> {
     let out = st.handle_command(ToileCommand::CreateComment {
         anchor,
@@ -5263,13 +5250,13 @@ fn a_thread_anchors_to_an_element_or_to_a_world_point() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "on the note",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     let on_board = comment_on(
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(40.0, -12.5)),
         "on the board",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
 
     assert_eq!(
@@ -5291,7 +5278,7 @@ fn a_message_author_is_the_user_id_of_the_session() {
     let out = st.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         body: "too early".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     assert!(
         out.update.is_none(),
@@ -5304,15 +5291,12 @@ fn a_message_author_is_the_user_id_of_the_session() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "hello",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(7),
+        Instant::<Authored>::new(7),
     );
     let thread = st.comment_thread(&t).expect("the thread reads back");
     assert_eq!(thread.messages.len(), 1);
     assert_eq!(thread.messages[0].author, me);
-    assert_eq!(
-        thread.messages[0].ts,
-        ambre_bus::Instant::<ambre_bus::Authored>::new(7)
-    );
+    assert_eq!(thread.messages[0].ts, Instant::<Authored>::new(7));
     assert_eq!(thread.resolved, ambre_core::ThreadState::Open);
 }
 
@@ -5331,12 +5315,12 @@ fn two_peers_commenting_on_one_spot_mint_distinct_threads() {
     let out_a = a.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(e.clone()),
         body: "from A".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     let out_b = b.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(e),
         body: "from B".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     let (ta, tb) = (opened_thread(&out_a), opened_thread(&out_b));
     assert_ne!(ta, tb, "two peers must mint two thread ids");
@@ -5364,7 +5348,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "first",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(50),
+        Instant::<Authored>::new(50),
     );
 
     let mut b = ToileState::new();
@@ -5375,7 +5359,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
         .handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: "from A".to_owned(),
-            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(900),
+            ts: Instant::<Authored>::new(900),
         })
         .update
         .expect("A's reply broadcasts a delta");
@@ -5383,7 +5367,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
         .handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: "from B".to_owned(),
-            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(1),
+            ts: Instant::<Authored>::new(1),
         })
         .update
         .expect("B's reply broadcasts a delta");
@@ -5408,7 +5392,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "typo",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
 
     let mut b = ToileState::new();
@@ -5418,7 +5402,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
     let da = a
         .handle_command(ToileCommand::EditComment {
             thread: t.clone(),
-            message: ThreadMessageIndex::ZERO,
+            message: Pos::<ThreadMessage>::ZERO,
             delta: insert_notes(0, "AAA"),
         })
         .update
@@ -5426,7 +5410,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
     let db = b
         .handle_command(ToileCommand::EditComment {
             thread: t.clone(),
-            message: ThreadMessageIndex::ZERO,
+            message: Pos::<ThreadMessage>::ZERO,
             delta: insert_notes(0, "BBB"),
         })
         .update
@@ -5455,7 +5439,7 @@ fn editing_another_authors_message_is_refused() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "mine",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
 
     let mut b = ToileState::new();
@@ -5464,7 +5448,7 @@ fn editing_another_authors_message_is_refused() {
 
     let out = b.handle_command(ToileCommand::EditComment {
         thread: t.clone(),
-        message: ThreadMessageIndex::ZERO,
+        message: Pos::<ThreadMessage>::ZERO,
         delta: insert_notes(0, "hijacked"),
     });
     assert!(
@@ -5484,7 +5468,7 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "settled?",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
 
     let mut b = ToileState::new();
@@ -5549,7 +5533,7 @@ fn a_thread_survives_the_deletion_of_its_anchor_element() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "about the note",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
 
     st.handle_command(ToileCommand::DeleteElements {
@@ -5575,7 +5559,7 @@ fn undo_reverts_the_drawing_and_never_the_comment() {
         &mut st,
         CommentAnchor::Element(e),
         "already read",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
 
     st.handle_command(ToileCommand::Undo);
@@ -5605,7 +5589,7 @@ fn replying_to_a_missing_thread_is_a_rejected_no_op() {
     let out = st.handle_command(ToileCommand::ReplyComment {
         thread: Id::<Thread>::from_text("ghost".to_owned()),
         body: "nobody".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     assert!(
         out.update.is_none(),
@@ -5640,7 +5624,7 @@ fn a_fresh_thread_is_open_anchored_and_carries_its_first_message() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "the point",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(11),
+        Instant::<Authored>::new(11),
     );
 
     let thread = st.comment_thread(&t).expect("the thread reads back");
@@ -5671,13 +5655,13 @@ fn a_reply_lands_at_the_end_of_the_thread() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "one",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     for body in ["two", "three"] {
         st.handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: body.to_owned(),
-            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+            ts: Instant::<Authored>::new(0),
         });
     }
     assert_eq!(
@@ -5696,26 +5680,26 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "first",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "secnd".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "third".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
 
     // Correct the middle message: insert the missing letter.
     st.handle_command(ToileCommand::EditComment {
         thread: t.clone(),
-        message: ThreadMessageIndex::new(1),
+        message: Pos::<ThreadMessage>::new(1),
         delta: TextDelta {
-            at: CharOffset::new(3),
-            delete: CharCount::ZERO,
+            at: Pos::<Char>::new(3),
+            delete: Count::<Char>::ZERO,
             insert: "o".to_owned(),
         },
     });
@@ -5737,7 +5721,7 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
         &mut st,
         anchor.clone(),
         "open it",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
@@ -5746,7 +5730,7 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "one more".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
 
     let thread = st.comment_thread(&t).expect("the thread reads back");
@@ -5768,12 +5752,12 @@ fn a_resolve_keeps_every_message_body() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "why",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "because".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
@@ -5798,19 +5782,19 @@ fn two_peers_answering_one_brand_new_thread_both_keep_their_reply() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "seed",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     b.apply_remote_snapshot(&a.export_snapshot());
 
     let ra = a.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "from A".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     let rb = b.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "from B".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     b.apply_remote(&ra.update.expect("A's reply broadcasts a delta"));
     a.apply_remote(&rb.update.expect("B's reply broadcasts a delta"));
@@ -5832,18 +5816,18 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
         &mut st,
         CommentAnchor::Element(e),
         "about it",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     st.handle_command(ToileCommand::ReplyComment {
         thread: on_element.clone(),
         body: "agreed".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        ts: Instant::<Authored>::new(0),
     });
     let on_board = comment_on(
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(5.0, 6.0)),
         "here",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     st.handle_command(ToileCommand::ResolveThread {
         thread: on_board.clone(),
@@ -5880,7 +5864,7 @@ fn a_pin_leaves_the_board_with_its_anchor_element() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "about it",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
     assert_eq!(pins(&st).len(), 1);
 
@@ -5905,7 +5889,7 @@ fn the_board_carries_no_body_and_a_read_carries_them_all() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "the body",
-        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+        Instant::<Authored>::new(0),
     );
 
     // The board-wide list carries the opening line and the counts, no more.
@@ -6272,12 +6256,12 @@ fn apply_local(
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
                 StrokePoint::full_pressure(
-                    ambre_core::Px::<ambre_core::StoredBoard>::new(*x as f32),
-                    ambre_core::Px::<ambre_core::StoredBoard>::new(*y as f32),
+                    Px::<StoredBoard>::new(*x as f32),
+                    Px::<StoredBoard>::new(*y as f32),
                 ),
                 StrokePoint::full_pressure(
-                    ambre_core::Px::<ambre_core::StoredBoard>::new(*x as f32 + 10.0),
-                    ambre_core::Px::<ambre_core::StoredBoard>::new(*y as f32 + 5.0),
+                    Px::<StoredBoard>::new(*x as f32 + 10.0),
+                    Px::<StoredBoard>::new(*y as f32 + 5.0),
                 ),
             ],
             style: ElementStyle::default(),
@@ -6964,7 +6948,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: Some(Rgba::from_bits(0xFF00_00FF)),
             stroke: None,
-            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(4.0),
+            stroke_w: Px::<StoredBoard>::new(4.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
             text_color: Some(Rgba::from_bits(0x00FF_00FF)),
             ..ElementStyle::default()
@@ -6975,7 +6959,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: None,
             stroke: Some(Rgba::from_bits(0x0000_FFFF)),
-            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(1.5),
+            stroke_w: Px::<StoredBoard>::new(1.5),
             opacity: ambre_core::Opacity::new(0.25).unwrap(),
             text_color: None,
             ..ElementStyle::default()
@@ -7409,10 +7393,7 @@ fn an_empty_combine_is_refused() {
 }
 
 fn sample(x: f32, y: f32) -> StrokePoint {
-    StrokePoint::full_pressure(
-        ambre_core::Px::<ambre_core::StoredBoard>::new(x),
-        ambre_core::Px::<ambre_core::StoredBoard>::new(y),
-    )
+    StrokePoint::full_pressure(Px::<StoredBoard>::new(x), Px::<StoredBoard>::new(y))
 }
 
 /// `TOILE-041`: a stroke's box runs from its lowest to its highest sample on

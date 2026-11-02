@@ -7,51 +7,24 @@
 
 use ambre_bus::MentionTarget;
 use ambre_core::id::{Id, User};
-use ambre_core::{ByteCount, ByteOffset, Point, Px, View};
+use ambre_core::index::{Axis, Circular, Count, IdxVec, Pos};
+use ambre_core::{Byte, Point, Px, View};
 
 use crate::Region;
 
 /// The word an `@channel` writes, after its `@`.
 pub const AT_CHANNEL: &str = "channel";
 
-ambre_core::define_index! {
-    /// The place of an entry in the `@` list, `@channel` first.
-    pub struct OfferIndex(u32);
-    /// A number of entries of the `@` list.
-    pub struct OfferCount;
-    /// The signed gap between two entries of the `@` list.
-    pub struct OfferDelta(i64);
-    /// A run of entries of the `@` list.
-    pub struct OfferSpan;
-    /// A list indexed by the entries of the `@` list.
-    pub struct OfferVec;
+/// The place of an entry in the `@` list, `@channel` first.
+#[derive(PartialEq, Eq)]
+pub enum MentionEntry {}
+
+impl Axis for MentionEntry {
+    const NAME: &'static str = "Offer";
 }
 
-impl OfferIndex {
-    /// The entry after this one in a list of `len` entries, the first after
-    /// the last.
-    pub fn after(self, len: OfferCount) -> Self {
-        let next = self.next();
-        if next < len.as_end() {
-            next
-        } else {
-            Self::ZERO
-        }
-    }
-
-    /// The entry before this one in a list of `len` entries, the last
-    /// before the first.
-    pub fn before(self, len: OfferCount) -> Self {
-        self.prev()
-            .unwrap_or_else(|| len.as_end().prev().unwrap_or(Self::ZERO))
-    }
-
-    /// This entry, or the last of a list of `len` entries when it is past
-    /// it.
-    pub fn within(self, len: OfferCount) -> Self {
-        self.min(len.as_end().prev().unwrap_or(Self::ZERO))
-    }
-}
+/// The arrow keys wrap the choice: past the last entry comes the first.
+impl Circular for MentionEntry {}
 
 /// One entry of the list: what a pick names, and the name it writes.
 ///
@@ -66,7 +39,7 @@ impl std::fmt::Debug for Offer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Offer")
             .field("target", &self.target)
-            .field("name", &ByteCount::from_len(self.name.as_str().len()))
+            .field("name", &Count::<Byte>::from_len(self.name.as_str().len()))
             .finish()
     }
 }
@@ -85,9 +58,9 @@ impl Offer {
 #[derive(Clone, PartialEq)]
 pub struct MentionList {
     /// Each entry as the list shows it, `@channel` first.
-    pub entries: OfferVec<String>,
+    pub entries: IdxVec<MentionEntry, String>,
     /// The entry Enter or Tab picks.
-    pub chosen: OfferIndex,
+    pub chosen: Pos<MentionEntry>,
     /// The top-left of the caret, in pixels of the region's canvas.
     pub at: Point<Px<View>>,
     /// The region the list hangs from.
@@ -108,8 +81,8 @@ impl std::fmt::Debug for MentionList {
 /// The query an `@` opens before the byte `caret` of `text`: the offset of
 /// its `@`, and what follows it. The `@` starts the text or follows a space,
 /// and no space comes after it.
-pub fn query_at(text: &str, caret: ByteOffset) -> Option<(ByteOffset, &str)> {
-    let before = text.get(..caret.get())?;
+pub fn query_at(text: &str, caret: Pos<Byte>) -> Option<(Pos<Byte>, &str)> {
+    let before = text.get(..caret.to_usize())?;
     let at = before.rfind(|c: char| c == '@' || c.is_whitespace())?;
     if !before[at..].starts_with('@') {
         return None;
@@ -118,7 +91,7 @@ pub fn query_at(text: &str, caret: ByteOffset) -> Option<(ByteOffset, &str)> {
         .chars()
         .next_back()
         .is_none_or(char::is_whitespace);
-    starts_word.then(|| (ByteOffset::new(at), &before[at + 1..]))
+    starts_word.then(|| (Pos::<Byte>::from_usize(at), &before[at + 1..]))
 }
 
 /// Whether a word of `name` starts with `query`, case folded.
@@ -164,6 +137,7 @@ pub fn offers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::index::Delta;
 
     /// The debug form of an entry and of the list names no member: it
     /// prints a length and a count.
@@ -177,7 +151,7 @@ mod tests {
         assert!(shown.contains("name: ByteCount(9)"), "{shown}");
         let list = MentionList {
             entries: found.iter().map(Offer::written).collect(),
-            chosen: OfferIndex::ZERO,
+            chosen: Pos::<MentionEntry>::ZERO,
             at: Point::default(),
             region: Region::Channel,
         };
@@ -191,34 +165,34 @@ mod tests {
     #[test]
     fn an_at_that_starts_a_word_opens_a_query_up_to_the_caret() {
         assert_eq!(
-            query_at("@", ByteOffset::new(1)),
-            Some((ByteOffset::new(0), ""))
+            query_at("@", Pos::<Byte>::new(1)),
+            Some((Pos::<Byte>::new(0), ""))
         );
         assert_eq!(
-            query_at("hi @bo", ByteOffset::new(6)),
-            Some((ByteOffset::new(3), "bo"))
+            query_at("hi @bo", Pos::<Byte>::new(6)),
+            Some((Pos::<Byte>::new(3), "bo"))
         );
         assert_eq!(
-            query_at("hi @bo", ByteOffset::new(5)),
-            Some((ByteOffset::new(3), "b"))
+            query_at("hi @bo", Pos::<Byte>::new(5)),
+            Some((Pos::<Byte>::new(3), "b"))
         );
         assert_eq!(
-            query_at("é\n@x", ByteOffset::new("é\n@x".len())),
-            Some((ByteOffset::new(3), "x"))
+            query_at("é\n@x", Pos::<Byte>::from_usize("é\n@x".len())),
+            Some((Pos::<Byte>::new(3), "x"))
         );
         assert_eq!(
-            query_at("mail@bo", ByteOffset::new(7)),
+            query_at("mail@bo", Pos::<Byte>::new(7)),
             None,
             "inside a word"
         );
         assert_eq!(
-            query_at("@bo b", ByteOffset::new(5)),
+            query_at("@bo b", Pos::<Byte>::new(5)),
             None,
             "a space ended it"
         );
-        assert_eq!(query_at("hi", ByteOffset::new(2)), None);
+        assert_eq!(query_at("hi", Pos::<Byte>::new(2)), None);
         assert_eq!(
-            query_at("é", ByteOffset::new(1)),
+            query_at("é", Pos::<Byte>::new(1)),
             None,
             "off a char boundary"
         );
@@ -253,13 +227,20 @@ mod tests {
     /// choice on its last entry.
     #[test]
     fn the_choice_goes_round_the_list_and_stays_on_it() {
-        let three = OfferCount::new(3);
-        let (first, last) = (OfferIndex::ZERO, OfferIndex::new(2));
-        assert_eq!(first.after(three), OfferIndex::new(1));
-        assert_eq!(last.after(three), first);
-        assert_eq!(first.before(three), last);
-        assert_eq!(last.before(three), OfferIndex::new(1));
-        assert_eq!(OfferIndex::new(5).within(three), last);
-        assert_eq!(OfferIndex::new(1).within(three), OfferIndex::new(1));
+        let three = Count::<MentionEntry>::new(3);
+        let (first, last) = (Pos::<MentionEntry>::ZERO, Pos::<MentionEntry>::new(2));
+        let (down, up) = (Delta::new(1), Delta::new(-1));
+        assert_eq!(
+            first.wrapped(down, three),
+            Some(Pos::<MentionEntry>::new(1))
+        );
+        assert_eq!(last.wrapped(down, three), Some(first));
+        assert_eq!(first.wrapped(up, three), Some(last));
+        assert_eq!(last.wrapped(up, three), Some(Pos::<MentionEntry>::new(1)));
+        assert_eq!(Pos::<MentionEntry>::new(5).within(three), last);
+        assert_eq!(
+            Pos::<MentionEntry>::new(1).within(three),
+            Pos::<MentionEntry>::new(1)
+        );
     }
 }

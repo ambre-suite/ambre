@@ -11,10 +11,11 @@
 use ambre_bus::DocType;
 use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementKind, ShapeKind, WebAddress};
 use ambre_core::id::{Element, Id};
+use ambre_core::index::Count;
 
 /// The longest text an announcement carries. A sticky holding a page of notes
 /// is announced by its start, not read whole on every click.
-const TEXT_LIMIT: ambre_core::CharCount = ambre_core::CharCount::new(120);
+const TEXT_LIMIT: Count<ambre_core::Char> = Count::<ambre_core::Char>::new(120);
 
 /// The announcement for `selection`, given the display data of its elements.
 /// One element whose data has not arrived yet is not announced: the data

@@ -62,7 +62,7 @@ struct Grant {
     horizon: Seq,
     amendments: Id<Document>,
     amendments_seq: Seq,
-    expires_in: ambre_core::TimeSpan<ambre_core::Ms>,
+    expires_in: TimeSpan<Ms>,
 }
 
 /// A fold snapshot to upload under a lease (`MURMURE-075`).

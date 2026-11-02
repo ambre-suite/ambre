@@ -9,9 +9,10 @@
 //! structural command moves its positions through them and draws nothing
 //! ahead: the view waits for [`ProseEvent::Synced`] before it edits again.
 
+use ambre_core::index::{Delta, Pos, Span};
 use std::collections::VecDeque;
 
-use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
+use ambre_bus::app::prose::DocChar;
 
 use crate::events::{ProseCommand, ProseEvent, ProseOutcome, TextEdit};
 use crate::rebase;
@@ -105,19 +106,19 @@ impl CatchUp {
     }
 
     /// A position the view sent, moved through what it had not seen.
-    fn position(&self, pos: DocOffset, block: crate::events::BlockId) -> DocOffset {
+    fn position(&self, pos: Pos<DocChar>, block: crate::events::BlockId) -> Pos<DocChar> {
         rebase::through_all(pos, block, &self.unseen())
     }
 
     /// The end of a range the view sent: an insertion at it stays outside.
-    fn end(&self, pos: DocOffset, block: crate::events::BlockId) -> DocOffset {
+    fn end(&self, pos: Pos<DocChar>, block: crate::events::BlockId) -> Pos<DocChar> {
         rebase::end_through_all(pos, block, &self.unseen())
     }
 
     /// A range the view sent, both ends moved through what it had not seen.
-    fn range(&self, block: crate::events::BlockId, range: DocSpan) -> DocSpan {
+    fn range(&self, block: crate::events::BlockId, range: Span<DocChar>) -> Span<DocChar> {
         let (start, end) = (range.start.min(range.end), range.start.max(range.end));
-        DocSpan::new(self.position(start, block), self.end(end, block))
+        Span::<DocChar>::new(self.position(start, block), self.end(end, block))
     }
 
     /// Stamp a change of the text: whether the view drew it, its number, and
@@ -181,11 +182,11 @@ impl ProseState {
                 text,
             } => {
                 sync.acked = sync.acked.next();
-                let n = DocCount::of(&text);
+                let n = ambre_core::char_len(&text).as_axis::<DocChar>();
                 let drawn = TextEdit {
                     block_id,
                     at: pos,
-                    delta: DocDelta::from_count(n),
+                    delta: Delta::<DocChar>::from_count(n),
                 };
                 let Some(edit) = sync.rebase(drawn) else {
                     return Err(ProseOutcome::nothing());
@@ -208,7 +209,7 @@ impl ProseState {
                 let drawn = TextEdit {
                     block_id,
                     at: start,
-                    delta: DocDelta::from_count(end.count_from(start)).reversed(),
+                    delta: Delta::<DocChar>::from_count(end.count_from(start)).reversed(),
                 };
                 // Everything it was to delete is gone already.
                 let Some(edit) = sync.rebase(drawn) else {
@@ -217,7 +218,7 @@ impl ProseState {
                 sync.predicting = Prediction::Text(vec![edit]);
                 ProseCommand::DeleteText {
                     block_id,
-                    range: DocSpan::from_count(edit.at, edit.delta.magnitude()),
+                    range: Span::<DocChar>::from_count(edit.at, edit.delta.magnitude()),
                 }
             }
             ProseCommand::SplitBlock { block_id, pos } => {
@@ -281,7 +282,7 @@ impl ProseState {
                 // The view sends the selection head first, so its tail is an
                 // end: text typed there stays outside.
                 let (anchor, focus) = if anchor.0 == focus.0 {
-                    let span = sync.range(anchor.0, DocSpan::new(anchor.1, focus.1));
+                    let span = sync.range(anchor.0, Span::<DocChar>::new(anchor.1, focus.1));
                     ((anchor.0, span.start), (focus.0, span.end))
                 } else {
                     (
@@ -350,8 +351,8 @@ mod tests {
     fn run(at: u32, delta: i64) -> TextEdit {
         TextEdit {
             block_id: A,
-            at: DocOffset::new(at),
-            delta: DocDelta::new(delta),
+            at: Pos::<DocChar>::new(at),
+            delta: Delta::<DocChar>::new(delta),
         }
     }
 

@@ -647,7 +647,8 @@ mod inner_tests {
     //! a restyle and a group must share ONE `doc.commit()` and collapse to ONE
     //! undo item, the invariant `apply_import` relies on.
 
-    use ambre_core::Rgba;
+    use ambre_core::index::Pos;
+    use ambre_core::{Px, Rgba, StoredBoard};
     use kurbo::{Point, Size};
 
     use crate::logic::align::AlignOp;
@@ -658,6 +659,7 @@ mod inner_tests {
     use crate::logic::state::ToileState;
     use ambre_bus::Token;
     use ambre_core::id::{Element, Id, User};
+    use ambre_core::{Authored, Instant};
 
     fn rect_at(st: &mut ToileState, x: f64) -> Id<Element> {
         st.create_element_inner(
@@ -680,7 +682,7 @@ mod inner_tests {
             Point::ZERO,
             Size::new(10.0, 10.0),
             InitContent::Image(crate::logic::command::MediaRef::Pending(
-                crate::logic::command::ImportSlot::ZERO,
+                Pos::<crate::logic::command::ImportSlot>::ZERO,
             )),
             None,
         );
@@ -785,10 +787,7 @@ mod inner_tests {
         let vv = st.doc.oplog_vv();
         let doc = st.doc.get_deep_value();
         let point = |x: f32| {
-            StrokePoint::full_pressure(
-                ambre_core::Px::<ambre_core::StoredBoard>::new(x),
-                ambre_core::Px::<ambre_core::StoredBoard>::new(x),
-            )
+            StrokePoint::full_pressure(Px::<StoredBoard>::new(x), Px::<StoredBoard>::new(x))
         };
         let commands = [
             (
@@ -825,7 +824,7 @@ mod inner_tests {
                 ToileCommand::CreateComment {
                     anchor: CommentAnchor::Point(Point::new(1.0, 1.0)),
                     body: "late".to_owned(),
-                    ts: ambre_core::Instant::<ambre_core::Authored>::new(1),
+                    ts: Instant::<Authored>::new(1),
                 },
             ),
         ];
@@ -1064,13 +1063,13 @@ mod inner_tests {
         // Seed two members with differing hidden fields, whole (the import path).
         let shadow = ambre_bus::app::toile::Shadow {
             color: Rgba::from_bits(0x0000_0000),
-            dx: ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
-            dy: ambre_core::Px::<ambre_core::StoredBoard>::new(1.0),
-            blur: ambre_core::Px::<ambre_core::StoredBoard>::new(2.0),
+            dx: Px::<StoredBoard>::new(1.0),
+            dy: Px::<StoredBoard>::new(1.0),
+            blur: Px::<StoredBoard>::new(2.0),
         };
         let style_a = ElementStyle {
             fill: Some(Rgba::from_bits(0xff00_00ff)),
-            corner: ambre_core::Px::<ambre_core::StoredBoard>::new(12.0),
+            corner: Px::<StoredBoard>::new(12.0),
             shadow: Some(shadow),
             font: ambre_bus::app::toile::FontSpec {
                 weight: ambre_core::FontWeight::new(600).unwrap(),
@@ -1080,7 +1079,7 @@ mod inner_tests {
         };
         let style_b = ElementStyle {
             fill: Some(Rgba::from_bits(0x00ff_00ff)),
-            corner: ambre_core::Px::<ambre_core::StoredBoard>::ZERO,
+            corner: Px::<StoredBoard>::ZERO,
             shadow: None,
             font: ambre_bus::app::toile::FontSpec {
                 weight: ambre_core::FontWeight::REGULAR,
@@ -1102,16 +1101,10 @@ mod inner_tests {
         });
 
         // The hidden fields survive; the shown fill changes on both.
-        assert_eq!(
-            st.style_of(&a).corner,
-            ambre_core::Px::<ambre_core::StoredBoard>::new(12.0)
-        );
+        assert_eq!(st.style_of(&a).corner, Px::<StoredBoard>::new(12.0));
         assert!(st.style_of(&a).shadow.is_some());
         assert_eq!(st.style_of(&a).font.weight.get(), 600);
-        assert_eq!(
-            st.style_of(&b).corner,
-            ambre_core::Px::<ambre_core::StoredBoard>::ZERO
-        );
+        assert_eq!(st.style_of(&b).corner, Px::<StoredBoard>::ZERO);
         assert!(st.style_of(&b).shadow.is_none());
         assert_eq!(st.style_of(&b).font.weight, ambre_core::FontWeight::REGULAR);
         assert_eq!(st.style_of(&a).fill, Some(Rgba::from_bits(0x0000_ffff)));

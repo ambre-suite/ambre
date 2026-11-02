@@ -20,6 +20,7 @@
 // formatting id a control or a chord left in its signal (`PROSE-UI-056`).
 // ============================================================================
 
+use ambre_core::index::Count;
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
@@ -32,6 +33,7 @@ use ambre_canvas::{
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
 use ambre_core::id::{Document, Id};
+use ambre_core::{Authored, Instant, PageLoad};
 use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
 use ambre_draw::{Consumed, DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
@@ -105,7 +107,7 @@ pub struct ProseView {
     /// The layout context the draft is shaped with.
     layout_cx: LayoutContext<ParleyBrush>,
     /// The clock of the last frame, to count presses in place.
-    now: ambre_core::Instant<ambre_core::PageLoad>,
+    now: Instant<PageLoad>,
     /// The keystrokes in flight, from their input to their frame.
     probe: KeyProbe,
     timeline: super::probe::Timeline,
@@ -159,7 +161,7 @@ impl ProseView {
             shown: None,
             annotations,
             layout_cx: LayoutContext::new(),
-            now: ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
+            now: Instant::<PageLoad>::new(0.0),
             probe: KeyProbe::default(),
             timeline: super::probe::Timeline::new(),
         }
@@ -245,7 +247,7 @@ impl ProseView {
             return;
         };
         self.annotations.intent.set(None);
-        let now = ambre_core::Instant::<ambre_core::Authored>::new(js_sys::Date::now() as u64);
+        let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
         if let Some(command) = self.state.take_intent(intent, now) {
             send_edit(&mut self.outbox, self.document_id, command);
             self.busy_pub.publish(self.outbox.load());
@@ -428,7 +430,7 @@ impl ProseView {
 
     pub fn plan_repaint(
         &mut self,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
         _hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         self.now = now;
@@ -553,9 +555,7 @@ impl ProseView {
                 // may leave its own (`PROSE-UI-218`, `KINETIC-002`).
                 let now = web_sys::window()
                     .and_then(|w| w.performance())
-                    .map_or(self.now, |p| {
-                        ambre_bus::Instant::<ambre_bus::PageLoad>::new(p.now())
-                    });
+                    .map_or(self.now, |p| Instant::<PageLoad>::new(p.now()));
                 self.state.wheel(*delta, now);
                 // The text moved from under the pointer, and the bar with it
                 // (`PROSE-UI-055`).
@@ -696,7 +696,7 @@ impl ProseView {
         &mut self,
         phase: super::TouchPhase,
         at: Point<Px<View>>,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> Consumed {
         if self.fatal {
             return Consumed::No;
@@ -785,7 +785,7 @@ fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::{GraphemeCount, PageCount, ParagraphCount, WordTotal};
+    use ambre_bus::app::prose::{GraphemeCount, Page, ParagraphCount, WordTotal};
     use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -943,7 +943,7 @@ mod tests {
             characters: GraphemeCount::new(60),
             characters_with_spaces: GraphemeCount::new(71),
             paragraphs: ParagraphCount::new(1),
-            pages: PageCount::new(2),
+            pages: Count::<Page>::new(2),
         };
         view.update();
         leptos::task::tick().await;

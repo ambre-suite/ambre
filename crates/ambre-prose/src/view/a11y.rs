@@ -58,8 +58,9 @@ impl ProseUiState {
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use crate::events::HeadingLevel;
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
     use ambre_bus::app::prose::{BlockInit, CursorPosition};
+    use ambre_core::index::Pos;
     use ambre_core::{Px, View};
 
     use crate::logic::ProseState;
@@ -91,7 +92,7 @@ mod tests {
 
         ui.cursor = Some(CursorPosition {
             block_id: title,
-            offset: DocOffset::new(3),
+            offset: Pos::<DocChar>::new(3),
             anchor: None,
         });
         assert_eq!(
@@ -100,7 +101,7 @@ mod tests {
         );
         ui.cursor = Some(CursorPosition {
             block_id: body,
-            offset: DocOffset::ZERO,
+            offset: Pos::<DocChar>::ZERO,
             anchor: None,
         });
         assert_eq!(

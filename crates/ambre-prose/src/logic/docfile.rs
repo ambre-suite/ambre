@@ -96,9 +96,9 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::prose::DocOffset;
-    use ambre_bus::app::prose::DocSpan;
+    use ambre_bus::app::prose::DocChar;
     use ambre_core::docfile::{AMBRE_VERSION, HEADER_LEN};
+    use ambre_core::index::{Pos, Span};
 
     use super::*;
     use crate::events::ProseCommand;
@@ -118,12 +118,12 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "hello world".to_owned(),
         });
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..5),
+            range: Span::<DocChar>::from_usize_range(0..5),
             key: "b".into(),
             value: None,
         });

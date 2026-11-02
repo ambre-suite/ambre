@@ -8,16 +8,15 @@
 //! peer's own colour (`PROSE-UI-014`). A paint reads the layout in force and
 //! writes nothing to the document (`PROSE-UI-120`).
 
-use ambre_core::{ByteCount, ByteOffset};
+use ambre_core::Byte;
+use ambre_core::index::{Count, Pos, Span};
 use ambre_core::{Px, Surface};
 use ambre_draw::{Affine, DocumentWalk, DrawSurface, Point, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::measure::{EffectiveStyle, shape_draft};
 use crate::layout::place::NOTE_SEPARATOR;
-use crate::layout::run::{
-    ParleyRunData, RunCount, RunLine, RunOffset, RunSpan, ShapedRun, TableShape,
-};
+use crate::layout::run::{ParleyRunData, RunChar, RunLine, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::cache::RunKey;
 use crate::view::caret::Spot;
@@ -116,22 +115,22 @@ fn place(content: ContentBox, run: &ShapedRun, piece: Fragment) -> Placed {
 }
 
 /// One end of a selection, as the run drawn for its block counts it.
-type RunSpot = (BlockId, RunOffset);
+type RunSpot = (BlockId, Pos<RunChar>);
 
 /// The code-point range of `block` a selection from `start` to `end` covers,
 /// the two ends already in flow order and read on the runs drawn.
 fn covered(
     ui: &ProseUiState,
     block: BlockId,
-    len: RunCount,
+    len: Count<RunChar>,
     ends: (RunSpot, RunSpot),
-) -> Option<RunSpan> {
+) -> Option<Span<RunChar>> {
     let ((first, from), (last, to)) = ends;
     let len = len.as_end();
     // Within one block, the flow is not asked: a header or a footer holds
     // its own selection and has no place in it.
     if first == last {
-        return (first == block && from < to).then_some(RunSpan::new(from, to.min(len)));
+        return (first == block && from < to).then_some(Span::<RunChar>::new(from, to.min(len)));
     }
     let here = ui.flow_index(&crate::events::tree_id(block))?;
     let first_index = ui.flow_index(&crate::events::tree_id(first))?;
@@ -142,10 +141,10 @@ fn covered(
     let start = if here == first_index {
         from
     } else {
-        RunOffset::ZERO
+        Pos::<RunChar>::ZERO
     };
     let end = if here == last_index { to } else { len };
-    (start < end).then_some(RunSpan::new(start, end))
+    (start < end).then_some(Span::<RunChar>::new(start, end))
 }
 
 /// The two ends of a selection in flow order, or `None` for a caret alone.
@@ -155,7 +154,7 @@ fn ordered(ui: &ProseUiState, cursor: &CursorPosition) -> Option<(Spot, Spot)> {
     let key = |(block, offset): Spot| {
         (
             ui.flow_index(&crate::events::tree_id(block))
-                .unwrap_or(crate::layout::run::FlowIndex::MAX),
+                .unwrap_or(Pos::<crate::layout::run::Flow>::MAX),
             offset,
         )
     };
@@ -198,7 +197,7 @@ impl ProseUiState {
     fn reshape(
         &self,
         kept: Option<(String, ShapedRun)>,
-        wanted: Option<(BlockId, RunOffset, String)>,
+        wanted: Option<(BlockId, Pos<RunChar>, String)>,
         font_cx: &mut parley::FontContext,
         layout_cx: &mut parley::LayoutContext<ambre_draw::ParleyBrush>,
     ) -> Option<(String, ShapedRun)> {
@@ -216,8 +215,8 @@ impl ProseUiState {
             });
         // Typed after a marked span, the text lands in it (`PROSE-UI-208`).
         let marks = [crate::layout::measure::MarkedSpan {
-            start: ByteOffset::ZERO,
-            end: ByteCount::from_len(text.len()).as_end(),
+            start: Pos::<Byte>::ZERO,
+            end: Count::<Byte>::from_len(text.len()).as_end(),
             ..run.map(|run| run.marks_before(at)).unwrap_or_default()
         }];
         // A shape is kept only in the style and the marks it was made in: the
@@ -346,7 +345,7 @@ impl ProseUiState {
 
     /// Resolve what `page` shows into the items the walk draws, and the
     /// blocks the screen draws around.
-    fn resolve_page(&self, frame: &mut Frame, page: crate::events::PageIndex, top: Px<Surface>) {
+    fn resolve_page(&self, frame: &mut Frame, page: Pos<crate::events::Page>, top: Px<Surface>) {
         let layout = std::sync::Arc::clone(&self.shaped.layout);
         let content = ContentBox {
             left: Px::<Surface>::new(f64::from(layout.margin_left.get())),
@@ -600,7 +599,7 @@ impl ProseUiState {
         id: BlockId,
         data: &ParleyRunData,
         local: LocalCaret,
-    ) -> Option<(RunLine, ambre_draw::BoundingBox)> {
+    ) -> Option<(Pos<RunLine>, ambre_draw::BoundingBox)> {
         self.cursor
             .as_ref()
             .filter(|cursor| {
@@ -644,7 +643,7 @@ impl ProseUiState {
         // The local selection counts the document, draft included, as the
         // local caret does. A peer's counts what the Logic thread answered.
         let laid = |(at, offset): Spot| (at, self.to_laid(at, offset));
-        let answered = |(at, offset): Spot| (at, RunOffset::from_doc(offset));
+        let answered = |(at, offset): Spot| (at, offset.as_axis::<RunChar>());
         if block.local == LocalCaret::Shown
             && let Some((first, last)) = self
                 .cursor
@@ -709,7 +708,7 @@ impl ProseUiState {
             let colour = ambre_draw::peer_color(&peer.user_id);
             let caret = to_rect(
                 placed,
-                &data.caret_box(RunOffset::from_doc(peer.position.offset)),
+                &data.caret_box(peer.position.offset.as_axis::<RunChar>()),
             );
             surface.fill_rect(
                 Rect::new(caret.x0, caret.y0, caret.x0 + CARET_WIDTH.get(), caret.y1),
@@ -760,10 +759,12 @@ fn paint_sheet<S: DrawSurface>(
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use crate::events::HeadingLevel;
-    use crate::layout::run::RunOffset;
-    use ambre_bus::app::prose::DocSpan;
-    use ambre_bus::app::prose::{DocCount, DocOffset};
-    use ambre_core::ByteOffset;
+    use crate::layout::run::RunChar;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::{Count, Pos, Span};
+    use ambre_core::{PrintLength, Pt};
+
+    use ambre_core::Byte;
     use ambre_core::id::{Id, User};
     use ambre_core::{Doc, Px, Surface, View};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
@@ -900,14 +901,14 @@ mod tests {
         let id = first_block(&ui);
         ui.cursor = Some(CursorPosition {
             block_id: id,
-            offset: DocOffset::new(12),
-            anchor: Some((id, DocOffset::new(2))),
+            offset: Pos::<DocChar>::new(12),
+            anchor: Some((id, Pos::<DocChar>::new(2))),
         });
         ui.highlights.insert(
             id,
             vec![Highlight {
                 kind: HighlightKind::Comment,
-                span: crate::view::answered_span(DocOffset::new(5), DocOffset::new(15)),
+                span: crate::view::answered_span(Pos::<DocChar>::new(5), Pos::<DocChar>::new(15)),
             }],
         );
         let surface = paint(&mut ui);
@@ -941,7 +942,7 @@ mod tests {
                 display_name: ambre_core::DisplayName::new("Bob").ok(),
                 position: CursorPosition {
                     block_id: id,
-                    offset: DocOffset::new(3),
+                    offset: Pos::<DocChar>::new(3),
                     anchor: None,
                 },
             }],
@@ -971,8 +972,8 @@ mod tests {
                 display_name: ambre_core::DisplayName::new("Eve").ok(),
                 position: CursorPosition {
                     block_id: id,
-                    offset: DocOffset::new(8),
-                    anchor: Some((id, DocOffset::new(1))),
+                    offset: Pos::<DocChar>::new(8),
+                    anchor: Some((id, Pos::<DocChar>::new(1))),
                 },
             }],
         );
@@ -986,13 +987,13 @@ mod tests {
             .iter()
             .map(|kind| Highlight {
                 kind: *kind,
-                span: crate::view::answered_span(DocOffset::ZERO, DocOffset::new(4)),
+                span: crate::view::answered_span(Pos::<DocChar>::ZERO, Pos::<DocChar>::new(4)),
             })
             .collect();
         ui.highlights.insert(id, marks);
         ui.cursor = Some(CursorPosition {
             block_id: id,
-            offset: DocOffset::new(2),
+            offset: Pos::<DocChar>::new(2),
             anchor: None,
         });
         let surface = paint(&mut ui);
@@ -1041,18 +1042,18 @@ mod tests {
         let header = state.bands().header.expect("the header block");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Header".to_owned(),
         });
         let footer = state.bands().footer.expect("the footer block");
         state.handle_command(ProseCommand::InsertText {
             block_id: footer,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Footer".to_owned(),
         });
         state.handle_command(ProseCommand::InsertFootnote {
             block_id: body,
-            pos: DocOffset::new(4),
+            pos: Pos::<DocChar>::new(4),
             note_text: "The note.".to_owned(),
         });
         let mut ui = view_of(&mut state);
@@ -1109,7 +1110,7 @@ mod tests {
         ui.apply_layout(shaped);
         let mark = Highlight {
             kind: HighlightKind::Comment,
-            span: crate::view::answered_span(DocOffset::ZERO, DocOffset::new(3)),
+            span: crate::view::answered_span(Pos::<DocChar>::ZERO, Pos::<DocChar>::new(3)),
         };
         let ids: Vec<BlockId> = ui
             .shaped
@@ -1244,7 +1245,7 @@ mod tests {
             if let ProseCommand::SetCellStyle { bg, border, .. } = command {
                 *bg = Some(ambre_core::Rgb::from_bits(0x00ff_8800));
                 *border = Some(CellBorder {
-                    width: ambre_core::PrintLength::<ambre_core::Pt>::new(3.0),
+                    width: PrintLength::<Pt>::new(3.0),
                     color: ambre_core::Rgb::from_bits(0x0012_3456),
                 });
             }
@@ -1295,16 +1296,12 @@ mod tests {
 
         style(&mut state, first, |command| {
             if let ProseCommand::SetCellStyle { padding, .. } = command {
-                *padding = Some(ambre_core::PrintLength::<ambre_core::Pt>::new(12.0));
+                *padding = Some(PrintLength::<Pt>::new(12.0));
             }
         });
         let mut ui = view_of(&mut state);
         let (x1, y1) = first_text_at(&paint(&mut ui));
-        let pad = f64::from(
-            ambre_core::PrintLength::<ambre_core::Pt>::new(12.0)
-                .to_doc_px()
-                .get(),
-        );
+        let pad = f64::from(PrintLength::<Pt>::new(12.0).to_doc_px().get());
         assert!(
             (x1 - x0 - pad).abs() < 0.5,
             "the text moves in by the padding"
@@ -1318,7 +1315,7 @@ mod tests {
         // The neighbour pads more, so the first cell has room below its text.
         style(&mut state, second, |command| {
             if let ProseCommand::SetCellStyle { padding, .. } = command {
-                *padding = Some(ambre_core::PrintLength::<ambre_core::Pt>::new(48.0));
+                *padding = Some(PrintLength::<Pt>::new(48.0));
             }
         });
         style(&mut state, first, |command| {
@@ -1328,12 +1325,7 @@ mod tests {
         });
         let mut ui = view_of(&mut state);
         let (_, y2) = first_text_at(&paint(&mut ui));
-        let room = 2.0
-            * f64::from(
-                ambre_core::PrintLength::<ambre_core::Pt>::new(36.0)
-                    .to_doc_px()
-                    .get(),
-            );
+        let room = 2.0 * f64::from(PrintLength::<Pt>::new(36.0).to_doc_px().get());
         assert!((y2 - y1 - room).abs() < 0.5, "the text sits at the bottom");
     }
 
@@ -1376,11 +1368,11 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "abc",
             &id,
-            DocOffset::new(14),
+            Pos::<DocChar>::new(14),
         );
         ui.cursor = Some(CursorPosition {
             block_id: id,
-            offset: DocOffset::ZERO,
+            offset: Pos::<DocChar>::ZERO,
             anchor: None,
         });
         ui.composing = "ni".to_owned();
@@ -1407,7 +1399,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "abc",
             &id,
-            DocOffset::new(4),
+            Pos::<DocChar>::new(4),
         );
         shape(&mut ui);
         assert_eq!(provisional(&ui, id), "wordabc word word");
@@ -1431,7 +1423,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "Head",
             &header,
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         shape(&mut ui);
         assert_eq!(provisional(&ui, header), "Head");
@@ -1456,7 +1448,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "Cell",
             &block,
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         shape(&mut ui);
         assert_eq!(provisional(&ui, block), "Cell");
@@ -1469,24 +1461,24 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             &long,
             &block,
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         shape(&mut ui);
         let run = ui.provisional_run(block).expect("the cell is shaped again");
-        let first = &laid.cells[crate::layout::run::ShapeCell::ZERO];
+        let first = &laid.cells[Pos::<crate::layout::run::ShapeCell>::ZERO];
         let text_width = first.width - first.style.padding * 2.0;
         assert!(
             run.data().line_count().get() > 1,
             "the draft wraps in its column"
         );
         let widest = (0..=run.data().len().get())
-            .map(|at| run.data().caret_box(RunOffset::new(at)).x0)
+            .map(|at| run.data().caret_box(Pos::<RunChar>::new(at)).x0)
             .fold(0.0, f64::max);
         assert!(
             widest <= f64::from(text_width.get()) + 0.5,
             "at the column's width"
         );
-        let (pieces, _) = ui.pieces(crate::events::PageIndex::new(0));
+        let (pieces, _) = ui.pieces(Pos::<crate::events::Page>::new(0));
         let grown = pieces
             .iter()
             .find_map(|piece| piece.table.clone())
@@ -1500,7 +1492,7 @@ mod tests {
     fn x_of(ui: &ProseUiState, block: BlockId, at: u32) -> f64 {
         ui.run_of(block)
             .expect("a run")
-            .caret_box(RunOffset::new(at))
+            .caret_box(Pos::<RunChar>::new(at))
             .x0
     }
 
@@ -1518,7 +1510,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "abc",
             &id,
-            DocOffset::new(4),
+            Pos::<DocChar>::new(4),
         );
         shape(&mut ui);
         let width = x_of(&ui, id, 7) - x_of(&ui, id, 4);
@@ -1533,7 +1525,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             text,
             &block,
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         shape(ui);
         x_of(ui, block, ambre_core::char_len(text).get())
@@ -1577,7 +1569,7 @@ mod tests {
         let block = *state.root_blocks().last().expect("a block");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..4),
+            range: Span::<DocChar>::from_usize_range(0..4),
             key: "b".into(),
             value: None,
         });
@@ -1591,7 +1583,7 @@ mod tests {
                 ambre_bus::app::prose::TextAck::new(1),
                 "abc",
                 &id,
-                DocOffset::new(at),
+                Pos::<DocChar>::new(at),
             );
             shape(ui);
             let run = ui
@@ -1600,8 +1592,8 @@ mod tests {
             let (start, end) = (at as usize, at as usize + 3);
             run.data().marks().iter().any(|span| {
                 span.bold == ambre_core::Weight::Bold
-                    && span.start <= ByteOffset::from_usize(start)
-                    && span.end >= ByteOffset::from_usize(end)
+                    && span.start <= Pos::<Byte>::from_usize(start)
+                    && span.end >= Pos::<Byte>::from_usize(end)
             })
         };
         assert!(bold_at(&mut ui, 4), "after the bold word");
@@ -1618,7 +1610,7 @@ mod tests {
         for key in ["u", "s"] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..4),
+                range: Span::<DocChar>::from_usize_range(0..4),
                 key: key.into(),
                 value: None,
             });
@@ -1653,7 +1645,7 @@ mod tests {
         let block = *state.root_blocks().last().expect("a block");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..4),
+            range: Span::<DocChar>::from_usize_range(0..4),
             key: "u".into(),
             value: None,
         });
@@ -1679,7 +1671,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "abc",
             &id,
-            DocOffset::new(4),
+            Pos::<DocChar>::new(4),
         );
         shape(&mut ui);
         let drawn = lines(&mut ui);
@@ -1706,7 +1698,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             &typed,
             &id,
-            DocOffset::new(14),
+            Pos::<DocChar>::new(14),
         );
         shape(&mut ui);
         let drawn = ui
@@ -1714,7 +1706,7 @@ mod tests {
             .expect("the paragraph is shaped again");
         state.handle_command(ProseCommand::InsertText {
             block_id: id,
-            pos: DocOffset::new(14),
+            pos: Pos::<DocChar>::new(14),
             text: typed.clone(),
         });
         let answered = state.shaped_layout();
@@ -1725,8 +1717,11 @@ mod tests {
         let starts = |run: &crate::layout::run::ParleyRunData| {
             (0..run.line_count().get())
                 .map(|line| {
-                    run.at_line(crate::layout::run::RunLine::new(line), Px::<Doc>::new(0.0))
-                        .0
+                    run.at_line(
+                        Pos::<crate::layout::run::RunLine>::new(line),
+                        Px::<Doc>::new(0.0),
+                    )
+                    .0
                 })
                 .collect::<Vec<_>>()
         };
@@ -1745,8 +1740,8 @@ mod tests {
         ui.draft.push_delete(
             ambre_bus::app::prose::TextAck::new(1),
             &id,
-            DocOffset::ZERO,
-            DocOffset::new(5),
+            Pos::<DocChar>::ZERO,
+            Pos::<DocChar>::new(5),
         );
         shape(&mut ui);
         assert_eq!(provisional(&ui, id), "word word");
@@ -1766,7 +1761,7 @@ mod tests {
         ui.apply_layout(shaped);
         let first = first_block(&ui);
         let top_of_second = |ui: &ProseUiState| {
-            let pieces = ui.pieces(crate::events::PageIndex::new(0)).0;
+            let pieces = ui.pieces(Pos::<crate::events::Page>::new(0)).0;
             let at = pieces
                 .iter()
                 .position(|piece| {
@@ -1778,7 +1773,7 @@ mod tests {
         let before = top_of_second(&ui);
         ui.splitting = Some(crate::view::provisional::Splitting {
             block: first,
-            at: DocOffset::new(10),
+            at: Pos::<DocChar>::new(10),
             new_block: None,
         });
         // Typed while the split is unanswered: held, and drawn.
@@ -1807,11 +1802,11 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "xy",
             &minted,
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         shape(&mut ui);
         assert_eq!(provisional(&ui, minted), "xyword");
-        assert_eq!(ui.block_len(minted), DocCount::new(6));
+        assert_eq!(ui.block_len(minted), Count::<DocChar>::new(6));
     }
 
     /// `PROSE-UI-214`: a press in the paragraph a split opens lands in the
@@ -1826,7 +1821,7 @@ mod tests {
         let first = first_block(&ui);
         ui.splitting = Some(crate::view::provisional::Splitting {
             block: first,
-            at: DocOffset::new(10),
+            at: Pos::<DocChar>::new(10),
             new_block: None,
         });
         let minted = BlockId::new(ambre_core::PeerId::new(9), ambre_core::OpCounter::new(9));
@@ -1838,21 +1833,21 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "xy",
             &minted,
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         shape(&mut ui);
         let at = ui
-            .pieces(crate::events::PageIndex::new(0))
+            .pieces(Pos::<crate::events::Page>::new(0))
             .1
             .expect("the new paragraph is drawn");
         let run = ui.ghost().expect("shaped").run.clone();
-        let caret = run.data().caret_box(RunOffset::new(3));
+        let caret = run.data().caret_box(Pos::<RunChar>::new(3));
         let layout = &ui.shaped.layout;
         let x = layout.margin_left
             + run.data().indent()
             + Px::<Doc>::new(caret.x0 as f32)
             + Px::<Doc>::new(0.5);
-        let y = ui.column.page_top_y(crate::events::PageIndex::new(0))
+        let y = ui.column.page_top_y(Pos::<crate::events::Page>::new(0))
             + layout.body_top()
             + at.top
             + Px::<Doc>::new((caret.y0 + caret.y1) as f32 / 2.0);
@@ -1863,25 +1858,25 @@ mod tests {
         );
         assert_eq!(
             ui.place_at(crate::view::tests::view_at(point.0.get(), point.1)),
-            Some((minted, DocOffset::new(3)))
+            Some((minted, Pos::<DocChar>::new(3)))
         );
         // A keystroke replayed before the next frame shapes again.
         ui.draft.push_str(
             ambre_bus::app::prose::TextAck::new(2),
             "z",
             &minted,
-            DocOffset::new(2),
+            Pos::<DocChar>::new(2),
         );
         assert_eq!(
             ui.place_at(crate::view::tests::view_at(point.0.get(), point.1)),
-            Some((minted, DocOffset::new(3)))
+            Some((minted, Pos::<DocChar>::new(3)))
         );
     }
 
     /// The screen point of offset `at` in the text of `block`, a cell of
     /// the table drawn on page 0.
     fn cell_point(ui: &ProseUiState, block: BlockId, at: u32) -> (f32, f32) {
-        let (pieces, _) = ui.pieces(crate::events::PageIndex::new(0));
+        let (pieces, _) = ui.pieces(Pos::<crate::events::Page>::new(0));
         let piece = pieces
             .iter()
             .find(|piece| piece.table.is_some())
@@ -1903,14 +1898,14 @@ mod tests {
             })
             .expect("the block is in a cell");
         let run = ui.provisional_run(block).cloned().unwrap_or(run);
-        let caret = run.data().caret_box(RunOffset::new(at));
+        let caret = run.data().caret_box(Pos::<RunChar>::new(at));
         let layout = &ui.shaped.layout;
         let x = layout.margin_left
             + frame.text_x
             + run.data().indent()
             + Px::<Doc>::new(caret.x0 as f32)
             + Px::<Doc>::new(0.5);
-        let y = ui.column.page_top_y(crate::events::PageIndex::new(0))
+        let y = ui.column.page_top_y(Pos::<crate::events::Page>::new(0))
             + layout.body_top()
             + piece.fragment.top
             + frame.text_y
@@ -1940,25 +1935,25 @@ mod tests {
         let point = cell_point(&ui, right, 3);
         assert_eq!(
             ui.place_at(crate::view::tests::view_at(point.0, point.1)),
-            Some((right, DocOffset::new(3)))
+            Some((right, Pos::<DocChar>::new(3)))
         );
 
         ui.draft.push_str(
             ambre_bus::app::prose::TextAck::new(1),
             &"word ".repeat(60),
             &left,
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         shape(&mut ui);
         let point = cell_point(&ui, left, 200);
         assert_eq!(
             ui.place_at(crate::view::tests::view_at(point.0, point.1)),
-            Some((left, DocOffset::new(200)))
+            Some((left, Pos::<DocChar>::new(200)))
         );
         let point = cell_point(&ui, right, 3);
         assert_eq!(
             ui.place_at(crate::view::tests::view_at(point.0, point.1)),
-            Some((right, DocOffset::new(3)))
+            Some((right, Pos::<DocChar>::new(3)))
         );
     }
 
@@ -1977,24 +1972,24 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "xy",
             &cell,
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         shape(&mut ui);
         let point = cell_point(&ui, cell, 1);
         assert_eq!(
             ui.place_at(crate::view::tests::view_at(point.0, point.1)),
-            Some((cell, DocOffset::new(1)))
+            Some((cell, Pos::<DocChar>::new(1)))
         );
         // A keystroke replayed before the next frame, after the point.
         ui.draft.push_str(
             ambre_bus::app::prose::TextAck::new(2),
             "z",
             &cell,
-            DocOffset::new(2),
+            Pos::<DocChar>::new(2),
         );
         assert_eq!(
             ui.place_at(crate::view::tests::view_at(point.0, point.1)),
-            Some((cell, DocOffset::new(1)))
+            Some((cell, Pos::<DocChar>::new(1)))
         );
     }
 
@@ -2002,8 +1997,8 @@ mod tests {
         crate::events::CommentThread {
             comment_id: Id::mint(),
             anchor_block: Some(block),
-            anchor_start: DocOffset::new(start),
-            anchor_end: DocOffset::new(end),
+            anchor_start: Pos::<DocChar>::new(start),
+            anchor_end: Pos::<DocChar>::new(end),
             orphaned: crate::events::AnchorState::Anchored,
             resolved: ambre_core::ThreadState::Open,
             replies: Vec::new(),
@@ -2037,8 +2032,8 @@ mod tests {
         let surface = paint(&mut ui);
         let data = ui.shaped.blocks[&crate::events::tree_id(id)].data();
         let (start, end) = (
-            data.caret_box(RunOffset::new(4)).x0,
-            data.caret_box(RunOffset::new(9)).x0,
+            data.caret_box(Pos::<RunChar>::new(4)).x0,
+            data.caret_box(Pos::<RunChar>::new(9)).x0,
         );
         let painted = tints(&surface, comment);
         assert_eq!(painted.len(), 1);
@@ -2072,7 +2067,7 @@ mod tests {
         let id = first_block(&ui);
         let mark = |kind| Highlight {
             kind,
-            span: crate::view::answered_span(DocOffset::new(2), DocOffset::new(6)),
+            span: crate::view::answered_span(Pos::<DocChar>::new(2), Pos::<DocChar>::new(6)),
         };
         ui.highlights.insert(
             id,
@@ -2128,19 +2123,19 @@ mod tests {
             ui.resize(Px::<View>::new(width), Px::<View>::new(height));
             ui.apply_layout(shaped);
             ui.viewport.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(f64::from(zoom));
-            let bottom = ui.column.page_top_y(crate::events::PageIndex::new(1)).get();
+            let bottom = ui.column.page_top_y(Pos::<crate::events::Page>::new(1)).get();
             ui.viewport.scroll_y = ui.column.clamp_scroll(&ui.viewport, Px::<Doc>::new(scroll * bottom));
             let id = first_block(&ui);
             ui.cursor = Some(CursorPosition {
                 block_id: id,
-                offset: DocOffset::new(12),
-                anchor: Some((id, DocOffset::new(2))),
+                offset: Pos::<DocChar>::new(12),
+                anchor: Some((id, Pos::<DocChar>::new(2))),
             });
             ui.highlights.insert(
                 id,
                 vec![Highlight {
                     kind: HighlightKind::Comment,
-                    span: crate::view::answered_span(DocOffset::new(5), DocOffset::new(15)),
+                    span: crate::view::answered_span(Pos::<DocChar>::new(5), Pos::<DocChar>::new(15)),
                 }],
             );
             let screen = paint(&mut ui);

@@ -47,7 +47,7 @@ enum Step {
     Held {
         lease: Id<Lease>,
         horizon: Seq,
-        expires_in: ambre_core::TimeSpan<ambre_core::Ms>,
+        expires_in: TimeSpan<Ms>,
         until: Option<Instant<Authored>>,
     },
     /// This copy holds an edit the relay refused for the lock, so it is not
@@ -128,11 +128,7 @@ impl ChannelState {
 
     /// The relay deferred the lease of `segment` by `retry_in` milliseconds:
     /// the grace period runs, or another member holds the lease.
-    pub fn lease_deferred(
-        &mut self,
-        segment: Id<Segment>,
-        retry_in: ambre_core::TimeSpan<ambre_core::Ms>,
-    ) {
+    pub fn lease_deferred(&mut self, segment: Id<Segment>, retry_in: TimeSpan<Ms>) {
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.failures = FailureCount::ZERO;
             finalizing.step = Step::Due {
@@ -150,7 +146,7 @@ impl ChannelState {
         segment: Id<Segment>,
         lease: Id<Lease>,
         horizon: Seq,
-        expires_in: ambre_core::TimeSpan<ambre_core::Ms>,
+        expires_in: TimeSpan<Ms>,
     ) {
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.failures = FailureCount::ZERO;

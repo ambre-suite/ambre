@@ -15,6 +15,7 @@
 //! would otherwise pull neighbouring board content into the page. The page
 //! draws no board grid and no frame title, so it shows only slide content.
 
+use ambre_core::{PrintLength, Pt};
 use std::collections::HashMap;
 
 use ambre_canvas::{Palette, TextCache};
@@ -34,18 +35,15 @@ use crate::ui::walk::{BoardView, BoardWalk, ImageStore};
 /// straight onto the page with no extra scaling. Defaults to a 16:9 slide.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PageSize {
-    pub width: ambre_core::PrintLength<ambre_core::Pt>,
-    pub height: ambre_core::PrintLength<ambre_core::Pt>,
+    pub width: PrintLength<Pt>,
+    pub height: PrintLength<Pt>,
 }
 
 impl PageSize {
     /// A page of `width` x `height` points, each clamped to a positive minimum so
     /// `PageSettings::from_wh` never rejects it.
-    pub fn new(
-        width: ambre_core::PrintLength<ambre_core::Pt>,
-        height: ambre_core::PrintLength<ambre_core::Pt>,
-    ) -> Self {
-        let least = ambre_core::PrintLength::<ambre_core::Pt>::new(1.0);
+    pub fn new(width: PrintLength<Pt>, height: PrintLength<Pt>) -> Self {
+        let least = PrintLength::<Pt>::new(1.0);
         Self {
             width: width.max(least),
             height: height.max(least),
@@ -57,8 +55,8 @@ impl Default for PageSize {
     fn default() -> Self {
         // 1280x720: a 16:9 slide, matching the default presentation aspect.
         Self::new(
-            ambre_core::PrintLength::<ambre_core::Pt>::new(1280.0),
-            ambre_core::PrintLength::<ambre_core::Pt>::new(720.0),
+            PrintLength::<Pt>::new(1280.0),
+            PrintLength::<Pt>::new(720.0),
         )
     }
 }
@@ -187,6 +185,7 @@ mod tests {
     };
     use ambre_canvas::Theme;
     use ambre_core::id::{Element, Id};
+    use ambre_core::{Board, Px};
     use ambre_draw::Affine;
 
     fn rect_node(id: &str, bounds: Rect) -> DisplayNode {
@@ -214,7 +213,7 @@ mod tests {
                 viewport: Default::default(),
                 nodes: vec![rect_node("a", Rect::new(10.0, 10.0, 90.0, 90.0))],
                 version: ambre_core::Generation::ZERO,
-                grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
+                grid_unit: Px::<Board>::new(20.0),
             },
             camera,
             clip: Some(frame),

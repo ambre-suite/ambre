@@ -71,6 +71,7 @@ mod schema_shape;
 #[cfg(test)]
 mod schema_reading;
 
+use ambre_core::index::{Count, Pos, Span};
 use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};
@@ -81,8 +82,8 @@ use ambre_core::{HistoryStep, StepDirection};
 
 use crate::doc;
 use crate::events::{
-    PageCount, PageIndex, PageSpan, ProseCommand, ProseError, ProseEvent, ProseOutcome,
-    ProseRefusal, RefusedAction, block_id, tree_id,
+    Page, ProseCommand, ProseError, ProseEvent, ProseOutcome, ProseRefusal, RefusedAction,
+    block_id, tree_id,
 };
 use crate::layout::pass::PageLayout;
 use crate::layout::reflow::Paginator;
@@ -97,11 +98,11 @@ ambre_core::define_tally! {
 }
 
 /// The pages a layout carries before the view asks for any (`PROSE-125`).
-pub const WINDOW_PAGES: PageCount = PageCount::new(8);
+pub const WINDOW_PAGES: Count<Page> = Count::<Page>::new(8);
 
 /// The pages carried on each side of a block the view reveals
 /// (`PROSE-UI-212`).
-pub const WINDOW_MARGIN: PageCount = PageCount::new(4);
+pub const WINDOW_MARGIN: Count<Page> = Count::<Page>::new(4);
 
 ambre_core::define_flag! {
     /// Whether this session owes a newcomer its presence.
@@ -122,7 +123,7 @@ struct LayoutBasis {
     /// How many faces the layout was shaped on.
     faces: FaceCount,
     /// The pages it carries.
-    window: PageSpan,
+    window: Span<Page>,
 }
 
 /// The per-document Prose engine.
@@ -189,7 +190,7 @@ pub struct ProseState {
     /// same basis is the same picture, so it is not handed over twice.
     handed: Option<LayoutBasis>,
     /// The pages the view last asked for (`PROSE-125`).
-    window: PageSpan,
+    window: Span<Page>,
     /// The version stamped on the last layout handed over. It only grows, even
     /// across a snapshot import that rebuilds the paginator: the view drops a
     /// layout older than the one it holds (`PROSE-UI-016`).
@@ -397,7 +398,7 @@ impl ProseState {
     }
 
     /// Carry the pages `first` to `last` in the layouts handed from now on.
-    fn show_pages(&mut self, first: PageIndex, last: PageIndex) -> ProseOutcome {
+    fn show_pages(&mut self, first: Pos<Page>, last: Pos<Page>) -> ProseOutcome {
         self.window = first.min(last).through(first.max(last));
         ProseOutcome::nothing()
     }
@@ -1415,8 +1416,7 @@ mod tests {
     use super::*;
     use crate::events::HeadingLevel;
     use crate::events::{BlockId, BlockInit, CursorPosition};
-    use ambre_bus::app::prose::DocOffset;
-    use ambre_bus::app::prose::DocSpan;
+    use ambre_bus::app::prose::DocChar;
 
     #[test]
     fn a_fresh_document_holds_one_paragraph_and_a_version() {
@@ -1441,7 +1441,7 @@ mod tests {
         let absent = BlockId::new(ambre_core::PeerId::new(9), ambre_core::OpCounter::new(9));
         let outcome = state.handle_command(ProseCommand::DeleteText {
             block_id: absent,
-            range: DocSpan::from_usize_range(0..1),
+            range: Span::<DocChar>::from_usize_range(0..1),
         });
         let error = refusal(&outcome);
         assert_eq!(
@@ -1449,7 +1449,7 @@ mod tests {
             RefusedAction::Command(
                 ProseCommand::DeleteText {
                     block_id: absent,
-                    range: DocSpan::from_usize_range(0..1),
+                    range: Span::<DocChar>::from_usize_range(0..1),
                 }
                 .name()
             )
@@ -1466,11 +1466,11 @@ mod tests {
         let absent = BlockId::new(ambre_core::PeerId::new(9), ambre_core::OpCounter::new(9));
         let deleting = state.handle_command(ProseCommand::DeleteText {
             block_id: absent,
-            range: DocSpan::from_usize_range(0..1),
+            range: Span::<DocChar>::from_usize_range(0..1),
         });
         let splitting = state.handle_command(ProseCommand::SplitBlock {
             block_id: absent,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
         });
         assert_eq!(refusal(&deleting).reason, refusal(&splitting).reason);
         assert_ne!(refusal(&deleting).refused, refusal(&splitting).refused);
@@ -1485,12 +1485,12 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "text".to_owned(),
         });
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..4),
+            range: Span::<DocChar>::from_usize_range(0..4),
             key: "fs".into(),
             value: Some(crate::mark::test_value("huge")),
         });
@@ -1521,7 +1521,7 @@ mod tests {
         let first = state
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "hello".to_owned(),
             })
             .update
@@ -1584,7 +1584,7 @@ mod tests {
         let block = author.root_blocks()[0];
         author.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a paragraph".to_owned(),
         });
         let mut reader = ProseState::new().expect("a document is built");
@@ -1600,7 +1600,7 @@ mod tests {
         let delta = author
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "Still ".to_owned(),
             })
             .update
@@ -1622,7 +1622,7 @@ mod tests {
         let mine = reader.root_blocks()[0];
         reader.handle_command(ProseCommand::InsertText {
             block_id: mine,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "mine".to_owned(),
         });
         reader
@@ -1640,12 +1640,12 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a paragraph that is measured, never stored".to_owned(),
         });
         let before = state.doc.get_deep_value();
         let pages = state.paginate(&[]).page_count;
-        assert!(pages >= PageCount::ONE);
+        assert!(pages >= Count::<Page>::ONE);
         // `PROSE-033`, `PROSE-065`, `PROSE-079`: laying out reads, and the
         // document holds no page number, no break and no height afterwards.
         assert_eq!(state.doc.get_deep_value(), before);
@@ -1659,7 +1659,7 @@ mod tests {
         let block = source.root_blocks()[0];
         source.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a long paragraph ".repeat(400),
         });
         let snapshot = source.export_snapshot();
@@ -1684,7 +1684,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a paragraph".to_owned(),
         });
         state.handle_command(ProseCommand::InsertBlock {
@@ -1710,7 +1710,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "x".to_owned(),
         });
         let before = state.last_exported_vv.clone();
@@ -1725,7 +1725,7 @@ mod tests {
         let block = source.root_blocks()[0];
         source.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "x".to_owned(),
         });
         let snapshot = source.export_snapshot();
@@ -1824,7 +1824,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "same text".to_owned(),
         });
         let before = state.export_snapshot();
@@ -1882,7 +1882,7 @@ mod tests {
         let block = state.root_blocks()[0];
         let insert = ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "text".to_owned(),
         };
         assert_eq!(
@@ -1904,13 +1904,13 @@ mod tests {
             ProseCommand::UpdateCursor {
                 pos: CursorPosition {
                     block_id: block,
-                    offset: DocOffset::new(1),
+                    offset: Pos::<DocChar>::new(1),
                     anchor: None,
                 },
             },
             ProseCommand::DeleteText {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..0),
+                range: Span::<DocChar>::from_usize_range(0..0),
             },
         ] {
             let outcome = state.handle_command(no_op);
@@ -1935,7 +1935,7 @@ mod tests {
         undo_on_nothing(&mut state);
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "text".to_owned(),
         });
         assert!(state.handle_command(ProseCommand::Undo).update.is_some());
@@ -1957,7 +1957,7 @@ mod tests {
             state
                 .handle_command(ProseCommand::InsertText {
                     block_id: block,
-                    pos: DocOffset::ZERO,
+                    pos: Pos::<DocChar>::ZERO,
                     text: text.to_owned(),
                 })
                 .update
@@ -1976,7 +1976,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "mine".to_owned(),
         });
         let doc = LoroDoc::new();
@@ -2007,7 +2007,7 @@ mod tests {
         let block = origin.root_blocks()[0];
         origin.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "an imported paragraph".to_owned(),
         });
         let snapshot = origin.export_snapshot();
@@ -2018,7 +2018,7 @@ mod tests {
         let delta = peer
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "mine".to_owned(),
             })
             .update

@@ -21,7 +21,23 @@ macro_rules! define_tally {
 
         // Serde through core's own paths, so a crate that expands the macro
         // needs no serde dependency of its own.
-        $crate::define_index!(@serde $name, u32);
+        impl $crate::__serde::Serialize for $name {
+            fn serialize<S: $crate::__serde::Serializer>(
+                &self,
+                serializer: S,
+            ) -> Result<S::Ok, S::Error> {
+                $crate::__serde::Serialize::serialize(&self.0, serializer)
+            }
+        }
+
+        impl<'de> $crate::__serde::Deserialize<'de> for $name {
+            fn deserialize<D: $crate::__serde::Deserializer<'de>>(
+                deserializer: D,
+            ) -> Result<Self, D::Error> {
+                <u32 as $crate::__serde::Deserialize<'de>>::deserialize(deserializer)
+                    .map(Self)
+            }
+        }
 
         impl $name {
             /// Nothing counted.

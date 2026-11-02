@@ -6,9 +6,11 @@
 //! (`PROSE-FEAT-035`). Every offset is a count of code points, the unit a
 //! block's text is indexed in (`PROSE-045`).
 
-use ambre_bus::app::find::{MatchCount, MatchIndex};
-use ambre_bus::app::prose::{DocSpan, FindRefusal};
+use ambre_bus::app::find::Match;
+use ambre_bus::app::prose::{DocChar, FindRefusal};
 use ambre_core::StepDirection;
+use ambre_core::index::Delta;
+use ambre_core::index::{Count, Pos, Span};
 use loro::TreeID;
 
 use crate::doc;
@@ -24,7 +26,7 @@ use super::ProseState;
 pub(super) struct FindSession {
     query: FindQuery,
     matches: Vec<FindMatch>,
-    current: Option<MatchIndex>,
+    current: Option<Pos<Match>>,
 }
 
 /// The match spans inside one block's text, honouring case and whole-word,
@@ -33,7 +35,7 @@ pub(super) struct FindSession {
 /// The case fold maps one code point to one, so a span in the folded text is
 /// the same span in the original. A code point whose lower case is longer
 /// than one is compared as it is.
-pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
+pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<Span<DocChar>> {
     let fold = |c: char| -> char {
         if query.options.case == ambre_core::CaseMatch::Sensitive {
             return c;
@@ -64,7 +66,7 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
                 .is_some_and(is_word)
                 && !hay.get(end).is_some_and(is_word));
         if hit && bounded {
-            found.push(DocSpan::from_usize_range(at..end));
+            found.push(Span::<DocChar>::from_usize_range(at..end));
             // Past the whole match: the next one starts after it.
             at = end;
         } else {
@@ -106,7 +108,7 @@ impl ProseState {
             return ProseOutcome::refused(ProseRefusal::FindRefused(FindRefusal::RegexUnbuilt));
         }
         let matches = self.find_all(&query);
-        let current = (!matches.is_empty()).then_some(MatchIndex::ZERO);
+        let current = (!matches.is_empty()).then_some(Pos::<Match>::ZERO);
         self.find = Some(FindSession {
             query,
             matches,
@@ -121,8 +123,10 @@ impl ProseState {
         let Some(session) = self.find.as_mut() else {
             return Self::err_no_search();
         };
-        let count = MatchCount::from_len(session.matches.len());
-        session.current = session.current.and_then(|at| at.stepped(direction, count));
+        let count = Count::<Match>::from_len(session.matches.len());
+        session.current = session
+            .current
+            .and_then(|at| at.wrapped(Delta::step(direction), count));
         ProseOutcome::display_only(vec![ProseEvent::FindUpdated {
             current: session.current,
         }])
@@ -194,7 +198,7 @@ impl ProseState {
     fn replace_range(
         &mut self,
         id: &TreeID,
-        range: DocSpan,
+        range: Span<DocChar>,
         replacement: &str,
     ) -> Result<(), ProseOutcome> {
         let Some(body) = self.body_of(id) else {
@@ -215,15 +219,15 @@ impl ProseState {
 
     /// Search again under the same query after a write, and answer with the
     /// new list. The index is kept when it still names a match.
-    fn refresh_matches(&mut self, keep: Option<MatchIndex>) -> Vec<ProseEvent> {
+    fn refresh_matches(&mut self, keep: Option<Pos<Match>>) -> Vec<ProseEvent> {
         let Some(query) = self.find.as_ref().map(|s| s.query.clone()) else {
             return Vec::new();
         };
         let matches = self.find_all(&query);
-        let count = MatchCount::from_len(matches.len());
+        let count = Count::<Match>::from_len(matches.len());
         let current = match keep {
             Some(at) if at < count.as_end() => Some(at),
-            _ if !count.is_zero() => Some(MatchIndex::ZERO),
+            _ if !count.is_zero() => Some(Pos::<Match>::ZERO),
             _ => None,
         };
         if let Some(session) = self.find.as_mut() {
@@ -256,7 +260,7 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
-    fn pairs(spans: Vec<ambre_bus::app::prose::DocSpan>) -> Vec<(u32, u32)> {
+    fn pairs(spans: Vec<Span<ambre_bus::app::prose::DocChar>>) -> Vec<(u32, u32)> {
         spans
             .into_iter()
             .map(|span| (span.start.get(), span.end.get()))
@@ -265,7 +269,7 @@ mod tests {
 
     use super::*;
     use crate::events::{BlockId, BlockInit, ProseCommand};
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
 
     fn query(text: &str) -> Option<FindQuery> {
         ambre_bus::app::find::FindText::new(text.to_owned())
@@ -294,14 +298,14 @@ mod tests {
         for (id, text) in ids.iter().zip(paragraphs) {
             state.handle_command(ProseCommand::InsertText {
                 block_id: *id,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: (*text).to_owned(),
             });
         }
         (state, ids)
     }
 
-    fn results(outcome: &ProseOutcome) -> (Vec<FindMatch>, Option<MatchIndex>) {
+    fn results(outcome: &ProseOutcome) -> (Vec<FindMatch>, Option<Pos<Match>>) {
         outcome
             .display
             .iter()
@@ -362,19 +366,19 @@ mod tests {
         let expected = vec![
             FindMatch {
                 block_id: ids[0],
-                range: DocSpan::from_usize_range(0..3),
+                range: Span::<DocChar>::from_usize_range(0..3),
             },
             FindMatch {
                 block_id: ids[0],
-                range: DocSpan::from_usize_range(8..11),
+                range: Span::<DocChar>::from_usize_range(8..11),
             },
             FindMatch {
                 block_id: ids[1],
-                range: DocSpan::from_usize_range(4..7),
+                range: Span::<DocChar>::from_usize_range(4..7),
             },
         ];
         assert_eq!(matches, expected);
-        assert_eq!(current, Some(MatchIndex::new(0)));
+        assert_eq!(current, Some(Pos::<Match>::new(0)));
     }
 
     #[test]
@@ -393,8 +397,8 @@ mod tests {
         state.handle_command(ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(root),
-            rows: crate::events::grid::RowCount::new(1),
-            cols: crate::events::grid::ColCount::new(1),
+            rows: Count::<crate::events::grid::Row>::new(1),
+            cols: Count::<crate::events::grid::Col>::new(1),
         });
         let cell_text = state
             .document_order()
@@ -405,7 +409,7 @@ mod tests {
             .expect("the cell's paragraph");
         state.handle_command(ProseCommand::InsertText {
             block_id: cell_text,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "needle".to_owned(),
         });
         let outcome = state.handle_command(ProseCommand::FindStart {
@@ -425,7 +429,7 @@ mod tests {
         assert_eq!(
             walked.display,
             vec![ProseEvent::FindUpdated {
-                current: Some(MatchIndex::new(1))
+                current: Some(Pos::<Match>::new(1))
             }]
         );
         assert!(walked.update.is_none() && walked.ephemeral.is_none());
@@ -433,14 +437,14 @@ mod tests {
         assert_eq!(
             back.display,
             vec![ProseEvent::FindUpdated {
-                current: Some(MatchIndex::new(0))
+                current: Some(Pos::<Match>::new(0))
             }]
         );
         let wrapped = state.handle_command(ProseCommand::FindPrev);
         assert_eq!(
             wrapped.display,
             vec![ProseEvent::FindUpdated {
-                current: Some(MatchIndex::new(2))
+                current: Some(Pos::<Match>::new(2))
             }]
         );
         assert_eq!(state.find.as_ref().map(|s| s.matches.clone()), Some(listed));
@@ -507,13 +511,13 @@ mod tests {
         let opened = state.handle_command(ProseCommand::FindStart {
             query: query("needle"),
         });
-        assert_eq!(results(&opened).1, Some(MatchIndex::ZERO));
+        assert_eq!(results(&opened).1, Some(Pos::<Match>::ZERO));
         state.handle_command(ProseCommand::FindNext);
         state.handle_command(ProseCommand::FindNext);
         for id in &ids[1..] {
             state.handle_command(ProseCommand::DeleteText {
                 block_id: *id,
-                range: DocSpan::from_usize_range(0..6),
+                range: Span::<DocChar>::from_usize_range(0..6),
             });
         }
         let outcome = state.handle_command(ProseCommand::ReplaceOne {
@@ -522,7 +526,7 @@ mod tests {
         let (matches, current) = results(&outcome);
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].block_id, ids[0]);
-        assert_eq!(current, Some(MatchIndex::new(0)));
+        assert_eq!(current, Some(Pos::<Match>::new(0)));
         assert!(outcome.update.is_none(), "a stale hit is not replaced");
         assert_eq!(texts(&state, &ids), vec!["needle one", " two", " three"]);
     }
@@ -555,7 +559,7 @@ mod tests {
         assert_eq!(texts(&state, &ids), vec!["cat dog", "cat"]);
         let (matches, current) = results(&outcome);
         assert_eq!(matches.len(), 2);
-        assert_eq!(current, Some(MatchIndex::new(1)));
+        assert_eq!(current, Some(Pos::<Match>::new(1)));
         assert_eq!(state.find_query(), query("cat").as_ref());
     }
 
@@ -621,7 +625,7 @@ mod tests {
         let header = state.bands().header.expect("the header");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "needle".to_owned(),
         });
         let outcome = state.handle_command(ProseCommand::FindStart {

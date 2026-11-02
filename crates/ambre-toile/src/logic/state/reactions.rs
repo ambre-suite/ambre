@@ -220,6 +220,7 @@ impl ToileState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::{Authored, Instant};
 
     /// A value no encoder can write. Nothing the board holds serializes like
     /// this; it exists so the failing arm of `encode` has an input.
@@ -247,7 +248,7 @@ mod tests {
     fn a_reaction_encodes() {
         let reaction = Reaction {
             kind: ReactionKind::Emoji(ambre_bus::Emoji::from("+1")),
-            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+            ts: Instant::<Authored>::new(0),
         };
         assert!(encode(&reaction).is_ok());
     }

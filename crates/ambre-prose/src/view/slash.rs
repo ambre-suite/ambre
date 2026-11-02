@@ -12,27 +12,23 @@ use crate::events::{
 use crate::layout::run::Affinity;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
-use ambre_bus::app::grid::{ColCount, RowCount};
-use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
+use ambre_bus::app::grid::{Col, Row};
+use ambre_bus::app::prose::DocChar;
+use ambre_core::index::{Axis, Count, IdxVec, Pos, Span};
 use ambre_core::{Doc, Point, Px, View};
 
-ambre_core::define_index! {
-    /// The place of an item in the menu as a query filters it.
-    pub struct SlashChoice(u32);
-    /// A number of items the filtered menu lists.
-    pub struct SlashChoiceCount;
-    /// A move between two places of the filtered menu.
-    pub struct SlashChoiceDelta(i64);
-    /// A run of places of the filtered menu.
-    pub struct SlashChoiceSpan;
-    /// The filtered menu, one entry per place.
-    pub struct SlashChoiceVec;
+/// The place of an item in the menu as a query filters it.
+#[derive(PartialEq, Eq)]
+pub enum SlashChoice {}
+
+impl Axis for SlashChoice {
+    const NAME: &'static str = "SlashChoice";
 }
 
 /// The rows of the table the menu inserts.
-const TABLE_ROWS: RowCount = RowCount::new(3);
+const TABLE_ROWS: Count<Row> = Count::<Row>::new(3);
 /// The columns of the table the menu inserts.
-const TABLE_COLS: ColCount = ColCount::new(3);
+const TABLE_COLS: Count<Col> = Count::<Col>::new(3);
 
 /// The deepest heading a table of contents from the menu lists.
 const TOC_LEVEL: HeadingLevel = HeadingLevel::H3;
@@ -151,7 +147,7 @@ impl SlashCommand {
 /// The items a query keeps: those whose label holds it, case folded, in the
 /// menu's order.
 #[must_use]
-pub fn filter(query: &str) -> SlashChoiceVec<SlashItem> {
+pub fn filter(query: &str) -> IdxVec<SlashChoice, SlashItem> {
     let query = query.to_lowercase();
     ITEMS
         .into_iter()
@@ -168,7 +164,7 @@ pub(crate) struct SlashMenu {
     pub(crate) origin: Spot,
     /// What was typed after the slash.
     pub(crate) query: String,
-    pub(crate) selected: SlashChoice,
+    pub(crate) selected: Pos<SlashChoice>,
 }
 
 impl std::fmt::Debug for SlashMenu {
@@ -183,9 +179,12 @@ impl std::fmt::Debug for SlashMenu {
 
 impl SlashMenu {
     /// The range the slash and the query take in the origin block.
-    pub(crate) fn span(&self) -> DocSpan {
+    pub(crate) fn span(&self) -> Span<DocChar> {
         let start = self.origin.1;
-        DocSpan::new(start, start + DocCount::ONE + DocCount::of(&self.query))
+        Span::<DocChar>::new(
+            start,
+            start + Count::<DocChar>::ONE + ambre_core::char_len(&self.query).as_axis::<DocChar>(),
+        )
     }
 }
 
@@ -196,8 +195,8 @@ pub struct SlashMenuState {
     /// Under the slash, on the canvas. `None` hides the menu.
     pub anchor: Option<Point<Px<View>>>,
     pub query: String,
-    pub items: SlashChoiceVec<&'static str>,
-    pub selected: SlashChoice,
+    pub items: IdxVec<SlashChoice, &'static str>,
+    pub selected: Pos<SlashChoice>,
 }
 
 impl std::fmt::Debug for SlashMenuState {
@@ -238,7 +237,7 @@ impl ProseUiState {
     /// start of a paragraph or a heading of the flow, where a block command
     /// is legal (`PROSE-UI-058`).
     pub(crate) fn opens_menu(&self, spot: Spot) -> bool {
-        if spot.1 != DocOffset::ZERO || self.is_band(spot.0) {
+        if spot.1 != Pos::<DocChar>::ZERO || self.is_band(spot.0) {
             return false;
         }
         self.flow_index(&tree_id(spot.0))
@@ -259,11 +258,12 @@ impl ProseUiState {
             return;
         }
         let (selected, count) = (menu.selected.get(), count.get());
-        menu.selected = SlashChoice::new(if direction == ambre_core::StepDirection::Forward {
-            (selected + 1) % count
-        } else {
-            (selected + count - 1) % count
-        });
+        menu.selected =
+            Pos::<SlashChoice>::new(if direction == ambre_core::StepDirection::Forward {
+                (selected + 1) % count
+            } else {
+                (selected + count - 1) % count
+            });
     }
 
     /// The bottom of the line holding a place, on the canvas.

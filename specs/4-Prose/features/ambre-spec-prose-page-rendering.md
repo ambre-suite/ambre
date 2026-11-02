@@ -83,11 +83,11 @@ pub struct ParleyRunData { /* private */ }
 
 impl ParleyRunData {
     /// The code-point offset under a point of the run, from the run's top-left corner.
-    pub fn offset_at(&self, at: Point<Px<Doc>>) -> RunOffset;
+    pub fn offset_at(&self, at: Point<Px<Doc>>) -> Pos<RunChar>;
     /// Where the caret sits for a code-point offset.
-    pub fn caret_box(&self, offset: RunOffset) -> BoundingBox;
+    pub fn caret_box(&self, offset: Pos<RunChar>) -> BoundingBox;
     /// One box per line a code-point range covers.
-    pub fn range_boxes(&self, span: RunSpan) -> Vec<BoundingBox>;
+    pub fn range_boxes(&self, span: Span<RunChar>) -> Vec<BoundingBox>;
 }
 
 /// A shared handle on one shaped block. Two handles are equal when they are one run.
@@ -132,9 +132,9 @@ impl ProseUiState {
 }
 
 impl HitTest for ProseUiState {
-    type Target = (BlockId, DocOffset);
+    type Target = (BlockId, Pos<DocChar>);
     /// The block and the offset under a canvas point.
-    fn hit_test(&self, at: Point<Px<View>>) -> Option<(BlockId, DocOffset)>;
+    fn hit_test(&self, at: Point<Px<View>>) -> Option<(BlockId, Pos<DocChar>)>;
 }
 ```
 

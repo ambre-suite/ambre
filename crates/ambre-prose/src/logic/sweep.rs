@@ -132,9 +132,10 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, tree_id};
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
     use ambre_core::FixedBytes;
     use ambre_core::id::{Id, User};
+    use ambre_core::index::Pos;
 
     /// Bob's user.
     const BOB: Id<User> = Id::from_bytes([2; 16]);
@@ -165,7 +166,7 @@ mod tests {
         let hidden = bob.root_blocks()[1];
         bob.handle_command(ProseCommand::InsertText {
             block_id: hidden,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "gone".to_owned(),
         });
         bob.handle_command(ProseCommand::DeleteBlock { block_id: hidden });
@@ -213,7 +214,7 @@ mod tests {
             .handle_command(ProseCommand::UpdateCursor {
                 pos: CursorPosition {
                     block_id: first,
-                    offset: DocOffset::ZERO,
+                    offset: Pos::<DocChar>::ZERO,
                     anchor: None,
                 },
             })
@@ -250,7 +251,7 @@ mod tests {
             .handle_command(ProseCommand::UpdateCursor {
                 pos: CursorPosition {
                     block_id: unseen,
-                    offset: DocOffset::ZERO,
+                    offset: Pos::<DocChar>::ZERO,
                     anchor: None,
                 },
             })

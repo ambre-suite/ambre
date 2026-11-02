@@ -2,6 +2,7 @@
 //! retarget, delete, plus the map handle and the "which connectors touch these
 //! elements" query used by element deletion. Split out of `state/mod.rs`.
 
+use ambre_core::{Board, Px};
 use std::cell::Ref;
 use std::collections::{HashMap, HashSet};
 use std::sync::PoisonError;
@@ -29,7 +30,7 @@ use super::{ToileState, write_edits};
 #[derive(Clone, Debug)]
 pub(super) struct Wire {
     pub(super) conn: Connector,
-    pub(super) reach: ambre_core::Px<ambre_core::Board>,
+    pub(super) reach: Px<Board>,
 }
 
 impl ToileState {
@@ -259,7 +260,7 @@ impl ToileState {
     fn read_wire(&self, id: &Id<id::Connector>) -> Option<Wire> {
         let cm = self.connector_map(id)?;
         let conn = read_connector(id.clone(), &cm)?;
-        let stroke = ambre_core::Px::<ambre_core::Board>::new(f64::from(
+        let stroke = Px::<Board>::new(f64::from(
             self.style_read(bin_of(&cm, ConnectorKey::Style).as_deref())
                 .stroke_w
                 .get()

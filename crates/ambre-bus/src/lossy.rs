@@ -72,6 +72,7 @@ mod tests {
     use crate::{AppCommand, TrameCommand};
     use crate::{Col, Row};
     use ambre_core::id::Id;
+    use ambre_core::index::Pos;
 
     /// The viewport request, the archetype of the class.
     fn viewport() -> LogicCommand {
@@ -79,10 +80,10 @@ mod tests {
             document_id: Id::from_bytes([1; 16]),
             command: AppCommand::Trame(TrameCommand::ScrollViewport {
                 version: ambre_core::Generation::nth(1),
-                row_start: Row::new(0),
-                row_end: Row::new(10),
-                col_start: Col::new(0),
-                col_end: Col::new(10),
+                row_start: Pos::<Row>::new(0),
+                row_end: Pos::<Row>::new(10),
+                col_start: Pos::<Col>::new(0),
+                col_end: Pos::<Col>::new(10),
             }),
         }
     }
@@ -93,13 +94,13 @@ mod tests {
             TrameCommand::InsertColLeft,
             TrameCommand::InsertRowAbove,
             TrameCommand::MoveColumn {
-                from: Col::new(0),
-                to: Col::new(3),
+                from: Pos::<Col>::new(0),
+                to: Pos::<Col>::new(3),
             },
             TrameCommand::ResizeCol {
                 version: ambre_core::Generation::nth(1),
                 sheet_id: crate::SheetId::new("s1".to_string()),
-                col: Col::new(0),
+                col: Pos::<Col>::new(0),
                 width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
             },
         ]

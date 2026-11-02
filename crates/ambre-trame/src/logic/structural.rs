@@ -8,6 +8,8 @@
 use super::*;
 use crate::formula::SheetQualifier;
 use crate::formula::identity::{self, AxisEdit, LineEdit};
+use crate::model::{delete_line, insert_line, move_line};
+use ambre_core::index::{Count, Pos};
 
 impl TrameState {
     /// Carry every formula that reads the active sheet across one structural
@@ -68,8 +70,8 @@ impl TrameState {
     /// down/right. One `LoroMovableList` op; cells keyed by stable id pairs
     /// follow their element automatically. A no-op past the materialized used
     /// range (those rows/columns are already virtual blanks, nothing to shift).
-    pub(super) fn insert_axis<P: SheetLine>(&mut self, at: P) -> TrameOutcome {
-        if at > P::end(&self.index) {
+    pub(super) fn insert_axis<L: SheetLine>(&mut self, at: Pos<L>) -> TrameOutcome {
+        if at > L::len(&self.index).as_end() {
             return TrameOutcome::display_only(vec![]);
         }
         // The new line carries a freshly minted, move-invariant uid value
@@ -77,10 +79,10 @@ impl TrameState {
         let Some(uid) = self.mint_uid() else {
             return TrameOutcome::display_only(vec![super::cells::ids_exhausted()]);
         };
-        if at.insert_into(&self.line_list::<P>(), &uid).is_none() {
+        if insert_line(&self.line_list::<L>(), at, &uid).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
-        self.reanchor_formulas(P::edit(LineEdit::Insert { at, n: P::ONE }));
+        self.reanchor_formulas(L::edit(LineEdit::Insert { at, n: Count::ONE }));
         self.doc.commit();
         self.after_structural()
     }
@@ -91,11 +93,11 @@ impl TrameState {
     /// (`TRAME-008`). One below it follows its cell up, and a range shrinks
     /// ([`reanchor_formulas`](Self::reanchor_formulas)). A no-op in virtual
     /// space.
-    pub(super) fn delete_axis<P: SheetLine>(&mut self, at: P) -> TrameOutcome {
+    pub(super) fn delete_axis<L: SheetLine>(&mut self, at: Pos<L>) -> TrameOutcome {
         let Some(filter_dropped) = self.remove_line(at) else {
             return TrameOutcome::display_only(vec![]);
         };
-        self.reanchor_formulas(P::edit(LineEdit::Delete { at, n: P::ONE }));
+        self.reanchor_formulas(L::edit(LineEdit::Delete { at, n: Count::ONE }));
         self.doc.commit();
         self.after_line_removal(filter_dropped)
     }
@@ -111,8 +113,8 @@ impl TrameState {
     }
 
     /// The list that orders the lines of axis `P` on the active sheet.
-    fn line_list<P: SheetLine>(&self) -> loro::LoroMovableList {
-        let root = match P::AXIS {
+    fn line_list<L: SheetLine>(&self) -> loro::LoroMovableList {
+        let root = match L::AXIS {
             Axis::Row => SheetRoot::Rows,
             Axis::Col => SheetRoot::Cols,
         };
@@ -124,11 +126,11 @@ impl TrameState {
     /// with no commit, so several removals land as one. `None` when the line is
     /// virtual and nothing was removed, else whether the active filter went
     /// with it.
-    fn remove_line<P: SheetLine>(&mut self, at: P) -> Option<bool> {
+    fn remove_line<L: SheetLine>(&mut self, at: Pos<L>) -> Option<bool> {
         // A virtual line has nothing materialized to remove.
-        let removed = P::uid(&self.index, at)?;
-        at.delete_from(&self.line_list::<P>())?;
-        Some(self.purge_axis(removed, P::AXIS))
+        let removed = L::uid(&self.index, at)?;
+        delete_line(&self.line_list::<L>(), at)?;
+        Some(self.purge_axis(removed, L::AXIS))
     }
 
     /// Move the row/column at grid position `from` to grid position `to`
@@ -138,15 +140,15 @@ impl TrameState {
     /// cell, while a range keeps its rectangle (`after_reorder`, `TRAME-227`). A no-op
     /// if `from == to` or either index is outside the materialized used range
     /// (virtual lines carry nothing to move).
-    pub(super) fn move_axis<P: SheetLine>(&mut self, from: P, to: P) -> TrameOutcome {
-        let end = P::end(&self.index);
+    pub(super) fn move_axis<L: SheetLine>(&mut self, from: Pos<L>, to: Pos<L>) -> TrameOutcome {
+        let end = L::len(&self.index).as_end();
         if from == to || from >= end || to >= end {
             return TrameOutcome::display_only(vec![]);
         }
-        if from.move_in(&self.line_list::<P>(), to).is_none() {
+        if move_line(&self.line_list::<L>(), from, to).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
-        let rewritten = self.reanchor_formulas(P::edit(LineEdit::Reorder));
+        let rewritten = self.reanchor_formulas(L::edit(LineEdit::Reorder));
         self.doc.commit();
         self.after_reorder(rewritten)
     }
@@ -157,12 +159,12 @@ impl TrameState {
     /// and one delta carrying every line to the peers (`TRAME-175`). The
     /// selection is left untouched -- the UI owns it and re-reports it on the
     /// next cursor move.
-    pub(super) fn delete_selected_axis<P: SheetLine>(&mut self) -> TrameOutcome {
+    pub(super) fn delete_selected_axis<L: SheetLine>(&mut self) -> TrameOutcome {
         // The span of every selected rectangle across the axis (`TRAME-UI-129`).
         let Some((start, end)) = self
             .selection_rects()
             .into_iter()
-            .map(P::bounds)
+            .map(L::bounds)
             .reduce(|(lo, hi), (a, b)| (lo.min(a), hi.max(b)))
         else {
             return TrameOutcome::display_only(vec![]);
@@ -171,14 +173,14 @@ impl TrameState {
         let mut at = Some(end);
         while let Some(line) = at.filter(|line| *line >= start) {
             removals.extend(self.remove_line(line));
-            at = line.before();
+            at = line.prev();
         }
         if removals.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
         // The removed lines are the materialized run from `start`.
-        let n = P::count_of(removals.len());
-        self.reanchor_formulas(P::edit(LineEdit::Delete { at: start, n }));
+        let n = Count::from_len(removals.len());
+        self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }));
         self.doc.commit();
         self.after_line_removal(removals.contains(&true))
     }
@@ -207,7 +209,7 @@ impl TrameState {
     pub(super) fn sort_selection(&mut self, order: SortOrder) -> TrameOutcome {
         let rect = self.selection_bounds();
         let sheet = self.active_sheet.clone();
-        self.sort_range(&sheet, rect, ColCount::ZERO, order, HeaderRow::Absent)
+        self.sort_range(&sheet, rect, Count::<Col>::ZERO, order, HeaderRow::Absent)
     }
 
     /// Whole-sheet single-column sort by the active cell's column (`trame-sort`,
@@ -221,11 +223,11 @@ impl TrameState {
         let rect = CellRect::spanning(
             CellPos::ORIGIN,
             CellPos::new(
-                Row::last(&self.index).unwrap_or(Row::ZERO),
-                Col::last(&self.index).unwrap_or(Col::ZERO),
+                Row::len(&self.index).last().unwrap_or(Pos::<Row>::ZERO),
+                Col::len(&self.index).last().unwrap_or(Pos::<Col>::ZERO),
             ),
         );
-        let sort_col = self.active.col.count_from(Col::ZERO);
+        let sort_col = self.active.col.count_from(Pos::<Col>::ZERO);
         let sheet = self.active_sheet.clone();
         self.sort_range(&sheet, rect, sort_col, order, HeaderRow::Absent)
     }

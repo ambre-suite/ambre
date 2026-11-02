@@ -19,6 +19,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_core::index::Pos;
 use std::path::{Path, PathBuf};
 
 use ambre_bus::{Col, Row, TrameCommand};
@@ -70,8 +71,8 @@ impl FixtureGen for TrameGen {
         let mut state = TrameState::with_peer(ambre_core::PeerId::new(self.seed));
         for (row, text) in [(0, "21"), (1, "=A1*2"), (2, "plain")] {
             state.handle_command(TrameCommand::SetCellText {
-                row: Row::new(row),
-                col: Col::new(0),
+                row: Pos::<Row>::new(row),
+                col: Pos::<Col>::new(0),
                 text: text.to_owned(),
             });
         }
@@ -611,13 +612,13 @@ fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
     let mut alice = TrameState::with_peer(ambre_core::PeerId::new(1));
     let mut bob = TrameState::with_peer(ambre_core::PeerId::new(2));
     alice.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "a".to_owned(),
     });
     bob.handle_command(TrameCommand::SetCellText {
-        row: Row::new(4),
-        col: Col::new(0),
+        row: Pos::<Row>::new(4),
+        col: Pos::<Col>::new(0),
         text: "b".to_owned(),
     });
     alice.apply_remote_snapshot(&bob.export_snapshot());
@@ -662,8 +663,8 @@ fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
         }
         for (row, text) in writes {
             state.handle_command(TrameCommand::SetCellText {
-                row: Row::new(row),
-                col: Col::new(0),
+                row: Pos::<Row>::new(row),
+                col: Pos::<Col>::new(0),
                 text: text.to_owned(),
             });
         }
@@ -683,8 +684,8 @@ fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
     let three = {
         let mut state = TrameState::with_peer(ambre_core::PeerId::new(11));
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
             text: "different".to_owned(),
         });
         DocState::Trame(Box::new(state))

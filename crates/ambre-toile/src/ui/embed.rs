@@ -35,6 +35,7 @@ use ambre_canvas::InputEvent;
 use ambre_commands::Key;
 
 use super::viewport::ViewportTransform;
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// How long a `doc_embed` must stay out of the culled set before its child
 /// document's sync session closes ("Opening the child").
@@ -45,8 +46,7 @@ use super::viewport::ViewportTransform;
 /// members fetch, a key unwrap and a snapshot hydration. So an embed opens the
 /// instant it enters the cull set, and only closes after staying out for this
 /// long. Re-entering cancels the pending close.
-pub const EMBED_CLOSE_DEBOUNCE: ambre_core::TimeSpan<ambre_core::FracMs> =
-    ambre_core::TimeSpan::<ambre_core::FracMs>::new(5_000.0);
+pub const EMBED_CLOSE_DEBOUNCE: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(5_000.0);
 
 /// One `doc_embed` in the current culled frame, projected to screen space and
 /// published for `FrameHost` (`toile-embeds` "Render").
@@ -449,7 +449,7 @@ impl EmbedFocus {
 pub struct EmbedSessions {
     /// Open children. `Some(deadline)` = out of the cull set, closing at that
     /// frame-clock reading; `None` = visible, nothing pending.
-    open: HashMap<Id<Document>, Option<ambre_core::Instant<ambre_core::PageLoad>>>,
+    open: HashMap<Id<Document>, Option<Instant<PageLoad>>>,
 }
 
 impl EmbedSessions {
@@ -473,12 +473,8 @@ impl EmbedSessions {
     /// `send` returns whether the command left. A caller that cannot send (a
     /// full queue, a disconnected one) returns `false` and the state stays as
     /// it was.
-    pub fn sync<F>(
-        &mut self,
-        display: &DisplayViewport,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
-        mut send: F,
-    ) where
+    pub fn sync<F>(&mut self, display: &DisplayViewport, now: Instant<PageLoad>, mut send: F)
+    where
         F: FnMut(LogicCommand) -> bool,
     {
         for (document_id, doc_type) in embedded_docs(display).collect::<Vec<_>>() {
@@ -602,6 +598,8 @@ pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayEleme
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{ElementKind, ElementStyle, Viewport};
+    use ambre_core::{Board, Px};
+    use ambre_core::{Instant, PageLoad};
     use ambre_draw::{Affine, Vec2};
 
     fn approx(a: Point, b: Point) -> bool {
@@ -638,7 +636,7 @@ mod tests {
     pub(super) fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
+            grid_unit: Px::<Board>::new(20.0),
             pins: Vec::new(),
             viewport: Viewport::default(),
             nodes,
@@ -943,7 +941,7 @@ mod tests {
     fn sync(
         s: &mut EmbedSessions,
         dv: &DisplayViewport,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> Vec<LogicCommand> {
         let mut sent = Vec::new();
         s.sync(dv, now, |cmd| {
@@ -958,7 +956,7 @@ mod tests {
     fn sync_refused(
         s: &mut EmbedSessions,
         dv: &DisplayViewport,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> Vec<LogicCommand> {
         let mut offered = Vec::new();
         s.sync(dv, now, |cmd| {
@@ -1012,32 +1010,14 @@ mod tests {
         let dv = board_with(child);
 
         assert_eq!(
-            opened(&sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0)
-            )),
+            opened(&sync(&mut s, &dv, Instant::<PageLoad>::new(0.0))),
             vec![child]
         );
         assert!(s.is_open(&child));
         // Still visible on later frames: no second open. A re-open costs a
         // members fetch, a key unwrap and a snapshot hydration.
-        assert!(
-            sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(16.0)
-            )
-            .is_empty()
-        );
-        assert!(
-            sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(32.0)
-            )
-            .is_empty()
-        );
+        assert!(sync(&mut s, &dv, Instant::<PageLoad>::new(16.0)).is_empty());
+        assert!(sync(&mut s, &dv, Instant::<PageLoad>::new(32.0)).is_empty());
     }
 
     #[test]
@@ -1045,40 +1025,20 @@ mod tests {
         let mut s = EmbedSessions::default();
         let child = Id::<Document>::mint();
         let empty = viewport(Vec::new());
-        sync(
-            &mut s,
-            &board_with(child),
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
-        );
+        sync(&mut s, &board_with(child), Instant::<PageLoad>::new(0.0));
 
         // Leaves the cull set: the countdown starts, and nothing leaves yet.
-        assert!(
-            sync(
-                &mut s,
-                &empty,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(1_000.0)
-            )
-            .is_empty()
-        );
+        assert!(sync(&mut s, &empty, Instant::<PageLoad>::new(1_000.0)).is_empty());
         // One millisecond short of the deadline: still nothing.
         let almost = 1_000.0 + EMBED_CLOSE_DEBOUNCE.get() - 1.0;
-        assert!(
-            sync(
-                &mut s,
-                &empty,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(almost)
-            )
-            .is_empty()
-        );
+        assert!(sync(&mut s, &empty, Instant::<PageLoad>::new(almost)).is_empty());
         assert!(s.is_open(&child), "closed before the debounce elapsed");
         // Deadline reached.
         assert_eq!(
             closed(&sync(
                 &mut s,
                 &empty,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(
-                    1_000.0 + EMBED_CLOSE_DEBOUNCE.get()
-                )
+                Instant::<PageLoad>::new(1_000.0 + EMBED_CLOSE_DEBOUNCE.get())
             )),
             vec![child]
         );
@@ -1092,11 +1052,7 @@ mod tests {
         let dv = board_with(child);
         let empty = viewport(Vec::new());
         assert_eq!(
-            opened(&sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0)
-            )),
+            opened(&sync(&mut s, &dv, Instant::<PageLoad>::new(0.0))),
             vec![child]
         );
 
@@ -1106,21 +1062,11 @@ mod tests {
         for i in 1..50 {
             let t = i as f64 * 100.0;
             assert!(
-                sync(
-                    &mut s,
-                    &empty,
-                    ambre_bus::Instant::<ambre_bus::PageLoad>::new(t)
-                )
-                .is_empty(),
+                sync(&mut s, &empty, Instant::<PageLoad>::new(t)).is_empty(),
                 "close storm at {t}"
             );
             assert!(
-                sync(
-                    &mut s,
-                    &dv,
-                    ambre_bus::Instant::<ambre_bus::PageLoad>::new(t + 50.0)
-                )
-                .is_empty(),
+                sync(&mut s, &dv, Instant::<PageLoad>::new(t + 50.0)).is_empty(),
                 "open storm at {t}"
             );
         }
@@ -1133,56 +1079,21 @@ mod tests {
         let child = Id::<Document>::mint();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
-        sync(
-            &mut s,
-            &dv,
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
-        );
+        sync(&mut s, &dv, Instant::<PageLoad>::new(0.0));
 
-        sync(
-            &mut s,
-            &empty,
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
-        ); // countdown armed for t = 5000
-        sync(
-            &mut s,
-            &dv,
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(4_000.0),
-        ); // back in view: cancelled
+        sync(&mut s, &empty, Instant::<PageLoad>::new(0.0)); // countdown armed for t = 5000
+        sync(&mut s, &dv, Instant::<PageLoad>::new(4_000.0)); // back in view: cancelled
         // Past the ORIGINAL deadline with the embed visible: nothing closes.
-        assert!(
-            sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(6_000.0)
-            )
-            .is_empty()
-        );
+        assert!(sync(&mut s, &dv, Instant::<PageLoad>::new(6_000.0)).is_empty());
         assert!(s.is_open(&child));
         // And the next departure gets a fresh full window, not the old deadline.
-        assert!(
-            sync(
-                &mut s,
-                &empty,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(6_000.0)
-            )
-            .is_empty()
-        );
-        assert!(
-            sync(
-                &mut s,
-                &empty,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(10_000.0)
-            )
-            .is_empty()
-        );
+        assert!(sync(&mut s, &empty, Instant::<PageLoad>::new(6_000.0)).is_empty());
+        assert!(sync(&mut s, &empty, Instant::<PageLoad>::new(10_000.0)).is_empty());
         assert_eq!(
             closed(&sync(
                 &mut s,
                 &empty,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(
-                    6_000.0 + EMBED_CLOSE_DEBOUNCE.get()
-                )
+                Instant::<PageLoad>::new(6_000.0 + EMBED_CLOSE_DEBOUNCE.get())
             )),
             vec![child]
         );
@@ -1196,11 +1107,7 @@ mod tests {
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
         ]);
-        sync(
-            &mut s,
-            &dv,
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
-        );
+        sync(&mut s, &dv, Instant::<PageLoad>::new(0.0));
 
         // The board is going away: no debounce, and the sweep empties the
         // registry so a later frame cannot close them twice.
@@ -1222,33 +1129,18 @@ mod tests {
         let dv = board_with(child);
 
         assert_eq!(
-            opened(&sync_refused(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0)
-            )),
+            opened(&sync_refused(&mut s, &dv, Instant::<PageLoad>::new(0.0))),
             vec![child]
         );
         assert!(!s.is_open(&child), "a refused open records nothing");
         // The embed is still in the cull set, so the next frame offers it again.
         assert_eq!(
-            opened(&sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(16.0)
-            )),
+            opened(&sync(&mut s, &dv, Instant::<PageLoad>::new(16.0))),
             vec![child]
         );
         assert!(s.is_open(&child));
         // And once it is through, it is not offered a third time.
-        assert!(
-            sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(32.0)
-            )
-            .is_empty()
-        );
+        assert!(sync(&mut s, &dv, Instant::<PageLoad>::new(32.0)).is_empty());
     }
 
     /// `TOILE-UI-339`: when the queue refuses a close, the next frame offers
@@ -1262,34 +1154,22 @@ mod tests {
         let child = Id::<Document>::mint();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
-        sync(
-            &mut s,
-            &dv,
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
-        );
+        sync(&mut s, &dv, Instant::<PageLoad>::new(0.0));
 
-        sync(
-            &mut s,
-            &empty,
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
-        ); // countdown armed
+        sync(&mut s, &empty, Instant::<PageLoad>::new(0.0)); // countdown armed
         let past = EMBED_CLOSE_DEBOUNCE.get() + 1.0;
         assert_eq!(
             closed(&sync_refused(
                 &mut s,
                 &empty,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(past)
+                Instant::<PageLoad>::new(past)
             )),
             vec![child]
         );
         assert!(s.is_open(&child), "a refused close forgets nothing");
         // Still past the deadline: offered again, and taken this time.
         assert_eq!(
-            closed(&sync(
-                &mut s,
-                &empty,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(past + 16.0)
-            )),
+            closed(&sync(&mut s, &empty, Instant::<PageLoad>::new(past + 16.0))),
             vec![child]
         );
         assert!(!s.is_open(&child));
@@ -1305,11 +1185,7 @@ mod tests {
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
         ]);
-        sync(
-            &mut s,
-            &dv,
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
-        );
+        sync(&mut s, &dv, Instant::<PageLoad>::new(0.0));
 
         // Only `a` gets through; the queue refuses `b`, which must survive
         // the sweep.
@@ -1337,21 +1213,10 @@ mod tests {
             )),
         ]);
         assert_eq!(
-            opened(&sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0)
-            )),
+            opened(&sync(&mut s, &dv, Instant::<PageLoad>::new(0.0))),
             vec![child]
         );
-        assert!(
-            sync(
-                &mut s,
-                &dv,
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(16.0)
-            )
-            .is_empty()
-        );
+        assert!(sync(&mut s, &dv, Instant::<PageLoad>::new(16.0)).is_empty());
     }
 }
 

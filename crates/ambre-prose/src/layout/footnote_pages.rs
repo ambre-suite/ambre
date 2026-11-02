@@ -4,8 +4,9 @@
 //! Driven through the engine: a note is written by its command, and the
 //! layout read back is the one the view is handed.
 
-use ambre_bus::app::prose::DocOffset;
+use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Footnote, Id};
+use ambre_core::index::Pos;
 use ambre_core::{Doc, Px};
 use loro::TreeID;
 
@@ -38,14 +39,14 @@ fn document(texts: &[String]) -> (ProseState, Vec<BlockId>) {
     for (id, text) in ids.iter().zip(texts) {
         state.handle_command(ProseCommand::InsertText {
             block_id: *id,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: text.clone(),
         });
     }
     (state, ids)
 }
 
-fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> Id<Footnote> {
+fn add(state: &mut ProseState, block: BlockId, pos: Pos<DocChar>, text: &str) -> Id<Footnote> {
     let before: Vec<Id<Footnote>> = note::ordinals(state.document())
         .into_iter()
         .map(|(id, _)| id)
@@ -62,7 +63,7 @@ fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> Id
 }
 
 /// The page a line of a block was placed on.
-fn page_of_line(layout: &PageLayout, block: &TreeID, line: BlockLine) -> Option<u32> {
+fn page_of_line(layout: &PageLayout, block: &TreeID, line: Pos<BlockLine>) -> Option<u32> {
     let entry = layout
         .blocks
         .iter()
@@ -124,8 +125,8 @@ fn nothing_runs_into_the_notes(layout: &PageLayout) {
 #[test]
 fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
     let (mut state, ids) = document(&["first".to_owned(), "second".to_owned()]);
-    let later = add(&mut state, ids[1], DocOffset::new(6), "later");
-    let earlier = add(&mut state, ids[0], DocOffset::new(5), "earlier");
+    let later = add(&mut state, ids[1], Pos::<DocChar>::new(6), "later");
+    let earlier = add(&mut state, ids[0], Pos::<DocChar>::new(5), "earlier");
     let layout = shipped_paginator().full(state.document()).clone();
     let ordinals: Vec<(Id<Footnote>, u32)> =
         placed(&layout).iter().map(|(id, n, _)| (*id, *n)).collect();
@@ -140,8 +141,8 @@ fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
 #[test]
 fn a_note_moved_to_another_page_keeps_its_ordinal() {
     let (mut state, ids) = document(&["intro".to_owned(), "body".to_owned()]);
-    let first = add(&mut state, ids[0], DocOffset::new(5), "one");
-    let second = add(&mut state, ids[1], DocOffset::new(4), "two");
+    let first = add(&mut state, ids[0], Pos::<DocChar>::new(5), "one");
+    let second = add(&mut state, ids[1], Pos::<DocChar>::new(4), "two");
     let before = placed(&shipped_paginator().full(state.document()).clone());
     assert_eq!(before, vec![(first, 1, 0), (second, 2, 0)]);
     state.handle_command(ProseCommand::InsertBlock {
@@ -159,8 +160,8 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
     let text = long_text();
     let end = u32::try_from(text.chars().count()).expect("a short text");
     let (mut state, ids) = document(&[text]);
-    let early = add(&mut state, ids[0], DocOffset::new(3), "early");
-    let late = add(&mut state, ids[0], DocOffset::new(end), "late");
+    let early = add(&mut state, ids[0], Pos::<DocChar>::new(3), "early");
+    let late = add(&mut state, ids[0], Pos::<DocChar>::new(end), "late");
     let block = tree_id(ids[0]);
     let check = |state: &mut ProseState| {
         let layout = state.paginate(&[block]).clone();
@@ -183,10 +184,10 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
             .split_points
             .last()
             .copied()
-            .unwrap_or(BlockLine::ZERO);
+            .unwrap_or(Pos::<BlockLine>::ZERO);
         assert_eq!(
             pages[0],
-            page_of_line(&layout, &block, BlockLine::ZERO).expect("line 0")
+            page_of_line(&layout, &block, Pos::<BlockLine>::ZERO).expect("line 0")
         );
         assert_eq!(
             pages[1],
@@ -219,7 +220,7 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
         .map(|e| e.page_start);
     assert_eq!(
         start,
-        Some(crate::events::PageIndex::new(1)),
+        Some(Pos::<crate::events::Page>::new(1)),
         "the paragraph now starts on the second page"
     );
     check(&mut state);
@@ -228,9 +229,9 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
 #[test]
 fn a_call_added_or_removed_lays_out_what_a_full_recomputation_would() {
     let (mut state, ids) = document(&["alpha".to_owned(), "beta".to_owned(), "gamma".to_owned()]);
-    let _ = add(&mut state, ids[2], DocOffset::new(5), "last");
+    let _ = add(&mut state, ids[2], Pos::<DocChar>::new(5), "last");
     let _ = state.paginate(&[]);
-    let first = add(&mut state, ids[0], DocOffset::new(5), "first");
+    let first = add(&mut state, ids[0], Pos::<DocChar>::new(5), "first");
     let reflowed = state.paginate(&[tree_id(ids[0])]).clone();
     let full = shipped_paginator().full(state.document()).clone();
     assert_eq!(placed(&reflowed), placed(&full));
@@ -245,14 +246,14 @@ fn a_call_added_or_removed_lays_out_what_a_full_recomputation_would() {
 #[test]
 fn text_typed_anywhere_lays_out_what_a_full_recomputation_would() {
     let (mut state, ids) = document(&[long_text(), "beta".to_owned(), long_text()]);
-    let call = add(&mut state, ids[1], DocOffset::new(2), "a note");
+    let call = add(&mut state, ids[1], Pos::<DocChar>::new(2), "a note");
     let _ = state.paginate(&[]);
     let body = note::block(state.document(), &call).expect("a note block");
     let typed_in = [ids[0], ids[1], crate::events::block_id(body), ids[2]];
     for block in typed_in {
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Typed at the head, long enough to push a line further on. ".repeat(3),
         });
         let reflowed = state.paginate(&[]).clone();

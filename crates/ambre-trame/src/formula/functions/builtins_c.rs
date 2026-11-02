@@ -3,7 +3,8 @@
 // resolve through the module glob mesh.
 
 use super::*;
-use crate::formula::types::ArgIndex;
+use crate::formula::types::Arg;
+use ambre_core::index::{Count, Pos};
 
 /// STDEV / VAR over the sample (denominator `n - 1`).
 pub(crate) fn variance(args: &[CellValue]) -> CellValue {
@@ -58,11 +59,11 @@ pub(crate) fn rank(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let num = match arg(args, ArgIndex::new(0)).as_number() {
+    let num = match arg(args, Pos::<Arg>::new(0)).as_number() {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
-    let data: Vec<f64> = range_cells(arg(args, ArgIndex::new(1)))
+    let data: Vec<f64> = range_cells(arg(args, Pos::<Arg>::new(1)))
         .filter_map(|v| v.as_number().ok())
         .collect();
     if !data.iter().any(|n| nearly_equal(*n, num)) {
@@ -113,7 +114,7 @@ impl PayTiming {
     /// The timing the type argument at `i` names. An absent or zero type is
     /// the end, and any other number the start: a type of 2 is no third
     /// timing.
-    pub(crate) fn of_arg(args: &[CellValue], i: ArgIndex) -> Self {
+    pub(crate) fn of_arg(args: &[CellValue], i: Pos<Arg>) -> Self {
         if opt_num(args, i, 0.0) == 0.0 {
             Self::End
         } else {
@@ -149,7 +150,7 @@ impl Annuity {
 }
 
 /// Optional positional argument as a number, with a default.
-pub(crate) fn opt_num(args: &[CellValue], i: ArgIndex, default: f64) -> f64 {
+pub(crate) fn opt_num(args: &[CellValue], i: Pos<Arg>, default: f64) -> f64 {
     i.to_index()
         .and_then(|i| args.get(i))
         .and_then(|v| v.as_number().ok())
@@ -162,12 +163,12 @@ pub(crate) fn pmt(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (rate, nper, pv) = (
-        opt_num(args, ArgIndex::new(0), 0.0),
-        opt_num(args, ArgIndex::new(1), 0.0),
-        opt_num(args, ArgIndex::new(2), 0.0),
+        opt_num(args, Pos::<Arg>::new(0), 0.0),
+        opt_num(args, Pos::<Arg>::new(1), 0.0),
+        opt_num(args, Pos::<Arg>::new(2), 0.0),
     );
-    let fv = opt_num(args, ArgIndex::new(3), 0.0);
-    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
+    let fv = opt_num(args, Pos::<Arg>::new(3), 0.0);
+    let timing = PayTiming::of_arg(args, Pos::<Arg>::new(4));
     if nper == 0.0 {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
@@ -190,15 +191,15 @@ pub(crate) fn fv(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (rate, nper, pmt_v) = (
-        opt_num(args, ArgIndex::new(0), 0.0),
-        opt_num(args, ArgIndex::new(1), 0.0),
-        opt_num(args, ArgIndex::new(2), 0.0),
+        opt_num(args, Pos::<Arg>::new(0), 0.0),
+        opt_num(args, Pos::<Arg>::new(1), 0.0),
+        opt_num(args, Pos::<Arg>::new(2), 0.0),
     );
-    let pv = opt_num(args, ArgIndex::new(3), 0.0);
+    let pv = opt_num(args, Pos::<Arg>::new(3), 0.0);
     let annuity = Annuity {
         rate,
         periods: nper,
-        timing: PayTiming::of_arg(args, ArgIndex::new(4)),
+        timing: PayTiming::of_arg(args, Pos::<Arg>::new(4)),
     };
     let value = if rate == 0.0 {
         -(pv + pmt_v * nper)
@@ -214,15 +215,15 @@ pub(crate) fn pv(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (rate, nper, pmt_v) = (
-        opt_num(args, ArgIndex::new(0), 0.0),
-        opt_num(args, ArgIndex::new(1), 0.0),
-        opt_num(args, ArgIndex::new(2), 0.0),
+        opt_num(args, Pos::<Arg>::new(0), 0.0),
+        opt_num(args, Pos::<Arg>::new(1), 0.0),
+        opt_num(args, Pos::<Arg>::new(2), 0.0),
     );
-    let fv = opt_num(args, ArgIndex::new(3), 0.0);
+    let fv = opt_num(args, Pos::<Arg>::new(3), 0.0);
     let annuity = Annuity {
         rate,
         periods: nper,
-        timing: PayTiming::of_arg(args, ArgIndex::new(4)),
+        timing: PayTiming::of_arg(args, Pos::<Arg>::new(4)),
     };
     let value = if rate == 0.0 {
         -(fv + pmt_v * nper)
@@ -238,12 +239,12 @@ pub(crate) fn nper(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (rate, pmt_v, pv) = (
-        opt_num(args, ArgIndex::new(0), 0.0),
-        opt_num(args, ArgIndex::new(1), 0.0),
-        opt_num(args, ArgIndex::new(2), 0.0),
+        opt_num(args, Pos::<Arg>::new(0), 0.0),
+        opt_num(args, Pos::<Arg>::new(1), 0.0),
+        opt_num(args, Pos::<Arg>::new(2), 0.0),
     );
-    let fv = opt_num(args, ArgIndex::new(3), 0.0);
-    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
+    let fv = opt_num(args, Pos::<Arg>::new(3), 0.0);
+    let timing = PayTiming::of_arg(args, Pos::<Arg>::new(4));
     if rate == 0.0 {
         if pmt_v == 0.0 {
             return CellValue::Error(FormulaError::DivisionByZero);
@@ -266,13 +267,13 @@ pub(crate) fn rate(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (nper, pmt_v, pv) = (
-        opt_num(args, ArgIndex::new(0), 0.0),
-        opt_num(args, ArgIndex::new(1), 0.0),
-        opt_num(args, ArgIndex::new(2), 0.0),
+        opt_num(args, Pos::<Arg>::new(0), 0.0),
+        opt_num(args, Pos::<Arg>::new(1), 0.0),
+        opt_num(args, Pos::<Arg>::new(2), 0.0),
     );
-    let fv = opt_num(args, ArgIndex::new(3), 0.0);
-    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
-    let mut r = opt_num(args, ArgIndex::new(5), 0.1);
+    let fv = opt_num(args, Pos::<Arg>::new(3), 0.0);
+    let timing = PayTiming::of_arg(args, Pos::<Arg>::new(4));
+    let mut r = opt_num(args, Pos::<Arg>::new(5), 0.1);
     // f(r) = pv*(1+r)^n + pmt*growth(r)*((1+r)^n-1)/r + fv
     let f = |r: f64| -> f64 {
         if r == 0.0 {
@@ -311,14 +312,14 @@ pub(crate) fn npv(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let rate = match arg(args, ArgIndex::new(0)).as_number() {
+    let rate = match arg(args, Pos::<Arg>::new(0)).as_number() {
         Ok(r) => r,
         Err(e) => return CellValue::Error(e),
     };
     if rate == -1.0 {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
-    let flows = match flatten_total(rest_from(args, ArgIndex::new(1))) {
+    let flows = match flatten_total(rest_from(args, Pos::<Arg>::new(1))) {
         Ok(nums) => nums,
         Err(err) => return err,
     };
@@ -336,7 +337,7 @@ pub(crate) fn irr(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    let flows = match flatten_total(one(args, ArgIndex::new(0))) {
+    let flows = match flatten_total(one(args, Pos::<Arg>::new(0))) {
         Ok(nums) => nums,
         Err(err) => return err,
     };
@@ -410,8 +411,8 @@ pub(crate) fn ifna(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, ArgIndex::new(0)) {
-        CellValue::Error(FormulaError::NaError) => arg(args, ArgIndex::new(1)).clone(),
+    match arg(args, Pos::<Arg>::new(0)) {
+        CellValue::Error(FormulaError::NaError) => arg(args, Pos::<Arg>::new(1)).clone(),
         other => other.clone(),
     }
 }
@@ -436,8 +437,8 @@ pub(crate) fn switch_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let subject = arg(args, ArgIndex::new(0));
-    let rest = rest_from(args, ArgIndex::new(1));
+    let subject = arg(args, Pos::<Arg>::new(0));
+    let rest = rest_from(args, Pos::<Arg>::new(1));
     let pairs = rest.chunks_exact(2);
     // A trailing unpaired argument is the default.
     let default = pairs.remainder().first().cloned();
@@ -456,12 +457,12 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let table = match arg(args, ArgIndex::new(1)) {
+    let table = match arg(args, Pos::<Arg>::new(1)) {
         CellValue::Range(r) => r,
         _ => return CellValue::Error(FormulaError::NaError),
     };
-    let row_index = match arg(args, ArgIndex::new(2)).as_number() {
-        Ok(n) if n >= 1.0 => Row::from_usize(n as usize - 1),
+    let row_index = match arg(args, Pos::<Arg>::new(2)).as_number() {
+        Ok(n) if n >= 1.0 => Pos::<Row>::from_usize(n as usize - 1),
         _ => return CellValue::Error(FormulaError::NaError),
     };
     if row_index >= table.rows.as_end() {
@@ -473,20 +474,20 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
             table
                 .col_offsets()
                 .into_iter()
-                .filter_map(|col| table.get(Row::ZERO, col)),
+                .filter_map(|col| table.get(Pos::<Row>::ZERO, col)),
         )
     {
         return CellValue::Error(FormulaError::NaError);
     }
-    let mut best: Option<Col> = None;
+    let mut best: Option<Pos<Col>> = None;
     for col in table.col_offsets() {
-        let key = match table.get(Row::ZERO, col) {
+        let key = match table.get(Pos::<Row>::ZERO, col) {
             Some(CellValue::Empty) if approximate => continue,
             Some(k) => k,
             None => continue,
         };
         if approximate {
-            if compare_cells(key, arg(args, ArgIndex::new(0)))
+            if compare_cells(key, arg(args, Pos::<Arg>::new(0)))
                 .map(|o| o.is_le())
                 .unwrap_or(false)
             {
@@ -494,7 +495,7 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
             } else {
                 break;
             }
-        } else if values_equal_ci(key, arg(args, ArgIndex::new(0))) {
+        } else if values_equal_ci(key, arg(args, Pos::<Arg>::new(0))) {
             best = Some(col);
             break;
         }
@@ -510,9 +511,9 @@ pub(crate) fn choose(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, ArgIndex::new(0)).as_number() {
+    match arg(args, Pos::<Arg>::new(0)).as_number() {
         Ok(n) if n >= 1.0 && (n as usize) < args.len() => {
-            arg(args, ArgIndex::from_usize(n as usize)).clone()
+            arg(args, Pos::<Arg>::from_usize(n as usize)).clone()
         }
         Ok(_) => CellValue::Error(FormulaError::NumError),
         Err(e) => CellValue::Error(e),
@@ -521,10 +522,10 @@ pub(crate) fn choose(args: &[CellValue]) -> CellValue {
 
 /// Dimensions of the first argument: a `Range` yields `(rows, cols)`, a scalar
 /// behaves like a 1x1 range.
-pub(crate) fn range_dims(args: &[CellValue]) -> Option<(RowCount, ColCount)> {
+pub(crate) fn range_dims(args: &[CellValue]) -> Option<(Count<Row>, Count<Col>)> {
     match args.first()? {
         CellValue::Range(r) => Some((r.rows, r.cols)),
-        _ => Some((RowCount::ONE, ColCount::ONE)),
+        _ => Some((Count::<Row>::ONE, Count::<Col>::ONE)),
     }
 }
 
@@ -554,8 +555,8 @@ pub(crate) fn search_fn(args: &[CellValue]) -> CellValue {
             .collect()
     };
     let lowered = vec![
-        CellValue::Text(fold(arg(args, ArgIndex::new(0)))),
-        CellValue::Text(fold(arg(args, ArgIndex::new(1)))),
+        CellValue::Text(fold(arg(args, Pos::<Arg>::new(0)))),
+        CellValue::Text(fold(arg(args, Pos::<Arg>::new(1)))),
     ];
     let mut call: Vec<CellValue> = lowered;
     if let Some(start) = args.get(2) {
@@ -569,16 +570,16 @@ pub(crate) fn replace_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 4 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let chars: Vec<char> = arg(args, ArgIndex::new(0)).to_display().chars().collect();
-    let start = match arg(args, ArgIndex::new(1)).as_number() {
+    let chars: Vec<char> = arg(args, Pos::<Arg>::new(0)).to_display().chars().collect();
+    let start = match arg(args, Pos::<Arg>::new(1)).as_number() {
         Ok(n) if n >= 1.0 => n as usize - 1,
         _ => return CellValue::Error(FormulaError::NumError),
     };
-    let count = match arg(args, ArgIndex::new(2)).as_number() {
+    let count = match arg(args, Pos::<Arg>::new(2)).as_number() {
         Ok(n) if n >= 0.0 => n as usize,
         _ => return CellValue::Error(FormulaError::NumError),
     };
-    let new = arg(args, ArgIndex::new(3)).to_display();
+    let new = arg(args, Pos::<Arg>::new(3)).to_display();
     let start = start.min(chars.len());
     let end = (start + count).min(chars.len());
     let mut out: String = chars.iter().take(start).collect();
@@ -593,7 +594,7 @@ pub(crate) fn exact(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     CellValue::Boolean(
-        arg(args, ArgIndex::new(0)).to_display() == arg(args, ArgIndex::new(1)).to_display(),
+        arg(args, Pos::<Arg>::new(0)).to_display() == arg(args, Pos::<Arg>::new(1)).to_display(),
     )
 }
 
@@ -602,9 +603,9 @@ pub(crate) fn textjoin(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let delim = arg(args, ArgIndex::new(0)).to_display();
-    let ignore_empty = is_truthy(arg(args, ArgIndex::new(1)));
-    let parts: Vec<String> = flatten_all(rest_from(args, ArgIndex::new(2)))
+    let delim = arg(args, Pos::<Arg>::new(0)).to_display();
+    let ignore_empty = is_truthy(arg(args, Pos::<Arg>::new(1)));
+    let parts: Vec<String> = flatten_all(rest_from(args, Pos::<Arg>::new(2)))
         .iter()
         .filter(|v| !(ignore_empty && matches!(v, CellValue::Empty)))
         .map(|v| v.to_display())
@@ -630,7 +631,7 @@ pub(crate) fn code_fn(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, ArgIndex::new(0)).to_display().chars().next() {
+    match arg(args, Pos::<Arg>::new(0)).to_display().chars().next() {
         Some(c) => CellValue::Number(c as u32 as f64),
         None => CellValue::Error(FormulaError::TypeError),
     }
@@ -642,9 +643,9 @@ pub(crate) fn time_fn(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let secs = match (
-        arg(args, ArgIndex::new(0)).as_number(),
-        arg(args, ArgIndex::new(1)).as_number(),
-        arg(args, ArgIndex::new(2)).as_number(),
+        arg(args, Pos::<Arg>::new(0)).as_number(),
+        arg(args, Pos::<Arg>::new(1)).as_number(),
+        arg(args, Pos::<Arg>::new(2)).as_number(),
     ) {
         (Ok(h), Ok(m), Ok(s)) => h * 3600.0 + m * 60.0 + s,
         _ => return CellValue::Error(FormulaError::TypeError),
@@ -737,8 +738,8 @@ pub(crate) fn edate(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (serial, months) = match (
-        arg(args, ArgIndex::new(0)).as_number(),
-        arg(args, ArgIndex::new(1)).as_number(),
+        arg(args, Pos::<Arg>::new(0)).as_number(),
+        arg(args, Pos::<Arg>::new(1)).as_number(),
     ) {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
@@ -754,8 +755,8 @@ pub(crate) fn eomonth(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (serial, months) = match (
-        arg(args, ArgIndex::new(0)).as_number(),
-        arg(args, ArgIndex::new(1)).as_number(),
+        arg(args, Pos::<Arg>::new(0)).as_number(),
+        arg(args, Pos::<Arg>::new(1)).as_number(),
     ) {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),

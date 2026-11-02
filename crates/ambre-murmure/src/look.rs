@@ -10,7 +10,8 @@
 use ambre_bus::TextStyle;
 use ambre_canvas::theme::SPACE_6;
 use ambre_canvas::{Palette, SpanShape};
-use ambre_core::ByteSpan;
+use ambre_core::Byte;
+use ambre_core::index::Span;
 use ambre_draw::{Affinity, Color, Cursor, Layout, ParleyBrush, Rect, Selection};
 
 /// The family an inline code run draws in.
@@ -35,7 +36,7 @@ const LIST_DOT: ambre_core::Px<ambre_core::Surface> =
     ambre_core::Px::<ambre_core::Surface>::new(3.0);
 
 /// What `style` shapes over the bytes `range`.
-pub(crate) fn shape(style: &TextStyle, range: ByteSpan) -> SpanShape {
+pub(crate) fn shape(style: &TextStyle, range: Span<Byte>) -> SpanShape {
     let mut shape = SpanShape {
         range,
         ..SpanShape::default()
@@ -58,7 +59,7 @@ pub(crate) fn margin(
     layout: &Layout<ParleyBrush>,
     text: &str,
     style: &TextStyle,
-    bytes: ByteSpan,
+    bytes: Span<Byte>,
 ) -> Vec<Rect> {
     let bytes = bytes.to_usize_range();
     let line = |at: usize| {

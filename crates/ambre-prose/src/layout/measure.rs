@@ -5,41 +5,39 @@
 //! holds a shaper. It measures and returns; it writes nothing back to the
 //! document it read (`PROSE-079`).
 
+use ambre_core::index::{Axis, Count, CountsAs, Delta, Pos, Span};
 use parley::{
     Alignment, AlignmentOptions, FontContext, FontFamily, FontStyle, FontWeight, Layout,
     LayoutContext, LineHeight, StyleProperty,
 };
 
 use ambre_bus::app::prose::{
-    Align, DocOffset, KeepTogether, KeepWithNext, LineHeight as StoredLineHeight, ParagraphStyle,
+    Align, DocChar, KeepTogether, KeepWithNext, LineHeight as StoredLineHeight, ParagraphStyle,
 };
-use ambre_core::{ByteDelta, ByteOffset, ByteSpan, PrintLength, Pt, Weight, char_to_byte};
+use ambre_core::{Byte, PrintLength, Pt, Weight, char_to_byte};
 use ambre_core::{Doc, Px};
 
 use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
-use crate::events::grid::RowCount;
+use crate::events::grid::Row;
 use crate::layout::fonts;
-use crate::layout::run::{
-    LocalLineCount, ParleyRunData, Resume, RunLine, RunLineCount, RunLineSpan, RunSegmentCount,
-    ShapedRun,
-};
+use crate::layout::run::{LocalLine, ParleyRunData, Resume, RunLine, RunSegment, ShapedRun};
 
 /// How many shaped stretches a run may hold before an edit shapes it whole
 /// again (`PROSE-128`). Typing at the end of a paragraph adds one per line,
 /// and an edit inside it at most two. Each holds a layout alive, so the cap
 /// bounds the memory a run keeps.
-const MAX_SEGMENTS: RunSegmentCount = RunSegmentCount::new(16);
+const MAX_SEGMENTS: Count<RunSegment> = Count::<RunSegment>::new(16);
 
 /// A byte range of a block's text and the inline marks the shaper reads on
 /// it. A mark either changes the glyphs (`PROSE-UI-207`) or draws a line
 /// across them (`PROSE-UI-209`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MarkedSpan {
-    pub start: ByteOffset,
-    pub end: ByteOffset,
+    pub start: Pos<Byte>,
+    pub end: Pos<Byte>,
     pub bold: Weight,
     pub italic: ambre_core::Slant,
     pub underline: ambre_core::Underline,
@@ -76,8 +74,8 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
                 .is_some_and(|value| !matches!(value, LoroValue::Null))
         };
         let span = MarkedSpan {
-            start: ByteOffset::from_usize(out.len()),
-            end: ByteOffset::from_usize(out.len() + insert.len()),
+            start: Pos::<Byte>::from_usize(out.len()),
+            end: Pos::<Byte>::from_usize(out.len() + insert.len()),
             bold: Weight::from_bool(on("b")),
             italic: ambre_core::Slant::from_bool(on("i")),
             underline: ambre_core::Underline::from_bool(on("u")),
@@ -202,56 +200,34 @@ fn line_height_of(paragraph: &ParagraphStyle, defaults: &doc::DocDefaults) -> Li
     }
 }
 
-ambre_core::define_index! {
-    /// A block of the document in reading order, as the paginator measures
-    /// and places it. The first is zero.
-    pub struct BlockIndex(u32);
-    /// A number of blocks.
-    pub struct BlockCount;
-    /// The signed gap between two blocks.
-    pub struct BlockDelta(i64);
-    /// A run of blocks.
-    pub struct BlockSpan;
-    /// A list indexed by block.
-    pub struct BlockVec;
+/// A block of the document in reading order, as the paginator measures
+/// and places it. The first is zero.
+#[derive(PartialEq, Eq)]
+pub enum Block {}
+
+impl Axis for Block {
+    const NAME: &'static str = "Block";
 }
 
-ambre_core::define_index! {
-    /// A line of one block as the paginator cuts it: a text's line, or a
-    /// table's row. The first is zero.
-    pub struct BlockLine(u32);
-    /// A number of lines of one block.
-    pub struct BlockLineCount;
-    /// The signed gap between two lines of one block.
-    pub struct BlockLineDelta(i64);
-    /// A run of lines of one block.
-    pub struct BlockLineSpan;
-    /// A list indexed by line of one block.
-    pub struct BlockLineVec;
+/// A line of one block as the paginator cuts it: a text's line, or a
+/// table's row. The first is zero.
+#[derive(PartialEq, Eq)]
+pub enum BlockLine {}
+
+impl Axis for BlockLine {
+    const NAME: &'static str = "BlockLine";
 }
 
-impl BlockLine {
-    /// The lines of the block above this one.
-    #[must_use]
-    pub const fn lines_before(self) -> BlockLineCount {
-        self.count_from(Self::ZERO)
-    }
-}
-
-impl BlockLineCount {
-    /// The lines of a table block: the paginator cuts a table at its rows.
-    #[must_use]
-    pub fn of_rows(rows: RowCount) -> Self {
-        Self::from_len(rows.to_usize())
-    }
-}
+/// The paginator cuts a table block at its rows, so a row of the table is a
+/// line of the block.
+impl CountsAs<BlockLine> for Row {}
 
 /// What one block's text measures, once broken to a width.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextMetrics {
     /// The shaped text alone, with neither margin included.
     pub text_height: Px<Doc>,
-    pub line_count: BlockLineCount,
+    pub line_count: Count<BlockLine>,
     /// The top of each line, relative to the top of the text. A break is only
     /// ever taken at one of these (`PROSE-071`).
     pub line_tops: Vec<Px<Doc>>,
@@ -261,7 +237,7 @@ impl TextMetrics {
     /// The height the first `lines` lines take. Zero for none, the whole text
     /// for every line, and the top of the next line in between.
     #[must_use]
-    pub fn height_of_first(&self, lines: BlockLineCount) -> Px<Doc> {
+    pub fn height_of_first(&self, lines: Count<BlockLine>) -> Px<Doc> {
         if lines.is_zero() {
             return Px::<Doc>::ZERO;
         }
@@ -273,10 +249,10 @@ impl TextMetrics {
 
     /// How many whole lines fit in a height. Never more than the text has.
     #[must_use]
-    pub fn lines_fitting_in(&self, height: Px<Doc>) -> BlockLineCount {
-        let mut fitting = BlockLineCount::ZERO;
+    pub fn lines_fitting_in(&self, height: Px<Doc>) -> Count<BlockLine> {
+        let mut fitting = Count::<BlockLine>::ZERO;
         for line in 1..=self.line_count.get() {
-            let lines = BlockLineCount::new(line);
+            let lines = Count::<BlockLine>::new(line);
             if self.height_of_first(lines) > height {
                 break;
             }
@@ -445,9 +421,9 @@ impl Measurer {
         (text, marks): (&str, &[MarkedSpan]),
         style: &EffectiveStyle,
         width: Px<Doc>,
-        offsets: &[DocOffset],
+        offsets: &[Pos<DocChar>],
         previous: Option<&ShapedRun>,
-    ) -> (TextMetrics, Vec<BlockLine>, ShapedRun) {
+    ) -> (TextMetrics, Vec<Pos<BlockLine>>, ShapedRun) {
         let run = previous
             .and_then(|old| self.shape_window(old.data(), (text, marks), style, width))
             .unwrap_or_else(|| {
@@ -459,8 +435,8 @@ impl Measurer {
         let lines = offsets
             .iter()
             .map(|offset| {
-                let byte = char_to_byte(text, offset.as_char());
-                run.data().line_at_byte(byte).in_block()
+                let byte = char_to_byte(text, offset.as_axis::<ambre_core::Char>());
+                run.data().line_at_byte(byte).as_axis::<BlockLine>()
             })
             .collect();
         (run_metrics(run.data()), lines, run)
@@ -645,17 +621,17 @@ pub(crate) fn reshape_window(
         .min(old.len() - prefix)
         .min(text.len() - prefix);
     let delta =
-        ByteDelta::new(isize::try_from(text.len()).ok()? - isize::try_from(old.len()).ok()?);
+        Delta::<Byte>::new(i64::try_from(text.len()).ok()? - i64::try_from(old.len()).ok()?);
     let (old_suffix, new_suffix) = (old.len() - suffix, text.len() - suffix);
     let cut = previous
-        .line_at_byte(ByteOffset::from_usize(prefix.saturating_sub(1)))
-        .saturating_sub(RunLineCount::ONE);
+        .line_at_byte(Pos::<Byte>::from_usize(prefix.saturating_sub(1)))
+        .saturating_sub(Count::<RunLine>::ONE);
     let start = previous.line_start(cut)?.to_usize();
     if start > prefix || !text.is_char_boundary(start) {
         return None;
     }
-    if clip(previous.marks(), ByteSpan::from_usize_range(0..start))
-        != clip(marks, ByteSpan::from_usize_range(0..start))
+    if clip(previous.marks(), Span::<Byte>::from_usize_range(0..start))
+        != clip(marks, Span::<Byte>::from_usize_range(0..start))
     {
         return None;
     }
@@ -663,10 +639,13 @@ pub(crate) fn reshape_window(
     // with the same marks after it. Each with where it starts now.
     let same_after = clip(
         previous.marks(),
-        ByteSpan::from_usize_range(old_suffix..old.len()),
-    ) == clip(marks, ByteSpan::from_usize_range(new_suffix..text.len()));
-    let meets: Vec<(RunLine, usize)> = if same_after {
-        RunLineSpan::new(cut.next(), previous.line_count().as_end())
+        Span::<Byte>::from_usize_range(old_suffix..old.len()),
+    ) == clip(
+        marks,
+        Span::<Byte>::from_usize_range(new_suffix..text.len()),
+    );
+    let meets: Vec<(Pos<RunLine>, usize)> = if same_after {
+        Span::<RunLine>::new(cut.next(), previous.line_count().as_end())
             .into_iter()
             .filter_map(|line| {
                 let at = previous
@@ -681,7 +660,7 @@ pub(crate) fn reshape_window(
     // Only the paragraph's first line is indented, and it is kept unless
     // the window starts there.
     let mut window_style = style.clone();
-    if cut > RunLine::ZERO {
+    if cut > Pos::<RunLine>::ZERO {
         window_style.indent_first = Px::<Doc>::ZERO;
     }
     if let Some(&(_, end)) = meets
@@ -690,7 +669,7 @@ pub(crate) fn reshape_window(
     {
         let window = shape(
             text.get(start..end)?,
-            &clip(marks, ByteSpan::from_usize_range(start..end)),
+            &clip(marks, Span::<Byte>::from_usize_range(start..end)),
             &window_style,
         );
         // The window's last line ends where its text ends, not where the
@@ -700,7 +679,7 @@ pub(crate) fn reshape_window(
             let found = meets.binary_search_by_key(&at, |&(_, now)| now).ok()?;
             let &(line, _) = meets.get(found)?;
             Some(Resume {
-                kept: LocalLineCount::from_len(local),
+                kept: Count::<LocalLine>::from_len(local),
                 line,
                 delta,
             })
@@ -711,7 +690,7 @@ pub(crate) fn reshape_window(
     }
     let window = shape(
         text.get(start..)?,
-        &clip(marks, ByteSpan::from_usize_range(start..text.len())),
+        &clip(marks, Span::<Byte>::from_usize_range(start..text.len())),
         &window_style,
     );
     ParleyRunData::with_window(previous, cut, (text, marks), window, None)
@@ -719,13 +698,13 @@ pub(crate) fn reshape_window(
 
 /// The spans of `spans` over `bytes`, cut to them and counted from its
 /// start.
-fn clip(spans: &[MarkedSpan], bytes: ByteSpan) -> Vec<MarkedSpan> {
+fn clip(spans: &[MarkedSpan], bytes: Span<Byte>) -> Vec<MarkedSpan> {
     spans
         .iter()
         .filter(|span| span.start < bytes.end && span.end > bytes.start)
         .map(|span| MarkedSpan {
-            start: ByteOffset::ZERO + span.start.max(bytes.start).count_from(bytes.start),
-            end: ByteOffset::ZERO + span.end.min(bytes.end).count_from(bytes.start),
+            start: Pos::<Byte>::ZERO + span.start.max(bytes.start).count_from(bytes.start),
+            end: Pos::<Byte>::ZERO + span.end.min(bytes.end).count_from(bytes.start),
             ..*span
         })
         .collect()
@@ -777,7 +756,7 @@ fn build(
         builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
     }
     for span in marks {
-        let range = ByteSpan::new(span.start, span.end).to_usize_range();
+        let range = Span::<Byte>::new(span.start, span.end).to_usize_range();
         if span.bold == Weight::Bold {
             builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
         }
@@ -832,7 +811,7 @@ fn metrics_of(layout: &Layout<ParleyBrush>) -> TextMetrics {
     TextMetrics {
         text_height: Px::<Doc>::new(layout.height()),
 
-        line_count: BlockLineCount::from_len(layout.len()),
+        line_count: Count::<BlockLine>::from_len(layout.len()),
         line_tops,
     }
 }
@@ -842,7 +821,7 @@ fn run_metrics(run: &ParleyRunData) -> TextMetrics {
     let line_tops = run.line_tops();
     TextMetrics {
         text_height: run.height(),
-        line_count: BlockLineCount::from_len(line_tops.len().saturating_sub(1)),
+        line_count: Count::<BlockLine>::from_len(line_tops.len().saturating_sub(1)),
         line_tops,
     }
 }
@@ -869,8 +848,7 @@ fn alignment_of(align: Align) -> Alignment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::run::RunCount;
-    use crate::layout::run::{RunOffset, RunSpan};
+    use crate::layout::run::RunChar;
     use parley::BoundingBox;
 
     fn style() -> EffectiveStyle {
@@ -899,8 +877,8 @@ mod tests {
     ) {
         let data = run.data();
         let starts = (0..data.line_count().get())
-            .filter_map(|line| data.line_start(crate::layout::run::RunLine::new(line)))
-            .map(ByteOffset::to_usize)
+            .filter_map(|line| data.line_start(Pos::<crate::layout::run::RunLine>::new(line)))
+            .map(Pos::<Byte>::to_usize)
             .collect();
         let baselines = data
             .lines()
@@ -909,7 +887,7 @@ mod tests {
         let carets = (0..=data.len().get())
             .map(|offset| {
                 let caret = data.caret_box_at(
-                    RunOffset::new(offset),
+                    Pos::<RunChar>::new(offset),
                     if offset % 2 == 0 {
                         crate::layout::run::Affinity::Upstream
                     } else {
@@ -924,9 +902,9 @@ mod tests {
             })
             .collect();
         let boxes = data
-            .range_boxes(RunSpan::new(
-                RunOffset::new(1),
-                data.len().saturating_sub(RunCount::ONE).as_end(),
+            .range_boxes(Span::<RunChar>::new(
+                Pos::<RunChar>::new(1),
+                data.len().saturating_sub(Count::<RunChar>::ONE).as_end(),
             ))
             .into_iter()
             .map(rounded)
@@ -955,8 +933,8 @@ mod tests {
         centered.align = Align::Center;
         let bold = |text: &str| {
             vec![MarkedSpan {
-                start: ByteOffset::new(20),
-                end: ByteOffset::from_usize(text.len() / 2),
+                start: Pos::<Byte>::new(20),
+                end: Pos::<Byte>::from_usize(text.len() / 2),
                 bold: Weight::Bold,
                 ..MarkedSpan::default()
             }]
@@ -1011,7 +989,7 @@ mod tests {
                 None,
             );
             assert_eq!(measurer.shaped(), before.plus(ShapedCount::new(2)));
-            if next.data().segment_count() > RunSegmentCount::ONE {
+            if next.data().segment_count() > Count::<RunSegment>::ONE {
                 partial += 1;
             }
             assert_eq!(metrics, whole_metrics, "heights after an edit at {at}");
@@ -1036,8 +1014,8 @@ mod tests {
         let base = LONG.repeat(12);
         let bold = |text: &str| {
             vec![MarkedSpan {
-                start: ByteOffset::from_usize(text.len() - 200),
-                end: ByteOffset::from_usize(text.len() - 100),
+                start: Pos::<Byte>::from_usize(text.len() - 200),
+                end: Pos::<Byte>::from_usize(text.len() - 100),
                 bold: Weight::Bold,
                 ..MarkedSpan::default()
             }]
@@ -1101,8 +1079,8 @@ mod tests {
             measurer.measure_with_lines((&text, &[]), &style, Px::<Doc>::new(300.0), &[], None);
         let edited = format!("x{text}");
         let marks = [MarkedSpan {
-            start: ByteOffset::from_usize(edited.len() - 300),
-            end: ByteOffset::from_usize(edited.len() - 10),
+            start: Pos::<Byte>::from_usize(edited.len() - 300),
+            end: Pos::<Byte>::from_usize(edited.len() - 10),
             bold: Weight::Bold,
             ..MarkedSpan::default()
         }];
@@ -1139,7 +1117,7 @@ mod tests {
             &[],
             Some(&run),
         );
-        assert_eq!(wider.data().segment_count(), RunSegmentCount::ONE);
+        assert_eq!(wider.data().segment_count(), Count::<RunSegment>::ONE);
         let (_, _, same) = measurer.measure_with_lines(
             (&longer, &[]),
             &style,
@@ -1147,7 +1125,7 @@ mod tests {
             &[],
             Some(&run),
         );
-        assert_eq!(same.data().segment_count(), RunSegmentCount::new(2));
+        assert_eq!(same.data().segment_count(), Count::<RunSegment>::new(2));
     }
 
     #[test]
@@ -1179,13 +1157,13 @@ mod tests {
         let metrics = measurer.measure(LONG, &style(), Px::<Doc>::new(200.0));
         assert_eq!(
             metrics.lines_fitting_in(Px::<Doc>::new(0.0)),
-            BlockLineCount::ZERO
+            Count::<BlockLine>::ZERO
         );
         assert_eq!(
             metrics.lines_fitting_in(metrics.text_height),
             metrics.line_count
         );
-        let two = BlockLineCount::new(2);
+        let two = Count::<BlockLine>::new(2);
         let two_lines = metrics.height_of_first(two);
         assert_eq!(metrics.lines_fitting_in(two_lines), two);
     }

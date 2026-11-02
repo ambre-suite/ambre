@@ -6,19 +6,20 @@
 
 use super::*;
 use crate::test_support::session;
+use ambre_core::index::Pos;
 
-const COL_1: Col = Col::new(1);
-const ROW_4: Row = Row::new(4);
+const COL_1: Pos<Col> = Pos::<Col>::new(1);
+const ROW_4: Pos<Row> = Pos::<Row>::new(4);
 
 /// Every non-empty cell of the active sheet in rows and columns `0..8`, as
 /// `(row, col, raw)`.
 fn cells(state: &mut TrameState) -> Vec<(u32, u32, String)> {
     let out = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(9),
-        row_start: Row::new(0),
-        row_end: Row::new(7),
-        col_start: Col::new(0),
-        col_end: Col::new(7),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(7),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(7),
     });
     let Some(TrameEvent::ViewportData { cells, .. }) = out.display.into_iter().next() else {
         panic!("expected ViewportData");
@@ -37,8 +38,8 @@ fn two_peers() -> (TrameState, TrameState) {
     let mut base = TrameState::new();
     for row in 0..4 {
         base.handle_command(TrameCommand::SetCellText {
-            row: Row::new(row),
-            col: Col::new(1),
+            row: Pos::<Row>::new(row),
+            col: Pos::<Col>::new(1),
             text: format!("b{}", row + 1),
         });
     }
@@ -79,11 +80,17 @@ fn a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above() {
     let (mut a, mut b) = two_peers();
     a.handle_command(TrameCommand::BeginCellEdit {
         session: session(1),
-        row: Row::new(3),
-        col: Col::new(1),
+        row: Pos::<Row>::new(3),
+        col: Pos::<Col>::new(1),
     });
 
-    let events = relay(&mut b, &mut a, TrameCommand::InsertRow { at: Row::new(1) });
+    let events = relay(
+        &mut b,
+        &mut a,
+        TrameCommand::InsertRow {
+            at: Pos::<Row>::new(1),
+        },
+    );
     assert!(
         events.iter().any(|e| matches!(
             e,
@@ -114,15 +121,23 @@ fn a_commit_past_the_used_range_follows_an_insert_above() {
     let (mut a, mut b) = two_peers();
     a.handle_command(TrameCommand::BeginCellEdit {
         session: session(2),
-        row: Row::new(6),
-        col: Col::new(3),
+        row: Pos::<Row>::new(6),
+        col: Pos::<Col>::new(3),
     });
 
-    relay(&mut b, &mut a, TrameCommand::InsertRow { at: Row::new(0) });
     relay(
         &mut b,
         &mut a,
-        TrameCommand::InsertColumn { at: Col::new(0) },
+        TrameCommand::InsertRow {
+            at: Pos::<Row>::new(0),
+        },
+    );
+    relay(
+        &mut b,
+        &mut a,
+        TrameCommand::InsertColumn {
+            at: Pos::<Col>::new(0),
+        },
     );
     commit(&mut a, session(2), "far");
 
@@ -135,14 +150,18 @@ fn a_commit_past_the_used_range_follows_an_insert_above() {
 #[test]
 fn a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write() {
     for delete in [
-        TrameCommand::DeleteRow { at: Row::new(2) },
-        TrameCommand::DeleteColumn { at: Col::new(1) },
+        TrameCommand::DeleteRow {
+            at: Pos::<Row>::new(2),
+        },
+        TrameCommand::DeleteColumn {
+            at: Pos::<Col>::new(1),
+        },
     ] {
         let (mut a, mut b) = two_peers();
         a.handle_command(TrameCommand::BeginCellEdit {
             session: session(3),
-            row: Row::new(2),
-            col: Col::new(1),
+            row: Pos::<Row>::new(2),
+            col: Pos::<Col>::new(1),
         });
 
         let events = relay(&mut b, &mut a, delete);
@@ -168,8 +187,8 @@ fn a_commit_after_a_tab_switch_lands_on_the_session_sheet() {
     let two = second_sheet_id(&a);
     a.handle_command(TrameCommand::BeginCellEdit {
         session: session(6),
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
     });
     a.handle_command(TrameCommand::ActivateSheet {
         sheet_id: two.clone(),
@@ -197,8 +216,8 @@ fn an_ended_session_writes_nothing() {
     let (mut a, _) = two_peers();
     a.handle_command(TrameCommand::BeginCellEdit {
         session: session(4),
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
     });
     a.handle_command(TrameCommand::EndCellEdit {
         session: session(4),
@@ -224,8 +243,8 @@ fn a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another() {
     });
     a.handle_command(TrameCommand::BeginCellEdit {
         session: session(5),
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
     });
 
     let events = relay(

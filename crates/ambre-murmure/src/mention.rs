@@ -7,7 +7,8 @@
 
 use ambre_bus::{Mention, MentionTarget, MessageDraft};
 use ambre_core::id::{Channel, Id, User};
-use ambre_core::{CharOffset, CharSpan, MemberCount, char_len};
+use ambre_core::index::{Pos, Span};
+use ambre_core::{Char, MemberCount, char_len};
 use loro::{LoroDoc, LoroText, LoroValue, TextDelta};
 
 use crate::error::MurmureError;
@@ -72,7 +73,7 @@ pub(crate) fn write(
 /// never a write (`MURMURE-152`).
 pub(crate) fn read(content: &LoroText, channel: Id<Channel>) -> Vec<Mention> {
     let mut mentions = Vec::new();
-    let mut at = CharOffset::ZERO;
+    let mut at = Pos::<Char>::ZERO;
     for span in content.to_delta() {
         let TextDelta::Insert { insert, attributes } = span else {
             continue;
@@ -85,7 +86,7 @@ pub(crate) fn read(content: &LoroText, channel: Id<Channel>) -> Vec<Mention> {
         if let Some(target) = target {
             mentions.push(Mention {
                 target,
-                range: CharSpan::from_count(at, len),
+                range: Span::<Char>::from_count(at, len),
             });
         }
         at += len;

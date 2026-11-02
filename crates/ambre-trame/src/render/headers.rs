@@ -5,6 +5,7 @@
 // the `use super::*` glob (the parent re-exports every renderer item).
 
 use super::*;
+use ambre_core::index::{Count, Pos};
 
 // -----------------------------------------------------------------------------
 // draw_col_headers_on / draw_row_headers_on -- fixed header strips
@@ -22,8 +23,8 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
-    active_col: Option<Col>,
-    hover_col: Option<Col>,
+    active_col: Option<Pos<Col>>,
+    hover_col: Option<Pos<Col>>,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     text_pass: TextPass,
@@ -147,8 +148,8 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
-    active_row: Option<Row>,
-    hover_row: Option<Row>,
+    active_row: Option<Pos<Row>>,
+    hover_row: Option<Pos<Row>>,
     hover_corner: CornerHover,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
@@ -211,7 +212,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // so the numbers read as discrete buttons (`trame-headers`). Walks the collapsed
     // (filtered) row space like the number loop, independent of `text_pass`.
     {
-        let mut slot = RowCount::ZERO;
+        let mut slot = Count::<Row>::ZERO;
         let mut row_y = cells_top;
         while let Some(row) = layout.row_at_slot(slot) {
             if row_y >= h {
@@ -224,7 +225,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
                 ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
             row_y = edge;
-            slot += RowCount::ONE;
+            slot += Count::<Row>::ONE;
         }
     }
 
@@ -241,7 +242,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // Walk the visible rows, accumulating their variable heights. `slot` only
     // tracks how many visible rows we have drawn (for `row_at_slot`); `row_y` is
     // the running pixel top.
-    let mut slot = RowCount::ZERO;
+    let mut slot = Count::<Row>::ZERO;
     let mut row_y = cells_top;
     while let Some(row) = layout.row_at_slot(slot) {
         if row_y >= h {
@@ -269,7 +270,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             surface.pop_clip();
         }
         row_y += rh;
-        slot += RowCount::ONE;
+        slot += Count::<Row>::ONE;
     }
     surface.pop_clip();
 }

@@ -14,10 +14,11 @@
 //! `fixtures` feature. No client build names it, so none of it can reach a wasm
 //! artifact.
 
+use crate::index::Count;
 use serde::{Deserialize, Serialize};
 
 use crate::id::{Document, Id};
-use crate::{CellCount, CharCount, DocType, ElementCount};
+use crate::{CellCount, Char, DocType, ElementCount};
 
 // -----------------------------------------------------------------------------
 // Generator identity
@@ -316,7 +317,7 @@ pub enum ShapeBody {
     },
     Prose {
         blocks: DocBlockCount,
-        characters: CharCount,
+        characters: Count<Char>,
     },
 }
 

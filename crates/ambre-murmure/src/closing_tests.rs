@@ -1,7 +1,8 @@
 //! The close of the active segment against its contract rows. They hold the
 //! size that asks for it, the states it writes, and two writers of one close.
 
-use ambre_bus::CharSpan;
+use ambre_bus::Char;
+use ambre_core::index::Span;
 use std::collections::HashMap;
 
 use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent, StyleMark, TextStyle};
@@ -11,6 +12,7 @@ use ambre_core::{ByteSize, DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotByt
 use crate::channel::live_segments;
 use crate::session::next_peer;
 use crate::{ChannelState, ChannelType, MurmureError, Signer};
+use ambre_core::{Ms, TimeSpan};
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
@@ -115,7 +117,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
         closing,
         Id::<Lease>::mint(),
         ambre_core::Seq::new(1),
-        ambre_core::TimeSpan::<ambre_core::Ms>::new(60_000),
+        TimeSpan::<Ms>::new(60_000),
     );
     alice.mark_final(closing).expect("mark").expect("a delta");
     assert_eq!(alice.closing_id(), None, "the slot is free");
@@ -377,7 +379,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     // `MURMURE-562`: the moved message keeps its styles.
     let code = StyleMark {
         style: TextStyle::Code,
-        range: CharSpan::from_usize_range(0..4),
+        range: Span::<Char>::from_usize_range(0..4),
     };
     let styled = MessageDraft {
         styles: vec![code.clone()],

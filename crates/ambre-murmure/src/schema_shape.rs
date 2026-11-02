@@ -24,7 +24,8 @@
 //! answer. The migration belt freezes what each step writes, and the registry
 //! holds no step yet.
 
-use ambre_bus::CharSpan;
+use ambre_bus::Char;
+use ambre_core::index::Span;
 use std::collections::BTreeSet;
 
 use ambre_bus::{
@@ -229,7 +230,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
                 styles: Vec::new(),
                 mentions: vec![Mention {
                     target: MentionTarget::Channel,
-                    range: CharSpan::from_usize_range(6..14),
+                    range: Span::<Char>::from_usize_range(6..14),
                 }],
             },
             &[file],
@@ -383,12 +384,12 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
             .into_iter()
             .map(|style| StyleMark {
                 style,
-                range: CharSpan::from_usize_range(0..2),
+                range: Span::<Char>::from_usize_range(0..2),
             })
             .collect(),
         mentions: vec![Mention {
             target: MentionTarget::Channel,
-            range: CharSpan::from_usize_range(3..11),
+            range: Span::<Char>::from_usize_range(3..11),
         }],
     };
     state

@@ -74,14 +74,15 @@ pub trait Tick:
     const ZERO: Self;
 
     /// The ticks of the unit `U` that `duration` covers. A whole count
-    /// rounds down and saturates at `u64::MAX`.
-    fn of_duration<U: TimeUnit>(duration: Duration) -> Self;
+    /// rounds down and saturates at `u64::MAX`. The bound keeps a unit to
+    /// the number it holds, so `u64` never counts a float unit.
+    fn of_duration<U: TimeUnit<Repr = Self>>(duration: Duration) -> Self;
 }
 
 impl Tick for u64 {
     const ZERO: Self = 0;
 
-    fn of_duration<U: TimeUnit>(duration: Duration) -> Self {
+    fn of_duration<U: TimeUnit<Repr = Self>>(duration: Duration) -> Self {
         let ticks = duration
             .as_nanos()
             .saturating_mul(u128::from(U::PER_SECOND))
@@ -94,7 +95,7 @@ impl Tick for f64 {
     const ZERO: Self = 0.0;
 
     #[allow(clippy::cast_precision_loss)]
-    fn of_duration<U: TimeUnit>(duration: Duration) -> Self {
+    fn of_duration<U: TimeUnit<Repr = Self>>(duration: Duration) -> Self {
         duration.as_secs_f64() * U::PER_SECOND as Self
     }
 }

@@ -11,6 +11,7 @@
 use ambre_bus::{AppCommand, StylePatch, TrameCommand};
 use ambre_chrome::commands::{ClipboardWrite, CommandId, PasteForm};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
+use ambre_core::index::Pos;
 use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;
 
@@ -46,7 +47,7 @@ impl TrameHandler {
         let at = client_anchor(self.anchor.get_untracked());
         // `col` is provisional; the ColumnValues reply carries the real one.
         self.filter_popover.set(Some(FilterPopoverState {
-            col: ambre_bus::Col::ZERO,
+            col: Pos::<ambre_bus::Col>::ZERO,
             at,
         }));
         self.filter_values.set(Vec::new());
@@ -117,8 +118,8 @@ impl CommandHandler for TrameHandler {
                         delimiter: None,
                         header: ambre_bus::HeaderRow::Absent,
                         target_sheet_id: None,
-                        start_row: ambre_bus::Row::ZERO,
-                        start_col: ambre_bus::Col::ZERO,
+                        start_row: Pos::<ambre_bus::Row>::ZERO,
+                        start_col: Pos::<ambre_bus::Col>::ZERO,
                     })
                 }),
             }),

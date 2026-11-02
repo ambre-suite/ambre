@@ -2,11 +2,12 @@
 //! Logic thread's answers fed back (`features/ambre-spec-prose-text-editing.md`,
 //! `features/ambre-spec-prose-selection.md`).
 
-use crate::layout::run::{Affinity, RunCount, RunOffset};
+use crate::layout::run::{Affinity, RunChar};
 use ambre_bus::PasteSource;
-use ambre_bus::app::prose::DocOffset;
-use ambre_bus::app::prose::DocSpan;
+use ambre_bus::app::prose::DocChar;
 use ambre_commands::ClipboardWrite;
+use ambre_core::index::Pos;
+use ambre_core::index::{Count, Span};
 use ambre_core::{Doc, Px, View};
 use ambre_draw::HitTest;
 
@@ -15,6 +16,7 @@ use crate::input::{ProseInput, ProseKey};
 use crate::logic::ProseState;
 use crate::ui::{ProseUiState, SendResult};
 use crate::view::tests::{append, down, view_at};
+use ambre_core::{Instant, PageLoad};
 
 /// One peer: its Logic side, its view, and the commands the view sent that
 /// have not reached the Logic side yet.
@@ -83,12 +85,7 @@ impl Rig {
         self.input(ProseInput::Text(text.to_owned()))
     }
 
-    fn press(
-        &mut self,
-        (x, y): (f32, f32),
-        shift: bool,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
-    ) -> bool {
+    fn press(&mut self, (x, y): (f32, f32), shift: bool, now: Instant<PageLoad>) -> bool {
         self.input(ProseInput::Press {
             at: view_at(x, y),
             mods: ambre_commands::Modifiers::NONE
@@ -138,7 +135,7 @@ impl Rig {
             .expect("the block is laid out");
         let placed = &layout.blocks[index.to_usize()];
         let run = ui.shaped.blocks[&placed.block_id].data();
-        let caret = run.caret_box(RunOffset::new(offset));
+        let caret = run.caret_box(Pos::<RunChar>::new(offset));
         let x = layout.margin_left
             + run.indent()
             + Px::<Doc>::new(caret.x0 as f32)
@@ -176,18 +173,18 @@ fn words(n: usize) -> String {
 fn typing_fills_the_draft_and_sends_one_insertion_per_run() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     assert!(rig.type_text(" w\u{e9}"));
     assert_eq!(
         rig.sent,
         vec![ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::new(5),
+            pos: Pos::<DocChar>::new(5),
             text: " w\u{e9}".to_owned(),
         }]
     );
     assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello w\u{e9}"));
-    assert_eq!(rig.caret().offset, DocOffset::new(8));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(8));
     // Nothing reached the document: the view wrote its own state alone.
     assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello"));
     rig.deliver();
@@ -199,14 +196,14 @@ fn typing_fills_the_draft_and_sends_one_insertion_per_run() {
 fn a_dropped_insertion_leaves_no_echo() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     let _ = rig
         .ui
         .handle_input(&ProseInput::Text("x".to_owned()), &mut |_| {
             SendResult::Dropped
         });
     assert!(rig.ui.draft.is_empty());
-    assert_eq!(rig.caret().offset, DocOffset::new(5));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(5));
 }
 
 /// `PROSE-UI-138`: each keystroke is an entry of the draft, and a block keeps
@@ -215,11 +212,11 @@ fn a_dropped_insertion_leaves_no_echo() {
 fn each_keystroke_is_its_own_entry_of_the_draft() {
     let mut rig = Rig::new(&["hello", "world"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
-    rig.ui.set_caret((first, DocOffset::ZERO));
+    rig.ui.set_caret((first, Pos::<DocChar>::ZERO));
     rig.type_text("a");
     rig.type_text("b");
     assert_eq!(rig.ui.shown_text(first).as_deref(), Some("abhello"));
-    rig.ui.set_caret((second, DocOffset::new(2)));
+    rig.ui.set_caret((second, Pos::<DocChar>::new(2)));
     rig.type_text("c");
     assert_eq!(rig.ui.shown_text(second).as_deref(), Some("wocrld"));
     assert_eq!(rig.ui.shown_text(first).as_deref(), Some("abhello"));
@@ -232,7 +229,7 @@ fn each_keystroke_is_its_own_entry_of_the_draft() {
 fn a_split_never_enters_the_draft() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.type_text("!");
     rig.key(ProseKey::Backspace, false, false);
     assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello"));
@@ -245,7 +242,7 @@ fn a_split_never_enters_the_draft() {
             ProseCommand::InsertText { .. },
             ProseCommand::DeleteText { range, .. },
             ProseCommand::SplitBlock { pos, .. },
-        ] if *range == DocSpan::new(DocOffset::new(5), DocOffset::new(6)) && *pos == DocOffset::new(5)
+        ] if *range == Span::<DocChar>::new(Pos::<DocChar>::new(5), Pos::<DocChar>::new(6)) && *pos == Pos::<DocChar>::new(5)
     ));
 }
 
@@ -255,9 +252,9 @@ fn a_split_never_enters_the_draft() {
 fn a_deletion_leaves_the_text_typed_before_it_drawn() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.type_text("abc");
-    rig.ui.set_caret((block, DocOffset::new(1)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(1)));
     rig.key(ProseKey::Backspace, false, false);
     assert_eq!(rig.ui.shown_text(block).as_deref(), Some("elloabc"));
     let mut font_cx = parley::FontContext::new();
@@ -268,7 +265,7 @@ fn a_deletion_leaves_the_text_typed_before_it_drawn() {
     rig.ui.shape_draft(&mut font_cx, &mut layout_cx);
     let drawn = rig.ui.run_of(block).map(|run| run.text().to_owned());
     assert_eq!(drawn.as_deref(), Some("elloabc"));
-    assert_eq!(rig.caret().offset, DocOffset::ZERO);
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::ZERO);
     rig.deliver();
     rig.lay();
     assert_eq!(rig.logic.text_of(&block).as_deref(), Some("elloabc"));
@@ -281,13 +278,13 @@ fn a_deletion_leaves_the_text_typed_before_it_drawn() {
 fn two_deletes_before_the_layout_never_split_a_grapheme() {
     let mut rig = Rig::new(&["xae\u{301}z"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(1)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(1)));
     rig.key(ProseKey::Delete, false, false);
     rig.key(ProseKey::Delete, false, false);
     rig.deliver();
     rig.lay();
     assert_eq!(rig.logic.text_of(&block).as_deref(), Some("xz"));
-    assert_eq!(rig.caret().offset, DocOffset::new(1));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(1));
 }
 
 /// `PROSE-UI-139`: typing changes no structure, no paragraph setting and no
@@ -298,14 +295,14 @@ fn typing_leaves_the_structure_the_settings_and_the_marks_alone() {
     let block = rig.blocks()[0];
     rig.logic.handle_command(ProseCommand::ApplyMark {
         block_id: block,
-        range: DocSpan::from_usize_range(0..3),
+        range: Span::<DocChar>::from_usize_range(0..3),
         key: "b".into(),
         value: None,
     });
     rig.lay();
     let blocks = rig.logic.root_blocks();
     let style = rig.logic.paragraph_style_of(&block);
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.type_text("XY");
     rig.deliver();
     assert_eq!(rig.logic.root_blocks(), blocks);
@@ -324,14 +321,14 @@ fn typing_leaves_the_structure_the_settings_and_the_marks_alone() {
 fn a_confirmed_run_leaves_the_draft_once_it_is_laid_out() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.type_text("!");
     rig.deliver();
     // Confirmed, and still drawn: the layout in force does not carry it yet.
     assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello!"));
     rig.lay();
     assert!(rig.ui.draft.is_empty());
-    assert_eq!(rig.caret().offset, DocOffset::new(6));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(6));
 }
 
 /// A second peer over the same document, for the changes the view did not
@@ -363,14 +360,14 @@ fn a_remote_insertion_before_the_draft_shifts_it() {
     let mut rig = Rig::new(&["hello world"]);
     let block = rig.blocks()[0];
     let mut other = a_collaborator(&rig);
-    rig.ui.set_caret((block, DocOffset::new(6)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(6)));
     rig.type_text("big ");
     receive(
         &mut rig,
         &mut other,
         ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: ">> ".to_owned(),
         },
     );
@@ -378,7 +375,7 @@ fn a_remote_insertion_before_the_draft_shifts_it() {
         rig.ui.draft.text_of(block, ">> hello world"),
         ">> hello big world"
     );
-    assert_eq!(rig.caret().offset, DocOffset::new(13));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(13));
     // The insertion was sent before the view saw the collaborator's, and it
     // still lands where it was typed.
     rig.deliver();
@@ -398,11 +395,11 @@ fn typing_in_flight_and_a_remote_deletion_land_on_one_text() {
         let mut rig = Rig::new(&["hello world"]);
         let block = rig.blocks()[0];
         let mut other = a_collaborator(&rig);
-        rig.ui.set_caret((block, DocOffset::new(6)));
+        rig.ui.set_caret((block, Pos::<DocChar>::new(6)));
         rig.type_text("big ");
         let deletion = ProseCommand::DeleteText {
             block_id: block,
-            range: DocSpan::from_usize_range(0..6),
+            range: Span::<DocChar>::from_usize_range(0..6),
         };
         if remote_first {
             receive(&mut rig, &mut other, deletion);
@@ -410,7 +407,7 @@ fn typing_in_flight_and_a_remote_deletion_land_on_one_text() {
             rig.deliver();
             receive(&mut rig, &mut other, deletion);
         }
-        assert_eq!(rig.caret().offset, DocOffset::new(4));
+        assert_eq!(rig.caret().offset, Pos::<DocChar>::new(4));
         rig.type_text("!");
         rig.deliver();
         rig.lay();
@@ -425,7 +422,7 @@ fn typing_in_flight_and_a_remote_deletion_land_on_one_text() {
 fn typing_right_after_enter_lands_in_the_new_paragraph() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.key(ProseKey::Enter, false, false);
     assert!(rig.type_text("x"));
     assert_eq!(rig.ui.queued.len(), 1);
@@ -444,14 +441,14 @@ fn the_draft_is_dropped_only_with_its_block() {
     let mut rig = Rig::new(&["one", "two"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
     let mut other = a_collaborator(&rig);
-    rig.ui.set_caret((second, DocOffset::new(3)));
+    rig.ui.set_caret((second, Pos::<DocChar>::new(3)));
     rig.type_text("!");
     receive(
         &mut rig,
         &mut other,
         ProseCommand::InsertText {
             block_id: first,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "x".to_owned(),
         },
     );
@@ -481,15 +478,15 @@ fn deleting_a_table_drops_the_draft_in_its_cell() {
     rig.logic.handle_command(ProseCommand::InsertTable {
         parent_id: None,
         after_id: Some(first),
-        rows: crate::events::grid::RowCount::new(1),
-        cols: crate::events::grid::ColCount::new(1),
+        rows: Count::<crate::events::grid::Row>::new(1),
+        cols: Count::<crate::events::grid::Col>::new(1),
     });
     rig.lay();
     let table = the_table(&rig.logic);
     let cell =
         crate::events::block_id(first_block_of(&rig.logic, cell_at(&rig.logic, table, 0, 0)));
     let mut other = a_collaborator(&rig);
-    rig.ui.set_caret((cell, DocOffset::ZERO));
+    rig.ui.set_caret((cell, Pos::<DocChar>::ZERO));
     rig.type_text("!");
     rig.deliver();
     receive(
@@ -510,14 +507,17 @@ fn the_caret_of_a_deleted_block_collapses_beside_it() {
     let mut rig = Rig::new(&["one", "two"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
     let mut other = a_collaborator(&rig);
-    rig.ui.set_caret((second, DocOffset::new(2)));
+    rig.ui.set_caret((second, Pos::<DocChar>::new(2)));
     receive(
         &mut rig,
         &mut other,
         ProseCommand::DeleteBlock { block_id: second },
     );
     let caret = rig.caret();
-    assert_eq!((caret.block_id, caret.offset), (first, DocOffset::new(3)));
+    assert_eq!(
+        (caret.block_id, caret.offset),
+        (first, Pos::<DocChar>::new(3))
+    );
 }
 
 // -- Pressing -----------------------------------------------------------------
@@ -531,15 +531,11 @@ fn a_press_places_the_caret_and_collapses_the_selection() {
     rig.ui.select_all();
     let scroll = rig.ui.viewport.scroll_y;
     let point = rig.point_of(block, 4);
-    assert!(rig.press(
-        point,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
-    ));
+    assert!(rig.press(point, false, Instant::<PageLoad>::new(0.0)));
     let caret = rig.caret();
     assert_eq!(
         (caret.block_id, caret.offset, caret.anchor),
-        (block, DocOffset::new(4), None)
+        (block, Pos::<DocChar>::new(4), None)
     );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     assert_eq!(rig.ui.runs.built(), crate::view::cache::BuildCount::ZERO);
@@ -553,17 +549,13 @@ fn a_press_in_the_margin_resolves_to_the_nearest_caret() {
     let block = rig.blocks()[0];
     let (_, y) = rig.point_of(block, 0);
     let left = rig.ui.column.left(&rig.ui.viewport);
-    assert!(rig.press(
-        (left.get() + 2.0, y),
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
-    ));
-    assert_eq!(rig.caret().offset, DocOffset::ZERO);
+    assert!(rig.press((left.get() + 2.0, y), false, Instant::<PageLoad>::new(0.0)));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::ZERO);
     let bottom = rig.ui.viewport.height - Px::<View>::new(2.0);
     assert!(rig.press(
         (left.get() + 400.0, bottom.get()),
         false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(1000.0)
+        Instant::<PageLoad>::new(1000.0)
     ));
     assert!(rig.ui.cursor.is_some());
 }
@@ -591,23 +583,19 @@ fn a_block_without_text_resolves_to_the_edge_on_the_pointers_side() {
         + placed.height / 2.0;
     let y = (y_doc - rig.ui.viewport.scroll_y).get();
     let left = rig.ui.column.left(&rig.ui.viewport).get() + layout.margin_left.get();
-    rig.press(
-        (left + 5.0, y),
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.press((left + 5.0, y), false, Instant::<PageLoad>::new(0.0));
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
-        (before, DocOffset::new(6))
+        (before, Pos::<DocChar>::new(6))
     );
     rig.press(
         (left + layout.content_width.get() - 5.0, y),
         false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(1000.0),
+        Instant::<PageLoad>::new(1000.0),
     );
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
-        (after, DocOffset::ZERO)
+        (after, Pos::<DocChar>::ZERO)
     );
 }
 
@@ -618,35 +606,25 @@ fn a_second_press_selects_the_word_and_a_third_the_paragraph() {
     let mut rig = Rig::new(&["hello brave world"]);
     let block = rig.blocks()[0];
     let point = rig.point_of(block, 8);
-    rig.press(
-        point,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
-    rig.press(
-        point,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(100.0),
-    );
+    rig.press(point, false, Instant::<PageLoad>::new(0.0));
+    rig.press(point, false, Instant::<PageLoad>::new(100.0));
     assert_eq!(
         rig.ui.selection(),
-        Some(((block, DocOffset::new(6)), (block, DocOffset::new(11))))
+        Some((
+            (block, Pos::<DocChar>::new(6)),
+            (block, Pos::<DocChar>::new(11))
+        ))
     );
-    rig.press(
-        point,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(200.0),
-    );
+    rig.press(point, false, Instant::<PageLoad>::new(200.0));
     assert_eq!(
         rig.ui.selection(),
-        Some(((block, DocOffset::ZERO), (block, DocOffset::new(17))))
+        Some((
+            (block, Pos::<DocChar>::ZERO),
+            (block, Pos::<DocChar>::new(17))
+        ))
     );
     // Too late for a fourth: a plain press again.
-    rig.press(
-        point,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(2000.0),
-    );
+    rig.press(point, false, Instant::<PageLoad>::new(2000.0));
     assert_eq!(rig.ui.selection(), None);
 }
 
@@ -657,24 +635,23 @@ fn a_second_press_selects_the_word_and_a_third_the_paragraph() {
 fn a_third_press_selects_the_text_drafted_at_the_blocks_end() {
     let mut rig = Rig::new(&["hello brave world"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(17)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(17)));
     rig.type_text("!!");
     let point = rig.point_of(block, 8);
     for at in [0.0, 100.0, 200.0] {
-        rig.press(
-            point,
-            false,
-            ambre_core::Instant::<ambre_core::PageLoad>::new(at),
-        );
+        rig.press(point, false, Instant::<PageLoad>::new(at));
     }
     assert_eq!(
         rig.ui.selection(),
-        Some(((block, DocOffset::ZERO), (block, DocOffset::new(19))))
+        Some((
+            (block, Pos::<DocChar>::ZERO),
+            (block, Pos::<DocChar>::new(19))
+        ))
     );
     rig.ui.select_all();
     assert_eq!(
         rig.ui.selection().map(|(_, end)| end),
-        Some((block, DocOffset::new(19)))
+        Some((block, Pos::<DocChar>::new(19)))
     );
 }
 
@@ -691,14 +668,14 @@ fn a_move_to_a_blocks_end_lands_after_its_draft() {
     ] {
         let mut rig = Rig::new(&["hello", "world"]);
         let blocks = rig.blocks();
-        rig.ui.set_caret((blocks[drafted], DocOffset::new(5)));
+        rig.ui.set_caret((blocks[drafted], Pos::<DocChar>::new(5)));
         rig.type_text("xyz");
-        rig.ui.set_caret((blocks[from], DocOffset::ZERO));
+        rig.ui.set_caret((blocks[from], Pos::<DocChar>::ZERO));
         rig.key(key, false, false);
         let caret = rig.caret();
         assert_eq!(
             (caret.block_id, caret.offset),
-            (blocks[drafted], DocOffset::new(8)),
+            (blocks[drafted], Pos::<DocChar>::new(8)),
             "{key:?}"
         );
     }
@@ -711,13 +688,13 @@ fn the_hit_test_answers_a_document_offset_while_drafts_wait() {
     let mut rig = Rig::new(&["hello brave world"]);
     let block = rig.blocks()[0];
     let (x, y) = rig.point_of(block, 8);
-    rig.ui.set_caret((block, DocOffset::ZERO));
+    rig.ui.set_caret((block, Pos::<DocChar>::ZERO));
     rig.type_text("ab");
     let hit = rig.ui.hit_test(ambre_core::Point::new(
         Px::<View>::new(x),
         Px::<View>::new(y),
     ));
-    assert_eq!(hit, Some((block, DocOffset::new(10))));
+    assert_eq!(hit, Some((block, Pos::<DocChar>::new(10))));
 }
 
 /// `PROSE-UI-072`: a press on a document holding no block asks for one, and
@@ -733,7 +710,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
         Arc::new(crate::layout::pass::PageLayout {
             page_width: Px::<Doc>::new(800.0),
             page_height: Px::<Doc>::new(1000.0),
-            page_count: crate::events::PageCount::ONE,
+            page_count: Count::<crate::events::Page>::ONE,
             ..crate::layout::pass::PageLayout::default()
         }),
         HashMap::new(),
@@ -745,7 +722,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let press = ProseInput::Press {
         at: view_at(600.0, 100.0),
         mods: ambre_commands::Modifiers::NONE,
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        now: Instant::<PageLoad>::new(0.0),
     };
     assert!(
         ui.handle_input(&press, &mut |command| {
@@ -776,7 +753,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let first = logic.root_blocks()[0];
     assert_eq!(
         ui.cursor.map(|c| (c.block_id, c.offset)),
-        Some((first, DocOffset::ZERO))
+        Some((first, Pos::<DocChar>::ZERO))
     );
 }
 
@@ -786,19 +763,19 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
 fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
     let mut ui = ProseUiState::default();
     let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
-    ui.set_caret((block, DocOffset::new(3)));
+    ui.set_caret((block, Pos::<DocChar>::new(3)));
     let consumed = ui.handle_input(
         &ProseInput::Press {
             at: view_at(10.0, 10.0),
             mods: ambre_commands::Modifiers::NONE,
-            now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+            now: Instant::<PageLoad>::new(0.0),
         },
         &mut |_| SendResult::Sent,
     );
     assert!(!consumed.is_yes());
     assert_eq!(
         ui.cursor.map(|c| (c.block_id, c.offset)),
-        Some((block, DocOffset::new(3)))
+        Some((block, Pos::<DocChar>::new(3)))
     );
 }
 
@@ -812,22 +789,25 @@ fn a_backwards_selection_is_read_in_order() {
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
     rig.ui.cursor = Some(CursorPosition {
         block_id: first,
-        offset: DocOffset::new(1),
-        anchor: Some((second, DocOffset::new(2))),
+        offset: Pos::<DocChar>::new(1),
+        anchor: Some((second, Pos::<DocChar>::new(2))),
     });
     assert_eq!(
         rig.ui.selection(),
-        Some(((first, DocOffset::new(1)), (second, DocOffset::new(2))))
+        Some((
+            (first, Pos::<DocChar>::new(1)),
+            (second, Pos::<DocChar>::new(2))
+        ))
     );
     rig.key(ProseKey::Delete, false, false);
     assert_eq!(
         rig.sent,
         vec![ProseCommand::DeleteRange {
-            anchor: (first, DocOffset::new(1)),
-            focus: (second, DocOffset::new(2)),
+            anchor: (first, Pos::<DocChar>::new(1)),
+            focus: (second, Pos::<DocChar>::new(2)),
         }]
     );
-    assert_eq!(rig.caret().offset, DocOffset::new(1));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(1));
     assert_eq!(rig.caret().block_id, first);
 }
 
@@ -839,8 +819,8 @@ fn typing_over_a_selection_deletes_it_first() {
     let block = rig.blocks()[0];
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(11),
-        anchor: Some((block, DocOffset::new(6))),
+        offset: Pos::<DocChar>::new(11),
+        anchor: Some((block, Pos::<DocChar>::new(6))),
     });
     rig.type_text("there");
     rig.deliver();
@@ -855,16 +835,16 @@ fn typing_over_a_selection_deletes_it_first() {
 fn shift_extends_from_a_fixed_anchor_and_a_plain_move_collapses() {
     let mut rig = Rig::new(&["hello world"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(2)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(2)));
     rig.key(ProseKey::Right, true, false);
     rig.key(ProseKey::Right, true, false);
     rig.key(ProseKey::Right, true, true);
     let caret = rig.caret();
-    assert_eq!(caret.anchor, Some((block, DocOffset::new(2))));
-    assert_eq!(caret.offset, DocOffset::new(5));
+    assert_eq!(caret.anchor, Some((block, Pos::<DocChar>::new(2))));
+    assert_eq!(caret.offset, Pos::<DocChar>::new(5));
     rig.key(ProseKey::Left, false, false);
     assert_eq!(rig.caret().anchor, None);
-    assert_eq!(rig.caret().offset, DocOffset::new(4));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(4));
 }
 
 /// The arrows cross the edge of a block into the next one.
@@ -872,16 +852,16 @@ fn shift_extends_from_a_fixed_anchor_and_a_plain_move_collapses() {
 fn the_arrows_cross_into_the_next_block() {
     let mut rig = Rig::new(&["ab", "cd"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
-    rig.ui.set_caret((first, DocOffset::new(2)));
+    rig.ui.set_caret((first, Pos::<DocChar>::new(2)));
     rig.key(ProseKey::Right, false, false);
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
-        (second, DocOffset::ZERO)
+        (second, Pos::<DocChar>::ZERO)
     );
     rig.key(ProseKey::Left, false, false);
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
-        (first, DocOffset::new(2))
+        (first, Pos::<DocChar>::new(2))
     );
 }
 
@@ -892,16 +872,16 @@ fn a_run_of_vertical_moves_keeps_its_column() {
     let long = words(6);
     let mut rig = Rig::new(&[&long, "ab", &long]);
     let blocks = rig.blocks();
-    rig.ui.set_caret((blocks[0], DocOffset::new(20)));
+    rig.ui.set_caret((blocks[0], Pos::<DocChar>::new(20)));
     rig.key(ProseKey::Down, false, false);
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
-        (blocks[1], DocOffset::new(2))
+        (blocks[1], Pos::<DocChar>::new(2))
     );
     rig.key(ProseKey::Down, false, false);
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
-        (blocks[2], DocOffset::new(20))
+        (blocks[2], Pos::<DocChar>::new(20))
     );
     // A horizontal move ends the run.
     rig.key(ProseKey::Left, false, false);
@@ -919,13 +899,18 @@ fn home_and_end_honour_the_wrapped_line() {
     let second_line = {
         let run = rig.ui.run_of(block).expect("a run");
         assert!(run.line_count().get() > 2);
-        run.at_line(crate::layout::run::RunLine::new(1), Px::<Doc>::new(5.0))
-            .0
+        run.at_line(
+            Pos::<crate::layout::run::RunLine>::new(1),
+            Px::<Doc>::new(5.0),
+        )
+        .0
     };
-    rig.ui
-        .set_caret((block, (second_line + RunCount::new(2)).as_doc()));
+    rig.ui.set_caret((
+        block,
+        (second_line + Count::<RunChar>::new(2)).as_axis::<DocChar>(),
+    ));
     rig.key(ProseKey::End, false, false);
-    let end = RunOffset::from_doc(rig.caret().offset);
+    let end = rig.caret().offset.as_axis::<RunChar>();
     assert!(end < run_len);
     assert_eq!(
         rig.ui.caret_affinity,
@@ -935,15 +920,15 @@ fn home_and_end_honour_the_wrapped_line() {
     let run = rig.ui.run_of(block).expect("a run");
     assert_eq!(
         run.line_of(end, Affinity::Upstream),
-        crate::layout::run::RunLine::new(1)
+        Pos::<crate::layout::run::RunLine>::new(1)
     );
     rig.key(ProseKey::Home, false, false);
-    let start = RunOffset::from_doc(rig.caret().offset);
-    assert!(start > RunOffset::ZERO && start <= second_line);
+    let start = rig.caret().offset.as_axis::<RunChar>();
+    assert!(start > Pos::<RunChar>::ZERO && start <= second_line);
     let run = rig.ui.run_of(block).expect("a run");
     assert_eq!(
         run.line_of(start, Affinity::Downstream),
-        crate::layout::run::RunLine::new(1)
+        Pos::<crate::layout::run::RunLine>::new(1)
     );
 }
 
@@ -955,7 +940,7 @@ fn every_move_leaves_the_caret_on_screen() {
     let paragraphs: Vec<&str> = vec![long.as_str(); 60];
     let mut rig = Rig::new(&paragraphs);
     let first = rig.blocks()[0];
-    rig.ui.set_caret((first, DocOffset::ZERO));
+    rig.ui.set_caret((first, Pos::<DocChar>::ZERO));
     let moves = [
         (ProseKey::End, true),
         (ProseKey::Down, false),
@@ -991,25 +976,27 @@ fn every_move_leaves_the_caret_on_screen() {
 fn a_drag_grows_from_the_anchor_its_press_captured() {
     let mut rig = Rig::new(&["hello world", "second line"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
-    rig.press(
-        rig.point_of(first, 3),
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.press(rig.point_of(first, 3), false, Instant::<PageLoad>::new(0.0));
     let scroll = rig.ui.viewport.scroll_y;
     let (x, y) = rig.point_of(second, 4);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(
         rig.ui.selection(),
-        Some(((first, DocOffset::new(3)), (second, DocOffset::new(4))))
+        Some((
+            (first, Pos::<DocChar>::new(3)),
+            (second, Pos::<DocChar>::new(4))
+        ))
     );
     // Upward, past the anchor: the anchor holds, the ends swap order.
     let (x, y) = rig.point_of(first, 1);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
-    assert_eq!(rig.caret().anchor, Some((first, DocOffset::new(3))));
+    assert_eq!(rig.caret().anchor, Some((first, Pos::<DocChar>::new(3))));
     assert_eq!(
         rig.ui.selection(),
-        Some(((first, DocOffset::new(1)), (first, DocOffset::new(3))))
+        Some((
+            (first, Pos::<DocChar>::new(1)),
+            (first, Pos::<DocChar>::new(3))
+        ))
     );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     rig.input(ProseInput::Release);
@@ -1024,11 +1011,7 @@ fn a_remote_change_does_not_move_the_anchor_of_a_drag() {
     let mut rig = Rig::new(&["hello world"]);
     let block = rig.blocks()[0];
     let mut other = a_collaborator(&rig);
-    rig.press(
-        rig.point_of(block, 6),
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.press(rig.point_of(block, 6), false, Instant::<PageLoad>::new(0.0));
     let (x, y) = rig.point_of(block, 9);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
     receive(
@@ -1036,11 +1019,11 @@ fn a_remote_change_does_not_move_the_anchor_of_a_drag() {
         &mut other,
         ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "abc".to_owned(),
         },
     );
-    assert_eq!(rig.caret().anchor, Some((block, DocOffset::new(6))));
+    assert_eq!(rig.caret().anchor, Some((block, Pos::<DocChar>::new(6))));
 }
 
 // -- Escape and select all ----------------------------------------------------
@@ -1052,22 +1035,18 @@ fn a_remote_change_does_not_move_the_anchor_of_a_drag() {
 fn escape_collapses_and_cancels_the_drag() {
     let mut rig = Rig::new(&["hello world"]);
     let block = rig.blocks()[0];
-    rig.press(
-        rig.point_of(block, 2),
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.press(rig.point_of(block, 2), false, Instant::<PageLoad>::new(0.0));
     let (x, y) = rig.point_of(block, 7);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
     let scroll = rig.ui.viewport.scroll_y;
     rig.key(ProseKey::Escape, false, false);
     let caret = rig.caret();
-    assert_eq!((caret.offset, caret.anchor), (DocOffset::new(7), None));
+    assert_eq!((caret.offset, caret.anchor), (Pos::<DocChar>::new(7), None));
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     let (x, y) = rig.point_of(block, 9);
     assert!(!rig.input(ProseInput::Drag { at: view_at(x, y) }));
     assert!(!rig.input(ProseInput::Release));
-    assert_eq!(rig.caret().offset, DocOffset::new(7));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(7));
 }
 
 /// `PROSE-UI-167`, `PROSE-UI-168`: select all runs from the start of the
@@ -1079,15 +1058,15 @@ fn select_all_spans_the_document_and_keeps_the_window() {
     let mut rig = Rig::new(&paragraphs);
     let blocks = rig.logic.root_blocks();
     let (first, last) = (blocks[0], *blocks.last().expect("a block"));
-    rig.ui.set_caret((blocks[3], DocOffset::ZERO));
+    rig.ui.set_caret((blocks[3], Pos::<DocChar>::ZERO));
     rig.ui.scroll_by(down(700.0));
     let scroll = rig.ui.viewport.scroll_y;
     rig.key(ProseKey::SelectAll, false, true);
     let len = rig.ui.run_of(last).expect("a run").len();
-    let len = len.as_end().as_doc();
+    let len = len.as_end().as_axis::<DocChar>();
     assert_eq!(
         rig.ui.selection(),
-        Some(((first, DocOffset::ZERO), (last, len)))
+        Some(((first, Pos::<DocChar>::ZERO), (last, len)))
     );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
 }
@@ -1114,7 +1093,11 @@ fn a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll() {
                 Px::<View>::new(x),
                 Px::<View>::new(y),
             ));
-            assert_eq!(hit, Some((block, DocOffset::new(offset))), "zoom {zoom}");
+            assert_eq!(
+                hit,
+                Some((block, Pos::<DocChar>::new(offset))),
+                "zoom {zoom}"
+            );
         }
     }
 }
@@ -1126,7 +1109,7 @@ fn a_refused_insertion_leaves_the_view_on_the_documents_text() {
     let mut rig = Rig::new(&["one", "two"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
     let mut other = a_collaborator(&rig);
-    rig.ui.set_caret((second, DocOffset::new(3)));
+    rig.ui.set_caret((second, Pos::<DocChar>::new(3)));
     rig.type_text("!");
     receive(
         &mut rig,
@@ -1154,7 +1137,7 @@ fn linked() -> (Rig, BlockId) {
     let block = rig.blocks()[0];
     rig.outbox.push(ProseCommand::ApplyMark {
         block_id: block,
-        range: DocSpan::from_usize_range(6..10),
+        range: Span::<DocChar>::from_usize_range(6..10),
         key: "a".into(),
         value: Some(crate::mark::test_value(TARGET)),
     });
@@ -1167,7 +1150,7 @@ fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
     rig.input(ProseInput::Press {
         at: view_at(x, y),
         mods: ambre_commands::Modifiers::NONE.ctrl_if(ambre_commands::KeyState::from_bool(follow)),
-        now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        now: Instant::<PageLoad>::new(0.0),
     })
 }
 
@@ -1197,7 +1180,7 @@ fn a_plain_press_inside_a_link_places_the_caret_and_opens_nothing() {
     assert!(press_follow(&mut rig, at, false));
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
-        (block, DocOffset::new(8))
+        (block, Pos::<DocChar>::new(8))
     );
     assert_eq!(rig.ui.followed, None);
     assert!(
@@ -1214,8 +1197,8 @@ fn a_press_with_the_modifier_hands_the_target_over_and_moves_nothing() {
     let (mut rig, block) = linked();
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(2),
-        anchor: Some((block, DocOffset::ZERO)),
+        offset: Pos::<DocChar>::new(2),
+        anchor: Some((block, Pos::<DocChar>::ZERO)),
     });
     let before = rig.ui.cursor;
     let sent = rig.sent.len();
@@ -1229,7 +1212,7 @@ fn a_press_with_the_modifier_hands_the_target_over_and_moves_nothing() {
     rig.ui.followed = None;
     assert!(press_follow(&mut rig, at, true));
     assert_eq!(rig.ui.followed, None);
-    assert_eq!(rig.caret().offset, DocOffset::new(15));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(15));
 }
 
 /// `PROSE-UI-186`: a peer's `javascript:` target never reaches the host, and
@@ -1240,7 +1223,7 @@ fn a_target_that_could_run_code_is_held_back() {
     let block = rig.blocks()[0];
     rig.outbox.push(ProseCommand::ApplyMark {
         block_id: block,
-        range: DocSpan::from_usize_range(6..10),
+        range: Span::<DocChar>::from_usize_range(6..10),
         key: "a".into(),
         value: Some(crate::mark::test_value("javascript:alert(1)")),
     });
@@ -1269,7 +1252,7 @@ fn banded() -> (Rig, BlockId, BlockId) {
     for (block, text) in [(header, "the running head"), (footer, "the running foot")] {
         rig.outbox.push(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: text.to_owned(),
         });
     }
@@ -1280,7 +1263,7 @@ fn banded() -> (Rig, BlockId, BlockId) {
 
 /// Where a band's offset is drawn on `page`, as the painter places it.
 fn band_point(rig: &Rig, block: BlockId, offset: u32, page: u32) -> (f32, f32) {
-    let page = crate::events::PageIndex::new(page);
+    let page = Pos::<crate::events::Page>::new(page);
     let ui = &rig.ui;
     let layout = &ui.shaped.layout;
     let slot = ui
@@ -1289,7 +1272,7 @@ fn band_point(rig: &Rig, block: BlockId, offset: u32, page: u32) -> (f32, f32) {
         .find(|slot| slot.block == crate::events::tree_id(block))
         .expect("the band is drawn");
     let run = ui.shaped.blocks[&slot.block].data();
-    let caret = run.caret_box(RunOffset::new(offset));
+    let caret = run.caret_box(Pos::<RunChar>::new(offset));
     let x =
         layout.margin_left + run.indent() + Px::<Doc>::new(caret.x0 as f32) + Px::<Doc>::new(0.5);
     let y_doc =
@@ -1308,16 +1291,12 @@ fn a_press_in_a_header_or_a_footer_lands_in_its_text() {
     let (mut rig, header, footer) = banded();
     for block in [header, footer] {
         let at = band_point(&rig, block, 4, 0);
-        assert!(rig.press(
-            at,
-            false,
-            ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
-        ));
+        assert!(rig.press(at, false, Instant::<PageLoad>::new(0.0)));
         assert_eq!(
             (rig.caret().block_id, rig.caret().offset),
-            (block, DocOffset::new(4))
+            (block, Pos::<DocChar>::new(4))
         );
-        assert_eq!(rig.ui.band_page, Some(crate::events::PageIndex::ZERO));
+        assert_eq!(rig.ui.band_page, Some(Pos::<crate::events::Page>::ZERO));
         assert!(
             rig.ui.caret_span().is_some(),
             "the caret is placed on its page"
@@ -1330,7 +1309,7 @@ fn a_press_in_a_header_or_a_footer_lands_in_its_text() {
     assert!(
         rig.sent[sent..].iter().any(|command| matches!(
             command,
-            ProseCommand::InsertText { block_id, pos, text } if *block_id == footer && *pos == DocOffset::new(4) && text == "x"
+            ProseCommand::InsertText { block_id, pos, text } if *block_id == footer && *pos == Pos::<DocChar>::new(4) && text == "x"
         )),
         "the text goes to the footer"
     );
@@ -1343,11 +1322,7 @@ fn a_selection_does_not_cross_the_edge_of_a_band() {
     let (mut rig, header, _) = banded();
     let body = rig.blocks()[0];
     let at = band_point(&rig, header, 2, 0);
-    assert!(rig.press(
-        at,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
-    ));
+    assert!(rig.press(at, false, Instant::<PageLoad>::new(0.0)));
     let (x, y) = rig.point_of(body, 5);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(rig.caret().block_id, header);
@@ -1355,22 +1330,21 @@ fn a_selection_does_not_cross_the_edge_of_a_band() {
     // Within the band, a drag selects.
     let (x, y) = band_point(&rig, header, 8, 0);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
-    assert_eq!(rig.caret().anchor, Some((header, DocOffset::new(2))));
+    assert_eq!(rig.caret().anchor, Some((header, Pos::<DocChar>::new(2))));
     assert_eq!(
         rig.ui.selection(),
-        Some(((header, DocOffset::new(2)), (header, DocOffset::new(8))))
+        Some((
+            (header, Pos::<DocChar>::new(2)),
+            (header, Pos::<DocChar>::new(8))
+        ))
     );
     // A shift press in the body is a plain press there.
     rig.input(ProseInput::Release);
     rig.ui.last_press = None;
-    assert!(rig.press(
-        rig.point_of(body, 5),
-        true,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
-    ));
+    assert!(rig.press(rig.point_of(body, 5), true, Instant::<PageLoad>::new(0.0)));
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset, rig.caret().anchor),
-        (body, DocOffset::new(5), None)
+        (body, Pos::<DocChar>::new(5), None)
     );
 }
 
@@ -1380,14 +1354,14 @@ fn noted() -> (Rig, BlockId, BlockId) {
     let body = rig.blocks()[0];
     rig.outbox.push(ProseCommand::InsertFootnote {
         block_id: body,
-        pos: DocOffset::new(4),
+        pos: Pos::<DocChar>::new(4),
         note_text: "the text of the note".to_owned(),
     });
     rig.deliver();
     rig.lay();
     let note = rig
         .ui
-        .note_slots(crate::events::PageIndex::new(0))
+        .note_slots(Pos::<crate::events::Page>::new(0))
         .first()
         .map(|slot| crate::events::block_id(slot.block))
         .expect("the note is drawn on the first page");
@@ -1399,15 +1373,15 @@ fn note_point(rig: &Rig, block: BlockId, offset: u32) -> (f32, f32) {
     let ui = &rig.ui;
     let layout = &ui.shaped.layout;
     let slot = ui
-        .note_slots(crate::events::PageIndex::new(0))
+        .note_slots(Pos::<crate::events::Page>::new(0))
         .into_iter()
         .find(|slot| slot.block == crate::events::tree_id(block))
         .expect("the note is drawn");
     let run = ui.shaped.blocks[&slot.block].data();
-    let caret = run.caret_box(RunOffset::new(offset));
+    let caret = run.caret_box(Pos::<RunChar>::new(offset));
     let x =
         layout.margin_left + run.indent() + Px::<Doc>::new(caret.x0 as f32) + Px::<Doc>::new(0.5);
-    let y_doc = ui.column.page_top_y(crate::events::PageIndex::new(0))
+    let y_doc = ui.column.page_top_y(Pos::<crate::events::Page>::new(0))
         + slot.top
         + Px::<Doc>::new((caret.y0 + caret.y1) as f32 / 2.0);
     let scale = ui.viewport.scale();
@@ -1423,14 +1397,10 @@ fn note_point(rig: &Rig, block: BlockId, offset: u32) -> (f32, f32) {
 fn a_press_in_a_note_lands_in_its_text() {
     let (mut rig, _, note) = noted();
     let at = note_point(&rig, note, 4);
-    assert!(rig.press(
-        at,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
-    ));
+    assert!(rig.press(at, false, Instant::<PageLoad>::new(0.0)));
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
-        (note, DocOffset::new(4))
+        (note, Pos::<DocChar>::new(4))
     );
     assert!(
         rig.ui.caret_span().is_some(),
@@ -1442,7 +1412,7 @@ fn a_press_in_a_note_lands_in_its_text() {
     assert!(
         rig.sent[sent..].iter().any(|command| matches!(
             command,
-            ProseCommand::InsertText { block_id, pos, text } if *block_id == note && *pos == DocOffset::new(4) && text == "x"
+            ProseCommand::InsertText { block_id, pos, text } if *block_id == note && *pos == Pos::<DocChar>::new(4) && text == "x"
         )),
         "the text goes to the note"
     );
@@ -1457,11 +1427,7 @@ fn a_press_in_a_note_lands_in_its_text() {
 fn a_selection_does_not_cross_the_edge_of_a_note() {
     let (mut rig, body, note) = noted();
     let at = note_point(&rig, note, 2);
-    assert!(rig.press(
-        at,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
-    ));
+    assert!(rig.press(at, false, Instant::<PageLoad>::new(0.0)));
     let (x, y) = rig.point_of(body, 5);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(rig.caret().block_id, note);
@@ -1470,7 +1436,10 @@ fn a_selection_does_not_cross_the_edge_of_a_note() {
     rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(
         rig.ui.selection(),
-        Some(((note, DocOffset::new(2)), (note, DocOffset::new(8))))
+        Some((
+            (note, Pos::<DocChar>::new(2)),
+            (note, Pos::<DocChar>::new(8))
+        ))
     );
 }
 
@@ -1481,8 +1450,8 @@ impl Rig {
     fn select(&mut self, block: BlockId, start: u32, end: u32) {
         self.ui.cursor = Some(CursorPosition {
             block_id: block,
-            offset: DocOffset::new(end),
-            anchor: Some((block, DocOffset::new(start))),
+            offset: Pos::<DocChar>::new(end),
+            anchor: Some((block, Pos::<DocChar>::new(start))),
         });
     }
 
@@ -1520,7 +1489,7 @@ impl Rig {
 fn marked(rig: &mut Rig, block: BlockId, range: (u32, u32), key: &str) {
     let outcome = rig.logic.handle_command(ProseCommand::ApplyMark {
         block_id: block,
-        range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
+        range: Span::<DocChar>::new(Pos::<DocChar>::new(range.0), Pos::<DocChar>::new(range.1)),
         key: key.into(),
         value: None,
     });
@@ -1534,7 +1503,7 @@ fn marked(rig: &mut Rig, block: BlockId, range: (u32, u32), key: &str) {
 fn the_bar_shows_over_a_selection_and_goes_with_it() {
     let mut rig = Rig::new(&["hello world"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(3)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(3)));
     assert!(!rig.ui.toolbar().visible());
     assert_eq!(rig.ui.marks_query(), None);
     rig.key(ProseKey::Right, true, false);
@@ -1590,8 +1559,8 @@ fn a_selection_bold_in_part_reads_mixed() {
     // Across two paragraphs: the bold start alone does not make it bold.
     rig.ui.cursor = Some(CursorPosition {
         block_id: second,
-        offset: DocOffset::new(3),
-        anchor: Some((first, DocOffset::ZERO)),
+        offset: Pos::<DocChar>::new(3),
+        anchor: Some((first, Pos::<DocChar>::ZERO)),
     });
     rig.read_marks();
     assert_eq!(
@@ -1633,16 +1602,16 @@ fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
     marked(&mut rig, first, (0, 5), "b");
     rig.ui.cursor = Some(CursorPosition {
         block_id: second,
-        offset: DocOffset::new(6),
-        anchor: Some((first, DocOffset::ZERO)),
+        offset: Pos::<DocChar>::new(6),
+        anchor: Some((first, Pos::<DocChar>::ZERO)),
     });
     rig.read_marks();
     let sent = rig.format(crate::commands::BOLD);
     assert_eq!(
         sent,
         Some(ProseCommand::FormatSelection {
-            anchor: (first, DocOffset::ZERO),
-            focus: (second, DocOffset::new(6)),
+            anchor: (first, Pos::<DocChar>::ZERO),
+            focus: (second, Pos::<DocChar>::new(6)),
             key: "b".into(),
             action: ambre_bus::app::prose::MarkAction::Apply,
         })
@@ -1738,7 +1707,7 @@ fn a_mark_sent_before_a_remote_insertion_lands_on_its_text() {
     let update = other
         .handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: ">> ".to_owned(),
         })
         .update
@@ -1760,7 +1729,7 @@ fn a_mark_sent_before_a_remote_insertion_lands_on_its_text() {
 fn caret_at(rig: &mut Rig, block: BlockId, offset: u32) {
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(offset),
+        offset: Pos::<DocChar>::new(offset),
         anchor: None,
     });
 }
@@ -1796,7 +1765,7 @@ fn the_slash_and_the_query_reach_the_document_as_text() {
     caret_at(&mut rig, block, 0);
     rig.type_text("/");
     let origin = rig.ui.slash.as_ref().map(|menu| menu.origin);
-    assert_eq!(origin, Some((block, DocOffset::ZERO)));
+    assert_eq!(origin, Some((block, Pos::<DocChar>::ZERO)));
     rig.type_text("tab");
     rig.deliver();
     assert!(
@@ -1828,13 +1797,13 @@ fn enter_erases_the_query_then_sends_one_command() {
         vec![
             ProseCommand::DeleteText {
                 block_id: block,
-                range: DocSpan::from_usize_range(0..4),
+                range: Span::<DocChar>::from_usize_range(0..4),
             },
             ProseCommand::InsertTable {
                 parent_id: None,
                 after_id: Some(block),
-                rows: crate::events::grid::RowCount::new(3),
-                cols: crate::events::grid::ColCount::new(3),
+                rows: Count::<crate::events::grid::Row>::new(3),
+                cols: Count::<crate::events::grid::Col>::new(3),
             },
         ]
     );
@@ -1875,11 +1844,7 @@ fn closing_the_menu_leaves_the_text_as_typed() {
     rig.deliver();
     let sent = open(&mut rig);
     let point = rig.point_of(below, 2);
-    rig.press(
-        point,
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.press(point, false, Instant::<PageLoad>::new(0.0));
     assert!(!rig.ui.slash_menu().visible());
     assert_eq!(rig.sent.len(), sent, "a press outside sends nothing");
 
@@ -1919,7 +1884,7 @@ fn moving_through_the_menu_sends_nothing() {
     rig.key(ProseKey::Up, false, false);
     assert_eq!(
         rig.ui.slash_menu().selected,
-        crate::view::slash::SlashChoice::new(1)
+        Pos::<crate::view::slash::SlashChoice>::new(1)
     );
     assert_eq!(rig.sent.len(), sent);
     rig.deliver();
@@ -1973,7 +1938,7 @@ fn every_item_is_a_command_the_plane_carries_out() {
         rig.type_text("/");
         rig.deliver();
         rig.input(ProseInput::SlashPick(
-            crate::view::slash::SlashChoice::from_usize(index),
+            Pos::<crate::view::slash::SlashChoice>::from_usize(index),
         ));
         rig.deliver();
         let turned = rig.logic.block_type_of(&block) == Some(crate::events::BlockType::Heading);
@@ -2000,13 +1965,13 @@ fn a_remote_insertion_before_the_slash_moves_the_origin() {
         &mut other,
         ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "ab".to_owned(),
         },
     );
     assert_eq!(
         rig.ui.slash.as_ref().map(|m| m.origin),
-        Some((block, DocOffset::new(2)))
+        Some((block, Pos::<DocChar>::new(2)))
     );
     rig.key(ProseKey::Enter, false, false);
     rig.deliver();
@@ -2038,12 +2003,12 @@ fn the_query_narrows_the_items_in_order() {
 fn a_composition_in_progress_sends_nothing() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.input(ProseInput::Compose("n".to_owned()));
     rig.input(ProseInput::Compose("ni".to_owned()));
     assert!(rig.sent.is_empty());
     assert_eq!(rig.ui.composing, "ni");
-    assert_eq!(rig.caret().offset, DocOffset::new(5));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(5));
     assert!(rig.ui.draft.is_empty());
 }
 
@@ -2053,7 +2018,7 @@ fn a_composition_in_progress_sends_nothing() {
 fn a_composition_ends_in_one_insertion() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.input(ProseInput::Compose("ni".to_owned()));
     rig.input(ProseInput::Compose("\u{4f60}".to_owned()));
     rig.input(ProseInput::ComposeEnd("\u{4f60}".to_owned()));
@@ -2061,7 +2026,7 @@ fn a_composition_ends_in_one_insertion() {
         rig.sent,
         vec![ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::new(5),
+            pos: Pos::<DocChar>::new(5),
             text: "\u{4f60}".to_owned(),
         }]
     );
@@ -2078,7 +2043,7 @@ fn a_composition_ends_in_one_insertion() {
 fn a_remote_insertion_during_a_composition_moves_its_landing() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.input(ProseInput::Compose("x".to_owned()));
     let mut other = a_collaborator(&rig);
     receive(
@@ -2086,7 +2051,7 @@ fn a_remote_insertion_during_a_composition_moves_its_landing() {
         &mut other,
         ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: ">> ".to_owned(),
         },
     );
@@ -2104,8 +2069,8 @@ fn a_composition_over_a_selection_deletes_it_first() {
     let block = rig.blocks()[0];
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(11),
-        anchor: Some((block, DocOffset::new(6))),
+        offset: Pos::<DocChar>::new(11),
+        anchor: Some((block, Pos::<DocChar>::new(6))),
     });
     rig.input(ProseInput::Compose(String::new()));
     assert!(rig.sent.is_empty(), "an empty preview takes nothing");
@@ -2114,11 +2079,11 @@ fn a_composition_over_a_selection_deletes_it_first() {
         rig.sent,
         vec![ProseCommand::DeleteText {
             block_id: block,
-            range: DocSpan::from_usize_range(6..11),
+            range: Span::<DocChar>::from_usize_range(6..11),
         }]
     );
     assert!(rig.ui.selection().is_none());
-    assert_eq!(rig.caret().offset, DocOffset::new(6));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(6));
     assert_eq!(rig.ui.composing, "n");
     rig.input(ProseInput::ComposeEnd("\u{4f60}".to_owned()));
     rig.deliver();
@@ -2132,7 +2097,7 @@ fn a_composition_over_a_selection_deletes_it_first() {
 fn held_text_is_never_dropped() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     rig.key(ProseKey::Enter, false, false);
     for _ in 0..300 {
         rig.key(ProseKey::Right, false, false);
@@ -2165,8 +2130,8 @@ fn a_cut_copies_before_it_deletes_the_selection() {
     };
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(5),
-        anchor: Some((block, DocOffset::ZERO)),
+        offset: Pos::<DocChar>::new(5),
+        anchor: Some((block, Pos::<DocChar>::ZERO)),
     });
     assert!(rig.input(ProseInput::Copy(ClipboardWrite::Cut)));
     assert!(matches!(rig.sent[0], ProseCommand::CopyRange { .. }));
@@ -2245,8 +2210,8 @@ fn the_kept_payload_serves_only_its_own_copy() {
     let block = rig.blocks()[0];
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(5),
-        anchor: Some((block, DocOffset::ZERO)),
+        offset: Pos::<DocChar>::new(5),
+        anchor: Some((block, Pos::<DocChar>::ZERO)),
     });
     rig.input(ProseInput::Copy(ClipboardWrite::Copy));
     rig.deliver();
@@ -2287,7 +2252,7 @@ fn a_paste_leaves_as_a_command() {
     let block = rig.blocks()[0];
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(1),
+        offset: Pos::<DocChar>::new(1),
         anchor: None,
     });
     rig.input(ProseInput::Paste {
@@ -2311,7 +2276,7 @@ fn an_html_half_keeps_a_short_paste_off_the_typing_path() {
     let block = rig.blocks()[0];
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(1),
+        offset: Pos::<DocChar>::new(1),
         anchor: None,
     });
     let blob = ambre_bus::ClipboardBlob {
@@ -2343,8 +2308,8 @@ fn a_plain_paste_carries_the_text_alone() {
     let block = rig.blocks()[0];
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(5),
-        anchor: Some((block, DocOffset::ZERO)),
+        offset: Pos::<DocChar>::new(5),
+        anchor: Some((block, Pos::<DocChar>::ZERO)),
     });
     rig.input(ProseInput::Copy(ClipboardWrite::Copy));
     rig.deliver();
@@ -2371,7 +2336,7 @@ fn a_plain_paste_carries_the_text_alone() {
     rig.sent.clear();
     rig.ui.cursor = Some(CursorPosition {
         block_id: block,
-        offset: DocOffset::new(5),
+        offset: Pos::<DocChar>::new(5),
         anchor: None,
     });
     rig.input(input);
@@ -2392,11 +2357,7 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
     let mut rig = Rig::new(&refs);
     let first = rig.blocks()[0];
-    rig.press(
-        rig.point_of(first, 2),
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.press(rig.point_of(first, 2), false, Instant::<PageLoad>::new(0.0));
     let (x, _) = rig.point_of(first, 2);
     let bottom = rig.ui.viewport.height + Px::<View>::new(40.0);
     rig.input(ProseInput::Drag {
@@ -2404,23 +2365,19 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     });
     let before = rig.ui.selection().expect("a selection").1;
     assert!(
-        !rig.ui
-            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)),
+        !rig.ui.tick_autoscroll(Instant::<PageLoad>::new(0.0)),
         "the first tick only starts the clock"
     );
     let mut now = 0.0;
     for _ in 0..20 {
         now += 16.0;
-        assert!(
-            rig.ui
-                .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(now))
-        );
+        assert!(rig.ui.tick_autoscroll(Instant::<PageLoad>::new(now)));
         rig.lay();
     }
     assert!(rig.ui.viewport.scroll_y > Px::<Doc>::new(0.0));
     let after = rig.ui.selection().expect("a selection").1;
     assert_ne!(after, before, "the focus follows the revealed text");
-    assert_eq!(rig.caret().anchor, Some((first, DocOffset::new(2))));
+    assert_eq!(rig.caret().anchor, Some((first, Pos::<DocChar>::new(2))));
 }
 
 /// `PROSE-UI-163`: once released, no tick scrolls, and nothing is armed.
@@ -2430,59 +2387,40 @@ fn a_released_drag_leaves_nothing_armed() {
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
     let mut rig = Rig::new(&refs);
     let first = rig.blocks()[0];
-    rig.press(
-        rig.point_of(first, 2),
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.press(rig.point_of(first, 2), false, Instant::<PageLoad>::new(0.0));
     let (x, _) = rig.point_of(first, 2);
     let bottom = rig.ui.viewport.height + Px::<View>::new(40.0);
     rig.input(ProseInput::Drag {
         at: view_at(x, bottom.get()),
     });
-    rig.ui
-        .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(0.0));
+    rig.ui.tick_autoscroll(Instant::<PageLoad>::new(0.0));
     rig.input(ProseInput::Release);
     let scroll = rig.ui.viewport.scroll_y;
-    assert!(
-        !rig.ui
-            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(16.0))
-    );
-    assert!(
-        !rig.ui
-            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(32.0))
-    );
+    assert!(!rig.ui.tick_autoscroll(Instant::<PageLoad>::new(16.0)));
+    assert!(!rig.ui.tick_autoscroll(Instant::<PageLoad>::new(32.0)));
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     // Escape disarms a drag in flight the same way.
     rig.press(
         rig.point_of(first, 2),
         false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(1000.0),
+        Instant::<PageLoad>::new(1000.0),
     );
     rig.input(ProseInput::Drag {
         at: view_at(x, bottom.get()),
     });
-    rig.ui
-        .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(40.0));
+    rig.ui.tick_autoscroll(Instant::<PageLoad>::new(40.0));
     rig.key(ProseKey::Escape, false, false);
-    assert!(
-        !rig.ui
-            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(56.0))
-    );
+    assert!(!rig.ui.tick_autoscroll(Instant::<PageLoad>::new(56.0)));
     // A drag away from the edges arms nothing.
     rig.press(
         rig.point_of(first, 2),
         false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(2000.0),
+        Instant::<PageLoad>::new(2000.0),
     );
     let (x, y) = rig.point_of(first, 4);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
-    rig.ui
-        .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(80.0));
-    assert!(
-        !rig.ui
-            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(96.0))
-    );
+    rig.ui.tick_autoscroll(Instant::<PageLoad>::new(80.0));
+    assert!(!rig.ui.tick_autoscroll(Instant::<PageLoad>::new(96.0)));
 }
 
 /// `PROSE-UI-204`: dropped text goes in at the drop point as one insertion,
@@ -2491,11 +2429,7 @@ fn a_released_drag_leaves_nothing_armed() {
 fn dropped_text_is_one_insertion_at_the_drop_point() {
     let mut rig = Rig::new(&["hello world"]);
     let block = rig.blocks()[0];
-    rig.press(
-        rig.point_of(block, 0),
-        false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.press(rig.point_of(block, 0), false, Instant::<PageLoad>::new(0.0));
     let (x, y) = rig.point_of(block, 6);
     assert!(rig.input(ProseInput::Drop {
         at: view_at(x, y),
@@ -2505,11 +2439,11 @@ fn dropped_text_is_one_insertion_at_the_drop_point() {
         rig.sent,
         vec![ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::new(6),
+            pos: Pos::<DocChar>::new(6),
             text: "big ".to_owned()
         }]
     );
-    assert_eq!(rig.caret().offset, DocOffset::new(10));
+    assert_eq!(rig.caret().offset, Pos::<DocChar>::new(10));
     assert_eq!(rig.caret().anchor, None);
     assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello big world"));
     rig.deliver();
@@ -2528,19 +2462,16 @@ fn long_rig() -> Rig {
 
 /// Flick a finger up the canvas at 2 px/ms, and lift it.
 fn flick_up(rig: &mut Rig) {
-    rig.ui.touch_start(
-        view_at(300.0, 600.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    rig.ui
+        .touch_start(view_at(300.0, 600.0), Instant::<PageLoad>::new(0.0));
     for step in 1..=5 {
         rig.ui.touch_move(
             view_at(300.0, 600.0 - 32.0 * step as f32),
-            ambre_core::Instant::<ambre_core::PageLoad>::new(16.0 * f64::from(step)),
+            Instant::<PageLoad>::new(16.0 * f64::from(step)),
         );
     }
     assert_eq!(
-        rig.ui
-            .touch_end(ambre_core::Instant::<ambre_core::PageLoad>::new(80.0)),
+        rig.ui.touch_end(Instant::<PageLoad>::new(80.0)),
         None,
         "a pan is no tap"
     );
@@ -2555,13 +2486,11 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
     let speed = rig.ui.fling_speed().expect("a flick is in motion").get();
     assert!((speed - 2.0).abs() < 0.01, "the release speed, {speed}");
     let mut now = 80.0;
-    rig.ui
-        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(now));
+    rig.ui.tick_fling(Instant::<PageLoad>::new(now));
     let (mut last_step, mut scroll) = (Px::<Doc>::new(f32::INFINITY), rig.ui.viewport.scroll_y);
     while rig.ui.fling_speed().is_some() {
         now += 16.0;
-        rig.ui
-            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(now));
+        rig.ui.tick_fling(Instant::<PageLoad>::new(now));
         rig.lay();
         let step = rig.ui.viewport.scroll_y - scroll;
         assert!(
@@ -2571,10 +2500,7 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
         (last_step, scroll) = (step, rig.ui.viewport.scroll_y);
         assert!(now < 10_000.0, "the motion stops");
     }
-    assert!(
-        !rig.ui
-            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(now + 16.0))
-    );
+    assert!(!rig.ui.tick_fling(Instant::<PageLoad>::new(now + 16.0)));
     // Near the end of the column, the motion stops there.
     let end = rig.ui.column.max_scroll(&rig.ui.viewport);
     rig.ui.scroll_by(down(
@@ -2583,9 +2509,7 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
     flick_up(&mut rig);
     for frame in 1..=20 {
         rig.ui
-            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(
-                80.0 + 16.0 * f64::from(frame),
-            ));
+            .tick_fling(Instant::<PageLoad>::new(80.0 + 16.0 * f64::from(frame)));
     }
     assert_eq!(rig.ui.viewport.scroll_y, end);
     assert_eq!(rig.ui.fling_speed(), None);
@@ -2598,24 +2522,20 @@ fn a_press_stops_a_flick_and_the_motion_writes_nothing() {
     let mut rig = long_rig();
     let block = rig.blocks()[0];
     flick_up(&mut rig);
-    rig.ui
-        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(80.0));
-    rig.ui
-        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(96.0));
+    rig.ui.tick_fling(Instant::<PageLoad>::new(80.0));
+    rig.ui.tick_fling(Instant::<PageLoad>::new(96.0));
     rig.press(
         rig.point_of(block, 1),
         false,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(100.0),
+        Instant::<PageLoad>::new(100.0),
     );
     assert_eq!(rig.ui.fling_speed(), None);
     flick_up(&mut rig);
     rig.key(ProseKey::Right, false, false);
     assert_eq!(rig.ui.fling_speed(), None);
     flick_up(&mut rig);
-    rig.ui.touch_start(
-        view_at(10.0, 10.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(200.0),
-    );
+    rig.ui
+        .touch_start(view_at(10.0, 10.0), Instant::<PageLoad>::new(200.0));
     assert_eq!(rig.ui.fling_speed(), None);
     // Panning and flicking send nothing: the sent edits are the press's.
     assert!(rig.sent.is_empty());
@@ -2650,14 +2570,11 @@ fn notch(dy: f64) -> ambre_draw::WheelDelta {
 #[test]
 fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
     let mut by_line = long_rig();
-    by_line.ui.wheel(
-        notch(2.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    by_line.ui.wheel(notch(2.0), Instant::<PageLoad>::new(0.0));
     let mut by_px = long_rig();
     by_px.ui.wheel(
         glide(2.0 * f64::from(ambre_draw::WHEEL_LINE.get())),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+        Instant::<PageLoad>::new(0.0),
     );
     assert!(
         by_px.ui.viewport.scroll_y > Px::<Doc>::new(0.0),
@@ -2674,10 +2591,7 @@ fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
         ),
         ambre_draw::WheelDeltaMode::Page,
     );
-    by_page.ui.wheel(
-        page_delta,
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-    );
+    by_page.ui.wheel(page_delta, Instant::<PageLoad>::new(0.0));
     assert_eq!(by_page.ui.viewport.scroll_y.get(), page.get());
 }
 
@@ -2689,49 +2603,35 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
     for step in 0..5 {
         rig.ui.wheel(
             glide(16.0),
-            ambre_core::Instant::<ambre_core::PageLoad>::new(16.0 * f64::from(step)),
+            Instant::<PageLoad>::new(16.0 * f64::from(step)),
         );
     }
     let glided = rig.ui.viewport.scroll_y;
-    rig.ui
-        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(64.0));
+    rig.ui.tick_fling(Instant::<PageLoad>::new(64.0));
     assert_eq!(
         rig.ui.fling_speed(),
         None,
         "no motion while the glide lasts"
     );
     // The frame past the pause launches the motion, and the next one moves.
-    rig.ui
-        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(
-            64.0 + 70.0,
-        ));
+    rig.ui.tick_fling(Instant::<PageLoad>::new(64.0 + 70.0));
     let speed = rig
         .ui
         .fling_speed()
         .expect("the paused glide carries on")
         .get();
     assert!((speed - 1.0).abs() < 0.05, "the glide's speed, {speed}");
-    assert!(
-        rig.ui
-            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(
-                64.0 + 86.0
-            ))
-    );
+    assert!(rig.ui.tick_fling(Instant::<PageLoad>::new(64.0 + 86.0)));
     assert!(rig.ui.viewport.scroll_y > glided);
 
     let mut rig = long_rig();
     for step in 0..5 {
-        rig.ui.wheel(
-            notch(0.4),
-            ambre_core::Instant::<ambre_core::PageLoad>::new(16.0 * f64::from(step)),
-        );
+        rig.ui
+            .wheel(notch(0.4), Instant::<PageLoad>::new(16.0 * f64::from(step)));
     }
     let stepped = rig.ui.viewport.scroll_y;
     assert!(
-        !rig.ui
-            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(
-                64.0 + 70.0
-            )),
+        !rig.ui.tick_fling(Instant::<PageLoad>::new(64.0 + 70.0)),
         "a notch never coasts"
     );
     assert_eq!(rig.ui.viewport.scroll_y, stepped);
@@ -2742,17 +2642,14 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
 #[test]
 fn a_finger_that_barely_moves_is_a_tap() {
     let mut rig = long_rig();
-    rig.ui.touch_start(
-        view_at(300.0, 400.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    rig.ui
+        .touch_start(view_at(300.0, 400.0), Instant::<PageLoad>::new(0.0));
+    assert!(
+        !rig.ui
+            .touch_move(view_at(303.0, 402.0), Instant::<PageLoad>::new(10.0))
     );
-    assert!(!rig.ui.touch_move(
-        view_at(303.0, 402.0),
-        ambre_core::Instant::<ambre_core::PageLoad>::new(10.0)
-    ));
     assert_eq!(
-        rig.ui
-            .touch_end(ambre_core::Instant::<ambre_core::PageLoad>::new(20.0)),
+        rig.ui.touch_end(Instant::<PageLoad>::new(20.0)),
         Some(view_at(300.0, 400.0))
     );
     assert_eq!(rig.ui.viewport.scroll_y, Px::<Doc>::new(0.0));
@@ -2842,7 +2739,7 @@ fn the_history_chords_undo_and_redo_the_typing() {
     };
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
-    rig.ui.set_caret((block, DocOffset::new(5)));
+    rig.ui.set_caret((block, Pos::<DocChar>::new(5)));
     assert!(rig.type_text(" world"));
     rig.deliver();
     let text = |rig: &Rig| rig.logic.text_of(&block);

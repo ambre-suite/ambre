@@ -7,33 +7,29 @@
 //! out of a row's place, and one struct per pair fixes the order of the pair.
 //! Every position is 0-based.
 
-use ambre_core::define_index;
+use ambre_core::index::{Axis, Count, Pos, Span};
 use serde::{Deserialize, Serialize};
 
-define_index! {
-    /// A grid row, 0-based.
-    pub struct Row(u32);
-    /// A number of rows.
-    pub struct RowCount;
-    /// The signed gap between two rows.
-    pub struct RowDelta(i64);
-    /// A run of rows.
-    pub struct RowSpan;
-    /// A list indexed by row.
-    pub struct RowVec;
+/// A grid row, 0-based.
+///
+/// The axis derives the traits a type generic over it derives, such as the
+/// structural edit of `ambre-trame`. It holds no value, so none of them runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Row {}
+
+impl Axis for Row {
+    const NAME: &'static str = "Row";
 }
 
-define_index! {
-    /// A grid column, 0-based.
-    pub struct Col(u32);
-    /// A number of columns.
-    pub struct ColCount;
-    /// The signed gap between two columns.
-    pub struct ColDelta(i64);
-    /// A run of columns.
-    pub struct ColSpan;
-    /// A list indexed by column.
-    pub struct ColVec;
+/// A grid column, 0-based.
+///
+/// The axis derives the traits a type generic over it derives, such as the
+/// structural edit of `ambre-trame`. It holds no value, so none of them runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Col {}
+
+impl Axis for Col {
+    const NAME: &'static str = "Col";
 }
 
 /// The cell at the crossing of a row and a column.
@@ -43,18 +39,18 @@ define_index! {
     Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
 )]
 pub struct CellPos {
-    pub row: Row,
-    pub col: Col,
+    pub row: Pos<Row>,
+    pub col: Pos<Col>,
 }
 
 impl CellPos {
     /// The cell at `row` and `col`.
-    pub const fn new(row: Row, col: Col) -> Self {
+    pub const fn new(row: Pos<Row>, col: Pos<Col>) -> Self {
         Self { row, col }
     }
 
     /// The top-left cell of the grid.
-    pub const ORIGIN: Self = Self::new(Row::ZERO, Col::ZERO);
+    pub const ORIGIN: Self = Self::new(Pos::<Row>::ZERO, Pos::<Col>::ZERO);
 }
 
 /// A rectangle of cells, both corners included. The top-left corner is never
@@ -85,22 +81,22 @@ impl CellRect {
     }
 
     /// The rows the rectangle covers.
-    pub const fn rows(self) -> RowSpan {
+    pub const fn rows(self) -> Span<Row> {
         self.top_left.row.through(self.bottom_right.row)
     }
 
     /// The columns the rectangle covers.
-    pub const fn cols(self) -> ColSpan {
+    pub const fn cols(self) -> Span<Col> {
         self.top_left.col.through(self.bottom_right.col)
     }
 
     /// How many rows the rectangle covers.
-    pub const fn row_count(self) -> RowCount {
+    pub const fn row_count(self) -> Count<Row> {
         self.rows().len()
     }
 
     /// How many columns the rectangle covers.
-    pub const fn col_count(self) -> ColCount {
+    pub const fn col_count(self) -> Count<Col> {
         self.cols().len()
     }
 
@@ -154,16 +150,16 @@ impl CellRect {
 /// columns it covers, the top-left cell included. A 1 x 1 extent is no merge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MergeSpan {
-    pub rows: RowCount,
-    pub cols: ColCount,
+    pub rows: Count<Row>,
+    pub cols: Count<Col>,
 }
 
 impl MergeSpan {
     /// The extent of one cell alone.
-    pub const CELL: Self = Self::new(RowCount::ONE, ColCount::ONE);
+    pub const CELL: Self = Self::new(Count::<Row>::ONE, Count::<Col>::ONE);
 
     /// The extent of `rows` rows by `cols` columns.
-    pub const fn new(rows: RowCount, cols: ColCount) -> Self {
+    pub const fn new(rows: Count<Row>, cols: Count<Col>) -> Self {
         Self { rows, cols }
     }
 

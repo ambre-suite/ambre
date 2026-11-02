@@ -11,13 +11,14 @@
 // signals declared at the bottom.
 // ============================================================================
 
-use ambre_bus::app::toile::{DeckFrame, SlideIndex};
+use ambre_bus::app::toile::{DeckFrame, Slide};
 use ambre_core::id::{Frame, Id};
+use ambre_core::index::Pos;
 
 /// What a deck row reads (`TOILE-UI-317`). The frame's title, or its rank when
 /// the frame has never been named, so a deck of unnamed frames is still
 /// navigable. `rank` is 0-based and shown 1-based, like the slide counter.
-pub fn deck_label(frame: &DeckFrame, rank: SlideIndex) -> String {
+pub fn deck_label(frame: &DeckFrame, rank: Pos<Slide>) -> String {
     let name = frame.name.trim();
     if name.is_empty() {
         format!("Frame {}", rank.number())
@@ -40,7 +41,7 @@ pub fn add(order: &[Id<Frame>], frame: &Id<Frame>) -> Option<Vec<Id<Frame>>> {
 
 /// Drop the slide at `at` from the deck, or `None` when `at` names no slide.
 /// The frame itself is untouched: leaving the deck is not a deletion.
-pub fn remove(order: &[Id<Frame>], at: SlideIndex) -> Option<Vec<Id<Frame>>> {
+pub fn remove(order: &[Id<Frame>], at: Pos<Slide>) -> Option<Vec<Id<Frame>>> {
     let at = at.to_index().filter(|at| *at < order.len())?;
     let mut next = order.to_vec();
     next.remove(at);
@@ -50,7 +51,7 @@ pub fn remove(order: &[Id<Frame>], at: SlideIndex) -> Option<Vec<Id<Frame>>> {
 /// Swap the slide at `at` with its neighbour one step towards `to`
 /// (`Move::Up` earlier, `Move::Down` later), or `None` when it is already at
 /// that end. One swap is one `SetSlideOrder`, so one reorder is one undo item.
-pub fn shift(order: &[Id<Frame>], at: SlideIndex, to: Move) -> Option<Vec<Id<Frame>>> {
+pub fn shift(order: &[Id<Frame>], at: Pos<Slide>, to: Move) -> Option<Vec<Id<Frame>>> {
     let other = match to {
         Move::Up => at.prev()?,
         Move::Down => at.next(),
@@ -81,11 +82,11 @@ pub enum DeckIntent {
     /// Add a frame the deck does not name yet, at the end.
     Add(Id<Frame>),
     /// Drop the slide at this rank.
-    Remove(SlideIndex),
+    Remove(Pos<Slide>),
     /// Move the slide at this rank one step.
-    Shift(SlideIndex, Move),
+    Shift(Pos<Slide>, Move),
     /// Move this viewer's playback to a slide (`TOILE-FEAT-081`).
-    Goto(SlideIndex),
+    Goto(Pos<Slide>),
     /// Name a frame, deck member or not (`TOILE-247`). It names the frame
     /// rather than a rank, because the panel's second list holds frames no
     /// rank addresses.
@@ -149,8 +150,8 @@ mod tests {
         }
     }
 
-    fn rank(at: u32) -> SlideIndex {
-        SlideIndex::new(at)
+    fn rank(at: u32) -> Pos<Slide> {
+        Pos::<Slide>::new(at)
     }
 
     fn ids(names: &[&str]) -> Vec<Id<Frame>> {
@@ -162,9 +163,9 @@ mod tests {
 
     #[test]
     fn an_unnamed_frame_reads_by_rank() {
-        assert_eq!(deck_label(&frame("a", ""), SlideIndex::new(0)), "Frame 1");
+        assert_eq!(deck_label(&frame("a", ""), Pos::<Slide>::new(0)), "Frame 1");
         assert_eq!(
-            deck_label(&frame("a", "   "), SlideIndex::new(2)),
+            deck_label(&frame("a", "   "), Pos::<Slide>::new(2)),
             "Frame 3"
         );
     }
@@ -172,7 +173,7 @@ mod tests {
     #[test]
     fn a_named_frame_reads_by_name() {
         assert_eq!(
-            deck_label(&frame("a", "Agenda"), SlideIndex::new(4)),
+            deck_label(&frame("a", "Agenda"), Pos::<Slide>::new(4)),
             "Agenda"
         );
     }

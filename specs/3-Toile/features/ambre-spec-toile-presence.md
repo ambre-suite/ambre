@@ -114,7 +114,7 @@ pub struct PresencePayload {
     pub selection:     Vec<Id<Element>>,       // the peer's selection, drawn as ghosts
     pub live_stroke:   Option<Vec<StrokePoint>>, // an in-flight stroke, before it commits
     pub laser:         Option<Point>,        // one highlighter point; None = lifted
-    pub present_slide: Option<SlideIndex>,   // the presenter's slide (see the presentation feature)
+    pub present_slide: Option<Pos<Slide>>,   // the presenter's slide (see the presentation feature)
 }
 ```
 

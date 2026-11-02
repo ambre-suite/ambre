@@ -62,12 +62,10 @@ fn catmull_rom(p0: Point, p1: Point, p2: Point, p3: Point, t: f64) -> Point {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::{Px, StoredBoard};
 
     fn sp(x: f32, y: f32) -> StrokePoint {
-        StrokePoint::full_pressure(
-            ambre_core::Px::<ambre_core::StoredBoard>::new(x),
-            ambre_core::Px::<ambre_core::StoredBoard>::new(y),
-        )
+        StrokePoint::full_pressure(Px::<StoredBoard>::new(x), Px::<StoredBoard>::new(y))
     }
 
     #[test]

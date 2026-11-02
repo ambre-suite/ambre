@@ -45,6 +45,7 @@
 //! returned `Err` carries no commands.
 
 use ambre_core::{ElementCount, Rgb, Rgba};
+use ambre_core::{Px, StoredBoard, index::Pos};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
 
@@ -322,7 +323,7 @@ fn import_image(
     };
 
     // The blob's slot is its rank in the batch's media, pushed below.
-    let media = MediaRef::Pending(ImportSlot::from_usize(batch.media.len()));
+    let media = MediaRef::Pending(Pos::<ImportSlot>::from_usize(batch.media.len()));
     let blob = decode_media(raw, limits, media.clone())?;
 
     let rect = limits.clamp_rect(rect_from_usvg(image.abs_bounding_box()));
@@ -451,7 +452,7 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
     let mut style = ElementStyle {
         fill: None,
         stroke: None,
-        stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::ZERO,
+        stroke_w: Px::<StoredBoard>::ZERO,
         ..ElementStyle::default()
     };
     if let Some(fill) = path.fill() {
@@ -470,8 +471,7 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
         ) {
             Some(rgba) => {
                 style.stroke = Some(rgba);
-                style.stroke_w =
-                    ambre_core::Px::<ambre_core::StoredBoard>::new(stroke.width().get());
+                style.stroke_w = Px::<StoredBoard>::new(stroke.width().get());
             }
             None => batch.report.skip("path stroke: non-solid paint dropped"),
         }

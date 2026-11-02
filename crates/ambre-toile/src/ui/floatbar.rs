@@ -23,7 +23,7 @@ use ambre_bus::app::toile::{
     DisplayElement, ElementCount, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
 };
 use ambre_core::id::{Element, Id};
-use ambre_core::{Css, Px, Rgba, View};
+use ambre_core::{Css, Px, Rgba, StoredBoard, View};
 use ambre_draw::{Point, Rect};
 
 use super::menu::{GroupHeld, LockMix};
@@ -81,7 +81,7 @@ pub enum StyleEdit {
     /// Stroke colour (`None` == no stroke). The panel alone emits it.
     Stroke(Option<Rgba>),
     /// Stroke width in world px, floored at zero. The panel alone emits it.
-    StrokeWidth(ambre_core::Px<ambre_core::StoredBoard>),
+    StrokeWidth(Px<StoredBoard>),
     /// Opacity. The panel alone emits it.
     Opacity(ambre_core::Opacity),
     /// Text (foreground ink) colour (`None` == the kind default ink).
@@ -112,9 +112,7 @@ impl StyleEdit {
         match self {
             StyleEdit::Fill(c) => style.fill = c,
             StyleEdit::Stroke(c) => style.stroke = c,
-            StyleEdit::StrokeWidth(w) => {
-                style.stroke_w = w.max(ambre_core::Px::<ambre_core::StoredBoard>::ZERO)
-            }
+            StyleEdit::StrokeWidth(w) => style.stroke_w = w.max(Px::<StoredBoard>::ZERO),
             StyleEdit::Opacity(o) => style.opacity = o,
             StyleEdit::TextColor(c) => style.text_color = c,
             StyleEdit::Font(f) => style.font.family = f,
@@ -231,6 +229,7 @@ mod tests {
         DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle, FontSpec,
         ShapeKind, Viewport,
     };
+    use ambre_core::Board;
     use ambre_draw::Size;
     use kurbo::Affine;
 
@@ -289,7 +288,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
+            grid_unit: Px::<Board>::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             nodes,
@@ -591,9 +590,9 @@ mod tests {
         let base = ElementStyle {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             stroke: Some(Rgba::from_bits(0x4455_66ff)),
-            stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::new(3.0),
+            stroke_w: Px::<StoredBoard>::new(3.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
-            corner: ambre_core::Px::<ambre_core::StoredBoard>::new(7.0),
+            corner: Px::<StoredBoard>::new(7.0),
             text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
                 family: Some(FontFamily::Other("Comic Sans MS".to_owned())),
@@ -620,9 +619,9 @@ mod tests {
                 },
             ),
             (
-                StyleEdit::StrokeWidth(ambre_core::Px::<ambre_core::StoredBoard>::new(-2.0)),
+                StyleEdit::StrokeWidth(Px::<StoredBoard>::new(-2.0)),
                 ElementStyle {
-                    stroke_w: ambre_core::Px::<ambre_core::StoredBoard>::ZERO,
+                    stroke_w: Px::<StoredBoard>::ZERO,
                     ..base.clone()
                 },
             ),

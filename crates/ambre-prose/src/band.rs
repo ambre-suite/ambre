@@ -7,11 +7,12 @@
 //! writes to the document.
 
 use ambre_core::StoredAsI64;
+use ambre_core::index::{Count, Pos};
 use ambre_core::{Authored, Instant, LangTag, Month, Ms, TimeSpan, Year};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
-use crate::events::{DateFieldFormat, HeaderField, PageCount, PageIndex};
+use crate::events::{DateFieldFormat, HeaderField, Page};
 
 /// The span of one day.
 const DAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(86_400_000);
@@ -21,8 +22,8 @@ const DAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(86_400_000);
 pub fn resolve(
     document: &LoroDoc,
     block: &TreeID,
-    page: PageIndex,
-    page_count: PageCount,
+    page: Pos<Page>,
+    page_count: Count<Page>,
 ) -> String {
     let text = doc::get_block_text(document, block);
     let mut out = String::new();
@@ -110,8 +111,8 @@ pub fn field_of(key: &str, value: &LoroValue) -> Option<HeaderField> {
 fn field_value(
     document: &LoroDoc,
     field: HeaderField,
-    page: PageIndex,
-    count: PageCount,
+    page: Pos<Page>,
+    count: Count<Page>,
 ) -> String {
     match field {
         HeaderField::PageNumber => page.number().to_string(),

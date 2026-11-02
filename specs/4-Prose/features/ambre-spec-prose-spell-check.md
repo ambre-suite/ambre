@@ -82,7 +82,7 @@ pub struct SpellChecker {
 }
 
 pub struct SpellError {
-    pub range:       DocSpan,
+    pub range:       Span<DocChar>,
     pub word:        String,
     /// At most five.
     pub suggestions: Vec<String>,

@@ -136,6 +136,7 @@ mod tests {
     use super::*;
     use ambre_bus::TrameCommand;
     use ambre_bus::{Col, Row};
+    use ambre_core::index::Pos;
 
     /// A delta a session of `peer` wrote, carrying `bytes` of cell text.
     fn written_by(peer: ambre_core::PeerId, bytes: usize) -> SignedDelta {
@@ -143,8 +144,8 @@ mod tests {
         assert!(author.adopt_session(peer, crate::test_entry(peer)));
         let payload = author
             .handle_command(TrameCommand::SetCellText {
-                row: Row::new(0),
-                col: Col::new(0),
+                row: Pos::<Row>::new(0),
+                col: Pos::<Col>::new(0),
                 text: "x".repeat(bytes),
             })
             .update

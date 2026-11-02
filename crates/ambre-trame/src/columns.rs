@@ -8,11 +8,12 @@
 //! is the single source of truth; every call site delegates here.
 
 use ambre_bus::{Col, Row};
+use ambre_core::index::Pos;
 
 /// Convert a 0-based column index to its spreadsheet letters.
 ///
 /// `0 -> "A"`, `25 -> "Z"`, `26 -> "AA"`, `701 -> "ZZ"`, `702 -> "AAA"`.
-pub fn col_to_alpha(col: Col) -> String {
+pub fn col_to_alpha(col: Pos<Col>) -> String {
     let mut col = col.get();
     let mut chars = Vec::new();
     loop {
@@ -54,7 +55,7 @@ impl std::error::Error for ColumnParseError {}
 /// [`ColumnParseError::Invalid`] when `s` is empty or holds a byte outside
 /// `A..Z`, and [`ColumnParseError::Overflow`] when the accumulated index
 /// overflows a `u32`.
-pub fn alpha_to_col(s: &str) -> Result<Col, ColumnParseError> {
+pub fn alpha_to_col(s: &str) -> Result<Pos<Col>, ColumnParseError> {
     if s.is_empty() || !s.bytes().all(|b| b.is_ascii_uppercase()) {
         return Err(ColumnParseError::Invalid(s.to_owned()));
     }
@@ -65,11 +66,11 @@ pub fn alpha_to_col(s: &str) -> Result<Col, ColumnParseError> {
             .and_then(|c| c.checked_add((b - b'A') as u32 + 1))
             .ok_or_else(|| ColumnParseError::Overflow(s.to_owned()))?;
     }
-    Ok(Col::new(col.saturating_sub(1)))
+    Ok(Pos::<Col>::new(col.saturating_sub(1)))
 }
 
 /// The label a user reads for a 0-based row: its 1-based number.
-pub fn row_label(row: Row) -> String {
+pub fn row_label(row: Pos<Row>) -> String {
     (u64::from(row.get()) + 1).to_string()
 }
 
@@ -88,17 +89,17 @@ mod tests {
             (701, "ZZ"),
             (702, "AAA"),
         ] {
-            assert_eq!(col_to_alpha(Col::new(col)), alpha);
+            assert_eq!(col_to_alpha(Pos::<Col>::new(col)), alpha);
         }
     }
 
     #[test]
     fn alpha_to_col_roundtrip() {
         for col in [0, 1, 25, 26, 51, 52, 100, 701, 702, 999] {
-            let alpha = col_to_alpha(Col::new(col));
+            let alpha = col_to_alpha(Pos::<Col>::new(col));
             assert_eq!(
                 alpha_to_col(&alpha),
-                Ok(Col::new(col)),
+                Ok(Pos::<Col>::new(col)),
                 "roundtrip for {alpha}"
             );
         }

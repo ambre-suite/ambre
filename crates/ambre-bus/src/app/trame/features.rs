@@ -11,8 +11,9 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{CellNumber, CellRect, ColCount, DateSerial, FormulaSource, SheetId};
+use super::{CellNumber, CellRect, Col, DateSerial, FormulaSource, SheetId};
 use ambre_core::Rgb;
+use ambre_core::index::Count;
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -34,7 +35,7 @@ pub enum FillMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SortKey {
     /// Column to sort on, as an offset within the range (`0` = `col_start`).
-    pub col: ColCount,
+    pub col: Count<Col>,
     pub order: SortOrder,
 }
 
@@ -284,8 +285,8 @@ pub enum ValidationKind {
         max: Option<DateSerial>,
     },
     TextLength {
-        min: Option<ambre_core::CharCount>,
-        max: Option<ambre_core::CharCount>,
+        min: Option<Count<ambre_core::Char>>,
+        max: Option<Count<ambre_core::Char>>,
     },
     Regex(String),
     /// Custom formula that must return `TRUE`, as the user typed it. The Logic

@@ -20,6 +20,13 @@
 // `unsafe` block breaks the build rather than silently landing.
 #![forbid(unsafe_code)]
 
+/// The serde paths the `define_flag!` and `define_tally!` macros name, so a
+/// crate that expands one needs no serde dependency of its own.
+#[doc(hidden)]
+pub mod __serde {
+    pub use serde::{Deserialize, Deserializer, Serialize, Serializer};
+}
+
 /// The activity summary an update may carry, and the counters it moves
 /// (`ambre-spec-residency.md`).
 pub mod activity;
@@ -52,8 +59,8 @@ pub mod flag;
 pub mod font;
 pub mod generation;
 pub mod id;
-/// Index families: a position, a count, a difference and a span, written by
-/// [`define_index!`].
+/// Index families: a position, a count, a difference, a span and a list, one
+/// generic type each over an axis marker.
 pub mod index;
 pub mod key_id;
 pub mod lang;
@@ -183,10 +190,8 @@ pub use status::{
 };
 pub use tally::{CellCount, ElementCount};
 pub use text_offset::{
-    ByteCount, ByteDelta, ByteOffset, ByteSpan, ByteVec, CharCount, CharDelta, CharOffset,
-    CharSpan, CharVec, RedactedChars, Utf16Count, Utf16Delta, Utf16Offset, Utf16Span, Utf16Vec,
-    byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte, char_to_utf16,
-    utf16_to_char,
+    Byte, Char, RedactedChars, Utf16, byte_span_to_chars, byte_to_char, char_len,
+    char_span_to_bytes, char_to_byte, char_to_utf16, utf16_to_char,
 };
 pub use unit::{
     Mm, PX_PER_MM, Point, PrintLength, PrintUnit, Pt, Px, Radians, Size, Vector, ViewSpeed,

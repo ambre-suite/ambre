@@ -29,8 +29,8 @@
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
     Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
-    ElementCount, PresencePayload, PresenceUpdate, PresentMode, SlideCount, SlideIndex,
-    SlidePosition, ToileCommand, ToileEvent,
+    ElementCount, PresencePayload, PresenceUpdate, PresentMode, Slide, SlidePosition, ToileCommand,
+    ToileEvent,
 };
 use ambre_bus::{AppCommand, AppEvent, UiEvent};
 use ambre_canvas::PerfSnapshot;
@@ -38,8 +38,10 @@ use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
+use ambre_core::Char;
 use ambre_core::id::{Document, Frame, Id, Thread, User};
-use ambre_core::{CharCount, CharOffset};
+use ambre_core::index::{Count, Pos};
+use ambre_core::{Authored, Instant};
 use ambre_core::{Doc, Scale, View};
 use ambre_draw::Rect;
 use ambre_toile::chrome::{
@@ -580,8 +582,8 @@ fn mount_presenter_follow(
         PresentMode::Editing
     });
     let slide = RwSignal::new(SlidePosition::new(
-        SlideIndex::from_usize(index),
-        SlideCount::from_len(count),
+        Pos::<Slide>::from_usize(index),
+        Count::<Slide>::from_len(count),
     ));
     let notes = RwSignal::new(notes.to_owned());
     let broadcasting = RwSignal::new(if broadcasting {
@@ -680,8 +682,8 @@ fn presenter_notes_edit_fires_minimal_delta() {
         Some(PresenterIntent::EditNotes {
             base: "abc".to_owned(),
             delta: TextDelta {
-                at: CharOffset::new(3),
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::new(3),
+                delete: Count::<Char>::ZERO,
                 insert: "d".to_owned(),
             },
         })
@@ -783,14 +785,14 @@ fn deck_panel_edits_fire_intents() {
     assert!(click_by_aria(&root, "Move down"));
     assert_eq!(
         fired.get_untracked(),
-        Some(DeckIntent::Shift(SlideIndex::ZERO, DeckMove::Down)),
+        Some(DeckIntent::Shift(Pos::<Slide>::ZERO, DeckMove::Down)),
         "the first row's only reorder step is downwards"
     );
 
     assert!(click_by_aria(&root, "Remove from deck"));
     assert_eq!(
         fired.get_untracked(),
-        Some(DeckIntent::Remove(SlideIndex::ZERO))
+        Some(DeckIntent::Remove(Pos::<Slide>::ZERO))
     );
 
     let add: web_sys::HtmlElement = root
@@ -1103,7 +1105,7 @@ fn summary(id: &str, preview: &str) -> CommentSummary {
         id: Id::<Thread>::from_text(id.to_owned()),
         anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         resolved: ambre_core::ThreadState::Open,
-        messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
+        messages: Count::<ambre_bus::app::toile::ThreadMessage>::new(1),
         preview: preview.to_owned(),
     }
 }
@@ -1140,7 +1142,7 @@ async fn the_comment_panel_shows_what_the_board_answered() {
         resolved: ambre_core::ThreadState::Open,
         messages: vec![CommentMessage {
             author: Id::<User>::mint(),
-            ts: ambre_core::Instant::<ambre_core::Authored>::new(0),
+            ts: Instant::<Authored>::new(0),
             body: "read back".to_owned(),
         }],
     }));
@@ -1262,7 +1264,7 @@ fn peer(user_id: Id<User>, slide: Option<u32>) -> PresenceUpdate {
     PresenceUpdate {
         user_id,
         presence: PresencePayload {
-            present_slide: slide.map(SlideIndex::new),
+            present_slide: slide.map(Pos::<Slide>::new),
             ..Default::default()
         },
     }
@@ -1301,8 +1303,8 @@ fn a_note_edit_with_no_frame_on_screen_is_refused() {
         ToileIntent::Present(PresenterIntent::EditNotes {
             base: String::new(),
             delta: TextDelta {
-                at: CharOffset::ZERO,
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::ZERO,
+                delete: Count::<Char>::ZERO,
                 insert: "hi".to_owned(),
             },
         })

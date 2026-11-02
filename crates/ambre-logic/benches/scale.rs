@@ -24,6 +24,7 @@
     reason = "a bench aborts on a corpus it cannot read"
 )]
 
+use ambre_core::index::Pos;
 use std::hint::black_box;
 
 use ambre_bus::app::toile::{ToileCommand, Viewport};
@@ -101,8 +102,8 @@ fn bench_trame_recompute(c: &mut Criterion) {
             // no-op measures the equality check rather than the recompute.
             round += 1;
             state.handle_command(TrameCommand::SetCellText {
-                row: Row::new(0),
-                col: Col::new(0),
+                row: Pos::<Row>::new(0),
+                col: Pos::<Col>::new(0),
                 text: round.to_string(),
             })
         });
@@ -126,7 +127,7 @@ fn bench_trame_batch(c: &mut Criterion) {
             let cells = (0..50)
                 .map(|i| {
                     (
-                        CellPos::new(Row::new(i), Col::new(0)),
+                        CellPos::new(Pos::<Row>::new(i), Pos::<Col>::new(0)),
                         format!("{round}-{i}"),
                     )
                 })
@@ -243,7 +244,7 @@ fn bench_remote_delta(c: &mut Criterion) {
         let cells = (0..50)
             .map(|i| {
                 (
-                    CellPos::new(Row::new(i), Col::new(1)),
+                    CellPos::new(Pos::<Row>::new(i), Pos::<Col>::new(1)),
                     format!("remote {i}"),
                 )
             })

@@ -465,10 +465,10 @@ const STICKY_SIZE: Size = Size::new(120.0, 120.0);
 const TEXT_SIZE: Size = Size::new(200.0, 40.0);
 const CLICK_SHAPE_SIZE: Size = Size::new(120.0, 80.0);
 /// Below this drag extent (world units) a shape gesture counts as a click.
-const MIN_DRAG: ambre_core::Px<ambre_core::Board> = ambre_core::Px::<ambre_core::Board>::new(3.0);
+const MIN_DRAG: Px<Board> = Px::<Board>::new(3.0);
 /// Trailing pen nodes closer than this (world units) are the closing
 /// double-click's duplicate press; dropped before the path commits.
-const PEN_DEDUP: ambre_core::Px<ambre_core::Board> = ambre_core::Px::<ambre_core::Board>::new(2.0);
+const PEN_DEDUP: Px<Board> = Px::<Board>::new(2.0);
 
 /// What a pointer / keyboard event produced across all tools. Overlay previews
 /// (marquee, rubber-band, pen path, live stroke) are queried separately via
@@ -1443,7 +1443,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
+            grid_unit: Px::<Board>::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),

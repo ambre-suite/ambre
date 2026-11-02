@@ -167,7 +167,7 @@ impl Created {
                     doc,
                     DocumentKind::Meta,
                     channel_id,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(now.get()),
+                    Instant::<Authored>::new(now.get()),
                 )?;
                 let channel = crate::schema::channel(doc);
                 channel.insert(ChannelKey::Type, channel_type.as_str())?;
@@ -181,7 +181,7 @@ impl Created {
                     doc,
                     DocumentKind::Segment,
                     channel_id,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(now.get()),
+                    Instant::<Authored>::new(now.get()),
                 )?;
             }
             Self::Amendments { segment, now } => {
@@ -189,7 +189,7 @@ impl Created {
                     doc,
                     DocumentKind::Amendments,
                     channel_id,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(now.get()),
+                    Instant::<Authored>::new(now.get()),
                 )?;
                 crate::schema::header(doc)
                     .insert(schema::HeaderKey::Segment, segment.to_string())?;
@@ -199,7 +199,7 @@ impl Created {
                     doc,
                     DocumentKind::Thread,
                     channel_id,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(now.get()),
+                    Instant::<Authored>::new(now.get()),
                 )?;
                 let header = crate::schema::header(doc);
                 header.insert(schema::HeaderKey::Segment, segment.to_string())?;

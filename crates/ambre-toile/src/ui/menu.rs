@@ -24,15 +24,16 @@ use ambre_bus::app::toile::{
     AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementCount, ElementKind, LockState,
     NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
 };
+use ambre_bus::{Authored, Instant};
 use ambre_commands::CommandId;
 use ambre_core::id::{Element, Id};
+use ambre_core::{Board, Px};
 use kurbo::{Rect, Vec2};
 
 /// Diagonal offset, on each axis, of a duplicate so the copy is visibly
 /// distinct from its source (`toile-clipboard`). The menu Duplicate and the
 /// `Ctrl/Cmd+D` of the view both read it.
-const DUPLICATE_NUDGE: ambre_core::Px<ambre_core::Board> =
-    ambre_core::Px::<ambre_core::Board>::new(10.0);
+const DUPLICATE_NUDGE: Px<Board> = Px::<Board>::new(10.0);
 
 /// The move of a duplicate from its source: [`DUPLICATE_NUDGE`] on each axis.
 pub(crate) fn duplicate_delta() -> Vec2 {
@@ -544,7 +545,7 @@ pub fn resolve_menu_command(
                 selection,
                 Some(Reaction {
                     kind: ReactionKind::Emoji(emoji),
-                    ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+                    ts: Instant::<Authored>::new(0),
                 }),
             )
         }
@@ -650,7 +651,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayElement>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
+            grid_unit: Px::<Board>::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Viewport::default(),

@@ -23,7 +23,7 @@ use ambre_bus::app::toile::{
 };
 use ambre_canvas::{Palette, TextCache};
 use ambre_core::id::{Connector, Element, Id};
-use ambre_core::{Doc, Px, Rgba};
+use ambre_core::{Board, Doc, Px, Rgba, StoredBoard};
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DocumentWalk, DrawSurface, FontContext, ImageKey,
     ImageSource, Point, PositionedLayoutItem, Rect, Size, Stroke,
@@ -58,8 +58,7 @@ pub type ImageStore = HashMap<ambre_core::ContentHash, DecodedImage>;
 /// Inner padding, in board units, between an element's border and its body,
 /// and between a caption's plate and its words. The inline editor applies the
 /// same inset, so a body does not move when an edit opens or closes.
-pub(crate) const TEXT_PAD: ambre_core::Px<ambre_core::Board> =
-    ambre_core::Px::<ambre_core::Board>::new(4.0);
+pub(crate) const TEXT_PAD: Px<Board> = Px::<Board>::new(4.0);
 
 /// The board as the walk reads it.
 pub struct BoardView<'v> {
@@ -192,8 +191,7 @@ fn sticky_ink(card: Option<Rgba>) -> Rgba {
 /// bottom-right so the note reads as a physical card (feedback).
 pub(crate) const STICKY_SHADOW: Rgba = Rgba::from_bits(0x0000_0033);
 /// Drop-shadow offset in world units (bottom-right).
-const STICKY_SHADOW_OFFSET: ambre_core::Px<ambre_core::Board> =
-    ambre_core::Px::<ambre_core::Board>::new(4.0);
+const STICKY_SHADOW_OFFSET: Px<Board> = Px::<Board>::new(4.0);
 
 /// The body font size (world units) for a sticky of the given bounds. It scales
 /// with the note so the text "adapts to the size of the note" (feedback). A
@@ -364,7 +362,7 @@ fn fill_and_stroke<S: DrawSurface>(surface: &mut S, path: &BezPath, style: &Elem
         surface.fill_path(path, &Brush::Solid(style_color(fill, style.opacity)));
     }
     if let Some(stroke) = style.stroke
-        && style.stroke_w > ambre_core::Px::<ambre_core::StoredBoard>::ZERO
+        && style.stroke_w > Px::<StoredBoard>::ZERO
     {
         surface.stroke_path(
             path,

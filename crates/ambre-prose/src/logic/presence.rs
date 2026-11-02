@@ -13,12 +13,13 @@
 //! not. A `loro::Cursor` rides the operation it was taken against, so after
 //! convergence every peer resolves it to the same absolute position.
 
+use ambre_core::index::Pos;
 use loro::cursor::{Cursor, Side};
 use loro::{ContainerTrait, TreeID};
 
 use ambre_core::id::{Id, User};
 
-use ambre_bus::app::prose::{DocOffset, EncodedCursor};
+use ambre_bus::app::prose::{DocChar, EncodedCursor};
 use ambre_core::Payload;
 
 use crate::doc;
@@ -75,7 +76,7 @@ impl ProseState {
         let first = *self.root_blocks().first()?;
         self.update_cursor(&CursorPosition {
             block_id: first,
-            offset: DocOffset::ZERO,
+            offset: Pos::<DocChar>::ZERO,
             anchor: None,
         })
         .ephemeral
@@ -181,17 +182,23 @@ impl ProseState {
     }
 
     /// One encoded cursor, resolved against this replica's own document.
-    fn resolve_one(&self, block: BlockId, encoded: &Payload<EncodedCursor>) -> Option<DocOffset> {
+    fn resolve_one(
+        &self,
+        block: BlockId,
+        encoded: &Payload<EncodedCursor>,
+    ) -> Option<Pos<DocChar>> {
         // A block this peer has not received, or one already tombstoned, is not
         // a place a caret can sit.
         self.body_of(&tree_id(block))?;
         let cursor = Cursor::decode(encoded.as_bytes()).ok()?;
         let resolved = self.doc.get_cursor_pos(&cursor).ok()?;
-        u32::try_from(resolved.current.pos).ok().map(DocOffset::new)
+        u32::try_from(resolved.current.pos)
+            .ok()
+            .map(Pos::<DocChar>::new)
     }
 
     /// The encoded cursor for a local offset in a live block.
-    fn cursor_at(&self, block_id: &TreeID, offset: DocOffset) -> Option<Cursor> {
+    fn cursor_at(&self, block_id: &TreeID, offset: Pos<DocChar>) -> Option<Cursor> {
         let body = self.body_of(block_id)?;
         let offset = offset.to_usize();
         if offset > body.len_unicode() {
@@ -227,14 +234,14 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "hello".to_owned(),
         });
         let before = state.export_snapshot();
         let outcome = state.handle_command(ProseCommand::UpdateCursor {
             pos: CursorPosition {
                 block_id: block,
-                offset: DocOffset::new(3),
+                offset: Pos::<DocChar>::new(3),
                 anchor: None,
             },
         });
@@ -254,7 +261,7 @@ mod tests {
         let hello = alice
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "hello".to_owned(),
             })
             .update
@@ -265,7 +272,7 @@ mod tests {
             .handle_command(ProseCommand::UpdateCursor {
                 pos: CursorPosition {
                     block_id: block,
-                    offset: DocOffset::new(5),
+                    offset: Pos::<DocChar>::new(5),
                     anchor: None,
                 },
             })
@@ -276,7 +283,7 @@ mod tests {
         let shove = bob
             .handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "oh ".to_owned(),
             })
             .update
@@ -284,7 +291,7 @@ mod tests {
         alice.apply_remote(&shove);
         bob.apply_ephemeral(a_user(1), &frame);
         let bob_view = bob.presence_of(a_user(1)).expect("Alice's caret");
-        assert_eq!(bob_view.offset, DocOffset::new(8));
+        assert_eq!(bob_view.offset, Pos::<DocChar>::new(8));
     }
 
     #[test]
@@ -295,7 +302,7 @@ mod tests {
         let root = alice.root_blocks()[0];
         alice.handle_command(ProseCommand::SplitBlock {
             block_id: root,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
         });
         let block = alice
             .root_blocks()
@@ -306,7 +313,7 @@ mod tests {
             .handle_command(ProseCommand::UpdateCursor {
                 pos: CursorPosition {
                     block_id: block,
-                    offset: DocOffset::ZERO,
+                    offset: Pos::<DocChar>::ZERO,
                     anchor: None,
                 },
             })

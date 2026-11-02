@@ -5,6 +5,7 @@
 //! header and the words of each row. Pure, so the host tests hold it. The painter in
 //! `paint` lays the rows out and draws them.
 
+use ambre_core::index::{Axis, Count, IdxVec, Pos, Span};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
@@ -12,26 +13,22 @@ use ambre_bus::{
     MurmureEvent, Notice, Reaction, Revision, TextStyle, UiEvent, Unreadable,
 };
 use ambre_core::id::{self, Channel, Document, Id, Message, User};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec, Px, View};
+use ambre_core::{Byte, Char, Px, View};
 
 use crate::MessageCount;
+use ambre_core::{Ms, TimeSpan};
 
-ambre_core::define_index! {
-    /// A row of a message list, counted from zero at the oldest. A key
-    /// outlives a load above, where a row does not.
-    pub struct ListRow(u32);
-    /// A number of list rows.
-    pub struct ListRowCount;
-    /// The signed gap between two list rows.
-    pub struct ListRowDelta(i64);
-    /// A run of list rows.
-    pub struct ListRowSpan;
-    /// A list indexed by list row.
-    pub struct ListRowVec;
+/// A row of a message list, counted from zero at the oldest. A key
+/// outlives a load above, where a row does not.
+#[derive(PartialEq, Eq)]
+pub enum ListRow {}
+
+impl Axis for ListRow {
+    const NAME: &'static str = "ListRow";
 }
 
 /// The row `key` names among `keys`, `None` once it left the list.
-pub fn row_of(keys: &ListRowVec<RowKey>, key: RowKey) -> Option<ListRow> {
+pub fn row_of(keys: &IdxVec<ListRow, RowKey>, key: RowKey) -> Option<Pos<ListRow>> {
     keys.iter_enumerated()
         .find(|&(_, k)| *k == key)
         .map(|(row, _)| row)
@@ -39,8 +36,7 @@ pub fn row_of(keys: &ListRowVec<RowKey>, key: RowKey) -> Option<ListRow> {
 
 /// Consecutive messages of one author inside this span share one header:
 /// the grouping row of `ambre-spec-budgets.md section 8`.
-pub const GROUP_SPAN: ambre_core::TimeSpan<ambre_core::Ms> =
-    ambre_core::TimeSpan::<ambre_core::Ms>::new(5 * 60 * 1000);
+pub const GROUP_SPAN: TimeSpan<Ms> = TimeSpan::<Ms>::new(5 * 60 * 1000);
 
 /// What a deleted message shows in place of its body (`MURMURE-185`).
 pub const DELETED: &str = "This message was deleted.";
@@ -197,8 +193,8 @@ impl MessageList {
 
     /// The rows the list draws: a row per message and per band. A capacity,
     /// so a paint allocates once.
-    fn row_capacity(&self) -> ListRowCount {
-        ListRowCount::from_len(
+    fn row_capacity(&self) -> Count<ListRow> {
+        Count::<ListRow>::from_len(
             self.segments
                 .iter()
                 .map(|s| s.messages.len() + usize::from(s.band.is_some()))
@@ -233,7 +229,7 @@ impl MessageList {
 
     /// What names each row, in the order of [`MessageList::rows`]. A key
     /// outlives a load above, where an index does not (`MURMURE-192`).
-    pub fn keys(&self) -> ListRowVec<RowKey> {
+    pub fn keys(&self) -> IdxVec<ListRow, RowKey> {
         let mut keys = Vec::with_capacity(self.row_capacity().to_usize());
         for segment in &self.segments {
             if segment.band.is_some() {
@@ -241,13 +237,13 @@ impl MessageList {
             }
             keys.extend(segment.messages.iter().map(|m| RowKey::Message(m.id)));
         }
-        ListRowVec::from(keys)
+        IdxVec::<ListRow, _>::from(keys)
     }
 
     /// The rows, oldest first, each message marked with whether it opens a
     /// group under a header of its own (`MURMURE-183`). A band is one row,
     /// and the message after it opens a group.
-    pub fn rows(&self) -> ListRowVec<Row<'_>> {
+    pub fn rows(&self) -> IdxVec<ListRow, Row<'_>> {
         let mut rows = Vec::with_capacity(self.row_capacity().to_usize());
         let mut previous: Option<&MessageView> = None;
         for segment in &self.segments {
@@ -263,7 +259,7 @@ impl MessageList {
                 previous = Some(message);
             }
         }
-        ListRowVec::from(rows)
+        IdxVec::<ListRow, _>::from(rows)
     }
 }
 
@@ -319,7 +315,7 @@ pub enum RowKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BodyMark {
     pub style: TextStyle,
-    pub bytes: ByteSpan,
+    pub bytes: Span<Byte>,
 }
 
 /// The words of a header that opens a group: who wrote, and when.
@@ -336,7 +332,7 @@ pub struct HeaderWords {
 impl std::fmt::Debug for HeaderWords {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HeaderWords")
-            .field("author", &ByteCount::from_len(self.author.len()))
+            .field("author", &Count::<Byte>::from_len(self.author.len()))
             .field("time", &self.time)
             .finish()
     }
@@ -372,7 +368,7 @@ impl std::fmt::Debug for RowWords {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RowWords")
             .field("header", &self.header)
-            .field("body", &ByteCount::from_len(self.body.len()))
+            .field("body", &Count::<Byte>::from_len(self.body.len()))
             .field("ink", &self.ink)
             .field("marks", &self.marks.len())
             .field("replies", &self.replies)
@@ -530,12 +526,12 @@ fn band_words(band: &Band, time_of: impl Fn(Instant<Authored>) -> String) -> Row
 /// The style marks of `message` over the bytes of its shown body, `bytes`
 /// giving where each char of its text starts there. A mark the shown body
 /// leaves empty, such as one inside a renamed mention, is dropped.
-fn body_marks(message: &MessageView, bytes: &CharVec<ByteOffset>) -> Vec<BodyMark> {
-    let byte = |chars: CharOffset| bytes.get(chars).copied();
+fn body_marks(message: &MessageView, bytes: &IdxVec<Char, Pos<Byte>>) -> Vec<BodyMark> {
+    let byte = |chars: Pos<Char>| bytes.get(chars).copied();
     crate::style::normalized(&message.styles)
         .into_iter()
         .filter_map(|mark| {
-            let range = ByteSpan::new(byte(mark.range.start)?, byte(mark.range.end)?);
+            let range = Span::<Byte>::new(byte(mark.range.start)?, byte(mark.range.end)?);
             (!range.is_empty()).then_some(BodyMark {
                 style: mark.style,
                 bytes: range,
@@ -550,13 +546,13 @@ fn body_marks(message: &MessageView, bytes: &CharVec<ByteOffset>) -> Vec<BodyMar
 /// Walked from the bottom, and `measure` is asked only for a row the walk
 /// reaches: a row above the viewport is never laid out (`MURMURE-187`).
 pub fn from_bottom(
-    count: ListRowCount,
+    count: Count<ListRow>,
     height: Px<View>,
-    mut measure: impl FnMut(ListRow) -> Px<View>,
-) -> Vec<(ListRow, Px<View>)> {
+    mut measure: impl FnMut(Pos<ListRow>) -> Px<View>,
+) -> Vec<(Pos<ListRow>, Px<View>)> {
     let mut shown = Vec::new();
     let mut bottom = height;
-    for i in ListRowSpan::from_count(ListRow::ZERO, count)
+    for i in Span::<ListRow>::from_count(Pos::<ListRow>::ZERO, count)
         .into_iter()
         .rev()
     {
@@ -588,14 +584,14 @@ ambre_core::define_flag! {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Window {
     /// Each row shown, top first: its index, its top and its height.
-    pub rows: Vec<(ListRow, Px<View>, Px<View>)>,
+    pub rows: Vec<(Pos<ListRow>, Px<View>, Px<View>)>,
     /// Whether the oldest row is on screen.
     pub oldest: OnScreen,
     /// Whether the latest row is on screen.
     pub latest: OnScreen,
     /// The row the list rests on, and its top: the first row on screen.
     /// `None` when the list rests on its latest message.
-    pub anchor: Option<(ListRow, Px<View>)>,
+    pub anchor: Option<(Pos<ListRow>, Px<View>)>,
 }
 
 /// The rows a viewport `height` tall shows with the row `anchor` names at
@@ -606,13 +602,13 @@ pub struct Window {
 /// inside the viewport rests the list on its latest row. Each row is
 /// measured once, and only the rows the walk reaches (`MURMURE-187`).
 pub fn window(
-    count: ListRowCount,
+    count: Count<ListRow>,
     height: Px<View>,
-    anchor: Option<(ListRow, Px<View>)>,
-    mut measure: impl FnMut(ListRow) -> Px<View>,
+    anchor: Option<(Pos<ListRow>, Px<View>)>,
+    mut measure: impl FnMut(Pos<ListRow>) -> Px<View>,
 ) -> Window {
-    let mut known: HashMap<ListRow, Px<View>> = HashMap::new();
-    let mut tall = |i: ListRow| *known.entry(i).or_insert_with(|| measure(i));
+    let mut known: HashMap<Pos<ListRow>, Px<View>> = HashMap::new();
+    let mut tall = |i: Pos<ListRow>| *known.entry(i).or_insert_with(|| measure(i));
     let Some((at, top)) = anchor.filter(|&(at, _)| at < count.as_end()) else {
         return at_bottom(count, height, &mut tall);
     };
@@ -642,7 +638,7 @@ pub fn window(
     }
     rows.retain(|&(_, top, h)| top + h > Px::<View>::ZERO && top < height);
     Window {
-        oldest: OnScreen::from_bool(rows.front().is_some_and(|r| r.0 == ListRow::ZERO)),
+        oldest: OnScreen::from_bool(rows.front().is_some_and(|r| r.0 == Pos::<ListRow>::ZERO)),
         latest: OnScreen::from_bool(rows.back().is_some_and(|r| r.0.next() == count.as_end())),
         anchor: rows.front().map(|&(i, top, _)| (i, top)),
         rows: rows.into(),
@@ -653,10 +649,10 @@ pub fn window(
 /// viewport. Answers whether the last row ends inside it, which rests the
 /// list on its latest row.
 fn fill_down(
-    rows: &mut VecDeque<(ListRow, Px<View>, Px<View>)>,
-    (next, y): (&mut ListRow, &mut Px<View>),
-    (count, height): (ListRowCount, Px<View>),
-    tall: &mut impl FnMut(ListRow) -> Px<View>,
+    rows: &mut VecDeque<(Pos<ListRow>, Px<View>, Px<View>)>,
+    (next, y): (&mut Pos<ListRow>, &mut Px<View>),
+    (count, height): (Count<ListRow>, Px<View>),
+    tall: &mut impl FnMut(Pos<ListRow>) -> Px<View>,
 ) -> bool {
     while *next < count.as_end() && *y < height {
         let h = tall(*next);
@@ -669,16 +665,16 @@ fn fill_down(
 
 /// The window of a list resting on its latest row.
 fn at_bottom(
-    count: ListRowCount,
+    count: Count<ListRow>,
     height: Px<View>,
-    tall: &mut impl FnMut(ListRow) -> Px<View>,
+    tall: &mut impl FnMut(Pos<ListRow>) -> Px<View>,
 ) -> Window {
     let mut shown = from_bottom(count, height, &mut *tall);
     shown.reverse();
-    let rows: Vec<(ListRow, Px<View>, Px<View>)> =
+    let rows: Vec<(Pos<ListRow>, Px<View>, Px<View>)> =
         shown.iter().map(|&(i, top)| (i, top, tall(i))).collect();
     Window {
-        oldest: OnScreen::from_bool(rows.first().is_some_and(|r| r.0 == ListRow::ZERO)),
+        oldest: OnScreen::from_bool(rows.first().is_some_and(|r| r.0 == Pos::<ListRow>::ZERO)),
         latest: OnScreen::from_bool(!rows.is_empty()),
         anchor: None,
         rows,
@@ -897,13 +893,10 @@ pub(crate) mod tests {
     use ambre_bus::ThreadHead;
 
     use super::*;
+    use ambre_core::{Authored, Instant};
 
     /// A message of `author`, written at `ts` milliseconds.
-    pub(crate) fn message(
-        author: Id<User>,
-        ts: ambre_core::Instant<ambre_core::Authored>,
-        text: &str,
-    ) -> MessageView {
+    pub(crate) fn message(author: Id<User>, ts: Instant<Authored>, text: &str) -> MessageView {
         MessageView {
             id: Id::<Message>::mint(),
             author,
@@ -983,19 +976,11 @@ pub(crate) mod tests {
         let mut list = MessageList::default();
         list.absorb(
             newer,
-            vec![message(
-                author,
-                ambre_bus::Instant::<ambre_bus::Authored>::new(30),
-                "c",
-            )],
+            vec![message(author, Instant::<Authored>::new(30), "c")],
         );
         list.absorb(
             older,
-            vec![message(
-                author,
-                ambre_bus::Instant::<ambre_bus::Authored>::new(10),
-                "a",
-            )],
+            vec![message(author, Instant::<Authored>::new(10), "a")],
         );
         list.unreadable(unread, band(Unreadable::KeyNotReceived, 20, Some(30)));
         assert_eq!(texts(&list), ["a", "#", "c"]);
@@ -1043,20 +1028,12 @@ pub(crate) mod tests {
         );
         list.absorb(
             segment,
-            vec![message(
-                author,
-                ambre_bus::Instant::<ambre_bus::Authored>::new(10),
-                "a",
-            )],
+            vec![message(author, Instant::<Authored>::new(10), "a")],
         );
         assert_eq!(texts(&list), ["a"]);
         list.absorb(
             read,
-            vec![message(
-                author,
-                ambre_bus::Instant::<ambre_bus::Authored>::new(20),
-                "b",
-            )],
+            vec![message(author, Instant::<Authored>::new(20), "b")],
         );
         list.unreadable(read, band(Unreadable::Damaged, 20, None));
         assert_eq!(texts(&list), ["a", "b"]);
@@ -1072,31 +1049,15 @@ pub(crate) mod tests {
         list.absorb(
             active,
             vec![
-                message(
-                    author,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(30),
-                    "c",
-                ),
-                message(
-                    author,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(40),
-                    "d",
-                ),
+                message(author, Instant::<Authored>::new(30), "c"),
+                message(author, Instant::<Authored>::new(40), "d"),
             ],
         );
         list.absorb(
             closing,
             vec![
-                message(
-                    author,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(10),
-                    "a",
-                ),
-                message(
-                    author,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(20),
-                    "b",
-                ),
+                message(author, Instant::<Authored>::new(10), "a"),
+                message(author, Instant::<Authored>::new(20), "b"),
             ],
         );
         assert_eq!(texts(&list), ["a", "b", "c", "d"]);
@@ -1104,11 +1065,7 @@ pub(crate) mod tests {
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("d"));
         list.absorb(
             active,
-            vec![message(
-                author,
-                ambre_bus::Instant::<ambre_bus::Authored>::new(50),
-                "e",
-            )],
+            vec![message(author, Instant::<Authored>::new(50), "e")],
         );
         assert_eq!(texts(&list), ["a", "b", "c", "d", "e"]);
     }
@@ -1120,16 +1077,8 @@ pub(crate) mod tests {
         let author = Id::<User>::mint();
         let (old, new) = (Id::<id::Segment>::mint(), Id::<id::Segment>::mint());
         let mut list = MessageList::default();
-        let first = message(
-            author,
-            ambre_bus::Instant::<ambre_bus::Authored>::new(10),
-            "a",
-        );
-        let second = message(
-            author,
-            ambre_bus::Instant::<ambre_bus::Authored>::new(20),
-            "b",
-        );
+        let first = message(author, Instant::<Authored>::new(10), "a");
+        let second = message(author, Instant::<Authored>::new(20), "b");
         list.absorb(old, vec![first.clone(), second.clone()]);
         let edited = MessageView {
             text: "a2".to_owned(),
@@ -1152,37 +1101,17 @@ pub(crate) mod tests {
     fn one_author_inside_the_span_shares_one_header() {
         let (ada, bob) = (Id::<User>::mint(), Id::<User>::mint());
         let mut list = MessageList::default();
-        let mut notice = message(
-            ada,
-            ambre_bus::Instant::<ambre_bus::Authored>::new(2_000),
-            "",
-        );
+        let mut notice = message(ada, Instant::<Authored>::new(2_000), "");
         notice.notice = Some(Notice::MemberAdded { member: bob });
         list.absorb(
             Id::<id::Segment>::mint(),
             vec![
-                message(ada, ambre_bus::Instant::<ambre_bus::Authored>::new(0), "a"),
-                message(
-                    ada,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(GROUP_SPAN.get()),
-                    "b",
-                ),
-                message(
-                    ada,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(2 * GROUP_SPAN.get() + 1),
-                    "c",
-                ),
-                message(
-                    bob,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(2 * GROUP_SPAN.get() + 2),
-                    "d",
-                ),
+                message(ada, Instant::<Authored>::new(0), "a"),
+                message(ada, Instant::<Authored>::new(GROUP_SPAN.get()), "b"),
+                message(ada, Instant::<Authored>::new(2 * GROUP_SPAN.get() + 1), "c"),
+                message(bob, Instant::<Authored>::new(2 * GROUP_SPAN.get() + 2), "d"),
                 notice,
-                message(
-                    bob,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(2 * GROUP_SPAN.get() + 3),
-                    "e",
-                ),
+                message(bob, Instant::<Authored>::new(2 * GROUP_SPAN.get() + 3), "e"),
             ],
         );
         assert_eq!(headers(&list), [true, false, true, true, false, true]);
@@ -1196,12 +1125,8 @@ pub(crate) mod tests {
         list.absorb(
             Id::<id::Segment>::mint(),
             vec![
-                message(
-                    ada,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(1_000),
-                    "a",
-                ),
-                message(ada, ambre_bus::Instant::<ambre_bus::Authored>::new(10), "b"),
+                message(ada, Instant::<Authored>::new(1_000), "a"),
+                message(ada, Instant::<Authored>::new(10), "b"),
             ],
         );
         assert_eq!(headers(&list), [true, false]);
@@ -1213,7 +1138,7 @@ pub(crate) mod tests {
     fn a_row_debugs_its_lengths_alone() {
         let message = message(
             Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(7),
+            Instant::<Authored>::new(7),
             "secret body",
         );
         let row = words(&message, true);
@@ -1230,11 +1155,7 @@ pub(crate) mod tests {
     /// (`MURMURE-185`).
     #[test]
     fn a_deleted_message_shows_a_muted_line() {
-        let mut gone = message(
-            Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(7),
-            "",
-        );
+        let mut gone = message(Id::<User>::mint(), Instant::<Authored>::new(7), "");
         gone.deleted = ambre_bus::Deletion::Deleted;
         let row = words(&gone, true);
         assert_eq!(row.body, DELETED);
@@ -1252,19 +1173,11 @@ pub(crate) mod tests {
     /// alone (`MURMURE-186`).
     #[test]
     fn an_edited_message_carries_the_marker() {
-        let mut edited = message(
-            Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
-            "fixed",
-        );
+        let mut edited = message(Id::<User>::mint(), Instant::<Authored>::new(0), "fixed");
         edited.edited = ambre_bus::Revision::Edited;
         assert_eq!(words(&edited, false).body, format!("fixed {EDITED}"));
         let plain = words(
-            &message(
-                Id::<User>::mint(),
-                ambre_bus::Instant::<ambre_bus::Authored>::new(0),
-                "plain",
-            ),
+            &message(Id::<User>::mint(), Instant::<Authored>::new(0), "plain"),
             false,
         );
         assert_eq!(plain.body, "plain");
@@ -1279,11 +1192,7 @@ pub(crate) mod tests {
     fn a_message_is_announced_with_its_author_its_time_and_its_text() {
         let name_of = |_| ambre_core::DisplayName::new("Ada").ok();
         let time_of = |ts: Instant<Authored>| format!("t{}", ts.get());
-        let mut grouped = message(
-            Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(7),
-            "hello",
-        );
+        let mut grouped = message(Id::<User>::mint(), Instant::<Authored>::new(7), "hello");
         let row = Row::Message {
             message: &grouped,
             header: Header::Joined,
@@ -1314,11 +1223,7 @@ pub(crate) mod tests {
     /// does not know reads under the stand-in name.
     #[test]
     fn a_notice_names_the_member_and_an_unknown_one_reads_as_a_member() {
-        let mut notice = message(
-            Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
-            "",
-        );
+        let mut notice = message(Id::<User>::mint(), Instant::<Authored>::new(0), "");
         notice.notice = Some(Notice::MemberAdded {
             member: Id::<User>::mint(),
         });
@@ -1346,11 +1251,7 @@ pub(crate) mod tests {
     /// A root counts its replies once its thread holds one.
     #[test]
     fn a_root_counts_its_replies() {
-        let mut root = message(
-            Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
-            "root",
-        );
+        let mut root = message(Id::<User>::mint(), Instant::<Authored>::new(0), "root");
         let head = |replies| ThreadHead {
             document: Id::<Document>::mint(),
             replies: ambre_bus::ReplyCount::new(replies),
@@ -1368,11 +1269,7 @@ pub(crate) mod tests {
     /// and a screen reader hears it after the text (`MURMURE-532`).
     #[test]
     fn a_reply_sent_to_the_channel_too_names_its_thread() {
-        let mut copy = message(
-            Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
-            "ok",
-        );
+        let mut copy = message(Id::<User>::mint(), Instant::<Authored>::new(0), "ok");
         assert_eq!(words(&copy, false).replies, None);
         copy.also_in_thread = Some(Id::<Document>::mint());
         assert_eq!(words(&copy, false).replies.as_deref(), Some(FROM_THREAD));
@@ -1392,14 +1289,14 @@ pub(crate) mod tests {
     #[test]
     fn the_walk_from_the_bottom_measures_only_the_rows_it_reaches() {
         let mut measured = Vec::new();
-        let shown = from_bottom(ListRowCount::new(10_000), px(100.0), |i| {
+        let shown = from_bottom(Count::<ListRow>::new(10_000), px(100.0), |i| {
             measured.push(i.get());
             px(20.0)
         });
         assert_eq!(measured, [9_999, 9_998, 9_997, 9_996, 9_995]);
-        assert_eq!(shown.first(), Some(&(ListRow::new(9_999), px(80.0))));
-        assert_eq!(shown.last(), Some(&(ListRow::new(9_995), px(0.0))));
-        assert!(from_bottom(ListRowCount::ZERO, px(100.0), |_| px(1.0)).is_empty());
+        assert_eq!(shown.first(), Some(&(Pos::<ListRow>::new(9_999), px(80.0))));
+        assert_eq!(shown.last(), Some(&(Pos::<ListRow>::new(9_995), px(0.0))));
+        assert!(from_bottom(Count::<ListRow>::ZERO, px(100.0), |_| px(1.0)).is_empty());
     }
 
     /// The indices and tops of a window's rows.
@@ -1421,9 +1318,9 @@ pub(crate) mod tests {
     #[test]
     fn a_window_on_a_row_keeps_it_in_place_as_rows_arrive_below() {
         let rested = window(
-            ListRowCount::new(10),
+            Count::<ListRow>::new(10),
             px(100.0),
-            Some((ListRow::new(3), px(-5.0))),
+            Some((Pos::<ListRow>::new(3), px(-5.0))),
             |_| px(20.0),
         );
         let expected = [
@@ -1435,15 +1332,15 @@ pub(crate) mod tests {
             (8, 95.0),
         ];
         assert_eq!(tops(&rested), expected);
-        assert_eq!(rested.anchor, Some((ListRow::new(3), px(-5.0))));
+        assert_eq!(rested.anchor, Some((Pos::<ListRow>::new(3), px(-5.0))));
         assert_eq!(
             (rested.oldest, rested.latest),
             (OnScreen::Hidden, OnScreen::Hidden)
         );
         let grown = window(
-            ListRowCount::new(12),
+            Count::<ListRow>::new(12),
             px(100.0),
-            Some((ListRow::new(3), px(-5.0))),
+            Some((Pos::<ListRow>::new(3), px(-5.0))),
             |_| px(20.0),
         );
         assert_eq!(grown, rested);
@@ -1454,9 +1351,9 @@ pub(crate) mod tests {
     #[test]
     fn a_window_past_the_bottom_rests_on_the_latest_row() {
         let rested = window(
-            ListRowCount::new(10),
+            Count::<ListRow>::new(10),
             px(100.0),
-            Some((ListRow::new(8), px(0.0))),
+            Some((Pos::<ListRow>::new(8), px(0.0))),
             |_| px(20.0),
         );
         assert_eq!(rested.anchor, None);
@@ -1464,9 +1361,9 @@ pub(crate) mod tests {
         assert_eq!(tops(&rested).last(), Some(&(9, 80.0)));
         assert_eq!(rested.latest, OnScreen::Shown);
         let flush = window(
-            ListRowCount::new(10),
+            Count::<ListRow>::new(10),
             px(100.0),
-            Some((ListRow::new(5), px(0.0))),
+            Some((Pos::<ListRow>::new(5), px(0.0))),
             |_| px(20.0),
         );
         assert_eq!(
@@ -1475,18 +1372,18 @@ pub(crate) mod tests {
         );
         assert_eq!(
             window(
-                ListRowCount::new(10),
+                Count::<ListRow>::new(10),
                 px(100.0),
-                Some((ListRow::new(10), px(0.0))),
+                Some((Pos::<ListRow>::new(10), px(0.0))),
                 |_| px(20.0)
             )
             .anchor,
             None
         );
         let short = window(
-            ListRowCount::new(2),
+            Count::<ListRow>::new(2),
             px(100.0),
-            Some((ListRow::new(0), px(0.0))),
+            Some((Pos::<ListRow>::new(0), px(0.0))),
             |_| px(20.0),
         );
         assert_eq!(
@@ -1504,21 +1401,21 @@ pub(crate) mod tests {
     #[test]
     fn a_window_past_the_top_rests_the_oldest_row_at_the_top() {
         let rested = window(
-            ListRowCount::new(10),
+            Count::<ListRow>::new(10),
             px(100.0),
-            Some((ListRow::new(1), px(30.0))),
+            Some((Pos::<ListRow>::new(1), px(30.0))),
             |_| px(20.0),
         );
-        assert_eq!(rested.anchor, Some((ListRow::new(0), px(0.0))));
+        assert_eq!(rested.anchor, Some((Pos::<ListRow>::new(0), px(0.0))));
         assert_eq!(tops(&rested).last(), Some(&(4, 80.0)));
         assert_eq!(
             (rested.oldest, rested.latest),
             (OnScreen::Shown, OnScreen::Hidden)
         );
         let short = window(
-            ListRowCount::new(4),
+            Count::<ListRow>::new(4),
             px(100.0),
-            Some((ListRow::new(1), px(30.0))),
+            Some((Pos::<ListRow>::new(1), px(30.0))),
             |_| px(20.0),
         );
         assert_eq!(
@@ -1533,9 +1430,9 @@ pub(crate) mod tests {
     fn a_window_measures_only_the_rows_it_reaches_once_each() {
         let mut measured = Vec::new();
         let rested = window(
-            ListRowCount::new(10_000),
+            Count::<ListRow>::new(10_000),
             px(100.0),
-            Some((ListRow::new(5_000), px(0.0))),
+            Some((Pos::<ListRow>::new(5_000), px(0.0))),
             |i| {
                 measured.push(i.get());
                 px(20.0)
@@ -1544,12 +1441,12 @@ pub(crate) mod tests {
         assert_eq!(measured, [5_000, 5_001, 5_002, 5_003, 5_004]);
         assert_eq!(rested.rows.len(), 5);
         let flung = window(
-            ListRowCount::new(10_000),
+            Count::<ListRow>::new(10_000),
             px(100.0),
-            Some((ListRow::new(5_000), px(-45.0))),
+            Some((Pos::<ListRow>::new(5_000), px(-45.0))),
             |_| px(20.0),
         );
-        assert_eq!(flung.anchor, Some((ListRow::new(5_002), px(-5.0))));
+        assert_eq!(flung.anchor, Some((Pos::<ListRow>::new(5_002), px(-5.0))));
     }
 
     /// Each row has a key, a band's being its segment, and the oldest
@@ -1560,11 +1457,7 @@ pub(crate) mod tests {
         let (older, newer) = (Id::<id::Segment>::mint(), Id::<id::Segment>::mint());
         let mut list = MessageList::default();
         assert_eq!(list.oldest_segment(), None);
-        let later = message(
-            author,
-            ambre_bus::Instant::<ambre_bus::Authored>::new(30),
-            "c",
-        );
+        let later = message(author, Instant::<Authored>::new(30), "c");
         list.absorb(newer, vec![later.clone()]);
         assert_eq!(list.oldest_segment(), Some(newer));
         list.unreadable(older, band(Unreadable::Damaged, 10, Some(30)));
@@ -1603,11 +1496,7 @@ pub(crate) mod tests {
     fn a_thread_fills_its_own_list_and_leaving_drops_the_channel() {
         let (channel, other) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         let author = Id::<User>::mint();
-        let root = message(
-            author,
-            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
-            "root",
-        );
+        let root = message(author, Instant::<Authored>::new(0), "root");
         let mut talks = Conversations::default();
         let document = Id::<Document>::mint();
         let ev = |channel_id, event| UiEvent::Channel { channel_id, event };
@@ -1623,22 +1512,14 @@ pub(crate) mod tests {
             MurmureEvent::ThreadMessages {
                 root: root.id,
                 thread: document,
-                messages: vec![message(
-                    author,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(1),
-                    "reply"
-                )],
+                messages: vec![message(author, Instant::<Authored>::new(1), "reply")],
             },
         )));
         assert!(talks.absorb(ev(
             other,
             MurmureEvent::Messages {
                 segment: Id::<id::Segment>::mint(),
-                messages: vec![message(
-                    author,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(2),
-                    "elsewhere"
-                )],
+                messages: vec![message(author, Instant::<Authored>::new(2), "elsewhere")],
             },
         )));
         assert!(!talks.absorb(ev(

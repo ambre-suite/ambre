@@ -3,6 +3,7 @@
 //! Produces an [`Expr`] AST from a raw formula string (without the leading `=`).
 //! Uses nom 8.0 with the `Parser::parse` trait method.
 
+use ambre_core::index::{Count, Pos};
 use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while1};
@@ -108,10 +109,10 @@ fn col_letters(input: &str) -> nom::IResult<&str, &str> {
 /// exist: `A0` is rejected here so it falls through to the named-range parser,
 /// where it surfaces as an undefined name. Saturating it to row 1 would silently
 /// rewrite the user's `=A0` into `=A1` on the canonicalization round-trip.
-fn row_number(input: &str) -> nom::IResult<&str, Row> {
-    map_res(digit1, |s: &str| -> Result<Row, ()> {
+fn row_number(input: &str) -> nom::IResult<&str, Pos<Row>> {
+    map_res(digit1, |s: &str| -> Result<Pos<Row>, ()> {
         let n: u32 = s.parse().map_err(|_| ())?;
-        n.checked_sub(1).map(Row::new).ok_or(())
+        n.checked_sub(1).map(Pos::<Row>::new).ok_or(())
     })
     .parse(input)
 }
@@ -509,7 +510,7 @@ fn expr(input: &str) -> nom::IResult<&str, Expr> {
 // -----------------------------------------------------------------------------
 
 /// The longest formula the parser reads, in characters: Excel's own limit.
-pub const MAX_FORMULA_CHARS: ambre_core::CharCount = ambre_core::CharCount::new(8_192);
+pub const MAX_FORMULA_CHARS: Count<ambre_core::Char> = Count::<ambre_core::Char>::new(8_192);
 
 /// The deepest parenthesis or call nesting it reads: Excel's own limit.
 pub const MAX_FORMULA_NESTING: FormulaNesting = FormulaNesting::new(64);
@@ -556,7 +557,7 @@ fn within_bounds(input: &str) -> Result<(), ParseError> {
             _ => {}
         }
     }
-    if ambre_core::CharCount::from_len(chars) > MAX_FORMULA_CHARS {
+    if Count::<ambre_core::Char>::from_len(chars) > MAX_FORMULA_CHARS {
         return Err(ParseError::TooLong);
     }
     if FormulaNesting::of_len(deepest) > MAX_FORMULA_NESTING {

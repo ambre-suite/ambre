@@ -143,19 +143,19 @@ the sheet's current name (`DisplayFormula`). One type per text keeps one from pa
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AxisId<P> {    // P is `Row` or `Col`
+pub enum AxisId<P> {    // P is `Pos<Row>` or `Pos<Col>`
     Bound(Uid),         // a materialized row or column. #REF! once that uid is deleted
     Virtual(P),         // a position past the used range: stays positional, reads empty
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CellId { pub sheet: EngineSheet, pub row: AxisId<Row>, pub col: AxisId<Col> }
+pub struct CellId { pub sheet: EngineSheet, pub row: AxisId<Pos<Row>>, pub col: AxisId<Pos<Col>> }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeId {
     pub sheet: EngineSheet,
-    pub row_start: RangeEndpoint<Row>, pub row_end: RangeEndpoint<Row>,
-    pub col_start: RangeEndpoint<Col>, pub col_end: RangeEndpoint<Col>,
+    pub row_start: RangeEndpoint<Pos<Row>>, pub row_end: RangeEndpoint<Pos<Row>>,
+    pub col_start: RangeEndpoint<Pos<Col>>, pub col_end: RangeEndpoint<Pos<Col>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -230,7 +230,7 @@ pub enum CellValue {
 }
 
 #[derive(Debug, Clone)]
-pub struct RangeValue { pub rows: RowCount, pub cols: ColCount, pub values: Vec<CellValue> }
+pub struct RangeValue { pub rows: Count<Row>, pub cols: Count<Col>, pub values: Vec<CellValue> }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FormulaError {

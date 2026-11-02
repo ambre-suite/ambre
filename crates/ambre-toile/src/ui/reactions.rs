@@ -190,6 +190,7 @@ mod tests {
     };
     use ambre_canvas::theme::LIGHT;
     use ambre_core::id::{Element, Id};
+    use ambre_core::{Board, Px};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use std::collections::BTreeMap;
 
@@ -213,7 +214,7 @@ mod tests {
     ) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
-            grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
+            grid_unit: Px::<Board>::new(20.0),
             pins: Vec::new(),
             reactions,
             viewport: Viewport::default(),

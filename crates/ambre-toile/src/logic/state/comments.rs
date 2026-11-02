@@ -36,26 +36,27 @@
 //! (`TOILE-FEAT-017`).
 
 use ambre_core::StoredAsI64;
+use ambre_core::index::{Count, Pos};
 use std::collections::HashSet;
 
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
-use ambre_core::CharCount;
+use ambre_core::Char;
 use ambre_core::id::{Element, Id, Thread, User};
 
 use crate::logic::command::{
     CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, TextDelta,
-    ThreadMessageIndex, ToileError, ToileEvent, ToileOutcome, Viewport,
+    ThreadMessage, ToileError, ToileEvent, ToileOutcome, Viewport,
 };
-use ambre_bus::app::toile::ThreadMessageCount;
 
 use super::ToileState;
 use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry};
+use ambre_core::{Authored, Instant};
 
 /// How many characters of the opening message the board-wide list carries. The
 /// panel shows a row per thread, and a row is a line: the rest of the
 /// conversation arrives when the thread is opened (`TOILE-205`).
-const PREVIEW_CHARS: CharCount = CharCount::new(80);
+const PREVIEW_CHARS: Count<Char> = Count::<Char>::new(80);
 
 impl ToileState {
     /// Open a thread at `anchor`, seeded with its first message.
@@ -68,7 +69,7 @@ impl ToileState {
         &mut self,
         anchor: &CommentAnchor,
         body: &str,
-        ts: ambre_core::Instant<ambre_core::Authored>,
+        ts: Instant<Authored>,
     ) -> ToileOutcome {
         // A session with no identity has no author to write under. The UI cannot
         // reach this pre-`SessionReady`; guard anyway.
@@ -114,7 +115,7 @@ impl ToileState {
         thread: &Id<Thread>,
         anchor: Vec<u8>,
         author: Id<User>,
-        ts: ambre_core::Instant<ambre_core::Authored>,
+        ts: Instant<Authored>,
         body: &str,
     ) -> Option<()> {
         let map = self
@@ -138,7 +139,7 @@ impl ToileState {
         &mut self,
         thread: &Id<Thread>,
         body: &str,
-        ts: ambre_core::Instant<ambre_core::Authored>,
+        ts: Instant<Authored>,
     ) -> ToileOutcome {
         let Some(author) = self.my_user_id else {
             return ToileOutcome::display_only(Vec::new());
@@ -169,7 +170,7 @@ impl ToileState {
     pub(super) fn edit_comment(
         &mut self,
         thread: &Id<Thread>,
-        message: ThreadMessageIndex,
+        message: Pos<ThreadMessage>,
         delta: &TextDelta,
     ) -> ToileOutcome {
         let Some(me) = self.my_user_id else {
@@ -190,7 +191,7 @@ impl ToileState {
         };
         // Clamp to the current length: `at` and the deletion span never run past
         // the end of the buffer.
-        let (at, del) = delta.clamped(CharCount::from_len(text.len_unicode()));
+        let (at, del) = delta.clamped(Count::<Char>::from_len(text.len_unicode()));
         if !del.is_zero() {
             let _ = text.delete(at.to_usize(), del.to_usize());
         }
@@ -290,7 +291,7 @@ impl ToileState {
                     id: thread.id,
                     anchor: thread.anchor,
                     resolved: thread.resolved,
-                    messages: ThreadMessageCount::from_len(thread.messages.len()),
+                    messages: Count::<ThreadMessage>::from_len(thread.messages.len()),
                     preview,
                 })
             })
@@ -337,7 +338,7 @@ impl ToileState {
                 Some(CommentPin {
                     thread: thread.id,
                     at,
-                    messages: ThreadMessageCount::from_len(thread.messages.len()),
+                    messages: Count::<ThreadMessage>::from_len(thread.messages.len()),
                     resolved: thread.resolved,
                 })
             })
@@ -386,7 +387,7 @@ impl ToileState {
     fn message_map(
         &self,
         thread: &Id<Thread>,
-        index: ThreadMessageIndex,
+        index: Pos<ThreadMessage>,
     ) -> Option<Fields<MessageKey>> {
         self.message_list(thread)?
             .get(index.to_usize())?
@@ -404,7 +405,7 @@ impl ToileState {
 fn push_message(
     messages: &LoroMovableList,
     author: Id<User>,
-    ts: ambre_core::Instant<ambre_core::Authored>,
+    ts: Instant<Authored>,
     body: &str,
 ) -> Option<()> {
     let map = Fields::<MessageKey>::of(messages.push_container(LoroMap::new()).ok()?);
@@ -448,8 +449,8 @@ fn read_message(value: &LoroValue) -> Option<CommentMessage> {
     };
     let author = Id::<User>::parse_str(author).ok()?;
     let ts = match fields.get(MessageKey::Ts) {
-        Some(LoroValue::I64(ts)) => ambre_core::Instant::<ambre_core::Authored>::from_i64(*ts),
-        _ => ambre_core::Instant::<ambre_core::Authored>::default(),
+        Some(LoroValue::I64(ts)) => Instant::<Authored>::from_i64(*ts),
+        _ => Instant::<Authored>::default(),
     };
     let body = match fields.get(MessageKey::Body) {
         Some(LoroValue::String(body)) => body.to_string(),

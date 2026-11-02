@@ -16,6 +16,7 @@
     reason = "a bench aborts on a fixture it cannot run"
 )]
 
+use ambre_core::{Board, Px};
 use std::collections::HashMap;
 use std::hint::black_box;
 
@@ -215,7 +216,7 @@ fn walk(
 fn board_paint() {
     let viewport = DisplayViewport {
         version: ambre_core::Generation::ZERO,
-        grid_unit: ambre_core::Px::<ambre_core::Board>::new(20.0),
+        grid_unit: Px::<Board>::new(20.0),
         reactions: Default::default(),
         pins: Vec::new(),
         viewport: Default::default(),

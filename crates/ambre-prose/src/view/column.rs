@@ -5,7 +5,8 @@
 //! Everything here is arithmetic over the layout in force: nothing shapes,
 //! nothing reads the document, and nothing is sent.
 
-use ambre_bus::app::prose::{PageCount, PageIndex, PageSpan};
+use ambre_bus::app::prose::Page;
+use ambre_core::index::{Count, Pos, Span};
 
 use ambre_core::{Doc, Point, Px, View};
 
@@ -63,7 +64,7 @@ impl Viewport {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DocPos {
     OnPage {
-        page: PageIndex,
+        page: Pos<Page>,
         x_in_page: Px<Doc>,
         y_in_page: Px<Doc>,
     },
@@ -79,7 +80,7 @@ pub struct PageColumn {
     pub page_height: Px<Doc>,
     pub gutter: Px<Doc>,
     /// Zero until a layout has arrived.
-    pub page_count: PageCount,
+    pub page_count: Count<Page>,
     pub total_height: Px<Doc>,
 }
 
@@ -109,7 +110,7 @@ impl PageColumn {
 
     /// Where a page starts, from the top of the column.
     #[must_use]
-    pub fn page_top_y(&self, page: PageIndex) -> Px<Doc> {
+    pub fn page_top_y(&self, page: Pos<Page>) -> Px<Doc> {
         self.stride() * page.get() as f32
     }
 
@@ -136,11 +137,11 @@ impl PageColumn {
     /// first or the last page. `None` only for a layout with no page
     /// (`PROSE-UI-022`).
     #[must_use]
-    pub fn doc_y_to_page(&self, doc_y: Px<Doc>) -> Option<(PageIndex, Px<Doc>)> {
+    pub fn doc_y_to_page(&self, doc_y: Px<Doc>) -> Option<(Pos<Page>, Px<Doc>)> {
         let last = self.page_count.last()?;
         let stride = self.stride();
         if doc_y.get().is_nan() || doc_y <= Px::<Doc>::ZERO || stride <= Px::<Doc>::ZERO {
-            return Some((PageIndex::ZERO, Px::<Doc>::ZERO));
+            return Some((Pos::<Page>::ZERO, Px::<Doc>::ZERO));
         }
         let index = (doc_y / stride).floor();
         if index >= last.get() as f32 {
@@ -148,7 +149,7 @@ impl PageColumn {
             return Some((last, within));
         }
         // `index` is below `last`, so it fits a page index.
-        let page = PageIndex::new(index as u32);
+        let page = Pos::<Page>::new(index as u32);
         let within = doc_y - self.page_top_y(page);
         if within <= self.page_height {
             return Some((page, within));
@@ -165,7 +166,7 @@ impl PageColumn {
     /// page; never inverted, and never a page the layout lacks
     /// (`PROSE-UI-021`, `PROSE-UI-123`).
     #[must_use]
-    pub fn visible_pages(&self, viewport: &Viewport) -> Option<PageSpan> {
+    pub fn visible_pages(&self, viewport: &Viewport) -> Option<Span<Page>> {
         let top = viewport.scroll_y;
         let (first, _) = self.doc_y_to_page(top)?;
         let (last, _) = self.doc_y_to_page(top + viewport.visible_height())?;
@@ -175,10 +176,10 @@ impl PageColumn {
     /// The pages a frame builds: the visible ones and one more on each side,
     /// and never the whole document (`PROSE-UI-007`).
     #[must_use]
-    pub fn built_pages(&self, viewport: &Viewport) -> Option<PageSpan> {
+    pub fn built_pages(&self, viewport: &Viewport) -> Option<Span<Page>> {
         let visible = self.visible_pages(viewport)?;
         let last = self.page_count.last()?;
-        let first = visible.start - PageCount::ONE;
+        let first = visible.start - Count::<Page>::ONE;
         let end = visible.last()?.next().min(last);
         Some(first.through(end))
     }
@@ -226,7 +227,7 @@ mod tests {
         PageColumn::of(&PageLayout {
             page_width: Px::<Doc>::new(800.0),
             page_height: Px::<Doc>::new(1000.0),
-            page_count: PageCount::new(pages),
+            page_count: Count::<Page>::new(pages),
             ..PageLayout::default()
         })
     }
@@ -284,7 +285,7 @@ mod tests {
             let view = viewport(scroll, height, 1.0);
             let visible = column.visible_pages(&view).expect("a page");
             let built = column.built_pages(&view).expect("a page");
-            prop_assert_eq!(built.start, visible.start - PageCount::ONE);
+            prop_assert_eq!(built.start, visible.start - Count::<Page>::ONE);
             prop_assert_eq!(
                 built.last().expect("a page").get(),
                 (visible.last().expect("a page").get() + 1).min(pages - 1)
@@ -314,12 +315,12 @@ mod tests {
         let bottom = column.page_height;
         assert_eq!(
             column.doc_y_to_page(bottom + Px::<Doc>::new(5.0)),
-            Some((PageIndex::ZERO, bottom))
+            Some((Pos::<Page>::ZERO, bottom))
         );
-        let next = column.page_top_y(PageIndex::new(1)).get();
+        let next = column.page_top_y(Pos::<Page>::new(1)).get();
         assert_eq!(
             column.doc_y_to_page(Px::<Doc>::new(next - 5.0)),
-            Some((PageIndex::new(1), Px::<Doc>::ZERO))
+            Some((Pos::<Page>::new(1), Px::<Doc>::ZERO))
         );
     }
 
@@ -337,7 +338,7 @@ mod tests {
     #[test]
     fn a_screen_point_lands_on_the_page_drawn_under_it() {
         let column = column(3);
-        let view = viewport(column.page_top_y(PageIndex::new(1)).get(), 800.0, 2.0);
+        let view = viewport(column.page_top_y(Pos::<Page>::new(1)).get(), 800.0, 2.0);
         let left = column.left(&view);
         let DocPos::OnPage {
             page,
@@ -347,7 +348,7 @@ mod tests {
         else {
             panic!("a page is under the point");
         };
-        assert_eq!(page, PageIndex::new(1));
+        assert_eq!(page, Pos::<Page>::new(1));
         assert!((x_in_page - Px::<Doc>::new(50.0)).abs() < Px::<Doc>::new(1e-3));
         assert!((y_in_page - Px::<Doc>::new(30.0)).abs() < Px::<Doc>::new(1e-3));
     }

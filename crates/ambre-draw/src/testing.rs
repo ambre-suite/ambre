@@ -25,6 +25,7 @@ use crate::{
     Rect, Stroke,
 };
 use ambre_core::{Image, Px, Size, Surface};
+use ambre_core::{Instant, PageLoad};
 
 ambre_core::define_tally! {
     /// How many glyphs one recorded run holds.
@@ -266,18 +267,18 @@ impl DrawSurface for RecordingSurface {
 /// deterministic zero-deltas in headless tests, which never assert on them.
 #[derive(Clone, Copy, Default)]
 pub struct FixedClock {
-    at: ambre_core::Instant<ambre_core::PageLoad>,
+    at: Instant<PageLoad>,
 }
 
 impl FixedClock {
     /// The clock that reads `at` on every call.
-    pub fn new(at: ambre_core::Instant<ambre_core::PageLoad>) -> Self {
+    pub fn new(at: Instant<PageLoad>) -> Self {
         Self { at }
     }
 }
 
 impl Clock for FixedClock {
-    fn now(&self) -> ambre_core::Instant<ambre_core::PageLoad> {
+    fn now(&self) -> Instant<PageLoad> {
         self.at
     }
 }

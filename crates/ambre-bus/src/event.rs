@@ -24,6 +24,7 @@ use ambre_core::id::{
     Channel, Document, Id, Lease, Meeting, Message, Segment, Snapshot, Space, User,
 };
 use ambre_core::{FixedBytes, Generation, Seq, SessionNonce};
+use ambre_core::{Ms, TimeSpan};
 
 // -----------------------------------------------------------------------------
 // LogicEvent
@@ -484,13 +485,11 @@ pub enum LeaseAnswer {
     Granted {
         lease: Id<Lease>,
         horizon: Seq,
-        expires_in: ambre_core::TimeSpan<ambre_core::Ms>,
+        expires_in: TimeSpan<Ms>,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The grace period
     /// runs, or another member holds the lease.
-    Deferred {
-        retry_in: ambre_core::TimeSpan<ambre_core::Ms>,
-    },
+    Deferred { retry_in: TimeSpan<Ms> },
 }
 
 /// The relay's answer to a fold lease request (`SRV-204`).
@@ -504,13 +503,11 @@ pub enum FoldAnswer {
         horizon: Seq,
         amendments: Id<Document>,
         amendments_seq: Seq,
-        expires_in: ambre_core::TimeSpan<ambre_core::Ms>,
+        expires_in: TimeSpan<Ms>,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The fold delay
     /// runs, or another member holds the lease.
-    Deferred {
-        retry_in: ambre_core::TimeSpan<ambre_core::Ms>,
-    },
+    Deferred { retry_in: TimeSpan<Ms> },
 }
 
 /// Why a snapshot is checked (`ambre-spec-op-authorship.md` section 3).

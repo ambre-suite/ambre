@@ -6,21 +6,31 @@
 //! "k/n" counter. One family keeps a match index apart from a count, and
 //! from every other index a search event carries.
 
-use ambre_core::StepDirection;
+use ambre_core::index::{Axis, Circular, Count, Numbered, Pos, Shown};
 
-ambre_core::define_index! {
-    /// A match of one search, counted from zero in the order the search
-    /// reports its list.
-    pub struct MatchIndex(u32);
-    /// A number of matches.
-    pub struct MatchCount;
-    /// The signed gap between two matches.
-    pub struct MatchDelta(i64);
-    /// A run of matches.
-    pub struct MatchSpan;
-    /// A list indexed by match.
-    pub struct MatchVec;
+/// A match of one search, counted from zero in the order the search
+/// reports its list.
+#[derive(PartialEq, Eq)]
+pub enum Match {}
+
+impl Axis for Match {
+    const NAME: &'static str = "Match";
 }
+
+/// The match a counter shows a reader: its index plus one, the "k" of "k/n".
+impl Numbered for Match {
+    type Number = Count<Match>;
+
+    fn number_of(pos: Pos<Match>) -> Count<Match> {
+        Count::through(pos)
+    }
+}
+
+/// A counter shows the number of matches to a reader.
+impl Shown for Match {}
+
+/// The match cursor wraps: a step past the last match lands on the first.
+impl Circular for Match {}
 
 /// The query of a find, as the user typed it, never empty. An empty field
 /// sends no query at all, which is how the panel clears its highlight
@@ -66,30 +76,11 @@ impl<O> FindQuery<O> {
     }
 }
 
-impl MatchIndex {
-    /// The match one step on in `direction` among `count`, wrapping at either
-    /// end. `None` when the search found nothing.
-    #[must_use]
-    pub fn stepped(self, direction: StepDirection, count: MatchCount) -> Option<Self> {
-        let last = count.as_end().prev()?;
-        Some(match direction {
-            StepDirection::Backward => self.prev().unwrap_or(last),
-            StepDirection::Forward if self >= last => Self::ZERO,
-            StepDirection::Forward => self.next(),
-        })
-    }
-
-    /// The match a counter shows a reader: its index plus one.
-    #[must_use]
-    pub fn ordinal(self) -> u32 {
-        self.get().saturating_add(1)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{FindQuery, FindText, MatchCount, MatchIndex};
+    use super::{FindQuery, FindText, Match};
     use ambre_core::StepDirection;
+    use ambre_core::index::{Count, Delta, Pos};
 
     #[test]
     fn an_empty_text_is_no_query() {
@@ -110,18 +101,15 @@ mod tests {
 
     #[test]
     fn a_step_wraps_at_either_end_and_finds_nothing_in_an_empty_list() {
-        let three = MatchCount::new(3);
-        let (first, last) = (MatchIndex::ZERO, MatchIndex::new(2));
-        assert_eq!(last.stepped(StepDirection::Forward, three), Some(first));
-        assert_eq!(first.stepped(StepDirection::Backward, three), Some(last));
-        assert_eq!(
-            first.stepped(StepDirection::Forward, three),
-            Some(MatchIndex::new(1))
+        let three = Count::<Match>::new(3);
+        let (first, last) = (Pos::<Match>::ZERO, Pos::<Match>::new(2));
+        let (forward, back) = (
+            Delta::step(StepDirection::Forward),
+            Delta::step(StepDirection::Backward),
         );
-        assert_eq!(
-            first.stepped(StepDirection::Forward, MatchCount::new(0)),
-            None
-        );
-        assert_eq!(last.ordinal(), 3);
+        assert_eq!(last.wrapped(forward, three), Some(first));
+        assert_eq!(first.wrapped(back, three), Some(last));
+        assert_eq!(first.wrapped(forward, three), Some(Pos::<Match>::new(1)));
+        assert_eq!(first.wrapped(forward, Count::ZERO), None);
     }
 }
