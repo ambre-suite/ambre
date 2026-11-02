@@ -204,7 +204,6 @@ impl Scalar for u16 {
 
 // The zoom is an `f64`, and an `f32` length scaled by it stays an `f32`
 // product, as it was before the generic type.
-#[allow(clippy::cast_possible_truncation)]
 impl Rescale<f32> for f32 {
     fn scaled(self, factor: f64) -> f32 {
         self * factor as f32

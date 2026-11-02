@@ -156,7 +156,6 @@ const REVEAL_SLACK: Px<View> = Px::<View>::new(0.5);
 /// The size of a region, from the CSS pixels the page gives it. A view
 /// pixel is a CSS pixel in size (`CANVAS-032`).
 fn view_size(size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>) -> Size<Px<View>> {
-    #[allow(clippy::cast_precision_loss)]
     let (width, height) = (size.width.get() as f32, size.height.get() as f32);
     Size::new(Px::<View>::new(width), Px::<View>::new(height))
 }
@@ -2075,7 +2074,6 @@ mod tests {
             now: Rc::new(move || now.get()),
             // The wall clock follows the page's unless a test sets it, so a
             // step dates what it sends.
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             wall_clock: Rc::new(move || {
                 wall.get()
                     .unwrap_or(Instant::<Authored>::new(follows.get().get() as u64))

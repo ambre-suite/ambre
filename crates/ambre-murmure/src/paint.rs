@@ -895,9 +895,7 @@ fn preview_boxes<'r>(
             .and_then(|pics| pics.shelf.get(&file.media_ref))
             .filter(|picture| picture.size.width > Px::ZERO && picture.size.height > Px::ZERO)
             .map_or(PLACEHOLDER_ASPECT, |picture| {
-                #[allow(clippy::cast_precision_loss)]
-                let aspect = picture.size.width.get() as f32 / picture.size.height.get() as f32;
-                aspect
+                picture.size.width.get() as f32 / picture.size.height.get() as f32
             });
         y += SPACE_2;
         let mut wide = PREVIEW_TALL * aspect;
@@ -914,7 +912,6 @@ fn preview_boxes<'r>(
 /// The height the previews of a row take, the space above each included.
 /// Each takes [`PREVIEW_TALL`], so a row keeps its height when one lands.
 fn previews_height(row: &RowWords, pics: Option<Pictured<'_>>) -> Px<View> {
-    #[allow(clippy::cast_precision_loss)]
     let count = previewed(row, pics).len() as f32;
     (SPACE_2 + PREVIEW_TALL) * count
 }
