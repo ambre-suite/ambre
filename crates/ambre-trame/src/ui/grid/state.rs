@@ -4,6 +4,7 @@
 use super::*;
 use crate::formula::text::CellText;
 use ambre_commands::SelectionMode;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Delta, Pos, Span};
 
 impl TrameUiState {
@@ -31,7 +32,7 @@ impl TrameUiState {
             dirty_cells: HashSet::new(),
             formula_errors: HashSet::new(),
             accepted_version: ambre_core::Generation::ZERO,
-            active_sheet: ambre_bus::SheetId::default(),
+            active_sheet: Id::<Sheet>::from_text(String::new()),
             next_version: ambre_core::Generation::ZERO.next(),
             filtered_col: None,
             hidden_rows: Vec::new(),

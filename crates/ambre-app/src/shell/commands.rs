@@ -9,8 +9,8 @@
 // Nothing here matches on an application's id.
 // ============================================================================
 
-use ambre_chrome::commands::{Commands, StaticKey};
 use ambre_chrome::{CommandHandler, KeyRoute, ShellAction};
+use ambre_core::{Commands, StaticKey};
 use ambre_murmure::chrome::MurmureHandler;
 use ambre_prose::chrome::ProseHandler;
 use ambre_toile::chrome::ToileHandler;

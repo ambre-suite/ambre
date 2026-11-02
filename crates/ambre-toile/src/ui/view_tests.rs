@@ -8,12 +8,13 @@ use crate::ui::kinetic::FingerRole;
 use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
 use ambre_bus::{Instant, PageLoad};
-use ambre_commands::{Commands, KeyChar, StaticKey};
+use ambre_commands::KeyChar;
 use ambre_core::Rgba;
 use ambre_core::Tally;
 use ambre_core::id::User;
 use ambre_core::index::Count;
 use ambre_core::{Board, Px, StoredBoard};
+use ambre_core::{Commands, StaticKey};
 use kurbo::Rect;
 
 /// A pointer at screen `(x, y)`, as the canvas hands it over.

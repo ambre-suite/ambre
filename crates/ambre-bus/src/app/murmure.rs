@@ -13,7 +13,7 @@
 //! document (`BUS-027`).
 
 use ambre_core::index::{Count, IdxVec, Pos, Span};
-use ambre_core::{Byte, Char, Redacted, Tally, TallyKind};
+use ambre_core::{Byte, Char, Recounts, Rule, Tally, TallyKind, Validated};
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Category, Channel, Document, Id, Message, Meta, Segment, Space, User};
@@ -55,11 +55,11 @@ pub struct ChannelActivity {
     pub active: crate::Activity,
     /// The new messages of the channel, once the loaded document gives the
     /// number (`MURMURE-120`). `None` while only the mark is known.
-    pub unread: Option<UnreadCount>,
+    pub unread: Option<Tally<Unread>>,
     /// The new messages that name this user or the channel. A loaded
     /// document counts its marks, so a false summary does not stay
     /// (`MURMURE-104`). `None` while only the mark is known.
-    pub mentions: Option<MentionCount>,
+    pub mentions: Option<Tally<Mentions>>,
 }
 
 /// How many messages a segment or a list holds, or how many a segment
@@ -71,45 +71,19 @@ impl TallyKind for Messages {
 }
 
 /// How many messages past the reader's cursor mention them, or the channel
-/// (`MURMURE-233`). A type of its own beside [`UnreadCount`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MentionCount(u32);
+/// (`MURMURE-233`). A marker of its own beside [`Unread`].
+pub enum Mentions {}
 
-impl MentionCount {
-    /// The messages a count found that mention a reader.
-    #[must_use]
-    pub const fn of_messages(messages: Tally<Messages>) -> Self {
-        Self(messages.get())
-    }
-
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-
-    /// No mention.
-    pub const ZERO: Self = Self(0);
-
-    /// The mentions a document's activity counted: each update that named
-    /// the reader, or every member, is one mention.
-    #[must_use]
-    pub const fn of_updates(
-        updates: ambre_core::Tally<ambre_core::activity::MentionUpdates>,
-    ) -> Self {
-        Self(updates.get())
-    }
-
-    /// The two counts together, held at the top rather than wrapping.
-    #[must_use]
-    pub const fn plus(self, other: Self) -> Self {
-        Self(self.0.saturating_add(other.0))
-    }
+impl TallyKind for Mentions {
+    const NAME: &'static str = "MentionCount";
 }
+
+/// Each message a count found that mentions a reader is one mention.
+impl Recounts<Messages> for Mentions {}
+
+/// Each update of a document's activity that named the reader, or every
+/// member, is one mention.
+impl Recounts<ambre_core::activity::MentionUpdates> for Mentions {}
 
 /// Where a channel the user belongs to lives, as the relay lists it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -175,51 +149,19 @@ pub struct DirectPeers {
     pub names: Vec<ambre_core::DisplayName>,
 }
 
-/// How many messages of a channel are past the reader's cursor. A distinct
-/// type, so a count of mentions never takes its place.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UnreadCount(u32);
+/// How many messages of a channel are past the reader's cursor. A marker of
+/// its own, so a count of mentions never takes its place.
+pub enum Unread {}
 
-impl UnreadCount {
-    /// The messages a count found past a reader's cursor.
-    #[must_use]
-    pub const fn of_messages(messages: Tally<Messages>) -> Self {
-        Self(messages.get())
-    }
-
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-
-    /// Nothing unread.
-    pub const ZERO: Self = Self(0);
-
-    /// The unread messages a document's activity counted: each content
-    /// update is one message.
-    #[must_use]
-    pub const fn of_updates(
-        updates: ambre_core::Tally<ambre_core::activity::ContentUpdates>,
-    ) -> Self {
-        Self(updates.get())
-    }
-
-    /// The two counts together, held at the top rather than wrapping.
-    #[must_use]
-    pub const fn plus(self, other: Self) -> Self {
-        Self(self.0.saturating_add(other.0))
-    }
-
-    /// Whether nothing is unread.
-    pub const fn is_zero(self) -> bool {
-        self.0 == 0
-    }
+impl TallyKind for Unread {
+    const NAME: &'static str = "UnreadCount";
 }
+
+/// Each message a count found past a reader's cursor is one unread message.
+impl Recounts<Messages> for Unread {}
+
+/// Each content update of a document's activity is one unread message.
+impl Recounts<ambre_core::activity::ContentUpdates> for Unread {}
 
 pub use ambre_core::{Authored, Instant};
 
@@ -825,7 +767,7 @@ pub enum MurmureEvent {
     /// Nothing was sent: the view asks the author, then sends `held` again
     /// confirmed (`MURMURE-231`).
     ConfirmChannelMention {
-        members: ambre_core::MemberCount,
+        members: Tally<ambre_core::Members>,
         held: HeldSend,
     },
     /// A member reported the snapshot of `segment` as false, and the relay
@@ -937,14 +879,28 @@ impl std::fmt::Debug for SealedChannelKey {
 /// catalogue stores an absent key rather than an empty string. A member typed
 /// it, so `Debug` prints its length alone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct Topic(Redacted<String>);
+#[serde(transparent)]
+pub struct Topic(Validated<TopicRule>);
+
+/// The rule of a [`Topic`]: never empty.
+pub enum TopicRule {}
+
+impl Rule for TopicRule {
+    type Error = &'static str;
+
+    fn admit(text: String) -> Result<String, Self::Error> {
+        if text.is_empty() {
+            Err("a topic is never empty")
+        } else {
+            Ok(text)
+        }
+    }
+}
 
 impl Topic {
     /// The topic `text` states, or `None` for an empty text.
     pub fn new(text: impl Into<String>) -> Option<Self> {
-        let text = text.into();
-        (!text.is_empty()).then_some(Self(Redacted::new(text)))
+        Validated::parse(text).ok().map(Self)
     }
 
     /// The text of the topic.
@@ -957,13 +913,13 @@ impl TryFrom<String> for Topic {
     type Error = &'static str;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
-        Self::new(text).ok_or("a topic is never empty")
+        Validated::parse(text).map(Self)
     }
 }
 
 impl From<Topic> for String {
     fn from(topic: Topic) -> Self {
-        topic.0.into_inner()
+        topic.0.into_string()
     }
 }
 

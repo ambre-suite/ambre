@@ -83,7 +83,8 @@ and the document schema in one type.
 
 ```rust
 /// A key a `const` table names, for example "prose.format.bold": its kind
-/// is `Commands`, `Icons` or `Categories`.
+/// is `Commands`, `Icons`, `Categories` or `Canvases`. It lives in
+/// `ambre-core`, beside the canvas ids it also names.
 pub struct StaticKey<K: KeyKind> { text: &'static str, kind: PhantomData<fn() -> K> }
 
 /// The description every view of a command derives from (`UI-THREAD-019`).

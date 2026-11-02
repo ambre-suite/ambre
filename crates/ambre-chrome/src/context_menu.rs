@@ -13,7 +13,8 @@
 // "Bold" therefore runs the exact same command, decoupled from the trigger.
 // ============================================================================
 
-use ambre_commands::{Command, Commands, KeyBinding, Locale, StaticKey};
+use ambre_commands::{Command, KeyBinding, Locale};
+use ambre_core::{Commands, StaticKey};
 use ambre_core::{Css, Point, Px, Vector};
 use leptos::html;
 use leptos::prelude::*;

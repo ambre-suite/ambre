@@ -14,8 +14,8 @@
 
 use ambre_bus::AppCommand;
 use ambre_bus::app::toile::ToileCommand;
-use ambre_chrome::commands::{Commands, StaticKey};
 use ambre_chrome::{CommandHandler, KeyRoute, Openness, ShellAction, Toasts};
+use ambre_core::{Commands, StaticKey};
 use ambre_draw::Point;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;

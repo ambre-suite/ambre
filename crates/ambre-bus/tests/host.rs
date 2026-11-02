@@ -29,6 +29,7 @@ use ambre_bus::{
 };
 use ambre_bus::{Col, Decimals, DecimalsStep, Row};
 use ambre_core::Bounded;
+use ambre_core::id::Sheet;
 use ambre_core::id::{
     Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
@@ -991,7 +992,7 @@ fn read_only_and_local_commands_are_not_mutating() {
             kind: SelectionKind::Cells,
         }),
         AppCommand::Trame(TrameCommand::ActivateSheet {
-            sheet_id: ambre_bus::SheetId::new("s1".to_owned()),
+            sheet_id: Id::<Sheet>::from_text("s1".to_owned()),
         }),
         // Trame: read-only queries.
         AppCommand::Trame(TrameCommand::RequestSelectionStats),

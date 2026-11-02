@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos, Span};
 
 impl TrameState {
@@ -23,7 +24,7 @@ impl TrameState {
     /// sheet or a virtual (never-materialized) column.
     pub(super) fn apply_filter(
         &mut self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         col: Pos<Col>,
         kind: FilterKind,
     ) -> TrameOutcome {
@@ -160,7 +161,7 @@ impl TrameState {
     /// and the stored `filters_{sheet}` definition, then broadcast
     /// (`trame-shared-filter`). A no-op
     /// (no delta) when nothing is filtered.
-    pub(super) fn clear_filter(&mut self, sheet_id: &SheetId) -> TrameOutcome {
+    pub(super) fn clear_filter(&mut self, sheet_id: &Id<Sheet>) -> TrameOutcome {
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }

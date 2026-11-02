@@ -19,8 +19,8 @@ pub use ambre_core::FontFamily;
 use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
 use ambre_core::index::{Axis, Count, Numbered, Pos, Shown};
 use ambre_core::{
-    Board, Bounded, DocType, FontSize, Px, Redacted, Rgba, Slant, StoredBoard, Strikethrough,
-    Tally, Underline,
+    Board, Bounded, DocType, FontSize, Px, Rgba, Rule, Slant, StoredBoard, Strikethrough, Tally,
+    Underline, Validated,
 };
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
@@ -502,8 +502,53 @@ impl LinkTarget {
 /// frame (`TOILE-088`, `TOILE-267`). A user typed the address, so `Debug`
 /// prints its length alone.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct WebAddress(Redacted<String>);
+#[serde(transparent)]
+pub struct WebAddress(Validated<HttpsAddress>);
+
+/// The rule of a [`WebAddress`]: an `https` address with a host, as
+/// [`WebAddress::parse`] states it. The rule keeps the address with its
+/// scheme written out.
+pub enum HttpsAddress {}
+
+impl Rule for HttpsAddress {
+    type Error = AddressError;
+
+    fn admit(text: String) -> Result<String, AddressError> {
+        // A control character or a space inside an address is never legitimate.
+        // It is a paste accident, or an attempt to hide a scheme from a naive
+        // prefix test (`java\nscript:`). Strip the ends, and refuse the middle.
+        let trimmed = text.trim_matches(|c: char| c.is_whitespace() || c.is_control());
+        if trimmed.is_empty() {
+            return Err(AddressError::Empty);
+        }
+        if trimmed.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err(AddressError::NoHost);
+        }
+
+        let rest = match split_scheme(trimmed) {
+            // An explicit scheme: `https` and nothing else.
+            Some((scheme, rest)) => {
+                if !scheme.eq_ignore_ascii_case("https") {
+                    return Err(AddressError::NotHttps);
+                }
+                rest.strip_prefix("//").unwrap_or(rest)
+            }
+            // No scheme at all: the user typed a host, and https is what they get.
+            None => trimmed,
+        };
+
+        // The authority ends at the first `/`, `?` or `#`; what is left must be
+        // a host. A leading `@` would make the host the part after it
+        // (userinfo), so an empty one there is as empty as no host at all.
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        let host = authority.rsplit('@').next().unwrap_or_default();
+        if host.is_empty() || host.starts_with(':') {
+            return Err(AddressError::NoHost);
+        }
+
+        Ok(format!("https://{rest}"))
+    }
+}
 
 /// Why a text is not an address a frame may load. One variant per message
 /// the user reads, so the wording lives with the rule rather than at the
@@ -566,39 +611,7 @@ impl WebAddress {
     /// * [`AddressError::NoHost`] on a missing host, or a host holding a
     ///   character no host may carry.
     pub fn parse(text: &str) -> Result<Self, AddressError> {
-        // A control character or a space inside an address is never legitimate.
-        // It is a paste accident, or an attempt to hide a scheme from a naive
-        // prefix test (`java\nscript:`). Strip the ends, and refuse the middle.
-        let trimmed = text.trim_matches(|c: char| c.is_whitespace() || c.is_control());
-        if trimmed.is_empty() {
-            return Err(AddressError::Empty);
-        }
-        if trimmed.chars().any(|c| c.is_whitespace() || c.is_control()) {
-            return Err(AddressError::NoHost);
-        }
-
-        let rest = match split_scheme(trimmed) {
-            // An explicit scheme: `https` and nothing else.
-            Some((scheme, rest)) => {
-                if !scheme.eq_ignore_ascii_case("https") {
-                    return Err(AddressError::NotHttps);
-                }
-                rest.strip_prefix("//").unwrap_or(rest)
-            }
-            // No scheme at all: the user typed a host, and https is what they get.
-            None => trimmed,
-        };
-
-        // The authority ends at the first `/`, `?` or `#`; what is left must be
-        // a host. A leading `@` would make the host the part after it
-        // (userinfo), so an empty one there is as empty as no host at all.
-        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-        let host = authority.rsplit('@').next().unwrap_or_default();
-        if host.is_empty() || host.starts_with(':') {
-            return Err(AddressError::NoHost);
-        }
-
-        Ok(Self(Redacted::new(format!("https://{rest}"))))
+        Validated::parse(text).map(Self)
     }
 
     /// The address's text, for the frame that loads it.
@@ -608,7 +621,7 @@ impl WebAddress {
 
     /// The address's text, for the document that stores it.
     pub fn into_string(self) -> String {
-        self.0.into_inner()
+        self.0.into_string()
     }
 }
 
@@ -637,20 +650,20 @@ impl TryFrom<String> for WebAddress {
     type Error = AddressError;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
-        Self::parse(&text)
+        Validated::parse(text).map(Self)
     }
 }
 
 impl From<WebAddress> for String {
     fn from(address: WebAddress) -> Self {
-        address.0.into_inner()
+        address.0.into_string()
     }
 }
 
 /// The link target of a web page, once its address passed the address gate.
 impl From<WebAddress> for ambre_core::LinkUrl {
     fn from(address: WebAddress) -> Self {
-        Self::new(address.0.into_inner())
+        Self::new(address.0.into_string())
     }
 }
 

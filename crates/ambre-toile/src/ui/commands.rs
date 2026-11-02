@@ -23,10 +23,8 @@
 // redoes on both.
 // ============================================================================
 
-use ambre_commands::{
-    Categories, Command, Commands, Icons, Key, KeyBinding, KeyChar, Locale, Modifiers, StaticKey,
-    shared,
-};
+use ambre_commands::{Command, Key, KeyBinding, KeyChar, Locale, Modifiers, shared};
+use ambre_core::{Categories, Commands, Icons, StaticKey};
 
 use crate::ui::find::FIND;
 use crate::ui::menu;

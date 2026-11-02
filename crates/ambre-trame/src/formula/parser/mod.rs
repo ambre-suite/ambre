@@ -4,6 +4,7 @@
 //! Uses nom 8.0 with the `Parser::parse` trait method.
 
 use ambre_core::Tally;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 use nom::Parser;
 use nom::branch::alt;
@@ -19,7 +20,7 @@ use super::types::{
     UnaryOpKind, alpha_to_col,
 };
 use crate::model::Uid;
-use ambre_bus::{DefinedName, Row, SheetId, SheetName};
+use ambre_bus::{DefinedName, Row, SheetName};
 
 // -----------------------------------------------------------------------------
 // Whitespace
@@ -241,10 +242,10 @@ fn sheet_name(input: &str) -> nom::IResult<&str, SheetName> {
 /// A stable sheet id token in canonical form: `#` followed by id characters
 /// (hex digits and `_`, for example `#s0` or `#00..0_0000002a`). The id may start with
 /// a digit, so a plain `identifier` parser does not fit.
-fn sheet_id_token(input: &str) -> nom::IResult<&str, SheetId> {
+fn sheet_id_token(input: &str) -> nom::IResult<&str, Id<Sheet>> {
     let (input, _) = char('#').parse(input)?;
     let (input, id) = recognize(many1(alt((alphanumeric1, tag("_"))))).parse(input)?;
-    Ok((input, SheetId::new(id.to_owned())))
+    Ok((input, Id::<Sheet>::from_text(id.to_owned())))
 }
 
 /// The qualifier preceding a `!`: a stable id (`#s0`) or a display name
@@ -621,7 +622,7 @@ pub fn parse_formula(input: &str) -> Result<Expr, ParseError> {
 /// `#NAME?`.
 pub fn resolve_refs(
     expr: Expr,
-    default_sheet: EngineSheet,
+    default_sheet: Pos<EngineSheet>,
     ctx: &dyn FormulaCtx,
 ) -> Result<Expr, ParseError> {
     match expr {

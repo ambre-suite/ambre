@@ -9,9 +9,10 @@
 // ============================================================================
 
 use ambre_bus::{AppCommand, StylePatch, TrameCommand};
-use ambre_chrome::commands::{ClipboardWrite, Commands, PasteForm, StaticKey};
+use ambre_chrome::commands::{ClipboardWrite, PasteForm};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
 use ambre_core::index::Pos;
+use ambre_core::{Commands, StaticKey};
 use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;
 

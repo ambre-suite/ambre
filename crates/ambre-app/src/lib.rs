@@ -31,7 +31,9 @@
 
 #![cfg(target_arch = "wasm32")]
 
-use ambre_chrome::commands::{Commands, Keymap, StaticKey};
+use ambre_chrome::commands::Keymap;
+use ambre_core::id::Sheet;
+use ambre_core::{Commands, StaticKey};
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -40,8 +42,8 @@ use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use ambre_bus::conduit::{self, ChannelCapacity, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    AppCommand, LogicCommand, LogicEvent, MemberInfo, RestCommand, Role, SheetId, SheetTab,
-    SyncCommand, UiEvent,
+    AppCommand, LogicCommand, LogicEvent, MemberInfo, RestCommand, Role, SheetTab, SyncCommand,
+    UiEvent,
 };
 use ambre_chrome::{
     AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
@@ -398,7 +400,7 @@ struct Wiring {
     /// DOM `SheetTabs` slot (the tabs no longer live on the canvas).
     sheets: RwSignal<Vec<SheetTab>>,
     /// Active sheet id, published by the Trame view on `TrameEvent::SheetList`.
-    active_sheet: RwSignal<SheetId>,
+    active_sheet: RwSignal<Id<Sheet>>,
     /// Chrome status indicator (`-chrome.md` 2.G): drives the header sync label
     /// and the document-loading overlay. Set by the per-frame relay on
     /// `UiEvent::DocumentReady` / `ConnectionStatus`, and by the route poll on a
@@ -668,7 +670,7 @@ pub fn main() {
     // Sheet-tab strip model (`trame-sheets`): mirrored from `TrameEvent::SheetList`
     // by the relay below and fed to the DOM `SheetTabs` slot (off the canvas now).
     let sheets = RwSignal::new(Vec::<SheetTab>::new());
-    let active_sheet = RwSignal::new(SheetId::default());
+    let active_sheet = RwSignal::new(Id::<Sheet>::from_text(String::new()));
     // Grid zoom factor selected in the status-bar menu (`trame-status-bar`),
     // polled by the canvas view each frame. Defaults to 100%.
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
@@ -688,8 +690,7 @@ pub fn main() {
     // against its (UI-only) selection. Created here so the view and the Leptos
     // shell share the one pair of signals, exactly like Trame's `ctx_scope`.
     let toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
-    let toile_menu_cmd =
-        RwSignal::new(None::<ambre_chrome::commands::StaticKey<ambre_chrome::commands::Commands>>);
+    let toile_menu_cmd = RwSignal::new(None::<ambre_core::StaticKey<ambre_core::Commands>>);
     // Toile active tool (`toile-tools`): shared by the DOM tool palette,
     // the keyboard tool chords and the canvas view, exactly like the context-menu
     // pair above. Starts on the default tool (Select).
@@ -1766,7 +1767,7 @@ pub fn main() {
     let ch_tr_sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     let ch_tr_ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
     let ch_tr_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let ch_tr_active_sheet = RwSignal::new(SheetId::default());
+    let ch_tr_active_sheet = RwSignal::new(Id::<Sheet>::from_text(String::new()));
     let ch_tr_filter_active = RwSignal::new(trame_chrome::SheetFilter::Unfiltered);
     let ch_tr_find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
     let ch_toile_present = RwSignal::new(PresentMode::Editing);
@@ -1846,7 +1847,7 @@ pub fn main() {
     };
 
     let switcher = host::run_with(
-        ambre_core::CanvasId::CONTENT,
+        ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         move |size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>, text_input| {
             let w = ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.width.get()));
             let h = ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.height.get()));

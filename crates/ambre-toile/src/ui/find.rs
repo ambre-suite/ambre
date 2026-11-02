@@ -12,9 +12,9 @@
 // ============================================================================
 
 use ambre_bus::app::find::Match;
-use ambre_commands::{Commands, StaticKey};
 use ambre_core::id::{Element, Id};
 use ambre_core::index::Pos;
+use ambre_core::{Commands, StaticKey};
 
 /// Open the Find panel. A UI-only intent: the launcher intercepts it to toggle
 /// the panel open rather than dispatching to Logic (the panel emits

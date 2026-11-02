@@ -23,9 +23,9 @@ use super::types::{
     RangeEndpoint, RangeId, SpanLines,
 };
 
-/// Per-sheet indices, keyed by the engine's local sheet index ([`EngineSheet`]), used to
+/// Per-sheet indices, keyed by the engine's local sheet index ([`Pos<EngineSheet>`]), used to
 /// bind positional references to row/column `Uid`s during compilation.
-pub type SheetIndices = HashMap<EngineSheet, SheetIndex>;
+pub type SheetIndices = HashMap<Pos<EngineSheet>, SheetIndex>;
 
 /// Compile an AST into a [`CellBytecode`] (ops + dependencies), resolving
 /// positional references against `indices`.
@@ -186,6 +186,7 @@ fn compile_into(
 mod tests {
     use super::super::parser::parse_formula;
     use super::super::test_index::index_with;
+    use super::super::types::ACTIVE_SHEET;
     use crate::Col;
     use ambre_core::index::Pos;
 
@@ -195,7 +196,7 @@ mod tests {
     fn compile_str(input: &str) -> CellBytecode {
         let ast = parse_formula(input).unwrap();
         let mut indices = SheetIndices::new();
-        indices.insert(EngineSheet::ACTIVE, index_with(20, 10));
+        indices.insert(ACTIVE_SHEET, index_with(20, 10));
         compile(&ast, &indices)
     }
 

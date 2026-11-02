@@ -13,7 +13,8 @@
 // (`SCHEMA-002`), so the launcher fixes it to the bus's application command.
 // ============================================================================
 
-use ambre_commands::{ClipboardWrite, Commands, PasteForm, StaticKey};
+use ambre_commands::{ClipboardWrite, PasteForm};
+use ambre_core::{Commands, StaticKey};
 
 /// One thing a command asks of the shell, once its application has decided.
 pub enum ShellAction<C> {

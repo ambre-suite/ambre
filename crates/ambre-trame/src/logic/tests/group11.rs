@@ -10,6 +10,7 @@ use crate::logic::schema::{
 use crate::model::CellKey;
 use crate::{FillMode, SelectionKind};
 use ambre_core::Rgb;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use loro::LoroValue;
 
@@ -542,7 +543,7 @@ fn a_write_past_the_line_cap_is_refused() {
 
 /// Two sheets beside the default one, each holding a value, a formula and
 /// a bold cell. Returns their ids, the default first.
-fn three_sheets(state: &mut TrameState) -> Vec<SheetId> {
+fn three_sheets(state: &mut TrameState) -> Vec<Id<Sheet>> {
     for name in ["Two", "Three"] {
         state.handle_command(TrameCommand::CreateSheet {
             name: crate::test_support::sheet(name),
@@ -567,7 +568,7 @@ fn three_sheets(state: &mut TrameState) -> Vec<SheetId> {
 }
 
 /// The cells and the styles of every sheet in `ids`.
-fn contents(state: &TrameState, ids: &[SheetId]) -> Vec<(LoroValue, LoroValue)> {
+fn contents(state: &TrameState, ids: &[Id<Sheet>]) -> Vec<(LoroValue, LoroValue)> {
     ids.iter()
         .map(|id| {
             (
@@ -666,7 +667,7 @@ fn two_peers_adding_a_sheet_keep_both() {
 }
 
 /// The tab strip one peer reads: each sheet's id and name, and the active id.
-fn strip(state: &TrameState) -> (Vec<(SheetId, String)>, SheetId) {
+fn strip(state: &TrameState) -> (Vec<(Id<Sheet>, String)>, Id<Sheet>) {
     match state.sheet_list_event() {
         TrameEvent::SheetList { sheets, active } => (
             sheets

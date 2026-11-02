@@ -9,7 +9,8 @@ use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_bus::{Authored, Instant};
-use ambre_chrome::commands::{ClipboardWrite, Commands, PasteForm, StaticKey};
+use ambre_chrome::commands::{ClipboardWrite, PasteForm};
+use ambre_core::{Commands, StaticKey};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
     ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, EmojiPicker, InviteControl,
@@ -339,7 +340,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 ambre_prose::chrome::LinkHover::Elsewhere => "text",
             };
             if let Some(doc) = web_sys::window().and_then(|w| w.document())
-                && let Some(el) = doc.get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
+                && let Some(el) = doc.get_element_by_id(
+                    ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT.as_str(),
+                )
                 && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
             {
                 let _ = html.style().set_property("cursor", cursor);
@@ -426,7 +429,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 .get()
                 .unwrap_or_else(|| ambre_toile::ui::palette::cursor_css(toile_active_tool.get()));
             if let Some(doc) = web_sys::window().and_then(|w| w.document())
-                && let Some(el) = doc.get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
+                && let Some(el) = doc.get_element_by_id(
+                    ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT.as_str(),
+                )
                 && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
             {
                 let _ = html.style().set_property("cursor", cursor.as_str());

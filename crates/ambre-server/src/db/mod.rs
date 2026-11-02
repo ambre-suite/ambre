@@ -64,8 +64,9 @@ fn decode_display_names(texts: Vec<String>) -> Result<Vec<ambre_core::DisplayNam
 
 /// A stored member count, checked into 32 bits. A count that does not fit is
 /// a decode error, never a truncation (`SRV-238`).
-fn decode_member_count(count: i64) -> Result<ambre_core::MemberCount, sqlx::Error> {
-    ambre_core::MemberCount::try_from(count).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+fn decode_member_count(count: i64) -> Result<ambre_core::Tally<ambre_core::Members>, sqlx::Error> {
+    ambre_core::Tally::<ambre_core::Members>::try_from(count)
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
 /// A stored sequence number column, as a [`Seq`](ambre_core::Seq). A

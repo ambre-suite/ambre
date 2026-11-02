@@ -14,6 +14,7 @@ use crate::formula::text::fold_char;
 use crate::formula::types::CellId;
 use ambre_bus::app::find::{FindText, Match};
 use ambre_core::Redacted;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 
 pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
@@ -130,7 +131,7 @@ impl TrameState {
         // active sheet's engine state.
         let mut touched_other = false;
         if options.sheets == SheetScope::All {
-            let others: Vec<SheetId> = self
+            let others: Vec<Id<Sheet>> = self
                 .all_sheet_ids()
                 .into_iter()
                 .filter(|id| *id != self.active_sheet)
@@ -262,7 +263,7 @@ impl TrameState {
     /// evaluation for that sheet, consistent with the active path.
     fn replace_in_other(
         &mut self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         needle: &FoldedNeedle,
         replacement: &Replacement,
         options: FindOptions,

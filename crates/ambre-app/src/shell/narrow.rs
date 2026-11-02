@@ -3,8 +3,9 @@
 // reads the viewport of the frame it runs in. So each test mounts into an
 // iframe of the width it reads.
 
-use ambre_chrome::commands::{Categories, Command, Commands, Locale, StaticKey};
+use ambre_chrome::commands::{Command, Locale};
 use ambre_chrome::{ContextMenu, MenuEntry};
+use ambre_core::{Categories, Commands, StaticKey};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;

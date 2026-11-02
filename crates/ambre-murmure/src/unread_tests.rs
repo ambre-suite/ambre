@@ -2,7 +2,7 @@
 //! (`features/ambre-spec-murmure-unread.md section 3`).
 
 use crate::Receipt;
-use ambre_bus::{Authored, Instant, MessageDraft, UnreadCount};
+use ambre_bus::{Authored, Instant, MessageDraft, Unread};
 use ambre_core::id::{Channel, Id, Segment, User};
 use ambre_core::{Payload, Seq, SnapshotBytes};
 use loro::{Container, ValueOrContainer};
@@ -99,15 +99,15 @@ fn a_message_takes_the_number_of_the_update_that_created_it() {
     let me = Id::<User>::mint();
     assert_eq!(
         bob.unread(segment, Seq::new(4), me).expect("count"),
-        UnreadCount::new(2)
+        ambre_core::Tally::<Unread>::new(2)
     );
     assert_eq!(
         bob.unread(segment, Seq::new(5), me).expect("count"),
-        UnreadCount::new(1)
+        ambre_core::Tally::<Unread>::new(1)
     );
     assert_eq!(
         bob.unread(segment, Seq::new(6), me).expect("count"),
-        UnreadCount::ZERO
+        ambre_core::Tally::<Unread>::ZERO
     );
     assert_eq!(bob.delivered(segment.document_id()), Seq::new(6));
 }
@@ -124,7 +124,7 @@ fn the_authors_own_message_is_numbered_by_its_echo_and_never_counts() {
     assert_eq!(alice.position(segment, id), Some(Position::Unknown));
     assert_eq!(
         alice.unread(segment, Seq::ZERO, me).expect("count"),
-        UnreadCount::ZERO
+        ambre_core::Tally::<Unread>::ZERO
     );
 
     // The relay hands every member the update, its author included.
@@ -197,11 +197,11 @@ fn a_message_known_only_from_a_snapshot_lies_within_its_horizon() {
     );
     assert_eq!(
         bob.unread(segment, Seq::new(11), me).expect("count"),
-        UnreadCount::new(1)
+        ambre_core::Tally::<Unread>::new(1)
     );
     assert_eq!(
         bob.unread(segment, Seq::new(12), me).expect("count"),
-        UnreadCount::ZERO
+        ambre_core::Tally::<Unread>::ZERO
     );
 }
 
@@ -245,7 +245,7 @@ fn an_edit_creates_no_message_and_never_counts() {
     assert_eq!(
         bob.unread(segment, Seq::new(5), Id::<User>::mint())
             .expect("count"),
-        UnreadCount::ZERO
+        ambre_core::Tally::<Unread>::ZERO
     );
 }
 

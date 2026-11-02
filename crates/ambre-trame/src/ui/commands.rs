@@ -16,9 +16,8 @@
 // ============================================================================
 
 use ambre_bus::{AppCommand, TrameCommand};
-use ambre_commands::{
-    Categories, Command, Commands, Icons, KeyBinding, KeyChar, Keymap, Locale, StaticKey, shared,
-};
+use ambre_commands::{Command, KeyBinding, KeyChar, Keymap, Locale, shared};
+use ambre_core::{Categories, Commands, Icons, StaticKey};
 
 use crate::ui::grid::CtxScope;
 

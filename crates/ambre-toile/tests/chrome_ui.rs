@@ -37,10 +37,10 @@ use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
-use ambre_commands::{Commands, StaticKey};
 use ambre_core::id::{Document, Frame, Id, Thread, User};
 use ambre_core::index::{Count, Pos};
 use ambre_core::{Authored, Char, Instant, Tally};
+use ambre_core::{Commands, StaticKey};
 use ambre_core::{Doc, Scale, View};
 use ambre_draw::Rect;
 use ambre_toile::chrome::{

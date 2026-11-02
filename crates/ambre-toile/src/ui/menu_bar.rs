@@ -20,7 +20,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{PresentFocus, ToileCommand};
-use ambre_commands::{Commands, StaticKey};
+use ambre_core::{Commands, StaticKey};
 
 use super::menu;
 

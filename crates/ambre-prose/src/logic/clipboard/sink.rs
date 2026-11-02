@@ -13,6 +13,8 @@ use html5ever::interface::{ElementFlags, NodeOrText, QuirksMode, TreeSink};
 use html5ever::tendril::StrTendril;
 use html5ever::{Attribute, QualName};
 
+use ambre_core::index::{Axis, IdxVec, Pos};
+
 /// What a node of the arena holds. A comment, a doctype and a processing
 /// instruction carry nothing a paste reads.
 pub(super) enum Data {
@@ -26,59 +28,49 @@ pub(super) enum Data {
 }
 
 pub(super) struct Node {
-    pub(super) parent: Option<NodeId>,
-    pub(super) children: Vec<NodeId>,
+    pub(super) parent: Option<Pos<HtmlNode>>,
+    pub(super) children: Vec<Pos<HtmlNode>>,
     pub(super) data: Data,
 }
 
-/// A node's place in the arena. Only the arena hands one out, so an id
-/// always names a node of the tree it came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(super) struct NodeId(usize);
-
-impl NodeId {
-    /// The document, the root every other node hangs from.
-    pub(super) const DOCUMENT: Self = Self(0);
-}
-
-/// The nodes of a parsed tree, by id.
-pub(super) struct Nodes(Vec<Node>);
-
-impl Nodes {
-    /// The node `id` names, `None` past the arena.
-    pub(super) fn get(&self, id: NodeId) -> Option<&Node> {
-        self.0.get(id.0)
-    }
-
-    fn get_mut(&mut self, id: NodeId) -> Option<&mut Node> {
-        self.0.get_mut(id.0)
-    }
-
-    /// Add a node under no parent, and name it.
-    fn push(&mut self, data: Data) -> NodeId {
-        self.0.push(Node {
+impl Node {
+    /// A node under no parent, holding `data`.
+    const fn orphan(data: Data) -> Self {
+        Self {
             parent: None,
             children: Vec::new(),
             data,
-        });
-        NodeId(self.0.len() - 1)
+        }
     }
 }
+
+/// The places of the arena: a [`Pos<HtmlNode>`] names a node. Only the
+/// arena hands one out, so a position always names a node of the tree it
+/// came from.
+#[derive(PartialEq, Eq)]
+pub(super) enum HtmlNode {}
+
+impl Axis for HtmlNode {
+    const NAME: &'static str = "HtmlNode";
+}
+
+/// The document, the root every other node hangs from.
+pub(super) const DOCUMENT: Pos<HtmlNode> = Pos::ZERO;
 
 /// A node's index, and the element name the tree builder asks for without
 /// reaching into the arena.
 #[derive(Clone)]
 pub(super) struct Handle {
-    id: NodeId,
+    id: Pos<HtmlNode>,
     name: QualName,
 }
 
 /// The arena the tree builder writes into. Index 0 is the document.
 pub(super) struct Arena {
-    nodes: RefCell<Nodes>,
+    nodes: RefCell<IdxVec<HtmlNode, Node>>,
     /// A template's contents: a fragment no parent holds, so a paste never
     /// reads it.
-    templates: RefCell<HashMap<NodeId, NodeId>>,
+    templates: RefCell<HashMap<Pos<HtmlNode>, Pos<HtmlNode>>>,
 }
 
 fn nameless() -> QualName {
@@ -88,17 +80,13 @@ fn nameless() -> QualName {
 impl Arena {
     pub(super) fn new() -> Self {
         Self {
-            nodes: RefCell::new(Nodes(vec![Node {
-                parent: None,
-                children: Vec::new(),
-                data: Data::Document,
-            }])),
+            nodes: RefCell::new(IdxVec::from(vec![Node::orphan(Data::Document)])),
             templates: RefCell::new(HashMap::new()),
         }
     }
 
-    fn push(&self, data: Data) -> NodeId {
-        self.nodes.borrow_mut().push(data)
+    fn push(&self, data: Data) -> Pos<HtmlNode> {
+        self.nodes.borrow_mut().push(Node::orphan(data))
     }
 
     fn handle(&self, data: Data) -> Handle {
@@ -112,7 +100,7 @@ impl Arena {
         }
     }
 
-    fn detach(nodes: &mut Nodes, id: NodeId) {
+    fn detach(nodes: &mut IdxVec<HtmlNode, Node>, id: Pos<HtmlNode>) {
         let Some(parent) = nodes.get(id).and_then(|node| node.parent) else {
             return;
         };
@@ -126,7 +114,7 @@ impl Arena {
 
     /// Put `child` under `parent` at `index` among its children, merging
     /// text into a text neighbour as the tree builder expects.
-    fn insert(&self, parent: NodeId, index: usize, child: NodeOrText<Handle>) {
+    fn insert(&self, parent: Pos<HtmlNode>, index: usize, child: NodeOrText<Handle>) {
         let mut nodes = self.nodes.borrow_mut();
         let Some(count) = nodes.get(parent).map(|node| node.children.len()) else {
             return;
@@ -145,7 +133,7 @@ impl Arena {
                     previous.push_str(&text);
                     return;
                 }
-                nodes.push(Data::Text(text.to_string()))
+                nodes.push(Node::orphan(Data::Text(text.to_string())))
             }
             NodeOrText::AppendNode(handle) => {
                 Self::detach(&mut nodes, handle.id);
@@ -163,7 +151,7 @@ impl Arena {
         }
     }
 
-    fn append_to(&self, parent: NodeId, child: NodeOrText<Handle>) {
+    fn append_to(&self, parent: Pos<HtmlNode>, child: NodeOrText<Handle>) {
         let end = self
             .nodes
             .borrow()
@@ -175,10 +163,10 @@ impl Arena {
 
 impl TreeSink for Arena {
     type Handle = Handle;
-    type Output = Nodes;
+    type Output = IdxVec<HtmlNode, Node>;
     type ElemName<'a> = &'a QualName;
 
-    fn finish(self) -> Nodes {
+    fn finish(self) -> IdxVec<HtmlNode, Node> {
         self.nodes.into_inner()
     }
 
@@ -186,7 +174,7 @@ impl TreeSink for Arena {
 
     fn get_document(&self) -> Handle {
         Handle {
-            id: NodeId::DOCUMENT,
+            id: DOCUMENT,
             name: nameless(),
         }
     }

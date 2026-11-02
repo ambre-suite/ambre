@@ -25,6 +25,7 @@
 //    AVERAGE = SUM/COUNT / MIN<=x<=MAX / COUNT invariants.
 // ============================================================================
 
+use crate::formula::ACTIVE_SHEET;
 use ambre_core::index::{Count, Pos};
 use std::collections::HashMap;
 
@@ -36,7 +37,6 @@ use super::functions::{FnCtx, call_builtin};
 use super::parser::parse_formula;
 use super::render::render;
 use super::test_index::{function, indices_with, stored};
-use super::types::EngineSheet;
 use super::types::{
     BinOpKind, CellId, CellRef, CellValue, Expr, Op, RangeDep, RangeValue, UnaryOpKind,
 };
@@ -52,7 +52,7 @@ use crate::{Col, Row};
 /// scheme (rows on peer 1, columns on peer 2, counter == position).
 fn cell(row: u32, col: u32) -> CellId {
     CellId::bound(
-        EngineSheet::ACTIVE,
+        ACTIVE_SHEET,
         Uid {
             peer: ambre_core::PeerId::new(1),
             counter: ambre_core::IdCounter::new(row),

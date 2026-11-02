@@ -3,9 +3,7 @@
 
 use crate::Receipt;
 use ambre_bus::Char;
-use ambre_bus::{
-    Authored, Instant, Mention, MentionCount, MentionTarget, MessageDraft, MessageView,
-};
+use ambre_bus::{Authored, Instant, Mention, MentionTarget, Mentions, MessageDraft, MessageView};
 use ambre_core::Seq;
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::Span;
@@ -231,7 +229,7 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     deliver(&mut held, &state, author, &claimed, 2);
     assert_eq!(
         count(&held, bob),
-        MentionCount::new(0),
+        ambre_core::Tally::<Mentions>::new(0),
         "the claim reads as nothing"
     );
 
@@ -245,7 +243,10 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     deliver(&mut held, &state, author, &to_bob, 3);
     assert_eq!(
         (count(&held, bob), count(&held, carol)),
-        (MentionCount::new(1), MentionCount::new(0))
+        (
+            ambre_core::Tally::<Mentions>::new(1),
+            ambre_core::Tally::<Mentions>::new(0)
+        )
     );
 
     let to_all = state
@@ -258,11 +259,14 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     deliver(&mut held, &state, author, &to_all, 4);
     assert_eq!(
         (count(&held, bob), count(&held, carol)),
-        (MentionCount::new(2), MentionCount::new(1))
+        (
+            ambre_core::Tally::<Mentions>::new(2),
+            ambre_core::Tally::<Mentions>::new(1)
+        )
     );
     assert_eq!(
         count(&held, author),
-        MentionCount::new(0),
+        ambre_core::Tally::<Mentions>::new(0),
         "her own messages never count"
     );
 }
@@ -370,7 +374,7 @@ fn an_at_channel_past_the_threshold_waits_for_confirmation() {
             ambre_bus::Confirmation::Unconfirmed
         ),
         Screened::Confirm {
-            members: ambre_core::MemberCount::new(CONFIRM_CHANNEL_PAST.get() + 1),
+            members: ambre_core::Tally::<ambre_core::Members>::new(CONFIRM_CHANNEL_PAST.get() + 1),
             draft: all.clone(),
         }
     );

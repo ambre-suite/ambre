@@ -5,7 +5,8 @@ use super::{TrameOutcome, TrameState, col_to_alpha, default_sheet};
 use crate::model::Uid;
 use crate::{CellPos, Col, Row};
 use crate::{HeaderRow, SortKey, SortOrder, TrameCommand, TrameEvent};
-use ambre_bus::{FilterKind, FilterOp, SheetId};
+use ambre_bus::{FilterKind, FilterOp};
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 
 use crate::test_support::{at, span};
@@ -87,7 +88,7 @@ fn read_display(state: &mut TrameState, row: u32, col: u32) -> crate::DisplayCel
 }
 
 /// The id of the first non-default sheet in the current tab order.
-fn second_sheet_id(state: &TrameState) -> SheetId {
+fn second_sheet_id(state: &TrameState) -> Id<Sheet> {
     state
         .sheet_order_ids()
         .into_iter()
@@ -194,7 +195,7 @@ fn replaced_count(out: &TrameOutcome) -> u32 {
 }
 
 /// Pull the `ImportComplete` event out of an outcome.
-fn import_result(out: &TrameOutcome) -> (SheetId, u32, u32) {
+fn import_result(out: &TrameOutcome) -> (Id<Sheet>, u32, u32) {
     out.display
         .iter()
         .find_map(|e| match e {

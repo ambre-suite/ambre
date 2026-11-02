@@ -2,9 +2,7 @@
 //! (`features/ambre-spec-murmure-reactions.md`).
 
 use crate::Receipt;
-use ambre_bus::{
-    ActivityKind, Authored, Instant, MessageDraft, MessageView, Reaction, UnreadCount,
-};
+use ambre_bus::{ActivityKind, Authored, Instant, MessageDraft, MessageView, Reaction, Unread};
 use ambre_core::id::{Channel, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, Seq};
 use loro::{Container, LoroMap, ValueOrContainer, VersionVector};
@@ -365,14 +363,14 @@ fn a_reaction_never_counts_as_unread() {
     };
     assert_eq!(
         count(&bob),
-        UnreadCount::new(1),
+        ambre_core::Tally::<Unread>::new(1),
         "Alice's message is unread"
     );
     let sent = alice.react(message, THUMB);
     bob.receive(&alice, &sent, 2);
     assert_eq!(
         count(&bob),
-        UnreadCount::new(1),
+        ambre_core::Tally::<Unread>::new(1),
         "her reaction adds nothing"
     );
 }

@@ -12,8 +12,7 @@ use ambre_bus::{
     HeldReply, HeldSend, MessageAt, MurmureCommand, MurmureEvent,
 };
 use ambre_bus::{
-    MemberInfo, Mention, MentionCount, MentionTarget, OpenFailure, Seq, SignedDelta, UnreadCount,
-    Unreadable,
+    MemberInfo, Mention, MentionTarget, Mentions, OpenFailure, Seq, SignedDelta, Unread, Unreadable,
 };
 use ambre_core::Name;
 use ambre_murmure::{
@@ -153,7 +152,7 @@ impl ClosedChannel {
     pub(crate) fn mark(
         &self,
         channel_id: Id<Channel>,
-        threads: MentionCount,
+        threads: ambre_core::Tally<Mentions>,
     ) -> Option<ChannelActivity> {
         let since = self
             .counted
@@ -162,14 +161,14 @@ impl ClosedChannel {
             .with_mentions(threads);
         match self.base {
             Some(base) => Some(base.plus(&since).activity(channel_id)),
-            None => (!since.unread.is_zero() || since.mentions != MentionCount::ZERO).then_some(
-                ChannelActivity {
+            None => (!since.unread.is_zero()
+                || since.mentions != ambre_core::Tally::<Mentions>::ZERO)
+                .then_some(ChannelActivity {
                     channel_id,
                     active: ambre_bus::Activity::Active,
                     unread: None,
                     mentions: None,
-                },
-            ),
+                }),
         }
     }
 }
@@ -177,8 +176,8 @@ impl ClosedChannel {
 /// The new messages of a channel, and those of them that mention this user.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct Counts {
-    unread: UnreadCount,
-    mentions: MentionCount,
+    unread: ambre_core::Tally<Unread>,
+    mentions: ambre_core::Tally<Mentions>,
 }
 
 impl Counts {
@@ -190,9 +189,9 @@ impl Counts {
     }
 
     /// The same counts, with the mentions of the threads not held.
-    fn with_mentions(self, mentions: MentionCount) -> Self {
+    fn with_mentions(self, mentions: ambre_core::Tally<Mentions>) -> Self {
         self.plus(&Self {
-            unread: UnreadCount::default(),
+            unread: ambre_core::Tally::<Unread>::default(),
             mentions,
         })
     }
@@ -203,7 +202,7 @@ impl Counts {
         ChannelActivity {
             channel_id,
             active: ambre_bus::Activity::from_bool(
-                !self.unread.is_zero() || self.mentions != MentionCount::ZERO,
+                !self.unread.is_zero() || self.mentions != ambre_core::Tally::<Mentions>::ZERO,
             ),
             unread: Some(self.unread),
             mentions: Some(self.mentions),
@@ -670,8 +669,8 @@ impl LogicState {
             return false;
         };
         let now = Counts {
-            unread: UnreadCount::of_updates(counters.content),
-            mentions: MentionCount::of_updates(counters.mentions),
+            unread: ambre_core::Tally::<Unread>::recount(counters.content),
+            mentions: ambre_core::Tally::<Mentions>::recount(counters.mentions),
         };
         let before = closed.counted.insert(document_id, now).unwrap_or_default();
         // The summaries counted a message since the last count: that is
@@ -2561,8 +2560,8 @@ mod tests {
             vec![ChannelActivity {
                 channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(UnreadCount::new(unread)),
-                mentions: Some(MentionCount::ZERO),
+                unread: Some(ambre_core::Tally::<Unread>::new(unread)),
+                mentions: Some(ambre_core::Tally::<Mentions>::ZERO),
             }]
         };
         assert_eq!(marks, vec![mark(2), mark(3), mark(3)]);
@@ -2602,8 +2601,8 @@ mod tests {
             &[ChannelActivity {
                 channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(UnreadCount::new(2)),
-                mentions: Some(MentionCount::new(1)),
+                unread: Some(ambre_core::Tally::<Unread>::new(2)),
+                mentions: Some(ambre_core::Tally::<Mentions>::new(1)),
             }]
         );
     }
@@ -3096,8 +3095,8 @@ mod tests {
             [ChannelActivity {
                 channel_id,
                 active: ambre_bus::Activity::Quiet,
-                unread: Some(UnreadCount::ZERO),
-                mentions: Some(MentionCount::ZERO),
+                unread: Some(ambre_core::Tally::<Unread>::ZERO),
+                mentions: Some(ambre_core::Tally::<Mentions>::ZERO),
             }]
         );
     }
@@ -4399,7 +4398,9 @@ mod tests {
             styles: Vec::new(),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
-            members: ambre_core::MemberCount::new(ambre_murmure::CONFIRM_CHANNEL_PAST.get() + 1),
+            members: ambre_core::Tally::<ambre_core::Members>::new(
+                ambre_murmure::CONFIRM_CHANNEL_PAST.get() + 1,
+            ),
             held: HeldSend {
                 draft: draft.clone(),
                 attachments: Vec::new(),
@@ -4439,7 +4440,9 @@ mod tests {
             }),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
-            members: ambre_core::MemberCount::new(ambre_murmure::CONFIRM_CHANNEL_PAST.get() + 1),
+            members: ambre_core::Tally::<ambre_core::Members>::new(
+                ambre_murmure::CONFIRM_CHANNEL_PAST.get() + 1,
+            ),
             held,
         };
         assert_eq!(channel_events(&ui), [(channel_id, asked)]);
@@ -5710,7 +5713,7 @@ mod tests {
         assert!(drain(&ui).iter().any(|event| matches!(
             event,
             UiEvent::ChannelActivity { channels }
-                if channels.first().is_some_and(|mark| mark.unread == Some(UnreadCount::new(2)))
+                if channels.first().is_some_and(|mark| mark.unread == Some(ambre_core::Tally::<Unread>::new(2)))
         )));
     }
 
@@ -6213,8 +6216,8 @@ mod tests {
             Some(ChannelActivity {
                 channel_id: m.channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(UnreadCount::new(0)),
-                mentions: Some(MentionCount::new(1)),
+                unread: Some(ambre_core::Tally::<Unread>::new(0)),
+                mentions: Some(ambre_core::Tally::<Mentions>::new(1)),
             })
         );
     }
@@ -6257,7 +6260,10 @@ mod tests {
         else {
             panic!("expected the channel's mark and its first unread, got {shown:?}");
         };
-        assert_eq!(channels[0].mentions, Some(MentionCount::new(0)));
+        assert_eq!(
+            channels[0].mentions,
+            Some(ambre_core::Tally::<Mentions>::new(0))
+        );
         assert_eq!(channels[0].active, ambre_bus::Activity::Quiet);
     }
 
@@ -6499,8 +6505,8 @@ mod tests {
                 &[ChannelActivity {
                     channel_id,
                     active: ambre_bus::Activity::Active,
-                    unread: Some(UnreadCount::new(0)),
-                    mentions: Some(MentionCount::new(1)),
+                    unread: Some(ambre_core::Tally::<Unread>::new(0)),
+                    mentions: Some(ambre_core::Tally::<Mentions>::new(1)),
                 }]
             );
         }

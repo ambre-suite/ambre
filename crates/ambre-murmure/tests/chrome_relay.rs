@@ -898,7 +898,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
-        canvas: ambre_core::CanvasId::CONTENT,
+        canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
     };
     relay.target.set(Some(target.clone()));
@@ -968,7 +968,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
-        canvas: ambre_core::CanvasId::CONTENT,
+        canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
     };
     relay.target.set(Some(target.clone()));
@@ -1037,7 +1037,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
-        canvas: ambre_core::CanvasId::CONTENT,
+        canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
     };
     let other = MessageTarget {
@@ -1184,7 +1184,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
-        canvas: ambre_core::CanvasId::CONTENT,
+        canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
     }));
     let send = handler.send;
@@ -1763,7 +1763,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     let ask = |reply: Option<HeldReply>| UiEvent::Channel {
         channel_id: direct,
         event: MurmureEvent::ConfirmChannelMention {
-            members: ambre_core::MemberCount::new(12),
+            members: ambre_core::Tally::<ambre_core::Members>::new(12),
             held: HeldSend {
                 draft: draft.clone(),
                 attachments: Vec::new(),

@@ -13,6 +13,7 @@ use crate::formula::shift::shift_formula;
 use crate::formula::text::CellText;
 use ambre_bus::app::trame::CellNumber;
 use ambre_bus::{Col, FillMode, Row};
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Delta};
 
 /// A cell's or a tile's place in its fill line's series, counted from the
@@ -82,7 +83,7 @@ impl TrameState {
     /// a `DataReset` so the UI re-fetches the filled region, plus the CRDT delta.
     pub(super) fn fill_range(
         &mut self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         src: CellRect,
         dest: CellRect,
         mode: FillMode,

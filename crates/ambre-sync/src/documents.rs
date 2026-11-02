@@ -55,7 +55,9 @@ impl SyncState {
                                         ms as u64
                                     })
                                 },
-                                member_count: e.member_count.max(ambre_core::MemberCount::ONE),
+                                member_count: e
+                                    .member_count
+                                    .max(ambre_core::Tally::<ambre_core::Members>::ONE),
                             });
                         }
                         let _ = tx.send(SyncEvent::DocumentList {
@@ -78,7 +80,7 @@ impl SyncState {
                     name: Some(name.clone()),
                     role: Role::Owner,
                     updated_at: Instant::<Authored>::new(0),
-                    member_count: ambre_core::MemberCount::ONE,
+                    member_count: ambre_core::Tally::<ambre_core::Members>::ONE,
                 })
                 .collect();
             let count = documents.len();

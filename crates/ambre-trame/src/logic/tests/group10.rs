@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::FillMode;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Count, Pos};
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
@@ -283,7 +284,7 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     });
     set(&mut state, 0, 0, "foo");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId::new("s0".to_owned()),
+        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {

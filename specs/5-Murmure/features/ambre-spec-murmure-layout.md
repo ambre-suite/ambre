@@ -124,7 +124,7 @@ pub struct MessageRef { pub segment: Id<Segment>, pub message: Id<Message> }
 pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<Name>, pub entries: Vec<SidebarEntry> }
 pub struct SidebarEntry { pub channel: Id<Channel>, pub name: Option<Name>, pub activity: Activity }
 pub enum SidebarGroup { Category { space: Id<Space>, category: Option<Id<Category>> }, Private, Direct, ToJoin }
-pub enum Activity { None, Some, Count { messages: UnreadCount, mentions: MentionCount } }
+pub enum Activity { None, Some, Count { messages: Tally<Unread>, mentions: Tally<Mentions> } }
 ```
 
 The sidebar is rebuilt from what the Logic thread hands the view. That is the channels of the user,

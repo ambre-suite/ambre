@@ -5,8 +5,9 @@
 use crate::layout::run::{Affinity, RunChar};
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocChar;
-use ambre_commands::{ClipboardWrite, Commands, StaticKey};
+use ambre_commands::ClipboardWrite;
 use ambre_core::index::{Count, Pos, Span};
+use ambre_core::{Commands, StaticKey};
 use ambre_core::{Doc, Px, View};
 use ambre_draw::HitTest;
 

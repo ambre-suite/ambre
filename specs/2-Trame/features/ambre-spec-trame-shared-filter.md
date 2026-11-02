@@ -183,7 +183,7 @@ DisplayCell { is_filtered: true, /* the value and the style are unchanged */ }
 pub struct FilterView {
     pub id:          String,
     pub name:        String,
-    pub sheet_id:    SheetId,
+    pub sheet_id:    Id<Sheet>,
     pub filter_col:  Uid,
     pub kind:        FilterKind,   // the same predicate the shared filter stores
     pub hidden_rows: HashSet<Uid>, // a cache, recomputed on each activation

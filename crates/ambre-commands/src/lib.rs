@@ -6,7 +6,8 @@
 // palette are all *views* of one registry of `Command`s. This keeps the chrome
 // tractable across 5 apps x ~200 commands (ambre-spec-commands.md).
 //
-// Layering: a `Command`/`StaticKey<Commands>` here is a UI *affordance*. It is distinct
+// Layering: a `Command` here, named by an `ambre_core::StaticKey<Commands>`,
+// is a UI *affordance*. It is distinct
 // from the `AppCommand`/`LogicCommand` IPC payloads in `ambre-bus`: invoking a
 // `Command` *produces* a `LogicCommand`. This crate never knows about IPC, the
 // renderer, or Leptos -- it is the leaf of the UI-thread crate graph.
@@ -18,10 +19,10 @@ mod mode;
 pub use keybinding::{FunctionKey, Key, KeyBinding, KeyChar, KeyState, Modifiers};
 pub use mode::{ClipboardWrite, PasteForm, SelectionMode};
 
+use ambre_core::{Categories, Commands, Icons, StaticKey};
+
 use std::collections::HashMap;
-use std::fmt;
 use std::hash::Hash;
-use std::marker::PhantomData;
 
 /// Locale selector for command labels. Minimal today (the two shipping UI
 /// languages); extend as i18n grows.
@@ -30,89 +31,6 @@ pub enum Locale {
     #[default]
     Fr,
     En,
-}
-
-/// The marker of one kind of static key. Sealed: every kind lives in this
-/// module.
-pub trait KeyKind: sealed::Sealed + 'static {
-    /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
-}
-
-mod sealed {
-    /// Closes [`super::KeyKind`].
-    pub trait Sealed {}
-}
-
-/// A key of the kind `K` that a `const` table names: a command, an icon or a
-/// category.
-///
-/// The `&'static str` is the identity: two keys are equal iff their strings
-/// are equal, which makes them cheap map keys and trivially `Copy`.
-///
-/// `PartialEq` and `Eq` are derived, not written by hand. A handler matches
-/// a key against the `const` keys of its table. Only a derived equality lets
-/// a constant stand in a pattern. The derive bounds the marker, so each
-/// marker derives the same traits.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct StaticKey<K: KeyKind> {
-    text: &'static str,
-    kind: PhantomData<fn() -> K>,
-}
-
-impl<K: KeyKind> StaticKey<K> {
-    /// Wraps a raw value. The constructor checks nothing.
-    #[must_use]
-    pub const fn new(value: &'static str) -> Self {
-        Self {
-            text: value,
-            kind: PhantomData,
-        }
-    }
-
-    /// Returns the raw text.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        self.text
-    }
-}
-
-/// `NAME("...")`, as the derived `Debug` of the hand-written type printed
-/// it.
-impl<K: KeyKind> fmt::Debug for StaticKey<K> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.text).finish()
-    }
-}
-
-/// Stable, namespaced identifier of a command, for example
-/// `StaticKey::<Commands>::new("prose.format.bold")`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Commands {}
-
-impl sealed::Sealed for Commands {}
-impl KeyKind for Commands {
-    const NAME: &'static str = "CommandId";
-}
-
-/// Opaque icon handle. The concrete glyph/asset is resolved by the chrome's
-/// icon set; the registry only carries the reference.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Icons {}
-
-impl sealed::Sealed for Icons {}
-impl KeyKind for Icons {
-    const NAME: &'static str = "IconId";
-}
-
-/// Grouping key for the command palette and for ribbon tabs (one category =
-/// one tab), for example `StaticKey::<Categories>::new("format")`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Categories {}
-
-impl sealed::Sealed for Categories {}
-impl KeyKind for Categories {
-    const NAME: &'static str = "CommandCategory";
 }
 
 /// Static description of a command. Apps build `const` tables of these and
@@ -143,8 +61,8 @@ impl Command {
 /// the chords the universal operations answer (`ambre-spec-commands.md`,
 /// `UI-THREAD-011`).
 pub mod shared {
-    use super::StaticKey;
-    use super::{Commands, Key, KeyBinding, KeyChar, Modifiers};
+    use super::{Key, KeyBinding, KeyChar, Modifiers};
+    use ambre_core::{Commands, StaticKey};
 
     /// The clipboard identities. One intent, one identity, in every
     /// application: a menu entry, a toolbar button and the browser's own event

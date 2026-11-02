@@ -166,7 +166,9 @@ fn text_inside_a_group_keeps_its_place_and_its_transform() {
     assert!(
         batch.groups[0]
             .members
-            .contains(&ImportRef::Slot(ImportElementSlot::from_usize(text_slot))),
+            .contains(&ImportRef::Slot(Pos::<ImportElement>::from_usize(
+                text_slot
+            ))),
         "the text left its group: {:?}",
         batch.groups[0].members
     );
@@ -248,16 +250,16 @@ fn nested_groups_are_rebuilt_innermost_first() {
     assert_eq!(
         batch.groups[0].members,
         vec![
-            ImportRef::Slot(ImportElementSlot::new(1)),
-            ImportRef::Slot(ImportElementSlot::new(2))
+            ImportRef::Slot(Pos::<ImportElement>::new(1)),
+            ImportRef::Slot(Pos::<ImportElement>::new(2))
         ]
     );
     // groups[1] is the outer <g>: a rect slot plus the already-resolved inner group.
     assert_eq!(
         batch.groups[1].members,
         vec![
-            ImportRef::Slot(ImportElementSlot::ZERO),
-            ImportRef::Group(ImportGroupSlot::ZERO)
+            ImportRef::Slot(Pos::<ImportElement>::ZERO),
+            ImportRef::Group(Pos::<ImportGroupRank>::ZERO)
         ]
     );
     // Transforms are still baked into geometry: inner rect at (5+50, 5+50)=(55,55).

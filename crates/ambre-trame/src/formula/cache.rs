@@ -156,13 +156,13 @@ impl Default for BytecodeCache {
 #[cfg(test)]
 mod tests {
     use super::super::test_index::{indices_with, stored};
-    use super::super::types::{AxisId, EngineSheet, SingleSheetCtx};
+    use super::super::types::{ACTIVE_SHEET, AxisId, SingleSheetCtx};
     use super::*;
     use crate::model::Uid;
 
     fn cell(row: u32, col: u32) -> CellId {
         CellId::bound(
-            EngineSheet::ACTIVE,
+            ACTIVE_SHEET,
             Uid {
                 peer: ambre_core::PeerId::new(1),
                 counter: ambre_core::IdCounter::new(row),

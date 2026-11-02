@@ -8,6 +8,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_core::id::{Id, Sheet};
 
 // AppRoot lives in a sibling submodule; it reaches the launcher imports and
 // `Wiring` via `use super::super::*`.
@@ -80,9 +81,7 @@ pub(crate) fn mount_shell(
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
     filter_active: RwSignal<trame_chrome::SheetFilter>,
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
-    toile_menu_cmd: RwSignal<
-        Option<ambre_chrome::commands::StaticKey<ambre_chrome::commands::Commands>>,
-    >,
+    toile_menu_cmd: RwSignal<Option<ambre_core::StaticKey<ambre_core::Commands>>>,
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
     toile_cursor: RwSignal<Option<ambre_toile::ui::palette::CanvasCursor>>,
     toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
@@ -96,7 +95,7 @@ pub(crate) fn mount_shell(
     toile_set_link: RwSignal<Option<toile_chrome::LinkEdit>>,
     toile_followed_link: RwSignal<Option<toile_chrome::ShellNav>>,
     sheets: RwSignal<Vec<SheetTab>>,
-    active_sheet: RwSignal<SheetId>,
+    active_sheet: RwSignal<Id<Sheet>>,
     commands_slot: Slot<CommandPath>,
 ) {
     leptos::mount::mount_to_body(move || {

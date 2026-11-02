@@ -6,6 +6,7 @@
 //! script and a remote reference included, so nothing a page carries runs or
 //! loads. The walk holds its own stack, so a deep tree never recurses.
 
+use ambre_core::index::{IdxVec, Pos};
 use ambre_core::{Rgb, Rgba};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -19,7 +20,7 @@ use html5ever::{Attribute, LocalName, ParseOpts, local_name, ns, parse_document}
 
 use ambre_bus::app::prose::{CodeLang, HeadingLevel, OrderedStyle};
 
-use super::sink::{Arena, Data, NodeId, Nodes};
+use super::sink::{Arena, DOCUMENT, Data, HtmlNode, Node};
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
 use crate::mark::{self, MarkRoot, MarkValue};
 use ambre_bus::app::prose::MarkKey;
@@ -223,7 +224,7 @@ fn too_deep(html: &str) -> bool {
 }
 
 enum Step {
-    Enter(NodeId),
+    Enter(Pos<HtmlNode>),
     Leave,
 }
 
@@ -381,8 +382,8 @@ impl<'a> Declarations<'a> {
 }
 
 impl Reader {
-    fn walk(&mut self, nodes: &Nodes) {
-        let mut steps = vec![Step::Enter(NodeId::DOCUMENT)];
+    fn walk(&mut self, nodes: &IdxVec<HtmlNode, Node>) {
+        let mut steps = vec![Step::Enter(DOCUMENT)];
         while let Some(step) = steps.pop() {
             let id = match step {
                 Step::Leave => {

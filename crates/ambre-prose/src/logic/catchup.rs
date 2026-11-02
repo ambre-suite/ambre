@@ -64,7 +64,7 @@ pub(super) struct CatchUp {
     /// The last of them the view said it applied.
     seen: ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
     /// How many text commands the view sent so far.
-    acked: ambre_bus::app::prose::TextAck,
+    acked: ambre_core::Generation<ambre_bus::app::prose::TextAck>,
     /// The runs of the changes the view has not said it applied, each with
     /// its number. Each counts positions after every text command taken.
     queue: VecDeque<(
@@ -130,7 +130,7 @@ impl CatchUp {
     ) -> (
         crate::events::ChangeOrigin,
         ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
-        ambre_bus::app::prose::TextAck,
+        ambre_core::Generation<ambre_bus::app::prose::TextAck>,
         Vec<TextEdit>,
     ) {
         let prediction = match source {

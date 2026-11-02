@@ -28,8 +28,8 @@
 use std::time::Duration;
 
 use ambre_bus::app::toile::{ElementStyle, FontFamily, FontSizeChoice};
-use ambre_chrome::commands::{Commands, StaticKey};
 use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
+use ambre_core::{Commands, StaticKey};
 use ambre_core::{FontSize, Px, Rgba, StoredBoard};
 use leptos::prelude::*;
 

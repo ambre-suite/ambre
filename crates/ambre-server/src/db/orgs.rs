@@ -7,13 +7,14 @@ use ambre_core::{Bounded, Bounds, Refusal};
 /// The name an organization is created or renamed with: trimmed, never blank,
 /// at most [`ambre_core::NAME_MAX_CHARS`] characters (`SRV-233`). A row read
 /// back keeps its name as text, so a name stored before the rule still lists.
-/// A request body decodes it through [`OrgName::new`], so a body naming a
-/// name that breaks the rule does not decode.
+/// A request body decodes it through [`OrgNameRule`], so a body naming a
+/// name that breaks the rule does not decode. `Debug` prints the length
+/// alone.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(try_from = "String")]
-pub struct OrgName(String);
+#[serde(transparent)]
+pub struct OrgName(ambre_core::Validated<OrgNameRule>);
 
-/// The error of a name [`OrgName::new`] refuses.
+/// The error of a name [`OrgNameRule`] refuses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error(
     "an organization name is blank or past {} characters",
@@ -21,23 +22,57 @@ pub struct OrgName(String);
 )]
 pub struct InvalidOrgName;
 
+/// The rule of an [`OrgName`]: trimmed, never blank, at most
+/// [`ambre_core::NAME_MAX_CHARS`] characters. The rule keeps the trimmed
+/// text.
+pub enum OrgNameRule {}
+
+impl ambre_core::Rule for OrgNameRule {
+    type Error = InvalidOrgName;
+
+    fn admit(text: String) -> Result<String, InvalidOrgName> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() || !ambre_core::name_fits(trimmed) {
+            Err(InvalidOrgName)
+        } else if trimmed.len() == text.len() {
+            Ok(text)
+        } else {
+            Ok(trimmed.to_owned())
+        }
+    }
+}
+
 impl TryFrom<String> for OrgName {
     type Error = InvalidOrgName;
 
     fn try_from(text: String) -> Result<Self, InvalidOrgName> {
-        Self::new(&text).ok_or(InvalidOrgName)
+        ambre_core::Validated::parse(text).map(Self)
     }
 }
 
 impl OrgName {
-    /// The name `text` is once trimmed, or `None` when it breaks the rule.
-    pub fn new(text: &str) -> Option<Self> {
-        let text = text.trim();
-        (!text.is_empty() && ambre_core::name_fits(text)).then(|| Self(text.to_owned()))
-    }
-
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
+    }
+}
+
+#[cfg(test)]
+mod org_name_tests {
+    use super::OrgName;
+
+    /// A body decodes a name trimmed, and refuses a blank one with the
+    /// words of the rule.
+    #[test]
+    fn a_body_decodes_a_trimmed_name_and_refuses_a_blank_one() {
+        let name: OrgName = serde_json::from_str("\" Acme \"").expect("a name");
+        assert_eq!(name.as_str(), "Acme");
+        let refused = serde_json::from_str::<OrgName>("\"  \"")
+            .expect_err("blank")
+            .to_string();
+        assert!(
+            refused.starts_with("an organization name is blank"),
+            "{refused}"
+        );
     }
 }
 

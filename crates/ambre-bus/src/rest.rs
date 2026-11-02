@@ -104,7 +104,7 @@ pub struct DocumentSummary {
     /// Epoch milliseconds.
     pub updated_at: Instant<Authored>,
     /// Total member count (routing metadata, plaintext). `> 1` => shared.
-    pub member_count: ambre_core::MemberCount,
+    pub member_count: ambre_core::Tally<ambre_core::Members>,
 }
 
 /// Member of a document or channel.

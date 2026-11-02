@@ -10,7 +10,7 @@
 // declared once, in `ui::commands`.
 // ============================================================================
 
-use ambre_commands::{Icons, StaticKey};
+use ambre_core::{Icons, StaticKey};
 
 /// The icon asset for `id`, or `None` for a handle no Trame command declares.
 ///

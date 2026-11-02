@@ -142,7 +142,7 @@ pub struct PresencePayload {
 /// A cell anchor that survives a structural change: the row and column **uids**
 /// of `ambre-spec-trame-schema.md section 2`, never grid positions.
 pub struct CellAnchor {
-    pub sheet_id: SheetId,
+    pub sheet_id: Id<Sheet>,
     pub row_uid:  Uid,
     pub col_uid:  Uid,
 }
@@ -154,7 +154,7 @@ pub struct RemoteCursorPayload {
     pub user_id:      Id<User>,
     pub display_name: Option<DisplayName>,
     pub color:        Color,
-    pub sheet_id:     SheetId,
+    pub sheet_id:     Id<Sheet>,
     pub at:           CellPos,
     pub selection:    Option<CellRect>,
 }

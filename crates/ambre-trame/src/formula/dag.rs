@@ -14,6 +14,7 @@
 //! would explode memory. Two-level resolution avoids this: ranges are stored
 //! separately and checked for containment at dirty-collection time.
 
+use ambre_core::index::Pos;
 use std::collections::{HashMap, HashSet};
 
 use petgraph::Direction;
@@ -59,9 +60,9 @@ pub struct DependencyGraph {
 
     /// Range dependencies for each formula cell.
     pub range_deps: HashMap<CellId, Vec<RangeId>>,
-    /// Reverse index: sheet ([`EngineSheet`]) -> list of `(formula_cell, RangeId)`
+    /// Reverse index: sheet ([`Pos<EngineSheet>`]) -> list of `(formula_cell, RangeId)`
     /// whose range lives on that sheet. MVP linear scan; Phase 2: 2D interval tree.
-    pub range_index: HashMap<EngineSheet, Vec<(CellId, RangeId)>>,
+    pub range_index: HashMap<Pos<EngineSheet>, Vec<(CellId, RangeId)>>,
 }
 
 impl DependencyGraph {
@@ -297,7 +298,7 @@ impl Default for DependencyGraph {
 mod tests {
     use super::super::compile::SheetIndices;
     use super::super::test_index::indices_with;
-    use super::super::types::{AxisId, RangeEndpoint};
+    use super::super::types::{ACTIVE_SHEET, AxisId, RangeEndpoint};
     use super::*;
     use crate::model::SheetIndex;
     use crate::model::Uid;
@@ -306,7 +307,7 @@ mod tests {
     /// synthetic uids (rows peer 1, cols peer 2, counter == position).
     fn cell(row: u32, col: u32) -> CellId {
         CellId::bound(
-            EngineSheet::ACTIVE,
+            ACTIVE_SHEET,
             Uid {
                 peer: ambre_core::PeerId::new(1),
                 counter: ambre_core::IdCounter::new(row),
@@ -333,7 +334,7 @@ mod tests {
             }))
         };
         RangeId {
-            sheet: EngineSheet::ACTIVE,
+            sheet: ACTIVE_SHEET,
             row_start: rid(r0),
             row_end: rid(r1),
             col_start: cid(c0),
@@ -465,9 +466,9 @@ mod tests {
     }
 
     /// Bound cell at grid `(row, col)` on `sheet`, matching `sheet_index`'s uids.
-    fn cell_on(sheet: u16, row: u32, col: u32) -> CellId {
+    fn cell_on(sheet: u32, row: u32, col: u32) -> CellId {
         CellId::bound(
-            EngineSheet::new(sheet),
+            Pos::<EngineSheet>::new(sheet),
             Uid {
                 peer: ambre_core::PeerId::new(sheet as u64 * 10 + 1),
                 counter: ambre_core::IdCounter::new(row),
@@ -480,7 +481,7 @@ mod tests {
     }
 
     /// Bound range on `sheet`, matching `sheet_index`'s uids.
-    fn range_on(sheet: u16, r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
+    fn range_on(sheet: u32, r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
         let rid = |r: u32| {
             RangeEndpoint::Specific(AxisId::Bound(Uid {
                 peer: ambre_core::PeerId::new(sheet as u64 * 10 + 1),
@@ -494,7 +495,7 @@ mod tests {
             }))
         };
         RangeId {
-            sheet: EngineSheet::new(sheet),
+            sheet: Pos::<EngineSheet>::new(sheet),
             row_start: rid(r0),
             row_end: rid(r1),
             col_start: cid(c0),
@@ -510,8 +511,8 @@ mod tests {
         // to test B1's containment through *sheet 1's* index. Sheet 0's index
         // knows none of sheet 1's uids, so reusing it silently drops the link.
         let mut indices = SheetIndices::new();
-        indices.insert(EngineSheet::new(0), sheet_index(0, 10, 10));
-        indices.insert(EngineSheet::new(1), sheet_index(1, 10, 10));
+        indices.insert(Pos::<EngineSheet>::new(0), sheet_index(0, 10, 10));
+        indices.insert(Pos::<EngineSheet>::new(1), sheet_index(1, 10, 10));
 
         let mut dag = DependencyGraph::new();
         dag.update(cell_on(1, 0, 1), vec![cell_on(0, 0, 0)], vec![])

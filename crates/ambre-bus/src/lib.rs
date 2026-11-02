@@ -46,10 +46,10 @@ pub use app::murmure::{
     ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, Confirmation,
     ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers,
     DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel, MemberView, Mention,
-    MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, Messages, MurmureCommand,
+    MentionTarget, Mentions, MessageAt, MessageDraft, MessageView, Messages, MurmureCommand,
     MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft, PublicChannelDraft,
     Reaction, Replies, ReplyEcho, Revision, SealedChannelKey, SearchMatch, Segments, SpaceCommand,
-    SpaceEvent, StyleMark, TextStyle, ThreadHead, Topic, UnreadCount, Unreadable,
+    SpaceEvent, StyleMark, TextStyle, ThreadHead, Topic, Unread, Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{
@@ -60,13 +60,13 @@ pub use event::{
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
-    CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, CondFormatId, CondFormatKind,
+    CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, CondFormatKind,
     CondFormatPriority, CondStyle, CsvDelimiter, DateParts, DateSerial, DayCount, DayOfMonth,
     DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell, EditSession, FillMode, FilterKind,
-    FilterOp, FilterViewId, HAlign, HeaderRow, Merge, MergeSpan, Month, MonthCount, Percent, Row,
-    RowFilter, SelectionKind, SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, Slant,
-    SortKey, SortOrder, Strikethrough, StylePatch, TabStrip, TrameCommand, TrameEvent, Underline,
-    VAlign, ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
+    FilterOp, HAlign, HeaderRow, Merge, MergeSpan, Month, MonthCount, Percent, Row, RowFilter,
+    SelectionKind, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, Slant, SortKey, SortOrder,
+    Strikethrough, StylePatch, TabStrip, TrameCommand, TrameEvent, Underline, VAlign,
+    ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
 };
 pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};

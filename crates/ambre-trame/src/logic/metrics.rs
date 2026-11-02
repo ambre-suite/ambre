@@ -13,6 +13,7 @@
 // `use super::*`.
 
 use super::*;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 
 /// The size range of one axis, and the size of a line never resized.
@@ -75,7 +76,7 @@ impl TrameState {
     /// resizes a background sheet).
     pub(super) fn resize_col(
         &mut self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         col: Pos<Col>,
         width: Px<Doc>,
     ) -> TrameOutcome {
@@ -108,7 +109,7 @@ impl TrameState {
     /// writes `row_heights_{sheet}`.
     pub(super) fn resize_row(
         &mut self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         row: Pos<Row>,
         height: Px<Doc>,
     ) -> TrameOutcome {

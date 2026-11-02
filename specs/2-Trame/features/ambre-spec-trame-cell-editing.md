@@ -205,7 +205,7 @@ keyed by the two corners of the range it covers:
 ```rust
 pub enum ValidationKind {
     List(Vec<String>),                                   // a fixed value set
-    ListRange { sheet: SheetId, range: CellRect },      // the values of a range, resolved at input
+    ListRange { sheet: Id<Sheet>, range: CellRect },      // the values of a range, resolved at input
     NumberRange { limits: NumberBounds, bounds: RangeBounds }, // two `CellNumber`s, `min` at most `max`
     NumberInteger,
     DateRange { min: Option<DateSerial>, max: Option<DateSerial> },

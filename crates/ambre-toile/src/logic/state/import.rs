@@ -23,8 +23,8 @@ use crate::logic::command::{
     ToileRequest,
 };
 use crate::logic::interop::{
-    ContentHash, ImportBatch, ImportConnector, ImportElementSlot, ImportError, ImportGroup,
-    ImportGroupSlot, ImportRef, ImportReport, Limits, MediaBlob, import_raster, import_svg,
+    ContentHash, ImportBatch, ImportConnector, ImportElement, ImportError, ImportGroup,
+    ImportGroupRank, ImportRef, ImportReport, Limits, MediaBlob, import_raster, import_svg,
     place_batch_at,
 };
 use crate::logic::model::ElementStyle;
@@ -171,14 +171,14 @@ impl ImportJob {
         let done = usize::try_from(self.done.get()).unwrap_or(usize::MAX);
         let creates = usize::try_from(self.creates.get()).unwrap_or(usize::MAX);
         let Some(rank) = done.checked_sub(creates) else {
-            return ImportStep::Create(ImportElementSlot::from_usize(done));
+            return ImportStep::Create(Pos::<ImportElement>::from_usize(done));
         };
         if rank < self.styles.len() {
-            return ImportStep::Style(ImportElementSlot::from_usize(rank));
+            return ImportStep::Style(Pos::<ImportElement>::from_usize(rank));
         }
         let rank = rank - self.styles.len();
         if rank < self.groups.len() {
-            return ImportStep::Group(ImportGroupSlot::from_usize(rank));
+            return ImportStep::Group(Pos::<ImportGroupRank>::from_usize(rank));
         }
         self.connectors
             .get(rank - self.groups.len())
@@ -190,11 +190,11 @@ impl ImportJob {
 /// The phase of one import unit, with what that phase needs to apply it.
 enum ImportStep {
     /// The create at this slot.
-    Create(ImportElementSlot),
+    Create(Pos<ImportElement>),
     /// The style of the element at this slot.
-    Style(ImportElementSlot),
+    Style(Pos<ImportElement>),
     /// The group at this rank.
-    Group(ImportGroupSlot),
+    Group(Pos<ImportGroupRank>),
     /// This connector.
     Connector(ImportConnector),
     /// No unit: the job is past its last connector.
@@ -491,7 +491,7 @@ impl ToileState {
     }
 
     /// Apply the create at `slot`, the next one the job's iterator holds.
-    fn apply_import_create(&mut self, job: &mut ImportJob, slot: ImportElementSlot) {
+    fn apply_import_create(&mut self, job: &mut ImportJob, slot: Pos<ImportElement>) {
         let unit = slot.to_usize();
         let created = match job.commands.next() {
             Some(ToileCommand::CreateElement {
@@ -519,7 +519,7 @@ impl ToileState {
 
     /// Build the group at `rank`, innermost first, so a `Group(i)` member
     /// always resolves to a group already built.
-    fn apply_import_group(&mut self, job: &mut ImportJob, rank: ImportGroupSlot) {
+    fn apply_import_group(&mut self, job: &mut ImportJob, rank: Pos<ImportGroupRank>) {
         let unit = rank.to_usize();
         if let Some(group) = job.groups.get(unit) {
             let members: Vec<Id<Element>> = group
@@ -667,8 +667,7 @@ mod tests {
 
     use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
     use crate::logic::interop::{
-        ContentHash, ImportBatch, ImportElementSlot, ImportGroup, ImportGroupSlot, ImportRef,
-        MediaBlob,
+        ContentHash, ImportBatch, ImportElement, ImportGroup, ImportGroupRank, ImportRef, MediaBlob,
     };
     use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
     use crate::logic::state::ToileState;
@@ -745,14 +744,14 @@ mod tests {
             groups: vec![
                 ImportGroup {
                     members: vec![
-                        ImportRef::Slot(ImportElementSlot::ZERO),
-                        ImportRef::Slot(ImportElementSlot::new(1)),
+                        ImportRef::Slot(Pos::<ImportElement>::ZERO),
+                        ImportRef::Slot(Pos::<ImportElement>::new(1)),
                     ],
                 },
                 ImportGroup {
                     members: vec![
-                        ImportRef::Slot(ImportElementSlot::new(2)),
-                        ImportRef::Group(ImportGroupSlot::ZERO),
+                        ImportRef::Slot(Pos::<ImportElement>::new(2)),
+                        ImportRef::Group(Pos::<ImportGroupRank>::ZERO),
                     ],
                 },
             ],

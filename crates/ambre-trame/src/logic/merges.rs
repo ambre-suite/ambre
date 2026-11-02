@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use ambre_core::id::{Id, Sheet};
 
 impl TrameState {
     /// Merge `rect` into one cell. Rejected locally if a covered cell is
@@ -208,7 +209,11 @@ impl TrameState {
     /// ([`Self::masked_cells_for`]) -- therefore read one answer instead of
     /// each deriving its own. A second copy of this precedence would let a
     /// masked cell differ from the block the grid draws.
-    pub(super) fn resolved_merges(&self, sheet_id: &SheetId, index: &SheetIndex) -> Vec<CellRect> {
+    pub(super) fn resolved_merges(
+        &self,
+        sheet_id: &Id<Sheet>,
+        index: &SheetIndex,
+    ) -> Vec<CellRect> {
         let LoroValue::Map(entries) = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Merges, sheet_id).as_str())
@@ -263,7 +268,7 @@ impl TrameState {
     /// with [`Self::index`]) it returns exactly [`Self::masked_cells`].
     pub(super) fn masked_cells_for(
         &self,
-        sheet_id: &SheetId,
+        sheet_id: &Id<Sheet>,
         index: &SheetIndex,
     ) -> HashSet<CellKey> {
         let cells = self

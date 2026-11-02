@@ -33,6 +33,42 @@ pub trait TallyKind: 'static {
     const NAME: &'static str;
 }
 
+/// A tally of `K` that a tally of `J` gives one for one: each thing `J`
+/// counted is one thing of `K`.
+///
+/// A capability that each pair opts in to. A count of messages gives a count
+/// of unread messages. A count of apples gives no count of pears.
+///
+/// ```compile_fail
+/// use ambre_core::{Tally, TallyKind};
+/// enum Apples {}
+/// impl TallyKind for Apples {
+///     const NAME: &'static str = "AppleCount";
+/// }
+/// enum Pears {}
+/// impl TallyKind for Pears {
+///     const NAME: &'static str = "PearCount";
+/// }
+/// let _ = Tally::<Pears>::recount(Tally::<Apples>::ZERO);
+/// ```
+///
+/// The same recount compiles once the pair opts in:
+///
+/// ```
+/// use ambre_core::{Recounts, Tally, TallyKind};
+/// enum Apples {}
+/// impl TallyKind for Apples {
+///     const NAME: &'static str = "AppleCount";
+/// }
+/// enum Pears {}
+/// impl TallyKind for Pears {
+///     const NAME: &'static str = "PearCount";
+/// }
+/// impl Recounts<Apples> for Pears {}
+/// assert_eq!(Tally::<Pears>::recount(Tally::<Apples>::new(3)).get(), 3);
+/// ```
+pub trait Recounts<J: TallyKind>: TallyKind {}
+
 /// A running count of the things `K` names, over a `u32`.
 ///
 /// Serde sees the bare number, so a record keeps its wire bytes.
@@ -60,6 +96,12 @@ impl<K: TallyKind> Tally<K> {
         self.raw
     }
 
+    /// Whether nothing was counted.
+    #[must_use]
+    pub const fn is_zero(self) -> bool {
+        self.raw == 0
+    }
+
     /// The tally one more, held at the top.
     #[must_use]
     pub const fn incremented(self) -> Self {
@@ -82,6 +124,15 @@ impl<K: TallyKind> Tally<K> {
     #[must_use]
     pub fn of_len(len: usize) -> Self {
         Self::new(u32::try_from(len).unwrap_or(u32::MAX))
+    }
+
+    /// The things a tally of `J` counted, each one counted again as `K`.
+    #[must_use]
+    pub const fn recount<J: TallyKind>(other: Tally<J>) -> Self
+    where
+        K: Recounts<J>,
+    {
+        Self::new(other.raw)
     }
 }
 
@@ -220,12 +271,26 @@ impl std::fmt::Display for CellCount {
 
 #[cfg(test)]
 mod tests {
-    use super::{Tally, TallyKind};
+    use super::{Recounts, Tally, TallyKind};
 
     /// A test tally.
     enum Seen {}
     impl TallyKind for Seen {
         const NAME: &'static str = "Seen";
+    }
+
+    /// A test tally recounted from [`Seen`].
+    enum Kept {}
+    impl TallyKind for Kept {
+        const NAME: &'static str = "Kept";
+    }
+    impl Recounts<Seen> for Kept {}
+
+    #[test]
+    fn a_recount_keeps_the_number_and_zero_reads_as_zero() {
+        assert_eq!(Tally::<Kept>::recount(Tally::<Seen>::new(9)).get(), 9);
+        assert!(Tally::<Kept>::ZERO.is_zero());
+        assert!(!Tally::<Kept>::new(1).is_zero());
     }
 
     #[test]

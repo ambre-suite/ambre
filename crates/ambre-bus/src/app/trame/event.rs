@@ -7,7 +7,7 @@
 
 use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
 use crate::token::Token;
-use ambre_core::id::{Id, User};
+use ambre_core::id::{FilterView, Id, Sheet, User};
 use ambre_core::index::{Axis, Count, Pos};
 use ambre_core::{Doc, Px, Rgb};
 
@@ -242,7 +242,7 @@ pub enum TrameEvent {
     /// is the id of the sheet currently shown.
     SheetList {
         sheets: Vec<SheetTab>,
-        active: SheetId,
+        active: Id<Sheet>,
     },
 
     /// A command was rejected for a reason the user should see (for example deleting the
@@ -380,7 +380,7 @@ pub enum TrameEvent {
     /// A personal filter view was persisted to local storage
     /// ([`SaveFilterView`](super::TrameCommand::SaveFilterView),
     /// `trame-shared-filter`). `view_id` is its stable local id.
-    FilterViewSaved { view_id: FilterViewId },
+    FilterViewSaved { view_id: Id<FilterView> },
 
     /// The sheet's conditional-formatting rules changed
     /// ([`AddCondFormat`](super::TrameCommand::AddCondFormat) /
@@ -433,7 +433,7 @@ pub enum TrameEvent {
     /// populated region. `rows` / `cols` are the dimensions actually written;
     /// `sheet_id` is the (possibly freshly created) target sheet.
     ImportComplete {
-        sheet_id: SheetId,
+        sheet_id: Id<Sheet>,
         rows: Count<Row>,
         cols: Count<Col>,
     },
@@ -607,82 +607,6 @@ impl std::fmt::Debug for TrameEvent {
     }
 }
 
-/// Stable identity of a sheet, peer-scoped where it is minted
-/// (`{peer:016x}_{counter:08x}`). A rename leaves it unchanged
-/// (`trame-sheets`).
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-pub struct SheetId(String);
-
-impl SheetId {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: String) -> Self {
-        Self(value)
-    }
-
-    /// The id as the CRDT container names spell it.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// The id as the CRDT container names spell it, by value.
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-
-    /// The name of a sheet whose document holds none: its id, verbatim.
-    pub fn bare_name(&self) -> SheetName {
-        SheetName::stored(self.0.clone())
-    }
-}
-
-/// A map keyed by sheet id answers a lookup by the bare text, as a map keyed
-/// by `String` does: both hash the same bytes.
-impl std::borrow::Borrow<str> for SheetId {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SheetId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-/// Stable local identity of a personal filter view, minted where the view is
-/// saved and never shared (`trame-shared-filter`).
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
-pub struct FilterViewId(String);
-
-impl FilterViewId {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: String) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw text.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// Stable identity of one conditional-formatting rule on a sheet, which an
-/// update or a removal names (`trame-cell-styles`).
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
-pub struct CondFormatId(String);
-
-impl CondFormatId {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: String) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw text.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 /// Where a conditional-formatting rule falls in evaluation order: the
 /// smaller is evaluated first, and the first rule that matches wins
 /// (`trame-cell-styles`). It orders rules and counts nothing.
@@ -717,7 +641,7 @@ impl Axis for TabStrip {
 /// One tab of the sheet strip: the sheet's id and its display name.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SheetTab {
-    pub id: SheetId,
+    pub id: Id<Sheet>,
     pub name: SheetName,
 }
 

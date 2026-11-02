@@ -22,6 +22,7 @@
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
 use crate::formula::text::CellText;
+use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use std::collections::BTreeMap;
 
@@ -104,7 +105,7 @@ impl TrameState {
                     .doc
                     .get_movable_list(SheetContainer::of(SheetRoot::Cols, &sheet).as_str()),
             );
-            let sheet_u16 = self.engine_sheet_by_id.get(&sheet).copied();
+            let engine_sheet = self.engine_sheet_by_id.get(&sheet).copied();
             // Keyed by grid position, not by stored key. The stored key carries
             // peer ids and mint counters, exactly what two documents "agreeing by
             // a different route" are allowed to differ in. `BTreeMap` sorts the
@@ -133,7 +134,7 @@ impl TrameState {
                         crate::columns::col_to_alpha(col),
                         row.get().saturating_add(1)
                     );
-                    let line = match sheet_u16 {
+                    let line = match engine_sheet {
                         // Both representations for a formula cell, one for a
                         // literal. `#N/A` marks a formula the engine has not
                         // evaluated -- a real difference, not one to paper over.
@@ -166,8 +167,8 @@ impl TrameState {
     /// Not `sheet_order_ids()`: that one is a *view* concern and pins the active
     /// sheet first. The same workbook would then dump differently depending on
     /// which tab happened to be open.
-    fn fixture_sheet_ids(&self) -> Vec<SheetId> {
-        let mut listed: Vec<SheetId> = match self
+    fn fixture_sheet_ids(&self) -> Vec<Id<Sheet>> {
+        let mut listed: Vec<Id<Sheet>> = match self
             .doc
             .get_movable_list(Root::SheetOrder.as_str())
             .get_value()
@@ -175,18 +176,18 @@ impl TrameState {
             LoroValue::List(items) => items
                 .iter()
                 .filter_map(|v| match v {
-                    LoroValue::String(s) => Some(SheetId::new(s.to_string())),
+                    LoroValue::String(s) => Some(Id::<Sheet>::from_text(s.to_string())),
                     _ => None,
                 })
                 .collect(),
             _ => Vec::new(),
         };
-        let mut rest: Vec<SheetId> = match self.doc.get_map(Root::Sheets.as_str()).get_value() {
+        let mut rest: Vec<Id<Sheet>> = match self.doc.get_map(Root::Sheets.as_str()).get_value() {
             LoroValue::Map(sheets) => sheets
                 .keys()
                 .filter(|id| !listed.iter().any(|l| l.as_str() == id.as_str()))
                 .cloned()
-                .map(SheetId::new)
+                .map(Id::<Sheet>::from_text)
                 .collect(),
             _ => Vec::new(),
         };
@@ -470,7 +471,7 @@ fn build_two_peer_merge(state: &mut TrameState, seed: FixtureSeed) {
 /// Panics when the event is absent or names no such sheet. A generator drives
 /// commands it chose itself, so a missing reply is a defect here rather than
 /// a runtime condition (`FixtureGen::build`).
-fn new_sheet_id(outcome: &TrameOutcome, name: &SheetName) -> SheetId {
+fn new_sheet_id(outcome: &TrameOutcome, name: &SheetName) -> Id<Sheet> {
     outcome
         .display
         .iter()

@@ -25,7 +25,8 @@
 // acts on. ============================================================================
 
 use ambre_bus::app::toile::{FontFamily, FontSizeChoice};
-use ambre_chrome::commands::{Commands, Locale, StaticKey};
+use ambre_chrome::commands::Locale;
+use ambre_core::{Commands, StaticKey};
 use ambre_core::{FontSize, Rgba};
 
 use super::icons;
