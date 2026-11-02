@@ -194,7 +194,7 @@ mod tests {
             nodes,
             viewport: Viewport {
                 center: Point::ZERO,
-                zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
+                zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.0),
                 size: Size::new(100.0, 100.0),
             },
         }

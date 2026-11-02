@@ -312,7 +312,13 @@ fn paint_preview<S: DrawSurface>(
     }
 
     let brush = Brush::Solid(palette.selection);
-    let px = |n: f64| Stroke::new(n / cam.zoom.get());
+    // A screen-constant width: `n` view pixels, in board units at this zoom.
+    let px = |n: f32| {
+        Stroke::new(
+            cam.to_board(ambre_core::Px::<ambre_core::View>::new(n))
+                .get(),
+        )
+    };
     surface.push_transform(cam.world_to_screen());
     match preview {
         Preview::Marquee(_) => {} // handled above
@@ -2102,7 +2108,7 @@ mod tests {
         )]);
         let origin = |zoom: f64| {
             let mut cam = cam();
-            cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
+            cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(zoom);
             let painted = runs(&paint_pass(&vp, &cam, &Pass::default()));
             let (_, first, depth) = *painted.first().expect("the body is shaped");
             assert_eq!(depth, 1, "zoom {zoom}: a run under the camera transform");
@@ -2397,7 +2403,7 @@ mod tests {
     #[test]
     fn every_preview_tracks_the_geometry_it_will_commit() {
         let mut cam = cam();
-        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
+        cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(2.0);
         let r = Rect::new(10.0, 20.0, 110.0, 70.0);
         let mut pen = BezPath::new();
         pen.move_to((0.0, 0.0));

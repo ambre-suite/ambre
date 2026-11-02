@@ -483,11 +483,11 @@ pub struct ToileView {
     /// the camera's zoom, and a preset the chip writes moves the camera.
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    zoom: RwSignal<ambre_core::Scale<ambre_core::Doc, ambre_core::View>>,
+    zoom: RwSignal<ambre_core::Scale<ambre_core::Board, ambre_core::View>>,
     /// The zoom this view last published. A signal reading anything else was
     /// written by the chip, so the camera follows it. Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    zoom_published: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+    zoom_published: ambre_core::Scale<ambre_core::Board, ambre_core::View>,
     /// Status-bar selection aggregates (`toile-status-bar`), shared with the
     /// DOM band. The view clears it to `None` on an empty selection: an
     /// empty-ids stats request would mean "whole board" to Logic. It must not
@@ -716,7 +716,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
         #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<super::palette::CanvasCursor>>,
         #[cfg(target_arch = "wasm32")] zoom: RwSignal<
-            ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+            ambre_core::Scale<ambre_core::Board, ambre_core::View>,
         >,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
         #[cfg(target_arch = "wasm32")] style_model: RwSignal<Option<super::style::StyleModel>>,
@@ -821,7 +821,7 @@ impl ToileView {
             #[cfg(target_arch = "wasm32")]
             zoom,
             #[cfg(target_arch = "wasm32")]
-            zoom_published: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
+            zoom_published: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::ONE,
             #[cfg(target_arch = "wasm32")]
             sel_stats,
             #[cfg(target_arch = "wasm32")]
@@ -3353,7 +3353,7 @@ impl ToileView {
         // scaled by the zoom at paint. Dividing here opens the edited text at
         // the size the band reads today. A zoom during the edit then drifts,
         // which `toile-frames` section 6 records.
-        let base_size = render::FRAME_TITLE_HEIGHT.unzoomed(self.cam.zoom);
+        let base_size = render::FRAME_TITLE_HEIGHT.unzoomed(self.cam.zoom.text_zoom());
         self.editor = Some(InlineEditor::open_frame_title(
             id,
             &title,

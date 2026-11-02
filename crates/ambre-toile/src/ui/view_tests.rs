@@ -1897,7 +1897,8 @@ fn a_finger_pans_only_the_empty_board() {
 fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
     let screen_step = |zoom: f64| {
         let mut rig = Rig::with_stickies(&[("a", A)]);
-        rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
+        rig.view.cam.zoom =
+            ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(zoom);
         rig.press(rig.screen(50.0, 50.0));
         rig.input(InputEvent::PointerMove {
             at: pointer(1195.0, 400.0),
@@ -1928,7 +1929,7 @@ fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
 fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.view.cam.center = kurbo::Point::new(40.0, -25.0);
-    rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.5);
+    rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.5);
     rig.view.update();
     rig.sent();
     rig.view
@@ -2346,7 +2347,7 @@ fn a_shown_shortcut_does_what_its_entry_does() {
 fn a_zoom_entry_moves_the_camera_and_queues_a_cull() {
     use crate::ui::menu_bar::{ZOOM_IN, ZOOM_OUT, ZOOM_RESET};
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
+    rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(2.0);
     for id in [ZOOM_IN, ZOOM_OUT, ZOOM_RESET] {
         let before = rig.view.cam.zoom;
         rig.view.apply_menu_command(id);
@@ -3044,7 +3045,8 @@ fn a_canvas_point_reaches_its_element_through_the_shared_hit_test() {
     use ambre_draw::HitTest;
     let mut rig = Rig::with_stickies(&[("a", A)]);
     for zoom in [0.5, 1.0, 2.0] {
-        rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
+        rig.view.cam.zoom =
+            ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(zoom);
         let (x, y) = rig.screen(50.0, 50.0);
         assert_eq!(
             rig.view.hit_test(ambre_core::Point::new(

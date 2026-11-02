@@ -697,7 +697,7 @@ fn a_command_culls_against_the_last_reported_camera() {
     );
     st.handle_command(ToileCommand::SetViewport(Viewport {
         center: Point::new(5005.0, 5005.0),
-        zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
+        zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.0),
         size: Size::new(400.0, 400.0),
     }));
     let out = st.handle_command(ToileCommand::MoveElements {

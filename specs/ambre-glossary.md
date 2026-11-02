@@ -152,7 +152,7 @@
 | theme | the light or dark choice a palette answers | | `1-Foundations/ambre-spec-design-tokens.md` |
 | kinetic scroll | the shared pan, flick and edge scroll of every app | | `1-Foundations/ambre-spec-kinetic-scroll.md` |
 | consumed | an input event a handler took, which stops there (`Consumed`) | | `1-Foundations/ambre-spec-text-input.md` |
-| zoom | the scale between document space and screen space | | `1-Foundations/ambre-spec-zoom.md` |
+| zoom | the scale between a document or a board and the screen | | `1-Foundations/ambre-spec-zoom.md` |
 | pixel space | the marker type a length is measured in, as `Px<View>` | | `1-Foundations/ambre-spec-high-density.md` |
 | preset ladder | the ordered zoom stops a gesture steps through | | `1-Foundations/ambre-spec-zoom.md` |
 | undo | taking back the last change of this client | | `1-Foundations/ambre-spec-undo.md` |

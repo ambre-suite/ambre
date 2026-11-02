@@ -50,7 +50,7 @@ use ambre_chrome::{
     Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar,
 };
 use ambre_core::id::{Document, Frame, Id, User};
-use ambre_core::{Doc, Scale, View};
+use ambre_core::{Board, Doc, Scale, View};
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
@@ -386,6 +386,9 @@ struct Wiring {
     /// Grid zoom factor (`1.0` = 100%, `trame-status-bar`): the status-bar menu
     /// writes it, the canvas view polls it each frame. Local view state, not synced.
     zoom: RwSignal<Scale<Doc, View>>,
+    /// Board zoom factor (`1.0` = 100%, `toile-status-bar`): the Toile twin of
+    /// `zoom`, a scale of board units. Local view state, not synced.
+    board_zoom: RwSignal<Scale<Board, View>>,
     /// Right-click context-menu scope (`trame-context-menu`): the view sets it
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
@@ -674,6 +677,8 @@ pub fn main() {
     // Grid zoom factor selected in the status-bar menu (`trame-status-bar`),
     // polled by the canvas view each frame. Defaults to 100%.
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
+    // Board zoom factor of the Toile camera (`toile-status-bar`). Defaults to 100%.
+    let board_zoom = RwSignal::new(Scale::<Board, View>::ONE);
 
     // Context-menu scope (`trame-context-menu`): the view sets it per right-click
     // (cell vs header) before the DOM `contextmenu` listener opens the menu. The
@@ -925,6 +930,7 @@ pub fn main() {
         presenter_peer_toile,
         perf_snap,
         zoom,
+        board_zoom,
         ctx_scope,
         filter_active,
         toile_ctx_scope,
@@ -1739,7 +1745,7 @@ pub fn main() {
     let ch_toile_menu_cmd = RwSignal::new(None::<StaticKey<Commands>>);
     let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
     let ch_toile_cursor = RwSignal::new(None::<ambre_toile::ui::palette::CanvasCursor>);
-    let ch_toile_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
+    let ch_toile_zoom = RwSignal::new(Scale::<Board, View>::ONE);
     let ch_toile_sel_stats = RwSignal::new(None::<toile_chrome::SelStats>);
     let ch_toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let ch_toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
@@ -1897,7 +1903,7 @@ pub fn main() {
                     toile_menu_cmd,
                     toile_active_tool,
                     toile_cursor,
-                    zoom,
+                    board_zoom,
                     sel_stats_toile,
                     toile_style_model,
                     toile_restyle,

@@ -1256,7 +1256,7 @@ fn a_search_finds_a_hit_far_outside_the_camera() {
     let far = create_sticky(&mut st, Point::new(1.0e6, 1.0e6), "needle");
     st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
         center: Point::ZERO,
-        zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
+        zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.0),
         size: Size::new(800.0, 600.0),
     }));
     let visible: Vec<Id<Element>> = st
@@ -5087,7 +5087,7 @@ fn a_reacted_target_out_of_view_is_left_out_of_the_frame() {
     }
     st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
         center: Point::ZERO,
-        zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
+        zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.0),
         size: Size::new(800.0, 600.0),
     }));
 
@@ -6275,7 +6275,7 @@ fn apply_local(
 fn wide_viewport() -> crate::logic::index::Viewport {
     crate::logic::index::Viewport {
         center: Point::ZERO,
-        zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.01),
+        zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(0.01),
         size: Size::new(2000.0, 2000.0),
     }
 }
