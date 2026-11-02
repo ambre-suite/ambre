@@ -55,6 +55,26 @@ impl OrgName {
     }
 }
 
+#[cfg(test)]
+mod org_name_tests {
+    use super::OrgName;
+
+    /// A body decodes a name trimmed, and refuses a blank one with the
+    /// words of the rule.
+    #[test]
+    fn a_body_decodes_a_trimmed_name_and_refuses_a_blank_one() {
+        let name: OrgName = serde_json::from_str("\" Acme \"").expect("a name");
+        assert_eq!(name.as_str(), "Acme");
+        let refused = serde_json::from_str::<OrgName>("\"  \"")
+            .expect_err("blank")
+            .to_string();
+        assert!(
+            refused.starts_with("an organization name is blank"),
+            "{refused}"
+        );
+    }
+}
+
 /// The k-of-n split an organization declares for its recovery key: `k`
 /// shares of `n` reconstruct it. [`ShamirParams::new`] holds
 /// `1 <= threshold <= total`, so no stored or decoded split breaks it.

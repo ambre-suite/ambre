@@ -6,7 +6,8 @@
 // palette are all *views* of one registry of `Command`s. This keeps the chrome
 // tractable across 5 apps x ~200 commands (ambre-spec-commands.md).
 //
-// Layering: a `Command`/`StaticKey<Commands>` here is a UI *affordance*. It is distinct
+// Layering: a `Command` here, named by an `ambre_core::StaticKey<Commands>`,
+// is a UI *affordance*. It is distinct
 // from the `AppCommand`/`LogicCommand` IPC payloads in `ambre-bus`: invoking a
 // `Command` *produces* a `LogicCommand`. This crate never knows about IPC, the
 // renderer, or Leptos -- it is the leaf of the UI-thread crate graph.

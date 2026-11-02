@@ -120,7 +120,7 @@ pub fn CanvasCell(
 /// whose `id` defaults to `"ambre-canvas"` (the id the canvas host looks up).
 #[component]
 pub fn AppShell(
-    /// Id of the central canvas element. Defaults to [`ambre_core::StaticKey::CONTENT`].
+    /// Id of the central canvas element. Defaults to the content canvas, `StaticKey::<Canvases>::CONTENT`.
     #[prop(optional)]
     canvas_id: Option<ambre_core::StaticKey<ambre_core::Canvases>>,
     header: Header,

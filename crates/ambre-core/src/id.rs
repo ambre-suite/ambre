@@ -269,9 +269,31 @@ impl<E: Entity<Repr = String>> Id<E> {
     }
 }
 
+/// A text entity whose map answers a lookup by the bare text, opt in per
+/// kind. A sheet map is read by the text a formula or a container name
+/// holds. A board node keeps its kind at every lookup, so an untyped text
+/// never finds a frame:
+///
+/// ```compile_fail
+/// use ambre_core::id::{Frame, Id};
+/// let mut frames = std::collections::HashMap::new();
+/// frames.insert(Id::<Frame>::from_text("f1".to_owned()), 1);
+/// let _ = frames.get("f1");
+/// ```
+///
+/// The same lookup on a sheet map compiles:
+///
+/// ```
+/// use ambre_core::id::{Id, Sheet};
+/// let mut sheets = std::collections::HashMap::new();
+/// sheets.insert(Id::<Sheet>::from_text("s1".to_owned()), 1);
+/// assert_eq!(sheets.get("s1"), Some(&1));
+/// ```
+pub trait TextKeyed: Entity<Repr = String> {}
+
 /// A map keyed by a text identifier answers a lookup by the bare text. The
 /// identifier and its text hash and compare as the same bytes.
-impl<E: Entity<Repr = String>> std::borrow::Borrow<str> for Id<E> {
+impl<E: TextKeyed> std::borrow::Borrow<str> for Id<E> {
     fn borrow(&self) -> &str {
         &self.raw
     }
@@ -465,6 +487,7 @@ impl Entity for Sheet {
     const NAME: &'static str = "SheetId";
     type Repr = String;
 }
+impl TextKeyed for Sheet {}
 
 /// A personal filter view of a Trame sheet, minted where the view is saved
 /// and never shared (`trame-shared-filter`).

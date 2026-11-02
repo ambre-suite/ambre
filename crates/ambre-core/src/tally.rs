@@ -51,6 +51,22 @@ pub trait TallyKind: 'static {
 /// }
 /// let _ = Tally::<Pears>::recount(Tally::<Apples>::ZERO);
 /// ```
+///
+/// The same recount compiles once the pair opts in:
+///
+/// ```
+/// use ambre_core::{Recounts, Tally, TallyKind};
+/// enum Apples {}
+/// impl TallyKind for Apples {
+///     const NAME: &'static str = "AppleCount";
+/// }
+/// enum Pears {}
+/// impl TallyKind for Pears {
+///     const NAME: &'static str = "PearCount";
+/// }
+/// impl Recounts<Apples> for Pears {}
+/// assert_eq!(Tally::<Pears>::recount(Tally::<Apples>::new(3)).get(), 3);
+/// ```
 pub trait Recounts<J: TallyKind>: TallyKind {}
 
 /// A running count of the things `K` names, over a `u32`.

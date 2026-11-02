@@ -3188,7 +3188,7 @@ ambre-core | src/member_count.rs | crate::member_count | MemberCountError.0 | fi
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the bool the one constructor of Visibility reads into its variant
 ambre-core | src/secret.rs | crate::secret | <SecretString as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of SecretString wraps
 ambre-core | src/secret.rs | crate::secret | SecretString::new(text) | param | String	newtype-inner	secret newtype
-ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to MemberCount at once
+ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to Tally<Members> at once
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	foreign-api	the column bytes sqlx hands a decoder, read into a MasterKeySalt at once
 ambre-canvas | src/fonts.rs | crate::fonts | BASE_FONTS | const | [&str;6]	free-text	same-origin font paths the boot fetches
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_max | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/

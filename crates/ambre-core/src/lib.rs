@@ -143,7 +143,7 @@ pub use font::{
     WordBreak,
 };
 pub use generation::{Generation, GenerationKind, Issuer, SharedIssuer};
-pub use id::{DocumentScoped, Entity, Id, IdRepr};
+pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::LangTag;
 pub use link::LinkUrl;

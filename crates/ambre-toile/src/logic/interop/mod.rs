@@ -75,7 +75,7 @@ impl Axis for ImportElement {
 pub enum ImportGroupRank {}
 
 impl Axis for ImportGroupRank {
-    const NAME: &'static str = "ImportGroup";
+    const NAME: &'static str = "ImportGroupRank";
 }
 
 /// A `<g>` (or a Figma/Miro group) to rebuild via `GroupElements` after the

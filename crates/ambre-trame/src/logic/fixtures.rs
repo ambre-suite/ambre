@@ -105,7 +105,7 @@ impl TrameState {
                     .doc
                     .get_movable_list(SheetContainer::of(SheetRoot::Cols, &sheet).as_str()),
             );
-            let sheet_u16 = self.engine_sheet_by_id.get(&sheet).copied();
+            let engine_sheet = self.engine_sheet_by_id.get(&sheet).copied();
             // Keyed by grid position, not by stored key. The stored key carries
             // peer ids and mint counters, exactly what two documents "agreeing by
             // a different route" are allowed to differ in. `BTreeMap` sorts the
@@ -134,7 +134,7 @@ impl TrameState {
                         crate::columns::col_to_alpha(col),
                         row.get().saturating_add(1)
                     );
-                    let line = match sheet_u16 {
+                    let line = match engine_sheet {
                         // Both representations for a formula cell, one for a
                         // literal. `#N/A` marks a formula the engine has not
                         // evaluated -- a real difference, not one to paper over.
