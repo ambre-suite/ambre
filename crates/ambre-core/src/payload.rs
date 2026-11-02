@@ -35,9 +35,10 @@ pub struct Payload<K: PayloadKind> {
 }
 
 impl<K: PayloadKind> Payload<K> {
-    /// Wraps the bytes.
+    /// Wraps the bytes. A `const fn`, so a role may name a fixed payload as a
+    /// constant, as the empty announcement of a worker start does.
     #[must_use]
-    pub fn new(bytes: Vec<u8>) -> Self {
+    pub const fn new(bytes: Vec<u8>) -> Self {
         Self {
             bytes,
             kind: PhantomData,
@@ -67,7 +68,32 @@ impl<K: PayloadKind> Payload<K> {
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
     }
+
+    /// The same bytes under the role `B`, with no copy. Only a pair of roles
+    /// that declares [`Becomes`] compiles, so no payload changes role by
+    /// accident.
+    #[must_use]
+    pub fn into_role<B: PayloadKind>(self) -> Payload<B>
+    where
+        K: Becomes<B>,
+    {
+        Payload::new(self.bytes)
+    }
 }
+
+/// A role whose bytes may go on under the role `B`, through
+/// [`Payload::into_role`]. Each pair of roles opts in by its own `impl`. No
+/// blanket `impl` exists: an answer body becomes a fetched blob, and nothing
+/// else becomes one.
+///
+/// A pair that declares nothing does not compile:
+///
+/// ```compile_fail
+/// use ambre_core::{DeltaBytes, Payload, SnapshotBytes};
+/// let delta = Payload::<DeltaBytes>::new(vec![1]);
+/// let _: Payload<SnapshotBytes> = delta.into_role();
+/// ```
+pub trait Becomes<B: PayloadKind>: PayloadKind {}
 
 impl<K: PayloadKind> From<Vec<u8>> for Payload<K> {
     fn from(bytes: Vec<u8>) -> Self {
@@ -391,9 +417,43 @@ impl<'a> From<&'a Payload<SnapshotBytes>> for LoroPayloadRef<'a> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DeltaBytes, EphemeralBytes, LoroPayload, MediaBytes, Payload, PlaintextContainer,
-        RgbaPixels, SnapshotBytes,
+        Becomes, DeltaBytes, EphemeralBytes, LoroPayload, MediaBytes, Payload, PayloadKind,
+        PlaintextContainer, RgbaPixels, SnapshotBytes,
     };
+
+    /// A role whose bytes go on under [`Arrived`] alone.
+    enum Received {}
+
+    impl PayloadKind for Received {
+        const NAME: &'static str = "Received";
+    }
+
+    /// The role [`Received`] becomes.
+    enum Arrived {}
+
+    impl PayloadKind for Arrived {
+        const NAME: &'static str = "Arrived";
+    }
+
+    impl Becomes<Arrived> for Received {}
+
+    /// A declared pair changes role and keeps every byte. The reverse pair
+    /// declares nothing, so `crate::payload::Becomes`'s doctest proves it
+    /// does not compile.
+    #[test]
+    fn a_declared_pair_changes_role_and_keeps_its_bytes() {
+        let received = Payload::<Received>::new(vec![7, 8, 9]);
+        let arrived: Payload<Arrived> = received.into_role();
+        assert_eq!(arrived, [7, 8, 9]);
+        assert_eq!(format!("{arrived:?}"), "Arrived(3 bytes)");
+    }
+
+    /// The constructor runs in a constant.
+    #[test]
+    fn a_payload_builds_in_a_constant() {
+        const EMPTY: Payload<DeltaBytes> = Payload::new(Vec::new());
+        assert!(EMPTY.is_empty());
+    }
 
     #[test]
     fn debug_prints_the_length_alone() {
@@ -436,15 +496,17 @@ mod tests {
     }
 
     /// Each serde form is the bare byte string, in JSON and in postcard, and
-    /// it reads back.
+    /// it reads back. The serde impl reads no role, so the form holds for
+    /// every role: a role folded from a transparent `Vec<u8>` newtype keeps
+    /// its bytes.
     #[test]
     fn serde_sees_the_bare_bytes() {
         let bytes = vec![0xab, 0xcd];
         let snapshot = Payload::<SnapshotBytes>::new(bytes.clone());
-        assert_eq!(
-            serde_json::to_string(&snapshot).unwrap(),
-            serde_json::to_string(&bytes).unwrap()
-        );
+        let json = serde_json::to_string(&snapshot).unwrap();
+        assert_eq!(json, serde_json::to_string(&bytes).unwrap());
+        let back: Payload<SnapshotBytes> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, snapshot);
         let wire = postcard::to_allocvec(&snapshot).unwrap();
         assert_eq!(wire, postcard::to_allocvec(&bytes).unwrap());
         let back: Payload<SnapshotBytes> = postcard::from_bytes(&wire).unwrap();
