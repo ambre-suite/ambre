@@ -24,8 +24,8 @@
 //! with, so a command needs no conversion on the write path. A caret moves by
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
-use ambre_core::index::{Axis, CountsAs, Delta, MapsTo, Numbered, Pos, Shown, Span};
-use ambre_core::{PrintLength, index::Count};
+use ambre_core::index::{Axis, Count, CountsAs, Delta, MapsTo, Numbered, Pos, Shown, Span};
+use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted};
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
@@ -33,7 +33,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
-use ambre_core::{Pt, Rgb};
+use ambre_core::{Pt, Rgb, Tally};
 
 use super::grid::{CellPos, Col, Row};
 
@@ -113,7 +113,7 @@ impl TextAck {
 // =============================================================================
 
 /// A page of one layout, counted from zero. The layout, the window and
-/// the view count pages this way. A reader sees a [`PageNumber`].
+/// the view count pages this way. A reader sees an [`Ordinal<Page>`].
 #[derive(PartialEq, Eq)]
 pub enum Page {}
 
@@ -121,42 +121,36 @@ impl Axis for Page {
     const NAME: &'static str = "Page";
 }
 
+/// A page as a reader sees it: counted from one (`PROSE-FEAT-060`).
+///
+/// A table of contents and a page-number field show it. The layout counts
+/// pages from zero in a [`Pos<Page>`], and [`Pos::number`] is the one way
+/// from that count to this one. Zero is not a page number, so "no page
+/// known" is an `Option` and never a zero.
+impl OrdinalKind for Page {
+    const NAME: &'static str = "PageNumber";
+}
+
 /// The number a reader sees for a page: its index plus one. The one
 /// conversion from a page index to a page number. It saturates at the last
 /// number the axis holds.
 impl Numbered for Page {
-    type Number = PageNumber;
+    type Number = Ordinal<Page>;
 
-    fn number_of(pos: Pos<Page>) -> PageNumber {
-        PageNumber::from_position(pos.to_usize())
+    fn number_of(pos: Pos<Page>) -> Ordinal<Page> {
+        Ordinal::<Page>::from_position(pos.to_usize())
     }
 }
 
 /// A layout shows its number of pages to a reader.
 impl Shown for Page {}
 
-ambre_core::define_ordinal! {
-    /// A page as a reader sees it: counted from one (`PROSE-FEAT-060`).
-    ///
-    /// A table of contents and a page-number field show it. The layout counts
-    /// pages from zero in a [`Pos<Page>`], and [`Pos::number`] is the one
-    /// way from that count to this one. Zero is not a page number, so "no page
-    /// known" is an `Option` and never a zero.
-    pub struct PageNumber;
-}
+/// The number a footnote is called by, one for the first call in document
+/// order. It is counted, never stored (`PROSE-FEAT-013`).
+pub enum FootnoteCall {}
 
-impl PageNumber {
-    /// The page index this number shows.
-    #[must_use]
-    pub const fn index(self) -> Pos<Page> {
-        Pos::<Page>::new(self.get() - 1)
-    }
-}
-
-ambre_core::define_ordinal! {
-    /// The number a footnote is called by, one for the first call in document
-    /// order. It is counted, never stored (`PROSE-FEAT-013`).
-    pub struct FootnoteOrdinal;
+impl ambre_core::OrdinalKind for FootnoteCall {
+    const NAME: &'static str = "FootnoteOrdinal";
 }
 
 // =============================================================================
@@ -194,24 +188,18 @@ impl fmt::Display for BlockId {
 /// (`ambre-spec-prose-schema.md`). The tree stores the name itself, so the
 /// newtype exists only to keep it apart from the other strings of a command.
 /// A user may have typed the name, so `Debug` prints its length alone.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct StyleId(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct StyleId(Redacted<String>);
 
 impl StyleId {
     /// Wraps a raw value. The constructor checks nothing.
     pub const fn new(value: String) -> Self {
-        Self(value)
+        Self(Redacted::new(value))
     }
 
     /// Returns the raw text.
     pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for StyleId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "StyleId({} chars)", self.0.chars().count())
+        self.0.as_str()
     }
 }
 
@@ -879,13 +867,25 @@ pub struct CellBorder {
     pub color: Rgb,
 }
 
-ambre_core::define_tally! {
-    /// A number of words, as Unicode word boundaries split the text.
-    pub struct WordTotal;
-    /// A number of grapheme clusters: the characters a reader counts.
-    pub struct GraphemeCount;
-    /// A number of paragraphs that hold a visible character.
-    pub struct ParagraphCount;
+/// A number of words, as Unicode word boundaries split the text.
+pub enum Words {}
+
+impl ambre_core::TallyKind for Words {
+    const NAME: &'static str = "WordTotal";
+}
+
+/// A number of grapheme clusters: the characters a reader counts.
+pub enum Graphemes {}
+
+impl ambre_core::TallyKind for Graphemes {
+    const NAME: &'static str = "GraphemeCount";
+}
+
+/// A number of paragraphs that hold a visible character.
+pub enum Paragraphs {}
+
+impl ambre_core::TallyKind for Paragraphs {
+    const NAME: &'static str = "ParagraphCount";
 }
 
 /// The five figures of the status bar (`features/ambre-spec-prose-word-count.md`).
@@ -894,13 +894,13 @@ ambre_core::define_tally! {
 /// half is refreshed by its own trigger.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WordCount {
-    pub words: WordTotal,
+    pub words: Tally<Words>,
     /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
-    pub characters: GraphemeCount,
+    pub characters: Tally<Graphemes>,
     /// The same clusters, whitespace and paragraph breaks included
     /// (`PROSE-FEAT-121`).
-    pub characters_with_spaces: GraphemeCount,
-    pub paragraphs: ParagraphCount,
+    pub characters_with_spaces: Tally<Graphemes>,
+    pub paragraphs: Tally<Paragraphs>,
     /// From the layout, never from the tally (`PROSE-FEAT-038`).
     pub pages: Count<Page>,
 }
@@ -1092,7 +1092,7 @@ pub struct FindMatch {
 #[derive(Clone, PartialEq, Eq)]
 pub struct FootnoteEntry {
     pub footnote_id: Id<Footnote>,
-    pub ordinal: Option<FootnoteOrdinal>,
+    pub ordinal: Option<Ordinal<FootnoteCall>>,
     pub text: String,
 }
 
@@ -1358,7 +1358,7 @@ pub struct TocEntry {
     pub heading_number: Option<HeadingNumber>,
     /// The page the heading starts on (`PROSE-FEAT-060`). `None` while the
     /// layout places no block that holds the heading.
-    pub page: Option<PageNumber>,
+    pub page: Option<Ordinal<Page>>,
 }
 
 // The heading's text is the author's: a log carries its length alone.
@@ -2133,10 +2133,12 @@ impl ConversionReport {
     }
 }
 
-ambre_core::define_tally! {
-    /// The times one construct was lost in a conversion, the figure a
-    /// warning carries in place of a repeat.
-    pub struct WarningCount;
+/// The times one construct was lost in a conversion, the figure a
+/// warning carries in place of a repeat.
+pub enum ConversionLosses {}
+
+impl ambre_core::TallyKind for ConversionLosses {
+    const NAME: &'static str = "WarningCount";
 }
 
 /// One fidelity loss. The same construct lost twice is one warning with its
@@ -2147,19 +2149,19 @@ pub enum ConversionWarning {
     FeatureNotSupported {
         feature: UnsupportedFeature,
         format: ConversionFormat,
-        count: WarningCount,
+        count: Tally<ConversionLosses>,
     },
     /// An element the reader does not recognise, dropped with its markup
     /// and its text kept where it has any (`PROSE-IO-005`).
     ElementDropped {
         element: DroppedElement,
-        count: WarningCount,
+        count: Tally<ConversionLosses>,
     },
     /// A block the tree refuses where the file put it, moved to the nearest
     /// place it allows (`PROSE-IO-026`, `PROSE-IO-052`).
     BlockLifted {
         block: LiftedBlock,
-        count: WarningCount,
+        count: Tally<ConversionLosses>,
     },
 }
 
@@ -2978,7 +2980,7 @@ mod tests {
     /// and none of the text a user may have typed.
     #[test]
     fn a_style_name_and_a_mark_value_print_their_length_alone() {
-        let style = StyleId("My notes".to_owned());
+        let style = StyleId(Redacted::new("My notes".to_owned()));
         assert_eq!(format!("{style:?}"), "StyleId(8 chars)");
         let link = mark::MarkRoot::Link.key();
         let value = mark::validate_value(&link, Some("https://a.example")).unwrap();

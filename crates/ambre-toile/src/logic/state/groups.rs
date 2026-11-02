@@ -4,6 +4,7 @@
 //! geometry is derived (never in the CRDT) and lives only in the `bounds` /
 //! R-tree caches.
 
+use ambre_core::Tally;
 use std::collections::HashSet;
 
 use ambre_core::id::{Element, Id};
@@ -13,7 +14,7 @@ use loro::{LoroMap, LoroMovableList, LoroValue};
 use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{ElementKind, NodeId};
-use ambre_bus::app::toile::{ElementCount, FRAME_NAME_MAX};
+use ambre_bus::app::toile::{Elements, FRAME_NAME_MAX};
 
 use super::ToileState;
 use super::codec::{em_seed_group, str_of};
@@ -300,7 +301,7 @@ impl ToileState {
         // Remove first, so a same-id remove+add re-appends at the end. Every
         // entry goes: two concurrent adds leave one id on the list twice.
         for id in remove {
-            if self.delete_entries(&list, frame, id) > ElementCount::ZERO {
+            if self.delete_entries(&list, frame, id) > Tally::<Elements>::ZERO {
                 changed = true;
             }
         }
@@ -534,7 +535,7 @@ impl ToileState {
             self.unlink_parent(child, parent);
             return;
         };
-        if self.delete_entries(&list, parent, child) == ElementCount::ZERO {
+        if self.delete_entries(&list, parent, child) == Tally::<Elements>::ZERO {
             self.unlink_parent(child, parent);
         }
     }
@@ -547,11 +548,11 @@ impl ToileState {
         list: &LoroMovableList,
         parent: &Id<Element>,
         child: &Id<Element>,
-    ) -> ElementCount {
+    ) -> Tally<Elements> {
         let LoroValue::List(items) = list.get_deep_value() else {
-            return ElementCount::ZERO;
+            return Tally::<Elements>::ZERO;
         };
-        let mut gone = ElementCount::ZERO;
+        let mut gone = Tally::<Elements>::ZERO;
         let at = items
             .iter()
             .enumerate()

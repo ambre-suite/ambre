@@ -1,6 +1,6 @@
 // ambre-trame/src/chrome/handler.rs
 // ============================================================================
-// Trame's command handler (`ARCH-018`): what each Trame `CommandId` means.
+// Trame's command handler (`ARCH-018`): what each Trame `StaticKey<Commands>` means.
 //
 // The shell resolves a trigger to an id and asks here. The panels Trame owns
 // -- find and replace, the filter popover -- open from here, through their
@@ -9,7 +9,7 @@
 // ============================================================================
 
 use ambre_bus::{AppCommand, StylePatch, TrameCommand};
-use ambre_chrome::commands::{ClipboardWrite, CommandId, PasteForm};
+use ambre_chrome::commands::{ClipboardWrite, Commands, PasteForm, StaticKey};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
 use ambre_core::index::Pos;
 use ambre_core::{Css, Point, Px, View};
@@ -84,7 +84,7 @@ enum StyleToggle {
 impl CommandHandler for TrameHandler {
     type Command = AppCommand;
 
-    fn on_command(&self, id: CommandId) -> Vec<ShellAction<AppCommand>> {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
             SAVE_SEALED_FILE => ShellAction::OpenSealedSave,
@@ -134,7 +134,11 @@ impl CommandHandler for TrameHandler {
         vec![action]
     }
 
-    fn on_key(&self, id: CommandId, _target: ambre_chrome::KeyTarget) -> KeyRoute<AppCommand> {
+    fn on_key(
+        &self,
+        id: StaticKey<Commands>,
+        _target: ambre_chrome::KeyTarget,
+    ) -> KeyRoute<AppCommand> {
         // A chord opens the palette and find and replace like the menu does.
         // Every other chord
         // maps straight through the table: the toggles and the clipboard keep

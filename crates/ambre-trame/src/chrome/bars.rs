@@ -6,7 +6,7 @@
 // ============================================================================
 
 use ambre_bus::{DecimalsStep, StylePatch};
-use ambre_chrome::commands::{CommandId, Locale};
+use ambre_chrome::commands::{Commands, Locale, StaticKey};
 use ambre_chrome::{Availability, FontSizeSelect, FormatToggle};
 use ambre_core::{FontSize, Rgb};
 use leptos::prelude::*;
@@ -22,18 +22,18 @@ use crate::ui::commands as registry;
 
 /// The label a control shows for `id`. Reads the registry and never a literal
 /// (`UI-THREAD-019`), so the toolbar and the context menu name a command alike.
-fn label(id: CommandId) -> String {
+fn label(id: StaticKey<Commands>) -> String {
     registry::title(id, &Locale::En).unwrap_or_default()
 }
 
 /// The glyph `id` declares, resolved to its asset.
-fn glyph(id: CommandId) -> Option<icondata::Icon> {
+fn glyph(id: StaticKey<Commands>) -> Option<icondata::Icon> {
     registry::icon(id).and_then(icons::resolve)
 }
 
 /// The command the merge toggle sends: a merged cell splits, any other cell
 /// merges the selection.
-fn merge_command(merged: ambre_bus::Merge) -> CommandId {
+fn merge_command(merged: ambre_bus::Merge) -> StaticKey<Commands> {
     match merged {
         ambre_bus::Merge::Single => MERGE,
         ambre_bus::Merge::Merged => UNMERGE,
@@ -45,7 +45,7 @@ use super::popovers::{
 use super::style::{Flip, StyleState, Toggles};
 
 /// The Trame format toolbar (the launcher mounts it inside the chrome `Toolbar`
-/// slot). Bold/Italic/Undo/Redo invoke their `CommandId` through `on_command`,
+/// slot). Bold/Italic/Undo/Redo invoke their `StaticKey<Commands>` through `on_command`,
 /// the shared command path. The rich-formatting controls (underline, font, size,
 /// colours, alignment, number format, borders, wrap) emit a [`StylePatch`]
 /// through `on_style`, routed as `SetCellStyle` (`trame-cell-styles`).
@@ -56,7 +56,7 @@ pub fn FormatBar(
     /// The active light/dark theme, so the colour pickers' "Automatic" /
     /// "Transparent" defaults match what the canvas actually renders.
     theme: RwSignal<ambre_canvas::Theme>,
-    on_command: Callback<CommandId>,
+    on_command: Callback<StaticKey<Commands>>,
     on_style: Callback<StylePatch>,
 ) -> impl IntoView {
     view! {
@@ -135,7 +135,7 @@ pub fn FormatBar(
         // Bold / Italic / Underline / Strikethrough -- shared toggles
         // (`ambre_chrome::FormatToggle`), same cluster Toile's inspector / selection
         // bar use. Bold/Italic route through the shared command path; underline /
-        // strikethrough emit a `StylePatch` (they have no `CommandId`).
+        // strikethrough emit a `StylePatch` (they have no `StaticKey<Commands>`).
         <FormatToggle
             label=label(BOLD)
             icon=glyph(BOLD)

@@ -46,10 +46,10 @@ pub use app::murmure::{
     ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, Confirmation,
     ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers,
     DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel, MemberView, Mention,
-    MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureCommand,
+    MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, Messages, MurmureCommand,
     MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft, PublicChannelDraft,
-    Reaction, ReplyCount, ReplyEcho, Revision, SealedChannelKey, SearchMatch, SegmentCount,
-    SpaceCommand, SpaceEvent, StyleMark, TextStyle, ThreadHead, Topic, UnreadCount, Unreadable,
+    Reaction, Replies, ReplyEcho, Revision, SealedChannelKey, SearchMatch, Segments, SpaceCommand,
+    SpaceEvent, StyleMark, TextStyle, ThreadHead, Topic, UnreadCount, Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{

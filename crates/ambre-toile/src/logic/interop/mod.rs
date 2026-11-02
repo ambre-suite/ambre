@@ -15,6 +15,7 @@
 //! yields **no** commands, so a caller applying the batch can never land a partial
 //! board.
 
+use ambre_core::Tally;
 use kurbo::{BezPath, Point, Rect};
 
 use crate::logic::command::{MediaRef, ToileCommand};
@@ -36,7 +37,7 @@ mod tests;
 
 pub use limits::{CoordBound, ImportDepth, Limits};
 pub use media::{
-    CachedBlobCount, ContentHash, MediaCache, MediaCacheCapacity, MediaState, RequestOutcome,
+    CachedBlobs, ContentHash, MediaCache, MediaCacheCapacity, MediaState, RequestOutcome,
 };
 #[cfg(all(test, feature = "pdf"))]
 pub(crate) use pdf_export::paint_page;
@@ -189,7 +190,7 @@ pub fn place_batch_at(batch: &mut ImportBatch, at: Point) {
 /// pattern, an unhandled node) so the user knows the import was lossy.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ImportReport {
-    pub imported: ambre_bus::app::toile::ElementCount,
+    pub imported: ambre_core::Tally<ambre_bus::app::toile::Elements>,
     pub skipped: Vec<ambre_bus::app::toile::SkipReason>,
 }
 
@@ -225,9 +226,11 @@ pub enum ImportError {
     #[error("failed to decode image: {0}")]
     Decode(String),
     #[error("import exceeds the element limit ({limit})")]
-    TooManyElements { limit: ambre_core::ElementCount },
+    TooManyElements {
+        limit: ambre_core::Tally<ambre_core::Elements>,
+    },
     #[error("import exceeds the nesting-depth limit ({limit})")]
-    TooDeep { limit: ImportDepth },
+    TooDeep { limit: Tally<ImportDepth> },
     #[error(
         "decoded image {}x{} exceeds the dimension limit ({}x{})",
         size.width,

@@ -19,13 +19,14 @@
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
 
-use ambre_core::{Px, index::Count};
+use ambre_core::index::Count;
+use ambre_core::{Px, Version};
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{
-    Board, BoardFrameCount, ConnectorCount, DocType, ElementCount, FixtureGen, FixtureName,
-    FixtureSeed, FixtureShape, GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
+    Board, BoardFrames, Connectors, DocType, Elements, FixtureGen, FixtureName, FixtureSeed,
+    FixtureShape, Generator, ShapeBody, Tally, fixture_peer_count, seeded_document_id,
 };
 use loro::LoroValue;
 
@@ -45,8 +46,8 @@ impl ToileState {
     /// checks the manifest against a recomputed shape; a generator declaring
     /// its own would assert only that it agrees with itself.
     pub fn fixture_shape(&self) -> FixtureShape {
-        let mut elements = ElementCount::ZERO;
-        let mut frames = BoardFrameCount::ZERO;
+        let mut elements = Tally::<Elements>::ZERO;
+        let mut frames = Tally::<BoardFrames>::ZERO;
         if let LoroValue::Map(map) = self.doc.get_map(Root::Elements.as_str()).get_deep_value() {
             for value in map.values() {
                 elements = elements.incremented();
@@ -58,8 +59,8 @@ impl ToileState {
             }
         }
         let connectors = match self.doc.get_map(Root::Connectors.as_str()).get_value() {
-            LoroValue::Map(map) => ConnectorCount::of_len(map.len()),
-            _ => ConnectorCount::ZERO,
+            LoroValue::Map(map) => Tally::<Connectors>::of_len(map.len()),
+            _ => Tally::<Connectors>::ZERO,
         };
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
@@ -268,10 +269,10 @@ impl FixtureGen for ToileFixture {
         })
     }
 
-    fn generator_version(&self) -> GeneratorVersion {
+    fn generator_version(&self) -> Version<Generator> {
         // 2: a colour is stored `0xRRGGBBAA`. An artifact frozen before
         // stores `0xAARRGGBB`, and no migration rewrites it.
-        GeneratorVersion::new(2)
+        Version::<Generator>::new(2)
     }
 
     fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
@@ -492,8 +493,8 @@ impl FixtureGen for ToileBenchFixture {
         })
     }
 
-    fn generator_version(&self) -> GeneratorVersion {
-        GeneratorVersion::new(1)
+    fn generator_version(&self) -> Version<Generator> {
+        Version::<Generator>::new(1)
     }
 
     fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
@@ -504,7 +505,7 @@ impl FixtureGen for ToileBenchFixture {
             // viewport, so a cull that returned everything shows up as a figure.
             Self::Board50k => build_spread_board(
                 &mut state,
-                TileCount::new(100),
+                Tally::<Tiles>::new(100),
                 Px::<Board>::new(4_000.0),
                 Px::<Board>::new(160.0),
             ),
@@ -512,7 +513,7 @@ impl FixtureGen for ToileBenchFixture {
             // camera, so every element of this board is a visible element.
             Self::DenseViewport2k => build_spread_board(
                 &mut state,
-                TileCount::new(4),
+                Tally::<Tiles>::new(4),
                 Px::<Board>::new(600.0),
                 Px::<Board>::new(24.0),
             ),
@@ -524,9 +525,11 @@ impl FixtureGen for ToileBenchFixture {
     }
 }
 
-ambre_core::define_tally! {
-    /// How many copies of the one built block a spread board holds.
-    pub struct TileCount;
+/// How many copies of the one built block a spread board holds.
+pub enum Tiles {}
+
+impl ambre_core::TallyKind for Tiles {
+    const NAME: &'static str = "TileCount";
 }
 
 /// Elements of one [`TILE`] block, spread over `tiles` copies on a
@@ -546,7 +549,7 @@ ambre_core::define_tally! {
 ///   meets a mix rather than one geometry repeated.
 fn build_spread_board(
     state: &mut ToileState,
-    tiles: TileCount,
+    tiles: Tally<Tiles>,
     tile_pitch: Px<Board>,
     element_pitch: Px<Board>,
 ) {

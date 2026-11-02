@@ -448,7 +448,7 @@ impl TrameView {
         if matches!(content, ContentRepaint::Reuse) {
             self.draw_stats.background = TimeSpan::<FracMs>::ZERO;
             self.draw_stats.cells = TimeSpan::<FracMs>::ZERO;
-            self.draw_stats.cells_drawn = ambre_canvas::CellsDrawn::ZERO;
+            self.draw_stats.cells_drawn = ambre_core::Tally::<ambre_canvas::CellsDrawn>::ZERO;
         }
 
         RepaintPlan {
@@ -520,7 +520,9 @@ impl TrameView {
             headers: self.draw_stats.headers,
             cells_drawn: self.draw_stats.cells_drawn,
             input_latency: self.draw_stats.input_latency,
-            glyph_misses: ambre_canvas::GlyphMisses::of_len(text_cache.frame_misses),
+            glyph_misses: ambre_core::Tally::<ambre_canvas::GlyphMisses>::of_len(
+                text_cache.frame_misses,
+            ),
         });
 
         // The in-cell edit field sits above everything (after the active border).

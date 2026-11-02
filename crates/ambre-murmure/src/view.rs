@@ -5595,7 +5595,7 @@ mod tests {
         let root = MessageView {
             thread: Some(ThreadHead {
                 document: thread,
-                replies: ambre_bus::ReplyCount::new(1),
+                replies: ambre_core::Tally::<ambre_bus::Replies>::new(1),
                 last_replier: Some(ada),
             }),
             ..message(ada, Instant::<Authored>::new(0), "root")
@@ -5913,7 +5913,8 @@ mod tests {
             .into_iter()
             .map(|span| {
                 let look = (
-                    span.weight.map(ambre_core::FontWeight::get),
+                    span.weight
+                        .map(ambre_core::Bounded::<ambre_core::FontWeight>::get),
                     span.italic,
                     span.family,
                     span.color,

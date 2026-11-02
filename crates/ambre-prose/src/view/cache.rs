@@ -7,6 +7,7 @@
 //! first time a run is painted (`PROSE-UI-119`) and reused after
 //! (`PROSE-UI-173`). The glyph atlas itself belongs to the drawing surface.
 
+use ambre_core::Tally;
 use ambre_core::index::{Axis, Pos};
 use std::collections::HashMap;
 
@@ -16,12 +17,18 @@ use loro::TreeID;
 
 use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
 
-ambre_core::define_tally! {
-    /// How many runs hold drawing state, or may.
-    pub struct CachedRunCount;
+/// How many runs hold drawing state, or may.
+pub enum CachedRuns {}
 
-    /// How many times the cache built the drawing state of a run.
-    pub struct BuildCount;
+impl ambre_core::TallyKind for CachedRuns {
+    const NAME: &'static str = "CachedRunCount";
+}
+
+/// How many times the cache built the drawing state of a run.
+pub enum Builds {}
+
+impl ambre_core::TallyKind for Builds {
+    const NAME: &'static str = "BuildCount";
 }
 
 /// An item of one shaped line, in the order the shaper laid them out.
@@ -34,7 +41,7 @@ impl Axis for LineItem {
 
 /// How many runs the cache keeps drawing state for, about fifty pages
 /// (`ambre-spec-budgets.md section 6`).
-pub const RUN_CACHE_RUNS: CachedRunCount = CachedRunCount::new(500);
+pub const RUN_CACHE_RUNS: Tally<CachedRuns> = Tally::<CachedRuns>::new(500);
 
 /// When an entry was last painted: the cache counts each paint. Only the
 /// order of two ticks means something.
@@ -113,9 +120,9 @@ struct Entry {
 #[derive(Clone, Debug)]
 pub struct RunCache {
     entries: HashMap<RunKey, Entry>,
-    capacity: CachedRunCount,
+    capacity: Tally<CachedRuns>,
     tick: Generation<PaintTick>,
-    built: BuildCount,
+    built: Tally<Builds>,
 }
 
 impl Default for RunCache {
@@ -127,19 +134,19 @@ impl Default for RunCache {
 impl RunCache {
     /// A cache holding at most `capacity` runs, and always at least one.
     #[must_use]
-    pub fn with_capacity(capacity: CachedRunCount) -> Self {
+    pub fn with_capacity(capacity: Tally<CachedRuns>) -> Self {
         Self {
             entries: HashMap::new(),
-            capacity: capacity.max(CachedRunCount::new(1)),
+            capacity: capacity.max(Tally::<CachedRuns>::new(1)),
             tick: Generation::ZERO,
-            built: BuildCount::ZERO,
+            built: Tally::<Builds>::ZERO,
         }
     }
 
     /// How many runs hold drawing state now.
     #[must_use]
-    pub fn len(&self) -> CachedRunCount {
-        CachedRunCount::of_len(self.entries.len())
+    pub fn len(&self) -> Tally<CachedRuns> {
+        Tally::<CachedRuns>::of_len(self.entries.len())
     }
 
     /// Whether no run holds drawing state.
@@ -150,7 +157,7 @@ impl RunCache {
 
     /// How many times drawing state was built, over the life of the cache.
     #[must_use]
-    pub fn built(&self) -> BuildCount {
+    pub fn built(&self) -> Tally<Builds> {
         self.built
     }
 
@@ -226,17 +233,17 @@ mod tests {
                 )
             })
             .collect();
-        let mut cache = RunCache::with_capacity(CachedRunCount::new(2));
+        let mut cache = RunCache::with_capacity(Tally::<CachedRuns>::new(2));
         cache.draw_state(runs[0].0, &runs[0].1);
         cache.draw_state(runs[1].0, &runs[1].1);
         // Touch the first again, so the second is now the oldest.
         cache.draw_state(runs[0].0, &runs[0].1);
         cache.draw_state(runs[2].0, &runs[2].1);
-        assert_eq!(cache.len(), CachedRunCount::new(2));
+        assert_eq!(cache.len(), Tally::<CachedRuns>::new(2));
         assert!(cache.holds(runs[0].0, &runs[0].1));
         assert!(!cache.holds(runs[1].0, &runs[1].1));
         assert!(cache.holds(runs[2].0, &runs[2].1));
-        assert_eq!(cache.built(), BuildCount::new(3));
+        assert_eq!(cache.built(), Tally::<Builds>::new(3));
     }
 
     #[test]
@@ -252,7 +259,7 @@ mod tests {
         let mut cache = RunCache::default();
         cache.draw_state(RunKey::Block(id), &old);
         cache.draw_state(RunKey::Block(id), &new);
-        assert_eq!(cache.built(), BuildCount::new(2));
+        assert_eq!(cache.built(), Tally::<Builds>::new(2));
         assert!(!cache.holds(RunKey::Block(id), &old));
     }
 }

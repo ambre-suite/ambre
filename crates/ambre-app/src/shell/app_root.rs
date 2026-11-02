@@ -9,7 +9,7 @@ use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_bus::{Authored, Instant};
-use ambre_chrome::commands::{ClipboardWrite, PasteForm};
+use ambre_chrome::commands::{ClipboardWrite, Commands, PasteForm, StaticKey};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
     ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, EmojiPicker, InviteControl,
@@ -442,7 +442,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let seal_open = commands.seal_open;
     let on_command = Callback::new({
         let commands = commands.clone();
-        move |id: CommandId| commands.run(id)
+        move |id: StaticKey<Commands>| commands.run(id)
     });
     // The entries the booted application adds to the palette: the channels
     // of a Murmure page, none for the others.

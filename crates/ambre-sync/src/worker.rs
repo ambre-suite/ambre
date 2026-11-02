@@ -60,7 +60,7 @@ pub fn start() {
 
     // Same-origin worker => its host is the app host (API + WS are proxied
     // same-origin; see the cross-origin isolation note in the spec).
-    let api_base = crate::RelayHost::new(scope.location().host());
+    let api_base = crate::http::Url::<crate::RelayHost>::new(scope.location().host());
 
     // Outbound sink: encode each LogicEvent and post it back to Main.
     let sink_scope = scope.clone();

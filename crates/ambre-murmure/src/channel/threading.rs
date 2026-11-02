@@ -745,7 +745,7 @@ fn thread_head(document: Id<Document>, thread: &LoroDoc, channel: Id<Channel>) -
         .collect();
     ThreadHead {
         document,
-        replies: ambre_bus::ReplyCount::of_len(replies.len()),
+        replies: ambre_core::Tally::<ambre_bus::Replies>::of_len(replies.len()),
         last_replier: replies.last().map(|reply| reply.author),
     }
 }

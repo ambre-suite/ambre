@@ -2,6 +2,7 @@
 // TrameUiState: construction, zoom, selection, cursor movement, scroll and viewport-data ingestion.
 
 use super::*;
+use crate::formula::text::CellText;
 use ambre_commands::SelectionMode;
 use ambre_core::index::{Count, Delta, Pos, Span};
 
@@ -492,7 +493,7 @@ impl TrameUiState {
                 at,
                 CellData {
                     text: cell.text,
-                    raw: DisplayFormula::new(cell.raw),
+                    raw: CellText::<DisplayForm>::new(cell.raw),
                     bold: cell.bold,
                     italic: cell.italic,
                     underline: cell.underline,

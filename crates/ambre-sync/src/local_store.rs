@@ -69,7 +69,10 @@ mod tests {
     /// A worker whose session holds `seed`, and what it answers.
     fn worker(seed: Option<[u8; 32]>) -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.master_seed = seed.map(MasterSeed::from_array);
         (state, rx)
     }

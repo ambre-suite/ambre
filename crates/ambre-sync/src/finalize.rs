@@ -15,7 +15,7 @@ use crate::updates::{SnapshotUpload, upload_snapshot};
 pub(crate) async fn take_lease(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &crate::http::ApiRoot,
+    base: &crate::http::Url<crate::http::ApiRoot>,
     channel_id: Id<Channel>,
     segment: Id<Segment>,
 ) -> Result<LeaseAnswer, http::HttpError> {
@@ -39,7 +39,7 @@ pub(crate) async fn take_lease(
 pub(crate) async fn commit_final(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &crate::http::ApiRoot,
+    base: &crate::http::Url<crate::http::ApiRoot>,
     channel_id: Id<Channel>,
     segment: Id<Segment>,
     lease: Id<Lease>,
@@ -68,7 +68,7 @@ impl SyncState {
                 "no relay on this transport",
             );
         };
-        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
+        let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let result = take_lease(&http::Fetch, &auth, &base, channel_id, segment).await;
@@ -138,7 +138,7 @@ impl SyncState {
                 "no relay on this transport",
             );
         };
-        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
+        let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let result = commit_final(
@@ -186,10 +186,10 @@ mod tests {
     const BASE: &str = "https://relay.test";
 
     /// The root the calls under test reach, under [`BASE`].
-    fn root() -> crate::http::ApiRoot {
-        crate::http::ApiRoot::of(
+    fn root() -> crate::http::Url<crate::http::ApiRoot> {
+        crate::http::Url::<crate::http::ApiRoot>::of(
             crate::http::UrlScheme::Https,
-            &crate::http::RelayHost::new("relay.test".to_owned()),
+            &crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
         )
     }
 

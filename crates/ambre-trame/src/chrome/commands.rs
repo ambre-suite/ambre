@@ -8,7 +8,7 @@
 //   - the inbound `UiEvent` mirroring (toggle state, toasts).
 //
 // The registry itself is `crate::ui::commands`: the identities, the descriptions
-// and the `CommandId -> AppCommand` mapping. It is host-compiled, so a test
+// and the `StaticKey<Commands> -> AppCommand` mapping. It is host-compiled, so a test
 // reaches a label without a browser. The identities are re-exported here so the
 // launcher and the chrome components keep naming `chrome::BOLD`
 // (`ambre-spec-commands.md`).

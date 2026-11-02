@@ -211,7 +211,7 @@ pub enum ValidationKind {
     DateRange { min: Option<DateSerial>, max: Option<DateSerial> },
     TextLength { min: Option<Count<Char>>, max: Option<Count<Char>> },
     Regex(String),
-    Formula(FormulaSource),                              // must return TRUE
+    Formula(CellText<SourceForm>),                       // must return TRUE
 }
 
 pub enum RangeBounds { Exclusive, Inclusive }            // `Exclusive` by default

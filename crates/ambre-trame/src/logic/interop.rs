@@ -7,6 +7,7 @@
 // plaintext file ever transits to the Blind Relay (Zero-Knowledge invariant).
 
 use super::*;
+use crate::formula::text::CellText;
 use crate::{CsvDelimiter, TOTAL_COLS, TOTAL_ROWS};
 use ambre_core::index::{Count, Pos};
 
@@ -152,7 +153,7 @@ impl TrameState {
         for (r, record) in records.into_iter().enumerate() {
             for (c, value) in record.into_iter().enumerate() {
                 if !value.is_empty() {
-                    self.write_cell(land(r, c), &FormulaSource::new(value));
+                    self.write_cell(land(r, c), &CellText::<SourceForm>::new(value));
                 }
             }
         }

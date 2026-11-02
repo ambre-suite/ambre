@@ -23,7 +23,7 @@
 //     frame, while the landing overlay covers the canvas.
 //
 // Command model (ambre-spec-commands.md): every trigger -- toolbar button,
-// keyboard shortcut, context menu -- produces the SAME `CommandId` ->
+// keyboard shortcut, context menu -- produces the SAME `StaticKey<Commands>` ->
 // `LogicCommand`, targeting the currently routed document (`current_doc`).
 //
 // Compiles ONLY on wasm32 targets (depends on web_sys, wgpu, leptos).
@@ -31,6 +31,7 @@
 
 #![cfg(target_arch = "wasm32")]
 
+use ambre_chrome::commands::{Commands, Keymap, StaticKey};
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -42,7 +43,6 @@ use ambre_bus::{
     AppCommand, LogicCommand, LogicEvent, MemberInfo, RestCommand, Role, SheetId, SheetTab,
     SyncCommand, UiEvent,
 };
-use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
     AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
     Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar,
@@ -684,11 +684,12 @@ pub fn main() {
 
     // Toile context-menu bridge (`toile-menus`): the canvas view publishes the
     // selection scope on each right-click. The DOM menu reads it to build its
-    // entries. It writes the chosen `CommandId` back for the view to resolve
+    // entries. It writes the chosen `StaticKey<Commands>` back for the view to resolve
     // against its (UI-only) selection. Created here so the view and the Leptos
     // shell share the one pair of signals, exactly like Trame's `ctx_scope`.
     let toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
-    let toile_menu_cmd = RwSignal::new(None::<ambre_chrome::commands::CommandId>);
+    let toile_menu_cmd =
+        RwSignal::new(None::<ambre_chrome::commands::StaticKey<ambre_chrome::commands::Commands>>);
     // Toile active tool (`toile-tools`): shared by the DOM tool palette,
     // the keyboard tool chords and the canvas view, exactly like the context-menu
     // pair above. Starts on the default tool (Select).
@@ -1736,7 +1737,7 @@ pub fn main() {
     let child_busy_pub = busy_pub.clone();
     let child_notice_pub = notice_pub.clone();
     let ch_toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
-    let ch_toile_menu_cmd = RwSignal::new(None::<CommandId>);
+    let ch_toile_menu_cmd = RwSignal::new(None::<StaticKey<Commands>>);
     let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
     let ch_toile_cursor = RwSignal::new(None::<ambre_toile::ui::palette::CanvasCursor>);
     let ch_toile_zoom = RwSignal::new(Scale::<Doc, View>::ONE);

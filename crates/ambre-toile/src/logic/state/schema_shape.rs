@@ -256,12 +256,12 @@ fn postcard_layouts() -> Vec<(String, String)> {
         fill: Some(Rgba::from_bits(0x0203_0401)),
         stroke: Some(Rgba::from_bits(0x0607_0805)),
         stroke_w: Px::<StoredBoard>::new(1.5),
-        opacity: ambre_core::Opacity::new(0.25).unwrap(),
+        opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.25).unwrap(),
         corner: Px::<StoredBoard>::new(3.5),
         font: FontSpec {
             family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
             size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
-            weight: ambre_core::FontWeight::BOLD,
+            weight: ambre_core::Bounded::<ambre_core::FontWeight>::BOLD,
             italic: ambre_core::Slant::Italic,
             underline: ambre_core::Underline::Underlined,
             strikethrough: ambre_core::Strikethrough::Struck,
@@ -289,7 +289,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let points = vec![StrokePoint {
         x: Px::<StoredBoard>::new(1.5),
         y: Px::<StoredBoard>::new(2.5),
-        pressure: ambre_bus::app::toile::UnitFraction::HALF,
+        pressure: ambre_core::Bounded::<ambre_bus::app::toile::UnitFraction>::HALF,
     }];
     vec![
         // `to_bytes` prefixes the style with its own version byte, so the frozen
@@ -363,14 +363,14 @@ fn render(shape: &Shape) -> String {
 
 /// The section of the freeze that names this version, or `None` when the freeze
 /// carries no such section.
-fn frozen_section(version: ambre_core::schema::SchemaVersion) -> Option<String> {
+fn frozen_section(version: ambre_core::Version<ambre_core::schema::Schema>) -> Option<String> {
     section_of(FROZEN, version)
 }
 
 /// The section of a frozen text that names this version.
 pub(super) fn section_of(
     frozen: &str,
-    version: ambre_core::schema::SchemaVersion,
+    version: ambre_core::Version<ambre_core::schema::Schema>,
 ) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
@@ -710,7 +710,7 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 /// holding what the step rewrites. Each step reads its own, so a step added
 /// later never moves what an earlier one writes. The registry holds no step
 /// yet, so no version has one.
-fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
+fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
     panic!("the step from version {from} has no canonical board: write one here")
 }
 

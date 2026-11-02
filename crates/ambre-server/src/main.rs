@@ -386,7 +386,8 @@ async fn snapshot_compaction_task(state: state::AppState) {
 /// One compaction pass: the old snapshots, the delta index they cover, then
 /// the inline tails of idle documents.
 async fn compact_once(state: &state::AppState) {
-    const KEEP_PER_DOCUMENT: db::SnapshotCount = db::SnapshotCount::new(10);
+    const KEEP_PER_DOCUMENT: ambre_core::Tally<db::Snapshots> =
+        ambre_core::Tally::<db::Snapshots>::new(10);
 
     // 1. Compact old snapshots: keep the N most recent per document, delete
     //    the rest from S3 and Postgres.

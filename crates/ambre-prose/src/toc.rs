@@ -9,12 +9,13 @@
 //! block is itself on a page, so its height moves the pages it lists. The
 //! paginator settles the two in a bounded pass (`PROSE-019`).
 
+use ambre_core::Ordinal;
 use std::collections::HashMap;
 
 use loro::{LoroDoc, LoroTree, TreeID, TreeParentId};
 
 use crate::doc;
-use crate::events::{PageNumber, TableOfContents, TocEntry, block_id};
+use crate::events::{Page, TableOfContents, TocEntry, block_id};
 use crate::layout::place::BlockLayout;
 use crate::numbering;
 
@@ -30,7 +31,7 @@ pub fn build(
     document: &LoroDoc,
     tree: &LoroTree,
     toc: &TreeID,
-    pages: &HashMap<TreeID, PageNumber>,
+    pages: &HashMap<TreeID, Ordinal<Page>>,
 ) -> Option<TableOfContents> {
     let doc::TocSettings {
         max_level,
@@ -61,8 +62,8 @@ pub fn build(
 /// A heading placed as a block of its own reads its own page. One inside a
 /// table cell is not a placed block, so it reads the page its table starts on.
 #[must_use]
-pub fn heading_pages(tree: &LoroTree, blocks: &[BlockLayout]) -> HashMap<TreeID, PageNumber> {
-    let placed: HashMap<TreeID, PageNumber> = blocks
+pub fn heading_pages(tree: &LoroTree, blocks: &[BlockLayout]) -> HashMap<TreeID, Ordinal<Page>> {
+    let placed: HashMap<TreeID, Ordinal<Page>> = blocks
         .iter()
         .map(|block| (block.block_id, block.page_start.number()))
         .collect();

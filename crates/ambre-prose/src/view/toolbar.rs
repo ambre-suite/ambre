@@ -7,7 +7,7 @@
 //! (`PROSE-UI-057`). Nothing here remembers a mark across a selection change
 //! (`PROSE-UI-097`).
 
-use ambre_commands::CommandId;
+use ambre_commands::{Commands, StaticKey};
 use ambre_core::index::Span;
 use ambre_core::{Doc, Point, Px, View};
 
@@ -109,7 +109,7 @@ impl ProseUiState {
     /// plane declares leaves (`PROSE-UI-098`): one, whatever the number of
     /// blocks, so one undo takes the gesture back (`PROSE-UI-192`).
     #[must_use]
-    pub fn format(&self, id: CommandId) -> Option<ProseCommand> {
+    pub fn format(&self, id: StaticKey<Commands>) -> Option<ProseCommand> {
         let key = crate::commands::mark_key(id)?;
         let (anchor, focus) = self.selection()?;
         let on = self

@@ -175,7 +175,7 @@ pub struct SnapElement {
     pub id:       Id<Element>,
     pub bounds:   Rect,       // the unrotated element box, world space
     pub rotation: Radians,
-    pub opacity:  Opacity,
+    pub opacity:  Bounded<Opacity>,
     pub fill:     Option<Rgba>,
 }
 ```

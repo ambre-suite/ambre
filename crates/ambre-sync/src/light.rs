@@ -374,7 +374,10 @@ mod tests {
         Id<Snapshot>,
     ) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.user_id = Some(Id::<User>::from_bytes([7; 16]));
         let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
@@ -524,7 +527,10 @@ mod tests {
                 .any(|event| matches!(event, LogicEvent::Released { .. }))
         };
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
         let doc = SyncDocumentState::new(
@@ -694,7 +700,10 @@ mod tests {
     #[test]
     fn a_channel_never_opened_is_watched_after_its_last_number() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.user_id = Some(Id::<User>::from_bytes([7; 16]));
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
@@ -807,8 +816,10 @@ mod tests {
     /// number asks for what follows it, and a reconnect resumes there.
     #[test]
     fn the_meta_of_a_channel_never_opened_is_watched_after_its_last_number() {
-        let mut state =
-            SyncState::new(LogicSink::channel().0, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            LogicSink::channel().0,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
@@ -849,7 +860,10 @@ mod tests {
     #[test]
     fn a_rotation_rekeys_a_channel_watched_unopened() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.user_id = Some(Id::<User>::from_bytes([7; 16]));
         let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
@@ -909,7 +923,10 @@ mod tests {
     #[test]
     fn a_frame_under_a_missing_key_fetches_it_and_replays() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.user_id = Some(Id::<User>::from_bytes([7; 16]));
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);

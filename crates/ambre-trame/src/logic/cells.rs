@@ -5,6 +5,7 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
+use crate::formula::text::CellText;
 use ambre_core::index::Count;
 use std::cell::OnceCell;
 
@@ -45,7 +46,7 @@ impl TrameState {
 
     /// Raw cell text as stored in the CRDT (the formula source for a formula
     /// cell, the literal otherwise). Empty for virtual/cleared cells.
-    pub(super) fn cell_raw(&self, at: CellPos) -> StoredFormula {
+    pub(super) fn cell_raw(&self, at: CellPos) -> CellText<StoredForm> {
         if let Some((rl, cl)) = self.index.resolve(at) {
             let map = self
                 .doc
@@ -54,16 +55,16 @@ impl TrameState {
                 .get(CellKey::of(rl, cl).as_str())
                 .map(|v| v.get_deep_value())
             {
-                return StoredFormula::new(s.to_string());
+                return CellText::<StoredForm>::new(s.to_string());
             }
         }
-        StoredFormula::default()
+        CellText::<StoredForm>::default()
     }
 
     /// The text of an active-sheet cell with a formula's references at their
     /// positions ([`formula_source`](Self::formula_source)). A fill or a copy
     /// shifts this text, never the stored one (`TRAME-228`).
-    pub(super) fn cell_source(&self, at: CellPos) -> FormulaSource {
+    pub(super) fn cell_source(&self, at: CellPos) -> CellText<SourceForm> {
         self.formula_source(&self.cell_raw(at), &self.active_sheet, &self.sheet_lines())
     }
 
@@ -82,11 +83,11 @@ impl TrameState {
     /// appears and break the day that sheet is renamed.
     pub(super) fn canonicalize_input(
         &self,
-        text: &FormulaSource,
+        text: &CellText<SourceForm>,
         sheet_id: &SheetId,
         lines: &SheetLines<'_>,
-    ) -> Result<StoredFormula, SheetName> {
-        let verbatim = || StoredFormula::new(text.as_str().to_owned());
+    ) -> Result<CellText<StoredForm>, SheetName> {
+        let verbatim = || CellText::<StoredForm>::new(text.as_str().to_owned());
         let Some(body) = text.formula_body() else {
             return Ok(verbatim());
         };
@@ -104,7 +105,10 @@ impl TrameState {
             return Err(unknown);
         }
         let bound = identity::bind(canonical, &|q| lines.of(sheet_id, q));
-        Ok(StoredFormula::new(format!("={}", render::render(&bound))))
+        Ok(CellText::<StoredForm>::new(format!(
+            "={}",
+            render::render(&bound)
+        )))
     }
 
     /// The source of a stored formula with each reference back at its position
@@ -113,11 +117,11 @@ impl TrameState {
     /// fill shifts, and what a copy carries. Plain text passes through.
     pub(super) fn formula_source(
         &self,
-        stored: &StoredFormula,
+        stored: &CellText<StoredForm>,
         sheet_id: &SheetId,
         lines: &SheetLines<'_>,
-    ) -> FormulaSource {
-        let verbatim = || FormulaSource::new(stored.as_str().to_owned());
+    ) -> CellText<SourceForm> {
+        let verbatim = || CellText::<SourceForm>::new(stored.as_str().to_owned());
         let Some(body) = stored.formula_body() else {
             return verbatim();
         };
@@ -127,7 +131,7 @@ impl TrameState {
             return verbatim();
         }
         match parse_formula(body) {
-            Ok(ast) => FormulaSource::new(format!(
+            Ok(ast) => CellText::<SourceForm>::new(format!(
                 "={}",
                 render::render(&identity::unbind(ast, &|q| lines.of(sheet_id, q)))
             )),
@@ -144,12 +148,12 @@ impl TrameState {
     /// reference. Plain text passes through.
     pub(super) fn formula_display(
         &self,
-        stored: &StoredFormula,
+        stored: &CellText<StoredForm>,
         sheet_id: &SheetId,
         lines: &SheetLines<'_>,
-    ) -> DisplayFormula {
+    ) -> CellText<DisplayForm> {
         let source = self.formula_source(stored, sheet_id, lines);
-        let verbatim = || DisplayFormula::new(source.as_str().to_owned());
+        let verbatim = || CellText::<DisplayForm>::new(source.as_str().to_owned());
         let Some(body) = source.formula_body() else {
             return verbatim();
         };
@@ -159,7 +163,7 @@ impl TrameState {
         }
         let id_to_name = |id: &SheetId| self.sheet_id_to_name.get(id).cloned();
         match parse_formula(body) {
-            Ok(ast) => DisplayFormula::new(format!(
+            Ok(ast) => CellText::<DisplayForm>::new(format!(
                 "={}",
                 render::render(&render::to_display_form(ast, &id_to_name))
             )),
@@ -335,7 +339,7 @@ impl TrameState {
     /// excluded commit interleaved between two value commits splits them into
     /// separate undo items. Materializing up front keeps all value writes in one
     /// final commit, hence one undo item.
-    pub(super) fn write_cell(&mut self, at: CellPos, text: &FormulaSource) {
+    pub(super) fn write_cell(&mut self, at: CellPos, text: &CellText<SourceForm>) {
         if text.is_empty() {
             // Clearing: only touch the CRDT if the cell was materialized.
             if let Some((rl, cl)) = self.index.resolve(at) {
@@ -352,7 +356,7 @@ impl TrameState {
                 named: &self.named,
             };
             self.engine
-                .on_cell_changed(cell, StoredFormula::default(), &indices, &ctx);
+                .on_cell_changed(cell, CellText::<StoredForm>::default(), &indices, &ctx);
         } else {
             // Persist the canonical form: sheet ids, so cross-sheet references
             // survive rename/reorder (`trame-sheets`), and lines, so references
@@ -379,7 +383,7 @@ impl TrameState {
             // or column names that line rather than a position.
             let stored = self
                 .canonicalize_input(text, &sheet, &self.sheet_lines())
-                .unwrap_or_else(|_| StoredFormula::new(text.as_str().to_owned()));
+                .unwrap_or_else(|_| CellText::<StoredForm>::new(text.as_str().to_owned()));
             let _ = self
                 .doc
                 .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())

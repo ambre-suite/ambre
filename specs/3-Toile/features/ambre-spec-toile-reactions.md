@@ -120,9 +120,9 @@ pub struct Reaction {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionTally {
-    pub emoji:      Vec<(Emoji, ReactionCount)>, // sorted, so the chip order is stable
+    pub emoji:      Vec<(Emoji, Tally<Reactions>)>, // sorted, so the chip order is stable
     pub vote_total: VoteTotal,
-    pub vote_count: VoteCount,
+    pub vote_count: Tally<Votes>,
 }
 ```
 

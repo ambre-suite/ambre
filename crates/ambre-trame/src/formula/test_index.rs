@@ -31,8 +31,8 @@ pub fn indices_with(rows: usize, cols: usize) -> super::SheetIndices {
 }
 
 /// `text` as the CRDT would store it.
-pub fn stored(text: &str) -> super::text::StoredFormula {
-    super::text::StoredFormula::new(text.to_owned())
+pub fn stored(text: &str) -> crate::formula::text::CellText<super::text::StoredForm> {
+    crate::formula::text::CellText::<super::text::StoredForm>::new(text.to_owned())
 }
 
 /// The function name `text`, which must be an identifier.

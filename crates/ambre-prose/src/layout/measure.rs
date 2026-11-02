@@ -5,6 +5,7 @@
 //! holds a shaper. It measures and returns; it writes nothing back to the
 //! document it read (`PROSE-079`).
 
+use ambre_core::Tally;
 use ambre_core::index::{Axis, Count, CountsAs, Delta, Pos, Span};
 use parley::{
     Alignment, AlignmentOptions, FontContext, FontFamily, FontStyle, FontWeight, Layout,
@@ -275,9 +276,11 @@ pub(crate) fn shipped_measurer() -> Measurer {
     measurer
 }
 
-ambre_core::define_tally! {
-    /// How many runs a measurer shaped.
-    pub struct ShapedCount;
+/// How many runs a measurer shaped.
+pub enum ShapedRuns {}
+
+impl ambre_core::TallyKind for ShapedRuns {
+    const NAME: &'static str = "ShapedCount";
 }
 
 /// The shaper, and the two contexts parley reuses between blocks.
@@ -289,7 +292,7 @@ pub struct Measurer {
     layout_cx: LayoutContext<ParleyBrush>,
     /// How many runs have been shaped. It is what makes a reflow that
     /// re-shapes an untouched block observable (`PROSE-083`).
-    shaped: ShapedCount,
+    shaped: Tally<ShapedRuns>,
     /// The scripts met since the last full run that no loaded face covers
     /// (`PROSE-110`). A layout carries it so a consumer can tell a settled
     /// measurement from one still waiting for a face.
@@ -313,14 +316,14 @@ impl Measurer {
         Self {
             font_cx: ambre_draw::sealed_font_context(),
             layout_cx: LayoutContext::new(),
-            shaped: ShapedCount::ZERO,
+            shaped: Tally::<ShapedRuns>::ZERO,
             missing: ScriptSet::new(),
         }
     }
 
     /// How many runs this measurer has shaped since it was built.
     #[must_use]
-    pub fn shaped(&self) -> ShapedCount {
+    pub fn shaped(&self) -> Tally<ShapedRuns> {
         self.shaped
     }
 
@@ -988,7 +991,7 @@ mod tests {
                 &[],
                 None,
             );
-            assert_eq!(measurer.shaped(), before.plus(ShapedCount::new(2)));
+            assert_eq!(measurer.shaped(), before.plus(Tally::<ShapedRuns>::new(2)));
             if next.data().segment_count() > Count::<RunSegment>::ONE {
                 partial += 1;
             }

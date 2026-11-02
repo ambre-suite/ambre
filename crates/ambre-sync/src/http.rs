@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
@@ -21,27 +22,91 @@ pub(crate) struct TokenPair {
 
 pub(crate) type TokenStore = Rc<RefCell<Option<TokenPair>>>;
 
+/// The marker of one kind of relay address. Sealed: every kind lives in
+/// this module.
+pub trait UrlKind: sealed::Sealed + 'static {
+    /// The name `Debug` prints, as the hand-written type printed its own.
+    const NAME: &'static str;
+}
+
+mod sealed {
+    /// Closes [`super::UrlKind`].
+    pub trait Sealed {}
+}
+
+/// One address of the kind `K`: the text a fetch, a socket or a log line
+/// reads. Each kind has its own constructor, so no text a user typed becomes
+/// a route.
+pub struct Url<K: UrlKind> {
+    text: String,
+    kind: PhantomData<fn() -> K>,
+}
+
+impl<K: UrlKind> Url<K> {
+    /// The address `text`, for this module alone.
+    const fn at(text: String) -> Self {
+        Self {
+            text,
+            kind: PhantomData,
+        }
+    }
+
+    /// The address, as a fetch or the browser's socket constructor takes it.
+    pub(crate) fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+// By hand, every impl below: a derive would bound the marker, which has no
+// value to clone or compare.
+
+impl<K: UrlKind> Clone for Url<K> {
+    fn clone(&self) -> Self {
+        Self::at(self.text.clone())
+    }
+}
+
+impl<K: UrlKind> PartialEq for Url<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+    }
+}
+
+impl<K: UrlKind> Eq for Url<K> {}
+
+/// `NAME("...")`, as the derived `Debug` of the hand-written type printed
+/// it.
+impl<K: UrlKind> std::fmt::Debug for Url<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple(K::NAME).field(&self.text).finish()
+    }
+}
+
+impl<K: UrlKind> std::fmt::Display for Url<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
 /// The relay as the page names it: a host and an optional port, such as
 /// `relay.example` or `localhost:3000`. Every URL of the relay is built from
-/// it, through [`ApiRoot`] or the socket address.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RelayHost(String);
+/// it, through [`Url<ApiRoot>`] or the socket address.
+pub enum RelayHost {}
 
-impl RelayHost {
+impl sealed::Sealed for RelayHost {}
+impl UrlKind for RelayHost {
+    const NAME: &'static str = "RelayHost";
+}
+
+impl Url<RelayHost> {
     /// The host the page configured.
     pub fn new(host: String) -> Self {
-        Self(host)
+        Self::at(host)
     }
 
     /// Whether the relay runs on this machine, which speaks plain HTTP.
     pub(crate) fn is_local(&self) -> bool {
-        self.0.starts_with("localhost") || self.0.starts_with("127.0.0.1")
-    }
-}
-
-impl std::fmt::Display for RelayHost {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        self.text.starts_with("localhost") || self.text.starts_with("127.0.0.1")
     }
 }
 
@@ -56,7 +121,7 @@ pub(crate) enum UrlScheme {
 
 impl UrlScheme {
     /// The scheme `host` speaks: `Http` on this machine, `Https` elsewhere.
-    pub(crate) fn of(host: &RelayHost) -> Self {
+    pub(crate) fn of(host: &Url<RelayHost>) -> Self {
         if host.is_local() {
             Self::Http
         } else {
@@ -76,48 +141,44 @@ impl std::fmt::Display for UrlScheme {
 
 /// The root of the relay's REST routes, `{scheme}://{host}/api`. Built in
 /// one place, so no route adds or forgets the `/api` itself.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ApiRoot(String);
+pub(crate) enum ApiRoot {}
 
-impl ApiRoot {
+impl sealed::Sealed for ApiRoot {}
+impl UrlKind for ApiRoot {
+    const NAME: &'static str = "ApiRoot";
+}
+
+impl Url<ApiRoot> {
     /// The root of `host`'s routes under `scheme`.
-    pub(crate) fn of(scheme: UrlScheme, host: &RelayHost) -> Self {
-        Self(format!("{scheme}://{host}/api"))
+    pub(crate) fn of(scheme: UrlScheme, host: &Url<RelayHost>) -> Self {
+        Self::at(format!("{scheme}://{host}/api"))
     }
 
     /// The URL of the route at `path` under this root.
-    pub(crate) fn route(&self, path: impl Into<RoutePath>) -> RelayUrl {
-        RelayUrl(format!("{}{}", self.0, path.into().as_str()))
+    pub(crate) fn route(&self, path: impl Into<Url<RoutePath>>) -> Url<Route> {
+        Url::at(format!("{}{}", self.text, path.into().text))
     }
 }
 
 /// The path of a relay route under the API root, starting with a slash, as
 /// `/documents` does. A call site writes the path as a literal or a
 /// `format!`, and the route reads it from this type alone.
-pub(crate) struct RoutePath(String);
+pub(crate) enum RoutePath {}
 
-impl RoutePath {
-    /// The path, as the URL spells it.
-    fn as_str(&self) -> &str {
-        &self.0
-    }
+impl sealed::Sealed for RoutePath {}
+impl UrlKind for RoutePath {
+    const NAME: &'static str = "RoutePath";
 }
 
-impl From<&str> for RoutePath {
+impl From<&str> for Url<RoutePath> {
     fn from(path: &str) -> Self {
-        Self(path.to_owned())
+        Self::at(path.to_owned())
     }
 }
 
-impl From<String> for RoutePath {
+impl From<String> for Url<RoutePath> {
     fn from(path: String) -> Self {
-        Self(path)
-    }
-}
-
-impl std::fmt::Display for ApiRoot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        Self::at(path)
     }
 }
 
@@ -125,46 +186,42 @@ impl std::fmt::Display for ApiRoot {
 /// no credential: the token travels in the socket's first frame, so no log
 /// line, proxy record or URL holds it (`SYNC-061`, `ambre-spec-session.md`,
 /// `SRV-031`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SocketUrl(String);
+pub(crate) enum Socket {}
 
-impl SocketUrl {
+impl sealed::Sealed for Socket {}
+impl UrlKind for Socket {
+    const NAME: &'static str = "SocketUrl";
+}
+
+impl Url<Socket> {
     /// The socket of `host`, under the TLS choice `scheme` makes for its
     /// routes.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) fn of(scheme: UrlScheme, host: &RelayHost) -> Self {
+    pub(crate) fn of(scheme: UrlScheme, host: &Url<RelayHost>) -> Self {
         let socket = match scheme {
             UrlScheme::Http => "ws",
             UrlScheme::Https => "wss",
         };
-        Self(format!("{socket}://{host}/api/ws"))
-    }
-
-    /// The address, as the browser's socket constructor takes it.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) fn as_str(&self) -> &str {
-        &self.0
+        Self::at(format!("{socket}://{host}/api/ws"))
     }
 }
 
-impl std::fmt::Display for SocketUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-/// The URL of one of the relay's REST routes. Only [`ApiRoot::route`] builds
+/// The URL of one of the relay's REST routes. Only [`Url::route`] builds
 /// one, and every helper that attaches the access token takes one. A
 /// presigned object-storage link is not one, so the token never reaches the
 /// storage host.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RelayUrl(String);
+pub(crate) enum Route {}
 
-impl RelayUrl {
+impl sealed::Sealed for Route {}
+impl UrlKind for Route {
+    const NAME: &'static str = "RelayUrl";
+}
+
+impl Url<Route> {
     /// The route at `path` below this one, such as `/media` below a
     /// document's route.
-    pub(crate) fn join(&self, path: impl Into<RoutePath>) -> Self {
-        Self(format!("{}{}", self.0, path.into().as_str()))
+    pub(crate) fn join(&self, path: impl Into<Url<RoutePath>>) -> Self {
+        Self::at(format!("{}{}", self.text, path.into().text))
     }
 
     /// This route with the one query parameter `key` set to `value`. The
@@ -173,17 +230,7 @@ impl RelayUrl {
     /// (`SYNC-179`).
     pub(crate) fn query(&self, key: QueryKey, value: &str) -> Self {
         let value = percent_encoding::utf8_percent_encode(value, QUERY_VALUE);
-        Self(format!("{}?{}={value}", self.0, key.as_str()))
-    }
-
-    pub(crate) fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for RelayUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        Self::at(format!("{}?{}={value}", self.text, key.as_str()))
     }
 }
 
@@ -221,7 +268,7 @@ const QUERY_VALUE: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUM
 #[derive(Debug, Clone)]
 pub(crate) enum Target {
     /// A route of the relay.
-    Relay(RelayUrl),
+    Relay(Url<Route>),
     /// An object in storage, through its presigned link.
     Object(ambre_core::Credential<ambre_core::PresignedUrl>),
 }
@@ -247,7 +294,7 @@ impl Target {
 impl Target {
     /// A relay route spelled out, for a test that builds an error by hand.
     pub(crate) fn relay(text: &str) -> Self {
-        Self::Relay(RelayUrl(text.to_owned()))
+        Self::Relay(Url::at(text.to_owned()))
     }
 
     /// The full address, for a test that reads where a request went.
@@ -259,8 +306,8 @@ impl Target {
     }
 }
 
-impl From<&RelayUrl> for Target {
-    fn from(url: &RelayUrl) -> Self {
+impl From<&Url<Route>> for Target {
+    fn from(url: &Url<Route>) -> Self {
         Self::Relay(url.clone())
     }
 }
@@ -294,7 +341,7 @@ impl std::fmt::Display for ShownTarget {
 
 #[derive(Clone)]
 pub(crate) struct AuthContext {
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub url_scheme: crate::http::UrlScheme,
     pub tokens: TokenStore,
 }
@@ -306,8 +353,8 @@ struct RefreshRequest {
 
 impl AuthContext {
     /// The root of the relay routes this session talks to.
-    pub(crate) fn api_root(&self) -> ApiRoot {
-        ApiRoot::of(self.url_scheme, &self.api_base)
+    pub(crate) fn api_root(&self) -> Url<ApiRoot> {
+        Url::<ApiRoot>::of(self.url_scheme, &self.api_base)
     }
 
     fn access_token(&self) -> Result<SecretToken, HttpError> {
@@ -906,7 +953,7 @@ async fn exchange_auth(
 /// An authenticated GET of JSON, reading `404 Not Found` as `Ok(None)`.
 pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
     transport: &impl Transport,
-    url: &RelayUrl,
+    url: &Url<Route>,
     auth: &AuthContext,
 ) -> Result<Option<T>, HttpError> {
     let mut request = Outgoing::new(Method::Get, url.into());
@@ -920,7 +967,7 @@ pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
 /// An authenticated GET of JSON.
 pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
     transport: &impl Transport,
-    url: &RelayUrl,
+    url: &Url<Route>,
     auth: &AuthContext,
 ) -> Result<T, HttpError> {
     let mut request = Outgoing::new(Method::Get, url.into());
@@ -931,7 +978,7 @@ pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
 /// A POST of JSON that carries no credential, answered with JSON.
 pub(crate) async fn post_json_via<T: Serialize, R: serde::de::DeserializeOwned>(
     transport: &impl Transport,
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
 ) -> Result<R, HttpError> {
     let request = Outgoing::json(Method::Post, url.into(), body)?;
@@ -942,7 +989,7 @@ pub(crate) async fn post_json_via<T: Serialize, R: serde::de::DeserializeOwned>(
 /// An authenticated POST of JSON, answered with JSON.
 pub(crate) async fn post_json_auth_via<T: Serialize, R: serde::de::DeserializeOwned>(
     transport: &impl Transport,
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
     auth: &AuthContext,
 ) -> Result<R, HttpError> {
@@ -956,7 +1003,7 @@ pub(crate) async fn post_json_auth_via<T: Serialize, R: serde::de::DeserializeOw
 pub(crate) async fn send_json_auth_via<T: Serialize>(
     transport: &impl Transport,
     method: Method,
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
     auth: &AuthContext,
 ) -> Result<(), HttpError> {
@@ -967,7 +1014,7 @@ pub(crate) async fn send_json_auth_via<T: Serialize>(
 
 /// HTTP GET to JSON, treating `404 Not Found` as `Ok(None)`.
 pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
-    url: &RelayUrl,
+    url: &Url<Route>,
     auth: AuthContext,
 ) -> Result<Option<T>, HttpError> {
     get_json_opt_via(&Fetch, url, &auth).await
@@ -976,7 +1023,7 @@ pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
 /// HTTP GET to JSON deserialized response.
 #[allow(dead_code)]
 pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
-    url: &RelayUrl,
+    url: &Url<Route>,
 ) -> Result<T, HttpError> {
     let request = Outgoing::new(Method::Get, url.into());
     let resp = exchange(&Fetch, &request).await?;
@@ -984,21 +1031,21 @@ pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
 }
 
 pub(crate) async fn get_json_auth<T: serde::de::DeserializeOwned>(
-    url: &RelayUrl,
+    url: &Url<Route>,
     auth: AuthContext,
 ) -> Result<T, HttpError> {
     get_json_auth_via(&Fetch, url, &auth).await
 }
 
 pub(crate) async fn post_json<T: Serialize, R: serde::de::DeserializeOwned>(
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
 ) -> Result<R, HttpError> {
     post_json_via(&Fetch, url, body).await
 }
 
 pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>(
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
     auth: AuthContext,
 ) -> Result<R, HttpError> {
@@ -1009,12 +1056,12 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
 /// relay, then the object itself. `None` when either step fails.
 pub(crate) async fn download_snapshot(
     url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::RelayHost,
+    api_base: &crate::http::Url<crate::http::RelayHost>,
     document_id: Id<Document>,
     snapshot_id: Id<Snapshot>,
     auth: AuthContext,
 ) -> Option<crate::pipeline::FetchedBlob> {
-    let url = crate::http::ApiRoot::of(url_scheme, api_base)
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/snapshot/download-url"));
     let body = SnapshotDownloadUrlRequest { snapshot_id };
     let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
@@ -1023,7 +1070,7 @@ pub(crate) async fn download_snapshot(
     fetch_bytes(&resp.download_url).await.ok()
 }
 
-pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(), HttpError> {
+pub(crate) async fn delete_auth(url: &Url<Route>, auth: AuthContext) -> Result<(), HttpError> {
     let mut request = Outgoing::new(Method::Delete, url.into());
     let resp = exchange_auth(&Fetch, &auth, &mut request).await?;
     expect_ok(&request, &resp)
@@ -1032,7 +1079,7 @@ pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(),
 /// Sends an authenticated `DELETE` and answers the status the relay gave. Only
 /// a request that reached no answer is an error.
 pub(crate) async fn delete_status_auth(
-    url: &RelayUrl,
+    url: &Url<Route>,
     auth: AuthContext,
 ) -> Result<HttpStatus, HttpError> {
     let mut request = Outgoing::new(Method::Delete, url.into());
@@ -1068,7 +1115,7 @@ pub(crate) async fn put_sealed_via(
 }
 
 pub(crate) async fn patch_json_auth<T: Serialize>(
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
     auth: AuthContext,
 ) -> Result<(), HttpError> {
@@ -1078,7 +1125,7 @@ pub(crate) async fn patch_json_auth<T: Serialize>(
 /// HTTP DELETE carrying a JSON body: a departure sends the entry it signs
 /// (`SYNC-132`).
 pub(crate) async fn delete_json_auth<T: Serialize>(
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
     auth: AuthContext,
 ) -> Result<(), HttpError> {
@@ -1087,7 +1134,7 @@ pub(crate) async fn delete_json_auth<T: Serialize>(
 
 /// HTTP PUT of a JSON body, expecting a success with no body to read.
 pub(crate) async fn put_json_auth<T: Serialize>(
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
     auth: AuthContext,
 ) -> Result<(), HttpError> {
@@ -1096,7 +1143,7 @@ pub(crate) async fn put_json_auth<T: Serialize>(
 
 /// HTTP POST of a JSON body, expecting a success with no body to read.
 pub(crate) async fn post_json_auth_ok<T: Serialize>(
-    url: &RelayUrl,
+    url: &Url<Route>,
     body: &T,
     auth: AuthContext,
 ) -> Result<(), HttpError> {
@@ -1878,11 +1925,11 @@ pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLin
 /// frames sealed under a key older than the cache then stay closed.
 pub(crate) async fn fetch_key_links(
     url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::RelayHost,
+    api_base: &crate::http::Url<crate::http::RelayHost>,
     document_id: Id<Document>,
     auth: AuthContext,
 ) -> Vec<ambre_protocol::KeyLink> {
-    let url = crate::http::ApiRoot::of(url_scheme, api_base)
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/key-links"));
     match get_json_auth::<KeyLinksResponse>(&url, auth).await {
         Ok(resp) => decode_links(resp),
@@ -2102,7 +2149,7 @@ pub(crate) mod scripted {
     /// `refresh`, against `https://relay.test`.
     pub(crate) fn session(access: &str, refresh: &str) -> AuthContext {
         AuthContext {
-            api_base: crate::http::RelayHost::new("relay.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
             url_scheme: UrlScheme::Https,
             tokens: Rc::new(RefCell::new(Some(TokenPair {
                 access_token: access.to_owned().into(),
@@ -2178,9 +2225,12 @@ mod tests {
     /// encoded.
     #[test]
     fn a_query_value_is_percent_encoded_whole() {
-        let url = ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
-            .route("/users/search")
-            .query(QueryKey::Query, "a&b=c#d+e%f g@h-\u{e9}~");
+        let url = Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/users/search")
+        .query(QueryKey::Query, "a&b=c#d+e%f g@h-\u{e9}~");
         assert_eq!(
             url.as_str(),
             "https://relay.test/api/users/search?query=a%26b%3Dc%23d%2Be%25f%20g%40h-%C3%A9~"
@@ -2289,8 +2339,11 @@ mod tests {
             Ok((200, serde_json::json!({ "ok": 1 }))),
         ]);
         let auth = session("access-1", "refresh-1");
-        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
-            .route("/documents");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents");
 
         let answer: serde_json::Value =
             post_json_auth_via(&transport, url, &serde_json::json!({ "n": 7 }), &auth)
@@ -2377,8 +2430,11 @@ mod tests {
     /// the relay refuses, ends the request with an error.
     #[tokio::test]
     async fn a_request_is_replayed_at_most_once() {
-        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
-            .route("/documents");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents");
         let refused_twice = Scripted::new([
             Ok((401, serde_json::json!({}))),
             Ok((200, renewed("access-2"))),
@@ -2444,8 +2500,11 @@ mod tests {
     async fn a_request_with_no_answer_is_abandoned_at_its_deadline() {
         let transport = Scripted::default();
         transport.silent.set(true);
-        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
-            .route("/documents");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents");
 
         let error = post_json_auth_via::<_, serde_json::Value>(
             &transport,
@@ -2470,8 +2529,11 @@ mod tests {
     /// renews the token or replays the request (`SYNC-099`).
     #[tokio::test]
     async fn each_answer_maps_to_its_error() {
-        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
-            .route("/documents/d/members");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents/d/members");
         let auth = session("access-1", "refresh-1");
         let body = serde_json::json!({});
         let answer = |status: u16, code: RefusalCode| {
@@ -2532,8 +2594,11 @@ mod tests {
             _role: ambre_core::Role,
             _status: ambre_core::SnapshotStatus,
         }
-        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
-            .route("/documents/d/members");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents/d/members");
         let auth = session("access-1", "refresh-1");
         let user = &Id::<User>::mint().to_string();
         let row = |user: &str, role: &str, status: &str| {
@@ -2664,8 +2729,11 @@ mod tests {
     /// moved membership.
     #[tokio::test]
     async fn a_refusal_code_outside_the_set_reads_as_its_status() {
-        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
-            .route("/documents/d/rotate");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents/d/rotate");
         let auth = session("access-1", "refresh-1");
         let body = serde_json::json!({});
         let transport = Scripted::new([

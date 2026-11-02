@@ -3,7 +3,7 @@
 // Trame UI layer -- UI Thread side.
 //
 //   commands -- the command registry: one description per affordance, the
-//               context-menu layouts, and the CommandId -> AppCommand mapping.
+//               context-menu layouts, and the StaticKey<Commands> -> AppCommand mapping.
 //   grid     -- virtual-scroll navigation state (TrameUiState).
 //   renderer -- DrawSurface rendering of the grid (draw_cells / draw_overlay).
 //   view     -- TrameView, an `AppView::Trame` variant driven by the launcher's FrameHost.

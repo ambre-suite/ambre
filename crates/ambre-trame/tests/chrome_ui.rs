@@ -8,7 +8,7 @@
 //!
 //! Two belts, per the story's DoD:
 //!   - the **reactive / presentation belt** -- the pure inbound-event mirrors
-//!     (`apply_style_event`, `mirror_event`) and the `CommandId -> AppCommand`
+//!     (`apply_style_event`, `mirror_event`) and the `StaticKey<Commands> -> AppCommand`
 //!     mapping, exercised over real leptos signals but no DOM;
 //!   - at least one **DOM `wasm-bindgen-test`** -- a component mounted into the
 //!     real document, asserted through `web-sys`.
@@ -31,7 +31,7 @@ use ambre_bus::{
 };
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
-use ambre_commands::Locale;
+use ambre_commands::{Commands, Locale, StaticKey};
 use ambre_core::id::{Document, Id};
 use ambre_core::index::{Count, Pos};
 use ambre_trame::chrome::{
@@ -198,7 +198,7 @@ fn undo_state_mirrors_into_command_store() {
     );
 }
 
-/// The `CommandId -> AppCommand` mapping: structural intents become a concrete
+/// The `StaticKey<Commands> -> AppCommand` mapping: structural intents become a concrete
 /// `TrameCommand`, while UI-only intents (style toggles the launcher intercepts)
 /// map to `None`.
 #[wasm_bindgen_test]
@@ -442,7 +442,9 @@ fn sort_dialog_adds_levels_and_emits_on_apply() {
 // -----------------------------------------------------------------------------
 
 /// Collect the command labels of an entry list, skipping separators.
-fn item_commands(entries: &[ambre_chrome::MenuEntry]) -> Vec<ambre_chrome::commands::CommandId> {
+fn item_commands(
+    entries: &[ambre_chrome::MenuEntry],
+) -> Vec<ambre_commands::StaticKey<ambre_chrome::commands::Commands>> {
     entries
         .iter()
         .filter_map(|e| match e {

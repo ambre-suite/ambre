@@ -10,10 +10,10 @@
 //! belt mounts the real components and asserts the composed DOM plus input:
 //! - the selection status band -- aggregates + shared zoom/fps chips;
 //! - the right-click context menu end-to-end -- the entry rows a
-//!   [`CtxScope`] renders, and that clicking a row fires its `CommandId`;
+//!   [`CtxScope`] renders, and that clicking a row fires its `StaticKey<Commands>`;
 //! - the tool palette -- a click switches the shared active tool;
 //! - the top menu bar zoom cluster and the floating selection
-//!   toolbar -- a click fires its `CommandId` on the shared sink.
+//!   toolbar -- a click fires its `StaticKey<Commands>` on the shared sink.
 //!
 //! On the host target the whole file is empty (the `cfg` gate below), so the
 //! native tier (`just test-native`) skips it cleanly.
@@ -29,7 +29,7 @@
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
     Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
-    ElementCount, PresencePayload, PresenceUpdate, PresentMode, Slide, SlidePosition, ToileCommand,
+    Elements, PresencePayload, PresenceUpdate, PresentMode, Slide, SlidePosition, ToileCommand,
     ToileEvent,
 };
 use ambre_bus::{AppCommand, AppEvent, UiEvent};
@@ -37,11 +37,10 @@ use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
-use ambre_commands::CommandId;
-use ambre_core::Char;
+use ambre_commands::{Commands, StaticKey};
 use ambre_core::id::{Document, Frame, Id, Thread, User};
 use ambre_core::index::{Count, Pos};
-use ambre_core::{Authored, Instant};
+use ambre_core::{Authored, Char, Instant, Tally};
 use ambre_core::{Doc, Scale, View};
 use ambre_draw::Rect;
 use ambre_toile::chrome::{
@@ -109,7 +108,7 @@ fn multi_selection_shows_count_bounds_and_chips() {
     let owner = Owner::new();
     owner.set();
     let stats = SelStats {
-        count: ambre_bus::app::toile::ElementCount::new(3),
+        count: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(3),
         bounds: Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.5, ambre_core::FrameRate::new(60.0));
@@ -166,7 +165,7 @@ fn single_selection_shows_count_without_bounds() {
     owner.set();
     // A lone element: the count shows, but no combined-bounds caption.
     let stats = SelStats {
-        count: ambre_bus::app::toile::ElementCount::new(1),
+        count: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(1),
         bounds: Some(Rect::new(0.0, 0.0, 10.0, 10.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.0, ambre_core::FrameRate::new(60.0));
@@ -184,20 +183,20 @@ fn single_selection_shows_count_without_bounds() {
 }
 
 // -- Context menu -----------------------------------------------------
-// The pure `CtxScope -> entries` mapping and the `CommandId -> ToileCommand`
+// The pure `CtxScope -> entries` mapping and the `StaticKey<Commands> -> ToileCommand`
 // resolver are host-tested in `ui::menu`; here we mount the real
 // `ambre_chrome::ContextMenu` fed by `chrome::context_entries_for` and assert
-// the DOM rows a scope renders, plus that clicking a row fires its `CommandId`
+// the DOM rows a scope renders, plus that clicking a row fires its `StaticKey<Commands>`
 // on the shared `on_command` sink (the exact bridge the shell wires, `app_root`).
 
 /// Mount a `ContextMenu` opened at a fixed point, fed by the entries a `scope`
 /// renders. Returns the container and the signal the menu's `on_command` writes
-/// (so a test can click a row and read back the fired `CommandId`).
-fn mount_ctx_menu(scope: CtxScope) -> (web_sys::Element, RwSignal<Option<CommandId>>) {
+/// (so a test can click a row and read back the fired `StaticKey<Commands>`).
+fn mount_ctx_menu(scope: CtxScope) -> (web_sys::Element, RwSignal<Option<StaticKey<Commands>>>) {
     let entries = RwSignal::new(ambre_toile::chrome::context_entries_for(&scope));
     let pos = RwSignal::new(Some(css_point(10.0, 10.0)));
-    let fired = RwSignal::new(None::<CommandId>);
-    let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
+    let fired = RwSignal::new(None::<StaticKey<Commands>>);
+    let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
     let root = mount_in_container(
         move || view! { <ContextMenu pos=pos entries=entries on_command=on_command /> },
     );
@@ -279,7 +278,7 @@ fn context_menu_copy_row_fires_copy_command() {
     // the COPY id the view resolves against its selection.
     let scope = CtxScope {
         site: ClickSite::Selection,
-        count: ElementCount::new(1),
+        count: Tally::<Elements>::new(1),
         locks: LockMix::Unlocked,
         ..CtxScope::default()
     };
@@ -306,7 +305,7 @@ fn context_menu_multi_selection_offers_group() {
     owner.set();
     let scope = CtxScope {
         site: ClickSite::Selection,
-        count: ElementCount::new(2),
+        count: Tally::<Elements>::new(2),
         locks: LockMix::Unlocked,
         ..CtxScope::default()
     };
@@ -327,7 +326,7 @@ fn context_menu_locked_selection_offers_only_unlock() {
     // A wholly-locked selection: Unlock applies, Lock is omitted.
     let scope = CtxScope {
         site: ClickSite::Selection,
-        count: ElementCount::new(1),
+        count: Tally::<Elements>::new(1),
         locks: LockMix::Locked,
         ..CtxScope::default()
     };
@@ -378,8 +377,8 @@ fn top_menu_bar_zoom_in_fires_command() {
     let owner = Owner::new();
     owner.set();
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let fired = RwSignal::new(None::<CommandId>);
-    let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
+    let fired = RwSignal::new(None::<StaticKey<Commands>>);
+    let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
     ambre_toile::chrome::init_command_states(&store);
     let toggles = Toggles::from_store(&store);
@@ -443,14 +442,14 @@ fn selection_toolbar_delete_fires_command() {
     // gated by the same flags as the context menu.
     let bar = RwSignal::new(Some(FloatBar {
         at: css_point(40.0, 20.0),
-        count: ElementCount::new(1),
+        count: Tally::<Elements>::new(1),
         groups: GroupHeld::NoGroup,
         locks: LockMix::Unlocked,
         fill: None,
         mixed: Default::default(),
     }));
-    let fired = RwSignal::new(None::<CommandId>);
-    let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
+    let fired = RwSignal::new(None::<StaticKey<Commands>>);
+    let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
     let model = RwSignal::new(None::<StyleModel>);
     let on_style = Callback::new(move |_e: StyleEdit| {});
     let root = mount_in_container(move || {
@@ -465,7 +464,7 @@ fn selection_toolbar_delete_fires_command() {
 
 /// Assert that `root` holds a control announcing the registry title of each
 /// of `ids`.
-fn assert_registry_labels(root: &web_sys::Element, ids: &[CommandId]) {
+fn assert_registry_labels(root: &web_sys::Element, ids: &[StaticKey<Commands>]) {
     for &id in ids {
         let expected = ambre_toile::ui::commands::title(id, &ambre_commands::Locale::En)
             .expect("the command is described");
@@ -511,7 +510,7 @@ fn the_button_bars_announce_the_registry_labels() {
     ambre_toile::chrome::init_command_states(&store);
     let toggles = Toggles::from_store(&store);
     let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
-    let on_command = Callback::new(|_: CommandId| {});
+    let on_command = Callback::new(|_: StaticKey<Commands>| {});
     let menu_bar = mount_in_container(move || {
         view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }
     });
@@ -525,7 +524,7 @@ fn the_button_bars_announce_the_registry_labels() {
     // command button the bar has.
     let bar = RwSignal::new(Some(FloatBar {
         at: css_point(40.0, 20.0),
-        count: ElementCount::new(2),
+        count: Tally::<Elements>::new(2),
         groups: GroupHeld::Group,
         locks: LockMix::Both,
         fill: None,
@@ -891,7 +890,7 @@ fn an_import_report_reaches_the_user() {
     let owner = Owner::new();
     owner.set();
     let root = mount_notified(ToileEvent::ImportReport {
-        imported: ambre_bus::app::toile::ElementCount::new(4),
+        imported: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(4),
         skipped: vec![ambre_bus::app::toile::SkipReason::new("gradient")],
     });
     let toast = root

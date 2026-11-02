@@ -467,7 +467,7 @@ pub struct ProseUiState {
     pub(crate) remote_at: HashMap<BlockId, Vec<RemoteCursor>>,
     /// How many highlights paints have read, for the tests to hold
     /// `PROSE-UI-020` against.
-    pub(crate) highlights_walked: crate::view::walk::HighlightCount,
+    pub(crate) highlights_walked: ambre_core::Tally<crate::view::walk::Highlights>,
     /// A link target a press asked to open, until the host takes it
     /// (`PROSE-UI-071`).
     pub followed: Option<ambre_core::LinkUrl>,
@@ -1081,10 +1081,10 @@ mod tests {
     #[test]
     fn the_status_bar_reads_the_five_figures() {
         let count = WordCount {
-            words: crate::events::WordTotal::new(12),
-            characters: crate::events::GraphemeCount::new(1),
-            characters_with_spaces: crate::events::GraphemeCount::new(70),
-            paragraphs: crate::events::ParagraphCount::new(3),
+            words: ambre_core::Tally::<crate::events::Words>::new(12),
+            characters: ambre_core::Tally::<crate::events::Graphemes>::new(1),
+            characters_with_spaces: ambre_core::Tally::<crate::events::Graphemes>::new(70),
+            paragraphs: ambre_core::Tally::<crate::events::Paragraphs>::new(3),
             pages: Count::<crate::events::Page>::new(1),
         };
         assert_eq!(

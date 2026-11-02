@@ -356,21 +356,21 @@ pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>, log: &Log) ->
 pub(crate) trait ShareHttp {
     async fn get_json<T: DeserializeOwned>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
     ) -> Result<T, http::HttpError>;
     async fn post_json<B: Serialize, R: DeserializeOwned>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
         body: &B,
     ) -> Result<R, http::HttpError>;
     async fn delete<B: Serialize>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
         body: &B,
     ) -> Result<(), http::HttpError>;
     async fn patch<B: Serialize>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
         body: &B,
     ) -> Result<(), http::HttpError>;
 }
@@ -384,27 +384,27 @@ pub(crate) struct GlooHttp {
 impl ShareHttp for GlooHttp {
     async fn get_json<T: DeserializeOwned>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
     ) -> Result<T, http::HttpError> {
         http::get_json_auth::<T>(url, self.auth.clone()).await
     }
     async fn post_json<B: Serialize, R: DeserializeOwned>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
         body: &B,
     ) -> Result<R, http::HttpError> {
         http::post_json_auth::<B, R>(url, body, self.auth.clone()).await
     }
     async fn delete<B: Serialize>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
         body: &B,
     ) -> Result<(), http::HttpError> {
         http::delete_json_auth(url, body, self.auth.clone()).await
     }
     async fn patch<B: Serialize>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
         body: &B,
     ) -> Result<(), http::HttpError> {
         http::patch_json_auth(url, body, self.auth.clone()).await
@@ -431,7 +431,7 @@ pub(crate) struct InviteParams {
     pub id: Generation<Request>,
     pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     /// The email phase 1 searched, or `None` for a member known by id.
     pub invitee_email: Option<ambre_core::Email>,
     /// The user phase 1 answered, whom the user confirmed.
@@ -480,9 +480,9 @@ pub(crate) async fn invite_task<H: ShareHttp>(
     // The invitation's entry names the invitee by identity and signing key.
     let invitee_id = p.invitee;
     let invitee_key = invitee.signing_pubkey;
-    let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let members_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/members", p.document_id));
-    let invite_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let invite_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/share", p.document_id));
     let mut tries: usize = 0;
     let posted = loop {
@@ -570,7 +570,7 @@ async fn invitee_keys<H: ShareHttp>(
     p: &InviteParams,
 ) -> Result<InviteeKeys, (ApiFailure, String)> {
     let Some(email) = &p.invitee_email else {
-        let url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+        let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
             .route(format!("/users/{}/pubkeys", p.invitee));
         return match http.get_json::<http::PubkeysResponse>(&url).await {
             Ok(served) => Ok(InviteeKeys {
@@ -580,10 +580,9 @@ async fn invitee_keys<H: ShareHttp>(
             Err(e) => Err((e.failure(), format!("Key fetch failed: {e}"))),
         };
     };
-    let search_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base).route(format!(
-        "/users/search?query={}",
-        email.as_str().replace('@', "%40")
-    ));
+    let search_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base).route(
+        format!("/users/search?query={}", email.as_str().replace('@', "%40")),
+    );
     let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
         Ok(resp) => resp.users,
         Err(e) => return Err((e.failure(), format!("User search failed: {e}"))),
@@ -625,7 +624,7 @@ pub(crate) struct FetchInviteeKeyParams {
     pub id: Generation<Request>,
     pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub invitee_email: ambre_core::Email,
 }
 
@@ -640,10 +639,11 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let search_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base).route(format!(
-        "/users/search?query={}",
-        p.invitee_email.as_str().replace('@', "%40")
-    ));
+    let search_url =
+        crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base).route(format!(
+            "/users/search?query={}",
+            p.invitee_email.as_str().replace('@', "%40")
+        ));
     let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
         Ok(resp) => resp.users,
         Err(e) => {
@@ -684,7 +684,7 @@ pub(crate) struct FetchMemberKeyParams {
     pub id: Generation<Request>,
     pub user_id: Id<User>,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
 }
 
 /// Fetch the exchange key the relay serves for a user the client already
@@ -697,7 +697,7 @@ pub(crate) async fn fetch_member_key_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/users/{}/pubkeys", p.user_id));
     let served = match http.get_json::<http::PubkeysResponse>(&url).await {
         Ok(served) => served,
@@ -729,7 +729,7 @@ pub(crate) struct RevokeParams {
     pub document_id: Id<Document>,
     pub user_id: Id<User>,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
     /// The key the revoke replaces, sealed under the new one (`SYNC-116`).
     pub previous: DocumentKey,
@@ -749,7 +749,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let members_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/members", p.document_id));
     let new_doc_key = DocumentKey::generate();
     let link = match link_to(
@@ -761,7 +761,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         Ok(link) => link,
         Err(e) => return failed(logic_tx, ApiRequest::RevokeFromDocument, e),
     };
-    let revoke_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let revoke_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/revoke", p.document_id));
     let mut tries: usize = 0;
     let unwrapped = loop {
@@ -872,7 +872,7 @@ pub(crate) struct LeaveParams {
     /// This user, who signs their own revoke: a departure removes no one else.
     pub author: Author,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
 }
 
@@ -914,13 +914,13 @@ async fn leave_document<H: ShareHttp>(
     document_id: Id<Document>,
     author: &Author,
     url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::RelayHost,
+    api_base: &crate::http::Url<crate::http::RelayHost>,
     exchange_key: &StaticSecret,
 ) -> Result<(), SyncError> {
     let me = author.user_id;
-    let members_url = crate::http::ApiRoot::of(url_scheme, api_base)
+    let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/members"));
-    let url = crate::http::ApiRoot::of(url_scheme, api_base)
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/share/{me}"));
     let mut tries: usize = 0;
     loop {
@@ -960,7 +960,7 @@ pub(crate) struct ChannelLeaveParams {
     /// This user, who signs their own revoke on the channel's `meta`.
     pub author: Author,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
 }
 
@@ -974,7 +974,7 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
     p: ChannelLeaveParams,
 ) -> Result<(), http::HttpError> {
     let (scheme, base) = (p.url_scheme, &p.api_base);
-    let url = crate::http::ApiRoot::of(scheme, base)
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(scheme, base)
         .route(format!("/channels/{}/documents", p.channel_id));
     let listed = http
         .get_json::<http::ChannelDocumentsResponse>(&url)
@@ -1001,7 +1001,7 @@ pub(crate) struct SegmentCloseParams {
     /// This user, who creates the successor.
     pub author: Author,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
 }
 
@@ -1017,7 +1017,7 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
     http: &H,
     p: SegmentCloseParams,
 ) -> Result<http::ClosedSegmentResponse, http::HttpError> {
-    let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
+    let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
     let successor = p.successor.document_id();
     let (doc_key_enc, entry) = creation(successor, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
@@ -1059,7 +1059,7 @@ pub(crate) struct AmendmentsParams {
     /// This user, who creates the document.
     pub author: Author,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
 }
 
@@ -1073,7 +1073,7 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
     http: &H,
     p: AmendmentsParams,
 ) -> Result<Id<Document>, http::HttpError> {
-    let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
+    let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.amendments, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
         doc_type: ambre_core::DocType::Murmure,
@@ -1115,7 +1115,7 @@ pub(crate) struct ThreadParams {
     /// This user, who creates the document.
     pub author: Author,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
 }
 
@@ -1129,7 +1129,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
     http: &H,
     p: ThreadParams,
 ) -> Result<Id<Document>, http::HttpError> {
-    let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
+    let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.thread, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
         doc_type: ambre_core::DocType::Murmure,
@@ -1162,7 +1162,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
 pub(crate) struct SettleParams {
     pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
     /// The key the rotation replaces, sealed under the new one (`SYNC-116`).
     pub previous: DocumentKey,
@@ -1178,7 +1178,7 @@ pub(crate) struct RoleChangeParams {
     pub user_id: Id<User>,
     pub role: Role,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
     /// The owner who signs the change's entry.
     pub author: Author,
@@ -1193,12 +1193,11 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let members_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/members", p.document_id));
-    let url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base).route(format!(
-        "/documents/{}/members/{}",
-        p.document_id, p.user_id
-    ));
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base).route(
+        format!("/documents/{}/members/{}", p.document_id, p.user_id),
+    );
     let mut tries: usize = 0;
     loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
@@ -1299,9 +1298,9 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             message,
         });
     };
-    let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let members_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/members", document_id));
-    let rotate_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let rotate_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/rotate-key", document_id));
     let new_doc_key = DocumentKey::generate();
     let (link, text) = match link_to(document_id, &p.previous, &new_doc_key, &p.signing_key) {
@@ -1364,7 +1363,7 @@ pub(crate) struct RotateChannelParams {
     pub space_id: Id<Space>,
     pub channel_id: Id<Channel>,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub exchange_key: StaticSecret,
     /// Signs the link the rotation leaves.
     pub signing_key: SigningKey,
@@ -1399,7 +1398,7 @@ async fn rotate_channel<H: ShareHttp>(
     http: &H,
     p: &RotateChannelParams,
 ) -> Result<ambre_bus::SealedChannelKey, http::HttpError> {
-    let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
+    let base = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base);
     let head = http
         .get_json::<http::JoinHeadResponse>(&base.route(format!("/channels/{}/join", p.channel_id)))
         .await
@@ -1455,7 +1454,7 @@ pub(crate) struct ListMembersParams {
     pub asked: ambre_core::Generation<crate::generation::Listing>,
     pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
-    pub api_base: crate::http::RelayHost,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
     /// Unwraps our own row, whose seal carries the log anchor (`SYNC-104`).
     pub exchange_key: StaticSecret,
     /// The rule the document's log walks under (`SYNC-106`).
@@ -1469,7 +1468,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
     p: ListMembersParams,
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
 ) {
-    let url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/members", p.document_id));
     match http.get_json::<http::DocumentMembersResponse>(&url).await {
         Ok(resp) => {
@@ -1769,7 +1768,7 @@ mod tests {
     impl ShareHttp for FakeHttp {
         async fn get_json<T: DeserializeOwned>(
             &self,
-            url: &http::RelayUrl,
+            url: &crate::http::Url<http::Route>,
         ) -> Result<T, http::HttpError> {
             self.calls.borrow_mut().push(Call::Get(url.to_string()));
             let v = self.next()?;
@@ -1777,7 +1776,7 @@ mod tests {
         }
         async fn post_json<B: Serialize, R: DeserializeOwned>(
             &self,
-            url: &http::RelayUrl,
+            url: &crate::http::Url<http::Route>,
             body: &B,
         ) -> Result<R, http::HttpError> {
             let bv = serde_json::to_value(body).unwrap();
@@ -1789,7 +1788,7 @@ mod tests {
         }
         async fn delete<B: Serialize>(
             &self,
-            url: &http::RelayUrl,
+            url: &crate::http::Url<http::Route>,
             body: &B,
         ) -> Result<(), http::HttpError> {
             let bv = serde_json::to_value(body).unwrap();
@@ -1800,7 +1799,7 @@ mod tests {
         }
         async fn patch<B: Serialize>(
             &self,
-            url: &http::RelayUrl,
+            url: &crate::http::Url<http::Route>,
             body: &B,
         ) -> Result<(), http::HttpError> {
             let bv = serde_json::to_value(body).unwrap();
@@ -1864,7 +1863,7 @@ mod tests {
             id: ambre_bus::next_request(),
             document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             invitee_email: Some("invitee@test.local".into()),
             invitee: Id::<User>::parse_str(INVITEE).expect("an id"),
             role: Role::Editor,
@@ -2110,7 +2109,7 @@ mod tests {
             id: ambre_bus::next_request(),
             document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             invitee_email: "invitee@test.local".into(),
         }
     }
@@ -2152,7 +2151,7 @@ mod tests {
             id: ambre_bus::next_request(),
             user_id,
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
         }
     }
 
@@ -2232,7 +2231,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
             user_id: Id::<User>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
             author: author(),
@@ -2517,7 +2516,7 @@ mod tests {
             channel_id,
             author: same(&bob.author),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: bob.xk.clone(),
         };
         assert_eq!(leave_channel_task(&http, params).await, Ok(()));
@@ -2548,7 +2547,7 @@ mod tests {
             channel_id: Id::<Channel>::mint(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         };
         let http = FakeHttp::new(vec![Err(http::HttpError::Local("404".into()))]);
@@ -2584,7 +2583,7 @@ mod tests {
             meta_key: DocumentKey::generate(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
     }
@@ -2684,7 +2683,7 @@ mod tests {
             meta_key: DocumentKey::generate(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
     }
@@ -2757,7 +2756,7 @@ mod tests {
             meta_key: DocumentKey::generate(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
     }
@@ -2858,7 +2857,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
             author,
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: my_xk,
         };
         leave_task(&http, params, &etx, &sink).await;
@@ -2900,7 +2899,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         };
         leave_task(&http, params, &etx, &sink).await;
@@ -2921,7 +2920,7 @@ mod tests {
             channel_id: Id::<Channel>::mint(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         };
         let left = leave_channel_task(&http, params).await;
@@ -2932,7 +2931,7 @@ mod tests {
         SettleParams {
             document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
@@ -3014,7 +3013,7 @@ mod tests {
             space_id,
             channel_id,
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
             previous: previous.clone(),
@@ -3062,7 +3061,7 @@ mod tests {
             space_id,
             channel_id,
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: my_xk,
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
             previous,
@@ -3189,7 +3188,7 @@ mod tests {
             asked: ambre_core::Generation::nth(1),
             document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
             rule: LogRule::document(),
         }
@@ -3626,7 +3625,7 @@ mod tests {
             document_id: logged.document_id,
             author: same(&bob.author),
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: bob.xk.clone(),
         };
         let http = FakeHttp::new(vec![
@@ -3664,7 +3663,7 @@ mod tests {
             user_id: bob.author.user_id,
             role: Role::Viewer,
             url_scheme: crate::http::UrlScheme::Https,
-            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: owner.xk.clone(),
             author: same(&owner.author),
         };

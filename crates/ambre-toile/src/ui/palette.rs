@@ -1,8 +1,8 @@
 // ambre-toile/src/ui/palette.rs
 // ============================================================================
 // Command surface for the Toile tool palette / primary toolbar
-// (`toile-tools`). The host-visible half: the `CommandId`s the palette
-// contributes, the pure `CommandId -> Tool` map and the bare-key tool chords.
+// (`toile-tools`). The host-visible half: the `StaticKey<Commands>`s the palette
+// contributes, the pure `StaticKey<Commands> -> Tool` map and the bare-key tool chords.
 // Also the pure focus-guard predicate the launcher applies before stealing a
 // key.
 //
@@ -12,15 +12,15 @@
 //
 // The active tool is UI-only, canvas-local state (`toile-tools`, "Local
 // view"): it never becomes a `ToileCommand` and never reaches the Logic thread.
-// A tool `CommandId` is therefore NOT mapped through `command_to_app`; the
+// A tool `StaticKey<Commands>` is therefore NOT mapped through `command_to_app`; the
 // palette (and the keyboard) write a shared `RwSignal<Tool>` the view applies.
 // ============================================================================
 
+use ambre_commands::{Commands, Keymap, StaticKey};
 use ambre_core::Rgba;
 use std::borrow::Cow;
 
 use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};
-use ambre_commands::{CommandId, Keymap};
 
 use super::tool::{Handle, Tool};
 
@@ -30,31 +30,31 @@ use super::tool::{Handle, Tool};
 // `Command` table.
 
 /// Select / move / resize / rotate / marquee (`toile-tools`).
-pub const TOOL_SELECT: CommandId = CommandId::new("toile.tool.select");
+pub const TOOL_SELECT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.select");
 /// Vector pen (Bezier path).
-pub const TOOL_PEN: CommandId = CommandId::new("toile.tool.pen");
+pub const TOOL_PEN: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.pen");
 /// Shape drag-rect (defaults to a rectangle; the kind sub-option is a local
 /// palette signal folded into `CreateElement`, `toile-tools`).
-pub const TOOL_SHAPE: CommandId = CommandId::new("toile.tool.shape");
+pub const TOOL_SHAPE: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.shape");
 /// Connector (anchor to anchor).
-pub const TOOL_CONNECTOR: CommandId = CommandId::new("toile.tool.connector");
+pub const TOOL_CONNECTOR: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.connector");
 /// Freehand draw.
-pub const TOOL_DRAW: CommandId = CommandId::new("toile.tool.draw");
+pub const TOOL_DRAW: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.draw");
 /// Sticky note.
-pub const TOOL_STICKY: CommandId = CommandId::new("toile.tool.sticky");
+pub const TOOL_STICKY: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.sticky");
 /// Text element.
-pub const TOOL_TEXT: CommandId = CommandId::new("toile.tool.text");
+pub const TOOL_TEXT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.text");
 /// Drop a comment thread (`toile-comments`, `TOILE-UI-042`).
-pub const TOOL_COMMENT: CommandId = CommandId::new("toile.tool.comment");
+pub const TOOL_COMMENT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.comment");
 /// The highlighter (`toile-presence`, `TOILE-UI-074`): a trail the other peers
 /// see and the board never keeps.
-pub const TOOL_LASER: CommandId = CommandId::new("toile.tool.laser");
+pub const TOOL_LASER: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.laser");
 /// Pan-only hand.
-pub const TOOL_HAND: CommandId = CommandId::new("toile.tool.hand");
+pub const TOOL_HAND: StaticKey<Commands> = StaticKey::<Commands>::new("toile.tool.hand");
 
-/// Every tool `CommandId`, in palette order. The `chrome::ToolPalette` renders
+/// Every tool `StaticKey<Commands>`, in palette order. The `chrome::ToolPalette` renders
 /// one button per entry; the launcher intercepts these ids (UI-only intents).
-pub const TOOL_COMMANDS: &[CommandId] = &[
+pub const TOOL_COMMANDS: &[StaticKey<Commands>] = &[
     TOOL_SELECT,
     TOOL_PEN,
     TOOL_SHAPE,
@@ -67,10 +67,10 @@ pub const TOOL_COMMANDS: &[CommandId] = &[
     TOOL_HAND,
 ];
 
-/// Map a tool `CommandId` to the [`Tool`] it selects, or `None` for any id that
+/// Map a tool `StaticKey<Commands>` to the [`Tool`] it selects, or `None` for any id that
 /// is not a tool. That covers a non-tool Toile command such as `FIND`, and an
 /// unknown id. `TOOL_SHAPE` selects the rectangle by default (`toile-tools`).
-pub fn tool_for_command(id: CommandId) -> Option<Tool> {
+pub fn tool_for_command(id: StaticKey<Commands>) -> Option<Tool> {
     match id {
         TOOL_SELECT => Some(Tool::Select),
         TOOL_PEN => Some(Tool::Pen),
@@ -338,8 +338,14 @@ mod tests {
     fn tool_for_command_rejects_non_tool_ids() {
         // A non-tool Toile command (the Find panel opener) and an unknown id both
         // resolve to `None`, so the launcher never switches tools for them.
-        assert_eq!(tool_for_command(CommandId::new("toile.find.open")), None);
-        assert_eq!(tool_for_command(CommandId::new("nonsense")), None);
+        assert_eq!(
+            tool_for_command(StaticKey::<Commands>::new("toile.find.open")),
+            None
+        );
+        assert_eq!(
+            tool_for_command(StaticKey::<Commands>::new("nonsense")),
+            None
+        );
     }
 
     #[test]
@@ -374,7 +380,7 @@ mod tests {
         // the keyboard).
         let mut keymap = Keymap::new();
         bind_tool_keys(&mut keymap);
-        let mut ids: Vec<CommandId> = ['v', 'p', 'r', 'c', 'd', 'n', 't', 'm', 'l', 'h']
+        let mut ids: Vec<StaticKey<Commands>> = ['v', 'p', 'r', 'c', 'd', 'n', 't', 'm', 'l', 'h']
             .into_iter()
             .filter_map(|c| {
                 keymap.resolve(KeyBinding::new(Modifiers::NONE, Key::Char(KeyChar::new(c))))

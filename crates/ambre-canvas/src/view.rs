@@ -15,8 +15,7 @@
 // ============================================================================
 
 use ambre_commands::{Key, Modifiers};
-use ambre_core::{FracMs, TimeSpan};
-use ambre_core::{Point, Px, View};
+use ambre_core::{FracMs, Point, Px, Tally, TimeSpan, View};
 use ambre_draw::{Color, Rect};
 
 use crate::{ContentRepaint, LayerRepaint, WheelDelta};
@@ -47,16 +46,23 @@ pub struct PerfSnapshot {
     pub background: TimeSpan<FracMs>,
     pub cells: TimeSpan<FracMs>,
     pub headers: TimeSpan<FracMs>,
-    pub cells_drawn: CellsDrawn,
+    pub cells_drawn: Tally<CellsDrawn>,
     pub input_latency: TimeSpan<FracMs>,
-    pub glyph_misses: GlyphMisses,
+    pub glyph_misses: Tally<GlyphMisses>,
 }
 
-ambre_core::define_tally! {
-    /// The cells one frame drew, for the performance panel.
-    pub struct CellsDrawn;
-    /// The glyphs one frame shaped afresh rather than read from the cache.
-    pub struct GlyphMisses;
+/// The cells one frame drew, for the performance panel.
+pub enum CellsDrawn {}
+
+impl ambre_core::TallyKind for CellsDrawn {
+    const NAME: &'static str = "CellsDrawn";
+}
+
+/// The glyphs one frame shaped afresh rather than read from the cache.
+pub enum GlyphMisses {}
+
+impl ambre_core::TallyKind for GlyphMisses {
+    const NAME: &'static str = "GlyphMisses";
 }
 
 /// Whether this frame is the one that refreshes the HUD's figures. The

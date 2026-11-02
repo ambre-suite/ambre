@@ -13,6 +13,7 @@
 // the Logic thread (`toile-board-rendering`).
 // ============================================================================
 
+use ambre_commands::{ClipboardWrite, Commands, Key, KeyChar, Modifiers, StaticKey};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
@@ -74,10 +75,9 @@ use ambre_core::Authored;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 // Context-menu bridge (`toile-menus`): the DOM `ContextMenu` reads the
-// published selection scope and writes back the chosen `CommandId`. Both ends
+// published selection scope and writes back the chosen `StaticKey<Commands>`. Both ends
 // are leptos signals, so the handles and their access traits are wasm-only.
 use ambre_bus::PasteSource;
-use ambre_commands::{ClipboardWrite, CommandId, Key, KeyChar, Modifiers};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
@@ -460,7 +460,7 @@ pub struct ToileView {
     /// live selection. The Logic thread never sees the selection, so the view
     /// attaches it. Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    menu_cmd: RwSignal<Option<CommandId>>,
+    menu_cmd: RwSignal<Option<StaticKey<Commands>>>,
     /// The active tool, shared with the DOM tool palette
     /// (`toile-tools`). The palette buttons and the bare-key tool chords both
     /// write it, and the view applies it each frame in `update`. Tool selection
@@ -711,7 +711,7 @@ impl ToileView {
         notices: NoticePublisher,
         theme_ctl: ThemeControl,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
-        #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
+        #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<StaticKey<Commands>>>,
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
         #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<super::palette::CanvasCursor>>,
         #[cfg(target_arch = "wasm32")] zoom: RwSignal<
@@ -1476,7 +1476,7 @@ impl ToileView {
             let (opacity, fill) = self
                 .find_element(&id)
                 .map(|e| (e.style.opacity, e.style.fill))
-                .unwrap_or((ambre_core::Opacity::OPAQUE, None));
+                .unwrap_or((ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE, None));
             self.gesture_overrides.insert(
                 id.clone(),
                 AnimatedElement {
@@ -2621,7 +2621,7 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_zoom(&mut self) {}
 
-    /// Turn a menu `CommandId` into board mutation(s). `Paste` and `Select all`
+    /// Turn a menu `StaticKey<Commands>` into board mutation(s). `Paste` and `Select all`
     /// are UI-only intents serviced here (the same-session clipboard / local
     /// selection). Every other id is resolved against the selection by
     /// `menu::resolve_menu_command` and emitted. The shell reaches it through
@@ -2630,7 +2630,7 @@ impl ToileView {
         not(target_arch = "wasm32"),
         allow(dead_code, reason = "the menu signal that calls it is wasm-only")
     )]
-    fn apply_menu_command(&mut self, id: CommandId) {
+    fn apply_menu_command(&mut self, id: StaticKey<Commands>) {
         use super::menu_bar as mb;
 
         // Top menu bar / zoom control ids (`toile-menus`). Undo / redo and the

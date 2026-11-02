@@ -24,6 +24,7 @@
 //! Both traits are sealed: each marker is an enum with no variant, and the
 //! list in this module is the whole set.
 
+use crate::Tally;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -34,10 +35,12 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-crate::define_tally! {
-    /// How many times in a row one request has failed: the count a retry
-    /// backs off by.
-    pub struct FailureCount;
+/// How many times in a row one request has failed: the count a retry
+/// backs off by.
+pub enum Failures {}
+
+impl crate::TallyKind for Failures {
+    const NAME: &'static str = "FailureCount";
 }
 
 mod sealed {
@@ -287,7 +290,7 @@ impl<U: TimeUnit<Repr = u64>> TimeSpan<U> {
     /// The span doubled once per failure of `failures`, saturating at
     /// `u64::MAX` ticks: the delay of a retry that backs off.
     #[must_use]
-    pub const fn doubled(self, failures: FailureCount) -> Self {
+    pub const fn doubled(self, failures: Tally<Failures>) -> Self {
         match 1_u64.checked_shl(failures.get()) {
             Some(factor) => self.times(factor),
             None => Self::new(u64::MAX),
@@ -815,9 +818,10 @@ pub mod stored_as_i64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        Authored, FailureCount, FracMs, Instant, LamportStamp, Ms, Ns, PageLoad, Sec, StoredAsI64,
+        Authored, Failures, FracMs, Instant, LamportStamp, Ms, Ns, PageLoad, Sec, StoredAsI64,
         TimeSpan, UnixMs, UnixSec,
     };
+    use crate::Tally;
     use std::time::Duration;
 
     #[test]
@@ -858,8 +862,8 @@ mod tests {
     fn a_millisecond_span_scales_and_backs_off_without_overflow() {
         let ms = TimeSpan::<Ms>::new;
         assert_eq!(ms(2_000).times(3), ms(6_000));
-        assert_eq!(ms(2_000).doubled(FailureCount::new(2)), ms(8_000));
-        assert_eq!(ms(2).doubled(FailureCount::new(64)), ms(u64::MAX));
+        assert_eq!(ms(2_000).doubled(Tally::<Failures>::new(2)), ms(8_000));
+        assert_eq!(ms(2).doubled(Tally::<Failures>::new(64)), ms(u64::MAX));
         assert_eq!(ms(u64::MAX).times(2), ms(u64::MAX));
         assert_eq!(ms(1_000).to_timer_i32(), 1_000);
         assert_eq!(ms(u64::MAX).to_timer_i32(), i32::MAX);

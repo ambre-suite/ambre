@@ -5,6 +5,7 @@
 //! header and the words of each row. Pure, so the host tests hold it. The painter in
 //! `paint` lays the rows out and draws them.
 
+use ambre_core::Tally;
 use ambre_core::index::{Axis, Count, IdxVec, Pos, Span};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -15,7 +16,7 @@ use ambre_bus::{
 use ambre_core::id::{self, Channel, Document, Id, Message, User};
 use ambre_core::{Byte, Char, Px, View};
 
-use crate::MessageCount;
+use ambre_bus::Messages;
 use ambre_core::{Ms, TimeSpan};
 
 /// A row of a message list, counted from zero at the oldest. A key
@@ -187,8 +188,8 @@ impl MessageList {
     }
 
     /// How many messages the list holds.
-    pub fn len(&self) -> MessageCount {
-        MessageCount::of_len(self.segments.iter().map(|s| s.messages.len()).sum())
+    pub fn len(&self) -> Tally<Messages> {
+        Tally::<Messages>::of_len(self.segments.iter().map(|s| s.messages.len()).sum())
     }
 
     /// The rows the list draws: a row per message and per band. A capacity,
@@ -426,7 +427,7 @@ impl<'a> Row<'a> {
         };
         let replies = message
             .thread
-            .filter(|t| t.replies > ambre_bus::ReplyCount::ZERO)
+            .filter(|t| t.replies > ambre_core::Tally::<ambre_bus::Replies>::ZERO)
             .map(|t| match t.replies.get() {
                 1 => "1 reply".to_owned(),
                 n => format!("{n} replies"),
@@ -989,7 +990,7 @@ pub(crate) mod tests {
             [true, false, true],
             "a band breaks the group"
         );
-        assert_eq!(list.len(), MessageCount::new(2));
+        assert_eq!(list.len(), Tally::<Messages>::new(2));
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("c"));
 
         let keys = band(Unreadable::KeyNotReceived, 20, Some(30));
@@ -1061,7 +1062,7 @@ pub(crate) mod tests {
             ],
         );
         assert_eq!(texts(&list), ["a", "b", "c", "d"]);
-        assert_eq!(list.len(), MessageCount::new(4));
+        assert_eq!(list.len(), Tally::<Messages>::new(4));
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("d"));
         list.absorb(
             active,
@@ -1200,7 +1201,7 @@ pub(crate) mod tests {
         assert_eq!(row.announcement(name_of, time_of), "Ada, t7: hello");
         grouped.thread = Some(ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_bus::ReplyCount::new(2),
+            replies: ambre_core::Tally::<ambre_bus::Replies>::new(2),
             last_replier: None,
         });
         let row = Row::Message {
@@ -1254,7 +1255,7 @@ pub(crate) mod tests {
         let mut root = message(Id::<User>::mint(), Instant::<Authored>::new(0), "root");
         let head = |replies| ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_bus::ReplyCount::new(replies),
+            replies: ambre_core::Tally::<ambre_bus::Replies>::new(replies),
             last_replier: None,
         };
         root.thread = Some(head(0));

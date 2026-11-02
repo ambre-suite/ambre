@@ -11,7 +11,8 @@ const RESEND_RETRY_BASE: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_000);
 
 /// The failures Sync sends again after. One more holds the document
 /// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
-const RESEND_RETRY_LIMIT: ambre_core::FailureCount = ambre_core::FailureCount::new(5);
+const RESEND_RETRY_LIMIT: ambre_core::Tally<ambre_core::Failures> =
+    ambre_core::Tally::<ambre_core::Failures>::new(5);
 
 /// Why a document holds its edits: the relay refused one, or failed to
 /// sequence one past the retry budget. It prints the cause the warning reads.
@@ -20,7 +21,7 @@ enum HoldCause {
     /// A refusal the relay named.
     Refused(ambre_core::RefusalCode),
     /// The failures counted since the last echo.
-    Failed(ambre_core::FailureCount),
+    Failed(ambre_core::Tally<ambre_core::Failures>),
 }
 
 impl std::fmt::Display for HoldCause {
@@ -34,8 +35,8 @@ impl std::fmt::Display for HoldCause {
 
 /// The delay before sending again after the `failure`-th failure since the
 /// last echo, counted from one. Past the budget there is none.
-fn resend_retry_delay(failure: ambre_core::FailureCount) -> Option<TimeSpan<Ms>> {
-    let first = ambre_core::FailureCount::new(1);
+fn resend_retry_delay(failure: ambre_core::Tally<ambre_core::Failures>) -> Option<TimeSpan<Ms>> {
+    let first = ambre_core::Tally::<ambre_core::Failures>::new(1);
     (first..=RESEND_RETRY_LIMIT)
         .contains(&failure)
         .then(|| RESEND_RETRY_BASE.doubled(failure.minus(first)))
@@ -228,7 +229,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let dl_url = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let dl_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/snapshot/download-url"));
             let body = http::SnapshotDownloadUrlRequest { snapshot_id };
             let blob = match http::post_json_auth::<_, http::SnapshotDownloadUrlResponse>(
@@ -385,7 +386,7 @@ impl SyncState {
             tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay (test path)");
             return;
         };
-        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
+        let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let sent =
@@ -530,8 +531,9 @@ impl SyncState {
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self.author_pub_key();
             wasm_bindgen_futures::spawn_local(async move {
-                let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
-                    .route(format!("/documents/{doc_id}/members"));
+                let members_url =
+                    crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                        .route(format!("/documents/{doc_id}/members"));
                 // 404 -> the doc does not exist server-side yet (local-only):
                 // generate a fresh key and defer creation to the first update.
                 let mut signers = None;
@@ -635,8 +637,9 @@ impl SyncState {
                 let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence
                     == crate::Existence::OnRelay
                 {
-                    let meta_url = crate::http::ApiRoot::of(url_scheme, &api_base)
-                        .route(format!("/documents/{doc_id}/snapshot"));
+                    let meta_url =
+                        crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                            .route(format!("/documents/{doc_id}/snapshot"));
                     match http::get_json_opt_auth::<http::SnapshotMetadataResponse>(
                         &meta_url,
                         auth.clone(),
@@ -1443,7 +1446,8 @@ impl SyncState {
                     }
                 };
 
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/documents");
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                .route("/documents");
             let body = http::CreateDocumentRequest {
                 doc_type,
                 name_enc: None,
@@ -1496,7 +1500,7 @@ impl SyncState {
             );
             return;
         };
-        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
+        let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
@@ -1604,7 +1608,7 @@ pub(crate) enum Vouch {
 pub(crate) async fn send_vouch(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &crate::http::ApiRoot,
+    base: &crate::http::Url<crate::http::ApiRoot>,
     document_id: Id<Document>,
     snapshot_id: Id<Snapshot>,
     vouch: &Vouch,
@@ -1648,7 +1652,7 @@ pub(crate) struct SnapshotUpload {
 pub(crate) async fn upload_snapshot(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &crate::http::ApiRoot,
+    base: &crate::http::Url<crate::http::ApiRoot>,
     upload: SnapshotUpload,
 ) -> Result<Id<Snapshot>, http::HttpError> {
     let SnapshotUpload {
@@ -1774,10 +1778,10 @@ mod tests {
     use ambre_protocol::SeqUpdate;
 
     /// The root a relay call under test reaches: `https://relay.test/api`.
-    fn root() -> crate::http::ApiRoot {
-        crate::http::ApiRoot::of(
+    fn root() -> crate::http::Url<crate::http::ApiRoot> {
+        crate::http::Url::<crate::http::ApiRoot>::of(
             crate::http::UrlScheme::Https,
-            &crate::http::RelayHost::new("relay.test".to_owned()),
+            &crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
         )
     }
 
@@ -1970,7 +1974,10 @@ mod tests {
         Id<Snapshot>,
     ) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::generate().derive_signing_key();
@@ -3736,7 +3743,7 @@ mod tests {
     /// the budget the document holds it, reported once as a refused edit.
     #[test]
     fn a_delta_failing_past_the_budget_holds_its_document() {
-        let failure = ambre_core::FailureCount::new;
+        let failure = ambre_core::Tally::<ambre_core::Failures>::new;
         assert_eq!(resend_retry_delay(failure(0)), None);
         assert_eq!(resend_retry_delay(failure(1)), Some(RESEND_RETRY_BASE));
         assert_eq!(

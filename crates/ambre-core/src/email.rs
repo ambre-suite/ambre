@@ -1,50 +1,43 @@
 //! An email address, as an account or an invitation names it.
 
+use crate::Redacted;
 use serde::{Deserialize, Serialize};
 
 /// An email address, as an account or an invitation names it. A distinct
 /// type, so a display name never takes its place. It checks no syntax: the
 /// text is whatever the identity provider or the inviter gave. The address is
 /// personal data, so `Debug` prints its length alone.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Email(String);
-
-impl std::fmt::Debug for Email {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Email")
-            .field(&crate::RedactedChars::of(&self.0))
-            .finish()
-    }
-}
+pub struct Email(Redacted<String>);
 
 impl Email {
     /// Wraps a raw value. The constructor checks nothing.
     pub const fn new(value: String) -> Self {
-        Self(value)
+        Self(Redacted::new(value))
     }
 
     /// The address text.
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
 impl From<&str> for Email {
     fn from(text: &str) -> Self {
-        Self(text.to_owned())
+        Self(Redacted::new(text.to_owned()))
     }
 }
 
 impl From<String> for Email {
     fn from(text: String) -> Self {
-        Self(text)
+        Self(Redacted::new(text))
     }
 }
 
 impl std::fmt::Display for Email {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.0.as_str())
     }
 }
 

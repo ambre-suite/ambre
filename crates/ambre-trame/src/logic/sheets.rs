@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use crate::formula::text::CellText;
 use crate::formula::types::SheetQualifier;
 use ambre_core::index::Pos;
 
@@ -87,7 +88,7 @@ impl TrameState {
                     };
                     self.engine.on_cell_changed(
                         CellId::bound(idx, rl, cl),
-                        StoredFormula::new(text.as_str().to_owned()),
+                        CellText::<StoredForm>::new(text.as_str().to_owned()),
                         &indices,
                         &ctx,
                     );

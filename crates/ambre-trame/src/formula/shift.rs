@@ -11,24 +11,29 @@
 //! shifted here is the *display* form the UI cached; the Logic thread
 //! re-canonicalises it on write, so cross-sheet qualifiers survive.
 
+use crate::formula::text::CellText;
 use ambre_bus::{Col, Row};
 use ambre_core::index::Delta;
 
 use super::parser::parse_formula;
 use super::render::render;
-use super::text::FormulaSource;
+use super::text::SourceForm;
 use super::types::{AxisSpan, CellRef, CellValue, Expr, FormulaError, RangeDep, SpanLines};
 
 /// Re-index a stored formula's relative references by `(dr, dc)` rows/columns
 /// and return the new formula text *with* its leading `=`. A formula that fails
 /// to parse is returned verbatim (a paste must never silently drop user input).
-pub fn shift_formula(raw: &FormulaSource, dr: Delta<Row>, dc: Delta<Col>) -> FormulaSource {
+pub fn shift_formula(
+    raw: &CellText<SourceForm>,
+    dr: Delta<Row>,
+    dc: Delta<Col>,
+) -> CellText<SourceForm> {
     if dr == Delta::<Row>::ZERO && dc == Delta::<Col>::ZERO {
         return raw.clone();
     }
     let body = raw.formula_body().unwrap_or(raw.as_str());
     match parse_formula(body) {
-        Ok(expr) => FormulaSource::new(format!("={}", render(&shift_expr(expr, dr, dc)))),
+        Ok(expr) => CellText::<SourceForm>::new(format!("={}", render(&shift_expr(expr, dr, dc)))),
         Err(_) => raw.clone(),
     }
 }
@@ -129,7 +134,7 @@ mod tests {
 
     /// `raw` shifted by `(dr, dc)`, as text.
     fn shift(raw: &str, dr: Delta<Row>, dc: Delta<Col>) -> String {
-        shift_formula(&FormulaSource::new(raw.to_owned()), dr, dc).into_string()
+        shift_formula(&CellText::<SourceForm>::new(raw.to_owned()), dr, dc).into_string()
     }
 
     #[test]

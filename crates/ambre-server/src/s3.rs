@@ -35,6 +35,7 @@
 //! Garage nor AWS S3 allows an origin by default; the local stack sets the
 //! rule in `scripts/garage_init.sh`.
 
+use ambre_core::Tally;
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::presigning::PresigningConfig;
 use rustis::commands::ScanOptions;
@@ -500,16 +501,18 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
     };
     let processed = drain_front(pending_key, &entries, &mut sink).await;
 
-    if processed > ProcessedCount::ZERO {
+    if processed > Tally::<DrainedEntries>::ZERO {
         let start = isize::try_from(processed.get()).unwrap_or(isize::MAX);
         let _: Result<(), _> = state.redis.ltrim(pending_key.as_str(), start, -1).await;
     }
 }
 
-ambre_core::define_tally! {
-    /// The pending entries one drain stored or dead-lettered, from the front
-    /// of the list: the start index of its trim.
-    pub struct ProcessedCount;
+/// The pending entries one drain stored or dead-lettered, from the front
+/// of the list: the start index of its trim.
+pub enum DrainedEntries {}
+
+impl ambre_core::TallyKind for DrainedEntries {
+    const NAME: &'static str = "ProcessedCount";
 }
 
 /// Where a drain sends each pending entry: the store, or the dead letters.
@@ -559,8 +562,8 @@ async fn drain_front(
     pending_key: &PendingKey,
     entries: &[Payload],
     sink: &mut impl DrainSink,
-) -> ProcessedCount {
-    let mut processed = ProcessedCount::ZERO;
+) -> Tally<DrainedEntries> {
+    let mut processed = Tally::<DrainedEntries>::ZERO;
     for entry in entries {
         // An entry carries `update_b64`, the E2EE ciphertext, and a `Payload`
         // cannot be logged. Only routing metadata (redis key, byte length, and
@@ -664,7 +667,7 @@ mod tests {
         .await;
 
         // Stored, dead-lettered, stored: the failure at the fourth stops it.
-        assert_eq!(processed, ProcessedCount::new(3));
+        assert_eq!(processed, Tally::<DrainedEntries>::new(3));
         assert_eq!(sink.stored, ["d/1", "d/3"]);
         assert_eq!(sink.dead, [b"not json".to_vec()]);
         // The fifth entry was never tried, and the trim keeps it with the fourth.

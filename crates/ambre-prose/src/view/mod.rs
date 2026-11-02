@@ -593,7 +593,10 @@ pub(crate) mod tests {
         assert_eq!(logic.shaped_count(), shaped_before);
         assert_eq!(logic.export_snapshot(), before);
         // The view holds the runs it was handed and built none of them.
-        assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);
+        assert_eq!(
+            ui.runs.built(),
+            ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+        );
     }
 
     #[test]

@@ -15,12 +15,12 @@
 //! document (`PROSE-IO-001`), and nothing reaches the relay but the one
 //! encrypted delta the commit produces (`PROSE-IO-043`).
 
-use ambre_core::index::{Axis, Count, Pos};
-use std::collections::HashMap;
-
-use ambre_bus::app::prose::{DocChar, FootnoteOrdinal, HeadingLevel};
+use ambre_bus::app::prose::{DocChar, FootnoteCall, HeadingLevel};
+use ambre_core::Ordinal;
 use ambre_core::id::{Footnote, Id};
+use ambre_core::index::{Axis, Count, Pos};
 use loro::{LoroValue, TreeID};
+use std::collections::HashMap;
 
 use ambre_bus::app::prose::{
     BlockInit, BlockType, DroppedElement, ExportFormat, ImportFormat, LiftedBlock, ListStyle,
@@ -310,7 +310,7 @@ fn marked_of(run: &IrRun) -> MarkedRun {
 }
 
 /// A run of the document as the form holds it.
-fn ir_run(run: MarkedRun, notes: &HashMap<Id<Footnote>, FootnoteOrdinal>) -> IrRun {
+fn ir_run(run: MarkedRun, notes: &HashMap<Id<Footnote>, Ordinal<FootnoteCall>>) -> IrRun {
     let mut out = IrRun::plain(run.text);
     for (key, value) in run.marks {
         let on = !matches!(value, LoroValue::Null | LoroValue::Bool(false));
@@ -352,7 +352,7 @@ impl ProseState {
     /// reads (`PROSE-IO-046`). It writes nothing (`PROSE-IO-017`).
     pub(crate) fn walk(&self) -> ProseIr {
         let tree = doc::blocks(&self.doc);
-        let notes: HashMap<Id<Footnote>, FootnoteOrdinal> =
+        let notes: HashMap<Id<Footnote>, Ordinal<FootnoteCall>> =
             crate::note::ordinals(&self.doc).into_iter().collect();
         let bands = doc::read_bands(&self.doc);
         let mut footnotes = Vec::new();
@@ -383,7 +383,7 @@ impl ProseState {
         &self,
         tree: &loro::LoroTree,
         parent: Option<TreeID>,
-        notes: &HashMap<Id<Footnote>, FootnoteOrdinal>,
+        notes: &HashMap<Id<Footnote>, Ordinal<FootnoteCall>>,
     ) -> Vec<IrBlock> {
         let ids = match parent {
             None => doc::roots(tree),
@@ -398,7 +398,7 @@ impl ProseState {
         &self,
         tree: &loro::LoroTree,
         id: TreeID,
-        notes: &HashMap<Id<Footnote>, FootnoteOrdinal>,
+        notes: &HashMap<Id<Footnote>, Ordinal<FootnoteCall>>,
     ) -> Option<IrBlock> {
         let runs = || -> Vec<IrRun> {
             self.body_of(&id)

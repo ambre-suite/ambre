@@ -6,6 +6,7 @@
 //! "k/n" counter. One family keeps a match index apart from a count, and
 //! from every other index a search event carries.
 
+use ambre_core::Redacted;
 use ambre_core::index::{Axis, Circular, Count, Numbered, Pos, Shown};
 
 /// A match of one search, counted from zero in the order the search
@@ -36,26 +37,20 @@ impl Circular for Match {}
 /// sends no query at all, which is how the panel clears its highlight
 /// (`FIND-005`). `Debug` prints the length alone, so a log carries none of
 /// the text, nor of the [`FindQuery`] that holds it.
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct FindText(String);
-
-impl std::fmt::Debug for FindText {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "FindText({} chars)", self.0.chars().count())
-    }
-}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FindText(Redacted<String>);
 
 impl FindText {
     /// The text as typed; `None` when it is empty.
     #[must_use]
     pub fn new(text: String) -> Option<Self> {
-        (!text.is_empty()).then_some(Self(text))
+        (!text.is_empty()).then_some(Self(Redacted::new(text)))
     }
 
     /// The text as typed.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 

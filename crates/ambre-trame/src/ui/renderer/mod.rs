@@ -90,7 +90,7 @@ pub struct DrawStats {
     /// lines, active border, header labels.
     pub headers: TimeSpan<FracMs>,
     /// Number of cells with non-empty text actually drawn this frame.
-    pub cells_drawn: ambre_canvas::CellsDrawn,
+    pub cells_drawn: ambre_core::Tally<ambre_canvas::CellsDrawn>,
     /// Latest measured input->caret latency (keydown to caret paint).
     /// Read against the keystroke-to-draft budget of `ambre-spec-budgets.md`.
     pub input_latency: TimeSpan<FracMs>,
@@ -203,7 +203,9 @@ mod tests {
                 CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)),
                 CellData {
                     text: text.to_owned(),
-                    raw: crate::formula::text::DisplayFormula::new(text.to_owned()),
+                    raw: crate::formula::text::CellText::<crate::formula::text::DisplayForm>::new(
+                        text.to_owned(),
+                    ),
                     ..Default::default()
                 },
             );
@@ -353,7 +355,7 @@ mod tests {
             SheetWalk {
                 font_cx: &mut font_cx,
                 text_cache: &mut cache,
-                cells_drawn: ambre_canvas::CellsDrawn::ZERO,
+                cells_drawn: ambre_core::Tally::<ambre_canvas::CellsDrawn>::ZERO,
             }
             .walk(&view, region, &mut walked);
             proptest::prop_assert!(screen.holds_walk(&walked));
@@ -441,7 +443,10 @@ mod tests {
         );
         // The clip stack is balanced and no cell bg was painted (empty cache).
         assert!(surface.clips_balanced());
-        assert_eq!(stats.cells_drawn, ambre_canvas::CellsDrawn::ZERO);
+        assert_eq!(
+            stats.cells_drawn,
+            ambre_core::Tally::<ambre_canvas::CellsDrawn>::ZERO
+        );
     }
 
     #[test]
@@ -523,7 +528,10 @@ mod tests {
             2,
         );
         // ...but only the non-empty one is tallied as drawn text.
-        assert_eq!(stats.cells_drawn, ambre_canvas::CellsDrawn::new(1));
+        assert_eq!(
+            stats.cells_drawn,
+            ambre_core::Tally::<ambre_canvas::CellsDrawn>::new(1)
+        );
         assert!(surface.clips_balanced());
     }
 
@@ -654,7 +662,10 @@ mod tests {
         );
 
         assert!(surface.ops().is_empty());
-        assert_eq!(stats.cells_drawn, ambre_canvas::CellsDrawn::ZERO);
+        assert_eq!(
+            stats.cells_drawn,
+            ambre_core::Tally::<ambre_canvas::CellsDrawn>::ZERO
+        );
     }
 
     #[test]

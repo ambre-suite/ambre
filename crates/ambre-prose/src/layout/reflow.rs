@@ -12,18 +12,18 @@
 //! gave. Then [`Paginator::settle_toc`] is the bounded pass that brings the two
 //! into step, off the keystroke path (`PROSE-019`, `PROSE-084`).
 
+use ambre_bus::app::prose::{BlockType, Page};
+use ambre_core::Ordinal;
+use ambre_core::id::{Footnote, Id};
 use ambre_core::index::{Count, Pos, Span};
+use ambre_core::{Doc, Px, Tally};
+use loro::{LoroDoc, TreeID};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use ambre_bus::app::prose::{BlockType, Page, PageNumber};
-use ambre_core::id::{Footnote, Id};
-use ambre_core::{Doc, Px};
-use loro::{LoroDoc, TreeID};
-
 use crate::doc;
 use crate::layout::geometry::PageBox;
-use crate::layout::measure::{Block, Measurer, ShapedCount};
+use crate::layout::measure::{Block, Measurer, ShapedRuns};
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
 use crate::layout::run::LayoutVersion;
@@ -36,11 +36,13 @@ use crate::toc;
 /// A document whose entries move the pages they list, which move the entries,
 /// could otherwise lay itself out without end. The bound makes it cheap rather
 /// than fatal: the last layout stands, one page number possibly off.
-pub const TOC_SETTLE_PASSES: PassCount = PassCount::new(3);
+pub const TOC_SETTLE_PASSES: Tally<Passes> = Tally::<Passes>::new(3);
 
-ambre_core::define_tally! {
-    /// How many layouts one settling of the tables of contents ran.
-    pub struct PassCount;
+/// How many layouts one settling of the tables of contents ran.
+pub enum Passes {}
+
+impl ambre_core::TallyKind for Passes {
+    const NAME: &'static str = "PassCount";
 }
 
 /// The layout of one document, and what it takes to update it in place.
@@ -57,7 +59,7 @@ pub struct Paginator {
     layout: PageLayout,
     /// The page each heading started on when the tables of contents were
     /// last measured. Only [`Paginator::settle_toc`] moves it.
-    toc_pages: HashMap<TreeID, PageNumber>,
+    toc_pages: HashMap<TreeID, Ordinal<Page>>,
     /// The bands the last layout was placed under (`PROSE-076`).
     bands: pass::BandHeights,
     /// The footnotes the last layout was placed with (`PROSE-117`).
@@ -105,7 +107,7 @@ impl Paginator {
 
     /// How many runs have been shaped, over the life of this paginator.
     #[must_use]
-    pub fn shaped(&self) -> ShapedCount {
+    pub fn shaped(&self) -> Tally<ShapedRuns> {
         self.measurer.shaped()
     }
 
@@ -321,14 +323,14 @@ impl Paginator {
     /// once no page moved, or after [`TOC_SETTLE_PASSES`] layouts, and answers
     /// how many it ran. No reflow calls it: a keystroke never pays for it
     /// (`PROSE-084`).
-    pub fn settle_toc(&mut self, document: &LoroDoc) -> PassCount {
+    pub fn settle_toc(&mut self, document: &LoroDoc) -> Tally<Passes> {
         let Some(tree) = doc::blocks_read(document) else {
-            return PassCount::ZERO;
+            return Tally::<Passes>::ZERO;
         };
         if self.measured.is_empty() {
             let _ = self.full(document);
         }
-        let mut passes = PassCount::ZERO;
+        let mut passes = Tally::<Passes>::ZERO;
         while passes < TOC_SETTLE_PASSES {
             let pages = toc::heading_pages(&tree, &self.layout.blocks);
             if pages == self.toc_pages {
@@ -343,7 +345,7 @@ impl Paginator {
 
     /// The heading pages the tables of contents were last measured on.
     #[cfg(test)]
-    pub(crate) fn toc_pages(&self) -> &HashMap<TreeID, PageNumber> {
+    pub(crate) fn toc_pages(&self) -> &HashMap<TreeID, Ordinal<Page>> {
         &self.toc_pages
     }
 
@@ -614,7 +616,7 @@ mod tests {
         // and shaped again, even though no block was named dirty.
         assert_eq!(
             paginator.shaped(),
-            after_full.plus(ShapedCount::of_len(ids.len()))
+            after_full.plus(Tally::<ShapedRuns>::of_len(ids.len()))
         );
     }
 
@@ -633,7 +635,7 @@ mod tests {
         // `PROSE-082`: the width moved, so every block is shaped again.
         assert_eq!(
             paginator.shaped(),
-            after_full.plus(ShapedCount::of_len(ids.len()))
+            after_full.plus(Tally::<ShapedRuns>::of_len(ids.len()))
         );
     }
 
@@ -717,7 +719,7 @@ mod tests {
         // `PROSE-019`: at least one pass, since the first layout measured the
         // entries on no page at all, and never more than the bound.
         assert!(
-            passes > PassCount::ZERO && passes <= TOC_SETTLE_PASSES,
+            passes > Tally::<Passes>::ZERO && passes <= TOC_SETTLE_PASSES,
             "{passes}"
         );
         let tree = crate::doc::blocks(&document);
@@ -725,7 +727,7 @@ mod tests {
         assert_eq!(&pages, paginator.toc_pages());
         assert_eq!(pages.len(), headings.len());
         // Settled, a second call finds nothing to move.
-        assert_eq!(paginator.settle_toc(&document), PassCount::ZERO);
+        assert_eq!(paginator.settle_toc(&document), Tally::<Passes>::ZERO);
     }
 
     #[test]
@@ -767,11 +769,12 @@ mod tests {
 #[cfg(not(target_arch = "wasm32"))]
 mod convergence {
     use ambre_bus::app::prose::BlockType;
+    use ambre_core::Tally;
     use ambre_draw::LazyFont;
     use loro::LoroDoc;
     use proptest::prelude::*;
 
-    use super::{Paginator, ShapedCount};
+    use super::{Paginator, ShapedRuns};
 
     /// Where the faces the application ships sit in the workspace.
     const FONT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
@@ -878,7 +881,7 @@ mod convergence {
         let layout = paginator.reflow(&document, &[]).clone();
         assert_eq!(
             paginator.shaped(),
-            after_full.plus(ShapedCount::of_len(paragraphs.len()))
+            after_full.plus(Tally::<ShapedRuns>::of_len(paragraphs.len()))
         );
         assert!(layout.missing_scripts.is_empty());
     }

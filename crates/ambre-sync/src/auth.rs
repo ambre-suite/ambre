@@ -20,7 +20,8 @@ impl SyncState {
             // WASM path: spawn an async HTTP task; the result flows back
             // through the SyncEvent queue into handle_sync_event.
             wasm_bindgen_futures::spawn_local(async move {
-                let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/keys/master");
+                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                    .route("/keys/master");
                 match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {
                     Ok(resp) if resp.setup_owed() => {
                         // No master material to unlock: the account still owes
@@ -89,7 +90,8 @@ impl SyncState {
                         let exchange_key = master_seed.derive_exchange_key();
 
                         let auth_url =
-                            crate::http::ApiRoot::of(url_scheme, &api_base).route("/auth/me");
+                            crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                                .route("/auth/me");
                         match http::get_json_auth::<http::AuthMeResponse>(&auth_url, auth.clone())
                             .await
                         {
@@ -178,7 +180,8 @@ impl SyncState {
                 ambre_core::FixedBytes::from_array(signing_key.verifying_key().to_bytes());
             let exchange_pub_key = crate::sharing::own_exchange_key(&exchange_key);
             wasm_bindgen_futures::spawn_local(async move {
-                let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/auth/dev/login");
+                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                    .route("/auth/dev/login");
                 let body = http::DevLoginRequest {
                     username,
                     signing_pub_key,
@@ -241,7 +244,7 @@ impl SyncState {
             return;
         }
         let logic_tx = self.logic_tx.clone();
-        let url = crate::http::ApiRoot::of(self.url_scheme, &self.api_base)
+        let url = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base)
             .route(format!("/auth/{provider}/login"));
         wasm_bindgen_futures::spawn_local(async move {
             let evt = match http::get_json::<http::ProviderLoginResponse>(&url).await {
@@ -281,7 +284,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         wasm_bindgen_futures::spawn_local(async move {
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/auth/{provider}/callback"));
             let body = http::ProviderCallbackRequest { code, state };
             let resp = match http::post_json::<_, http::ProviderCallbackResponse>(&url, &body).await
@@ -303,7 +306,8 @@ impl SyncState {
                     access_expires_in: resp.access_expires_in,
                 }))),
             };
-            let keys_url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/keys/master");
+            let keys_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                .route("/keys/master");
             let keys = match http::get_json_auth::<http::MasterKeyResponse>(&keys_url, auth.clone())
                 .await
             {
@@ -382,7 +386,8 @@ impl SyncState {
                 // Zero-Knowledge (N4): only the wrapped master key and its salt go
                 // over the wire; the passphrase stays in this worker and zeroizes
                 // on drop.
-                let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/auth/setup");
+                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                    .route("/auth/setup");
                 let body = http::SetupAccountRequest {
                     email,
                     display_name,
@@ -514,7 +519,10 @@ mod provider_tests {
     fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
         (
-            SyncState::new(sink, crate::RelayHost::new(String::new())),
+            SyncState::new(
+                sink,
+                crate::http::Url::<crate::RelayHost>::new(String::new()),
+            ),
             rx,
         )
     }

@@ -163,8 +163,7 @@ pub fn style_scope_for(
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementKind, ShapeKind, Viewport};
-    use ambre_core::Rgba;
-    use ambre_core::{Board, Px, StoredBoard};
+    use ambre_core::{Board, Px, Rgba, StoredBoard};
     use kurbo::{Affine, Point, Rect, Size};
 
     fn eid(s: &str) -> Id<Element> {
@@ -295,12 +294,12 @@ mod tests {
     fn differing_stroke_width_and_opacity_flag_both() {
         let a = ElementStyle {
             stroke_w: Px::<StoredBoard>::new(1.0),
-            opacity: ambre_core::Opacity::new(1.0).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(1.0).unwrap(),
             ..ElementStyle::default()
         };
         let b = ElementStyle {
             stroke_w: Px::<StoredBoard>::new(3.0),
-            opacity: ambre_core::Opacity::new(0.5).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.5).unwrap(),
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", a), elem("b", b)]);

@@ -21,6 +21,7 @@
 // `postMessage`. `LogicEvent`s arrive the same way in reverse.
 // ============================================================================
 
+use ambre_core::Tally;
 use std::collections::{HashMap, HashSet};
 
 /// IndexedDB-backed local snapshot store. Compiled only for wasm, since its
@@ -220,7 +221,7 @@ impl DocState {
     /// application owns it. Each declares its own number, so the value is only
     /// comparable against that application's own current version.
     #[must_use]
-    pub fn schema_version(&self) -> ambre_core::SchemaVersion {
+    pub fn schema_version(&self) -> ambre_core::Version<ambre_core::Schema> {
         match self {
             DocState::Trame(state) => state.schema_version(),
             DocState::Toile(state) => state.schema_version(),
@@ -405,10 +406,12 @@ impl DocState {
     /// How many faces this document measures on, zero for an engine that
     /// measures nothing on this thread (`PROSE-115`).
     #[cfg(test)]
-    fn face_count(&self) -> ambre_prose::logic::FaceCount {
+    fn face_count(&self) -> ambre_core::Tally<ambre_prose::logic::Faces> {
         match self {
             DocState::Prose(state) => state.face_count(),
-            DocState::Trame(_) | DocState::Toile(_) => ambre_prose::logic::FaceCount::ZERO,
+            DocState::Trame(_) | DocState::Toile(_) => {
+                ambre_core::Tally::<ambre_prose::logic::Faces>::ZERO
+            }
         }
     }
 
@@ -492,7 +495,7 @@ struct LiveDoc {
     /// `None` until this session saved one, since a delta only makes sense on
     /// top of a snapshot. A document freshly seeded holds a root block of its
     /// own, which a replay of deltas alone would duplicate.
-    logged: Option<LoggedDeltas>,
+    logged: Option<Tally<LoggedDeltas>>,
     /// Starts `Role::Owner` because a document is materialised optimistically at
     /// `OpenDocument`, before Sync has fetched the members response. Edits route
     /// immediately, exactly as they did before this gate existed. The real role
@@ -657,12 +660,14 @@ fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::Channe
 /// How many deltas a document's local log holds before the next save folds
 /// them into a snapshot. A keystroke then costs a delta, not a whole export,
 /// while a restore never replays more than this many.
-const DELTAS_PER_SNAPSHOT: LoggedDeltas = LoggedDeltas::new(256);
+const DELTAS_PER_SNAPSHOT: Tally<LoggedDeltas> = Tally::<LoggedDeltas>::new(256);
 
 mod logged {
-    ambre_core::define_tally! {
-        /// How many deltas a document's local log holds past its last snapshot.
-        pub struct LoggedDeltas;
+    /// How many deltas a document's local log holds past its last snapshot.
+    pub enum LoggedDeltas {}
+
+    impl ambre_core::TallyKind for LoggedDeltas {
+        const NAME: &'static str = "LoggedDeltas";
     }
 }
 use ambre_bus::{Authored, Instant};
@@ -1040,18 +1045,18 @@ impl LogicState {
         };
         let logged = doc
             .logged
-            .map(|n| n.plus(LoggedDeltas::of_len(owed.deltas.len())));
+            .map(|n| n.plus(Tally::<LoggedDeltas>::of_len(owed.deltas.len())));
         let written = !owed.deltas.is_empty();
         let compact = owed.snapshot
             || match logged {
                 None => written,
                 Some(n) => {
                     n > DELTAS_PER_SNAPSHOT
-                        || (moment == AnswerFor::Closing && n > LoggedDeltas::ZERO)
+                        || (moment == AnswerFor::Closing && n > Tally::<LoggedDeltas>::ZERO)
                 }
             };
         if compact {
-            doc.logged = Some(LoggedDeltas::ZERO);
+            doc.logged = Some(Tally::<LoggedDeltas>::ZERO);
             let snapshot = doc.state.export_snapshot();
             self.send_to_persist(document_id, PersistWrite::Snapshot(snapshot));
         } else {
@@ -1586,7 +1591,10 @@ mod pass_tests {
         }
     }
 
-    fn elements(state: &LogicState, document_id: Id<Document>) -> ambre_core::ElementCount {
+    fn elements(
+        state: &LogicState,
+        document_id: Id<Document>,
+    ) -> ambre_core::Tally<ambre_core::Elements> {
         match &state.docs[&document_id].state {
             DocState::Toile(board) => board.element_count(),
             other => panic!("the registry opened {other:?}"),
@@ -1612,7 +1620,8 @@ mod pass_tests {
         state.drain_pass(&from_ui, &from_sync);
         let first = elements(&state, document_id);
         assert!(
-            first > ambre_core::ElementCount::ZERO && first < ambre_core::ElementCount::new(1_000),
+            first > ambre_core::Tally::<ambre_core::Elements>::ZERO
+                && first < ambre_core::Tally::<ambre_core::Elements>::new(1_000),
             "one slice landed: {first}"
         );
         assert!(state.has_pending_work(), "the loop comes back unasked");
@@ -1624,7 +1633,7 @@ mod pass_tests {
         assert!(passes > 2, "the import took {passes} passes");
         assert_eq!(
             elements(&state, document_id),
-            ambre_core::ElementCount::new(1_000)
+            ambre_core::Tally::<ambre_core::Elements>::new(1_000)
         );
     }
 
@@ -1666,7 +1675,7 @@ mod pass_tests {
         );
         assert_eq!(
             elements(&reopened.state, reopened.document_id),
-            ambre_core::ElementCount::new(1_000)
+            ambre_core::Tally::<ambre_core::Elements>::new(1_000)
         );
     }
 
@@ -1704,7 +1713,7 @@ mod pass_tests {
         assert!(!state.has_pending_work(), "the import landed first");
         assert_eq!(
             elements(&state, document_id),
-            ambre_core::ElementCount::new(1_001)
+            ambre_core::Tally::<ambre_core::Elements>::new(1_001)
         );
         state.handle_logic_command(LogicCommand::App {
             document_id,
@@ -1712,7 +1721,7 @@ mod pass_tests {
         });
         assert_eq!(
             elements(&state, document_id),
-            ambre_core::ElementCount::new(1),
+            ambre_core::Tally::<ambre_core::Elements>::new(1),
             "one Undo takes the file back"
         );
     }

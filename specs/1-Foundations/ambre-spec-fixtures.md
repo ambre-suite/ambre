@@ -158,7 +158,7 @@ pub struct FixtureManifest {
     /// Bumped by the generator author when the produced document changes on
     /// purpose. Frozen into the artifact too: that is how a frozen fixture and
     /// the current one are found to be no longer comparable (`FIXTURE-020`).
-    pub generator_version: GeneratorVersion,
+    pub generator_version: Version<Generator>,
     /// Declared by the generator, and pins the `PeerID` and the `document_id`.
     /// The name, the version and the seed are transparent newtypes: the
     /// sidecar carries the bare string and numbers.
@@ -169,8 +169,8 @@ pub struct FixtureManifest {
     /// back from the generated document rather than declared, so a manifest
     /// cannot name a version its artifact does not hold
     /// (`ambre-spec-schema-version.md`).
-    pub ambre_version: ContainerVersion,
-    pub schema_version: SchemaVersion,
+    pub ambre_version: Version<Container>,
+    pub schema_version: Version<Schema>,
     /// BLAKE2b over the whole file, header included (`FIXTURE-011`). Hex, not
     /// 32 raw integers, which would defeat the readable diff this sidecar
     /// exists for: `FileDigest` is `#[serde(with = "hex")]` inside.
@@ -184,7 +184,7 @@ pub struct FixtureManifest {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct FixtureShape {
     /// Distinct peers whose ops are present; 1 for a solo document.
-    pub peers: PeerCount,
+    pub peers: Tally<Peers>,
     pub body: ShapeBody,
 }
 
@@ -194,9 +194,9 @@ pub struct FixtureShape {
 /// and serde sees the bare number.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
-    Trame { cells: CellCount, sheets: SheetCount, formulas: FormulaCount },
-    Toile { elements: ElementCount, frames: BoardFrameCount, connectors: ConnectorCount },
-    Prose { blocks: DocBlockCount, characters: Count<Char> },
+    Trame { cells: CellCount, sheets: Tally<Sheets>, formulas: Tally<Formulas> },
+    Toile { elements: Tally<Elements>, frames: Tally<BoardFrames>, connectors: Tally<Connectors> },
+    Prose { blocks: Tally<DocBlocks>, characters: Count<Char> },
 }
 ```
 
@@ -220,7 +220,7 @@ pub trait FixtureGen {
 
     /// Bumped by the author when the produced document changes on purpose; the
     /// driver copies it into the manifest, having no other source for it.
-    fn generator_version(&self) -> GeneratorVersion;
+    fn generator_version(&self) -> Version<Generator>;
 
     /// Build the document and return the plaintext `.ambre` bytes. Not a raw
     /// snapshot: the header makes the artifact self-describing and loadable

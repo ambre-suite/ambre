@@ -258,7 +258,7 @@ fn paint_laser<S: DrawSurface>(
         let (pa, _) = trail[i - 1];
         let (pb, tb) = trail[i];
         let alpha = laser_alpha(tb, now);
-        if alpha <= ambre_core::Opacity::TRANSPARENT {
+        if alpha <= ambre_core::Bounded::<ambre_core::Opacity>::TRANSPARENT {
             continue;
         }
         let a = *w2s * pa;
@@ -274,12 +274,15 @@ fn paint_laser<S: DrawSurface>(
 /// The alpha of a laser segment that arrived at `sampled_at`, read at `now`:
 /// opaque when fresh, zero once [`LASER_FADE`] has passed. A sample from the
 /// future (a clock that stepped back) reads as fresh rather than as invisible.
-pub fn laser_alpha(sampled_at: Instant<PageLoad>, now: Instant<PageLoad>) -> ambre_core::Opacity {
+pub fn laser_alpha(
+    sampled_at: Instant<PageLoad>,
+    now: Instant<PageLoad>,
+) -> ambre_core::Bounded<ambre_core::Opacity> {
     let age = (now - sampled_at).max(TimeSpan::<FracMs>::ZERO);
     if age >= LASER_FADE {
-        return ambre_core::Opacity::TRANSPARENT;
+        return ambre_core::Bounded::<ambre_core::Opacity>::TRANSPARENT;
     }
-    ambre_core::Opacity::clamped((1.0 - age / LASER_FADE) as f32)
+    ambre_core::Bounded::<ambre_core::Opacity>::clamped((1.0 - age / LASER_FADE) as f32)
 }
 
 /// What a peer's chip reads: the display name their sample carried, or a short
@@ -691,14 +694,14 @@ mod tests {
         );
         assert_eq!(
             laser_alpha(Instant::<PageLoad>::new(0.0), Instant::<PageLoad>::new(0.0)),
-            ambre_core::Opacity::OPAQUE
+            ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE
         );
         assert_eq!(
             laser_alpha(
                 Instant::<PageLoad>::new(0.0),
                 Instant::<PageLoad>::new(LASER_FADE.get())
             ),
-            ambre_core::Opacity::TRANSPARENT
+            ambre_core::Bounded::<ambre_core::Opacity>::TRANSPARENT
         );
         // A sample from the future reads as fresh, never as invisible.
         assert_eq!(
@@ -706,7 +709,7 @@ mod tests {
                 Instant::<PageLoad>::new(100.0),
                 Instant::<PageLoad>::new(0.0)
             ),
-            ambre_core::Opacity::OPAQUE
+            ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE
         );
     }
 
@@ -720,7 +723,10 @@ mod tests {
             (nan, Instant::<PageLoad>::new(0.0)),
             (Instant::<PageLoad>::new(0.0), nan),
         ] {
-            assert_eq!(laser_alpha(at, now), ambre_core::Opacity::OPAQUE);
+            assert_eq!(
+                laser_alpha(at, now),
+                ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE
+            );
         }
     }
 

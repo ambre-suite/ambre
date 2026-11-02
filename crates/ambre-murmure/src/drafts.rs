@@ -10,6 +10,7 @@
 //! The key of a row starts with the user's identifier. So a second person
 //! signed in on the device reads none of the first's.
 
+use ambre_core::Tally;
 use ambre_core::index::{Pos, Span};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -85,10 +86,12 @@ impl GenerationKind for ShelfVersion {
     const NAME: &'static str = "ShelfVersion";
 }
 
-ambre_core::define_tally! {
-    /// How many losses of a draft shelf a reader applied, so its next read
-    /// starts past them.
-    pub struct LossCount;
+/// How many losses of a draft shelf a reader applied, so its next read
+/// starts past them.
+pub enum ShelfLosses {}
+
+impl ambre_core::TallyKind for ShelfLosses {
+    const NAME: &'static str = "LossCount";
 }
 
 /// The drafts the device keeps, shared by every region of the page and the
@@ -218,14 +221,14 @@ impl DraftShelf {
     }
 
     /// The losses after the first `seen`, and how many there are in all.
-    pub fn losses_since(&self, seen: LossCount) -> (Vec<Loss>, LossCount) {
+    pub fn losses_since(&self, seen: Tally<ShelfLosses>) -> (Vec<Loss>, Tally<ShelfLosses>) {
         let shelf = self.0.borrow();
         let losses = usize::try_from(seen.get())
             .ok()
             .and_then(|seen| shelf.losses.get(seen..))
             .unwrap_or_default()
             .to_vec();
-        (losses, LossCount::of_len(shelf.losses.len()))
+        (losses, Tally::<ShelfLosses>::of_len(shelf.losses.len()))
     }
 }
 

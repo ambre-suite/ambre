@@ -5,6 +5,7 @@
 //! that honours it, a separator or a `..` names a place outside the download
 //! folder. So the name is a validated type (`DOCFILE-019`, `DOCFILE-020`).
 
+use crate::Redacted;
 use crate::index::Count;
 use crate::media::ByteSize;
 use crate::payload::{Payload, PayloadKind};
@@ -68,18 +69,8 @@ pub enum ExportFilenameError {
 /// `..`, and holds no path separator, no control character and no deceptive
 /// character (`DOCFILE-019`). It holds at most [`MAX_SIZE`](Self::MAX_SIZE) bytes
 /// (`DOCFILE-020`).
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ExportFilename(String);
-
-// A name comes from the document's title, which is the author's: a log carries
-// its length alone.
-impl std::fmt::Debug for ExportFilename {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("ExportFilename")
-            .field(&crate::RedactedChars::of(&self.0))
-            .finish()
-    }
-}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ExportFilename(Redacted<String>);
 
 impl ExportFilename {
     /// The most UTF-8 bytes a name holds, extension included: the limit of
@@ -113,7 +104,7 @@ impl ExportFilename {
         if Count::<Byte>::from_len(text.len()) > Self::MAX_SIZE {
             return Err(ExportFilenameError::TooLong);
         }
-        Ok(Self(text.to_owned()))
+        Ok(Self(Redacted::new(text.to_owned())))
     }
 
     /// The name of a file the suite names itself, such as `board.svg`.
@@ -137,7 +128,7 @@ impl ExportFilename {
             .map(|text| clean_stem(text, room))
             .find(|stem| !stem.is_empty())
             .unwrap_or_else(|| Self::FALLBACK_STEM.to_owned());
-        Self(format!("{stem}.{suffix}"))
+        Self(Redacted::new(format!("{stem}.{suffix}")))
     }
 
     /// The longest extension a received name keeps.
@@ -167,21 +158,21 @@ impl ExportFilename {
             .find(|stem| !stem.is_empty())
             .unwrap_or_else(|| Self::FALLBACK_STEM.to_owned());
         match extension {
-            Some(extension) => Self(format!("{stem}.{extension}")),
-            None => Self(stem),
+            Some(extension) => Self(Redacted::new(format!("{stem}.{extension}"))),
+            None => Self(Redacted::new(stem)),
         }
     }
 
     /// The name, for the browser call that saves the file under it.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
 impl std::fmt::Display for ExportFilename {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.0.as_str())
     }
 }
 

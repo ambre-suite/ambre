@@ -11,12 +11,13 @@
 // percentile of each measure.
 // ============================================================================
 
+use ambre_core::Tally;
 use std::collections::BTreeMap;
 
 use wasm_bindgen::{JsCast, JsValue};
 
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
-use ambre_prose::probe::{FrameCount, Measure, Percentiles, ProbeName, percentiles};
+use ambre_prose::probe::{AnimationFrames, Measure, Percentiles, ProbeName, percentiles};
 
 /// How often the summary is printed.
 const SUMMARY_EVERY: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(5_000.0);
@@ -44,7 +45,7 @@ pub(crate) struct Timeline {
     /// The samples per measure, kept only under `?probes`.
     samples: Option<BTreeMap<ProbeName, Vec<TimeSpan<FracMs>>>>,
     /// The samples per count, kept only under `?probes`.
-    counts: Option<BTreeMap<ProbeName, Vec<FrameCount>>>,
+    counts: Option<BTreeMap<ProbeName, Vec<Tally<AnimationFrames>>>>,
     last_summary: Instant<PageLoad>,
     /// A sample landed since the last summary.
     fresh: bool,
@@ -84,7 +85,7 @@ impl Timeline {
 
     /// Stamp each count as a mark carrying it in its detail, and keep it
     /// under `?probes`.
-    pub(crate) fn count(&mut self, name: ProbeName, values: Vec<FrameCount>) {
+    pub(crate) fn count(&mut self, name: ProbeName, values: Vec<Tally<AnimationFrames>>) {
         for value in values {
             mark_count(name.as_str(), value);
             if let Some(counts) = self.counts.as_mut() {
@@ -117,7 +118,9 @@ impl Timeline {
             }
         }
         for (name, values) in self.counts.iter().flatten() {
-            if let Some(Percentiles { median, p95 }) = percentiles(values, FrameCount::cmp) {
+            if let Some(Percentiles { median, p95 }) =
+                percentiles(values, Tally::<AnimationFrames>::cmp)
+            {
                 let (p50, p95) = (median.get(), p95.get());
                 web_sys::console::log_1(&JsValue::from_str(&format!(
                     "{}: n={} p50={p50} frames p95={p95} frames",
@@ -139,7 +142,7 @@ pub(crate) fn mark(name: ProbeName) {
 
 /// One `performance.mark(name, { detail: value })`, through `Reflect` like
 /// the measures.
-fn mark_count(name: &str, value: FrameCount) {
+fn mark_count(name: &str, value: Tally<AnimationFrames>) {
     let Some(performance) = web_sys::window().and_then(|w| w.performance()) else {
         return;
     };

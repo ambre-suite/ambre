@@ -152,7 +152,7 @@ fn a_birth_box_of_no_usable_size_is_refused() {
         assert_eq!(errors(&out), [&ToileError::UnusableSize], "{size:?}");
         assert_eq!(
             st.element_count(),
-            ambre_core::ElementCount::ZERO,
+            ambre_core::Tally::<ambre_core::Elements>::ZERO,
             "{size:?}"
         );
     }
@@ -218,7 +218,10 @@ fn a_seed_of_another_kind_is_refused() {
         assert!(out.update.is_none());
         assert_eq!(errors(&out), [&ToileError::ContentKindMismatch]);
     }
-    assert_eq!(st.element_count(), ambre_core::ElementCount::ZERO);
+    assert_eq!(
+        st.element_count(),
+        ambre_core::Tally::<ambre_core::Elements>::ZERO
+    );
     assert!(st.layer_order().is_empty());
 }
 
@@ -248,7 +251,10 @@ fn a_write_to_a_missing_element_is_refused() {
         assert!(out.update.is_none());
         assert_eq!(errors(&out), [&ToileError::NoSuchElement(ghost.clone())]);
     }
-    assert_eq!(st.element_count(), ambre_core::ElementCount::new(1));
+    assert_eq!(
+        st.element_count(),
+        ambre_core::Tally::<ambre_core::Elements>::new(1)
+    );
     assert_eq!(st.bounds_of(&kept), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
 }
 
@@ -331,7 +337,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
     st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
     assert_eq!(
         st.element_count(),
-        ambre_core::ElementCount::ZERO,
+        ambre_core::Tally::<ambre_core::Elements>::ZERO,
         "the unlock frees the delete"
     );
 }
@@ -494,7 +500,10 @@ fn deleting_a_group_spares_a_bystander() {
     let by = rect(&mut st, 5.0, 5.0);
     let g = group(&mut st, &[&a, &b]);
     st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
-    assert_eq!(st.element_count(), ambre_core::ElementCount::new(1));
+    assert_eq!(
+        st.element_count(),
+        ambre_core::Tally::<ambre_core::Elements>::new(1)
+    );
     assert_eq!(order(&st), nodes(&[&by]));
 }
 
@@ -718,7 +727,10 @@ fn a_remote_batch_repaints_once() {
     let mut batched = ToileState::with_peer(ambre_core::PeerId::new(2));
     let events = batched.apply_remote_batch(&deltas);
     assert_eq!(viewports(&events), 1);
-    assert_eq!(batched.element_count(), ambre_core::ElementCount::new(5));
+    assert_eq!(
+        batched.element_count(),
+        ambre_core::Tally::<ambre_core::Elements>::new(5)
+    );
     let mut single = ToileState::with_peer(ambre_core::PeerId::new(3));
     let each: usize = deltas
         .iter()

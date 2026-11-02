@@ -39,8 +39,10 @@ fn setup(
     MockWsTransport,
 ) {
     let (logic_sink, logic_rx) = ambre_sync::LogicSink::channel();
-    let mut state =
-        ambre_sync::SyncState::new(logic_sink, ambre_sync::RelayHost::new(String::new()));
+    let mut state = ambre_sync::SyncState::new(
+        logic_sink,
+        ambre_sync::Url::<ambre_sync::RelayHost>::new(String::new()),
+    );
     let mock = MockWsTransport::new();
     if with_mock {
         state.set_mock_ws(mock.client_tx.clone());
@@ -539,9 +541,8 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         ambre_core::classify(&ambre_core::Payload::<ambre_core::PickedContainer>::new(
             sealed.clone()
         )),
-        Ok(ambre_core::ContainerKind::Sealed(
-            ambre_core::AMBRE_SEALED_VERSION
-        ))
+        Ok(ambre_core::ContainerKind::Sealed(version))
+            if version == ambre_core::AMBRE_SEALED_VERSION
     ));
     // Read as a plaintext container, the same bytes are refused.
     let misread = ambre_core::Payload::<ambre_core::PlaintextContainer>::new(sealed.clone());

@@ -11,9 +11,10 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{CellNumber, CellRect, Col, DateSerial, FormulaSource, SheetId};
-use ambre_core::Rgb;
+use super::{CellNumber, CellRect, Col, DateSerial, SheetId, SourceForm};
+use crate::app::trame::CellText;
 use ambre_core::index::Count;
+use ambre_core::{Bounded, Bounds, Refusal, Rgb, Tally};
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -60,47 +61,17 @@ pub enum HeaderRow {
     Present,
 }
 
-/// A number refused as a percentage: outside `0..=100`, or not a number.
-#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
-#[error("{0} is not a percentage between 0 and 100")]
-pub struct InvalidPercent(f32);
-
-impl InvalidPercent {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: f32) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> f32 {
-        self.0
-    }
-}
-
 /// A share of a whole, in percent, from 0 to 100 inclusive, kept as given
 /// with no rounding (`TRAME-239`, `TRAME-240`). A top-N rule ranks the cells it covers by
-/// it (`trame-cell-styles`).
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Percent(f32);
+/// it (`trame-cell-styles`). A number below 0, above 100, or NaN is refused.
+pub enum Percent {}
 
-impl Percent {
-    /// The percentage `value` is.
-    ///
-    /// # Errors
-    ///
-    /// [`InvalidPercent`] when `value` is below 0, above 100, or NaN.
-    pub fn new(value: f32) -> Result<Self, InvalidPercent> {
-        if (0.0..=100.0).contains(&value) {
-            Ok(Self(value))
-        } else {
-            Err(InvalidPercent(value))
-        }
-    }
-
-    /// The percentage, from 0 to 100.
-    pub const fn value(self) -> f32 {
-        self.0
-    }
+impl Bounds for Percent {
+    type Repr = f32;
+    const MIN: f32 = 0.0;
+    const MAX: f32 = 100.0;
+    const NAME: &'static str = "Percent";
+    const REFUSAL: Refusal = Refusal::new("", " is not a percentage between 0 and 100");
 }
 
 /// A conditional-formatting rule predicate (`trame-cell-styles`).
@@ -121,7 +92,7 @@ pub enum CondFormatKind {
     StartsWith(String),
     /// Custom formula, for example `"=A1>AVERAGE(A:A)"` (relative refs resolved from
     /// the target cell), as the user typed it. The Logic thread parses it.
-    Formula(FormulaSource),
+    Formula(CellText<SourceForm>),
     IsEmpty,
     IsNotEmpty,
     IsError,
@@ -137,9 +108,9 @@ pub enum CondFormatKind {
     DataBar {
         color: Rgb,
     },
-    TopN(RankCount),
-    BottomN(RankCount),
-    TopNPercent(Percent),
+    TopN(Tally<Ranks>),
+    BottomN(Tally<Ranks>),
+    TopNPercent(Bounded<Percent>),
 }
 
 // An operand the author typed prints its length alone.
@@ -190,9 +161,11 @@ impl std::fmt::Debug for CondFormatKind {
     }
 }
 
-ambre_core::define_tally! {
-    /// How many of the top or bottom values a rule marks.
-    pub struct RankCount;
+/// How many of the top or bottom values a rule marks.
+pub enum Ranks {}
+
+impl ambre_core::TallyKind for Ranks {
+    const NAME: &'static str = "RankCount";
 }
 
 /// Style applied when a conditional-formatting rule matches
@@ -291,7 +264,7 @@ pub enum ValidationKind {
     Regex(String),
     /// Custom formula that must return `TRUE`, as the user typed it. The Logic
     /// thread parses it.
-    Formula(FormulaSource),
+    Formula(CellText<SourceForm>),
 }
 
 // A list entry and a pattern the author typed print their length alone.
@@ -352,6 +325,7 @@ pub enum ValidationOnInvalid {
 #[cfg(test)]
 mod tests {
     use super::{CellNumber, InvalidNumberBounds, NumberBounds, Percent};
+    use ambre_core::Bounded;
 
     /// The range from `min` to `max`, each limit refused first when it is
     /// no cell number.
@@ -393,10 +367,16 @@ mod tests {
     #[test]
     fn a_percentage_runs_from_zero_to_a_hundred() {
         for value in [0.0, 12.5, 33.333_33, 100.0] {
-            assert_eq!(Percent::new(value).map(Percent::value), Ok(value));
+            assert_eq!(
+                Bounded::<Percent>::try_new(value).map(Bounded::get),
+                Ok(value)
+            );
         }
         for value in [-0.5, 100.5, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
-            assert!(Percent::new(value).is_err(), "{value} is refused");
+            assert!(
+                Bounded::<Percent>::try_new(value).is_err(),
+                "{value} is refused"
+            );
         }
     }
 }

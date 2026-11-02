@@ -34,7 +34,7 @@ use rustc_hash::FxHashSet;
 // -----------------------------------------------------------------------------
 
 /// The base font faces registered at startup. Noto Sans covers regular, bold,
-/// italic and bold-italic, with real faces selected by `FontWeight` /
+/// italic and bold-italic, with real faces selected by `Bounded<FontWeight>` /
 /// `FontStyle`. The alternate DejaVu serif and monospace families serve the
 /// formatting toolbar picker (`trame-cell-styles`). Together they cover Latin,
 /// Latin-Extended, Cyrillic, and Greek; scripts outside that are fetched on

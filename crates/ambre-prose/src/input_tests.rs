@@ -5,9 +5,8 @@
 use crate::layout::run::{Affinity, RunChar};
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocChar;
-use ambre_commands::ClipboardWrite;
-use ambre_core::index::Pos;
-use ambre_core::index::{Count, Span};
+use ambre_commands::{ClipboardWrite, Commands, StaticKey};
+use ambre_core::index::{Count, Pos, Span};
 use ambre_core::{Doc, Px, View};
 use ambre_draw::HitTest;
 
@@ -538,7 +537,10 @@ fn a_press_places_the_caret_and_collapses_the_selection() {
         (block, Pos::<DocChar>::new(4), None)
     );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
-    assert_eq!(rig.ui.runs.built(), crate::view::cache::BuildCount::ZERO);
+    assert_eq!(
+        rig.ui.runs.built(),
+        ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+    );
     assert!(rig.ui.provisional_run(block).is_none());
 }
 
@@ -1466,7 +1468,7 @@ impl Rig {
     }
 
     /// Send what a control asks for, then take the new layout.
-    fn format(&mut self, id: ambre_commands::CommandId) -> Option<ProseCommand> {
+    fn format(&mut self, id: StaticKey<Commands>) -> Option<ProseCommand> {
         let command = self.ui.format(id);
         self.take_sent(command.clone().into_iter().collect());
         self.deliver();

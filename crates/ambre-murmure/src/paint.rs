@@ -29,7 +29,8 @@ use ambre_core::PageLoad;
 
 /// How strongly a selection tints the text under it: faint, so the text
 /// stays legible.
-const SELECTION_OPACITY: ambre_core::Opacity = ambre_core::Opacity::clamped(0.3);
+const SELECTION_OPACITY: ambre_core::Bounded<ambre_core::Opacity> =
+    ambre_core::Bounded::<ambre_core::Opacity>::clamped(0.3);
 
 /// The ink `selection` tints the text under a selection with.
 fn selection_tint(selection: Color) -> Color {
@@ -1382,7 +1383,7 @@ pub(crate) mod tests {
         gone.deleted = ambre_bus::Deletion::Deleted;
         gone.thread = Some(ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_bus::ReplyCount::new(2),
+            replies: ambre_core::Tally::<ambre_bus::Replies>::new(2),
             last_replier: None,
         });
         let mut list = MessageList::default();

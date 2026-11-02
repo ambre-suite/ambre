@@ -1,6 +1,6 @@
 // ambre-prose/src/chrome/handler.rs
 // ============================================================================
-// Prose's command handler (`ARCH-018`): what each Prose `CommandId` means.
+// Prose's command handler (`ARCH-018`): what each Prose `StaticKey<Commands>` means.
 //
 // The file commands each become one typed command: the native save, and the
 // Markdown import and export (`PROSE-IO-020`, `PROSE-IO-027`). A formatting
@@ -11,7 +11,7 @@
 use ambre_bus::AppCommand;
 use ambre_bus::app::prose::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
-use ambre_commands::{ClipboardWrite, CommandId, PasteForm};
+use ambre_commands::{ClipboardWrite, Commands, PasteForm, StaticKey};
 use leptos::prelude::*;
 
 use crate::commands::{
@@ -23,13 +23,13 @@ use crate::commands::{
 #[derive(Clone, Copy)]
 pub struct ProseHandler {
     /// The formatting id the view drains, shared with the format bar.
-    pub format: RwSignal<Option<CommandId>>,
+    pub format: RwSignal<Option<StaticKey<Commands>>>,
 }
 
 impl CommandHandler for ProseHandler {
     type Command = AppCommand;
 
-    fn on_command(&self, id: CommandId) -> Vec<ShellAction<AppCommand>> {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
         let export = |format| AppCommand::Prose(ProseCommand::ExportDocument { format });
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
@@ -60,7 +60,11 @@ impl CommandHandler for ProseHandler {
         vec![action]
     }
 
-    fn on_key(&self, id: CommandId, target: ambre_chrome::KeyTarget) -> KeyRoute<AppCommand> {
+    fn on_key(
+        &self,
+        id: StaticKey<Commands>,
+        target: ambre_chrome::KeyTarget,
+    ) -> KeyRoute<AppCommand> {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }

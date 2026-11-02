@@ -19,7 +19,7 @@
 // shared `zoom` signal the canvas view publishes each frame.
 // ============================================================================
 
-use ambre_chrome::commands::{CommandId, Locale};
+use ambre_chrome::commands::{Commands, Locale, StaticKey};
 use ambre_chrome::{Availability, ContextMenu, MenuEntry};
 use ambre_core::{Doc, Scale, View};
 use leptos::prelude::*;
@@ -68,7 +68,10 @@ fn entries_for(id: MenuId, toggles: Toggles) -> Vec<MenuEntry> {
 /// `command` through the shared path. Its tooltip and its glyph are the ones
 /// the command declares (`UI-THREAD-019`). `mousedown` `prevent_default` keeps
 /// DOM focus on the canvas text pipe (the palette / FormatBar hazard).
-fn zoom_button(on_command: Callback<CommandId>, command: CommandId) -> impl IntoView {
+fn zoom_button(
+    on_command: Callback<StaticKey<Commands>>,
+    command: StaticKey<Commands>,
+) -> impl IntoView {
     let label = registry::title(command, &Locale::En).unwrap_or_default();
     let icon = registry::icon(command).and_then(icons::resolve);
     view! {
@@ -89,7 +92,7 @@ fn zoom_button(on_command: Callback<CommandId>, command: CommandId) -> impl Into
 #[component]
 pub fn TopMenuBar(
     zoom: RwSignal<Scale<Doc, View>>,
-    on_command: Callback<CommandId>,
+    on_command: Callback<StaticKey<Commands>>,
     toggles: Toggles,
 ) -> impl IntoView {
     // Which menu is open (drives the pressed title) and where its dropdown sits.

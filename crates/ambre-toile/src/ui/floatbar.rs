@@ -10,7 +10,7 @@
 // geometry + flags are host-unit-tested, exactly like `ui::menu`, `ui::style` and
 // `ui::status`. The wasm-only Leptos component that renders it
 // (`chrome::SelectionToolbar`) consumes this model. Its command buttons route
-// through the shared `on_command` path with `ui::menu` `CommandId`s. So the bar is
+// through the shared `on_command` path with `ui::menu` `StaticKey<Commands>`s. So the bar is
 // a strict subset of the context menu and the two never diverge (`toile-menus`).
 //
 // The bar's transient hiding is decided by the view at publish time (`None` ==
@@ -20,10 +20,10 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    DisplayElement, ElementCount, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
+    DisplayElement, ElementKind, ElementStyle, Elements, FontFamily, FontSizeChoice,
 };
 use ambre_core::id::{Element, Id};
-use ambre_core::{Css, Px, Rgba, StoredBoard, View};
+use ambre_core::{Css, Px, Rgba, StoredBoard, Tally, View};
 use ambre_draw::{Point, Rect};
 
 use super::menu::{GroupHeld, LockMix};
@@ -43,7 +43,7 @@ pub struct FloatBar {
     /// The selection's top-edge midpoint on the page.
     pub at: ambre_core::Point<Px<Css>>,
     /// Number of selected elements. Two or more -> Group applies.
-    pub count: ElementCount,
+    pub count: Tally<Elements>,
     /// A selected element is a group node -> Ungroup applies.
     pub groups: GroupHeld,
     /// The lock states the selection holds: Unlock applies to a locked one,
@@ -60,7 +60,7 @@ pub struct FloatBar {
 impl FloatBar {
     /// At least two elements selected -> Group applies.
     pub fn multi(&self) -> bool {
-        self.count >= ElementCount::new(2)
+        self.count >= Tally::<Elements>::new(2)
     }
 }
 
@@ -83,7 +83,7 @@ pub enum StyleEdit {
     /// Stroke width in world px, floored at zero. The panel alone emits it.
     StrokeWidth(Px<StoredBoard>),
     /// Opacity. The panel alone emits it.
-    Opacity(ambre_core::Opacity),
+    Opacity(ambre_core::Bounded<ambre_core::Opacity>),
     /// Text (foreground ink) colour (`None` == the kind default ink).
     TextColor(Option<Rgba>),
     /// Font family. The picker's "Default" reset is `None`, so the element
@@ -119,7 +119,9 @@ impl StyleEdit {
             // The choice holds no negative size, so none reaches the style
             // (`TOILE-UI-180`).
             StyleEdit::Size(s) => style.font.size = s,
-            StyleEdit::Bold(b) => style.font.weight = ambre_core::FontWeight::of(b),
+            StyleEdit::Bold(b) => {
+                style.font.weight = ambre_core::Bounded::<ambre_core::FontWeight>::of(b)
+            }
             StyleEdit::Italic(i) => style.font.italic = i,
             StyleEdit::Underline(u) => style.font.underline = u,
             StyleEdit::Strikethrough(s) => style.font.strikethrough = s,
@@ -163,7 +165,7 @@ pub fn build_floatbar(
     }
 
     let mut union: Option<Rect> = None;
-    let mut count = ElementCount::ZERO;
+    let mut count = Tally::<Elements>::ZERO;
     let mut groups = GroupHeld::NoGroup;
     let mut locks = LockMix::Empty;
     // The bar's own fold: a base style plus one difference flag per field it
@@ -513,7 +515,7 @@ mod tests {
             text_color: Some(Rgba::from_bits(0x4455_66ff)),
             font: ambre_bus::app::toile::FontSpec {
                 size: FontSizeChoice::from_whole_points(Some(18)),
-                weight: ambre_core::FontWeight::BOLD,
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::BOLD,
                 italic: ambre_core::Slant::Italic,
                 underline: ambre_core::Underline::Plain,
                 strikethrough: ambre_core::Strikethrough::Struck,
@@ -555,9 +557,15 @@ mod tests {
             ..ElementStyle::default()
         };
         StyleEdit::Bold(ambre_core::Weight::Regular).apply_to(&mut s);
-        assert_eq!(s.font.weight, ambre_core::FontWeight::REGULAR);
+        assert_eq!(
+            s.font.weight,
+            ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR
+        );
         StyleEdit::Bold(ambre_core::Weight::Bold).apply_to(&mut s);
-        assert_eq!(s.font.weight, ambre_core::FontWeight::BOLD);
+        assert_eq!(
+            s.font.weight,
+            ambre_core::Bounded::<ambre_core::FontWeight>::BOLD
+        );
         // A negative size is refused, never clamped to automatic: no choice
         // holds one, and a decoded one does not decode.
         assert!(
@@ -591,13 +599,13 @@ mod tests {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             stroke: Some(Rgba::from_bits(0x4455_66ff)),
             stroke_w: Px::<StoredBoard>::new(3.0),
-            opacity: ambre_core::Opacity::new(0.5).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.5).unwrap(),
             corner: Px::<StoredBoard>::new(7.0),
             text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
                 family: Some(FontFamily::Other("Comic Sans MS".to_owned())),
                 size: FontSizeChoice::from_whole_points(Some(18)),
-                weight: ambre_core::FontWeight::new(600).unwrap(),
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::new(600).unwrap(),
                 italic: ambre_core::Slant::Italic,
                 ..Default::default()
             },
@@ -626,9 +634,9 @@ mod tests {
                 },
             ),
             (
-                StyleEdit::Opacity(ambre_core::Opacity::clamped(2.0)),
+                StyleEdit::Opacity(ambre_core::Bounded::<ambre_core::Opacity>::clamped(2.0)),
                 ElementStyle {
-                    opacity: ambre_core::Opacity::OPAQUE,
+                    opacity: ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE,
                     ..base.clone()
                 },
             ),
@@ -658,7 +666,7 @@ mod tests {
             font: FontSpec {
                 family: Some(FontFamily::Sans),
                 size: FontSizeChoice::from_whole_points(Some(12)),
-                weight: ambre_core::FontWeight::REGULAR,
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR,
                 italic: ambre_core::Slant::Upright,
                 underline: ambre_core::Underline::Plain,
                 strikethrough: ambre_core::Strikethrough::Plain,
@@ -671,7 +679,7 @@ mod tests {
             font: FontSpec {
                 family: Some(FontFamily::Serif),
                 size: FontSizeChoice::from_whole_points(Some(24)),
-                weight: ambre_core::FontWeight::BOLD,
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::BOLD,
                 italic: ambre_core::Slant::Italic,
                 underline: ambre_core::Underline::Underlined,
                 strikethrough: ambre_core::Strikethrough::Struck,

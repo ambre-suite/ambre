@@ -80,9 +80,9 @@ drawing kind, carrying its samples in one binary field
 pub struct StrokePoint {
     pub x:        Px<StoredBoard>,
     pub y:        Px<StoredBoard>,
-    /// `UnitFraction::ONE` when the input device reports none. A writer
+    /// `Bounded::<UnitFraction>::ONE` when the input device reports none. A writer
     /// refuses a value outside `0 ..= 1`; the reader clamps it (`TOILE-268`).
-    pub pressure: UnitFraction,
+    pub pressure: Bounded<UnitFraction>,
 }
 ```
 

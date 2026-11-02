@@ -15,13 +15,14 @@
 //! user has open. The only way back out would be to throw their session away,
 //! and a scratch document costs nothing to drop.
 
+use ambre_core::Version;
 use std::borrow::Cow;
 
 use loro::{ExportMode, LoroDoc, LoroValue};
 
 use ambre_core::schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
-    migrate_schema, migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
+    migration_peer, verdict,
 };
 
 /// The schema version this build writes into every board it creates
@@ -30,7 +31,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(1);
 
 /// Write the current version into a board's `meta` register.
 ///
@@ -58,7 +59,7 @@ pub(crate) fn stamp(doc: &LoroDoc) {
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
 /// container, or an integer outside `u32`.
-pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
+pub fn read_version(doc: &LoroDoc) -> Result<Version<Schema>, SchemaError> {
     let Some(value) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
@@ -66,13 +67,11 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
         return Ok(SCHEMA_VERSION_ABSENT);
     };
     match value.into_value() {
-        Ok(LoroValue::I64(n)) => {
-            u32::try_from(n)
-                .map(SchemaVersion::new)
-                .map_err(|_| SchemaError::VersionUnreadable {
-                    found: format!("the integer {n}"),
-                })
-        }
+        Ok(LoroValue::I64(n)) => u32::try_from(n).map(Version::<Schema>::new).map_err(|_| {
+            SchemaError::VersionUnreadable {
+                found: format!("the integer {n}"),
+            }
+        }),
         Ok(other) => Err(SchemaError::VersionUnreadable {
             found: format!("{other:?}"),
         }),
@@ -177,7 +176,7 @@ mod tests {
     /// A snapshot of a board carrying `version` in its register. A `None`
     /// version writes no register at all, which is every board written before
     /// `ARCH P8`.
-    fn snapshot_at(version: Option<SchemaVersion>) -> Vec<u8> {
+    fn snapshot_at(version: Option<Version<Schema>>) -> Vec<u8> {
         let doc = LoroDoc::new();
         crate::logic::state::board(&doc)
             .insert(BoardKey::BgColor, 0i64)

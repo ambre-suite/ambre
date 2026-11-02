@@ -1,32 +1,27 @@
 //! The texts a search carries: a message search, which reads only what the
 //! client holds, and a user search, which the relay answers.
 
+use crate::Redacted;
 use serde::{Deserialize, Serialize};
 
 /// The text of a message search, as typed, holding at least one character
 /// that is not white space. The box sends no search for a blank text.
 /// `Debug` prints the length alone, so a log carries none of the text.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct SearchQuery(String);
-
-impl std::fmt::Debug for SearchQuery {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SearchQuery({} chars)", self.0.chars().count())
-    }
-}
+pub struct SearchQuery(Redacted<String>);
 
 impl SearchQuery {
     /// The search for `text`, kept as typed; `None` when it is blank.
     #[must_use]
     pub fn new(text: String) -> Option<Self> {
-        (!text.trim().is_empty()).then_some(Self(text))
+        (!text.trim().is_empty()).then_some(Self(Redacted::new(text)))
     }
 
     /// The text as typed.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
@@ -40,7 +35,7 @@ impl TryFrom<String> for SearchQuery {
 
 impl From<SearchQuery> for String {
     fn from(query: SearchQuery) -> Self {
-        query.0
+        query.0.into_inner()
     }
 }
 
@@ -48,15 +43,9 @@ impl From<SearchQuery> for String {
 /// A shorter text would match a near-arbitrary slice of the user table. The
 /// sharing lookup would then list the directory, each email and key with it.
 /// `Debug` prints the length alone.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct UserSearch(String);
-
-impl std::fmt::Debug for UserSearch {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "UserSearch({} chars)", self.0.chars().count())
-    }
-}
+pub struct UserSearch(Redacted<String>);
 
 impl UserSearch {
     /// The search for `text`, `None` when its trimmed text is shorter than two
@@ -64,13 +53,13 @@ impl UserSearch {
     #[must_use]
     pub fn new(text: &str) -> Option<Self> {
         let text = text.trim();
-        (text.chars().count() >= 2).then(|| Self(text.to_owned()))
+        (text.chars().count() >= 2).then(|| Self(Redacted::new(text.to_owned())))
     }
 
     /// The trimmed text.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
@@ -84,7 +73,7 @@ impl TryFrom<String> for UserSearch {
 
 impl From<UserSearch> for String {
     fn from(search: UserSearch) -> Self {
-        search.0
+        search.0.into_inner()
     }
 }
 
@@ -121,7 +110,10 @@ mod tests {
     /// characters, counted as characters rather than bytes.
     #[test]
     fn a_search_is_two_characters_or_none() {
-        assert_eq!(UserSearch::new("  al ").map(|s| s.0), Some("al".to_owned()));
+        assert_eq!(
+            UserSearch::new("  al ").map(|s| s.0.into_inner()),
+            Some("al".to_owned())
+        );
         for short in ["", "   ", "a", " é "] {
             assert_eq!(UserSearch::new(short), None, "{short:?}");
         }

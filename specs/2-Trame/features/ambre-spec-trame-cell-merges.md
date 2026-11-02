@@ -135,7 +135,7 @@ persisted -- no covered-cell list, no hidden flag.
 |---|---|---|
 | `TrameCommand::MergeCells { rect }` | UI to Logic | the selection bounds |
 | `TrameCommand::UnmergeCells { row, col }` | UI to Logic | one cell inside the block |
-| `CommandId::MergeSelection` / `UnmergeActive` | chrome to Logic | no geometry: the Logic thread resolves it against the selection it tracks |
+| `StaticKey<Commands>::MergeSelection` / `UnmergeActive` | chrome to Logic | no geometry: the Logic thread resolves it against the selection it tracks |
 | `TrameEvent::MergeRejected` | Logic to UI | the local refusal, surfaced as a toast |
 | `TrameEvent::MergeConflictDetected { master_cell, covered_cell }` | Logic to UI | one conflict, on the local path and on the remote one |
 
@@ -183,11 +183,11 @@ Everything the user touches. The grid machinery modified here is specified elsew
 
 | Trigger | Sends | Behaviour |
 |---|---|---|
-| context menu, "Merge cells" | `CommandId::MergeSelection` | over the selection the Logic thread tracks. A single cell is a silent no-op; a non-empty covered cell replies `MergeRejected`, shown as a toast |
-| context menu, "Unmerge cells" | `CommandId::UnmergeActive` | over the selection the Logic thread tracks: every merge it crosses is split, and the selection grows over every freed cell. A selection crossing no merge is a no-op |
-| toolbar, the merge button | `CommandId::MergeSelection` | the same path: the `ToolbarAction::Merge` control reuses `merge_selection` |
+| context menu, "Merge cells" | `StaticKey<Commands>::MergeSelection` | over the selection the Logic thread tracks. A single cell is a silent no-op; a non-empty covered cell replies `MergeRejected`, shown as a toast |
+| context menu, "Unmerge cells" | `StaticKey<Commands>::UnmergeActive` | over the selection the Logic thread tracks: every merge it crosses is split, and the selection grows over every freed cell. A selection crossing no merge is a no-op |
+| toolbar, the merge button | `StaticKey<Commands>::MergeSelection` | the same path: the `ToolbarAction::Merge` control reuses `merge_selection` |
 
-Both carry no geometry. The DOM context menu dispatches a bare `CommandId`, and the Logic thread
+Both carry no geometry. The DOM context menu dispatches a bare `StaticKey<Commands>`, and the Logic thread
 resolves it against the active cell and selection it already tracks.
 
 **Selection, navigation and rendering** (`TRAME-UI-009`):

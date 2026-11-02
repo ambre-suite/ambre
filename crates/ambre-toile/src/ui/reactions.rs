@@ -18,8 +18,9 @@
 // `RecordingSurface` with no GPU.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ReactionTally, VoteCount, VoteTotal};
+use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ReactionTally, VoteTotal, Votes};
 use ambre_canvas::{Palette, TextCache};
+use ambre_core::Tally;
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
 };
@@ -96,7 +97,7 @@ fn paint_chip_row<S: DrawSurface>(
 
     // A single trailing vote badge when any vote exists: signed weight sum
     // and voter count, for example "+3 (5)".
-    if tally.vote_count > VoteCount::ZERO {
+    if tally.vote_count > Tally::<Votes>::ZERO {
         let label = vote_label(tally.vote_total, tally.vote_count);
         paint_chip(
             surface,
@@ -111,7 +112,7 @@ fn paint_chip_row<S: DrawSurface>(
 
 /// The trailing vote chip's label: the signed total, then the number of
 /// voters in parentheses (`TOILE-UI-304`).
-fn vote_label(total: VoteTotal, count: VoteCount) -> String {
+fn vote_label(total: VoteTotal, count: Tally<Votes>) -> String {
     format!("{total:+} ({count})")
 }
 
@@ -186,7 +187,7 @@ fn rect_to_screen(b: Rect, w2s: &Affine) -> Rect {
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{
-        DisplayElement, DisplayGeom, ElementKind, ElementStyle, ReactionCount, ShapeKind, Viewport,
+        DisplayElement, DisplayGeom, ElementKind, ElementStyle, Reactions, ShapeKind, Viewport,
     };
     use ambre_canvas::theme::LIGHT;
     use ambre_core::id::{Element, Id};
@@ -245,10 +246,10 @@ mod tests {
         ReactionTally {
             emoji: emoji
                 .iter()
-                .map(|(e, n)| (ambre_bus::Emoji::from(*e), ReactionCount::new(*n)))
+                .map(|(e, n)| (ambre_bus::Emoji::from(*e), Tally::<Reactions>::new(*n)))
                 .collect(),
             vote_total: VoteTotal::new(vote_total),
-            vote_count: VoteCount::new(vote_count),
+            vote_count: Tally::<Votes>::new(vote_count),
         }
     }
 
@@ -327,7 +328,7 @@ mod tests {
             pills.windows(2).all(|w| w[0].x1 < w[1].x0),
             "left to right, the vote chip last: {pills:?}"
         );
-        let label = |total, count| vote_label(VoteTotal::new(total), VoteCount::new(count));
+        let label = |total, count| vote_label(VoteTotal::new(total), Tally::<Votes>::new(count));
         assert_eq!(label(-2, 3), "-2 (3)");
         assert_eq!(label(4, 2), "+4 (2)");
         assert_eq!(label(0, 2), "+0 (2)", "a zero total keeps its sign");

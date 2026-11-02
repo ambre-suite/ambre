@@ -378,7 +378,7 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
-                let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/users/search")
                     .query(http::QueryKey::Query, query.as_str());
                 match http::get_json_auth::<http::UserSearchResult>(&url, auth).await {

@@ -14,11 +14,10 @@
 //! `fixtures` feature. No client build names it, so none of it can reach a wasm
 //! artifact.
 
-use crate::index::Count;
-use serde::{Deserialize, Serialize};
-
 use crate::id::{Document, Id};
-use crate::{CellCount, Char, DocType, ElementCount};
+use crate::index::Count;
+use crate::{CellCount, Char, DocType, Elements, Tally, Version};
+use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
 // Generator identity
@@ -81,39 +80,57 @@ impl FixtureSeed {
     }
 }
 
-/// The version a generator author bumps when the produced document changes on
-/// purpose. Transparent to serde.
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord)]
-#[serde(transparent)]
-pub struct GeneratorVersion(u32);
+/// The space of the version a generator author bumps when the produced
+/// document changes on purpose. Transparent to serde.
+pub enum Generator {}
 
-impl GeneratorVersion {
-    /// The version `version`.
-    #[must_use]
-    pub const fn new(version: u32) -> Self {
-        Self(version)
-    }
+impl crate::version::VersionKind for Generator {
+    type Repr = u32;
+    const NAME: &'static str = "GeneratorVersion";
 }
 
-impl std::fmt::Display for GeneratorVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
+impl crate::version::OpenRange for Generator {}
+
+/// How many distinct peers wrote ops into a fixture.
+pub enum Peers {}
+
+impl crate::TallyKind for Peers {
+    const NAME: &'static str = "PeerCount";
 }
 
-crate::define_tally! {
-    /// How many distinct peers wrote ops into a fixture.
-    pub struct PeerCount;
-    /// How many sheets a workbook fixture holds.
-    pub struct SheetCount;
-    /// How many stored formula sources a workbook fixture holds.
-    pub struct FormulaCount;
-    /// How many frame elements a board fixture holds.
-    pub struct BoardFrameCount;
-    /// How many connectors a board fixture holds.
-    pub struct ConnectorCount;
-    /// How many blocks a document fixture holds, in document order.
-    pub struct DocBlockCount;
+/// How many sheets a workbook fixture holds.
+pub enum Sheets {}
+
+impl crate::TallyKind for Sheets {
+    const NAME: &'static str = "SheetCount";
+}
+
+/// How many stored formula sources a workbook fixture holds.
+pub enum Formulas {}
+
+impl crate::TallyKind for Formulas {
+    const NAME: &'static str = "FormulaCount";
+}
+
+/// How many frame elements a board fixture holds.
+pub enum BoardFrames {}
+
+impl crate::TallyKind for BoardFrames {
+    const NAME: &'static str = "BoardFrameCount";
+}
+
+/// How many connectors a board fixture holds.
+pub enum Connectors {}
+
+impl crate::TallyKind for Connectors {
+    const NAME: &'static str = "ConnectorCount";
+}
+
+/// How many blocks a document fixture holds, in document order.
+pub enum DocBlocks {}
+
+impl crate::TallyKind for DocBlocks {
+    const NAME: &'static str = "DocBlockCount";
 }
 
 // -----------------------------------------------------------------------------
@@ -180,8 +197,8 @@ pub const FIXTURE_IMPORT_PEER: crate::PeerId = crate::PeerId::new(0x10AD_0000_00
 pub fn fixture_peer_count(
     peers: impl IntoIterator<Item = crate::PeerId>,
     scaffold: crate::PeerId,
-) -> PeerCount {
-    PeerCount::of_len(
+) -> Tally<Peers> {
+    Tally::<Peers>::of_len(
         peers
             .into_iter()
             .filter(|peer| *peer != FIXTURE_IMPORT_PEER && *peer != scaffold)
@@ -221,7 +238,7 @@ pub trait FixtureGen {
     /// recipe reads it. It exists for the reviewer reading the manifest diff, and
     /// for the frozen belt, which retires its semantic comparison when this no
     /// longer matches.
-    fn generator_version(&self) -> GeneratorVersion;
+    fn generator_version(&self) -> Version<Generator>;
 
     /// Build the document and return the plaintext `.ambre` container, that is,
     /// the output of the app's `export_ambre_plaintext()`. Not a raw snapshot: the
@@ -259,7 +276,7 @@ pub struct FixtureManifest {
     /// Bumped by the generator author when the produced document changes on
     /// purpose. Frozen into the artifact too: that is how detects a frozen
     /// fixture and the current one are no longer comparable.
-    pub generator_version: GeneratorVersion,
+    pub generator_version: Version<Generator>,
 
     /// Declared by the generator ([`FixtureGen::seed`]), and pins the `PeerID`
     /// and `document_id` (I1).
@@ -269,7 +286,7 @@ pub struct FixtureManifest {
 
     /// Container version (`docfile`) at write time -- current for a
     /// generated artifact, superseded for a frozen one.
-    pub ambre_version: crate::ContainerVersion,
+    pub ambre_version: crate::Version<crate::Container>,
 
     /// Payload schema version (`ambre-spec-schema-version.md`). Distinct from
     /// [`generator_version`](Self::generator_version), which tracks authorial
@@ -277,7 +294,7 @@ pub struct FixtureManifest {
     /// than declared, so a manifest cannot name a version its artefact does not
     /// hold. `0` is what a document written before the register existed reads as
     /// (`SCHEMA-005`).
-    pub schema_version: crate::SchemaVersion,
+    pub schema_version: crate::Version<crate::Schema>,
 
     /// BLAKE2b over the **whole `.ambre` file, header included**, so a flipped
     /// `document_id` byte is caught by the write-once check. The digest
@@ -296,7 +313,7 @@ pub struct FixtureManifest {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct FixtureShape {
     /// Number of distinct peers whose ops are present (1 for a solo document).
-    pub peers: PeerCount,
+    pub peers: Tally<Peers>,
     pub body: ShapeBody,
 }
 
@@ -307,16 +324,16 @@ pub struct FixtureShape {
 pub enum ShapeBody {
     Trame {
         cells: CellCount,
-        sheets: SheetCount,
-        formulas: FormulaCount,
+        sheets: Tally<Sheets>,
+        formulas: Tally<Formulas>,
     },
     Toile {
-        elements: ElementCount,
-        frames: BoardFrameCount,
-        connectors: ConnectorCount,
+        elements: Tally<Elements>,
+        frames: Tally<BoardFrames>,
+        connectors: Tally<Connectors>,
     },
     Prose {
-        blocks: DocBlockCount,
+        blocks: Tally<DocBlocks>,
         characters: Count<Char>,
     },
 }
@@ -324,22 +341,23 @@ pub enum ShapeBody {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Version;
 
     fn sample() -> FixtureManifest {
         FixtureManifest {
             generator: FixtureName::declared("trame/formula_dag_deep"),
-            generator_version: GeneratorVersion::new(3),
+            generator_version: Version::<Generator>::new(3),
             seed: FixtureSeed::new(0x0123_4567_89AB_CDEF),
             doc_type: DocType::Trame,
             ambre_version: crate::AMBRE_VERSION,
             schema_version: crate::SCHEMA_VERSION_ABSENT,
             digest: crate::FixedBytes::from_array([0xAB; 32]),
             shape: FixtureShape {
-                peers: PeerCount::new(2),
+                peers: Tally::<Peers>::new(2),
                 body: ShapeBody::Trame {
                     cells: CellCount::new(12),
-                    sheets: SheetCount::new(2),
-                    formulas: FormulaCount::new(4),
+                    sheets: Tally::<Sheets>::new(2),
+                    formulas: Tally::<Formulas>::new(4),
                 },
             },
         }
@@ -412,9 +430,9 @@ mod tests {
         // The Toile variant carries no Trame field and vice versa: a later app
         // adds a variant rather than widening every row.
         let toile = ShapeBody::Toile {
-            elements: ElementCount::new(5),
-            frames: BoardFrameCount::new(1),
-            connectors: ConnectorCount::new(2),
+            elements: Tally::<Elements>::new(5),
+            frames: Tally::<BoardFrames>::new(1),
+            connectors: Tally::<Connectors>::new(2),
         };
         let json = serde_json::to_string(&toile).expect("serializes");
         assert!(json.contains("Toile"), "{json}");

@@ -466,7 +466,7 @@ fn ordinals(state: &ProseState) -> Vec<Option<u32>> {
         .into_iter()
         .map(|id| {
             crate::numbering::compute_ordinal(&tree, &crate::events::tree_id(id))
-                .map(crate::numbering::ListOrdinal::get)
+                .map(ambre_core::Ordinal::<crate::numbering::ListItem>::get)
         })
         .collect()
 }

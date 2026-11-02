@@ -116,11 +116,11 @@ interrupted and resumes starts again at one (`PROSE-FEAT-026`).
 ```rust
 /// The one-based ordinal of an ordered item within its run (`PROSE-FEAT-002`); `None` for
 /// a block that is not an ordered item.
-pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal>;
+pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<Ordinal<ListItem>>;
 
 /// How deep an item sits in its list, counting the items above it in the parent chain
 /// (`PROSE-005`). A top-level item is at depth zero.
-pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> ListDepth;
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Tally<ListDepth>;
 
 /// The numbering style of a block, when it is an ordered item. A bullet, a checkbox and a
 /// block that is not a list item all answer `None`, and each of those breaks a run.

@@ -9,7 +9,7 @@
 // dialog) lives in the app crate and is built on top of this toolkit.
 //
 // The toolkit never reaches across the canvas/DOM boundary: it invokes
-// `CommandId`s and reflects state via Leptos signals (ambre-spec-ui.md). It
+// `StaticKey<Commands>`s and reflects state via Leptos signals (ambre-spec-ui.md). It
 // depends on no app crate (dependency inversion, symmetric to `AppView`).
 //
 // Module map. What is missing is `ambre-spec-chrome.md`'s own gap list, and the

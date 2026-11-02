@@ -2,7 +2,7 @@
 // ============================================================================
 // What an application hands the shell for its commands (`ARCH-018`).
 //
-// The shell resolves a click, a menu entry or a chord to a `CommandId`. What
+// The shell resolves a click, a menu entry or a chord to a `StaticKey<Commands>`. What
 // that id means belongs to the application that declared it. So the shell asks
 // the application's handler, and performs only what the answer names. That is
 // a command for the routed document, a shell overlay, the clipboard or a file
@@ -13,7 +13,7 @@
 // (`SCHEMA-002`), so the launcher fixes it to the bus's application command.
 // ============================================================================
 
-use ambre_commands::{ClipboardWrite, CommandId, PasteForm};
+use ambre_commands::{ClipboardWrite, Commands, PasteForm, StaticKey};
 
 /// One thing a command asks of the shell, once its application has decided.
 pub enum ShellAction<C> {
@@ -103,11 +103,11 @@ pub trait CommandHandler {
 
     /// What the command `id` asks of the shell. The handler opens its own
     /// panels before it returns.
-    fn on_command(&self, id: CommandId) -> Vec<ShellAction<Self::Command>>;
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<Self::Command>>;
 
     /// What a chord resolving to `id` does. `target` says whether the key
     /// went to a text field, which keeps a chord the field needs.
-    fn on_key(&self, id: CommandId, target: KeyTarget) -> KeyRoute<Self::Command>;
+    fn on_key(&self, id: StaticKey<Commands>, target: KeyTarget) -> KeyRoute<Self::Command>;
 
     /// The command a sealed save ends in, once the prompt holds a passphrase.
     /// `None` for an application with no sealed file.

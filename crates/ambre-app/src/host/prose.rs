@@ -785,7 +785,8 @@ fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::{GraphemeCount, Page, ParagraphCount, WordTotal};
+    use ambre_bus::app::prose::{Graphemes, Page, Paragraphs, Words};
+    use ambre_core::Tally;
     use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -939,10 +940,10 @@ mod tests {
         // The count as the page state holds it once the Logic thread's event
         // is applied. Decoding that event is Prose's own, and tested there.
         view.state.word_count = WordCount {
-            words: WordTotal::new(12),
-            characters: GraphemeCount::new(60),
-            characters_with_spaces: GraphemeCount::new(71),
-            paragraphs: ParagraphCount::new(1),
+            words: Tally::<Words>::new(12),
+            characters: Tally::<Graphemes>::new(60),
+            characters_with_spaces: Tally::<Graphemes>::new(71),
+            paragraphs: Tally::<Paragraphs>::new(1),
             pages: Count::<Page>::new(2),
         };
         view.update();

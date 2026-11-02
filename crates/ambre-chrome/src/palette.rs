@@ -15,7 +15,7 @@
 // the DOM half, tested under wasm.
 // ============================================================================
 
-use ambre_commands::{Command, CommandId, Locale};
+use ambre_commands::{Command, Commands, Locale, StaticKey};
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::{Axis, Circular, Count, Delta, Pos};
 use leptos::html;
@@ -121,7 +121,7 @@ pub fn rows<'a>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Chosen {
     Entry(PaletteKey),
-    Command(CommandId),
+    Command(StaticKey<Commands>),
 }
 
 /// The command palette overlay.
@@ -141,7 +141,7 @@ pub fn CommandPalette(
     open: RwSignal<crate::Openness>,
     /// Every command the active application declares (`CHROME-008`).
     table: &'static [Command],
-    on_command: Callback<CommandId>,
+    on_command: Callback<StaticKey<Commands>>,
     /// The entries of the application, listed before the commands.
     #[prop(optional, into)]
     entries: Option<Signal<Vec<PaletteEntry>>>,
@@ -289,7 +289,7 @@ pub fn CommandPalette(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_commands::{CommandCategory, IconId, KeyBinding, KeyChar};
+    use ambre_commands::{Categories, Icons, KeyBinding, KeyChar};
 
     fn bold(_: &Locale) -> String {
         "Bold".into()
@@ -303,25 +303,25 @@ mod tests {
 
     const TABLE: &[Command] = &[
         Command {
-            id: CommandId::new("t.format.bold"),
+            id: StaticKey::<Commands>::new("t.format.bold"),
             title: bold,
-            icon: Some(IconId::new("format-bold")),
+            icon: Some(StaticKey::<Icons>::new("format-bold")),
             keybindings: &[KeyBinding::primary(KeyChar::B)],
-            category: CommandCategory::new("format"),
+            category: StaticKey::<Categories>::new("format"),
         },
         Command {
-            id: CommandId::new("t.sort.asc"),
+            id: StaticKey::<Commands>::new("t.sort.asc"),
             title: sort_asc,
             icon: None,
             keybindings: &[],
-            category: CommandCategory::new("sort"),
+            category: StaticKey::<Categories>::new("sort"),
         },
         Command {
-            id: CommandId::new("t.interop.export"),
+            id: StaticKey::<Commands>::new("t.interop.export"),
             title: export,
             icon: None,
             keybindings: &[],
-            category: CommandCategory::new("interop"),
+            category: StaticKey::<Categories>::new("interop"),
         },
     ];
 
@@ -338,7 +338,7 @@ mod tests {
     fn a_query_matches_any_case_and_any_position() {
         let hits = filter(TABLE, "RANGE", &Locale::En);
         assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].id, CommandId::new("t.sort.asc"));
+        assert_eq!(hits[0].id, StaticKey::<Commands>::new("t.sort.asc"));
         assert!(matches("Export CSV", "csv"));
         assert!(matches("Export CSV", "Export"));
     }
@@ -393,16 +393,16 @@ mod tests {
     /// query narrows.
     #[test]
     fn rows_keep_the_declaration_order() {
-        let ids: Vec<CommandId> = filter(TABLE, "o", &Locale::En)
+        let ids: Vec<StaticKey<Commands>> = filter(TABLE, "o", &Locale::En)
             .iter()
             .map(|c| c.id)
             .collect();
         assert_eq!(
             ids,
             vec![
-                CommandId::new("t.format.bold"),
-                CommandId::new("t.sort.asc"),
-                CommandId::new("t.interop.export"),
+                StaticKey::<Commands>::new("t.format.bold"),
+                StaticKey::<Commands>::new("t.sort.asc"),
+                StaticKey::<Commands>::new("t.interop.export"),
             ]
         );
     }

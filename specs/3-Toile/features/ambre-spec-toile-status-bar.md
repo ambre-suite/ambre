@@ -73,7 +73,7 @@ status values are normative in `ambre-spec-template.md`.
 ```rust
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub count:  ElementCount,
+    pub count:  Tally<Elements>,
     pub bounds: Option<Rect>,     // world units; None when nothing is selected
 }
 ```

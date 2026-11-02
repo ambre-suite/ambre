@@ -63,7 +63,7 @@ revert travels as a delta, two peers undo into each other. Trame's own:
 | Shape | Direction | Carries |
 |---|---|---|
 | `TrameCommand::Undo` / `Redo` | UI to Logic | nothing: the history is the Logic thread's |
-| `CommandId::UNDO` / `REDO` | chrome to Logic | the same two intents, from the toolbar or the keymap |
+| `StaticKey<Commands>::UNDO` / `REDO` | chrome to Logic | the same two intents, from the toolbar or the keymap |
 | `TrameEvent::UndoState { undo, redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
 
 The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).

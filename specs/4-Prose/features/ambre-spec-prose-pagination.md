@@ -180,7 +180,7 @@ pub struct FootnoteLayout {
     /// The block whose line calls the note.
     pub block_id:     TreeID,
     /// Sequential across the whole document, assigned in pass 0.
-    pub ordinal:      FootnoteOrdinal,
+    pub ordinal:      Ordinal<FootnoteCall>,
     pub page:         Pos<Page>,
     pub height:       Px<Doc>,
 }

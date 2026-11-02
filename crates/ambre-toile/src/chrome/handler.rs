@@ -1,6 +1,6 @@
 // ambre-toile/src/chrome/handler.rs
 // ============================================================================
-// Toile's command handler (`ARCH-018`): what each Toile `CommandId` means.
+// Toile's command handler (`ARCH-018`): what each Toile `StaticKey<Commands>` means.
 //
 // The shell resolves a trigger to an id and asks here. The panels and dialogs
 // Toile owns open from here, through their signals. Every other id goes to the
@@ -14,7 +14,7 @@
 
 use ambre_bus::AppCommand;
 use ambre_bus::app::toile::ToileCommand;
-use ambre_chrome::commands::CommandId;
+use ambre_chrome::commands::{Commands, StaticKey};
 use ambre_chrome::{CommandHandler, KeyRoute, Openness, ShellAction, Toasts};
 use ambre_draw::Point;
 use leptos::prelude::*;
@@ -78,7 +78,7 @@ pub struct ToileHandler {
     /// The tool a chord arms.
     pub tool: RwSignal<Tool>,
     /// The id the canvas view resolves against its selection, next frame.
-    pub menu_cmd: RwSignal<Option<CommandId>>,
+    pub menu_cmd: RwSignal<Option<StaticKey<Commands>>>,
     /// A file read for the board, which the view imports next frame.
     pub dropped: RwSignal<Option<DroppedFile>>,
     /// Where a refused file is explained.
@@ -90,7 +90,7 @@ pub struct ToileHandler {
 impl CommandHandler for ToileHandler {
     type Command = AppCommand;
 
-    fn on_command(&self, id: CommandId) -> Vec<ShellAction<AppCommand>> {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
         let dialogs = self.dialogs;
         match id {
             PALETTE => return vec![ShellAction::OpenPalette],
@@ -127,7 +127,11 @@ impl CommandHandler for ToileHandler {
         Vec::new()
     }
 
-    fn on_key(&self, id: CommandId, target: ambre_chrome::KeyTarget) -> KeyRoute<AppCommand> {
+    fn on_key(
+        &self,
+        id: StaticKey<Commands>,
+        target: ambre_chrome::KeyTarget,
+    ) -> KeyRoute<AppCommand> {
         if let Some(tool) = tool_for_command(id) {
             // A bare tool key typed into a text field is a character.
             if target == ambre_chrome::KeyTarget::TextField {

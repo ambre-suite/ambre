@@ -13,16 +13,17 @@
 //! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 
 use ambre_core::index::{Axis, Count, Numbered, Pos, Shown};
+use ambre_core::{Board, Bounded, Px, Redacted};
 use std::collections::BTreeMap;
 use std::fmt;
 
+use ambre_core::DocType;
 pub use ambre_core::FontFamily;
+use ambre_core::FontSize;
 use ambre_core::Rgba;
 use ambre_core::StoredBoard;
 use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
-use ambre_core::{Board, FontSize};
-use ambre_core::{DocType, Px};
-use ambre_core::{Slant, Strikethrough, Underline};
+use ambre_core::{Slant, Strikethrough, Tally, Underline};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
 
@@ -178,7 +179,7 @@ pub struct FontSpec {
     pub family: Option<FontFamily>,
     /// The size, or automatic: a note's body then tracks its card.
     pub size: FontSizeChoice,
-    pub weight: ambre_core::FontWeight,
+    pub weight: ambre_core::Bounded<ambre_core::FontWeight>,
     pub italic: Slant,
     pub underline: Underline,
     pub strikethrough: Strikethrough,
@@ -189,7 +190,7 @@ impl Default for FontSpec {
         Self {
             family: None,
             size: FontSizeChoice::DEFAULT,
-            weight: ambre_core::FontWeight::REGULAR,
+            weight: ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR,
             italic: Slant::Upright,
             underline: Underline::Plain,
             strikethrough: Strikethrough::Plain,
@@ -243,7 +244,7 @@ pub struct ElementStyle {
     pub fill: Option<Rgba>, // None = no fill
     pub stroke: Option<Rgba>,
     pub stroke_w: Px<StoredBoard>,
-    pub opacity: ambre_core::Opacity,
+    pub opacity: ambre_core::Bounded<ambre_core::Opacity>,
     /// The corner radius of a rectangle or a sticky.
     pub corner: Px<StoredBoard>,
     pub font: FontSpec,
@@ -260,7 +261,7 @@ impl Default for ElementStyle {
             fill: Some(Rgba::from_bits(0xFFFF_FFFF)),
             stroke: Some(Rgba::from_bits(0x3333_33FF)),
             stroke_w: Px::<StoredBoard>::new(1.0),
-            opacity: ambre_core::Opacity::OPAQUE,
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE,
             corner: Px::<StoredBoard>::ZERO,
             font: FontSpec::default(),
             shadow: None,
@@ -502,9 +503,9 @@ impl LinkTarget {
 /// `data:` text therefore never becomes a `WebAddress`, and never reaches a
 /// frame (`TOILE-088`, `TOILE-267`). A user typed the address, so `Debug`
 /// prints its length alone.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct WebAddress(String);
+pub struct WebAddress(Redacted<String>);
 
 /// Why a text is not an address a frame may load. One variant per message
 /// the user reads, so the wording lives with the rule rather than at the
@@ -599,17 +600,17 @@ impl WebAddress {
             return Err(AddressError::NoHost);
         }
 
-        Ok(Self(format!("https://{rest}")))
+        Ok(Self(Redacted::new(format!("https://{rest}"))))
     }
 
     /// The address's text, for the frame that loads it.
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 
     /// The address's text, for the document that stores it.
     pub fn into_string(self) -> String {
-        self.0
+        self.0.into_inner()
     }
 }
 
@@ -644,26 +645,20 @@ impl TryFrom<String> for WebAddress {
 
 impl From<WebAddress> for String {
     fn from(address: WebAddress) -> Self {
-        address.0
+        address.0.into_inner()
     }
 }
 
 /// The link target of a web page, once its address passed the address gate.
 impl From<WebAddress> for ambre_core::LinkUrl {
     fn from(address: WebAddress) -> Self {
-        Self::new(address.0)
-    }
-}
-
-impl std::fmt::Debug for WebAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "WebAddress({} chars)", self.0.chars().count())
+        Self::new(address.0.into_inner())
     }
 }
 
 impl std::fmt::Display for WebAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.0.as_str())
     }
 }
 
@@ -677,10 +672,10 @@ impl std::fmt::Display for WebAddress {
 pub struct StrokePoint {
     pub x: Px<StoredBoard>,
     pub y: Px<StoredBoard>,
-    /// How hard the pen pressed, [`UnitFraction::ONE`] when the input device
+    /// How hard the pen pressed, [`Bounded::<UnitFraction>::ONE`] when the input device
     /// reports none. The type refuses a value outside `0 ..= 1`; the board
     /// reader clamps a stored one (`TOILE-268`).
-    pub pressure: UnitFraction,
+    pub pressure: Bounded<UnitFraction>,
 }
 
 impl StrokePoint {
@@ -691,7 +686,7 @@ impl StrokePoint {
         Self {
             x,
             y,
-            pressure: UnitFraction::ONE,
+            pressure: Bounded::<UnitFraction>::ONE,
         }
     }
 }
@@ -700,75 +695,7 @@ impl StrokePoint {
 // Connector anchoring (`toile-connectors`)
 // =============================================================================
 
-/// A fraction from 0 to 1: of a box's side, from its top or left edge to the
-/// other, or of a pen's full pressure. Anything else, NaN included, is
-/// refused.
-#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Serialize, Deserialize)]
-#[serde(try_from = "f32", into = "f32")]
-pub struct UnitFraction(f32);
-
-impl UnitFraction {
-    /// The middle of the side.
-    pub const HALF: Self = Self(0.5);
-
-    /// The whole of it: the far edge of a side, a full pressure.
-    pub const ONE: Self = Self(1.0);
-
-    /// The fraction `value`, `None` outside `0.0 ..= 1.0`.
-    #[must_use]
-    pub fn new(value: f32) -> Option<Self> {
-        (0.0..=1.0).contains(&value).then_some(Self(value))
-    }
-
-    /// The fraction itself.
-    #[must_use]
-    pub const fn get(self) -> f32 {
-        self.0
-    }
-
-    /// The point this fraction of the way from `start` to `end`, on a board.
-    #[must_use]
-    pub fn along(self, start: Px<Board>, end: Px<Board>) -> Px<Board> {
-        start + (end - start) * f64::from(self.0)
-    }
-}
-
-impl fmt::Display for UnitFraction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
-    }
-}
-
-/// The error of a fraction outside `0.0 ..= 1.0`.
-#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
-#[error("a fraction of a side lies in 0..=1, not {0}")]
-pub struct InvalidUnitFraction(f32);
-
-impl InvalidUnitFraction {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: f32) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> f32 {
-        self.0
-    }
-}
-
-impl TryFrom<f32> for UnitFraction {
-    type Error = InvalidUnitFraction;
-
-    fn try_from(value: f32) -> Result<Self, Self::Error> {
-        Self::new(value).ok_or(InvalidUnitFraction(value))
-    }
-}
-
-impl From<UnitFraction> for f32 {
-    fn from(fraction: UnitFraction) -> Self {
-        fraction.0
-    }
-}
+pub use ambre_core::UnitFraction;
 
 /// Where a connector attaches on an element's AABB. `Free` is a fraction of
 /// the box's width and height, from the top-left.
@@ -779,7 +706,10 @@ pub enum Anchor {
     Left,
     Right,
     Center,
-    Free { u: UnitFraction, v: UnitFraction },
+    Free {
+        u: Bounded<UnitFraction>,
+        v: Bounded<UnitFraction>,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
@@ -1347,7 +1277,7 @@ impl std::fmt::Display for VoteTotal {
     }
 }
 
-pub use ambre_core::ElementCount;
+pub use ambre_core::Elements;
 
 /// Why an import or an export left a construct behind, as the user reads it:
 /// "path fill: non-solid paint dropped".
@@ -1373,11 +1303,18 @@ impl std::fmt::Display for SkipReason {
     }
 }
 
-ambre_core::define_tally! {
-    /// How many votes were cast on one target.
-    pub struct VoteCount;
-    /// How many users reacted to one target with one emoji.
-    pub struct ReactionCount;
+/// How many votes were cast on one target.
+pub enum Votes {}
+
+impl ambre_core::TallyKind for Votes {
+    const NAME: &'static str = "VoteCount";
+}
+
+/// How many users reacted to one target with one emoji.
+pub enum Reactions {}
+
+impl ambre_core::TallyKind for Reactions {
+    const NAME: &'static str = "ReactionCount";
 }
 
 pub use ambre_core::IdCounter;
@@ -1390,9 +1327,9 @@ use ambre_core::{Authored, Instant, PageLoad};
 /// aggregate the `Vote` entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionTally {
-    pub emoji: Vec<(crate::app::murmure::Emoji, ReactionCount)>,
+    pub emoji: Vec<(crate::app::murmure::Emoji, Tally<Reactions>)>,
     pub vote_total: VoteTotal,
-    pub vote_count: VoteCount,
+    pub vote_count: Tally<Votes>,
 }
 
 // -----------------------------------------------------------------------------
@@ -1696,7 +1633,7 @@ pub struct SnapElement {
     /// The rotation (the element `rot` field).
     pub rotation: ambre_core::Radians,
     /// Opacity (from [`ElementStyle::opacity`]).
-    pub opacity: ambre_core::Opacity,
+    pub opacity: ambre_core::Bounded<ambre_core::Opacity>,
     /// Fill color, `None` = no fill (from [`ElementStyle::fill`]).
     pub fill: Option<Rgba>,
 }
@@ -2672,7 +2609,7 @@ pub enum StatsRequestKind {
 /// (world).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionStats {
-    pub count: ElementCount,
+    pub count: Tally<Elements>,
     pub bounds: Option<Rect>,
     pub kind: StatsRequestKind,
 }
@@ -2807,7 +2744,7 @@ pub enum ToileEvent {
     /// importer left behind. The whole import is one undo item
     /// (`toile-import-export`).
     ImportReport {
-        imported: ElementCount,
+        imported: Tally<Elements>,
         skipped: Vec<SkipReason>,
     },
     /// A foreign-file import aborted before touching the board (a parse error, a
@@ -3295,7 +3232,7 @@ mod tests {
         let sample = StrokePoint {
             x: Px::<StoredBoard>::new(1.5),
             y: Px::<StoredBoard>::new(-2.0),
-            pressure: UnitFraction::HALF,
+            pressure: Bounded::<UnitFraction>::HALF,
         };
         let encoded = postcard::to_allocvec(&sample).expect("a sample encodes");
         let bare = postcard::to_allocvec(&(1.5_f32, -2.0_f32, 0.5_f32)).expect("floats encode");
@@ -3436,7 +3373,7 @@ mod tests {
             font: FontSpec {
                 family: Some(FontFamily::Serif),
                 size: FontSizeChoice::from_whole_points(Some(24)),
-                weight: ambre_core::FontWeight::new(600).unwrap(),
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::new(600).unwrap(),
                 italic: Slant::Italic,
                 underline: Underline::Plain,
                 strikethrough: Strikethrough::Struck,

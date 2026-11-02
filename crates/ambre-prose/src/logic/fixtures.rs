@@ -10,6 +10,7 @@
 //! (`ProseState::with_peer`) is engine API and stays ungated, as does
 //! `ProseState::import_snapshot`.
 
+use ambre_core::Version;
 use ambre_core::index::{Count, Pos, Span};
 use std::collections::{BTreeMap, HashMap};
 
@@ -17,8 +18,8 @@ use ambre_bus::app::grid::{CellPos, Col, Row};
 use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Footnote, Id, User};
 use ambre_core::{
-    Char, DocBlockCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape,
-    GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
+    Char, DocBlocks, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Generator,
+    ShapeBody, Tally, fixture_peer_count, seeded_document_id,
 };
 use loro::{LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -37,7 +38,7 @@ impl ProseState {
     /// declaring its own shape would assert only that it agrees with itself.
     #[must_use]
     pub fn fixture_shape(&self) -> FixtureShape {
-        let blocks = DocBlockCount::of_len(self.document_order().len());
+        let blocks = Tally::<DocBlocks>::of_len(self.document_order().len());
         let characters = self
             .document_order()
             .iter()
@@ -326,8 +327,8 @@ impl FixtureGen for ProseFixture {
         })
     }
 
-    fn generator_version(&self) -> GeneratorVersion {
-        GeneratorVersion::new(1)
+    fn generator_version(&self) -> Version<Generator> {
+        Version::<Generator>::new(1)
     }
 
     fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
@@ -599,11 +600,11 @@ mod tests {
             text: "hello".to_owned(),
         });
         let shape = state.fixture_shape();
-        assert_eq!(shape.peers, ambre_core::PeerCount::new(1));
+        assert_eq!(shape.peers, ambre_core::Tally::<ambre_core::Peers>::new(1));
         assert_eq!(
             shape.body,
             ambre_core::ShapeBody::Prose {
-                blocks: ambre_core::DocBlockCount::new(1),
+                blocks: ambre_core::Tally::<ambre_core::DocBlocks>::new(1),
                 characters: Count::<ambre_core::Char>::new(5)
             }
         );

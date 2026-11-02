@@ -7,6 +7,7 @@
 
 use super::find::Replacement;
 use super::*;
+use crate::formula::text::CellText;
 use ambre_core::HistoryStep;
 use ambre_core::index::Pos;
 
@@ -78,7 +79,7 @@ impl TrameState {
                 // commit (filter recompute) merge into a single undo item. The
                 // next `CommitEdit` seals it, or the fallback seal above.
                 let _ = self.undo_manager.group_start();
-                self.write_cell(CellPos::new(row, col), &FormulaSource::new(text));
+                self.write_cell(CellPos::new(row, col), &CellText::<SourceForm>::new(text));
                 self.finish_cell_writes()
             }
             TrameCommand::BeginCellEdit { session, row, col } => {
@@ -89,7 +90,7 @@ impl TrameState {
                     "[Logic] CommitCellEdit session={session} text of {} chars",
                     text.chars().count()
                 );
-                self.commit_cell_edit(session, &FormulaSource::new(text))
+                self.commit_cell_edit(session, &CellText::<SourceForm>::new(text))
             }
             TrameCommand::EndCellEdit { session } => self.end_cell_edit(session),
             TrameCommand::SetCellsBatch { cells } => {
@@ -110,7 +111,7 @@ impl TrameState {
                     }
                 }
                 for (at, text) in cells {
-                    self.write_cell(at, &FormulaSource::new(text));
+                    self.write_cell(at, &CellText::<SourceForm>::new(text));
                 }
                 self.finish_cell_writes()
             }

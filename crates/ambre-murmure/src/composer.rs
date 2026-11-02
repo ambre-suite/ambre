@@ -25,6 +25,7 @@
 //! (`MURMURE-523`). A box under its field sends the reply to the channel as
 //! well, and unchecks once sent (`MURMURE-531`).
 
+use ambre_core::Tally;
 use ambre_core::index::{Count, Delta, IdxVec, Pos, Span};
 use std::collections::{HashMap, HashSet};
 
@@ -44,7 +45,7 @@ use ambre_draw::{Color, Consumed, DrawSurface, FontContext, Point, Rect};
 
 use crate::Region;
 use crate::commands::PendingEdit;
-use crate::drafts::{DraftShelf, Loss, LossCount};
+use crate::drafts::{DraftShelf, Loss, ShelfLosses};
 use crate::look;
 use crate::markers::{self, DraftEdit, MarkBar};
 use crate::mention_list::{MentionEntry, MentionList, Offer, offers, query_at};
@@ -138,7 +139,7 @@ pub fn typing_line(names: &[Option<ambre_core::DisplayName>]) -> Option<String> 
 /// The style of a draft: the face and the size of a message body.
 fn body_style(color: Color) -> TextEditorStyle {
     TextEditorStyle {
-        weight: ambre_core::FontWeight::REGULAR,
+        weight: ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR,
         italic: ambre_core::Slant::Upright,
         family: FAMILY,
         base_size: FONT_BODY.unzoomed(Scale::<Doc, View>::ONE),
@@ -548,7 +549,7 @@ pub struct Composer {
     /// go (`MURMURE-212`).
     sent: Vec<DraftOf>,
     /// How many losses of the shelf the composer applied.
-    losses_seen: LossCount,
+    losses_seen: Tally<ShelfLosses>,
     /// The files each draft carries, and those still uploading.
     uploads: Uploads,
     /// Each file chip of the last paint that a press takes off the draft, as

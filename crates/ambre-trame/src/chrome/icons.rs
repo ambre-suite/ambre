@@ -1,6 +1,6 @@
 // ambre-trame/src/chrome/icons.rs
 // ============================================================================
-// `IconId` -> `icondata::Icon` for Trame's command registry
+// `StaticKey<Icons>` -> `icondata::Icon` for Trame's command registry
 // (`ambre-spec-commands.md`, UI-THREAD-019).
 //
 // The registry carries an opaque string handle. So `ambre-commands` keeps an
@@ -10,13 +10,13 @@
 // declared once, in `ui::commands`.
 // ============================================================================
 
-use ambre_commands::IconId;
+use ambre_commands::{Icons, StaticKey};
 
 /// The icon asset for `id`, or `None` for a handle no Trame command declares.
 ///
 /// A missing handle draws no icon rather than failing the menu: an entry with
 /// its label is still usable, an absent entry is not.
-pub fn resolve(id: IconId) -> Option<icondata::Icon> {
+pub fn resolve(id: StaticKey<Icons>) -> Option<icondata::Icon> {
     let icon = match id.as_str() {
         "table-row-plus-before" => icondata::MdiTableRowPlusBefore,
         "table-row-plus-after" => icondata::MdiTableRowPlusAfter,

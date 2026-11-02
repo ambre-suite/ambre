@@ -5,6 +5,7 @@
 //! is stateless and shared by both the mutation and derivation impls via `use
 //! super::codec::*`.
 
+use ambre_core::Bounded;
 use ambre_core::crdt::FieldKey;
 use ambre_core::{Board, Px};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
@@ -390,8 +391,8 @@ pub(super) fn decode_anchor(s: &str) -> Anchor {
                 let mut fraction = || {
                     it.next()
                         .and_then(|x| x.parse().ok())
-                        .and_then(UnitFraction::new)
-                        .unwrap_or(UnitFraction::HALF)
+                        .and_then(Bounded::<UnitFraction>::new)
+                        .unwrap_or(Bounded::<UnitFraction>::HALF)
                 };
                 let u = fraction();
                 let v = fraction();
@@ -515,16 +516,16 @@ mod tests {
     /// side reads as the middle rather than outside the box.
     #[test]
     fn a_free_anchor_reads_back_and_a_fraction_off_the_side_reads_as_the_middle() {
-        let quarter = UnitFraction::new(0.25).expect("a fraction of the side");
+        let quarter = Bounded::<UnitFraction>::new(0.25).expect("a fraction of the side");
         let free = Anchor::Free {
             u: quarter,
-            v: UnitFraction::HALF,
+            v: Bounded::<UnitFraction>::HALF,
         };
         assert_eq!(encode_anchor(free), "f:0.25:0.5");
         assert_eq!(decode_anchor("f:0.25:0.5"), free);
         let off = Anchor::Free {
-            u: UnitFraction::HALF,
-            v: UnitFraction::HALF,
+            u: Bounded::<UnitFraction>::HALF,
+            v: Bounded::<UnitFraction>::HALF,
         };
         assert_eq!(decode_anchor("f:1.5:NaN"), off);
     }

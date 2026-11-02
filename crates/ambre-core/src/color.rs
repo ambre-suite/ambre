@@ -11,6 +11,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::bounded::{Bounded, Bounds, Defaulted, Refusal};
+
 /// A colour packed `0xRRGGBBAA`: red in the top byte, alpha in the bottom one.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -141,22 +143,25 @@ impl std::fmt::Display for Rgb {
 ///
 /// The value is finite and lies in that range. It serializes as the bare
 /// `f32` it wraps, and a decoded value outside the range is refused.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(try_from = "f32", into = "f32")]
-pub struct Opacity(f32);
+pub enum Opacity {}
 
-impl Opacity {
+impl Bounds for Opacity {
+    type Repr = f32;
+    const MIN: f32 = 0.0;
+    const MAX: f32 = 1.0;
+    const NAME: &'static str = "Opacity";
+    const REFUSAL: Refusal = Refusal::new("an opacity is a finite number from 0 to 1, not ", "");
+}
+
+impl Defaulted for Opacity {
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::OPAQUE;
+}
+
+impl Bounded<Opacity> {
     /// Nothing shows.
-    pub const TRANSPARENT: Self = Self(0.0);
+    pub const TRANSPARENT: Self = Self::MIN;
     /// Everything shows.
-    pub const OPAQUE: Self = Self(1.0);
-
-    /// The opacity `value`, or `None` when it is not a finite number from 0
-    /// to 1.
-    #[must_use]
-    pub fn new(value: f32) -> Option<Self> {
-        (0.0..=1.0).contains(&value).then_some(Self(value))
-    }
+    pub const OPAQUE: Self = Self::MAX;
 
     /// The opacity nearest `value`: a value past either end reads as that
     /// end, and a NaN reads as transparent. A `const` item names an opacity
@@ -166,82 +171,33 @@ impl Opacity {
         if value.is_nan() {
             Self::TRANSPARENT
         } else {
-            Self(value.clamp(0.0, 1.0))
+            Self::at(value.clamp(0.0, 1.0))
         }
-    }
-
-    /// The fraction that shows.
-    #[must_use]
-    pub const fn get(self) -> f32 {
-        self.0
     }
 
     /// The opacity multiplied by `factor`, held in range: a fade at `factor`.
     #[must_use]
     pub fn scaled(self, factor: f32) -> Self {
-        Self::clamped(self.0 * factor)
+        Self::clamped(self.get() * factor)
     }
 
     /// The opacity a fraction `t` of the way from `self` to `to`.
     #[must_use]
     pub fn lerp(self, to: Self, t: f64) -> Self {
-        Self::clamped(self.0 + (to.0 - self.0) * t as f32)
+        Self::clamped(self.get() + (to.get() - self.get()) * t as f32)
     }
 
     /// The alpha a channel of alpha `alpha` draws with at this opacity.
     #[must_use]
     pub fn fade(self, alpha: Alpha) -> Alpha {
-        Alpha((f32::from(alpha.0) / 255.0 * self.0 * 255.0).round() as u8)
-    }
-}
-
-impl Default for Opacity {
-    fn default() -> Self {
-        Self::OPAQUE
-    }
-}
-
-impl std::fmt::Display for Opacity {
-    /// The fraction, without a unit: `0.5` for half.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-/// The error of a decoded opacity that is not a finite number from 0 to 1.
-#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
-#[error("an opacity is a finite number from 0 to 1, not {0}")]
-pub struct InvalidOpacity(f32);
-
-impl InvalidOpacity {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: f32) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> f32 {
-        self.0
-    }
-}
-
-impl TryFrom<f32> for Opacity {
-    type Error = InvalidOpacity;
-
-    fn try_from(value: f32) -> Result<Self, Self::Error> {
-        Self::new(value).ok_or(InvalidOpacity(value))
-    }
-}
-
-impl From<Opacity> for f32 {
-    fn from(opacity: Opacity) -> Self {
-        opacity.0
+        Alpha((f32::from(alpha.0) / 255.0 * self.get() * 255.0).round() as u8)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Alpha, Opacity, Rgb, Rgba};
+    use crate::Bounded;
 
     // One orange in the two packings: red 0xff, green 0x80, blue 0x20,
     // alpha 0x40.
@@ -295,29 +251,38 @@ mod tests {
 
     #[test]
     fn an_opacity_lies_between_zero_and_one() {
-        assert_eq!(Opacity::new(1.5), None);
-        assert_eq!(Opacity::new(f32::NAN), None);
-        assert_eq!(Opacity::clamped(-1.0), Opacity::TRANSPARENT);
-        assert_eq!(Opacity::clamped(f32::NAN), Opacity::TRANSPARENT);
-        assert_eq!(Opacity::OPAQUE.scaled(2.0), Opacity::OPAQUE);
+        assert_eq!(Bounded::<Opacity>::new(1.5), None);
+        assert_eq!(Bounded::<Opacity>::new(f32::NAN), None);
         assert_eq!(
-            Opacity::new(0.5).unwrap().fade(Alpha::OPAQUE),
+            Bounded::<Opacity>::clamped(-1.0),
+            Bounded::<Opacity>::TRANSPARENT
+        );
+        assert_eq!(
+            Bounded::<Opacity>::clamped(f32::NAN),
+            Bounded::<Opacity>::TRANSPARENT
+        );
+        assert_eq!(
+            Bounded::<Opacity>::OPAQUE.scaled(2.0),
+            Bounded::<Opacity>::OPAQUE
+        );
+        assert_eq!(
+            Bounded::<Opacity>::new(0.5).unwrap().fade(Alpha::OPAQUE),
             Alpha::new(128)
         );
-        let past: Result<Opacity, _> = serde_json::from_str("2.0");
+        let past: Result<Bounded<Opacity>, _> = serde_json::from_str("2.0");
         assert!(past.is_err(), "a decoded opacity past 1 is refused");
     }
 
     /// A `const` opacity holds the range a run-time one holds.
     #[test]
     fn a_const_opacity_lies_between_zero_and_one() {
-        const PAST: Opacity = Opacity::clamped(3.0);
-        const BELOW: Opacity = Opacity::clamped(-0.5);
-        const NOT_A_NUMBER: Opacity = Opacity::clamped(f32::NAN);
-        const FAINT: Opacity = Opacity::clamped(0.3);
-        assert_eq!(PAST, Opacity::OPAQUE);
-        assert_eq!(BELOW, Opacity::TRANSPARENT);
-        assert_eq!(NOT_A_NUMBER, Opacity::TRANSPARENT);
-        assert_eq!(FAINT, Opacity::new(0.3).expect("in range"));
+        const PAST: Bounded<Opacity> = Bounded::<Opacity>::clamped(3.0);
+        const BELOW: Bounded<Opacity> = Bounded::<Opacity>::clamped(-0.5);
+        const NOT_A_NUMBER: Bounded<Opacity> = Bounded::<Opacity>::clamped(f32::NAN);
+        const FAINT: Bounded<Opacity> = Bounded::<Opacity>::clamped(0.3);
+        assert_eq!(PAST, Bounded::<Opacity>::OPAQUE);
+        assert_eq!(BELOW, Bounded::<Opacity>::TRANSPARENT);
+        assert_eq!(NOT_A_NUMBER, Bounded::<Opacity>::TRANSPARENT);
+        assert_eq!(FAINT, Bounded::<Opacity>::new(0.3).expect("in range"));
     }
 }

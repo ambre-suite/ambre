@@ -216,7 +216,10 @@ mod tests {
         channels: Vec<(Id<Channel>, SealedChannelKey)>,
     ) -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let document_id = space_id.document_id();
         let mut doc = SyncDocumentState::new(
             document_id,

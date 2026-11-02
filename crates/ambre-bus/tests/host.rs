@@ -28,6 +28,7 @@ use ambre_bus::{
     RestCommand, RestEvent, Role, SelectionKind, SyncCommand, TrameCommand,
 };
 use ambre_bus::{Col, Decimals, DecimalsStep, Row};
+use ambre_core::Bounded;
 use ambre_core::id::{
     Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
@@ -175,16 +176,16 @@ fn a_line_height_multiple_is_finite_and_above_zero() {
 fn a_fraction_of_a_side_lies_between_zero_and_one() {
     use ambre_bus::app::toile::UnitFraction;
     for refused in [-0.1, 1.1, f32::NAN] {
-        assert_eq!(UnitFraction::new(refused), None);
+        assert_eq!(Bounded::<UnitFraction>::new(refused), None);
     }
     assert_eq!(
-        UnitFraction::HALF.along(Px::<Board>::new(10.0), Px::<Board>::new(30.0)),
+        Bounded::<UnitFraction>::HALF.along(Px::<Board>::new(10.0), Px::<Board>::new(30.0)),
         Px::<Board>::new(20.0)
     );
-    let past: Result<UnitFraction, _> =
+    let past: Result<Bounded<UnitFraction>, _> =
         postcard::from_bytes(&postcard::to_allocvec(&2.0_f32).unwrap());
     assert!(past.is_err(), "a decoded fraction past one is refused");
-    let bytes = postcard::to_allocvec(&UnitFraction::HALF).unwrap();
+    let bytes = postcard::to_allocvec(&Bounded::<UnitFraction>::HALF).unwrap();
     assert_eq!(
         bytes,
         postcard::to_allocvec(&0.5_f32).unwrap(),
@@ -690,8 +691,8 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::Activity {
             document_id: doc,
             counters: ambre_core::activity::ActivityCounters {
-                content: ambre_core::activity::ContentUpdates::new(1),
-                mentions: ambre_core::activity::MentionUpdates::new(2),
+                content: ambre_core::Tally::<ambre_core::activity::ContentUpdates>::new(1),
+                mentions: ambre_core::Tally::<ambre_core::activity::MentionUpdates>::new(2),
                 ..Default::default()
             },
         },

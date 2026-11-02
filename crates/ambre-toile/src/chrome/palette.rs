@@ -24,7 +24,7 @@
 // Tool map, the swatch set) lives in the always-compiled, host-tested `ui::palette`.
 // ============================================================================
 
-use ambre_chrome::commands::{CommandId, Locale};
+use ambre_chrome::commands::{Commands, Locale, StaticKey};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -49,7 +49,7 @@ use super::icons;
 /// `command` names the tool. Its tooltip and its glyph come from the registry
 /// (`UI-THREAD-019`), and `tool_for_command` says which tool the click arms.
 /// The button, the keyboard chord and the command palette then all agree.
-fn tool_button(active: RwSignal<Tool>, command: CommandId) -> impl IntoView {
+fn tool_button(active: RwSignal<Tool>, command: StaticKey<Commands>) -> impl IntoView {
     let label = registry::title(command, &Locale::En).unwrap_or_default();
     let icon = registry::icon(command).and_then(icons::resolve);
     // An id absent from the tool map arms nothing rather than failing the bar.

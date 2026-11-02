@@ -14,10 +14,11 @@
 //! and the verdict and the walk are `ambre_core::schema`'s own.
 
 use ambre_core::LoroPayloadRef;
+use ambre_core::Version;
 use ambre_core::id::{Channel, Document, Id, Space};
 use ambre_core::schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
-    migrate_schema, migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
+    migration_peer, verdict,
 };
 use loro::{LoroDoc, LoroList, LoroMap, LoroValue, ValueOrContainer};
 
@@ -27,7 +28,7 @@ use crate::error::MurmureError;
 ///
 /// Raise it in the commit that changes a key or a value type, and append the
 /// new section to `schema/shapes.txt`.
-pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(1);
 
 ambre_core::loro_fields!(pub(crate));
 
@@ -473,7 +474,7 @@ pub(crate) fn flag<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> bo
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a non-integer, a container, or an
 /// integer outside `u32`.
-pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
+pub fn read_version(doc: &LoroDoc) -> Result<Version<Schema>, SchemaError> {
     let Some(found) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
@@ -482,7 +483,7 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
     };
     match found {
         ValueOrContainer::Value(LoroValue::I64(n)) => u32::try_from(n)
-            .map(SchemaVersion::new)
+            .map(Version::<Schema>::new)
             .map_err(|_| SchemaError::VersionUnreadable {
                 found: format!("the integer {n}"),
             }),
@@ -635,7 +636,7 @@ fn import_current(
 /// [`MIGRATIONS`] holds none.
 pub(crate) fn import_through(
     steps: &[SchemaMigration<LoroDoc>],
-    target: SchemaVersion,
+    target: Version<Schema>,
     fill: impl FnOnce(&LoroDoc) -> Result<(), MurmureError>,
 ) -> Result<LoroDoc, MurmureError> {
     let doc = LoroDoc::new();

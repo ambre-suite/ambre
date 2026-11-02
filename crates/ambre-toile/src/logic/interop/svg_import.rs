@@ -44,7 +44,7 @@
 //! enforced while walking. Any breach aborts the whole import atomically: the
 //! returned `Err` carries no commands.
 
-use ambre_core::{ElementCount, Rgb, Rgba};
+use ambre_core::{Elements, Rgb, Rgba, Tally};
 use ambre_core::{Px, StoredBoard, index::Pos};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
@@ -95,12 +95,19 @@ pub fn import_svg(
     let root_xml = doc.as_ref().map(|d| d.root_element());
     // The document root is not itself a `<g>`; its direct-member refs are dropped
     // (only nested `<g>` become groups). Nested groups are pushed during the walk.
-    walk_group(tree.root(), root_xml, ImportDepth::ZERO, limits, &mut batch)?;
+    walk_group(
+        tree.root(),
+        root_xml,
+        Tally::<ImportDepth>::ZERO,
+        limits,
+        &mut batch,
+    )?;
 
     if batch.commands.is_empty() {
         return Err(ImportError::Empty);
     }
-    batch.report.imported = ambre_bus::app::toile::ElementCount::of_len(batch.commands.len());
+    batch.report.imported =
+        ambre_core::Tally::<ambre_bus::app::toile::Elements>::of_len(batch.commands.len());
     Ok(batch)
 }
 
@@ -133,7 +140,7 @@ fn import_text_node(
             .skip("text: a node the reader could not read a body from");
         return Ok(None);
     }
-    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
+    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
     let x = node
         .attribute("x")
         .and_then(|v| v.parse::<f64>().ok())
@@ -188,7 +195,7 @@ fn is_drawn(node: roxmltree::Node) -> bool {
 fn walk_group(
     group: &usvg::Group,
     xml: Option<roxmltree::Node>,
-    depth: ImportDepth,
+    depth: Tally<ImportDepth>,
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Vec<ImportRef>, ImportError> {
@@ -277,7 +284,7 @@ fn import_path(
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<ImportRef, ImportError> {
-    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
+    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
 
     let bez = to_bezpath(path.data(), &path.abs_transform(), limits);
     let bounds = bez.bounding_box();
@@ -306,7 +313,7 @@ fn import_image(
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Option<ImportRef>, ImportError> {
-    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
+    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
 
     let raw: &[u8] = match image.kind() {
         usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) => d.as_slice(),
@@ -458,7 +465,7 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
     if let Some(fill) = path.fill() {
         match paint_rgba(
             fill.paint(),
-            ambre_core::Opacity::clamped(fill.opacity().get()),
+            ambre_core::Bounded::<ambre_core::Opacity>::clamped(fill.opacity().get()),
         ) {
             Some(rgba) => style.fill = Some(rgba),
             None => batch.report.skip("path fill: non-solid paint dropped"),
@@ -467,7 +474,7 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
     if let Some(stroke) = path.stroke() {
         match paint_rgba(
             stroke.paint(),
-            ambre_core::Opacity::clamped(stroke.opacity().get()),
+            ambre_core::Bounded::<ambre_core::Opacity>::clamped(stroke.opacity().get()),
         ) {
             Some(rgba) => {
                 style.stroke = Some(rgba);
@@ -481,7 +488,10 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
 
 /// A solid paint as packed RGBA (`ElementStyle` color encoding), or `None` for a
 /// gradient / pattern paint.
-fn paint_rgba(paint: &usvg::Paint, opacity: ambre_core::Opacity) -> Option<Rgba> {
+fn paint_rgba(
+    paint: &usvg::Paint,
+    opacity: ambre_core::Bounded<ambre_core::Opacity>,
+) -> Option<Rgba> {
     match paint {
         usvg::Paint::Color(c) => {
             let a = opacity.fade(ambre_core::Alpha::OPAQUE);

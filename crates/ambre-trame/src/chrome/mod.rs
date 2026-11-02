@@ -4,8 +4,8 @@
 // app crate, NOT the launcher). Built on the app-agnostic `ambre-chrome` toolkit,
 // this module owns everything the launcher used to hard-code about Trame:
 //
-//   - the format `CommandId`s (Bold/Italic) and their keybindings;
-//   - the CommandId -> `AppCommand` mapping (UI affordance -> IPC payload);
+//   - the format `StaticKey<Commands>`s (Bold/Italic) and their keybindings;
+//   - the StaticKey<Commands> -> `AppCommand` mapping (UI affordance -> IPC payload);
 //   - the inbound `UiEvent` -> command-store mirror (authoritative toggle state);
 //   - the toolbar markup and the status label.
 //

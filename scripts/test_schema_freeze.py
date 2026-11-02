@@ -45,8 +45,8 @@ def belt(root: Path, crate: str, version: int = 1, missing: str | None = None) -
     src = root / "crates" / crate / "src"
     src.mkdir(parents=True, exist_ok=True)
     body = (
-        "pub const SCHEMA_VERSION: SchemaVersion = "
-        f"SchemaVersion::new({version});\n"
+        "pub const SCHEMA_VERSION: Version<Schema> = "
+        f"Version::new({version});\n"
     )
     for name in schema_freeze.FREEZES.values():
         if name != missing:
@@ -392,7 +392,7 @@ class BeltTest(unittest.TestCase):
         src.mkdir(parents=True)
         (src / "schema.rs").write_text(
             'pub const SCHEMA_VERSION_KEY: &str = "schema_version";\n'
-            "pub const SCHEMA_VERSION_ABSENT: SchemaVersion = SchemaVersion(0);\n"
+            "pub const SCHEMA_VERSION_ABSENT: Version<Schema> = Version::new(0);\n"
         )
         self.assertEqual(self.findings(), [])
 

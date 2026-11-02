@@ -1294,7 +1294,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         channels: vec![ChannelMatches {
             channel_id: acme.general,
             covered: vec![segment],
-            listed: ambre_bus::SegmentCount::new(1),
+            listed: ambre_core::Tally::<ambre_bus::Segments>::new(1),
             matches: vec![SearchMatch { segment, message }],
         }],
     };

@@ -190,7 +190,7 @@ mod websocket;
 #[cfg(target_arch = "wasm32")]
 mod worker;
 
-pub use http::RelayHost;
+pub use http::{RelayHost, Url, UrlKind};
 
 // -----------------------------------------------------------------------------
 // Quarantine bounds (`ambre-spec-delta-order.md`)
@@ -1055,7 +1055,7 @@ pub struct SyncState {
     logic_tx: LogicSink,
     /// Base URL for REST API calls (for example `"api.ambre.app"`).
     #[allow(dead_code)]
-    api_base: crate::http::RelayHost,
+    api_base: crate::http::Url<crate::http::RelayHost>,
     /// URL scheme: `Http` on localhost, `Https` otherwise.
     #[allow(dead_code)]
     url_scheme: crate::http::UrlScheme,
@@ -1193,7 +1193,7 @@ pub struct SyncState {
 impl SyncState {
     /// A signed-out worker state: the session's tokens arrive with a sign-in.
     #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-    pub fn new(logic_tx: LogicSink, api_base: RelayHost) -> Self {
+    pub fn new(logic_tx: LogicSink, api_base: Url<RelayHost>) -> Self {
         let url_scheme = crate::http::UrlScheme::of(&api_base);
         Self {
             logic_tx,
@@ -1743,7 +1743,7 @@ impl SyncState {
 pub async fn run_wasm(
     cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>,
     logic_sink: LogicSink,
-    api_base: RelayHost,
+    api_base: Url<RelayHost>,
 ) {
     tracing::info!("Ambre Sync worker starting (wasm async)");
     run(cmd_rx, SyncState::new(logic_sink, api_base)).await;
@@ -1792,7 +1792,10 @@ mod run_tests {
                 let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
                 let looped = tokio::task::spawn_local(run(
                     cmd_rx,
-                    SyncState::new(sink, crate::RelayHost::new(String::new())),
+                    SyncState::new(
+                        sink,
+                        crate::http::Url::<crate::RelayHost>::new(String::new()),
+                    ),
                 ));
                 tokio::task::yield_now().await;
 
@@ -2021,7 +2024,10 @@ mod seal_tests {
         ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
     ) {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = Id::<Document>::mint();
         let doc = SyncDocumentState::new(

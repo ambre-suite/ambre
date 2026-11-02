@@ -3,29 +3,23 @@
 //! form; this module keeps their engine path. It also holds the case fold
 //! that every comparison ignoring case reads.
 
-pub use ambre_bus::app::trame::{DisplayFormula, FormulaSource, StoredFormula};
+pub use ambre_bus::app::trame::{CellText, DisplayForm, SourceForm, StoredForm};
 
 /// The text of a literal a user typed: a string in a formula, or the printed
 /// part of a number format. It is document content, so its Debug form is its
 /// length alone.
-#[derive(Clone, PartialEq, Eq)]
-pub struct LiteralText(String);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiteralText(ambre_core::Redacted<String>);
 
 impl LiteralText {
     /// The literal `text`.
     pub fn new(text: String) -> Self {
-        Self(text)
+        Self(ambre_core::Redacted::new(text))
     }
 
     /// The text, for the value or the output that holds it.
     pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for LiteralText {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "LiteralText({} chars)", self.0.chars().count())
+        self.0.as_str()
     }
 }
 

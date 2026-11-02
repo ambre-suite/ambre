@@ -8,8 +8,8 @@
 //! peer's own colour (`PROSE-UI-014`). A paint reads the layout in force and
 //! writes nothing to the document (`PROSE-UI-120`).
 
-use ambre_core::Byte;
 use ambre_core::index::{Count, Pos, Span};
+use ambre_core::{Byte, Tally};
 use ambre_core::{Px, Surface};
 use ambre_draw::{Affine, DocumentWalk, DrawSurface, Point, Rect};
 
@@ -23,8 +23,8 @@ use crate::view::caret::Spot;
 use crate::view::hit::{Fragment, cell_frame};
 pub use crate::view::walk::PagePalette;
 use crate::view::walk::{
-    BlockPaint, CellPaint, HighlightCount, Insertion, PageItem, PagePaint, PageView, PageWalk,
-    Placed, draw_shape, to_rect,
+    BlockPaint, CellPaint, Highlights, Insertion, PageItem, PagePaint, PageView, PageWalk, Placed,
+    draw_shape, to_rect,
 };
 
 /// How far the shadow falls from the sheet.
@@ -276,7 +276,7 @@ impl ProseUiState {
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
-            highlights_walked: HighlightCount::ZERO,
+            highlights_walked: Tally::<Highlights>::ZERO,
         };
         walk.walk(&view, region, surface);
         self.highlights_walked = self.highlights_walked.plus(walk.highlights_walked);
@@ -766,7 +766,7 @@ mod tests {
 
     use ambre_core::Byte;
     use ambre_core::id::{Id, User};
-    use ambre_core::{Doc, Px, Surface, View};
+    use ambre_core::{Doc, Px, Surface, Tally, View};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Color, DocumentWalk};
 
@@ -776,7 +776,7 @@ mod tests {
     };
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
-    use crate::view::cache::{BuildCount, RunCache, RunKey};
+    use crate::view::cache::{Builds, RunCache, RunKey};
     use crate::view::tests::{append, down, laid_out};
     use crate::view::{Highlight, HighlightKind};
 
@@ -865,10 +865,10 @@ mod tests {
         let mut ui = ProseUiState::default();
         ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
         ui.apply_layout(shaped);
-        assert_eq!(ui.runs.built(), BuildCount::ZERO);
+        assert_eq!(ui.runs.built(), Tally::<Builds>::ZERO);
         let first_paint = paint(&mut ui);
         let built = ui.runs.built();
-        assert!(built >= BuildCount::new(6));
+        assert!(built >= Tally::<Builds>::new(6));
         let second_paint = paint(&mut ui);
         assert_eq!(ui.runs.built(), built);
         // A paint reads the layout and changes nothing: two paints agree.
@@ -1127,7 +1127,7 @@ mod tests {
         let drawn: usize = built.into_iter().map(|page| ui.blocks_on(page).len()).sum();
         assert_eq!(
             ui.highlights_walked,
-            crate::view::walk::HighlightCount::of_len(drawn)
+            ambre_core::Tally::<crate::view::walk::Highlights>::of_len(drawn)
         );
         assert!(drawn < ids.len());
     }
@@ -2157,10 +2157,10 @@ mod tests {
             let mut walked = RecordingSurface::new();
             PageWalk {
                 runs: &mut runs,
-                highlights_walked: crate::view::walk::HighlightCount::ZERO,
+                highlights_walked: ambre_core::Tally::<crate::view::walk::Highlights>::ZERO,
             }
             .walk(&view, region, &mut walked);
-            proptest::prop_assert!(walked.count(glyphs) > ambre_draw::testing::OpCount::ZERO);
+            proptest::prop_assert!(walked.count(glyphs) > ambre_core::Tally::<ambre_draw::testing::Ops>::ZERO);
             proptest::prop_assert!(screen.holds_walk(&walked));
         }
     }

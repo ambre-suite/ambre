@@ -503,7 +503,10 @@ mod peer_geometry_tests {
             assert!(rect.is_finite(), "{rect:?}");
             assert_eq!((rect.x0, rect.y0), (0.0, 0.0), "NaN and inf read as zero");
             assert_eq!(rect.x1, 1_000_000.0, "a huge width is held at the bound");
-            assert_eq!(st.index.len(), ambre_core::ElementCount::new(8));
+            assert_eq!(
+                st.index.len(),
+                ambre_core::Tally::<ambre_core::Elements>::new(8)
+            );
         }
         victim.handle_command(ToileCommand::MoveElements {
             ids: vec![hit.clone()],

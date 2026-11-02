@@ -43,7 +43,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/channels/{channel_id}/documents"));
             let result = http::get_json_auth::<http::ChannelDocumentsResponse>(&url, auth)
                 .await
@@ -233,7 +233,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let base = crate::http::ApiRoot::of(url_scheme, &api_base);
+            let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             let result = async {
                 for (document_id, doc_key_enc, entry, name_enc) in documents {
                     let body = http::CreateDocumentRequest {
@@ -285,7 +285,7 @@ impl SyncState {
             tracing::warn!("Sync: no relay on this transport, the name of {meta} stays local");
             return;
         };
-        let url = crate::http::ApiRoot::of(self.url_scheme, &self.api_base)
+        let url = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base)
             .route(format!("/documents/{}", meta.document_id()));
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
@@ -342,7 +342,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/channels/{channel_id}/join"));
             let result = async {
                 let head =
@@ -529,7 +529,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/channels/{channel_id}"));
             let result = http::delete_auth(&url, auth).await;
             let _ = tx.send(SyncEvent::ChannelDeleted { channel_id, result });
@@ -599,7 +599,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let base = crate::http::ApiRoot::of(url_scheme, &api_base);
+            let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             let result = async {
                 let mut signing_keys = Vec::with_capacity(members.len());
                 for member in &members {
@@ -660,10 +660,10 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let base = crate::http::ApiRoot::of(url_scheme, &api_base);
+            let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base);
             put_cursors(&base, cursors, auth.clone()).await;
             if !finals.is_empty() {
-                let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/read-cursors/mark-read");
                 let body = http::MarkReadRequest {
                     documents: Some(finals.iter().map(Id::<Segment>::document_id).collect()),
@@ -702,7 +702,7 @@ impl SyncState {
             tracing::warn!("Sync: no relay on this transport, the read cursors stay");
             return;
         }
-        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
+        let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             put_cursors(&base, cursors, auth).await;
@@ -731,14 +731,15 @@ impl SyncState {
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             if fetch == ActivityFetch::MarkAllReadFirst {
-                let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+                let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                     .route("/read-cursors/mark-read");
                 let body = http::MarkReadRequest { documents: None };
                 if let Err(e) = http::post_json_auth_ok(&url, &body, auth.clone()).await {
                     tracing::warn!("Sync: mark all read failed: {e}");
                 }
             }
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/activity");
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                .route("/activity");
             let result = http::get_json_auth::<http::ActivityResponse>(&url, auth)
                 .await
                 .map(|resp| activity_of(&resp.documents));
@@ -766,7 +767,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/spaces/{space_id}/channels"));
             let result = http::get_json_auth::<http::SpaceChannelsResponse>(&url, auth)
                 .await
@@ -805,7 +806,8 @@ impl SyncState {
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
         wasm_bindgen_futures::spawn_local(async move {
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/channels");
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                .route("/channels");
             let result =
                 match http::get_json_auth::<http::MemberChannelsResponse>(&url, auth.clone()).await
                 {
@@ -921,7 +923,7 @@ async fn open_channel_names(
     answer: &http::MemberChannelsResponse,
     exchange_key: &StaticSecret,
     url_scheme: crate::http::UrlScheme,
-    api_base: &crate::http::RelayHost,
+    api_base: &crate::http::Url<crate::http::RelayHost>,
     auth: &http::AuthContext,
 ) -> Vec<ChannelName> {
     let mut names = Vec::new();
@@ -949,7 +951,7 @@ async fn open_channel_names(
 /// Move each cursor to its number, one request per document. A refused move
 /// leaves that cursor where it was and says so in the log.
 async fn put_cursors(
-    base: &crate::http::ApiRoot,
+    base: &crate::http::Url<crate::http::ApiRoot>,
     cursors: Vec<(Id<Document>, Seq)>,
     auth: http::AuthContext,
 ) {
@@ -1436,7 +1438,10 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_a_creation_and_a_join_fail_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let (channel_id, space_id) = (Id::<Channel>::mint(), Id::<Space>::mint());
         for visibility in [
             ambre_core::Visibility::Public,
@@ -1464,7 +1469,10 @@ pub(crate) mod tests {
     #[test]
     fn a_delete_answers_logic_and_leaves_the_sessions_to_it() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let channel_id = Id::<Channel>::mint();
         let meta = Id::<Document>::mint();
         state.documents.insert(
@@ -1509,7 +1517,10 @@ pub(crate) mod tests {
     #[test]
     fn a_leave_answers_logic_and_leaves_the_sessions_to_it() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let channel_id = Id::<Channel>::mint();
         let meta = Id::<Document>::mint();
         state.documents.insert(
@@ -1555,7 +1566,10 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_refused_for_want_of_membership_reads_as_refused() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let channel_id = Id::<Channel>::mint();
         let url = "https://relay.example/api/channels/c/documents";
         for (status, code) in [
@@ -1590,7 +1604,10 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_of_a_space_forwards_its_channels_and_a_failure_nothing() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let space_id = Id::<Space>::mint();
         let channel_id = Id::<Channel>::mint();
         let body = format!(r#"{{"channels":["{channel_id}"]}}"#);
@@ -1617,7 +1634,10 @@ pub(crate) mod tests {
     #[test]
     fn the_share_of_a_murmure_document_lists_the_users_channels() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         for doc_type in [DocType::Prose, DocType::Murmure] {
             state.handle_ws_message(ambre_protocol::ws::WsServerMsg::DocumentShared {
                 document_id: Id::<Document>::mint(),
@@ -1642,7 +1662,10 @@ pub(crate) mod tests {
     #[test]
     fn the_loss_of_a_document_not_held_as_another_kind_lists_the_users_channels() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.user_id = Some(Id::<User>::mint());
         let (prose, murmure, unheld) = (
             Id::<Document>::mint(),
@@ -1681,7 +1704,10 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_of_the_users_channels_forwards_their_places() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.handle_list_member_channels();
         state.handle_list_member_channels();
         let (space, bare) = (Id::<Space>::mint(), Id::<Space>::mint());
@@ -1792,8 +1818,10 @@ pub(crate) mod tests {
     /// none, and so does an empty one. A meta never named shows none.
     #[tokio::test]
     async fn a_listed_name_opens_under_the_users_key_of_its_meta() {
-        let mut state =
-            SyncState::new(LogicSink::channel().0, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            LogicSink::channel().0,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.signing_key =
             Some(ambre_crypto::MasterSeed::from_array([5; 32]).derive_signing_key());
         let own = exchange_key(1);
@@ -1844,7 +1872,7 @@ pub(crate) mod tests {
             &answer,
             &own,
             crate::http::UrlScheme::Http,
-            &crate::http::RelayHost::new(String::new()),
+            &crate::http::Url::<crate::http::RelayHost>::new(String::new()),
             &auth,
         )
         .await;
@@ -1877,8 +1905,10 @@ pub(crate) mod tests {
     /// its meta, under the channel key, and only meta opens it.
     #[test]
     fn a_channel_name_is_sealed_under_the_channel_key_for_its_meta() {
-        let mut state =
-            SyncState::new(LogicSink::channel().0, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            LogicSink::channel().0,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let (meta, key) = (Id::<Meta>::mint(), DocumentKey::generate());
         let design = ambre_core::Name::new("Design").unwrap();
         assert!(
@@ -1907,7 +1937,10 @@ pub(crate) mod tests {
     #[test]
     fn a_new_space_is_created_as_a_space() {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let (space, gone) = (Id::<Space>::mint(), Id::<Space>::mint());
         let other = Id::<Document>::mint();
         state.handle_command(SyncCommand::CreateSpace { space_id: space });
@@ -1951,7 +1984,10 @@ pub(crate) mod tests {
     #[test]
     fn a_listed_meta_walks_under_the_word_of_its_open_space() {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let (space_id, meta) = (Id::<Space>::mint(), Id::<Document>::mint());
         let document_id = space_id.document_id();
         let mut space = SyncDocumentState::new(
@@ -1971,7 +2007,10 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_the_open_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let channel_id = Id::<Channel>::mint();
         state.handle_open_channel(channel_id, None);
         let events: Vec<LogicEvent> = rx.try_iter().collect();
@@ -2095,7 +2134,10 @@ pub(crate) mod tests {
         let max = ambre_protocol::membership::DIRECT_MESSAGE_MAX_MEMBERS;
         let failure = |others: usize| {
             let (sink, rx) = LogicSink::channel();
-            let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+            let state = SyncState::new(
+                sink,
+                crate::http::Url::<crate::RelayHost>::new(String::new()),
+            );
             let members = (0..others).map(|_| member_of(&exchange_key(2))).collect();
             state.handle_create_direct_message(
                 Id::<Channel>::mint(),
@@ -2114,7 +2156,10 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_a_direct_message_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let channel_id = Id::<Channel>::mint();
         let members = vec![member_of(&exchange_key(2))];
         state.handle_create_direct_message(

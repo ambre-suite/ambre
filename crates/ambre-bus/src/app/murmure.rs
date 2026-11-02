@@ -13,7 +13,7 @@
 //! document (`BUS-027`).
 
 use ambre_core::index::{Count, IdxVec, Pos, Span};
-use ambre_core::{Byte, Char};
+use ambre_core::{Byte, Char, Redacted, Tally, TallyKind};
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Category, Channel, Document, Id, Message, Meta, Segment, Space, User};
@@ -62,12 +62,26 @@ pub struct ChannelActivity {
     pub mentions: Option<MentionCount>,
 }
 
+/// How many messages a segment or a list holds, or how many a segment
+/// holds before it asks to close.
+pub enum Messages {}
+
+impl TallyKind for Messages {
+    const NAME: &'static str = "MessageCount";
+}
+
 /// How many messages past the reader's cursor mention them, or the channel
 /// (`MURMURE-233`). A type of its own beside [`UnreadCount`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MentionCount(u32);
 
 impl MentionCount {
+    /// The messages a count found that mention a reader.
+    #[must_use]
+    pub const fn of_messages(messages: Tally<Messages>) -> Self {
+        Self(messages.get())
+    }
+
     /// Wraps a raw value. The constructor checks nothing.
     pub const fn new(value: u32) -> Self {
         Self(value)
@@ -84,7 +98,9 @@ impl MentionCount {
     /// The mentions a document's activity counted: each update that named
     /// the reader, or every member, is one mention.
     #[must_use]
-    pub const fn of_updates(updates: ambre_core::activity::MentionUpdates) -> Self {
+    pub const fn of_updates(
+        updates: ambre_core::Tally<ambre_core::activity::MentionUpdates>,
+    ) -> Self {
         Self(updates.get())
     }
 
@@ -165,6 +181,12 @@ pub struct DirectPeers {
 pub struct UnreadCount(u32);
 
 impl UnreadCount {
+    /// The messages a count found past a reader's cursor.
+    #[must_use]
+    pub const fn of_messages(messages: Tally<Messages>) -> Self {
+        Self(messages.get())
+    }
+
     /// Wraps a raw value. The constructor checks nothing.
     pub const fn new(value: u32) -> Self {
         Self(value)
@@ -181,7 +203,9 @@ impl UnreadCount {
     /// The unread messages a document's activity counted: each content
     /// update is one message.
     #[must_use]
-    pub const fn of_updates(updates: ambre_core::activity::ContentUpdates) -> Self {
+    pub const fn of_updates(
+        updates: ambre_core::Tally<ambre_core::activity::ContentUpdates>,
+    ) -> Self {
         Self(updates.get())
     }
 
@@ -625,11 +649,18 @@ impl std::fmt::Debug for MessageView {
     }
 }
 
-ambre_core::define_tally! {
-    /// How many replies a thread holds, deleted ones aside.
-    pub struct ReplyCount;
-    /// How many segments a channel lists.
-    pub struct SegmentCount;
+/// How many replies a thread holds, deleted ones aside.
+pub enum Replies {}
+
+impl TallyKind for Replies {
+    const NAME: &'static str = "ReplyCount";
+}
+
+/// How many segments a channel lists.
+pub enum Segments {}
+
+impl TallyKind for Segments {
+    const NAME: &'static str = "SegmentCount";
 }
 
 /// What a root shows of its thread (`MURMURE-106`).
@@ -639,7 +670,7 @@ pub struct ThreadHead {
     pub document: Id<Document>,
     /// The replies the thread document holds, deleted ones aside. Zero
     /// until the document is held.
-    pub replies: ReplyCount,
+    pub replies: Tally<Replies>,
     /// The author of the latest reply, `None` until the document is held.
     pub last_replier: Option<Id<User>>,
 }
@@ -726,7 +757,7 @@ pub struct ChannelMatches {
     /// The segments searched: the ones the client holds, in list order.
     pub covered: Vec<Id<Segment>>,
     /// How many segments `meta` lists, searched or not.
-    pub listed: SegmentCount,
+    pub listed: Tally<Segments>,
     /// The matches, segment by segment in list order, each segment's in
     /// message order.
     pub matches: Vec<SearchMatch>,
@@ -905,26 +936,20 @@ impl std::fmt::Debug for SealedChannelKey {
 /// Never empty: a channel with no topic holds no topic at all, so the
 /// catalogue stores an absent key rather than an empty string. A member typed
 /// it, so `Debug` prints its length alone.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct Topic(String);
-
-impl std::fmt::Debug for Topic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Topic({} chars)", self.0.chars().count())
-    }
-}
+pub struct Topic(Redacted<String>);
 
 impl Topic {
     /// The topic `text` states, or `None` for an empty text.
     pub fn new(text: impl Into<String>) -> Option<Self> {
         let text = text.into();
-        (!text.is_empty()).then_some(Self(text))
+        (!text.is_empty()).then_some(Self(Redacted::new(text)))
     }
 
     /// The text of the topic.
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
@@ -938,7 +963,7 @@ impl TryFrom<String> for Topic {
 
 impl From<Topic> for String {
     fn from(topic: Topic) -> Self {
-        topic.0
+        topic.0.into_inner()
     }
 }
 

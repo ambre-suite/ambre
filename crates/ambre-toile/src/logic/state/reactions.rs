@@ -28,13 +28,14 @@
 //! concurrently-deleted target is skipped at derivation, never destroyed
 //! (data-never-destroyed).
 
+use ambre_core::Tally;
 use std::collections::{BTreeMap, HashSet};
 
 use loro::LoroValue;
 
 use crate::ToileError;
 use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
-use ambre_bus::app::toile::ReactionCount;
+use ambre_bus::app::toile::Reactions;
 use ambre_core::id::{Element, Id};
 
 use super::ToileState;
@@ -55,7 +56,7 @@ fn encode<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, ToileError> {
 /// whole-viewport [`ToileState::reaction_tallies`] so both derive identically.
 fn accumulate(
     kind: ReactionKind,
-    emoji: &mut BTreeMap<ambre_bus::Emoji, ReactionCount>,
+    emoji: &mut BTreeMap<ambre_bus::Emoji, Tally<Reactions>>,
     tally: &mut ReactionTally,
 ) {
     match kind {
@@ -133,7 +134,7 @@ impl ToileState {
         if self.element_map(target).is_none() {
             return ReactionTally::default();
         }
-        let mut emoji: BTreeMap<ambre_bus::Emoji, ReactionCount> = BTreeMap::new();
+        let mut emoji: BTreeMap<ambre_bus::Emoji, Tally<Reactions>> = BTreeMap::new();
         let mut tally = ReactionTally::default();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {
@@ -165,7 +166,7 @@ impl ToileState {
         &self,
         visible: &HashSet<Id<Element>>,
     ) -> BTreeMap<Id<Element>, ReactionTally> {
-        let mut emoji: BTreeMap<Id<Element>, BTreeMap<ambre_bus::Emoji, ReactionCount>> =
+        let mut emoji: BTreeMap<Id<Element>, BTreeMap<ambre_bus::Emoji, Tally<Reactions>>> =
             BTreeMap::new();
         let mut tallies: BTreeMap<Id<Element>, ReactionTally> = BTreeMap::new();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
