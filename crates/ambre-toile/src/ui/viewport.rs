@@ -14,7 +14,7 @@ use ambre_bus::app::toile::Viewport;
 /// Minimum / maximum zoom: the bounds the culling type clamps to
 /// (`TOILE-UI-281`), so the camera and the Logic thread share one range.
 pub use ambre_bus::app::toile::{MAX_ZOOM, MIN_ZOOM};
-use ambre_core::{Board, Doc, Px, Scale, View};
+use ambre_core::{Board, Px, Scale, View};
 use ambre_draw::kinetic::ScrollStep;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
 
@@ -33,7 +33,7 @@ pub const FIT_PAD: f64 = 0.08;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ViewportTransform {
     pub center: Point,
-    pub zoom: Scale<Doc, View>,
+    pub zoom: Scale<Board, View>,
     pub size: Size,
 }
 
@@ -41,7 +41,7 @@ impl Default for ViewportTransform {
     fn default() -> Self {
         Self {
             center: Point::ZERO,
-            zoom: Scale::<Doc, View>::ONE,
+            zoom: Scale::<Board, View>::ONE,
             size: Size::new(1280.0, 800.0),
         }
     }
@@ -52,7 +52,7 @@ impl ViewportTransform {
     pub fn new(size: Size) -> Self {
         Self {
             center: Point::ZERO,
-            zoom: Scale::<Doc, View>::ONE,
+            zoom: Scale::<Board, View>::ONE,
             size: at_least_one(size),
         }
     }
@@ -70,7 +70,7 @@ impl ViewportTransform {
     /// The board length that `screen` pixels cover at this zoom.
     #[must_use]
     pub fn to_board(&self, screen: Px<View>) -> Px<Board> {
-        Px::<Board>::new(f64::from(screen.get()) / self.zoom.get())
+        screen / self.zoom
     }
 
     /// The screen length that the board length `board` covers at `zoom`, in
@@ -78,9 +78,9 @@ impl ViewportTransform {
     #[must_use]
     pub fn to_surface(
         board: Px<Board>,
-        zoom: Scale<Doc, View>,
+        zoom: Scale<Board, View>,
     ) -> ambre_core::Px<ambre_core::Surface> {
-        ambre_core::Px::<ambre_core::Surface>::new(board.get() * zoom.get())
+        board.zoomed_on_surface(zoom)
     }
 
     /// The inverse mapping (screen -> world). Always invertible: `zoom > 0`.
@@ -89,8 +89,8 @@ impl ViewportTransform {
     }
 
     /// Clamp a zoom request to the supported range.
-    fn clamp_zoom(z: f64) -> Scale<Doc, View> {
-        Scale::<Doc, View>::positive(z).clamped(MIN_ZOOM, MAX_ZOOM)
+    fn clamp_zoom(z: f64) -> Scale<Board, View> {
+        Scale::<Board, View>::positive(z).clamped(MIN_ZOOM, MAX_ZOOM)
     }
 
     /// Zoom by `factor` about a screen anchor (typically the cursor), keeping the
@@ -119,7 +119,7 @@ impl ViewportTransform {
     /// Reset to 100% (1 screen-pixel per world-unit) keeping the current center
     /// under the screen center (the `%` chip click,).
     pub fn reset_zoom(&mut self) {
-        self.zoom = Scale::<Doc, View>::ONE;
+        self.zoom = Scale::<Board, View>::ONE;
     }
 
     /// Fit `world` into the viewport with `pad_frac` breathing room on each axis,
@@ -139,7 +139,7 @@ impl ViewportTransform {
     /// without mutating the camera: the pure fit solver. `None` for a zero-area
     /// or non-finite rect (nothing to frame). Shared by the instant Fit and by
     /// the presentation camera glide, which lerps toward this target.
-    pub fn fit_target(&self, world: Rect, pad_frac: f64) -> Option<(Point, Scale<Doc, View>)> {
+    pub fn fit_target(&self, world: Rect, pad_frac: f64) -> Option<(Point, Scale<Board, View>)> {
         let (bw, bh) = (world.width(), world.height());
         if !(bw.is_finite() && bh.is_finite()) || bw <= 0.0 || bh <= 0.0 {
             return None;
@@ -158,7 +158,7 @@ impl ViewportTransform {
     pub fn glide(
         from: ViewportTransform,
         to_center: Point,
-        to_zoom: Scale<Doc, View>,
+        to_zoom: Scale<Board, View>,
         t: crate::logic::animate::Phase,
     ) -> ViewportTransform {
         let t = t.get();
@@ -167,7 +167,7 @@ impl ViewportTransform {
                 from.center.x + (to_center.x - from.center.x) * t,
                 from.center.y + (to_center.y - from.center.y) * t,
             ),
-            zoom: Scale::<Doc, View>::positive(
+            zoom: Scale::<Board, View>::positive(
                 from.zoom.get() + (to_zoom.get() - from.zoom.get()) * t,
             ),
             size: from.size,
@@ -180,8 +180,8 @@ impl ViewportTransform {
     /// step, so a distance the board computed itself does not move the camera
     /// (`KINETIC-001`).
     pub fn pan_by_screen(&mut self, step: ScrollStep) {
-        let (dx, dy) = (step.x().get(), step.y().get());
-        self.center += Vec2::new(f64::from(dx), f64::from(dy)) / self.zoom.get();
+        let (dx, dy) = (self.to_board(step.x()), self.to_board(step.y()));
+        self.center += Vec2::new(dx.get(), dy.get());
     }
 
     /// Set the logical canvas size (on resize). Keeps center and zoom.
@@ -209,7 +209,7 @@ impl ViewportTransform {
     /// glide leaves behind, which stops its fade-out halfway. The union keeps
     /// every element of both slides in the set for the whole transition, and
     /// adds nothing that is off both screens.
-    pub fn covering_viewport(&self, to_center: Point, to_zoom: Scale<Doc, View>) -> Viewport {
+    pub fn covering_viewport(&self, to_center: Point, to_zoom: Scale<Board, View>) -> Viewport {
         let to = ViewportTransform {
             center: to_center,
             zoom: to_zoom,
@@ -254,7 +254,7 @@ mod tests {
     fn round_trip_is_identity() {
         let vt = ViewportTransform {
             center: Point::new(120.0, -45.0),
-            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.5),
+            zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(2.5),
             size: Size::new(1000.0, 600.0),
         };
         let w2s = vt.world_to_screen();
@@ -273,7 +273,7 @@ mod tests {
     fn center_maps_to_screen_center() {
         let vt = ViewportTransform {
             center: Point::new(10.0, 20.0),
-            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(3.0),
+            zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(3.0),
             size: Size::new(800.0, 400.0),
         };
         let s = vt.world_to_screen() * vt.center;
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn reset_zoom_returns_to_100_percent() {
         let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
-        vt.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(4.7);
+        vt.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(4.7);
         vt.center = Point::new(10.0, 20.0);
         vt.reset_zoom();
         assert!((vt.zoom.get() - 1.0).abs() < 1e-9);
@@ -384,11 +384,11 @@ mod tests {
     fn glide_interpolates_center_and_zoom() {
         let from = ViewportTransform {
             center: Point::new(0.0, 0.0),
-            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
+            zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.0),
             size: Size::new(1000.0, 800.0),
         };
         let to_center = Point::new(100.0, 200.0);
-        let to_zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(3.0);
+        let to_zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(3.0);
         // t = 0 reproduces the source exactly.
         use crate::logic::animate::Phase;
         let g0 = ViewportTransform::glide(from, to_center, to_zoom, Phase::START);
@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn pan_moves_content_with_the_drag() {
         let mut vt = ViewportTransform::new(Size::new(1000.0, 1000.0));
-        vt.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
+        vt.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(2.0);
         let world_pt = Point::new(50.0, 50.0);
         let screen_before = vt.world_to_screen() * world_pt;
         vt.pan_by_screen(ScrollStep::dragged(

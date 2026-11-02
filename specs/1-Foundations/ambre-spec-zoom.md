@@ -77,7 +77,9 @@ maps it onto its own space -- a grid cell, a world unit, a page point.
 ```rust
 /// The shared zoom factor and the ladder of presets the chip steps through.
 /// `min` and `max` are the application's own clamp; `factor` is 1.0 at 100 %.
-pub struct Zoom { pub factor: Scale<Doc, View>, pub min: Scale<Doc, View>, pub max: Scale<Doc, View> }
+/// `S` is the space the application zooms: `Doc` for a grid or a page,
+/// `Board` for a board.
+pub struct Zoom<S: ScalesTo<View>> { pub factor: Scale<S, View>, pub min: Scale<S, View>, pub max: Scale<S, View> }
 ```
 
 **The preset ladder.** One ordered set of stops: 50 %, 75 %, 100 %, 125 %, and up. Every

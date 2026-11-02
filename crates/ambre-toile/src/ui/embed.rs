@@ -664,7 +664,7 @@ mod tests {
     #[test]
     fn a_child_pixel_is_a_screen_pixel() {
         let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
-        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.5);
+        cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(2.5);
         let e = doc_embed(
             "e1",
             Id::<Document>::mint(),
@@ -700,7 +700,7 @@ mod tests {
     #[test]
     fn child_size_scales_with_zoom() {
         let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
-        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.5);
+        cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(0.5);
         let e = doc_embed(
             "e1",
             Id::<Document>::mint(),
@@ -740,7 +740,7 @@ mod tests {
             for zoom in [0.5, 1.0, 2.5] {
                 let e = doc_embed("e", Id::<Document>::mint(), bounds, rot);
                 let cam = ViewportTransform {
-                    zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom),
+                    zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(zoom),
                     size: Size::new(800.0, 600.0),
                     ..Default::default()
                 };
@@ -1419,7 +1419,7 @@ mod web_embed_tests {
             "https://example.com",
         ))]);
         let mut zoomed = cam();
-        zoomed.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(3.0);
+        zoomed.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(3.0);
         let one = visible_web_embeds(&dv, &cam(), None)[0].layout_size;
         let two = visible_web_embeds(&dv, &zoomed, None)[0].layout_size;
         assert_eq!(
@@ -1446,7 +1446,7 @@ mod web_embed_tests {
         ))]);
 
         let mut zoomed = cam();
-        zoomed.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
+        zoomed.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(2.0);
         let one = visible_web_embeds(&dv, &cam(), None)[0].screen_rect;
         let two = visible_web_embeds(&dv, &zoomed, None)[0].screen_rect;
         assert!(

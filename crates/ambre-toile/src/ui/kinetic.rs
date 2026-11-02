@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn the_wheel_moves_the_content_as_a_page_scrolls() {
         let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
-        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
+        cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(2.0);
         let mut kinetic = Kinetic::default();
         let world = Point::new(10.0, 10.0);
         let before = cam.world_to_screen() * world;
@@ -226,7 +226,7 @@ mod tests {
         );
         for zoom in [0.25, 1.0, 4.0] {
             let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
-            cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
+            cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(zoom);
             let world = Point::new(10.0, 10.0);
             let before = cam.world_to_screen() * world;
             move_view(&mut cam, step);

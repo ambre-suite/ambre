@@ -246,6 +246,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         presenter_peer_toile,
         perf_snap,
         zoom,
+        board_zoom,
         ctx_scope,
         filter_active,
         toile_ctx_scope,
@@ -652,7 +653,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         <toile_chrome::StatusBar
                             stats=sel_stats_toile
                             perf=perf_snap
-                            zoom=zoom
+                            zoom=board_zoom
                         />
                     }
                     .into_any()
@@ -880,7 +881,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // publishes each frame.
         {boot_is_toile.then(|| view! {
             <toile_chrome::EditingSurfaces present=present_toile>
-                <toile_chrome::TopMenuBar zoom=zoom on_command=on_command toggles=toile_toggles />
+                <toile_chrome::TopMenuBar zoom=board_zoom on_command=on_command toggles=toile_toggles />
             </toile_chrome::EditingSurfaces>
         })}
         // Toile style / property inspector (toile-styles): a side panel shown only for

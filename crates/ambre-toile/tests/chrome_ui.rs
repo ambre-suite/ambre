@@ -40,8 +40,8 @@ use ambre_chrome::{ToastHost, Toasts};
 use ambre_core::id::{Document, Frame, Id, Thread, User};
 use ambre_core::index::{Count, Pos};
 use ambre_core::{Authored, Char, Instant, Tally};
+use ambre_core::{Board, Scale, View};
 use ambre_core::{Commands, StaticKey};
-use ambre_core::{Doc, Scale, View};
 use ambre_draw::Rect;
 use ambre_toile::chrome::{
     CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
@@ -91,9 +91,9 @@ fn mount_bar(
     stats: Option<SelStats>,
     zoom: f64,
     fps: ambre_core::FrameRate,
-) -> (web_sys::Element, RwSignal<Scale<Doc, View>>) {
+) -> (web_sys::Element, RwSignal<Scale<Board, View>>) {
     let stats = RwSignal::new(stats);
-    let zoom = RwSignal::new(Scale::<Doc, View>::within(zoom, 0.1, 10.0));
+    let zoom = RwSignal::new(Scale::<Board, View>::within(zoom, 0.1, 10.0));
     let perf = RwSignal::new(PerfSnapshot {
         fps,
         ..PerfSnapshot::default()
@@ -376,7 +376,7 @@ fn tool_palette_click_switches_active_tool() {
 fn top_menu_bar_zoom_in_fires_command() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
+    let zoom = RwSignal::new(Scale::<Board, View>::ONE);
     let fired = RwSignal::new(None::<StaticKey<Commands>>);
     let on_command = Callback::new(move |id: StaticKey<Commands>| fired.set(Some(id)));
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
@@ -509,7 +509,7 @@ fn the_button_bars_announce_the_registry_labels() {
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
     ambre_toile::chrome::init_command_states(&store);
     let toggles = Toggles::from_store(&store);
-    let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
+    let zoom = RwSignal::new(Scale::<Board, View>::ONE);
     let on_command = Callback::new(|_: StaticKey<Commands>| {});
     let menu_bar = mount_in_container(move || {
         view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }

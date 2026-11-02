@@ -1263,7 +1263,7 @@ mod tests {
         st.handle_command(large_import());
         let out = st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
             center: Point::ZERO,
-            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.5),
+            zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(0.5),
             size: Size::new(800.0, 600.0),
         }));
         assert!(out.update.is_none());

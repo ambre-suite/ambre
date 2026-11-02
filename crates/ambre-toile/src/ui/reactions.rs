@@ -291,7 +291,7 @@ mod tests {
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
         let near = ViewportTransform::new(ambre_draw::Size::new(800.0, 800.0));
         let far = ViewportTransform {
-            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(4.0),
+            zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(4.0),
             ..near
         };
 

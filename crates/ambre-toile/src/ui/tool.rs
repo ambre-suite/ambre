@@ -1531,7 +1531,7 @@ mod tests {
     fn cam() -> ViewportTransform {
         ViewportTransform {
             center: Point::ZERO,
-            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
+            zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.0),
             size: ambre_draw::Size::new(1000.0, 1000.0),
         }
     }
@@ -2047,7 +2047,7 @@ mod tests {
         e.style.stroke_w = Px::<StoredBoard>::new(0.5);
         let disp = viewport(vec![DisplayNode::Element(e)]);
         let mut cam = cam();
-        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(4.0);
+        cam.zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(4.0);
         let mut m = ToolMachine::new();
         for (off, on_line) in [(0.5, true), (2.0, false)] {
             let at = Point::new(500.0, off);

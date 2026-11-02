@@ -21,8 +21,8 @@
 
 use ambre_chrome::commands::Locale;
 use ambre_chrome::{Availability, ContextMenu, MenuEntry};
+use ambre_core::{Board, Scale, View};
 use ambre_core::{Commands, StaticKey};
-use ambre_core::{Doc, Scale, View};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
@@ -92,7 +92,7 @@ fn zoom_button(
 /// authoritative Undo/Redo availability the menu rows read (`UNDO-006`).
 #[component]
 pub fn TopMenuBar(
-    zoom: RwSignal<Scale<Doc, View>>,
+    zoom: RwSignal<Scale<Board, View>>,
     on_command: Callback<StaticKey<Commands>>,
     toggles: Toggles,
 ) -> impl IntoView {

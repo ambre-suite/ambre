@@ -74,5 +74,5 @@ pub use palette::{
 };
 pub use passphrase::{PassphraseDialog, PassphraseIntent};
 pub use shortcut::Kbd;
-pub use status::{PerfChip, PerfDetail, StatusLabel, ZOOM_PRESETS, ZoomChip};
+pub use status::{PerfChip, PerfDetail, StatusLabel, ZoomChip, zoom_presets};
 pub use toast::{ToastHost, ToastKind, Toasts};

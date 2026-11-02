@@ -169,7 +169,7 @@ impl InlineEditor {
     /// pixels, so its caret keeps one width at every zoom, and lands where the
     /// walk's body does.
     pub fn pad(
-        zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+        zoom: ambre_core::Scale<ambre_core::Board, ambre_core::View>,
     ) -> ambre_core::Px<ambre_core::Surface> {
         super::viewport::ViewportTransform::to_surface(TEXT_PAD, zoom)
     }
@@ -205,9 +205,9 @@ impl InlineEditor {
         &mut self,
         font_cx: &mut FontContext,
         wrap_w: Px<View>,
-        zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+        zoom: ambre_core::Scale<ambre_core::Board, ambre_core::View>,
     ) {
-        self.core.flush(font_cx, wrap_w, zoom);
+        self.core.flush(font_cx, wrap_w, zoom.text_zoom());
     }
 
     /// The caret rectangle in local editor coordinates, for the transparent

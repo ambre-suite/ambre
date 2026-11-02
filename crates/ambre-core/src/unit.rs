@@ -30,7 +30,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::font::PX_PER_PT;
 use crate::scale::Scale;
 use crate::space::{
-    Board, Css, Doc, Float, Rescale, Scalar, ScaleSpace, Space, StoredBoard, Surface, View,
+    Board, Css, Doc, Float, Rescale, Scalar, ScalesTo, Space, StoredBoard, Surface, View,
 };
 use crate::span::{FracMs, TimeSpan};
 
@@ -284,7 +284,7 @@ where
 }
 
 /// The length carried into the space `B` by `scale`.
-impl<A: ScaleSpace, B: ScaleSpace> Mul<Scale<A, B>> for Px<A>
+impl<A: ScalesTo<B>, B: Space> Mul<Scale<A, B>> for Px<A>
 where
     A::Repr: Rescale<B::Repr>,
 {
@@ -295,7 +295,7 @@ where
 }
 
 /// The length carried back into the space `A`, before `scale`.
-impl<A: ScaleSpace, B: ScaleSpace> Div<Scale<A, B>> for Px<B>
+impl<A: ScalesTo<B>, B: Space> Div<Scale<A, B>> for Px<B>
 where
     B::Repr: Rescale<A::Repr>,
 {
@@ -691,6 +691,15 @@ impl Px<StoredBoard> {
     }
 }
 
+impl Px<Board> {
+    /// The length on a drawing surface under the board camera's `zoom`,
+    /// in the surface's `f64`, so a padding keeps its precision.
+    #[must_use]
+    pub fn zoomed_on_surface(self, zoom: Scale<Board, View>) -> Px<Surface> {
+        Px::new(self.0 * zoom.get())
+    }
+}
+
 impl Px<Doc> {
     /// The length on the view at `zoom`.
     #[must_use]
@@ -740,6 +749,14 @@ impl Px<View> {
     #[must_use]
     pub fn on_surface(self, view_origin: Px<Surface>) -> Px<Surface> {
         Px::new(view_origin.0 + f64::from(self.0))
+    }
+
+    /// The same length in surface pixels. A view pixel is a surface pixel in
+    /// size, and every `f32` has an exact `f64`, so nothing is lost. A
+    /// coordinate goes through [`Self::on_surface`] instead.
+    #[must_use]
+    pub const fn surface_length(self) -> Px<Surface> {
+        Px::new(self.0 as f64)
     }
 
     /// The speed of a move of this length over `span`.
