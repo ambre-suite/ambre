@@ -21,6 +21,7 @@
     clippy::panic,
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
+use crate::formula::text::CellText;
 use std::collections::BTreeMap;
 
 use ambre_core::{
@@ -141,7 +142,7 @@ impl TrameState {
                                 .engine
                                 .evaluated_text(cell)
                                 .unwrap_or_else(|| "<unevaluated>".to_owned());
-                            let stored = StoredFormula::new(raw.to_owned());
+                            let stored = CellText::<StoredForm>::new(raw.to_owned());
                             let raw = self.formula_source(&stored, &sheet, &lines);
                             let raw = raw.as_str();
                             format!("  {label} raw={raw} text={text}\n")

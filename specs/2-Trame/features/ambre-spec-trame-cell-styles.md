@@ -169,7 +169,7 @@ pub enum CondFormatKind {
     GreaterThan(String), LessThan(String), Between { low: String, high: String },
     Equal(String),
     Contains(String), StartsWith(String),
-    Formula(FormulaSource),                   // relative to the cell tested (`TRAME-FEAT-019`)
+    Formula(CellText<SourceForm>),            // relative to the cell tested (`TRAME-FEAT-019`)
     IsEmpty, IsNotEmpty, IsError,
     ColorScale2 { min_color: Rgb, max_color: Rgb },
     ColorScale3 { min_color: Rgb, mid_color: Rgb, max_color: Rgb },

@@ -25,6 +25,7 @@
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
 use ambre_core::Ordinal;
+use ambre_core::Redacted;
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
@@ -236,24 +237,18 @@ impl fmt::Display for BlockId {
 /// (`ambre-spec-prose-schema.md`). The tree stores the name itself, so the
 /// newtype exists only to keep it apart from the other strings of a command.
 /// A user may have typed the name, so `Debug` prints its length alone.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct StyleId(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct StyleId(Redacted<String>);
 
 impl StyleId {
     /// Wraps a raw value. The constructor checks nothing.
     pub const fn new(value: String) -> Self {
-        Self(value)
+        Self(Redacted::new(value))
     }
 
     /// Returns the raw text.
     pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for StyleId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "StyleId({} chars)", self.0.chars().count())
+        self.0.as_str()
     }
 }
 
@@ -3030,7 +3025,7 @@ mod tests {
     /// and none of the text a user may have typed.
     #[test]
     fn a_style_name_and_a_mark_value_print_their_length_alone() {
-        let style = StyleId("My notes".to_owned());
+        let style = StyleId(Redacted::new("My notes".to_owned()));
         assert_eq!(format!("{style:?}"), "StyleId(8 chars)");
         let link = mark::MarkRoot::Link.key();
         let value = mark::validate_value(&link, Some("https://a.example")).unwrap();

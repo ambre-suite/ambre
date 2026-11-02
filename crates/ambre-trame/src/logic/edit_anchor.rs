@@ -5,6 +5,7 @@
 // fields/helpers of the parent module through the `use super::*` glob.
 
 use super::*;
+use crate::formula::text::CellText;
 
 /// One axis of the cell an edit session opened on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,7 +107,7 @@ impl TrameState {
     pub(super) fn commit_cell_edit(
         &mut self,
         session: ambre_bus::Token<crate::EditSession>,
-        text: &FormulaSource,
+        text: &CellText<SourceForm>,
     ) -> TrameOutcome {
         let Some(anchor) = self.edit_anchor.take_if(|a| a.session == session) else {
             // Dropped when its cell went, and the UI was told then.
@@ -129,7 +130,11 @@ impl TrameState {
     }
 
     /// Write `text` to the anchored cell of the active sheet, or report it gone.
-    fn write_at_anchor(&mut self, anchor: &EditAnchor, text: &FormulaSource) -> TrameOutcome {
+    fn write_at_anchor(
+        &mut self,
+        anchor: &EditAnchor,
+        text: &CellText<SourceForm>,
+    ) -> TrameOutcome {
         let Some(at) = self.locate_anchor(anchor) else {
             let session = anchor.session;
             return TrameOutcome::display_only(vec![TrameEvent::EditTargetGone { session }]);

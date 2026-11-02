@@ -10,6 +10,7 @@
 // send to the Logic thread whenever the visible range changes.
 // ============================================================================
 
+use crate::formula::text::CellText;
 use ambre_core::Rgb;
 use ambre_core::{Doc, Px, Surface, View};
 use std::collections::{HashMap, HashSet};
@@ -17,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 use ambre_canvas::{TextEditor, TextEditorStyle};
 use ambre_draw::Color;
 
-use crate::formula::text::DisplayFormula;
+use crate::formula::text::DisplayForm;
 use crate::render::BODY_SIZE;
 use crate::{
     CellPos, CellRect, Col, ColCount, ColDelta, ColSpan, EditSession, LAST_COL, LAST_ROW,
@@ -57,7 +58,7 @@ pub struct CellData {
     pub text: String,
     /// Raw cell text (formula source for formula cells, equal to `text`
     /// otherwise). Seeds the in-cell editor so formulas are editable as text.
-    pub raw: DisplayFormula,
+    pub raw: CellText<DisplayForm>,
     pub bold: ambre_bus::Weight,
     pub italic: ambre_bus::Slant,
     /// Rich manual formatting (`trame-cell-styles`): underline run, alignments,

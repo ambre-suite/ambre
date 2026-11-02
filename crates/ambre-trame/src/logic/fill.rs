@@ -10,6 +10,7 @@
 
 use super::*;
 use crate::formula::shift::shift_formula;
+use crate::formula::text::CellText;
 use ambre_bus::app::trame::CellNumber;
 use ambre_bus::{ColDelta, FillMode, RowDelta};
 
@@ -177,7 +178,7 @@ impl TrameState {
                     .step_by(bh)
                     .map(|top| CellPos::new(top, left))
                     .collect();
-                let sources: Vec<FormulaSource> =
+                let sources: Vec<CellText<SourceForm>> =
                     masters.iter().map(|&m| self.cell_source(m)).collect();
                 let series = series_params(mode, &sources);
                 let tiles = merged_tiles(
@@ -206,7 +207,7 @@ impl TrameState {
                     .step_by(bw)
                     .map(|left| CellPos::new(top, left))
                     .collect();
-                let sources: Vec<FormulaSource> =
+                let sources: Vec<CellText<SourceForm>> =
                     masters.iter().map(|&m| self.cell_source(m)).collect();
                 let series = series_params(mode, &sources);
                 let tiles = merged_tiles(
@@ -244,7 +245,7 @@ impl TrameState {
         &mut self,
         tile: CellRect,
         term: Term,
-        src_raw: &FormulaSource,
+        src_raw: &CellText<SourceForm>,
         src_master: CellPos,
         series: Option<Series>,
     ) {
@@ -274,7 +275,7 @@ impl TrameState {
         // Clear the covered cells first: merge_cells/rebuild only accept an empty
         // block, and a previous value there would otherwise be masked.
         for at in tile.cells().filter(|&at| at != master) {
-            self.write_cell(at, &FormulaSource::default());
+            self.write_cell(at, &CellText::<SourceForm>::default());
         }
         self.write_cell(master, &text);
         // Carry the source master's formatting onto the tile master.
@@ -292,7 +293,7 @@ impl TrameState {
     fn fill_vertical(&mut self, src: CellRect, dest: CellRect, mode: FillMode) {
         let origin = src.top_left.row;
         for col in src.cols() {
-            let sources: Vec<FormulaSource> = src
+            let sources: Vec<CellText<SourceForm>> = src
                 .rows()
                 .into_iter()
                 .map(|r| self.cell_source(CellPos::new(r, col)))
@@ -315,7 +316,7 @@ impl TrameState {
     fn fill_horizontal(&mut self, src: CellRect, dest: CellRect, mode: FillMode) {
         let origin = src.top_left.col;
         for row in src.rows() {
-            let sources: Vec<FormulaSource> = src
+            let sources: Vec<CellText<SourceForm>> = src
                 .cols()
                 .into_iter()
                 .map(|c| self.cell_source(CellPos::new(row, c)))
@@ -344,7 +345,7 @@ impl TrameState {
         at: CellPos,
         from: CellPos,
         term: Term,
-        sources: &[FormulaSource],
+        sources: &[CellText<SourceForm>],
         series: Option<Series>,
     ) {
         let text = if let Some(series) = series {
@@ -362,7 +363,7 @@ impl TrameState {
                     shift_formula(raw, at.row - from.row, at.col - from.col)
                 }
                 Some(raw) => raw.clone(),
-                None => FormulaSource::default(),
+                None => CellText::<SourceForm>::default(),
             }
         };
         // The value and the carried style both need the cell's lines. A cell
@@ -460,7 +461,7 @@ pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count)
 ///
 /// A step past the largest number is still a series. It stops at its first
 /// filled term, with a notice (`TRAME-UI-180`).
-fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
+fn series_params(mode: FillMode, sources: &[CellText<SourceForm>]) -> Option<Series> {
     if mode == FillMode::Copy {
         return None;
     }
@@ -490,7 +491,7 @@ fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
 
 /// Parse a plain numeric literal, or `None` for empty / non-numeric / formula
 /// cells (which cannot participate in a numeric series).
-fn parse_num(raw: &FormulaSource) -> Option<CellNumber> {
+fn parse_num(raw: &CellText<SourceForm>) -> Option<CellNumber> {
     let t = raw.as_str().trim();
     if t.is_empty() || t.starts_with('=') {
         return None;
@@ -500,9 +501,9 @@ fn parse_num(raw: &FormulaSource) -> Option<CellNumber> {
 
 /// Render an extrapolated series value as cell text: an integral value drops the
 /// decimals (`3.0 -> "3"`), otherwise Rust's shortest round-trip form is used.
-fn format_number(value: CellNumber) -> FormulaSource {
+fn format_number(value: CellNumber) -> CellText<SourceForm> {
     let v = value.get();
-    FormulaSource::new(if v.fract() == 0.0 && v.abs() < 1e15 {
+    CellText::<SourceForm>::new(if v.fract() == 0.0 && v.abs() < 1e15 {
         format!("{}", v as i64)
     } else {
         format!("{v}")

@@ -12,6 +12,7 @@
 //! [`LogicCommand::App`](crate::LogicCommand::App), whose address is a
 //! document (`BUS-027`).
 
+use ambre_core::Redacted;
 use ambre_core::{ByteOffset, CharCount, CharOffset, CharSpan, CharVec, Tally, TallyKind};
 use serde::{Deserialize, Serialize};
 
@@ -934,26 +935,20 @@ impl std::fmt::Debug for SealedChannelKey {
 /// Never empty: a channel with no topic holds no topic at all, so the
 /// catalogue stores an absent key rather than an empty string. A member typed
 /// it, so `Debug` prints its length alone.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct Topic(String);
-
-impl std::fmt::Debug for Topic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Topic({} chars)", self.0.chars().count())
-    }
-}
+pub struct Topic(Redacted<String>);
 
 impl Topic {
     /// The topic `text` states, or `None` for an empty text.
     pub fn new(text: impl Into<String>) -> Option<Self> {
         let text = text.into();
-        (!text.is_empty()).then_some(Self(text))
+        (!text.is_empty()).then_some(Self(Redacted::new(text)))
     }
 
     /// The text of the topic.
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
@@ -967,7 +962,7 @@ impl TryFrom<String> for Topic {
 
 impl From<Topic> for String {
     fn from(topic: Topic) -> Self {
-        topic.0
+        topic.0.into_inner()
     }
 }
 

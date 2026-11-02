@@ -9,6 +9,7 @@
 //! [`ProseCommand::ApplyMark`]: super::ProseCommand::ApplyMark
 
 use super::MarkKey;
+use ambre_core::Redacted;
 use ambre_core::{FontSize, Rgb, Rgba};
 
 ambre_core::crdt_names! {
@@ -196,20 +197,14 @@ pub fn read_font_size(raw: &str) -> Option<FontSize> {
 /// value read back from the document has not, and stays a string: a peer on
 /// another build may have written it. The text of a key that carries text is
 /// the user's, so `Debug` prints the length alone.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MarkValue(String);
-
-impl std::fmt::Debug for MarkValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MarkValue({} chars)", self.0.chars().count())
-    }
-}
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MarkValue(Redacted<String>);
 
 impl MarkValue {
     /// The value, for the call that writes it into the text.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
@@ -231,19 +226,19 @@ pub fn validate_value(key: &MarkKey, raw: Option<&str>) -> Result<MarkValue, Mar
     let arity = || MarkValueError::ArityMismatch { key: key.clone() };
     if FLAG_KEYS.contains(&root) {
         return match raw {
-            None | Some("") => Ok(MarkValue(String::new())),
+            None | Some("") => Ok(MarkValue(Redacted::new(String::new()))),
             Some(_) => Err(arity()),
         };
     }
     let raw = raw.ok_or_else(arity)?;
     if COLOR_KEYS.contains(&root) {
-        return Ok(MarkValue(canonical_color(parse_color(raw)?)));
+        return Ok(MarkValue(Redacted::new(canonical_color(parse_color(raw)?))));
     }
     if NUMERIC_KEYS.contains(&root) {
         let size = parse_font_size(raw)?;
-        return Ok(MarkValue(canonical_number(size)));
+        return Ok(MarkValue(Redacted::new(canonical_number(size))));
     }
-    Ok(MarkValue(raw.to_owned()))
+    Ok(MarkValue(Redacted::new(raw.to_owned())))
 }
 
 /// The keys whose value is a number, and the only ones a re-spelling applies to.
@@ -264,8 +259,8 @@ const NUMERIC_KEYS: [MarkRoot; 1] = [MarkRoot::FontSize];
 #[must_use]
 pub fn canonical_value(mark_key: &MarkKey, raw: &str) -> Option<MarkValue> {
     if !MarkRoot::of(mark_key).is_some_and(|root| NUMERIC_KEYS.contains(&root)) {
-        return Some(MarkValue(raw.to_owned()));
+        return Some(MarkValue(Redacted::new(raw.to_owned())));
     }
     let value = raw.parse::<f32>().ok().filter(|value| value.is_finite())?;
-    Some(MarkValue(spell(value)))
+    Some(MarkValue(Redacted::new(spell(value))))
 }

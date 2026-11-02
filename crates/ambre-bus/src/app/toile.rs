@@ -13,6 +13,7 @@
 //! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 
 use ambre_core::Bounded;
+use ambre_core::Redacted;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -502,9 +503,9 @@ impl LinkTarget {
 /// `data:` text therefore never becomes a `WebAddress`, and never reaches a
 /// frame (`TOILE-088`, `TOILE-267`). A user typed the address, so `Debug`
 /// prints its length alone.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct WebAddress(String);
+pub struct WebAddress(Redacted<String>);
 
 /// Why a text is not an address a frame may load. One variant per message
 /// the user reads, so the wording lives with the rule rather than at the
@@ -599,17 +600,17 @@ impl WebAddress {
             return Err(AddressError::NoHost);
         }
 
-        Ok(Self(format!("https://{rest}")))
+        Ok(Self(Redacted::new(format!("https://{rest}"))))
     }
 
     /// The address's text, for the frame that loads it.
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 
     /// The address's text, for the document that stores it.
     pub fn into_string(self) -> String {
-        self.0
+        self.0.into_inner()
     }
 }
 
@@ -644,26 +645,20 @@ impl TryFrom<String> for WebAddress {
 
 impl From<WebAddress> for String {
     fn from(address: WebAddress) -> Self {
-        address.0
+        address.0.into_inner()
     }
 }
 
 /// The link target of a web page, once its address passed the address gate.
 impl From<WebAddress> for ambre_core::LinkUrl {
     fn from(address: WebAddress) -> Self {
-        Self::new(address.0)
-    }
-}
-
-impl std::fmt::Debug for WebAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "WebAddress({} chars)", self.0.chars().count())
+        Self::new(address.0.into_inner())
     }
 }
 
 impl std::fmt::Display for WebAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.0.as_str())
     }
 }
 

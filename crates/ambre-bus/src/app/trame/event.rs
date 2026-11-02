@@ -837,6 +837,7 @@ ambre_core::define_flag! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::trame::CellText;
 
     fn numbers(values: &[f64]) -> Vec<CellNumber> {
         values
@@ -872,7 +873,7 @@ mod tests {
     fn an_authored_text_prints_its_length_alone() {
         use super::super::{
             CellFormat, ClipboardCell, ClipboardPayload, CondFormatKind, FilterKind, FilterOp,
-            FormulaSource, TrameCommand, ValidationKind,
+            SourceForm, TrameCommand, ValidationKind,
         };
         let secret = "Q3 layoffs".to_owned();
         let at = (Row::ZERO, Col::ZERO);
@@ -937,7 +938,7 @@ mod tests {
             format!("{:?}", CondFormatKind::Contains(secret.clone())),
             format!(
                 "{:?}",
-                CondFormatKind::Formula(FormulaSource::new(secret.clone()))
+                CondFormatKind::Formula(CellText::<SourceForm>::new(secret.clone()))
             ),
             format!("{:?}", ValidationKind::Regex(secret.clone())),
             format!("{:?}", ValidationKind::List(vec![secret.clone()])),

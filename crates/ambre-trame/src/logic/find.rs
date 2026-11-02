@@ -9,9 +9,11 @@
 // super::*`.
 
 use super::*;
+use crate::formula::text::CellText;
 use crate::formula::text::fold_char;
 use crate::formula::types::CellId;
 use ambre_bus::app::find::{FindText, MatchCount, MatchIndex};
+use ambre_core::Redacted;
 
 pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
@@ -28,24 +30,17 @@ fn fold_needle(query: &FindText, case: CaseMatch) -> FoldedNeedle {
 
 /// The text a replace writes in place of each match, as the user typed it.
 /// Any text, the empty one included, is a replacement.
-#[derive(Clone, PartialEq, Eq)]
-pub(super) struct Replacement(String);
-
-/// The length alone: the text is document content.
-impl std::fmt::Debug for Replacement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Replacement({} chars)", self.0.chars().count())
-    }
-}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Replacement(Redacted<String>);
 
 impl Replacement {
     /// The replacement `text`.
     pub(super) fn new(text: String) -> Self {
-        Self(text)
+        Self(Redacted::new(text))
     }
 
     fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
@@ -240,7 +235,7 @@ impl TrameState {
             let active = self.active_sheet.clone();
             self.formula_source(&stored, &active, &self.sheet_lines())
         } else {
-            FormulaSource::new(stored.into_string())
+            CellText::<SourceForm>::new(stored.into_string())
         };
         if is_formula && options.scope == SearchScope::Values {
             return false;
@@ -278,7 +273,7 @@ impl TrameState {
         let map = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str());
-        let mut edits: Vec<((Uid, Uid), Option<StoredFormula>)> = Vec::new();
+        let mut edits: Vec<(CellKey, Option<CellText<StoredForm>>)> = Vec::new();
         let mut refusals = Vec::new();
         let lines = self.sheet_lines();
         for at in index.used_range().into_iter().flat_map(CellRect::cells) {
@@ -289,7 +284,7 @@ impl TrameState {
                 .get(CellKey::of(rl, cl).as_str())
                 .map(|v| v.get_deep_value())
             {
-                Some(LoroValue::String(s)) => StoredFormula::new(s.to_string()),
+                Some(LoroValue::String(s)) => CellText::<StoredForm>::new(s.to_string()),
                 _ => continue,
             };
             let is_formula = raw.is_formula();
@@ -299,7 +294,7 @@ impl TrameState {
             let raw = if is_formula {
                 self.formula_source(&raw, sheet_id, &lines)
             } else {
-                FormulaSource::new(raw.into_string())
+                CellText::<SourceForm>::new(raw.into_string())
             };
             // Formula cells (in the formulas scope) match on their raw formula
             // text; plain cells match on the engine's displayed value.
@@ -334,19 +329,19 @@ impl TrameState {
                         }
                     }
                 };
-                edits.push(((rl, cl), stored));
+                edits.push((CellKey::of(rl, cl), stored));
             }
         }
         drop(lines);
         self.write_refusals.extend(refusals);
         let count = MatchCount::from_len(edits.len());
-        for ((rl, cl), stored) in edits {
+        for (key, stored) in edits {
             match stored {
                 Some(text) => {
-                    let _ = map.insert(CellKey::of(rl, cl).as_str(), text.as_str());
+                    let _ = map.insert(key.as_str(), text.as_str());
                 }
                 None => {
-                    let _ = map.delete(CellKey::of(rl, cl).as_str());
+                    let _ = map.delete(key.as_str());
                 }
             }
         }
@@ -382,13 +377,13 @@ fn cell_matches(haystack: &str, needle: &FoldedNeedle, extent: MatchExtent) -> b
 /// the entire content for `replacement`. The substring case replaces every
 /// occurrence of the needle, case-insensitively unless its case is sensitive.
 fn rewrite(
-    raw: &FormulaSource,
+    raw: &CellText<SourceForm>,
     needle: &FoldedNeedle,
     replacement: &Replacement,
     extent: MatchExtent,
-) -> FormulaSource {
+) -> CellText<SourceForm> {
     let raw = raw.as_str();
-    FormulaSource::new(match (extent, needle.case) {
+    CellText::<SourceForm>::new(match (extent, needle.case) {
         (MatchExtent::WholeCell, _) => replacement.as_str().to_owned(),
         (MatchExtent::Substring, CaseMatch::Sensitive) => {
             raw.replace(needle.text.as_str(), replacement.as_str())
@@ -452,9 +447,10 @@ fn replace_ci(raw: &str, needle: &FoldedNeedle, replacement: &Replacement) -> St
 #[cfg(test)]
 mod tests {
     use super::{
-        CaseMatch, FindText, FoldedNeedle, FormulaSource, MatchExtent, Replacement, fold_needle,
+        CaseMatch, FindText, FoldedNeedle, MatchExtent, Replacement, SourceForm, fold_needle,
         replace_ci, rewrite,
     };
+    use crate::formula::text::CellText;
 
     /// `query` folded by `case`.
     fn needle(query: &str, case: CaseMatch) -> FoldedNeedle {
@@ -537,7 +533,7 @@ mod tests {
     #[test]
     fn whole_cell_rewrite_swaps_the_entire_content() {
         let y = Replacement::new("y".to_owned());
-        let raw = |text: &str| FormulaSource::new(text.to_owned());
+        let raw = |text: &str| CellText::<SourceForm>::new(text.to_owned());
         let x = needle("x", CaseMatch::Insensitive);
         let whole = rewrite(&raw("=A1+1"), &x, &y, MatchExtent::WholeCell);
         assert_eq!(whole.as_str(), "y");

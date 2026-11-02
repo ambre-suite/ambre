@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use crate::formula::parser::{parse_formula, resolve_refs};
-use crate::formula::text::{DisplayFormula, FormulaSource, StoredFormula};
+use crate::formula::text::{DisplayForm, SourceForm, StoredForm};
 use crate::formula::types::CellValue;
 use crate::formula::types::Expr;
 use crate::formula::{

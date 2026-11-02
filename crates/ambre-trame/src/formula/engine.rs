@@ -8,6 +8,7 @@
 //! [`CellId`]; the host passes the current per-sheet indices on every call so
 //! references resolve against live positions.
 
+use crate::formula::text::CellText;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
@@ -16,7 +17,7 @@ use petgraph::visit::Topo;
 use super::cache::BytecodeCache;
 use super::compile::SheetIndices;
 use super::dag::DependencyGraph;
-use super::text::StoredFormula;
+use super::text::StoredForm;
 use super::types::{CellId, CellValue, FormulaCtx};
 use super::vm::EvalContext;
 use ambre_bus::DateSerial;
@@ -52,7 +53,7 @@ impl FormulaEngine {
     pub fn on_cell_changed(
         &mut self,
         cell: CellId,
-        raw: StoredFormula,
+        raw: CellText<StoredForm>,
         indices: &SheetIndices,
         ctx: &dyn FormulaCtx,
     ) {
@@ -184,7 +185,7 @@ fn now_serial() -> DateSerial {
 
 /// Parse a plain cell's raw text into a literal [`CellValue`]. Text that
 /// spells no finite number stays text (`TRAME-245`).
-fn literal_value(raw: &StoredFormula) -> CellValue {
+fn literal_value(raw: &CellText<StoredForm>) -> CellValue {
     match super::types::finite_number(raw.as_str()) {
         Some(n) => CellValue::Number(n),
         None => CellValue::Text(raw.as_str().to_owned()),

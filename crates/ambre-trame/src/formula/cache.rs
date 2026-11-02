@@ -5,13 +5,14 @@
 //! evaluation pass. Recompilation resolves positional references against the
 //! current per-sheet indices (so `=A1` binds to the row/column `Uid`).
 
+use crate::formula::text::CellText;
 use std::collections::{HashMap, HashSet};
 
 use super::compile::{SheetIndices, compile};
 use super::dag::DependencyGraph;
 use super::identity::unbind;
 use super::parser::{parse_formula, resolve_refs};
-use super::text::StoredFormula;
+use super::text::StoredForm;
 use super::types::{CellBytecode, CellId, CellValue, FormulaCtx, FormulaError, SheetQualifier};
 
 /// Caches compiled bytecode and tracks stale cells for incremental compilation.
@@ -23,7 +24,7 @@ pub struct BytecodeCache {
     /// The raw text each entry of `entries` was compiled from, so a cell
     /// retyped with the same text is recognised and not recompiled
     /// (`TRAME-212`).
-    sources: HashMap<CellId, StoredFormula>,
+    sources: HashMap<CellId, CellText<StoredForm>>,
     /// Formulas compiled since construction, for the tests that hold
     /// `TRAME-212`.
     compiles: u64,
@@ -46,7 +47,7 @@ impl BytecodeCache {
 
     /// Whether `cell` holds bytecode compiled from exactly `raw`: retyping it
     /// changes nothing, so the edit path skips it (`TRAME-212`).
-    pub fn compiled_from(&self, cell: CellId, raw: &StoredFormula) -> bool {
+    pub fn compiled_from(&self, cell: CellId, raw: &CellText<StoredForm>) -> bool {
         self.sources.get(&cell).is_some_and(|source| source == raw)
     }
 
@@ -82,7 +83,7 @@ impl BytecodeCache {
     pub fn recompile_if_stale(
         &mut self,
         cell: CellId,
-        raw: StoredFormula,
+        raw: CellText<StoredForm>,
         indices: &SheetIndices,
         deps: &mut DependencyGraph,
         ctx: &dyn FormulaCtx,

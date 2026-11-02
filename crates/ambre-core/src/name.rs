@@ -5,9 +5,10 @@
 //! refuses one before it is written or sealed (`SYNC-178`, and the Murmure
 //! channels spec). It builds a [`Name`], which only a fitting text makes.
 
+use crate::{Rule, Validated};
 use std::fmt;
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 /// The longest name, in characters (`ambre-spec-budgets.md`, section 6).
 pub const NAME_MAX_CHARS: usize = 128;
@@ -31,12 +32,29 @@ pub struct NameTooLong;
 /// text, and a read past the cap is refused. A document's name is sealed
 /// for the relay, so `Debug` prints the length alone, and a log carries none
 /// of the text.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-pub struct Name(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Name(Validated<NameLength>);
 
-impl fmt::Debug for Name {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Name({} chars)", self.0.chars().count())
+/// The rule of a [`Name`]: at most [`NAME_MAX_CHARS`] characters.
+pub enum NameLength {}
+
+impl Rule for NameLength {
+    type Error = NameTooLong;
+
+    fn admit(text: String) -> Result<String, NameTooLong> {
+        if name_fits(&text) {
+            Ok(text)
+        } else {
+            Err(NameTooLong)
+        }
+    }
+}
+
+/// The empty name, which fits the cap.
+impl Default for Name {
+    fn default() -> Self {
+        Self(Validated::admitted(String::new()))
     }
 }
 
@@ -47,20 +65,15 @@ impl Name {
     ///
     /// [`NameTooLong`] when `text` runs past [`NAME_MAX_CHARS`] characters.
     pub fn new(text: impl Into<String>) -> Result<Self, NameTooLong> {
-        let text = text.into();
-        if name_fits(&text) {
-            Ok(Self(text))
-        } else {
-            Err(NameTooLong)
-        }
+        Validated::parse(text).map(Self)
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.0.as_str().is_empty()
     }
 
     /// The name `text` gives once cut to its first [`NAME_MAX_CHARS`]
@@ -68,43 +81,33 @@ impl Name {
     /// member typed and which may run past the cap.
     #[must_use]
     pub fn cut_to_fit(text: &str) -> Self {
-        Self(text.chars().take(NAME_MAX_CHARS).collect())
+        Self(Validated::admitted(
+            text.chars().take(NAME_MAX_CHARS).collect(),
+        ))
     }
 
     /// The name without its leading and trailing blanks. A trimmed name is
     /// never longer, so it always fits the cap.
     #[must_use]
     pub fn trimmed(&self) -> Self {
-        Self(self.0.trim().to_owned())
+        Self(Validated::admitted(self.0.as_str().trim().to_owned()))
     }
 
     pub fn into_string(self) -> String {
-        self.0
+        self.0.into_string()
     }
 
     /// The UTF-8 bytes of the name, as the plaintext its seal takes. A
     /// document's name is sealed for the relay.
     #[must_use]
     pub fn to_plaintext(&self) -> crate::SecretBytes {
-        crate::SecretBytes::new(self.0.as_bytes().to_vec())
+        crate::SecretBytes::new(self.0.as_str().as_bytes().to_vec())
     }
 }
 
 impl fmt::Display for Name {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl Serialize for Name {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-impl<'de> Deserialize<'de> for Name {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::new(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+        f.write_str(self.0.as_str())
     }
 }
 
@@ -118,12 +121,26 @@ pub struct InvalidDisplayName;
 /// never blank, at most [`NAME_MAX_CHARS`] characters. It travels as its text,
 /// and a read of one that breaks the rule is refused. `Debug` prints the
 /// length alone, so a log carries none of the text.
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct DisplayName(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DisplayName(Validated<DisplayNameRule>);
 
-impl fmt::Debug for DisplayName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "DisplayName({} chars)", self.0.chars().count())
+/// The rule of a [`DisplayName`]: trimmed, never blank, at most
+/// [`NAME_MAX_CHARS`] characters.
+pub enum DisplayNameRule {}
+
+impl Rule for DisplayNameRule {
+    type Error = InvalidDisplayName;
+
+    fn admit(text: String) -> Result<String, InvalidDisplayName> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() || !name_fits(trimmed) {
+            Err(InvalidDisplayName)
+        } else if trimmed.len() == text.len() {
+            Ok(text)
+        } else {
+            Ok(trimmed.to_owned())
+        }
     }
 }
 
@@ -135,11 +152,7 @@ impl DisplayName {
     /// [`InvalidDisplayName`] when the trimmed text is blank or runs past
     /// [`NAME_MAX_CHARS`] characters.
     pub fn new(text: &str) -> Result<Self, InvalidDisplayName> {
-        let text = text.trim();
-        if text.is_empty() || !name_fits(text) {
-            return Err(InvalidDisplayName);
-        }
-        Ok(Self(text.to_owned()))
+        Validated::parse(text).map(Self)
     }
 
     /// The display name `text` gives once trimmed and cut to its first
@@ -161,15 +174,15 @@ impl DisplayName {
             .take(4)
             .map(|b| format!("{b:02x}"))
             .collect();
-        Self(handle)
+        Self(Validated::admitted(handle))
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 
     pub fn into_string(self) -> String {
-        self.0
+        self.0.into_string()
     }
 }
 
@@ -179,26 +192,13 @@ impl TryFrom<String> for DisplayName {
     type Error = InvalidDisplayName;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
-        Self::new(&text)
+        Validated::parse(text).map(Self)
     }
 }
 
 impl fmt::Display for DisplayName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl Serialize for DisplayName {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-impl<'de> Deserialize<'de> for DisplayName {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        Self::new(&text).map_err(serde::de::Error::custom)
+        f.write_str(self.0.as_str())
     }
 }
 

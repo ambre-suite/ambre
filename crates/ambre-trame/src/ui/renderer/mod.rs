@@ -200,7 +200,9 @@ mod tests {
                 CellPos::new(Row::new(row), Col::new(col)),
                 CellData {
                     text: text.to_owned(),
-                    raw: crate::formula::text::DisplayFormula::new(text.to_owned()),
+                    raw: crate::formula::text::CellText::<crate::formula::text::DisplayForm>::new(
+                        text.to_owned(),
+                    ),
                     ..Default::default()
                 },
             );

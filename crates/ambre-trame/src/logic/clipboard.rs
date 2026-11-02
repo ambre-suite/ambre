@@ -8,6 +8,7 @@
 
 use super::*;
 use crate::formula::shift::shift_formula;
+use crate::formula::text::CellText;
 
 impl TrameState {
     /// Paste `payload` with its top-left landing on `target`
@@ -51,7 +52,7 @@ impl TrameState {
             // copied verbatim. The shifted text is in display form -- `write_cell`
             // re-canonicalizes it, so cross-sheet qualifiers survive
             // (`trame-sheets`).
-            let raw = FormulaSource::new(cell.raw.clone());
+            let raw = CellText::<SourceForm>::new(cell.raw.clone());
             let text = if raw.is_formula() {
                 shift_formula(&raw, dr, dc)
             } else {

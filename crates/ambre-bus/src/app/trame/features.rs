@@ -11,7 +11,8 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{CellNumber, CellRect, ColCount, DateSerial, FormulaSource, SheetId};
+use super::{CellNumber, CellRect, ColCount, DateSerial, SheetId, SourceForm};
+use crate::app::trame::CellText;
 use ambre_core::Tally;
 use ambre_core::{Bounded, Bounds, Refusal, Rgb};
 
@@ -91,7 +92,7 @@ pub enum CondFormatKind {
     StartsWith(String),
     /// Custom formula, for example `"=A1>AVERAGE(A:A)"` (relative refs resolved from
     /// the target cell), as the user typed it. The Logic thread parses it.
-    Formula(FormulaSource),
+    Formula(CellText<SourceForm>),
     IsEmpty,
     IsNotEmpty,
     IsError,
@@ -263,7 +264,7 @@ pub enum ValidationKind {
     Regex(String),
     /// Custom formula that must return `TRUE`, as the user typed it. The Logic
     /// thread parses it.
-    Formula(FormulaSource),
+    Formula(CellText<SourceForm>),
 }
 
 // A list entry and a pattern the author typed print their length alone.

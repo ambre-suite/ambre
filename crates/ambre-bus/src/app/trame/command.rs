@@ -6,6 +6,7 @@
 
 use super::*;
 use ambre_core::id::{Id, User};
+use ambre_core::{Redacted, Rule, Validated};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- commands (UI -> Logic)
@@ -24,25 +25,22 @@ impl crate::token::TokenKind for EditSession {
 /// A text refused as a defined name: empty, or not a letter or underscore
 /// followed by letters, digits and underscores. `Debug` prints the length
 /// alone; `Display` quotes the text, for the author who typed it.
-#[derive(Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{0:?} is not a name: a letter or underscore, then letters, digits and underscores")]
-pub struct InvalidDefinedName(String);
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "{:?} is not a name: a letter or underscore, then letters, digits and underscores",
+    .0.as_str()
+)]
+pub struct InvalidDefinedName(Redacted<String>);
 
 impl InvalidDefinedName {
     /// Wraps a raw value. The constructor checks nothing.
     pub const fn new(value: String) -> Self {
-        Self(value)
+        Self(Redacted::new(value))
     }
 
     /// Returns the raw text.
     pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for InvalidDefinedName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "InvalidDefinedName({} chars)", self.0.chars().count())
+        self.0.as_str()
     }
 }
 
@@ -52,12 +50,25 @@ impl std::fmt::Debug for InvalidDefinedName {
 /// The grammar reads some such words as something else first, a cell
 /// reference (`A1`) or a boolean (`TRUE`). `DefineName` refuses those.
 /// `Debug` prints the length alone, so a log carries none of the name.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct DefinedName(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DefinedName(Validated<NameShape>);
 
-impl std::fmt::Debug for DefinedName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "DefinedName({} chars)", self.0.chars().count())
+/// The rule of a [`DefinedName`]: the shape of a formula bareword.
+pub enum NameShape {}
+
+impl Rule for NameShape {
+    type Error = InvalidDefinedName;
+
+    fn admit(text: String) -> Result<String, InvalidDefinedName> {
+        let mut chars = text.chars();
+        let starts = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+        if starts && chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            Ok(text)
+        } else {
+            Err(InvalidDefinedName(Redacted::new(text)))
+        }
     }
 }
 
@@ -68,32 +79,24 @@ impl DefinedName {
     ///
     /// [`InvalidDefinedName`] when `text` does not have the shape of a name.
     pub fn new(text: &str) -> Result<Self, InvalidDefinedName> {
-        let mut chars = text.chars();
-        let starts = chars
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
-        if starts && chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            Ok(Self(text.to_owned()))
-        } else {
-            Err(InvalidDefinedName(text.to_owned()))
-        }
+        Validated::parse(text).map(Self)
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
 impl std::fmt::Display for DefinedName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.0.as_str())
     }
 }
 
 /// A name table is looked up by the key text the document stores.
 impl std::borrow::Borrow<str> for DefinedName {
     fn borrow(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 }
 
@@ -126,26 +129,14 @@ pub enum SheetNameRefusal {
 /// reads as (`TRAME-235`). Uniqueness compares [`SheetName::key`], which
 /// ignores case (`TRAME-078`). `Debug` prints the length alone, so a log
 /// carries none of the name.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct SheetName(String);
-
-impl std::fmt::Debug for SheetName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SheetName({} chars)", self.0.chars().count())
-    }
-}
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SheetName(Redacted<String>);
 
 /// The comparison key of a [`SheetName`]: the name with its case folded. Two
 /// names with one key are one name to the uniqueness rule and to a formula
 /// qualifier (`TRAME-078`, `TRAME-236`). Its `Debug` form is the length too.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct SheetNameKey(String);
-
-impl std::fmt::Debug for SheetNameKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SheetNameKey({} chars)", self.0.chars().count())
-    }
-}
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SheetNameKey(Redacted<String>);
 
 impl SheetName {
     /// The most characters a sheet name holds.
@@ -174,7 +165,7 @@ impl SheetName {
         if text.starts_with('\'') || text.ends_with('\'') {
             return Err(SheetNameRefusal::EdgeApostrophe);
         }
-        Ok(Self(text.to_owned()))
+        Ok(Self(Redacted::new(text.to_owned())))
     }
 
     /// The name a document or a formula already holds, kept verbatim. An
@@ -182,29 +173,29 @@ impl SheetName {
     /// rule refuses; [`SheetName::obeyed`] tells which. Only a create or a
     /// rename goes through [`SheetName::new`].
     pub fn stored(text: String) -> Self {
-        Self(text)
+        Self(Redacted::new(text))
     }
 
     /// Whether this name obeys the rule of a create or a rename as it is
     /// spelled, spaces included (`TRAME-234`).
     pub fn obeyed(&self) -> bool {
-        Self::new(&self.0).is_ok_and(|name| name.0 == self.0)
+        Self::new(self.as_str()).is_ok_and(|name| name.0 == self.0)
     }
 
     /// The name `Sheet<n>`, the fallback a stored name the rule refuses reads
     /// as, `n` the position of its tab from 1 (`TRAME-235`). It obeys the
     /// rule for any `n`.
     pub fn numbered(n: usize) -> Self {
-        Self(format!("Sheet{n}"))
+        Self(Redacted::new(format!("Sheet{n}")))
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 
     /// The key uniqueness and qualifier lookup compare (`TRAME-078`).
     pub fn key(&self) -> SheetNameKey {
-        SheetNameKey(self.0.to_lowercase())
+        SheetNameKey(Redacted::new(self.0.as_str().to_lowercase()))
     }
 
     /// The first ` (n)` variant of this name, from `n = 2`, whose key `taken`
@@ -215,8 +206,8 @@ impl SheetName {
             .map(|n| {
                 let suffix = format!(" ({n})");
                 let room = Self::MAX_CHARS.saturating_sub(ambre_core::char_len(&suffix));
-                let base: String = self.0.chars().take(room.to_usize()).collect();
-                Self(format!("{}{suffix}", base.trim_end()))
+                let base: String = self.0.as_str().chars().take(room.to_usize()).collect();
+                Self(Redacted::new(format!("{}{suffix}", base.trim_end())))
             })
             .find(|candidate| !taken(&candidate.key()))
             .unwrap_or_else(|| self.clone())
@@ -232,7 +223,7 @@ impl Default for SheetName {
 
 impl std::fmt::Display for SheetName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.0.as_str())
     }
 }
 

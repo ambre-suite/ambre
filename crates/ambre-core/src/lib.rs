@@ -71,6 +71,7 @@ pub mod ordinal;
 pub mod payload;
 pub mod provider;
 pub mod public_key;
+pub mod redacted;
 /// Which documents a client holds, and which leave first
 /// (`ambre-spec-residency.md`).
 pub mod residency;
@@ -94,6 +95,7 @@ pub mod text_offset;
 /// Lengths and angles, one type per unit and per pixel space.
 pub mod unit;
 pub mod uuid;
+pub mod validated;
 pub mod version;
 
 // Re-export the main types for convenient use.
@@ -149,7 +151,8 @@ pub use mode::{
     LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle, Visibility, WordMatch,
 };
 pub use name::{
-    DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
+    DisplayName, DisplayNameRule, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name,
+    NameLength, NameTooLong, name_fits,
 };
 pub use object_key::ObjectKey;
 pub use ordinal::{Ordinal, OrdinalKind};
@@ -161,6 +164,7 @@ pub use payload::{
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
+pub use redacted::Redacted;
 pub use role::{DocumentRank, OrganizationRank, Role};
 pub use scale::Scale;
 pub use schema::{
@@ -194,4 +198,5 @@ pub use unit::{
     ViewSpeedVector,
 };
 pub use uuid::Uuid;
+pub use validated::{Rule, Validated};
 pub use version::{Current, OpenRange, Version, VersionKind, VersionRepr};

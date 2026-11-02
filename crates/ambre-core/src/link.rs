@@ -1,5 +1,6 @@
 //! The target of a link, as a document stores it.
 
+use crate::Redacted;
 use serde::{Deserialize, Serialize};
 
 /// The target of a link as a document stores it: a web or a mail address,
@@ -8,51 +9,45 @@ use serde::{Deserialize, Serialize};
 /// rule before the host opens it. A distinct type keeps it apart from the
 /// text the link covers. A peer typed the target, so `Debug` prints its
 /// length alone, and a log carries none of it.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct LinkUrl(String);
+pub struct LinkUrl(Redacted<String>);
 
 impl LinkUrl {
     /// The target spelled as `text`.
     pub fn new(text: String) -> Self {
-        Self(text)
+        Self(Redacted::new(text))
     }
 
     /// The target's text, for the check that rules on it and the call that
     /// opens it.
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 
     /// The size of the target, in UTF-8 bytes, for the cap a writer holds
     /// it to.
     #[must_use]
     pub fn size(&self) -> crate::ByteSize {
-        crate::ByteSize::of_len(self.0.len())
+        crate::ByteSize::of_len(self.0.as_str().len())
     }
 }
 
 impl From<&str> for LinkUrl {
     fn from(text: &str) -> Self {
-        Self(text.to_owned())
+        Self(Redacted::new(text.to_owned()))
     }
 }
 
 impl From<String> for LinkUrl {
     fn from(text: String) -> Self {
-        Self(text)
+        Self(Redacted::new(text))
     }
 }
 
 impl std::fmt::Display for LinkUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::fmt::Debug for LinkUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "LinkUrl({} chars)", self.0.chars().count())
+        f.write_str(self.0.as_str())
     }
 }
 

@@ -2,6 +2,7 @@
 // TrameUiState: pixel/axis geometry, hit-testing, merge and fill-handle rectangles.
 
 use super::*;
+use crate::formula::text::CellText;
 use ambre_core::{Doc, Point, Px, Surface, View};
 
 use super::{in_view, on_grid};
@@ -36,7 +37,7 @@ impl TrameUiState {
         // ViewportData carries the computed value. Never echo the formula
         // source as its own result. For a plain literal, raw == display.
         let is_formula = text.starts_with('=');
-        entry.raw = DisplayFormula::new(text.clone());
+        entry.raw = CellText::<DisplayForm>::new(text.clone());
         // A literal the engine would read as a number aligns as one until the
         // pack confirms it.
         entry.numeric = ambre_bus::CellValueKind::from_bool(
