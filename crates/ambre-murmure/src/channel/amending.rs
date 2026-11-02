@@ -33,7 +33,7 @@ pub(super) struct Pending {
     /// Its payloads, in the order they came.
     pub(super) arrivals: Vec<Arrival>,
     /// The identity issued for it, adopted once it is admitted.
-    session: Option<(ambre_core::PeerId, PeerEntryBytes)>,
+    session: Option<(ambre_core::PeerId, Payload<PeerEntryBytes>)>,
 }
 
 impl Pending {
@@ -261,7 +261,7 @@ impl ChannelState {
         &mut self,
         document_id: Id<Document>,
         peer: ambre_core::PeerId,
-        entry: PeerEntryBytes,
+        entry: Payload<PeerEntryBytes>,
     ) -> bool {
         let Some(pending) = self.amendments_pending.get_mut(&document_id) else {
             return false;

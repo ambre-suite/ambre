@@ -35,7 +35,7 @@ use ambre_bus::{
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN};
 use ambre_core::id::{Category, Channel, Document, Id, Message, Segment, Space, User};
 use ambre_core::schema::{migration_peer, step_fingerprint};
-use ambre_core::{FixedBytes, PeerEntryBytes};
+use ambre_core::{FixedBytes, Payload, PeerEntryBytes};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{DocumentKind, MIGRATIONS, SCHEMA_VERSION};
@@ -212,7 +212,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             .adopt_session(
                 id,
                 ambre_core::PeerId::new(peer),
-                PeerEntryBytes::new(entry()),
+                Payload::<PeerEntryBytes>::new(entry()),
             )
             .expect("adopt");
     }
@@ -293,7 +293,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
         .adopt_session(
             thread,
             ambre_core::PeerId::new(THREAD_PEER),
-            PeerEntryBytes::new(entry()),
+            Payload::<PeerEntryBytes>::new(entry()),
         )
         .expect("adopt");
     state.thread_linked(segment, root, thread).expect("link");
@@ -347,7 +347,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
         .adopt_session(
             successor.document_id(),
             ambre_core::PeerId::new(SUCCESSOR_PEER),
-            PeerEntryBytes::new(entry()),
+            Payload::<PeerEntryBytes>::new(entry()),
         )
         .expect("adopt");
     state
@@ -363,7 +363,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
         .adopt_session(
             amendments,
             ambre_core::PeerId::new(AMENDMENTS_PEER),
-            PeerEntryBytes::new(entry()),
+            Payload::<PeerEntryBytes>::new(entry()),
         )
         .expect("adopt");
     state.amendments_linked(segment, amendments).expect("link");
@@ -436,7 +436,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
     space
         .adopt_session(
             ambre_core::PeerId::new(SPACE_PEER),
-            PeerEntryBytes::new(entry()),
+            Payload::<PeerEntryBytes>::new(entry()),
         )
         .expect("adopt");
     let category = Id::<Category>::mint();

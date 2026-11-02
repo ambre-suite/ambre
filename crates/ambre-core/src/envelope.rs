@@ -5,8 +5,6 @@
 //! Both depend on this crate alone, so the types live here. They hold bytes
 //! only: no primitive of this module encrypts, hashes or signs.
 
-use serde::{Deserialize, Serialize};
-
 use crate::fixed_bytes::{DebugForm, FixedRole};
 
 /// The role of a 24-byte nonce used for XChaCha20-Poly1305 encryption:
@@ -36,37 +34,14 @@ impl FixedRole for Signature {
     type Array = [u8; 64];
 }
 
-/// AEAD ciphertext wrapper. `Debug` prints its length and none of its bytes,
-/// so a logged message logs no ciphertext (`ZK-006`).
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Ciphertext(#[serde(with = "serde_bytes")] Vec<u8>);
+/// The role of AEAD ciphertext: `Payload<Ciphertext>`. `Debug` prints the
+/// length and none of the bytes, so a logged message logs no ciphertext
+/// (`ZK-006`). Serde sees the bare byte string, as the `serde_bytes` form it
+/// replaced: postcard and JSON write the same bytes.
+pub enum Ciphertext {}
 
-impl Ciphertext {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: Vec<u8>) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw bytes.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-
-    /// The length in bytes, the one reading of a ciphertext a log may carry.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Whether it holds no byte.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl std::fmt::Debug for Ciphertext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Ciphertext({} bytes)", self.0.len())
-    }
+impl crate::PayloadKind for Ciphertext {
+    const NAME: &'static str = "Ciphertext";
 }
 
 /// The associated data a seal binds its ciphertext to: the public context
@@ -120,9 +95,35 @@ impl FixedRole for EntryDigest {
 
 #[cfg(test)]
 mod tests {
-    use super::{CommitmentTag, Nonce, Signature};
+    use super::{Ciphertext, CommitmentTag, Nonce, Signature};
     use crate::authorship::SessionNonce;
-    use crate::{ByteSize, FixedBytes, KeyId, PublicKey};
+    use crate::{ByteSize, FixedBytes, KeyId, Payload, PublicKey};
+
+    /// A ciphertext prints its length and none of its bytes (`ZK-006`).
+    #[test]
+    fn a_ciphertext_debug_prints_no_byte() {
+        let ciphertext = Payload::<Ciphertext>::new(vec![0xab; 3]);
+        let debug = format!("{ciphertext:?}");
+        assert_eq!(debug, "Ciphertext(3 bytes)");
+        assert!(!debug.contains("171") && !debug.contains("ab"));
+    }
+
+    /// A ciphertext writes the bytes the `serde_bytes` form wrote, in postcard
+    /// and in JSON, and reads that form back.
+    #[test]
+    fn a_ciphertext_keeps_its_serde_bytes() {
+        let bytes = vec![0, 1, 0xfe, 0xff];
+        let old = serde_bytes::Bytes::new(&bytes);
+        let ciphertext = Payload::<Ciphertext>::new(bytes.clone());
+        let wire = postcard::to_allocvec(&ciphertext).unwrap();
+        assert_eq!(wire, postcard::to_allocvec(&old).unwrap());
+        let back: Payload<Ciphertext> = postcard::from_bytes(&wire).unwrap();
+        assert_eq!(back, ciphertext);
+        let json = serde_json::to_string(&ciphertext).unwrap();
+        assert_eq!(json, serde_json::to_string(&old).unwrap());
+        let back: Payload<Ciphertext> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, ciphertext);
+    }
 
     /// Each fixed-size type states the size it frames, the length of its
     /// array.

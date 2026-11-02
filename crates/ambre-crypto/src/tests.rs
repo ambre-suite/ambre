@@ -21,12 +21,12 @@ fn secret(bytes: &[u8]) -> ambre_core::SecretBytes {
 
 /// The ciphertext with the byte at `at` XORed by `mask`, as an attacker
 /// tampers with it on the wire. An index past the end changes nothing.
-fn flipped(ciphertext: &Ciphertext, at: usize, mask: u8) -> Ciphertext {
+fn flipped(ciphertext: &Payload<Ciphertext>, at: usize, mask: u8) -> Payload<Ciphertext> {
     let mut bytes = ciphertext.as_bytes().to_vec();
     if let Some(byte) = bytes.get_mut(at) {
         *byte ^= mask;
     }
-    Ciphertext::new(bytes)
+    Payload::<Ciphertext>::new(bytes)
 }
 
 fn fixed_doc_key() -> DocumentKey {
@@ -83,7 +83,7 @@ fn an_envelope_debug_form_prints_no_byte_of_it() {
     )
     .unwrap();
     // Bytes no length or field name can spell, so a match is a leak.
-    sealed.ciphertext = Ciphertext::new(vec![0xAB; 7]);
+    sealed.ciphertext = Payload::<Ciphertext>::new(vec![0xAB; 7]);
     sealed.nonce = FixedBytes::from_array([0xCD; aead::NONCE_LEN]);
     let shown = format!("{sealed:?}");
     assert_eq!(shown, "Sealed { ciphertext_len: 7, .. }");
@@ -456,8 +456,9 @@ fn a_wrap_has_a_length_the_wire_reads() {
             .to_bytes(),
     );
     let doc_key = DocumentKey::from_array([0x55; 32]);
-    let length =
-        |wrapped: ecdh::WrappedKey| wrapped.nonce.as_slice().len() + wrapped.ciphertext.len();
+    let length = |wrapped: ecdh::WrappedKey| {
+        wrapped.nonce.as_slice().len() + wrapped.ciphertext.len().as_len()
+    };
     let bare = length(ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap());
     let anchored = length(
         ecdh::wrap_anchored(
@@ -577,13 +578,13 @@ fn argon2_deterministic() {
 
 #[test]
 fn blake2_chain_hash() {
-    let snapshot = Ciphertext::new(b"snapshot".to_vec());
+    let snapshot = Payload::<Ciphertext>::new(b"snapshot".to_vec());
     let genesis = hash::chain_hash(None, &snapshot);
     assert_eq!(genesis, hash::chain_hash(None, &snapshot));
     // The parent is part of the link: a different parent breaks the chain.
     let child = hash::chain_hash(Some(&genesis), &snapshot);
     assert_ne!(child, genesis);
-    let other = hash::chain_hash(None, &Ciphertext::new(b"snapshoT".to_vec()));
+    let other = hash::chain_hash(None, &Payload::<Ciphertext>::new(b"snapshoT".to_vec()));
     assert_ne!(child, hash::chain_hash(Some(&other), &snapshot));
 }
 
@@ -598,7 +599,7 @@ fn the_keyless_digests_keep_their_bytes() {
     let file = ambre_core::Payload::<ambre_core::PickedContainer>::new(b"file".to_vec());
     assert_eq!(hash::file_digest(&file).as_array()[..], full[..32]);
     assert_eq!(
-        hash::chain_hash(None, &Ciphertext::new(b"file".to_vec())).as_array(),
+        hash::chain_hash(None, &Payload::<Ciphertext>::new(b"file".to_vec())).as_array(),
         hash::file_digest(&file).as_array()
     );
 }
@@ -954,10 +955,10 @@ fn golden(hex: &str) -> Vec<u8> {
 }
 
 /// The inputs every golden of the envelope shares.
-fn golden_envelope() -> (FixedBytes<Nonce>, Ciphertext, Aad) {
+fn golden_envelope() -> (FixedBytes<Nonce>, Payload<Ciphertext>, Aad) {
     (
         FixedBytes::from_array([0x07; 24]),
-        Ciphertext::new(b"a sealed body".to_vec()),
+        Payload::<Ciphertext>::new(b"a sealed body".to_vec()),
         Aad::of(b"public-data"),
     )
 }

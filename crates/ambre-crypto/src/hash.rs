@@ -79,7 +79,7 @@ pub fn entry_digest(
 /// unambiguous, so a parent and a snapshot never read as another pair.
 pub fn chain_hash(
     parent: Option<&FixedBytes<ambre_core::ChainHash>>,
-    snapshot: &ambre_core::Ciphertext,
+    snapshot: &ambre_core::Payload<ambre_core::Ciphertext>,
 ) -> FixedBytes<ambre_core::ChainHash> {
     let parent: &[u8] = parent.map_or(&[], |p| p.as_slice());
     FixedBytes::from_array(length_prefixed(Head(parent), Tail(snapshot.as_bytes())))

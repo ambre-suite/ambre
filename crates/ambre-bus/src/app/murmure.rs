@@ -885,7 +885,7 @@ impl SealedChannelKey {
     pub fn from_parts(
         key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
         nonce: &ambre_core::FixedBytes<ambre_core::Nonce>,
-        ciphertext: &ambre_core::Ciphertext,
+        ciphertext: &ambre_core::Payload<ambre_core::Ciphertext>,
     ) -> Self {
         let mut bytes = Vec::new();
         key_id.push_to(&mut bytes);
@@ -907,14 +907,14 @@ impl SealedChannelKey {
     ) -> Option<(
         ambre_core::FixedBytes<ambre_core::KeyId>,
         ambre_core::FixedBytes<ambre_core::Nonce>,
-        ambre_core::Ciphertext,
+        ambre_core::Payload<ambre_core::Ciphertext>,
     )> {
         let (key_id, rest) = ambre_core::FixedBytes::<ambre_core::KeyId>::split_from(&self.0)?;
         let (nonce, ciphertext) = ambre_core::FixedBytes::<ambre_core::Nonce>::split_from(rest)?;
         Some((
             key_id,
             nonce,
-            ambre_core::Ciphertext::new(ciphertext.to_vec()),
+            ambre_core::Payload::<ambre_core::Ciphertext>::new(ciphertext.to_vec()),
         ))
     }
 
@@ -1193,7 +1193,7 @@ pub enum SpaceEvent {
 mod tests {
     use super::{MurmureCommand, SealedChannelKey, Topic};
     use ambre_core::id::{Id, Message, Segment, User};
-    use ambre_core::{Ciphertext, FixedBytes, KeyId, Nonce};
+    use ambre_core::{Ciphertext, FixedBytes, KeyId, Nonce, Payload};
 
     /// A split gives back the parts a join wrote. Bytes too short to hold a
     /// key id and a nonce give nothing.
@@ -1203,14 +1203,15 @@ mod tests {
             FixedBytes::<KeyId>::from_array([3; 16]),
             FixedBytes::<Nonce>::from_array([7; 24]),
         );
-        let ciphertext = Ciphertext::new(b"sealed".to_vec());
+        let ciphertext = Payload::<Ciphertext>::new(b"sealed".to_vec());
         let sealed = SealedChannelKey::from_parts(key_id, &nonce, &ciphertext);
         assert_eq!(sealed.key_id(), Some(key_id));
         assert_eq!(sealed.split(), Some((key_id, nonce, ciphertext)));
-        let empty = SealedChannelKey::from_parts(key_id, &nonce, &Ciphertext::new(Vec::new()));
+        let empty =
+            SealedChannelKey::from_parts(key_id, &nonce, &Payload::<Ciphertext>::new(Vec::new()));
         assert_eq!(
             empty.split(),
-            Some((key_id, nonce, Ciphertext::new(Vec::new())))
+            Some((key_id, nonce, Payload::<Ciphertext>::new(Vec::new())))
         );
         let short = SealedChannelKey::from_bytes(vec![3; 39]);
         assert_eq!(short.key_id(), Some(key_id));

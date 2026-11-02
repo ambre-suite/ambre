@@ -341,7 +341,7 @@ pub(crate) async fn handle_update(
     // persisted durably (S3 + Redis pending) and fanned out to every subscriber.
     // That is the same storage/cost abuse the media and snapshot caps close, on
     // the hot path.
-    let cipher_len = ambre_core::ByteSize::of_len(update.ciphertext.len());
+    let cipher_len = update.ciphertext.len();
     if cipher_len > state.config.delta_max_size {
         let detail = format!(
             "delta ciphertext {} bytes exceeds max {}",
@@ -601,7 +601,7 @@ pub(crate) async fn handle_ephemeral(
     // blob is tiny. This mirrors the `handle_update` delta cap for the
     // fire-and-forget path. An oversized ephemeral cannot be fanned out to every
     // subscriber and stored in the presence hash. Fire-and-forget: drop silently.
-    if ambre_core::ByteSize::of_len(eph.ciphertext.len()) > state.config.ephemeral_max_size {
+    if eph.ciphertext.len() > state.config.ephemeral_max_size {
         return;
     }
 
@@ -910,7 +910,7 @@ mod postcard_tests {
 
     fn make_update() -> Update {
         Update {
-            ciphertext: Ciphertext::new(vec![1, 2, 3]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![1, 2, 3]),
             nonce: FixedBytes::<Nonce>::from_array([4u8; 24]),
             public_data: UpdatePublicData {
                 document_id: Id::<Document>::from_bytes([5u8; 16]),
@@ -926,7 +926,7 @@ mod postcard_tests {
 
     fn make_ephemeral() -> Ephemeral {
         Ephemeral {
-            ciphertext: Ciphertext::new(vec![10, 11]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![10, 11]),
             nonce: FixedBytes::<Nonce>::from_array([12u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: Id::<Document>::from_bytes([13u8; 16]),
@@ -1087,18 +1087,18 @@ mod postcard_tests {
 
     #[test]
     fn empty_frame_is_error() {
-        assert!(decode_client_msg(&WireFrame::new(Vec::new())).is_err());
+        assert!(decode_client_msg(&ambre_core::Payload::new(Vec::new())).is_err());
     }
 
     #[test]
     fn wrong_version_byte_is_error() {
-        let msg = WireFrame::new(vec![0x02, 0x00]);
+        let msg = ambre_core::Payload::<WireFrame>::new(vec![0x02, 0x00]);
         assert!(decode_client_msg(&msg).is_err());
     }
 
     #[test]
     fn garbage_data_returns_error_not_panics() {
-        let result = decode_client_msg(&WireFrame::new(vec![0x01, 0xFF, 0xFE, 0xFD]));
+        let result = decode_client_msg(&ambre_core::Payload::new(vec![0x01, 0xFF, 0xFE, 0xFD]));
         assert!(result.is_err());
     }
 }
@@ -1170,7 +1170,7 @@ mod ephemeral_binding_tests {
     /// the signature is ever examined.
     fn unsigned_ephemeral(pub_key: FixedBytes<PublicKey>, doc_id: Id<Document>) -> Ephemeral {
         Ephemeral {
-            ciphertext: Ciphertext::new(vec![1, 2, 3]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![1, 2, 3]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: doc_id,
@@ -1208,7 +1208,7 @@ mod ephemeral_binding_tests {
         push_framed(&mut signed_data, commitment_tag.as_slice());
         let sig = signing_key.sign(&signed_data);
         Ephemeral {
-            ciphertext: Ciphertext::new(ciphertext),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(ciphertext),
             nonce,
             public_data,
             commitment_tag,
@@ -1310,7 +1310,7 @@ mod ephemeral_binding_tests {
 
         // Correct author key, but tamper the ciphertext after signing.
         let mut eph = signed_ephemeral(&signing_key, &session_key, doc_id, vec![1, 2, 3]);
-        eph.ciphertext = Ciphertext::new(vec![9, 9, 9]);
+        eph.ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![9, 9, 9]);
         handle_ephemeral(&state, &mut conn, eph).await;
 
         let after: std::collections::HashMap<String, String> =
@@ -1386,7 +1386,8 @@ mod ephemeral_binding_tests {
                 .await
                 .unwrap();
         }
-        let blob = ambre_protocol::messages::Ciphertext::new(b"blob".to_vec());
+        let blob =
+            ambre_core::Payload::<ambre_protocol::messages::Ciphertext>::new(b"blob".to_vec());
         redis_ops::doc_presence_update(
             &state.redis,
             &doc_id,
@@ -1418,7 +1419,7 @@ mod ephemeral_binding_tests {
             .await
             .unwrap()
             .unwrap();
-        let msg = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+        let msg = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
             frame.expose_bytes().to_vec(),
         ))
         .unwrap();
@@ -1498,7 +1499,7 @@ mod delta_size_cap_tests {
         cipher_len: usize,
     ) -> Update {
         Update {
-            ciphertext: Ciphertext::new(vec![0u8; cipher_len]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![0u8; cipher_len]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,
@@ -1523,7 +1524,7 @@ mod delta_size_cap_tests {
         let doc_id = Id::<Document>::mint();
         let session_key = FixedBytes::<PublicKey>::from_array([1u8; 32]);
         let mut empty = update_with(session_key, doc_id, 16);
-        empty.ciphertext = Ciphertext::new(Vec::new());
+        empty.ciphertext = ambre_core::Payload::<Ciphertext>::new(Vec::new());
         let cases = [
             (empty, RefusalCode::BadRequest),
             (
@@ -1541,7 +1542,7 @@ mod delta_size_cap_tests {
             let (tx, mut rx) = mpsc::channel::<Payload>(8);
             handle_update(&state, &mut conn, update, &tx).await;
             let reply = rx.try_recv().expect("a refusal");
-            let decoded = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            let decoded = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
                 reply.expose_bytes().to_vec(),
             ))
             .unwrap();
@@ -1581,7 +1582,7 @@ mod delta_size_cap_tests {
         );
         // The client is told why (413), so it can move the blob to the media path.
         let reply = rx.try_recv().expect("a 413 error reply must be sent");
-        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
             reply.expose_bytes().to_vec(),
         ))
         .unwrap();
@@ -1628,7 +1629,7 @@ mod delta_size_cap_tests {
             "a viewer's delta must not be pushed to the pending list"
         );
         let reply = rx.try_recv().expect("a 403 error reply must be sent");
-        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
             reply.expose_bytes().to_vec(),
         ))
         .unwrap();
@@ -1692,7 +1693,7 @@ mod delta_size_cap_tests {
         let reply = rx
             .try_recv()
             .expect("an empty replay must still send a MissingUpdates to release the client");
-        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
             reply.expose_bytes().to_vec(),
         ))
         .unwrap();
@@ -1764,7 +1765,7 @@ mod access_tests {
 
     fn update_for(pub_key: FixedBytes<PublicKey>, doc_id: Id<Document>) -> Update {
         Update {
-            ciphertext: Ciphertext::new(vec![1, 2, 3]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![1, 2, 3]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,
@@ -1781,10 +1782,7 @@ mod access_tests {
     fn replies(rx: &mut mpsc::Receiver<Payload>) -> Vec<WsServerMsg> {
         std::iter::from_fn(|| rx.try_recv().ok())
             .map(|wire| {
-                decode_server_msg(&ambre_protocol::WireFrame::new(
-                    wire.expose_bytes().to_vec(),
-                ))
-                .unwrap()
+                decode_server_msg(&ambre_core::Payload::new(wire.expose_bytes().to_vec())).unwrap()
             })
             .collect()
     }
@@ -2039,7 +2037,7 @@ mod ed25519_tests {
             clock: Clock::new(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([3u8; 24]);
-        let ciphertext = Ciphertext::new(vec![4, 5, 6]);
+        let ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![4, 5, 6]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([7u8; 32]);
 
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
@@ -2075,7 +2073,8 @@ mod ed25519_tests {
         let signing_key = SigningKey::from_bytes(&[9u8; 32]);
         let pubkey = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let nonce = FixedBytes::<Nonce>::from_array([1; 24]);
-        let ciphertext = ambre_protocol::messages::Ciphertext::new(b"c".to_vec());
+        let ciphertext =
+            ambre_core::Payload::<ambre_protocol::messages::Ciphertext>::new(b"c".to_vec());
         let tag = FixedBytes::<CommitmentTag>::from_array([2; 32]);
         let mut signed = Vec::new();
         for field in [
@@ -2124,7 +2123,7 @@ mod ed25519_tests {
         let pubkey = FixedBytes::<PublicKey>::from_array([42u8; 32]);
 
         let update = Update {
-            ciphertext: Ciphertext::new(vec![1u8]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![1u8]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: Id::<Document>::from_bytes([0u8; 16]),
@@ -2158,7 +2157,7 @@ mod ed25519_tests {
             clock: Clock::new(0),
         };
         let nonce = FixedBytes::<Nonce>::from_array([0u8; 24]);
-        let ciphertext = Ciphertext::new(vec![1, 2, 3]);
+        let ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![1, 2, 3]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([0u8; 32]);
 
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
@@ -2171,7 +2170,7 @@ mod ed25519_tests {
         let sig = signing_key.sign(&signed_data);
 
         let tampered = Update {
-            ciphertext: Ciphertext::new(vec![9, 9, 9]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![9, 9, 9]),
             nonce,
             public_data,
             commitment_tag,
@@ -2205,7 +2204,7 @@ mod ed25519_tests {
         push_framed(&mut signed_data, commitment_tag.as_slice());
         let sig = signing_key.sign(&signed_data);
         ambre_protocol::Ephemeral {
-            ciphertext: Ciphertext::new(ciphertext),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(ciphertext),
             nonce,
             public_data,
             commitment_tag,
@@ -2229,7 +2228,7 @@ mod ed25519_tests {
         let doc_id = Id::<Document>::from_bytes([9u8; 16]);
         let mut eph = sign_ephemeral(&signing_key, &pubkey, doc_id, vec![1, 2, 3, 4]);
         // Flip the ciphertext after signing: the signature must no longer verify.
-        eph.ciphertext = Ciphertext::new(vec![9, 9, 9, 9]);
+        eph.ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![9, 9, 9, 9]);
         assert!(verify_ephemeral_signature(&pubkey, &eph).is_err());
     }
 
@@ -2238,7 +2237,7 @@ mod ed25519_tests {
         // The old handler broadcast this (all-zero signature) unverified.
         let pubkey = FixedBytes::<PublicKey>::from_array([7u8; 32]);
         let eph = ambre_protocol::Ephemeral {
-            ciphertext: Ciphertext::new(vec![1, 2, 3]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![1, 2, 3]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: ambre_protocol::public_data::EphemeralPublicData {
                 document_id: Id::<Document>::from_bytes([0u8; 16]),
@@ -2262,7 +2261,7 @@ mod refusal_tests {
         ambre_protocol::SeqUpdate {
             seq: Seq::new(seq),
             update: ambre_protocol::Update {
-                ciphertext: Ciphertext::new(vec![seq as u8]),
+                ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![seq as u8]),
                 nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
                 public_data: ambre_protocol::public_data::UpdatePublicData {
                     document_id: Id::<Document>::mint(),
@@ -2523,7 +2522,7 @@ mod hot_tail_tests {
         push_framed(&mut signed, &postcard::to_allocvec(&public_data).unwrap());
         push_framed(&mut signed, commitment_tag.as_slice());
         Update {
-            ciphertext: Ciphertext::new(ciphertext),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(ciphertext),
             nonce,
             public_data,
             commitment_tag,
@@ -2644,7 +2643,7 @@ mod hot_tail_tests {
         let lost = signed_update(&key, doc_id, 1, 20);
         let lost_signature = lost.signature;
         handle_update(&state, &mut second, lost, &second_tx).await;
-        let refusal = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+        let refusal = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
             second_rx.try_recv().unwrap().expose_bytes().to_vec(),
         ))
         .unwrap();
@@ -2805,7 +2804,7 @@ mod channel_gate_tests {
 
     fn update_on(pub_key: FixedBytes<PublicKey>, doc_id: Id<Document>) -> Update {
         Update {
-            ciphertext: Ciphertext::new(vec![0u8; 16]),
+            ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![0u8; 16]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,
@@ -2821,7 +2820,7 @@ mod channel_gate_tests {
 
     /// The code of a refusal, of a wire message or of a delta.
     fn error_code(frame: &Payload) -> Option<RefusalCode> {
-        match ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+        match ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
             frame.expose_bytes().to_vec(),
         ))
         .ok()?
@@ -2873,7 +2872,7 @@ mod channel_gate_tests {
         handle_subscribe(&state, &mut conn, segment, &tx).await;
 
         let reply = rx.try_recv().expect("a reply");
-        let ack = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+        let ack = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
             reply.expose_bytes().to_vec(),
         ));
         assert!(

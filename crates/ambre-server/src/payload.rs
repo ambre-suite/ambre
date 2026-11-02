@@ -51,7 +51,7 @@ impl Payload {
     /// The client message a socket frame carries. The bytes move into the
     /// frame the decoder reads, with no copy.
     pub fn client_msg(self) -> Result<WsClientMsg, WireDecodeError> {
-        ambre_protocol::ws::decode_client_msg(&WireFrame::new(self.0))
+        ambre_protocol::ws::decode_client_msg(&ambre_core::Payload::new(self.0))
     }
 
     /// The length in bytes, the one reading a log may carry.
@@ -153,8 +153,8 @@ impl Payload {
 }
 
 /// A frame the protocol encoded moves into a payload with no copy.
-impl From<WireFrame> for Payload {
-    fn from(frame: WireFrame) -> Self {
+impl From<ambre_core::Payload<WireFrame>> for Payload {
+    fn from(frame: ambre_core::Payload<WireFrame>) -> Self {
         Self(frame.into_bytes())
     }
 }

@@ -13,6 +13,7 @@ use std::collections::HashSet;
 // Newtype wrappers for binary buffers
 // -----------------------------------------------------------------------------
 
+use ambre_core::Payload;
 /// The envelope byte newtypes. `ambre-crypto` builds them too, so they live in
 /// `ambre-core`, the one crate both depend on.
 pub use ambre_core::envelope::{Ciphertext, CommitmentTag, Nonce, Signature};
@@ -100,7 +101,7 @@ impl Counter {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Update {
     /// AEAD ciphertext (XChaCha20-Poly1305).
-    pub ciphertext: Ciphertext,
+    pub ciphertext: Payload<Ciphertext>,
     /// 24-byte nonce used for encryption.
     pub nonce: FixedBytes<Nonce>,
     /// Public metadata visible to the Blind Relay.
@@ -140,7 +141,7 @@ impl Update {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snapshot {
     /// AEAD ciphertext (XChaCha20-Poly1305).
-    pub ciphertext: Ciphertext,
+    pub ciphertext: Payload<Ciphertext>,
     /// 24-byte nonce used for encryption.
     pub nonce: FixedBytes<Nonce>,
     /// Public metadata visible to the Blind Relay.
@@ -187,7 +188,7 @@ impl Snapshot {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ephemeral {
     /// AEAD ciphertext (XChaCha20-Poly1305).
-    pub ciphertext: Ciphertext,
+    pub ciphertext: Payload<Ciphertext>,
     /// 24-byte nonce used for encryption.
     pub nonce: FixedBytes<Nonce>,
     /// Public metadata visible to the Blind Relay.
@@ -239,7 +240,7 @@ mod validate_tests {
 
     fn update(cipher: Vec<u8>, clock: u64) -> Update {
         Update {
-            ciphertext: Ciphertext::new(cipher),
+            ciphertext: Payload::<Ciphertext>::new(cipher),
             nonce: FixedBytes::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: Id::from_bytes([1u8; 16]),
@@ -255,7 +256,7 @@ mod validate_tests {
 
     fn ephemeral(cipher: Vec<u8>, counter: u64) -> Ephemeral {
         Ephemeral {
-            ciphertext: Ciphertext::new(cipher),
+            ciphertext: Payload::<Ciphertext>::new(cipher),
             nonce: FixedBytes::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: Id::from_bytes([1u8; 16]),
@@ -330,7 +331,7 @@ mod validate_tests {
         clocks: Vec<(FixedBytes<PublicKey>, Clock)>,
     ) -> Snapshot {
         Snapshot {
-            ciphertext: Ciphertext::new(cipher),
+            ciphertext: Payload::<Ciphertext>::new(cipher),
             nonce: FixedBytes::from_array([0u8; 24]),
             public_data: SnapshotPublicData {
                 document_id: Id::from_bytes([1u8; 16]),

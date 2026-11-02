@@ -394,8 +394,12 @@ PAYLOAD_NAME = re.compile(
 )
 PAYLOAD_SAFE = re.compile(r"_(?:len|size|count|key|id|hash)$", re.IGNORECASE)
 # A reading of a payload's bytes: the one accessor of the relay's payload type,
-# a ciphertext's field, or a ciphertext taken whole by a function.
-PAYLOAD_BYTES = re.compile(r"\bexpose_bytes\b|\bciphertext\.0\b|:\s*&(?:\w+::)*Ciphertext\b")
+# a ciphertext's field, or a ciphertext taken whole by a function, bare or as
+# the role of the generic `Payload<Ciphertext>`.
+PAYLOAD_BYTES = re.compile(
+    r"\bexpose_bytes\b|\bciphertext\.0\b"
+    r"|:\s*&(?:\w+::)*(?:Payload\s*<\s*(?:\w+::)*)?Ciphertext\b"
+)
 STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
 INTERPOLATION = re.compile(r"\{(\w+)")
 

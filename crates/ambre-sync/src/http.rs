@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
-use ambre_core::{ApiFailure, FixedRole, HttpStatus, RefusalCode, Seq, UnreadableCause};
+use ambre_core::{ApiFailure, FixedRole, HttpStatus, Payload, RefusalCode, Seq, UnreadableCause};
 use serde::{Deserialize, Serialize};
 
 use ambre_core::{Ms, Sec, TimeSpan};
@@ -467,34 +467,18 @@ pub(crate) enum ContentType {
     Octets,
 }
 
-/// The bytes of a request or an answer body: JSON, or a sealed blob. `Debug`
-/// prints the length and none of the bytes, as the body may carry a token.
-#[derive(Clone, PartialEq, Eq)]
-pub(crate) struct HttpBody(Vec<u8>);
+/// The role of the bytes of a request or an answer body: JSON, or a sealed
+/// blob. `Payload<HttpBody>`. `Debug` prints the length and none of the
+/// bytes, as the body may carry a token.
+pub(crate) enum HttpBody {}
 
-impl HttpBody {
-    /// The body made of `bytes`.
-    pub(crate) fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    /// The bytes, as the transport sends them or a reader parses them.
-    pub(crate) fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-
-    /// The answer of a download, as a blob some writer sealed: neither
-    /// verified nor opened yet.
-    pub(crate) fn into_fetched(self) -> crate::pipeline::FetchedBlob {
-        crate::pipeline::FetchedBlob::new(self.0)
-    }
+impl ambre_core::PayloadKind for HttpBody {
+    const NAME: &'static str = "HttpBody";
 }
 
-impl std::fmt::Debug for HttpBody {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "HttpBody({} bytes)", self.0.len())
-    }
-}
+/// The answer of a download is a blob some writer sealed, neither verified
+/// nor opened yet: the one role an answer body becomes.
+impl ambre_core::Becomes<crate::pipeline::FetchedBlob> for HttpBody {}
 
 /// One request as the transport sends it. The policy below builds it, and
 /// the transport only moves it.
@@ -508,7 +492,7 @@ pub(crate) struct Outgoing {
     /// the relay that needs one. The transport spells the header at send time.
     pub bearer: Option<SecretToken>,
     /// The content type and the bytes of the body, if any.
-    pub body: Option<(ContentType, HttpBody)>,
+    pub body: Option<(ContentType, Payload<HttpBody>)>,
     /// How long the transport waits before it aborts the request.
     pub timeout: TimeSpan<Ms>,
 }
@@ -532,7 +516,7 @@ impl Outgoing {
             HttpError::Local(format!("{} {url}: serialize error: {e}", method.as_str()))
         })?;
         Ok(Self {
-            body: Some((ContentType::Json, HttpBody::new(bytes))),
+            body: Some((ContentType::Json, Payload::<HttpBody>::new(bytes))),
             ..Self::new(method, url)
         })
     }
@@ -543,7 +527,7 @@ pub(crate) struct Incoming {
     /// The HTTP status.
     pub status: HttpStatus,
     /// The body, empty when there is none.
-    pub body: HttpBody,
+    pub body: Payload<HttpBody>,
 }
 
 /// What moves a request and brings its answer back. The renewal, the replay
@@ -638,7 +622,7 @@ impl Transport for Fetch {
             .map_err(|e| TransportError::Truncated(e.to_string()))?;
         Ok(Incoming {
             status: HttpStatus::new(resp.status()),
-            body: HttpBody::new(body),
+            body: Payload::<HttpBody>::new(body),
         })
     }
 
@@ -1060,7 +1044,7 @@ pub(crate) async fn download_snapshot(
     document_id: Id<Document>,
     snapshot_id: Id<Snapshot>,
     auth: AuthContext,
-) -> Option<crate::pipeline::FetchedBlob> {
+) -> Option<Payload<crate::pipeline::FetchedBlob>> {
     let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/snapshot/download-url"));
     let body = SnapshotDownloadUrlRequest { snapshot_id };
@@ -1152,11 +1136,11 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
 
 pub(crate) async fn fetch_bytes(
     url: &ambre_core::Credential<ambre_core::PresignedUrl>,
-) -> Result<crate::pipeline::FetchedBlob, HttpError> {
+) -> Result<Payload<crate::pipeline::FetchedBlob>, HttpError> {
     let request = Outgoing::new(Method::Get, url.into());
     let resp = exchange(&Fetch, &request).await?;
     expect_ok(&request, &resp)?;
-    Ok(resp.body.into_fetched())
+    Ok(resp.body.into_role())
 }
 
 /// Account-setup payload. Zero-Knowledge invariant (N4): the passphrase NEVER
@@ -2104,7 +2088,7 @@ pub(crate) mod scripted {
                 .map(|answer| {
                     answer.map(|(status, body)| Incoming {
                         status: HttpStatus::new(status),
-                        body: HttpBody::new(serde_json::to_vec(&body).unwrap()),
+                        body: Payload::<HttpBody>::new(serde_json::to_vec(&body).unwrap()),
                     })
                 })
                 .collect();
@@ -2182,6 +2166,17 @@ mod tests {
             Method::Post
         };
         HttpError::refused(method, &Target::relay(url), HttpStatus::new(status), code)
+    }
+
+    /// An answer body becomes a fetched blob with every byte kept, and each
+    /// prints its role and its length alone.
+    #[test]
+    fn an_answer_body_becomes_a_fetched_blob() {
+        let body = Payload::<HttpBody>::new(b"token".to_vec());
+        assert_eq!(format!("{body:?}"), "HttpBody(5 bytes)");
+        let blob: Payload<crate::pipeline::FetchedBlob> = body.into_role();
+        assert_eq!(blob, b"token");
+        assert_eq!(format!("{blob:?}"), "FetchedBlob(5 bytes)");
     }
 
     /// The relay's JSON `bool` reads as a [`ambre_core::Creation`] and an

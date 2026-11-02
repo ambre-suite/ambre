@@ -7,7 +7,7 @@
 
 use ambre_core::Bounded;
 use ambre_core::crdt::FieldKey;
-use ambre_core::{Board, Px};
+use ambre_core::{Board, Payload, Px};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use loro::{Container, LoroText, LoroValue, ValueOrContainer};
 
@@ -101,7 +101,7 @@ pub(super) fn capture_scalars<K: FieldKey + PartialEq>(
             Some(LoroValue::Double(d)) => ClipValue::F64(*d),
             Some(LoroValue::Bool(b)) => ClipValue::Bool(*b),
             Some(LoroValue::String(s)) => ClipValue::Str(s.to_string()),
-            Some(LoroValue::Binary(b)) => ClipValue::Bin(ClipBytes::new(b.to_vec())),
+            Some(LoroValue::Binary(b)) => ClipValue::Bin(Payload::<ClipBytes>::new(b.to_vec())),
             _ => continue,
         };
         out.push((key, cv));

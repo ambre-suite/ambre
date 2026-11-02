@@ -5,38 +5,23 @@
 //! posts [`ANNOUNCEMENT`] as the last step of its start. The Main side holds
 //! every command in [`StartGate`] until it reads one.
 
+use ambre_core::{Payload, PayloadKind};
+
 use crate::conduit::Receiver;
 
-/// One payload a `postMessage` carries between Main and a worker: an encoded
-/// command or event, or the [`ANNOUNCEMENT`]. It may carry document content,
-/// so `Debug` prints the length and none of the bytes.
-#[derive(Clone, PartialEq, Eq)]
-pub struct WorkerPost(Vec<u8>);
+/// The role of one payload a `postMessage` carries between Main and a
+/// worker: an encoded command or event, or the [`ANNOUNCEMENT`].
+/// `Payload<WorkerPost>`. It may carry document content, so `Debug` prints
+/// the length and none of the bytes.
+pub enum WorkerPost {}
 
-impl WorkerPost {
-    /// The payload made of `bytes`, as an encoder wrote them or a message
-    /// event carried them.
-    #[must_use]
-    pub const fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    /// The bytes, for the decoder or the `postMessage` buffer.
-    #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for WorkerPost {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "WorkerPost({} bytes)", self.0.len())
-    }
+impl PayloadKind for WorkerPost {
+    const NAME: &'static str = "WorkerPost";
 }
 
 /// What a worker posts once its inbound handler is installed: an empty
 /// payload. An encoded event is never empty, so the two cannot be confused.
-pub const ANNOUNCEMENT: WorkerPost = WorkerPost(Vec::new());
+pub const ANNOUNCEMENT: Payload<WorkerPost> = Payload::new(Vec::new());
 
 /// Holds the commands bound for one worker until that worker announces it
 /// is listening.
@@ -65,7 +50,7 @@ impl StartGate {
 
     /// Reads one payload from the worker. The announcement opens the gate and
     /// yields nothing; any other payload is an event, handed back.
-    pub fn read<'a>(&mut self, post: &'a WorkerPost) -> Option<&'a WorkerPost> {
+    pub fn read<'a>(&mut self, post: &'a Payload<WorkerPost>) -> Option<&'a Payload<WorkerPost>> {
         if *post == ANNOUNCEMENT {
             self.worker = Worker::Announced;
             return None;
@@ -113,7 +98,8 @@ mod tests {
         }
         assert!(posted.is_empty(), "the worker is not listening yet");
 
-        let event = WorkerPost::new(postcard::to_allocvec(&LogicEvent::SetupRequired).unwrap());
+        let event =
+            Payload::<WorkerPost>::new(postcard::to_allocvec(&LogicEvent::SetupRequired).unwrap());
         assert_eq!(gate.read(&event), Some(&event));
         assert!(!gate.is_open(), "an event is not the announcement");
         assert!(

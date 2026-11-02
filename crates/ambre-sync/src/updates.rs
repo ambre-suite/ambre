@@ -2,7 +2,7 @@ use super::*;
 use crate::pipeline::UpdateFrame;
 use crate::rekey::{RefusedFrames, SentFrame};
 use ambre_core::FixedBytes;
-use ambre_core::{Ms, TimeSpan};
+use ambre_core::{Ms, Payload, TimeSpan};
 use ambre_protocol::messages::Signature;
 
 /// The delay before Sync sends again the first delta the relay failed to
@@ -260,7 +260,7 @@ impl SyncState {
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
         covered_seq: Seq,
-        blob: Option<pipeline::FetchedBlob>,
+        blob: Option<Payload<pipeline::FetchedBlob>>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
@@ -2116,7 +2116,7 @@ mod tests {
         payload: &[u8],
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
-    ) -> pipeline::FetchedBlob {
+    ) -> Payload<pipeline::FetchedBlob> {
         let public_data = SnapshotPublicData {
             document_id,
             pub_key: FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes()),
@@ -2132,7 +2132,7 @@ mod tests {
             signing_key,
         )
         .expect("seal");
-        pipeline::FetchedBlob::new(postcard::to_allocvec(&snapshot).expect("encode"))
+        Payload::<pipeline::FetchedBlob>::new(postcard::to_allocvec(&snapshot).expect("encode"))
     }
 
     fn drain(rx: &ambre_bus::conduit::Receiver<LogicEvent>) -> Vec<LogicEvent> {
@@ -2433,7 +2433,9 @@ mod tests {
     // -- Snapshot lifecycle (upload adoption + cold-start seq gating) ----------
 
     /// Drain the WsClientMsg this state sent to its mock WS, decoded.
-    fn drain_ws(rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>) -> Vec<WsClientMsg> {
+    fn drain_ws(
+        rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
+    ) -> Vec<WsClientMsg> {
         rx.try_iter()
             .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
             .collect()
@@ -3147,7 +3149,10 @@ mod tests {
                 ambre_crypto::peer::session_identity(author, Id::<User>::mint(), doc, nonce);
             let verdict = if verdict_is_match {
                 SnapshotVerdict::Match {
-                    extras: vec![(peer, ambre_core::PeerEntryBytes::from(&entry))],
+                    extras: vec![(
+                        peer,
+                        ambre_core::Payload::<ambre_core::PeerEntryBytes>::from(&entry),
+                    )],
                 }
             } else {
                 SnapshotVerdict::Mismatch
@@ -3331,7 +3336,7 @@ mod tests {
         let foreign = snapshot_blob(Id::<Document>::mint(), announced, b"x", &key, &sk);
         for blob in [
             None,
-            Some(pipeline::FetchedBlob::new(b"garbage".to_vec())),
+            Some(Payload::<pipeline::FetchedBlob>::new(b"garbage".to_vec())),
             Some(foreign),
         ] {
             state.handle_sync_event(SyncEvent::SnapshotFetched {
@@ -3365,7 +3370,7 @@ mod tests {
                 make_update(doc, parent, Clock::new(clock), b"x", &key, &sk),
             );
         }
-        let asks = |rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>| {
+        let asks = |rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>| {
             drain_ws(rx)
                 .iter()
                 .filter(|m| matches!(m, WsClientMsg::RequestMissing { .. }))
@@ -3386,7 +3391,7 @@ mod tests {
 
     /// Each update sent, as its clock, the key it names and its plaintext.
     fn sent_updates(
-        rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
+        rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
         keys: &[&DocumentKey],
     ) -> Vec<(u64, FixedBytes<KeyId>, Vec<u8>)> {
         opened_updates(drain_ws(rx), keys)
@@ -4362,7 +4367,7 @@ mod tests {
 
     /// Each update sent, as the nonce and the delta its body carries.
     fn sent_bodies(
-        rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
+        rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
         key: &DocumentKey,
     ) -> Vec<(FixedBytes<SessionNonce>, Vec<u8>)> {
         drain_ws(rx)
@@ -4451,7 +4456,7 @@ mod tests {
         let mut forged = make_update(doc, snap, Clock::new(2), b"forged", &key, &sk);
         let mut bytes = forged.ciphertext.as_bytes().to_vec();
         bytes[0] ^= 1;
-        forged.ciphertext = ambre_core::Ciphertext::new(bytes);
+        forged.ciphertext = Payload::<ambre_core::Ciphertext>::new(bytes);
         let mut unsigned = make_update(doc, snap, Clock::new(3), b"unsigned", &key, &sk);
         unsigned.signature = FixedBytes::from_array([0; 64]);
         let updates = [

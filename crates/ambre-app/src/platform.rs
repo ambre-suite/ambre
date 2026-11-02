@@ -9,6 +9,7 @@
 use super::*;
 use ambre_bus::start::WorkerPost;
 use ambre_chrome::commands::PasteForm;
+use ambre_core::Payload;
 
 /// Open a transient file picker and hand the chosen file's bytes to `on_bytes`,
 /// read off the main thread (`File::array_buffer`). An application asks for
@@ -323,7 +324,7 @@ pub(crate) fn spawn_sync_worker(
 
     let onmessage =
         Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
-            let post = WorkerPost::new(js_sys::Uint8Array::new(&e.data()).to_vec());
+            let post = Payload::<WorkerPost>::new(js_sys::Uint8Array::new(&e.data()).to_vec());
             // The worker's announcement opens the gate, so the relay starts
             // draining the commands held for it (`SYNC-057`).
             if start.borrow_mut().read(&post).is_none() {
@@ -363,14 +364,14 @@ pub(crate) fn relay_pressure(inbox: &SyncInbox, worker: &web_sys::Worker) {
         None => return,
     };
     match postcard::to_allocvec(&cmd) {
-        Ok(bytes) => post_to_worker(worker, &WorkerPost::new(bytes)),
+        Ok(bytes) => post_to_worker(worker, &Payload::<WorkerPost>::new(bytes)),
         Err(e) => tracing::error!("[UI->Sync] failed to encode {cmd:?}: {e}"),
     }
 }
 
 /// Encode-free postMessage of `post` to the Sync worker, transferring the
 /// backing `ArrayBuffer` (zero-copy move, no structured clone of the payload).
-pub(crate) fn post_to_worker(worker: &web_sys::Worker, post: &WorkerPost) {
+pub(crate) fn post_to_worker(worker: &web_sys::Worker, post: &Payload<WorkerPost>) {
     let bytes = post.as_bytes();
     let array = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
     array.copy_from(bytes);

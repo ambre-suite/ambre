@@ -95,7 +95,7 @@ fn amended() -> Amended {
         .adopt_session(
             successor.document_id(),
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
     assert_eq!(alice.lease_to_ask(NOW), Some(segment));
@@ -121,7 +121,7 @@ fn amended() -> Amended {
         .adopt_session(
             amendments,
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt")
         .expect("the header travels");

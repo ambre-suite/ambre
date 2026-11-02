@@ -2,13 +2,13 @@
 
 use super::*;
 use crate::messages::{Ciphertext, Clock, Counter, Seq};
-use ambre_core::FixedBytes;
 use ambre_core::id::{self, Document, Id, User};
+use ambre_core::{FixedBytes, Payload};
 
 #[test]
 fn update_roundtrip() {
     let update = Update {
-        ciphertext: Ciphertext::new(vec![1, 2, 3, 4]),
+        ciphertext: Payload::<Ciphertext>::new(vec![1, 2, 3, 4]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::mint(),
@@ -43,7 +43,7 @@ fn update_roundtrip() {
 #[test]
 fn snapshot_roundtrip() {
     let snapshot = Snapshot {
-        ciphertext: Ciphertext::new(vec![8, 9, 10]),
+        ciphertext: Payload::<Ciphertext>::new(vec![8, 9, 10]),
         nonce: FixedBytes::from_array([11u8; 24]),
         public_data: SnapshotPublicData {
             document_id: Id::<Document>::mint(),
@@ -89,7 +89,7 @@ fn snapshot_roundtrip() {
 #[test]
 fn ephemeral_roundtrip() {
     let ephemeral = Ephemeral {
-        ciphertext: Ciphertext::new(vec![21, 22, 23]),
+        ciphertext: Payload::<Ciphertext>::new(vec![21, 22, 23]),
         nonce: FixedBytes::from_array([24u8; 24]),
         public_data: EphemeralPublicData {
             document_id: Id::<Document>::mint(),
@@ -119,7 +119,7 @@ fn ephemeral_roundtrip() {
 #[test]
 fn ws_messages_roundtrip() {
     let update = Update {
-        ciphertext: Ciphertext::new(vec![1]),
+        ciphertext: Payload::<Ciphertext>::new(vec![1]),
         nonce: FixedBytes::from_array([2u8; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::mint(),
@@ -154,7 +154,10 @@ fn ws_messages_roundtrip() {
             update: decoded_update,
         } => {
             assert_eq!(seq, Seq::new(100));
-            assert_eq!(decoded_update.ciphertext, Ciphertext::new(vec![1]));
+            assert_eq!(
+                decoded_update.ciphertext,
+                Payload::<Ciphertext>::new(vec![1])
+            );
         }
         _ => panic!("wrong variant"),
     }
@@ -206,7 +209,7 @@ fn a_wire_message_that_does_not_decode_is_a_typed_error() {
         WireDecodeError, WireFrame, WsClientMsg, decode_client_msg, decode_server_msg,
         encode_client_msg,
     };
-    let frame = |bytes: &[u8]| WireFrame::new(bytes.to_vec());
+    let frame = |bytes: &[u8]| Payload::<WireFrame>::new(bytes.to_vec());
     assert!(matches!(
         decode_client_msg(&frame(&[])),
         Err(WireDecodeError::Empty)
@@ -222,7 +225,7 @@ fn a_wire_message_that_does_not_decode_is_a_typed_error() {
     let wire = encode_client_msg(&WsClientMsg::Subscribe {
         document_id: Id::<Document>::mint(),
     });
-    for cut in 1..wire.len() {
+    for cut in 1..wire.as_bytes().len() {
         let cut_frame = frame(&wire.as_bytes()[..cut]);
         assert!(decode_client_msg(&cut_frame).is_err(), "cut at {cut}");
         let _ = decode_server_msg(&cut_frame);
@@ -233,10 +236,10 @@ fn a_wire_message_that_does_not_decode_is_a_typed_error() {
 /// older one is the relay's lag, and the user cannot cure it.
 #[test]
 fn only_a_newer_wire_version_calls_for_an_update() {
-    use crate::ws::{WireDecodeError, WireFrame, decode_server_msg};
+    use crate::ws::{WireDecodeError, decode_server_msg};
     let current = CURRENT_VERSION.get();
-    let newer = decode_server_msg(&WireFrame::new(vec![current + 1, 0x00])).unwrap_err();
-    let older = decode_server_msg(&WireFrame::new(vec![current - 1, 0x00])).unwrap_err();
+    let newer = decode_server_msg(&Payload::new(vec![current + 1, 0x00])).unwrap_err();
+    let older = decode_server_msg(&Payload::new(vec![current - 1, 0x00])).unwrap_err();
     assert!(newer.is_from_newer_peer());
     assert!(!older.is_from_newer_peer());
     assert!(!WireDecodeError::Empty.is_from_newer_peer());
@@ -248,7 +251,7 @@ const FROZEN_LAYOUT: (u8, &str) = (1, "c1985c0e3889a14100b99c48d8952d65");
 
 fn sample_update(fill: u8) -> Update {
     Update {
-        ciphertext: Ciphertext::new(vec![fill, fill + 1]),
+        ciphertext: Payload::<Ciphertext>::new(vec![fill, fill + 1]),
         nonce: FixedBytes::from_array([fill; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::from_bytes([fill; 16]),
@@ -264,7 +267,7 @@ fn sample_update(fill: u8) -> Update {
 
 fn sample_ephemeral(fill: u8) -> Ephemeral {
     Ephemeral {
-        ciphertext: Ciphertext::new(vec![fill]),
+        ciphertext: Payload::<Ciphertext>::new(vec![fill]),
         nonce: FixedBytes::from_array([fill + 1; 24]),
         public_data: EphemeralPublicData {
             document_id: Id::<Document>::from_bytes([fill + 2; 16]),
@@ -448,7 +451,7 @@ fn the_relay_reads_only_the_listed_fields() {
     let pk = FixedBytes::from_array([5u8; 32]);
     let kid = FixedBytes::from_array([8u8; 16]);
     let update = Update {
-        ciphertext: Ciphertext::new(vec![1]),
+        ciphertext: Payload::<Ciphertext>::new(vec![1]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: UpdatePublicData {
             document_id: doc,
@@ -461,7 +464,7 @@ fn the_relay_reads_only_the_listed_fields() {
         signature: FixedBytes::from_array([7u8; 64]),
     };
     let snapshot = Snapshot {
-        ciphertext: Ciphertext::new(vec![1]),
+        ciphertext: Payload::<Ciphertext>::new(vec![1]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: SnapshotPublicData {
             document_id: doc,
@@ -475,7 +478,7 @@ fn the_relay_reads_only_the_listed_fields() {
         signature: FixedBytes::from_array([7u8; 64]),
     };
     let ephemeral = Ephemeral {
-        ciphertext: Ciphertext::new(vec![1]),
+        ciphertext: Payload::<Ciphertext>::new(vec![1]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: EphemeralPublicData {
             document_id: doc,

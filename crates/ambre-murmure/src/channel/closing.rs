@@ -225,7 +225,7 @@ impl ChannelState {
         &mut self,
         segment: Id<Segment>,
         peer: ambre_core::PeerId,
-        entry: PeerEntryBytes,
+        entry: Payload<PeerEntryBytes>,
     ) -> bool {
         if self.successor != Some(segment) {
             return false;

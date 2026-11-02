@@ -1561,7 +1561,7 @@ mod tests {
             .expect("an open stream")
             .expect("a message");
         assert!(matches!(
-            ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(msg.payload().to_vec())),
+            ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(msg.payload().to_vec())),
             Ok(ambre_protocol::ws::WsServerMsg::MembersChanged { document_id }) if document_id == meta
         ));
 
@@ -2385,7 +2385,7 @@ mod tests {
             .expect("the notice arrives")
             .expect("a message")
             .expect("readable");
-        let notice = decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec()))
+        let notice = decode_server_msg(&ambre_core::Payload::new(heard.payload().to_vec()))
             .expect("decodes");
         assert!(
             matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == meta),
@@ -2439,9 +2439,8 @@ mod tests {
                 .expect("the notice arrives")
                 .expect("a message")
                 .expect("readable");
-            let notice =
-                decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec()))
-                    .expect("decodes");
+            let notice = decode_server_msg(&ambre_core::Payload::new(heard.payload().to_vec()))
+                .expect("decodes");
             assert!(
                 matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == meta),
                 "heard {notice:?}"
@@ -2892,7 +2891,7 @@ mod tests {
             .expect("a message")
             .expect("readable");
         Some(
-            ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
                 heard.payload().to_vec(),
             ))
             .expect("decodes"),
@@ -3337,7 +3336,7 @@ mod tests {
             .expect("the notice arrives")
             .expect("a message")
             .expect("readable");
-        let notice = decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec()))
+        let notice = decode_server_msg(&ambre_core::Payload::new(heard.payload().to_vec()))
             .expect("decodes");
         assert!(
             matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == gone.document_id()),

@@ -23,17 +23,18 @@ use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
 
 use ambre_bus::start::WorkerPost;
 use ambre_bus::{LogicEvent, SyncCommand};
+use ambre_core::Payload;
 
 use crate::{LogicSink, run_wasm};
 
 /// Copy a JS `ArrayBuffer` (the `postMessage` payload) into a [`WorkerPost`].
-fn array_buffer_to_post(data: &JsValue) -> WorkerPost {
-    WorkerPost::new(js_sys::Uint8Array::new(data).to_vec())
+fn array_buffer_to_post(data: &JsValue) -> Payload<WorkerPost> {
+    Payload::<WorkerPost>::new(js_sys::Uint8Array::new(data).to_vec())
 }
 
 /// Copy `post` into a fresh `Uint8Array` and `postMessage` its backing
 /// `ArrayBuffer` to Main, transferring it (zero-copy move, no structured clone).
-fn post_bytes(scope: &DedicatedWorkerGlobalScope, post: &WorkerPost) {
+fn post_bytes(scope: &DedicatedWorkerGlobalScope, post: &Payload<WorkerPost>) {
     let bytes = post.as_bytes();
     let array = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
     array.copy_from(bytes);
@@ -66,7 +67,7 @@ pub fn start() {
     let sink_scope = scope.clone();
     let logic_sink = LogicSink::new(
         move |event: LogicEvent| match postcard::to_allocvec(&event) {
-            Ok(bytes) => post_bytes(&sink_scope, &WorkerPost::new(bytes)),
+            Ok(bytes) => post_bytes(&sink_scope, &Payload::<WorkerPost>::new(bytes)),
             Err(e) => tracing::error!("[Sync] failed to encode LogicEvent: {e}"),
         },
     );

@@ -3669,6 +3669,7 @@
   {"edge": "cites-rule", "from": "ZK-006", "to": "SRV-001"},
   {"edge": "cites-finding", "from": "ZK-006", "to": "C1"},
   {"edge": "verified-by", "from": "ZK-006", "to": "ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext"},
+  {"edge": "verified-by", "from": "ZK-006", "to": "ambre_core::envelope::tests::a_ciphertext_debug_prints_no_byte"},
   {"edge": "cites-rule", "from": "ZK-017", "to": "ZK-006"},
   {"edge": "cites-finding", "from": "ZK-017", "to": "C1"},
   {"edge": "verified-by", "from": "ZK-017", "to": "ambre_crypto::tests::an_envelope_debug_form_prints_no_byte_of_it"},

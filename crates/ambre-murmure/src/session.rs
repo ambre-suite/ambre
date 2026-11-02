@@ -37,7 +37,7 @@ impl Session {
     pub(crate) fn adopt(
         doc: &LoroDoc,
         peer: ambre_core::PeerId,
-        entry: PeerEntryBytes,
+        entry: Payload<PeerEntryBytes>,
     ) -> Result<Self, MurmureError> {
         doc.commit();
         doc.set_peer_id(peer.get())?;

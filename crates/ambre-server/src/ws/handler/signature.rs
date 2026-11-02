@@ -81,7 +81,7 @@ pub(crate) fn verify_ephemeral_signature(
 pub(crate) fn verify_sealed_signature(
     pubkey: &FixedBytes<PublicKey>,
     nonce: &FixedBytes<Nonce>,
-    ciphertext: &Ciphertext,
+    ciphertext: &ambre_core::Payload<Ciphertext>,
     public_data: &ambre_core::Aad,
     commitment_tag: &FixedBytes<CommitmentTag>,
     signature: &FixedBytes<Signature>,

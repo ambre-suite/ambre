@@ -478,7 +478,7 @@ pub struct SealedAmbre {
     pub nonce: FixedBytes<Nonce>,
     /// Offset [`SEALED_HEADER_LEN`] onward: the sealed bytes, authentication tag
     /// included. Opens to a whole plaintext container.
-    pub ciphertext: Ciphertext,
+    pub ciphertext: Payload<Ciphertext>,
 }
 
 impl SealedAmbre {
@@ -520,9 +520,9 @@ pub fn sealed_aad(salt: &FixedBytes<FileSalt>) -> crate::Aad {
 pub fn write_ambre_sealed(
     salt: &FixedBytes<FileSalt>,
     nonce: &FixedBytes<Nonce>,
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
 ) -> Payload<SealedContainer> {
-    let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len());
+    let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len().as_len());
     out.extend_from_slice(sealed_aad(salt).as_bytes());
     nonce.push_to(&mut out);
     debug_assert_eq!(out.len(), SEALED_HEADER_LEN);
@@ -572,7 +572,7 @@ pub fn parse_sealed_header(file: &Payload<SealedContainer>) -> Result<SealedAmbr
         version,
         salt,
         nonce,
-        ciphertext: Ciphertext::new(ciphertext.to_vec()),
+        ciphertext: Payload::<Ciphertext>::new(ciphertext.to_vec()),
     })
 }
 
@@ -975,7 +975,7 @@ mod tests {
         write_ambre_sealed(
             &SALT,
             &NONCE,
-            &Ciphertext::new(b"ciphertext-bytes".to_vec()),
+            &Payload::<Ciphertext>::new(b"ciphertext-bytes".to_vec()),
         )
         .into_bytes()
     }
@@ -1144,7 +1144,7 @@ mod tests {
         let envelope = parse_sealed_header(&write_ambre_sealed(
             &SALT,
             &NONCE,
-            &Ciphertext::new(Vec::new()),
+            &Payload::<Ciphertext>::new(Vec::new()),
         ))
         .expect("a header with no ciphertext is still a header");
         assert!(envelope.ciphertext.is_empty());

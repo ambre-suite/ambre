@@ -6,7 +6,7 @@
 //! document key is then sealed under the KEK with XChaCha20-Poly1305. This module
 //! provides the primitive only; the share/rotation flow lives in the Sync thread.
 
-use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, FixedBytes, Nonce, Secret};
+use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, FixedBytes, Nonce, Payload, Secret};
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -26,7 +26,7 @@ pub struct WrappedKey {
     /// AEAD nonce used to wrap the key.
     pub nonce: FixedBytes<Nonce>,
     /// Sealed document key (32 bytes + Poly1305 tag).
-    pub ciphertext: Ciphertext,
+    pub ciphertext: Payload<Ciphertext>,
 }
 
 /// The raw X25519 output between two parties, the input of the KEK.

@@ -277,7 +277,7 @@ pub struct ChannelState {
     /// The successor another client created, whose bytes are in `pending`.
     successor: Option<Id<Segment>>,
     /// The identity issued for that successor, adopted once it is admitted.
-    successor_session: Option<(ambre_core::PeerId, PeerEntryBytes)>,
+    successor_session: Option<(ambre_core::PeerId, Payload<PeerEntryBytes>)>,
     /// The successor that failed to open, fetched again on a later tick.
     successor_retry: Option<closing::Retry>,
     /// The finalization of the closing segment, as this client drives it.
@@ -368,7 +368,7 @@ impl ChannelState {
         &mut self,
         document_id: Id<Document>,
         peer: ambre_core::PeerId,
-        entry: PeerEntryBytes,
+        entry: Payload<PeerEntryBytes>,
     ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         let channel_id = self.channel_id;
         let Some(held) = self.held_mut(document_id) else {
@@ -420,7 +420,7 @@ impl ChannelState {
             self.adopt_session(
                 id,
                 peer,
-                PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+                Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
             )
             .expect("adopt");
         }

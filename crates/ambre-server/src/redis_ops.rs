@@ -747,7 +747,7 @@ pub async fn doc_presence_update(
     redis: &Client,
     document_id: &Id<Document>,
     pub_key: &FixedBytes<PublicKey>,
-    presence: &ambre_protocol::messages::Ciphertext,
+    presence: &ambre_core::Payload<ambre_protocol::messages::Ciphertext>,
     ttl: TimeSpan<Sec>,
 ) -> Result<(), AppError> {
     let pub_key_hex = pub_key.to_hex();
@@ -1240,8 +1240,8 @@ mod tests {
     }
 
     /// A presence sample: its bytes stand for an encrypted cursor.
-    pub(super) fn sample() -> ambre_protocol::messages::Ciphertext {
-        ambre_protocol::messages::Ciphertext::new(b"blob".to_vec())
+    pub(super) fn sample() -> ambre_core::Payload<ambre_protocol::messages::Ciphertext> {
+        ambre_core::Payload::<ambre_protocol::messages::Ciphertext>::new(b"blob".to_vec())
     }
 
     #[test]

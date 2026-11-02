@@ -807,7 +807,7 @@ pub enum ClipValue {
     F64(f64),
     Bool(bool),
     Str(String),
-    Bin(ClipBytes),
+    Bin(ambre_core::Payload<ClipBytes>),
 }
 
 impl std::fmt::Debug for ClipValue {
@@ -824,32 +824,14 @@ impl std::fmt::Debug for ClipValue {
     }
 }
 
-/// The bytes of one captured binary field, such as a style blob. They travel
-/// as the bare bytes a `Vec<u8>` serializes to, so a payload already on the
-/// clipboard reads back the same. They may hold board content, so `Debug`
-/// prints the length alone.
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ClipBytes(Vec<u8>);
+/// The role of the bytes of one captured binary field, such as a style
+/// blob: `Payload<ClipBytes>`. They travel as the bare bytes a `Vec<u8>`
+/// serializes to, so a payload already on the clipboard reads back the same.
+/// They may hold board content, so `Debug` prints the length alone.
+pub enum ClipBytes {}
 
-impl ClipBytes {
-    /// Wraps the bytes of one field.
-    #[must_use]
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    /// The bytes.
-    #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for ClipBytes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ClipBytes({} bytes)", self.0.len())
-    }
+impl ambre_core::PayloadKind for ClipBytes {
+    const NAME: &'static str = "ClipBytes";
 }
 
 ambre_core::crdt_names! {
@@ -3045,7 +3027,7 @@ impl fmt::Debug for DisplayConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{Authored, Instant};
+    use ambre_core::{Authored, Instant, Payload};
 
     /// A minted id spells its peer and its counter in fixed-width hex, as the
     /// board stores it. An id written before the counter was typed reads the
@@ -3066,17 +3048,19 @@ mod tests {
 
     /// A binary clipboard field encodes as the bare bytes a `Vec<u8>` did.
     /// A payload already on the clipboard reads back, and `Debug` prints the
-    /// length alone.
+    /// length alone. The JSON form is the role-blind one
+    /// `ambre_core::payload` proves.
     #[test]
     fn a_binary_clipboard_field_keeps_the_bytes_of_a_vec() {
         let bytes = vec![0xde, 0xad, 0x00, 0x01];
-        let field = ClipValue::Bin(ClipBytes::new(bytes.clone()));
+        let field = ClipValue::Bin(Payload::<ClipBytes>::new(bytes.clone()));
         let encoded = postcard::to_allocvec(&field).expect("a field encodes");
         let mut expected = vec![3];
         expected.extend(postcard::to_allocvec(&bytes).expect("a vec encodes"));
         assert_eq!(encoded, expected, "variant index 3, then the bare bytes");
         assert_eq!(postcard::from_bytes::<ClipValue>(&encoded), Ok(field));
-        assert_eq!(format!("{:?}", ClipBytes::new(bytes)), "ClipBytes(4 bytes)");
+        let clip = Payload::<ClipBytes>::new(bytes.clone());
+        assert_eq!(format!("{clip:?}"), "ClipBytes(4 bytes)");
     }
 
     /// Every board type and command that holds a text a user typed prints its

@@ -174,7 +174,7 @@ pub(crate) fn check_snapshot(
             match registry_entry(&theirs, peer) {
                 Some(entry) => extras.push((
                     ambre_core::PeerId::new(peer),
-                    ambre_core::PeerEntryBytes::new(entry),
+                    ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(entry),
                 )),
                 None => return Outcome::Unchecked,
             }
@@ -467,7 +467,7 @@ mod tests {
             Outcome::Match {
                 extras: vec![(
                     ambre_core::PeerId::new(1),
-                    ambre_core::PeerEntryBytes::new(vec![7_u8; 4])
+                    ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(vec![7_u8; 4])
                 )]
             }
         );

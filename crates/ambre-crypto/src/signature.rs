@@ -13,7 +13,7 @@
 //! `ws/handler/message.rs::verify_update_signature` (it must not link
 //! `ambre-crypto`); the two layouts MUST stay byte-identical.
 
-use ambre_core::{Ciphertext, CommitmentTag, FixedBytes, Nonce, PublicKey, Signature};
+use ambre_core::{Ciphertext, CommitmentTag, FixedBytes, Nonce, Payload, PublicKey, Signature};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 
 use crate::error::CryptoError;
@@ -36,13 +36,13 @@ fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
 /// fields does not compile, and the bytes unwrap here alone.
 fn message(
     nonce: &FixedBytes<Nonce>,
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
     aad: &ambre_core::Aad,
     commitment_tag: &FixedBytes<CommitmentTag>,
 ) -> Vec<u8> {
     let mut msg = Vec::with_capacity(
         16 + nonce.as_slice().len()
-            + ciphertext.len()
+            + ciphertext.len().as_len()
             + aad.as_bytes().len()
             + commitment_tag.as_slice().len(),
     );
@@ -57,7 +57,7 @@ fn message(
 pub fn sign(
     signing_key: &SigningKey,
     nonce: &FixedBytes<Nonce>,
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
     aad: &ambre_core::Aad,
     commitment_tag: &FixedBytes<CommitmentTag>,
 ) -> FixedBytes<Signature> {
@@ -75,7 +75,7 @@ pub fn sign(
 pub fn verify(
     author_pub: &FixedBytes<PublicKey>,
     nonce: &FixedBytes<Nonce>,
-    ciphertext: &Ciphertext,
+    ciphertext: &Payload<Ciphertext>,
     aad: &ambre_core::Aad,
     commitment_tag: &FixedBytes<CommitmentTag>,
     signature: &FixedBytes<Signature>,
@@ -149,8 +149,8 @@ mod tests {
         FixedBytes::from_array([1; 24])
     }
 
-    fn ct(bytes: &[u8]) -> Ciphertext {
-        Ciphertext::new(bytes.to_vec())
+    fn ct(bytes: &[u8]) -> Payload<Ciphertext> {
+        Payload::<Ciphertext>::new(bytes.to_vec())
     }
 
     fn tag() -> FixedBytes<CommitmentTag> {

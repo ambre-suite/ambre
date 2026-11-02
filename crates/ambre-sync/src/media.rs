@@ -5,7 +5,7 @@ use crate::sharing::GlooHttp;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use ambre_core::{FixedBytes, MediaAddress};
+use ambre_core::{FixedBytes, MediaAddress, Payload};
 
 /// Seals a blob for one document and the address it is stored under
 /// (`SYNC-051`, `SYNC-074`).
@@ -29,7 +29,7 @@ fn seal_blob(
 /// recomputed address refuses one a member sealed under this address over
 /// other bytes.
 fn open_blob(
-    blob: &pipeline::FetchedBlob,
+    blob: &Payload<pipeline::FetchedBlob>,
     document_id: Id<Document>,
     content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
@@ -49,7 +49,7 @@ fn open_blob(
 /// Opens a downloaded blob with the one key it names: the current key, a
 /// cached one, or one the chain recovers (`SYNC-042`, `SYNC-045`).
 fn open_blob_named(
-    blob: &pipeline::FetchedBlob,
+    blob: &Payload<pipeline::FetchedBlob>,
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
 ) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, SyncError> {
@@ -273,7 +273,7 @@ pub(crate) trait MediaHttp {
     async fn fetch_bytes(
         &self,
         url: &ambre_core::Credential<ambre_core::PresignedUrl>,
-    ) -> Result<pipeline::FetchedBlob, http::HttpError>;
+    ) -> Result<Payload<pipeline::FetchedBlob>, http::HttpError>;
     /// An authenticated `DELETE` to the relay, answering its status.
     async fn delete(
         &self,
@@ -299,7 +299,7 @@ impl MediaHttp for GlooHttp {
     async fn fetch_bytes(
         &self,
         url: &ambre_core::Credential<ambre_core::PresignedUrl>,
-    ) -> Result<pipeline::FetchedBlob, http::HttpError> {
+    ) -> Result<Payload<pipeline::FetchedBlob>, http::HttpError> {
         http::fetch_bytes(url).await
     }
     async fn delete(
@@ -660,9 +660,9 @@ mod tests {
         async fn fetch_bytes(
             &self,
             _url: &ambre_core::Credential<ambre_core::PresignedUrl>,
-        ) -> Result<pipeline::FetchedBlob, http::HttpError> {
+        ) -> Result<Payload<pipeline::FetchedBlob>, http::HttpError> {
             self.step("fetch")?;
-            Ok(pipeline::FetchedBlob::new(self.served.clone()))
+            Ok(Payload::<pipeline::FetchedBlob>::new(self.served.clone()))
         }
         async fn delete(
             &self,
@@ -832,13 +832,13 @@ mod tests {
         data: &[u8],
         document_id: Id<Document>,
         key: &DocumentKey,
-    ) -> (pipeline::FetchedBlob, ambre_core::ContentHash) {
+    ) -> (Payload<pipeline::FetchedBlob>, ambre_core::ContentHash) {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let data = ambre_core::Payload::new(data.to_vec());
         let address = ambre_crypto::commitment::media_address(key, &data);
         let blob = seal_blob(&data, document_id, &address, key, &signing).unwrap();
         (
-            pipeline::FetchedBlob::new(blob.into_bytes()),
+            Payload::<pipeline::FetchedBlob>::new(blob.into_bytes()),
             address.content_hash(),
         )
     }
@@ -905,7 +905,7 @@ mod tests {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let other = ambre_core::Payload::new(b"other bytes".to_vec());
         let forged = seal_blob(&other, document_id, &address, &key, &signing).unwrap();
-        let forged = &pipeline::FetchedBlob::new(forged.into_bytes());
+        let forged = &Payload::<pipeline::FetchedBlob>::new(forged.into_bytes());
         assert_eq!(
             pipeline::open_object(forged, &pipeline::media_aad(document_id, &address), &key)
                 .unwrap()

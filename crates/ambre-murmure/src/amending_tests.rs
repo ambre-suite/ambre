@@ -49,7 +49,7 @@ fn closing_with(texts: &[&str], author: Id<User>) -> (ChannelState, Id<Segment>)
         .adopt_session(
             successor.document_id(),
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
     (state, closing)
@@ -80,7 +80,7 @@ fn amended(
         .adopt_session(
             amendments,
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt")
         .expect("the header travels");
@@ -151,7 +151,7 @@ fn bob_holding(
     bob.adopt_session(
         amendments,
         peer,
-        PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+        Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
     )
     .expect("adopt");
     assert_eq!(bob.amendments_id(segment), Some(amendments));
@@ -480,7 +480,7 @@ fn locked_thread(
         .adopt_session(
             thread,
             peer,
-            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
     let linked = state.thread_linked(segment, root, thread).expect("link");

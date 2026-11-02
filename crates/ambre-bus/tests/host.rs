@@ -507,7 +507,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             verdict: SnapshotVerdict::Match {
                 extras: vec![(
                     ambre_core::PeerId::new(41),
-                    ambre_core::PeerEntryBytes::new(vec![2, 3]),
+                    ambre_core::Payload::<ambre_core::PeerEntryBytes>::new(vec![2, 3]),
                 )],
             },
         },

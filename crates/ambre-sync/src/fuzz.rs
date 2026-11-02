@@ -6,7 +6,7 @@
 //! Each entry point below opens one of the two under a fixed key.
 
 use ambre_core::id::{self, Document, Id};
-use ambre_core::{FixedBytes, PublicKey};
+use ambre_core::{FixedBytes, Payload, PublicKey};
 use ambre_crypto::{DocumentKey, MasterSeed, envelope};
 use ambre_protocol::messages::Clock;
 use ambre_protocol::public_data::UpdatePublicData;
@@ -40,7 +40,7 @@ pub fn open_relayed_update(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
 pub fn open_stored_snapshot(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let named: Snapshot = postcard::from_bytes(bytes).map_err(|_| PipelineError::Postcard)?;
     let snapshot = decode_snapshot_blob(
-        &FetchedBlob::new(bytes.to_vec()),
+        &Payload::<FetchedBlob>::new(bytes.to_vec()),
         named.public_data.document_id,
     )?;
     open_snapshot(&snapshot, &doc_key()).map(ambre_core::Payload::into_bytes)
