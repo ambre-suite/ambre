@@ -9,7 +9,7 @@
 use ambre_bus::app::grid::Row;
 use ambre_bus::app::prose::{DocChar, Page};
 use ambre_core::Rgba;
-use ambre_core::index::{Axis, Count, Delta, IdxVec, MapsTo, Pos, Span};
+use ambre_core::index::{Axis, Count, CountsAs, Delta, IdxVec, MapsTo, Pos, Span};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -42,13 +42,19 @@ impl Axis for RunChar {
 /// * the Logic thread answered the offset.
 ///
 /// `ProseUiState::to_doc` is the bridge otherwise.
+impl CountsAs<DocChar> for RunChar {}
+
+/// A position crosses too: both axes start at the same place.
 impl MapsTo<DocChar> for RunChar {}
 
 /// The way back, under the condition the crossing above states.
+impl CountsAs<RunChar> for DocChar {}
+
+/// A position crosses too: both axes start at the same place.
 impl MapsTo<RunChar> for DocChar {}
 
 /// A text the run holds whole counts the same code points in the run.
-impl MapsTo<RunChar> for Char {}
+impl CountsAs<RunChar> for Char {}
 
 /// A block's place in the flow of the document, the first being zero.
 /// A window of the layout carries a stretch of them.
@@ -122,10 +128,10 @@ impl Axis for LocalByte {
 
 /// A segment's text is a slice of the run's text: a count of bytes is the
 /// same in both.
-impl MapsTo<Byte> for LocalByte {}
+impl CountsAs<Byte> for LocalByte {}
 
 /// The way back: a count of the run's bytes, taken into one segment's text.
-impl MapsTo<LocalByte> for Byte {}
+impl CountsAs<LocalByte> for Byte {}
 
 /// A line of one run, counted across its segments, the first being zero.
 #[derive(PartialEq, Eq)]
@@ -137,6 +143,9 @@ impl Axis for RunLine {
 
 /// A text block is one run, so the paginator cuts the block at the run's
 /// own lines.
+impl CountsAs<BlockLine> for RunLine {}
+
+/// A position crosses too: both axes start at the same place.
 impl MapsTo<BlockLine> for RunLine {}
 
 /// A line of one segment's layout, as the shaper numbers it. A segment
@@ -151,10 +160,10 @@ impl Axis for LocalLine {
 
 /// A number of lines is the same counted in the run or in one segment's
 /// layout; a position is not, and `ParleyRunData::lines` maps those.
-impl MapsTo<LocalLine> for RunLine {}
+impl CountsAs<LocalLine> for RunLine {}
 
 /// The way back, for a number of lines.
-impl MapsTo<RunLine> for LocalLine {}
+impl CountsAs<RunLine> for LocalLine {}
 
 /// A segment of one run, the first being zero.
 #[derive(PartialEq, Eq)]
@@ -1033,7 +1042,7 @@ impl Axis for WindowPage {
 }
 
 /// The window counts the document's pages: a count of pages is the same.
-impl MapsTo<WindowPage> for Page {}
+impl CountsAs<WindowPage> for Page {}
 
 /// Where a text block sits in the tables of a layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

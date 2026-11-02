@@ -70,7 +70,9 @@
 //! | :--- | :--- |
 //! | [`Numbered`] | the number a reader sees for a position |
 //! | [`Shown`] | the `Display` of a count |
-//! | [`MapsTo`] | the crossing to an axis that counts the same thing |
+//! | [`Circular`] | [`Pos::wrapped`], a move that wraps at either end |
+//! | [`CountsAs`] | the crossing of a count to an axis that counts the same thing |
+//! | [`MapsTo`] | the crossing of a position and a span as well |
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -93,8 +95,9 @@ use crate::mode::StepDirection;
 /// A constant such as `Pos::<Row>::ZERO` then works as a match pattern. The
 /// derive bounds the marker, and this supertrait meets that bound.
 pub trait Axis: Eq + Sized + 'static {
-    /// The name `Debug` prints before the kind of value: `RowCount(3)`, as
-    /// the hand-written type of each axis printed its own.
+    /// The name `Debug` prints before the kind of value: `RowCount(3)`,
+    /// `RowPos(3)`. A count prints as the hand-written type of its axis
+    /// printed; a position prints the kind `Pos` after the name.
     const NAME: &'static str;
 }
 
@@ -114,12 +117,29 @@ pub trait Numbered: Axis {
 /// as the bare number.
 pub trait Shown: Axis {}
 
-/// An axis whose positions are the positions of axis `B`, one for one.
+/// An axis whose positions wrap: past the last comes the first.
+///
+/// A mention list or a match cursor wraps by design. A page, a row or a line
+/// that wraps is a bug, so [`Pos::wrapped`] exists only on an axis that opts
+/// in here.
+pub trait Circular: Axis {}
+
+/// An axis whose counts are counts of axis `B`: the same number of things.
 ///
 /// The impl states the condition under which the two axes count the same
-/// thing. [`Pos::as_axis`] and [`Count::as_axis`] then cross from one axis to
-/// the other. A crossing back is its own impl.
-pub trait MapsTo<B: Axis>: Axis {}
+/// thing. [`Count::as_axis`] then crosses from one axis to the other. A
+/// position does not cross: the two axes may start at different places, as a
+/// window of pages starts at some page of the document. A crossing back is
+/// its own impl.
+pub trait CountsAs<B: Axis>: Axis {}
+
+/// An axis whose positions are the positions of axis `B`, one for one: both
+/// start at the same place and count the same thing.
+///
+/// [`Pos::as_axis`] and [`Span::as_axis`] then cross from one axis to the
+/// other, and a count crosses through [`CountsAs`]. A crossing back is its
+/// own impl.
+pub trait MapsTo<B: Axis>: CountsAs<B> {}
 
 /// A position on the axis `A`: a row, a page, a code-point offset.
 #[derive(PartialEq, Eq)]
@@ -224,19 +244,6 @@ impl<A: Axis> Pos<A> {
         }
     }
 
-    /// The position `by` away on an axis of `len` positions, wrapping at
-    /// either end. Past the last comes the first, and before the first comes
-    /// the last. A position past `len` wraps as if it stood at the last one.
-    /// `None` when `len` is zero, since the axis then holds no position.
-    pub fn wrapped(self, by: Delta<A>, len: Count<A>) -> Option<Self> {
-        if len.is_zero() {
-            return None;
-        }
-        let at = i64::from(self.within(len).raw);
-        let moved = (at + by.raw.rem_euclid(i64::from(len.raw))).rem_euclid(i64::from(len.raw));
-        u32::try_from(moved).ok().map(Self::new)
-    }
-
     /// This position, or the last of an axis of `len` positions when it lies
     /// past it. [`Self::ZERO`] when `len` is zero.
     #[must_use]
@@ -311,6 +318,21 @@ impl<A: Axis> Pos<A> {
     }
 }
 
+impl<A: Circular> Pos<A> {
+    /// The position `by` away on an axis of `len` positions, wrapping at
+    /// either end. Past the last comes the first, and before the first comes
+    /// the last. A position past `len` wraps as if it stood at the last one.
+    /// `None` when `len` is zero, since the axis then holds no position.
+    pub fn wrapped(self, by: Delta<A>, len: Count<A>) -> Option<Self> {
+        if len.is_zero() {
+            return None;
+        }
+        let at = i64::from(self.within(len).raw);
+        let moved = (at + by.raw.rem_euclid(i64::from(len.raw))).rem_euclid(i64::from(len.raw));
+        u32::try_from(moved).ok().map(Self::new)
+    }
+}
+
 impl<A: Numbered> Pos<A> {
     /// The number a reader sees for this position.
     pub fn number(self) -> A::Number {
@@ -381,10 +403,10 @@ impl<A: Axis> Count<A> {
     }
 
     /// The same count on the axis `B`, which counts what this axis counts
-    /// under the condition the [`MapsTo`] impl states.
+    /// under the condition the [`CountsAs`] impl states.
     pub const fn as_axis<B: Axis>(self) -> Count<B>
     where
-        A: MapsTo<B>,
+        A: CountsAs<B>,
     {
         Count::new(self.raw)
     }
@@ -989,7 +1011,7 @@ impl<A: Axis, T: fmt::Debug> fmt::Debug for IdxVec<A, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Axis, Count, Delta, IdxVec, MapsTo, Pos, Span};
+    use super::{Axis, Circular, Count, CountsAs, Delta, IdxVec, MapsTo, Pos, Span};
 
     /// A test line.
     #[derive(PartialEq, Eq)]
@@ -1007,7 +1029,11 @@ mod tests {
         const NAME: &'static str = "Mirror";
     }
 
+    impl CountsAs<Mirror> for Line {}
+
     impl MapsTo<Mirror> for Line {}
+
+    impl Circular for Line {}
 
     fn line(raw: u32) -> Pos<Line> {
         Pos::new(raw)
@@ -1138,7 +1164,7 @@ mod tests {
         let len = count(3);
         assert_eq!(line(2).wrapped(delta(1), len), Some(Pos::<Line>::ZERO));
         assert_eq!(Pos::<Line>::ZERO.wrapped(delta(-1), len), Some(line(2)));
-        assert_eq!(line(1).wrapped(delta(7), len), Some(Pos::<Line>::ZERO));
+        assert_eq!(line(1).wrapped(delta(8), len), Some(Pos::<Line>::ZERO));
         assert_eq!(line(9).wrapped(delta(1), len), Some(Pos::<Line>::ZERO));
         assert_eq!(Pos::<Line>::ZERO.wrapped(delta(1), Count::ZERO), None);
     }

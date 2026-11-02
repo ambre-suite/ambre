@@ -25,7 +25,7 @@
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
 use ambre_core::index::Count;
-use ambre_core::index::{Axis, Delta, MapsTo, Numbered, Pos, Shown, Span};
+use ambre_core::index::{Axis, CountsAs, Delta, MapsTo, Numbered, Pos, Shown, Span};
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
@@ -53,10 +53,13 @@ impl Axis for DocChar {
 
 /// A block's body counts code points, so an offset of it is a code-point
 /// offset of the block's text.
+impl CountsAs<ambre_core::Char> for DocChar {}
+
+/// A position crosses too: both axes start at the same place.
 impl MapsTo<ambre_core::Char> for DocChar {}
 
 /// The code points of a block's text are the code points its body counts.
-impl MapsTo<DocChar> for ambre_core::Char {}
+impl CountsAs<DocChar> for ambre_core::Char {}
 
 /// The number of a text change the view did not draw: a remote one, or a
 /// local one the Logic thread rewrote. The view hands back the last it

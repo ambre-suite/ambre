@@ -118,7 +118,8 @@
     with `Range` and delete it. The module of the index family carries the same note.
   * **Indexing.** A collection indexed by a position is an `IdxVec<A, T>`.
   * **Derives.** Each type derives what the code needs: `Ord`, `Hash` and `Default` where they
-    hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A plaintext type
+    hold. A generic type over a marker writes them by hand, as a derive bounds the marker. Its
+    serde form is `#[serde(transparent)]` unless the wire says otherwise. A plaintext type
     prints only its length through `Debug`. A secret type prints nothing of its value: it holds
     an `ambre_core::Secret` and derives `Debug`, which prints `Secret([REDACTED])`.
   * **Secrets.** A key, a seed, a passphrase or a token is a domain newtype over

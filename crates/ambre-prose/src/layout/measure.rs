@@ -5,7 +5,7 @@
 //! holds a shaper. It measures and returns; it writes nothing back to the
 //! document it read (`PROSE-079`).
 
-use ambre_core::index::{Axis, Count, Delta, MapsTo, Pos, Span};
+use ambre_core::index::{Axis, Count, CountsAs, Delta, Pos, Span};
 use parley::{
     Alignment, AlignmentOptions, FontContext, FontFamily, FontStyle, FontWeight, Layout,
     LayoutContext, LineHeight, StyleProperty,
@@ -205,7 +205,7 @@ impl Axis for BlockLine {
 
 /// The paginator cuts a table block at its rows, so a row of the table is a
 /// line of the block.
-impl MapsTo<BlockLine> for Row {}
+impl CountsAs<BlockLine> for Row {}
 
 /// What one block's text measures, once broken to a width.
 #[derive(Clone, Debug, PartialEq)]

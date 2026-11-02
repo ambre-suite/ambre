@@ -7,7 +7,7 @@
 
 use ambre_bus::MentionTarget;
 use ambre_core::id::{Id, User};
-use ambre_core::index::{Axis, Count, IdxVec, Pos};
+use ambre_core::index::{Axis, Circular, Count, IdxVec, Pos};
 use ambre_core::{Byte, Point, Px, View};
 
 use crate::Region;
@@ -22,6 +22,9 @@ pub enum MentionEntry {}
 impl Axis for MentionEntry {
     const NAME: &'static str = "Offer";
 }
+
+/// The arrow keys wrap the choice: past the last entry comes the first.
+impl Circular for MentionEntry {}
 
 /// One entry of the list: what a pick names, and the name it writes.
 ///

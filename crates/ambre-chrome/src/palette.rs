@@ -17,7 +17,7 @@
 
 use ambre_commands::{Command, CommandId, Locale};
 use ambre_core::id::{Channel, Id, User};
-use ambre_core::index::{Axis, Count, Delta, Pos};
+use ambre_core::index::{Axis, Circular, Count, Delta, Pos};
 use leptos::html;
 use leptos::prelude::*;
 
@@ -31,6 +31,9 @@ enum PaletteLine {}
 impl Axis for PaletteLine {
     const NAME: &'static str = "PaletteLine";
 }
+
+/// The arrow keys wrap the focus: past the last row comes the first.
+impl Circular for PaletteLine {}
 
 /// Whether `label` answers `query`: a case-insensitive substring match.
 ///

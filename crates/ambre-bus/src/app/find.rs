@@ -6,7 +6,7 @@
 //! "k/n" counter. One family keeps a match index apart from a count, and
 //! from every other index a search event carries.
 
-use ambre_core::index::{Axis, Count, Numbered, Pos, Shown};
+use ambre_core::index::{Axis, Circular, Count, Numbered, Pos, Shown};
 
 /// A match of one search, counted from zero in the order the search
 /// reports its list.
@@ -28,6 +28,9 @@ impl Numbered for Match {
 
 /// A counter shows the number of matches to a reader.
 impl Shown for Match {}
+
+/// The match cursor wraps: a step past the last match lands on the first.
+impl Circular for Match {}
 
 /// The query of a find, as the user typed it, never empty. An empty field
 /// sends no query at all, which is how the panel clears its highlight
