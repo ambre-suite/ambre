@@ -786,6 +786,7 @@ mod tests {
     use super::*;
     use ambre_bus::app::prose::{Graphemes, Page, Paragraphs, Words};
     use ambre_core::Tally;
+    use ambre_core::index::Count;
     use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
     use wasm_bindgen_test::wasm_bindgen_test;
 
