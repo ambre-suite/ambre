@@ -669,7 +669,7 @@ mod handler_tests {
             .unwrap();
         assert_eq!(marks, 0, "a done sweep drops the mark");
 
-        let gone_key = crate::redis_keys::GoneKey::of(&doc);
+        let gone_key = crate::redis_keys::DocKey::<crate::redis_keys::Gone>::of(&doc);
         let _ = redis.del([other_seq, gone_key.as_str()]).await;
     }
 
@@ -724,7 +724,7 @@ mod handler_tests {
         );
 
         // A reset of the ephemeral store loses the tombstone.
-        let gone_key = crate::redis_keys::GoneKey::of(&doc);
+        let gone_key = crate::redis_keys::DocKey::<crate::redis_keys::Gone>::of(&doc);
         let _: usize = down.redis.del([gone_key.as_str()]).await.unwrap();
 
         // The store is back, and the pass finishes the delete.
@@ -1546,7 +1546,7 @@ mod handler_tests {
             redis,
             pubsub,
             s3,
-            s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
+            s3_bucket: crate::s3::StoreText::<crate::s3::BucketName>::new("test-bucket".to_owned()),
             config: Arc::new(Config::default()),
             jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
                 &crate::jwt::JwtSeed::from_array([7u8; 32]),
@@ -1572,7 +1572,7 @@ mod handler_tests {
             redis,
             pubsub,
             s3,
-            s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
+            s3_bucket: crate::s3::StoreText::<crate::s3::BucketName>::new("test-bucket".to_owned()),
             config: Arc::new(config),
             jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
                 &crate::jwt::JwtSeed::from_array([7u8; 32]),
@@ -3403,7 +3403,7 @@ mod handler_tests {
             &state.db,
             &document,
             ambre_core::Seq::new(0),
-            crate::db::QueryLimit::saturating(10),
+            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10),
         )
         .await;
         assert_eq!(deltas.unwrap().len(), 3, "no delta is dropped with it");
@@ -3734,7 +3734,7 @@ mod handler_tests {
         let doc = Id::<Document>::from_uuid(ambre_core::Uuid::parse_str(doc_id).unwrap());
         let n: usize = state
             .redis
-            .exists(crate::redis_keys::RotationOwedKey::of(&doc).as_str())
+            .exists(crate::redis_keys::DocKey::<crate::redis_keys::RotationOwed>::of(&doc).as_str())
             .await
             .unwrap();
         n == 1

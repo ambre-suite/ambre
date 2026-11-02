@@ -3875,7 +3875,7 @@ mod tests {
         );
         let mirrored: usize = state
             .redis
-            .exists(crate::redis_keys::LockedKey::of(&segment).as_str())
+            .exists(crate::redis_keys::DocKey::<crate::redis_keys::Locked>::of(&segment).as_str())
             .await
             .expect("exists");
         assert_eq!(mirrored, 1, "the store refuses every later delta");
@@ -3894,7 +3894,7 @@ mod tests {
         use rustis::commands::GenericCommands;
         let mirrored: usize = state
             .redis
-            .exists(crate::redis_keys::LockedKey::of(&segment).as_str())
+            .exists(crate::redis_keys::DocKey::<crate::redis_keys::Locked>::of(&segment).as_str())
             .await
             .expect("exists");
         mirrored == 1

@@ -92,7 +92,7 @@ async fn a_refused_index_write_is_retried_until_the_row_lands(pool: sqlx::PgPool
         &state.db,
         &doc_id,
         ambre_core::Seq::new(0),
-        crate::db::QueryLimit::saturating(10),
+        ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10),
     )
     .await
     .unwrap();
@@ -124,7 +124,7 @@ async fn an_index_write_that_never_lands_leaves_the_whole_frame(pool: sqlx::PgPo
             &state.db,
             &doc_id,
             ambre_core::Seq::new(0),
-            crate::db::QueryLimit::saturating(10)
+            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10)
         )
         .await
         .unwrap()
@@ -174,7 +174,7 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
         &state.db,
         &doc_id,
         ambre_core::Seq::new(0),
-        crate::db::QueryLimit::saturating(10),
+        ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10),
     )
     .await
     .unwrap();

@@ -2,6 +2,7 @@
 // Organization rows and org membership / recovery queries.
 
 use super::*;
+use ambre_core::{Bounded, Bounds, Refusal};
 
 /// The name an organization is created or renamed with: trimmed, never blank,
 /// at most [`ambre_core::NAME_MAX_CHARS`] characters (`SRV-233`). A row read
@@ -47,96 +48,49 @@ impl OrgName {
 #[serde(try_from = "ShamirWire", into = "ShamirWire")]
 pub struct ShamirParams(ShamirWire);
 
-/// How many shares of a split reconstruct the key: the `k` of k-of-n. A type
-/// apart from [`ShareTotal`], so a split never takes the two swapped.
-/// [`ShareThreshold::new`] is the one way in, so the count is at least 1.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
-#[serde(try_from = "i16", into = "i16")]
-pub struct ShareThreshold(i16);
+/// How many shares of a split reconstruct the key: the `k` of k-of-n, at
+/// least 1. A quantity apart from [`ShareTotal`], so a split never takes the
+/// two swapped. The value is a `Bounded<ShareThreshold>`, a bare `i16` on the
+/// wire and in the `smallint` column.
+pub enum ShareThreshold {}
 
-/// How many shares a split cuts the key into: the `n` of k-of-n.
-/// [`ShareTotal::new`] is the one way in, so the count is at least 1.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
-#[serde(try_from = "i16", into = "i16")]
-pub struct ShareTotal(i16);
-
-/// The error of a share count below 1, which no split may declare.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("a share count is below 1")]
-pub struct InvalidShareCount;
-
-impl ShareThreshold {
-    /// The one share a single-authority recovery takes.
-    pub const ONE: Self = Self(1);
-
-    /// The threshold `count` names, or `None` below 1.
-    pub fn new(count: i16) -> Option<Self> {
-        (count >= 1).then_some(Self(count))
-    }
-
-    /// The count, for the column and the wire that store it.
-    pub fn get(self) -> i16 {
-        self.0
-    }
+impl Bounds for ShareThreshold {
+    type Repr = i16;
+    const MIN: i16 = 1;
+    const MAX: i16 = i16::MAX;
+    const NAME: &'static str = "ShareThreshold";
+    const REFUSAL: Refusal = Refusal::new("a share threshold is at least 1, not ", "");
 }
 
-impl ShareTotal {
-    /// The total `count` names, or `None` below 1.
-    pub fn new(count: i16) -> Option<Self> {
-        (count >= 1).then_some(Self(count))
-    }
+/// How many shares a split cuts the key into: the `n` of k-of-n, at least 1.
+/// The value is a `Bounded<ShareTotal>`, a bare `i16` on the wire and in the
+/// `smallint` column.
+pub enum ShareTotal {}
 
-    /// The count, for the column and the wire that store it.
-    pub fn get(self) -> i16 {
-        self.0
-    }
-}
-
-impl TryFrom<i16> for ShareThreshold {
-    type Error = InvalidShareCount;
-
-    fn try_from(count: i16) -> Result<Self, InvalidShareCount> {
-        Self::new(count).ok_or(InvalidShareCount)
-    }
-}
-
-impl From<ShareThreshold> for i16 {
-    fn from(threshold: ShareThreshold) -> Self {
-        threshold.0
-    }
-}
-
-impl TryFrom<i16> for ShareTotal {
-    type Error = InvalidShareCount;
-
-    fn try_from(count: i16) -> Result<Self, InvalidShareCount> {
-        Self::new(count).ok_or(InvalidShareCount)
-    }
-}
-
-impl From<ShareTotal> for i16 {
-    fn from(total: ShareTotal) -> Self {
-        total.0
-    }
+impl Bounds for ShareTotal {
+    type Repr = i16;
+    const MIN: i16 = 1;
+    const MAX: i16 = i16::MAX;
+    const NAME: &'static str = "ShareTotal";
+    const REFUSAL: Refusal = Refusal::new("a share total is at least 1, not ", "");
 }
 
 /// The two fields of a split as the request body, the answer and the
 /// `organizations` row spell them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ShamirWire {
-    shamir_threshold: ShareThreshold,
-    shamir_total: ShareTotal,
+    shamir_threshold: Bounded<ShareThreshold>,
+    shamir_total: Bounded<ShareTotal>,
 }
 
 impl ShamirParams {
     /// The split of `total` shares that `threshold` of them reconstruct.
-    /// Refuses a threshold above the total. Each type already holds its count
-    /// at 1 or more.
-    pub fn new(threshold: ShareThreshold, total: ShareTotal) -> Result<Self, AppError> {
+    /// Refuses a threshold above the total. Each quantity already holds its
+    /// count at 1 or more.
+    pub fn new(
+        threshold: Bounded<ShareThreshold>,
+        total: Bounded<ShareTotal>,
+    ) -> Result<Self, AppError> {
         if threshold.get() > total.get() {
             return Err(AppError::Conflict {
                 detail: "shamir_threshold/shamir_total out of range (need 1 <= threshold <= total)"
@@ -150,12 +104,12 @@ impl ShamirParams {
     }
 
     /// How many shares reconstruct the key.
-    pub fn threshold(self) -> ShareThreshold {
+    pub fn threshold(self) -> Bounded<ShareThreshold> {
         self.0.shamir_threshold
     }
 
     /// How many shares the key is split into.
-    pub fn total(self) -> ShareTotal {
+    pub fn total(self) -> Bounded<ShareTotal> {
         self.0.shamir_total
     }
 }
@@ -177,10 +131,11 @@ impl From<ShamirParams> for ShamirWire {
 impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for ShamirParams {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
         let decode = |e: &dyn std::fmt::Display| sqlx::Error::Decode(e.to_string().into());
-        let threshold = ShareThreshold::try_from(row.try_get::<i16, _>("shamir_threshold")?)
+        let threshold =
+            Bounded::<ShareThreshold>::try_new(row.try_get::<i16, _>("shamir_threshold")?)
+                .map_err(|e| decode(&e))?;
+        let total = Bounded::<ShareTotal>::try_new(row.try_get::<i16, _>("shamir_total")?)
             .map_err(|e| decode(&e))?;
-        let total =
-            ShareTotal::try_from(row.try_get::<i16, _>("shamir_total")?).map_err(|e| decode(&e))?;
         Self::new(threshold, total).map_err(|e| decode(&e))
     }
 }

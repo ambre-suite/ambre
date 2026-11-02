@@ -40,6 +40,7 @@ use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::presigning::PresigningConfig;
 use rustis::commands::ScanOptions;
 use rustis::commands::{GenericCommands, ListCommands};
+use std::marker::PhantomData;
 use std::time::Duration;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
@@ -48,52 +49,105 @@ use ambre_core::id::{Document, Id, Snapshot};
 
 use crate::error::AppError;
 use crate::payload::Payload;
-use crate::redis_keys::{FlushLockKey, PendingKey};
+use crate::redis_keys::{DocKey, FlushLock, PendingKey};
 use ambre_core::{Instant, Sec, TimeSpan, UnixSec};
 
-/// Defines a text the object store names a place with. Each is its own type,
-/// so a bucket never takes the place of a key prefix in one signature.
-macro_rules! store_text {
-    ($($(#[$meta:meta])* $name:ident;)*) => {$(
-        $(#[$meta])*
-        #[derive(Debug, Clone, PartialEq, Eq)]
-        pub struct $name(String);
-
-        impl $name {
-            /// Wraps the text.
-            pub fn new(text: String) -> Self {
-                Self(text)
-            }
-
-            /// The text, as the object store's client takes it.
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(self.as_str())
-            }
-        }
-    )*};
+mod sealed {
+    /// Closes [`super::StoreTextKind`]: every kind lives in this module.
+    pub trait Sealed {}
 }
 
-store_text! {
-    /// The prefix every object key of one deployment starts with, read from
-    /// `S3_ENV_PREFIX` (for example `dev-ambre`). Two deployments can share
-    /// one bucket without sharing a key.
-    EnvPrefix;
-    /// The bucket the relay keeps every object in, read from `S3_BUCKET`.
-    BucketName;
-    /// A key prefix inside the bucket: every key under it starts with it.
-    /// [`format_s3_document_prefix`] builds the one prefix a delete sweeps.
-    S3Prefix;
+/// The marker of one kind of text the object store names a place with.
+/// Sealed: the three kinds below are the whole set.
+pub trait StoreTextKind: sealed::Sealed + 'static {
+    /// The name `Debug` prints, as the hand-written type printed its own.
+    const NAME: &'static str;
+}
+
+/// A text the object store names a place with, of the kind `K`. Each kind is
+/// its own type, so a bucket never takes the place of a key prefix in one
+/// signature. The constructor checks nothing: no kind carries a rule.
+pub struct StoreText<K: StoreTextKind> {
+    text: String,
+    kind: PhantomData<fn() -> K>,
+}
+
+impl<K: StoreTextKind> StoreText<K> {
+    /// Wraps the text.
+    pub fn new(text: String) -> Self {
+        Self {
+            text,
+            kind: PhantomData,
+        }
+    }
+
+    /// The text, as the object store's client takes it.
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+// By hand, every impl below: a derive would bound the marker, which has no
+// value to clone or compare.
+
+impl<K: StoreTextKind> Clone for StoreText<K> {
+    fn clone(&self) -> Self {
+        Self::new(self.text.clone())
+    }
+}
+
+impl<K: StoreTextKind> PartialEq for StoreText<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+    }
+}
+
+impl<K: StoreTextKind> Eq for StoreText<K> {}
+
+/// `NAME("...")`, as the derived `Debug` of the hand-written type printed
+/// it.
+impl<K: StoreTextKind> std::fmt::Debug for StoreText<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple(K::NAME).field(&self.text).finish()
+    }
+}
+
+impl<K: StoreTextKind> std::fmt::Display for StoreText<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// The prefix every object key of one deployment starts with, read from
+/// `S3_ENV_PREFIX` (for example `dev-ambre`). Two deployments can share one
+/// bucket without sharing a key.
+pub enum EnvPrefix {}
+
+impl sealed::Sealed for EnvPrefix {}
+impl StoreTextKind for EnvPrefix {
+    const NAME: &'static str = "EnvPrefix";
+}
+
+/// The bucket the relay keeps every object in, read from `S3_BUCKET`.
+pub enum BucketName {}
+
+impl sealed::Sealed for BucketName {}
+impl StoreTextKind for BucketName {
+    const NAME: &'static str = "BucketName";
+}
+
+/// A key prefix inside the bucket: every key under it starts with it.
+/// [`format_s3_document_prefix`] builds the one prefix a delete sweeps.
+pub enum S3Prefix {}
+
+impl sealed::Sealed for S3Prefix {}
+impl StoreTextKind for S3Prefix {
+    const NAME: &'static str = "S3Prefix";
 }
 
 /// S3 object key for a snapshot blob.
 pub fn format_s3_snapshot_key(
-    env_prefix: &EnvPrefix,
+    env_prefix: &StoreText<EnvPrefix>,
     document_id: &Id<Document>,
     snapshot_id: &Id<Snapshot>,
 ) -> ambre_core::ObjectKey {
@@ -104,7 +158,7 @@ pub fn format_s3_snapshot_key(
 
 /// S3 object key for a delta blob (zero-padded seq).
 pub fn format_s3_delta_key(
-    env_prefix: &EnvPrefix,
+    env_prefix: &StoreText<EnvPrefix>,
     document_id: &Id<Document>,
     seq: ambre_core::Seq,
 ) -> ambre_core::ObjectKey {
@@ -124,7 +178,7 @@ pub fn format_s3_delta_key(
 /// (cross-document IDOR). We require the exact per-document snapshot prefix and a
 /// single, slash-free object id (which also rejects `../` traversal).
 pub fn is_valid_snapshot_key(
-    env_prefix: &EnvPrefix,
+    env_prefix: &StoreText<EnvPrefix>,
     document_id: &Id<Document>,
     s3_key: &ambre_core::ObjectKey,
 ) -> bool {
@@ -137,7 +191,7 @@ pub fn is_valid_snapshot_key(
 
 /// S3 object key for an encrypted media blob (content-addressed by hash).
 pub fn format_s3_media_key(
-    env_prefix: &EnvPrefix,
+    env_prefix: &StoreText<EnvPrefix>,
     document_id: &Id<Document>,
     content_hash: &ambre_core::ContentHash,
 ) -> ambre_core::ObjectKey {
@@ -167,7 +221,7 @@ fn presign_lifetime(ttl: TimeSpan<Sec>) -> Duration {
 /// through an otherwise key-only presigned URL.
 pub async fn generate_presigned_upload_url(
     s3: &S3Client,
-    bucket: &BucketName,
+    bucket: &StoreText<BucketName>,
     key: &ambre_core::ObjectKey,
     ttl: TimeSpan<Sec>,
     content_length: ambre_core::ByteSize,
@@ -188,7 +242,7 @@ pub async fn generate_presigned_upload_url(
 /// Generates a presigned S3 GET URL valid for `ttl`.
 pub async fn generate_presigned_download_url(
     s3: &S3Client,
-    bucket: &BucketName,
+    bucket: &StoreText<BucketName>,
     key: &ambre_core::ObjectKey,
     ttl: TimeSpan<Sec>,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
@@ -206,8 +260,11 @@ pub async fn generate_presigned_download_url(
 
 /// The prefix every object of one document lives under: its snapshots, its
 /// deltas and its media.
-pub fn format_s3_document_prefix(env_prefix: &EnvPrefix, document_id: &Id<Document>) -> S3Prefix {
-    S3Prefix::new(format!("{env_prefix}/documents/{document_id}/"))
+pub fn format_s3_document_prefix(
+    env_prefix: &StoreText<EnvPrefix>,
+    document_id: &Id<Document>,
+) -> StoreText<S3Prefix> {
+    StoreText::<S3Prefix>::new(format!("{env_prefix}/documents/{document_id}/"))
 }
 
 /// Deletes every object under `prefix`, a page of at most a thousand keys at a
@@ -215,8 +272,8 @@ pub fn format_s3_document_prefix(env_prefix: &EnvPrefix, document_id: &Id<Docume
 /// call, so the caller can refuse to forget the document (`SRV-057`).
 pub async fn delete_prefix(
     s3: &S3Client,
-    bucket: &BucketName,
-    prefix: &S3Prefix,
+    bucket: &StoreText<BucketName>,
+    prefix: &StoreText<S3Prefix>,
 ) -> Result<usize, AppError> {
     use aws_sdk_s3::types::{Delete, ObjectIdentifier};
     let mut deleted: usize = 0;
@@ -276,7 +333,7 @@ pub async fn delete_prefix(
 /// the pending list, rather than treating it as a hard error.
 pub async fn fetch_object(
     s3: &S3Client,
-    bucket: &BucketName,
+    bucket: &StoreText<BucketName>,
     key: &ambre_core::ObjectKey,
 ) -> Result<Option<Payload>, AppError> {
     match s3
@@ -450,7 +507,7 @@ async fn reconcile_dirty_set(state: &crate::state::AppState) {
 /// document; the next 15 s cycle picks it up. The client write path never takes
 /// this lock, so collaboration latency is unaffected.
 async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &PendingKey) {
-    let lock_key = FlushLockKey::of(&pending_key.document());
+    let lock_key = DocKey::<FlushLock>::of(&pending_key.document());
     let token = crate::redis_ops::LockToken::fresh();
     match crate::redis_ops::try_acquire_flush_lock(&state.redis, &lock_key, &token, FLUSH_LOCK_TTL)
         .await
@@ -607,8 +664,8 @@ mod tests {
     use ambre_core::{Sec, TimeSpan};
 
     /// The deployment prefix `text`.
-    fn env(text: &str) -> EnvPrefix {
-        EnvPrefix::new(text.to_owned())
+    fn env(text: &str) -> StoreText<EnvPrefix> {
+        StoreText::<EnvPrefix>::new(text.to_owned())
     }
 
     /// A pending entry as `append_pending_delta` stores it.
@@ -796,7 +853,7 @@ mod tests {
         let s3 = test_s3_client();
         let url = generate_presigned_upload_url(
             &s3,
-            &BucketName::new("bucket".to_owned()),
+            &StoreText::<BucketName>::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
             TimeSpan::<Sec>::new(900),
             ambre_core::ByteSize::new(4096),
@@ -827,7 +884,7 @@ mod tests {
         let day = 24 * 3600;
         let up = generate_presigned_upload_url(
             &s3,
-            &BucketName::new("bucket".to_owned()),
+            &StoreText::<BucketName>::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             TimeSpan::<Sec>::new(day),
             ambre_core::ByteSize::new(1),
@@ -839,7 +896,7 @@ mod tests {
         .to_owned();
         let down = generate_presigned_download_url(
             &s3,
-            &BucketName::new("bucket".to_owned()),
+            &StoreText::<BucketName>::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             TimeSpan::<Sec>::new(day),
         )
@@ -853,7 +910,7 @@ mod tests {
         }
         let short = generate_presigned_download_url(
             &s3,
-            &BucketName::new("bucket".to_owned()),
+            &StoreText::<BucketName>::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             TimeSpan::<Sec>::new(60),
         )

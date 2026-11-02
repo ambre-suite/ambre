@@ -31,7 +31,7 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
         redis,
         pubsub,
         s3,
-        s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
+        s3_bucket: crate::s3::StoreText::<crate::s3::BucketName>::new("test-bucket".to_owned()),
         config: Arc::new(Config::default()),
         jwt: Arc::new(JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
             TEST_JWT_SEED,
@@ -111,7 +111,7 @@ pub fn with_s3(base: &AppState, s3: aws_sdk_s3::Client) -> Arc<AppState> {
 pub fn with_storage(
     base: &AppState,
     s3: aws_sdk_s3::Client,
-    bucket: crate::s3::BucketName,
+    bucket: crate::s3::StoreText<crate::s3::BucketName>,
 ) -> Arc<AppState> {
     Arc::new(AppState {
         db: base.db.clone(),
@@ -150,7 +150,10 @@ pub fn offline_s3(endpoint: Option<&str>) -> aws_sdk_s3::Client {
 /// and the bucket default to those of the local stack, `scripts/garage_init.sh`.
 ///
 /// A run with no `S3_ENDPOINT` fails, so the tier cannot pass without a store.
-pub async fn storage_service() -> (aws_sdk_s3::Client, crate::s3::BucketName) {
+pub async fn storage_service() -> (
+    aws_sdk_s3::Client,
+    crate::s3::StoreText<crate::s3::BucketName>,
+) {
     let endpoint = std::env::var("S3_ENDPOINT")
         .expect("S3_ENDPOINT: the database tier needs an object store (just services-up)");
     let env = |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.into());
@@ -179,7 +182,10 @@ pub async fn storage_service() -> (aws_sdk_s3::Client, crate::s3::BucketName) {
             .await
             .expect("create the database tier's bucket");
     }
-    (s3, crate::s3::BucketName::new(bucket))
+    (
+        s3,
+        crate::s3::StoreText::<crate::s3::BucketName>::new(bucket),
+    )
 }
 
 /// What an [`S3Stub`] holds: each object's bytes, how often each was read, and

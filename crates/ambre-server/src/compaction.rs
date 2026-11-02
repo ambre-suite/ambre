@@ -230,7 +230,7 @@ mod db_tests {
             &state.db,
             doc,
             ambre_core::Seq::new(0),
-            crate::db::QueryLimit::saturating(1000),
+            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(1000),
         )
         .await
         .unwrap()

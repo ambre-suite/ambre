@@ -14,6 +14,10 @@
 use std::time::Duration;
 use std::time::Instant;
 
+use ambre_core::Bounded;
+
+#[cfg(test)]
+use crate::state::limit_from_env;
 use crate::state::{Burst, RatePerSec};
 
 /// A monotonic-clock token bucket.
@@ -24,9 +28,9 @@ use crate::state::{Burst, RatePerSec};
 /// sustained rate below the refill rate is never rejected by rounding.
 pub(crate) struct TokenBucket {
     /// Maximum number of tokens the bucket can hold (the burst allowance).
-    capacity: Burst,
+    capacity: Bounded<Burst>,
     /// Tokens replenished per second (the sustained rate).
-    refill_per_sec: RatePerSec,
+    refill_per_sec: Bounded<RatePerSec>,
     /// Current token count, in `[0, capacity]`.
     tokens: f64,
     /// Last instant the bucket was refilled.
@@ -37,7 +41,7 @@ impl TokenBucket {
     /// Builds a bucket that starts full (`capacity` tokens), refilling at
     /// `refill_per_sec`. A full start lets a freshly connected client burst up to
     /// `capacity` messages (for example an initial batch of subscribes) immediately.
-    pub(crate) fn new(capacity: Burst, refill_per_sec: RatePerSec) -> Self {
+    pub(crate) fn new(capacity: Bounded<Burst>, refill_per_sec: Bounded<RatePerSec>) -> Self {
         Self {
             capacity,
             refill_per_sec,
@@ -52,8 +56,8 @@ impl TokenBucket {
     #[cfg(test)]
     pub(crate) fn of(burst: u64, rate: u64) -> Self {
         Self::new(
-            Burst::from_env(burst).expect("a valid burst"),
-            RatePerSec::from_env(rate).expect("a valid rate"),
+            limit_from_env::<Burst>(burst).expect("a valid burst"),
+            limit_from_env::<RatePerSec>(rate).expect("a valid rate"),
         )
     }
 

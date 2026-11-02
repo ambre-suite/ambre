@@ -130,7 +130,7 @@ fn org_role_valid(role: Role) -> Result<Role, AppError> {
 /// cannot keep: reject any threshold above 1. [`db::ShamirParams`] already
 /// holds `1 <= threshold <= total`.
 fn validate_shamir_params(shamir: db::ShamirParams) -> Result<(), AppError> {
-    if shamir.threshold() > db::ShareThreshold::ONE {
+    if shamir.threshold() > ambre_core::Bounded::<db::ShareThreshold>::MIN {
         return Err(AppError::Conflict {
             detail: "shamir_threshold > 1 is not yet supported: threshold reconstruction is \
                      unimplemented and recovery is single-authority (owner-only)"
@@ -485,8 +485,8 @@ mod tests {
     /// the split holds, then the quorum the relay enforces.
     fn accepted(threshold: i16, total: i16) -> bool {
         let (Some(threshold), Some(total)) = (
-            db::ShareThreshold::new(threshold),
-            db::ShareTotal::new(total),
+            ambre_core::Bounded::<db::ShareThreshold>::new(threshold),
+            ambre_core::Bounded::<db::ShareTotal>::new(total),
         ) else {
             return false;
         };
@@ -528,8 +528,8 @@ mod tests {
     /// The split of `total` shares that `threshold` reconstruct, for a test.
     fn split(threshold: i16, total: i16) -> db::ShamirParams {
         db::ShamirParams::new(
-            db::ShareThreshold::new(threshold).unwrap(),
-            db::ShareTotal::new(total).unwrap(),
+            ambre_core::Bounded::<db::ShareThreshold>::new(threshold).unwrap(),
+            ambre_core::Bounded::<db::ShareTotal>::new(total).unwrap(),
         )
         .unwrap()
     }
@@ -539,16 +539,22 @@ mod tests {
     #[test]
     fn a_share_count_below_one_is_unrepresentable() {
         for count in [0, -1, i16::MIN] {
-            assert_eq!(db::ShareThreshold::new(count), None);
-            assert_eq!(db::ShareTotal::new(count), None);
-            assert!(serde_json::from_str::<db::ShareThreshold>(&count.to_string()).is_err());
-            assert!(serde_json::from_str::<db::ShareTotal>(&count.to_string()).is_err());
+            assert_eq!(ambre_core::Bounded::<db::ShareThreshold>::new(count), None);
+            assert_eq!(ambre_core::Bounded::<db::ShareTotal>::new(count), None);
+            assert!(
+                serde_json::from_str::<ambre_core::Bounded<db::ShareThreshold>>(&count.to_string())
+                    .is_err()
+            );
+            assert!(
+                serde_json::from_str::<ambre_core::Bounded<db::ShareTotal>>(&count.to_string())
+                    .is_err()
+            );
         }
-        let threshold = db::ShareThreshold::new(2).unwrap();
+        let threshold = ambre_core::Bounded::<db::ShareThreshold>::new(2).unwrap();
         assert_eq!(threshold.get(), 2);
         assert_eq!(serde_json::to_string(&threshold).unwrap(), "2");
         assert_eq!(
-            serde_json::to_string(&db::ShareTotal::new(5).unwrap()).unwrap(),
+            serde_json::to_string(&ambre_core::Bounded::<db::ShareTotal>::new(5).unwrap()).unwrap(),
             "5"
         );
         let body = r#"{"shamir_threshold": 0, "shamir_total": 3}"#;

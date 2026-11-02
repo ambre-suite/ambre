@@ -1,64 +1,55 @@
 //! How many rows one query may return.
 
-/// The most rows one query returns: never zero, never past [`Self::MAX`]
-/// (`SRV-075`).
+use ambre_core::{Bounded, Bounds, Defaulted, Refusal};
+
+/// The most rows one query returns: never zero, never past 1000 (`SRV-075`).
+/// The value is a `Bounded<QueryLimit>`.
 ///
-/// A request names any number, and [`Self::clamped`] brings it into range
-/// instead of refusing it. A pass of the relay names its own as a constant,
-/// through [`Self::saturating`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct QueryLimit(u16);
+/// A request names any number, and [`clamped_limit`] brings it into range instead
+/// of refusing it. A pass of the relay names its own as a constant, through
+/// [`Bounded::saturating`]. The count is a `u32`, the one representation
+/// with a `const` door. No wire and no column holds it: the store binds it
+/// as an `i64`.
+pub enum QueryLimit {}
 
-impl QueryLimit {
-    /// The smallest page: one row.
-    pub const MIN: Self = Self(1);
-    /// The cap the relay declares for one page.
-    pub const MAX: Self = Self(1000);
-    /// The page a request that names no limit is served.
-    pub const DEFAULT: Self = Self(100);
-
-    /// `n` brought into range: zero is one, and past the cap is the cap.
-    pub const fn saturating(n: u16) -> Self {
-        if n < Self::MIN.0 {
-            Self::MIN
-        } else if n > Self::MAX.0 {
-            Self::MAX
-        } else {
-            Self(n)
-        }
-    }
-
-    /// The number a request asked for, brought into range as
-    /// [`Self::saturating`] does. Zero or below is one row.
-    pub fn clamped(n: i64) -> Self {
-        if n < 1 {
-            return Self::MIN;
-        }
-        u16::try_from(n).map_or(Self::MAX, Self::saturating)
-    }
-
-    /// The count, as the store binds it.
-    pub fn as_i64(self) -> i64 {
-        i64::from(self.0)
-    }
-
-    /// The count, to compare a page against.
-    pub fn as_usize(self) -> usize {
-        usize::from(self.0)
-    }
+impl Bounds for QueryLimit {
+    type Repr = u32;
+    const MIN: u32 = 1;
+    const MAX: u32 = 1000;
+    const NAME: &'static str = "QueryLimit";
+    const REFUSAL: Refusal = Refusal::new("a query limit lies in 1..=1000, not ", "");
 }
 
-/// A request's `limit` reads as any integer, clamped (`SRV-075`). A word
-/// that is not an integer is still refused.
-impl<'de> serde::Deserialize<'de> for QueryLimit {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        <i64 as serde::Deserialize>::deserialize(deserializer).map(Self::clamped)
-    }
+/// The page a request that names no limit is served.
+impl Defaulted for QueryLimit {
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::saturating(100);
+}
+
+/// A request's `limit` reads as any integer, clamped (`SRV-075`): zero or
+/// below is one row, and past the cap is the cap. A word that is not an
+/// integer is still refused. A field takes it through `deserialize_with`,
+/// since the decode of [`Bounded`] refuses a number out of range.
+///
+/// # Errors
+///
+/// The error of the deserializer, on a value that is not an integer.
+pub fn clamped_limit<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Bounded<QueryLimit>>, D::Error> {
+    <i64 as serde::Deserialize>::deserialize(deserializer)
+        .map(|asked| Some(Bounded::saturating_from(asked)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The query of a request that may name a page size.
+    #[derive(serde::Deserialize)]
+    struct Asked {
+        #[serde(default, deserialize_with = "clamped_limit")]
+        limit: Option<Bounded<QueryLimit>>,
+    }
 
     #[test]
     fn a_query_limit_is_never_zero_and_never_past_the_cap() {
@@ -73,12 +64,30 @@ mod tests {
             (70_000, 1000),
             (i64::MAX, 1000),
         ] {
-            assert_eq!(QueryLimit::clamped(asked).as_i64(), served, "asked {asked}");
+            let text = format!(r#"{{"limit": {asked}}}"#);
+            let read: Asked = serde_json::from_str(&text).expect("an integer reads");
+            assert_eq!(read.limit.map(Bounded::get), Some(served), "asked {asked}");
         }
-        assert_eq!(QueryLimit::saturating(0), QueryLimit::MIN);
-        assert_eq!(QueryLimit::saturating(u16::MAX), QueryLimit::MAX);
-        let read: QueryLimit = serde_json::from_str("5000").expect("an integer reads");
-        assert_eq!(read, QueryLimit::MAX);
-        assert!(serde_json::from_str::<QueryLimit>("\"many\"").is_err());
+        assert_eq!(Bounded::<QueryLimit>::saturating(0), Bounded::MIN);
+        assert_eq!(Bounded::<QueryLimit>::saturating(u32::MAX), Bounded::MAX);
+        assert_eq!(Bounded::<QueryLimit>::default().get(), 100);
+        let absent: Asked = serde_json::from_str("{}").expect("no limit reads");
+        assert_eq!(absent.limit, None);
+        assert!(serde_json::from_str::<Asked>(r#"{"limit": "many"}"#).is_err());
+    }
+
+    /// The query string form, as the route reads it: `?limit=5000` serves
+    /// the cap.
+    #[test]
+    fn a_query_string_limit_is_clamped_like_a_json_one() {
+        let read = |uri: &'static str| {
+            axum::extract::Query::<Asked>::try_from_uri(&axum::http::Uri::from_static(uri))
+                .map(|query| query.0.limit)
+                .ok()
+        };
+        assert_eq!(read("/deltas?limit=5000"), Some(Some(Bounded::MAX)));
+        assert_eq!(read("/deltas?limit=-2"), Some(Some(Bounded::MIN)));
+        assert_eq!(read("/deltas"), Some(None));
+        assert_eq!(read("/deltas?limit=many"), None);
     }
 }
