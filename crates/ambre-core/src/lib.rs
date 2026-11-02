@@ -186,7 +186,7 @@ pub use secret::{
 };
 pub use seq::{DeltaCount, Seq};
 pub use space::{
-    Board, CanvasCss, Css, Device, Doc, Image, ScaleSpace, Space, StoredBoard, Surface, Texel, View,
+    Board, CanvasCss, Css, Device, Doc, Image, ScalesTo, Space, StoredBoard, Surface, Texel, View,
 };
 pub use span::{
     Authored, Failures, FracMs, FrameRate, Instant, LamportStamp, Ms, Ns, PageLoad, Rfc3339, Sec,

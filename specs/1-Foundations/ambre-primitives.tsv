@@ -2719,7 +2719,7 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::signal_fatal(message
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	the padding fraction a fit scales the bounds by, as 1 + pad
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a Scale<Doc, View>
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a Scale<Board, View>
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	the padding fraction the bounds are scaled by, as 1 + pad_frac
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	the padding fraction forwarded to the same 1 + pad_frac scale
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
@@ -3838,6 +3838,10 @@ ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled() | ret
 ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/space.rs | crate::space | Float::finite() | ret | bool	generic	predicate
 ambre-core | src/space.rs | crate::space | <f32 as Float>::finite() | ret | bool	generic	predicate
 ambre-core | src/space.rs | crate::space | <f64 as Float>::finite() | ret | bool	generic	predicate

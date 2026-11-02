@@ -224,6 +224,19 @@ impl Rescale<f64> for f32 {
     }
 }
 
+// A board length is an `f64`, and its view length the `f32` a view holds.
+// The product rounds once, after the `f64` multiplication, as the camera
+// computed it before the generic type.
+impl Rescale<f32> for f64 {
+    fn scaled(self, factor: f64) -> f32 {
+        (self * factor) as f32
+    }
+
+    fn unscaled(self, factor: f64) -> f32 {
+        (self / factor) as f32
+    }
+}
+
 /// A pixel space: the marker type a `Px` names, and the one number its
 /// lengths hold.
 pub trait Space: 'static {
@@ -234,30 +247,81 @@ pub trait Space: 'static {
     const NAME: &'static str;
 }
 
-/// A pixel space that a [`Scale`](crate::scale::Scale) may join: the zoom
-/// joins [`Doc`] and [`View`], and the density joins [`Css`] and [`Device`].
+/// A pair of pixel spaces that a [`Scale`](crate::scale::Scale) joins: a
+/// length of `Self` times the scale is a length of `B`.
 ///
-/// A board space implements no such trait, so no generic scale carries a
-/// view length into board units. The board camera's named conversions stand
-/// alone between the two:
+/// The pair is directed and named one by one, never derived from the two
+/// ends. Three pairs exist:
 ///
-/// ```compile_fail
+/// | Pair | Scale |
+/// | :--- | :--- |
+/// | [`Doc`] to [`View`] | the zoom of a document |
+/// | [`Css`] to [`Device`] | the display density (`CANVAS-031`) |
+/// | [`Board`] to [`View`] | the zoom of a board's camera |
+///
+/// A space that joins some scale still joins no other. A view length read as
+/// a document length, or a board length read as a document length, does not
+/// compile:
+///
+/// ```compile_fail,E0277
+/// use ambre_core::{Doc, Px, Scale, View};
+/// let _ = Px::<View>::new(4.0) * Scale::<View, Doc>::ONE;
+/// ```
+///
+/// ```compile_fail,E0277
 /// use ambre_core::{Board, Px, Scale, View};
 /// let _: Px<Board> = Px::<View>::new(4.0) * Scale::<View, Board>::ONE;
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// use ambre_core::{Px, Scale, StoredBoard, View};
 /// let _: Px<View> = Px::<StoredBoard>::new(4.0) * Scale::<StoredBoard, View>::ONE;
 /// ```
-pub trait ScaleSpace: Space {}
+///
+/// ```compile_fail,E0277
+/// use ambre_core::{Css, Device, Scale};
+/// let _ = Scale::<Device, Css>::ONE;
+/// ```
+///
+/// ```compile_fail,E0308
+/// use ambre_core::{Board, Doc, Px, Scale, View};
+/// let _: Px<View> = Px::<Doc>::new(4.0).zoomed(Scale::<Board, View>::ONE);
+/// ```
+///
+/// Each declared pair builds its scale:
+///
+/// ```
+/// use ambre_core::{Board, Css, Device, Doc, Px, Scale, View};
+/// let zoom = Scale::<Doc, View>::positive(2.0);
+/// assert_eq!(Px::<Doc>::new(3.0) * zoom, Px::<View>::new(6.0));
+/// let camera = Scale::<Board, View>::positive(2.0);
+/// assert_eq!(Px::<Board>::new(3.0) * camera, Px::<View>::new(6.0));
+/// assert_eq!(Px::<View>::new(6.0) / camera, Px::<Board>::new(3.0));
+/// assert_eq!(Scale::<Css, Device>::new(2.0).map(Scale::get), Some(2.0));
+/// ```
+///
+/// The trait is sealed: a pair is a decision of this crate. A crate that
+/// declares a space of its own could otherwise join it to [`View`], and the
+/// slip would compile again.
+pub trait ScalesTo<B: Space>: Space + pair::Sealed<B> {}
+
+mod pair {
+    /// Closes [`super::ScalesTo`] to the pairs this module lists.
+    pub trait Sealed<B> {}
+
+    impl Sealed<super::View> for super::Doc {}
+    impl Sealed<super::Device> for super::Css {}
+    impl Sealed<super::View> for super::Board {}
+}
+
+impl ScalesTo<View> for Doc {}
+impl ScalesTo<Device> for Css {}
+impl ScalesTo<View> for Board {}
 
 /// The pixels of the document, before the zoom: what a layout measures a
 /// page, a column or a run in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Doc {}
-
-impl ScaleSpace for Doc {}
 
 impl Space for Doc {
     type Repr = f32;
@@ -272,8 +336,6 @@ impl Space for Doc {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum View {}
 
-impl ScaleSpace for View {}
-
 impl Space for View {
     type Repr = f32;
     const NAME: &'static str = "View";
@@ -283,8 +345,6 @@ impl Space for View {
 /// place of an element fixed on the page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Css {}
-
-impl ScaleSpace for Css {}
 
 impl Space for Css {
     type Repr = f32;
@@ -321,8 +381,6 @@ impl Space for CanvasCss {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Device {}
 
-impl ScaleSpace for Device {}
-
 impl Space for Device {
     type Repr = i32;
     const NAME: &'static str = "Device";
@@ -353,8 +411,8 @@ impl Space for Image {
 ///
 /// A view length and a board length are both floats. A reach of four view
 /// pixels taken as four board units picks wrong at every zoom but 1. The
-/// camera's named conversion stands between the two, and the space is no
-/// [`ScaleSpace`]. The `f64` is the one kurbo measures a board in.
+/// camera's scale, a `Scale<Board, View>`, stands between the two
+/// ([`ScalesTo`]). The `f64` is the one kurbo measures a board in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Board {}
 
@@ -368,8 +426,8 @@ impl Space for Board {
 /// A freehand sample keeps its coordinates in it, so a sample stays twelve
 /// bytes. A style keeps its stroke width and its corner radius in it. The
 /// camera scales it with the shape, and a screen length meets it only through
-/// the camera: the space is no [`ScaleSpace`]. `Px::widened` reads it as the
-/// [`Board`] length the board computes in.
+/// the camera: the space joins no scale ([`ScalesTo`]). `Px::widened` reads it
+/// as the [`Board`] length the board computes in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StoredBoard {}
 
