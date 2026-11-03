@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use ambre_bus::RestEvent;
 use ambre_bus::app::toile::Elements;
-use ambre_core::Generation;
+use ambre_core::Seq;
 use kurbo::Point;
 use loro::{LoroMap, LoroValue};
 
@@ -57,12 +57,12 @@ fn rewrite_hash(batch: &mut ImportBatch, slot: Pos<ImportSlot>, hash: &ContentHa
 
 /// An import applied only once every embedded media blob has a real content hash
 /// back from Sync (`toile-media`). Holds the fully converted batch and the set
-/// of upload `Generation<Request>`s still outstanding. Each id maps to the `media` slot
+/// of upload `Seq<Request>`s still outstanding. Each id maps to the `media` slot
 /// it will resolve.
 pub(super) struct PendingImport {
     batch: ImportBatch,
     /// Outstanding `UploadMedia` request -> the `batch.media` index it fills.
-    outstanding: HashMap<Generation<Request>, Pos<ImportSlot>>,
+    outstanding: HashMap<Seq<Request>, Pos<ImportSlot>>,
 }
 
 /// A number of import units. A unit is one create, one style, one group
@@ -402,11 +402,7 @@ impl ToileState {
     ///
     /// When the outstanding upload it just matched is absent from the pending
     /// import. The position lookup above establishes it.
-    pub fn handle_service_event(
-        &mut self,
-        id: Generation<Request>,
-        evt: RestEvent,
-    ) -> ToileOutcome {
+    pub fn handle_service_event(&mut self, id: Seq<Request>, evt: RestEvent) -> ToileOutcome {
         let RestEvent::MediaUploaded { content_hash, .. } = evt else {
             // Only upload confirmations concern an import; ignore anything else.
             return ToileOutcome::display_only(Vec::new());
@@ -437,11 +433,7 @@ impl ToileState {
     /// (`toile-media`): a failed media upload aborts the whole pending import
     /// (atomicity), leaving the board untouched. An id matching no pending
     /// import is dropped.
-    pub fn handle_service_error(
-        &mut self,
-        id: Generation<Request>,
-        reason: String,
-    ) -> ToileOutcome {
+    pub fn handle_service_error(&mut self, id: Seq<Request>, reason: String) -> ToileOutcome {
         let Some(pos) = self
             .pending_imports
             .iter()
@@ -891,7 +883,7 @@ mod tests {
     use std::io::Cursor;
 
     use crate::logic::command::{Request, ToileEvent, ToileOutcome, ToileRequest};
-    use ambre_core::Generation;
+    use ambre_core::Seq;
 
     /// A minimal solid-color PNG produced with the `image` crate (no fixture).
     fn solid_png(w: u32, h: u32) -> Vec<u8> {
@@ -903,7 +895,7 @@ mod tests {
         bytes
     }
 
-    fn first_upload_id(out: &ToileOutcome) -> Generation<Request> {
+    fn first_upload_id(out: &ToileOutcome) -> Seq<Request> {
         match out.requests.first().expect("an upload request") {
             ToileRequest::UploadMedia { id, .. } => *id,
             _ => panic!("expected UploadMedia"),

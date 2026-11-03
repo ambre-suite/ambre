@@ -60,15 +60,15 @@ impl Prediction {
 #[derive(Debug, Default)]
 pub(super) struct CatchUp {
     /// How many changes the view did not draw so far.
-    seq: ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
+    seq: ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
     /// The last of them the view said it applied.
-    seen: ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
+    seen: ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
     /// How many text commands the view sent so far.
-    acked: ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+    acked: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
     /// The runs of the changes the view has not said it applied, each with
     /// its number. Each counts positions after every text command taken.
     queue: VecDeque<(
-        ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
+        ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
         TextEdit,
     )>,
     /// What the view drew for the command in dispatch.
@@ -129,8 +129,8 @@ impl CatchUp {
         edits: Vec<TextEdit>,
     ) -> (
         crate::events::ChangeOrigin,
-        ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
-        ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+        ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
+        ambre_core::Seq<ambre_bus::app::prose::TextAck>,
         Vec<TextEdit>,
     ) {
         let prediction = match source {
@@ -361,7 +361,7 @@ mod tests {
         let mut sync = CatchUp::default();
         let (origin, seq, _, _) = sync.stamp(ChangeSource::Import, vec![run(0, 3)]);
         assert_eq!(origin, crate::events::ChangeOrigin::Remote);
-        assert_eq!(seq, ambre_core::Generation::nth(1));
+        assert_eq!(seq, ambre_core::Seq::nth(1));
         assert_eq!(sync.rebase(run(2, 1)), Some(run(5, 1)));
     }
 
@@ -369,7 +369,7 @@ mod tests {
     fn a_change_the_view_has_seen_moves_nothing() {
         let mut sync = CatchUp::default();
         sync.stamp(ChangeSource::Import, vec![run(0, 3)]);
-        sync.seen = ambre_core::Generation::nth(1);
+        sync.seen = ambre_core::Seq::nth(1);
         assert_eq!(sync.rebase(run(2, 1)), Some(run(2, 1)));
     }
 
@@ -381,7 +381,7 @@ mod tests {
         };
         let (origin, seq, _, edits) = sync.stamp(ChangeSource::Command, Vec::new());
         assert_eq!(origin, crate::events::ChangeOrigin::Remote);
-        assert_eq!(seq, ambre_core::Generation::nth(1));
+        assert_eq!(seq, ambre_core::Seq::nth(1));
         assert_eq!(edits, vec![run(4, -2)]);
     }
 }

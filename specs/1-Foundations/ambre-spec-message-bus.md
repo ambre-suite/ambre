@@ -64,7 +64,7 @@ is what a full queue means.
 | `BUS-015` | `POST` | A service response MUST be relayed to the interface field for field, unless a recorded route claims it for the document that issued it. | this spec section 2 | `ambre_logic::dispatch::tests::an_unrouted_rest_event_still_forwards_to_the_ui` -- the unclaimed case; `::routed_media_uploaded_lands_in_engine_not_the_ui` -- the claimed case reaches the engine and no stray event reaches the interface | none | verified |
 | `BUS-030` | `POST` | A document that could not open MUST reach the interface as a failed open naming it, never as an authentication error. | this spec section 2; `ambre-spec-sync.md`, `SYNC-157` | `ambre_logic::dispatch::tests::a_failed_open_reaches_the_ui_naming_its_document` -- a plain document's failed open reaches the UI as one failed open naming it | none | verified |
 | `BUS-020` | `FAIL` | A service response whose document was closed MUST be dropped, never delivered. | this spec section 2 | `ambre_logic::dispatch::tests::a_late_response_after_close_is_dropped_without_panic` -- the route is gone on close and the late response repaints nothing; `::a_correlated_upload_failure_aborts_the_import_without_a_raw_api_error` -- the same for the error direction | none | verified |
-| `BUS-004` | `PRE` | A service request identity MUST be allocated in the Main instance. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses in `ambre-sync` above its tests a `next_request`, a `from_stored`, a `ZERO.next`, and an issuer or a generation written with the `Request` family. A family left to inference escapes it | none | verified |
+| `BUS-004` | `PRE` | A service request identity MUST be allocated in the Main instance. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses in `ambre-sync` above its tests a `next_request`, a `Seq::new` that names no family, a `ZERO.next`, and an issuer or a sequence number written with the `Request` family. A family left to inference escapes it | none | verified |
 | `BUS-019` | `FRAME` | Relaying a service request MUST NOT touch the document registry, save for the two commands that remove a document from it. | this spec section 2 | `ambre_logic::dispatch::tests::a_relayed_request_leaves_the_registry_alone` -- every other variant, listed by an exhaustive `match`; `::logout_clears_docs_and_forwards` -- the exception that clears everything | none | verified |
 
 ### 1.5 A message crosses the worker hop
@@ -116,13 +116,13 @@ travels towards the downstream worker and an `Event` always flows back.
 pub enum LogicCommand {
     App { document_id: Id<Document>, command: AppCommand },   // content
     Channel { channel_id: Id<Channel>, command: MurmureCommand }, // content, a channel
-    Rest { id: Generation<Request>, cmd: RestCommand },     // service, relayed
+    Rest { id: Seq<Request>, cmd: RestCommand },     // service, relayed
     OpenDocument { document_id: Id<Document>, doc_type: DocType },
     // control and local restore variants, one per fire-and-forget operation
 }
 pub enum AppCommand { Trame(TrameCommand), Toile(ToileCommand), Prose(ProseCommand) }
 pub enum AppEvent { Trame(TrameEvent), Toile(ToileEvent), Prose(ProseEvent) }
-pub enum Request {}  // a family of `ambre_core::Generation`; `None` answers no request
+pub enum Request {}  // a family of `ambre_core::Seq`; `None` answers no request
 ```
 
 The four envelopes and the service family are the contract. The variant lists are not restated

@@ -212,7 +212,7 @@ mod tests {
                 pins: Vec::new(),
                 viewport: Default::default(),
                 nodes: vec![rect_node("a", Rect::new(10.0, 10.0, 90.0, 90.0))],
-                version: ambre_core::Generation::ZERO,
+                version: ambre_core::Seq::ZERO,
                 grid_unit: Px::<Board>::new(20.0),
             },
             camera,

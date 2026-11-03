@@ -478,7 +478,7 @@ fn a_stored_value_moving_moves_the_reading() {
     // The same width written in points: the key and the type stay, so only the
     // value column can show it.
     moved.handle_command(TrameCommand::ResizeCol {
-        version: ambre_core::Generation::ZERO,
+        version: ambre_core::Seq::ZERO,
         sheet_id: super::schema::default_sheet(),
         col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(90.0),

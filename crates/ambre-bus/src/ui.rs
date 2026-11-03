@@ -66,7 +66,7 @@ pub enum UiEvent {
     /// can route it to the call-site that issued the [`crate::RestCommand`].
     /// `None` for an answer no request asked for.
     Rest {
-        id: Option<ambre_core::Generation<Request>>,
+        id: Option<ambre_core::Seq<Request>>,
         evt: RestEvent,
     },
 
@@ -207,7 +207,7 @@ pub enum UiEvent {
     /// failed command carried one, so a UI-issued request can be matched to its failure. It
     /// is `None` for a spontaneous error.
     ApiError {
-        id: Option<ambre_core::Generation<Request>>,
+        id: Option<ambre_core::Seq<Request>>,
         request: crate::ApiRequest,
         failure: ambre_core::ApiFailure,
         message: String,

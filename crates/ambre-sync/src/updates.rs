@@ -1076,7 +1076,7 @@ impl SyncState {
             }
             return;
         }
-        doc_state.local_clock = doc_state.local_clock.after();
+        doc_state.local_clock = doc_state.local_clock.next();
         let clock = doc_state.local_clock;
         let Some((key_id, signature)) =
             self.seal_and_send(document_id, clock, &body, &signing_key, pub_key)
@@ -1311,7 +1311,7 @@ impl SyncState {
     pub(crate) fn resend_failed(
         &mut self,
         document_id: Id<Document>,
-        ticket: ambre_core::Generation<crate::generation::ResendTicket>,
+        ticket: ambre_core::Seq<crate::generation::ResendTicket>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
@@ -2655,7 +2655,7 @@ mod tests {
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
-            ambre_core::Generation::nth(1),
+            ambre_core::Seq::nth(1),
             "one listing"
         );
         assert_eq!(rows_handed(&drain(&rx)), None, "nothing before the answer");
@@ -2663,7 +2663,7 @@ mod tests {
         let carol = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: ambre_core::Generation::nth(1),
+            asked: ambre_core::Seq::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2680,7 +2680,7 @@ mod tests {
 
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: ambre_core::Generation::nth(1),
+            asked: ambre_core::Seq::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2699,7 +2699,7 @@ mod tests {
         });
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
-            ambre_core::Generation::nth(1)
+            ambre_core::Seq::nth(1)
         );
         assert_eq!(rows_handed(&drain(&rx)), None, "a document not open here");
     }
@@ -2723,7 +2723,7 @@ mod tests {
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
-            ambre_core::Generation::nth(2),
+            ambre_core::Seq::nth(2),
             "each word lists again"
         );
         drain(&rx);
@@ -2731,7 +2731,7 @@ mod tests {
         let carol = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: ambre_core::Generation::nth(2),
+            asked: ambre_core::Seq::nth(2),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2741,7 +2741,7 @@ mod tests {
         let bob = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: ambre_core::Generation::nth(1),
+            asked: ambre_core::Seq::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2784,13 +2784,13 @@ mod tests {
         state.handle_ws_message(WsServerMsg::Subscribed { document_id: doc });
         assert_eq!(
             state.documents[&doc].directory_asked.latest(),
-            ambre_core::Generation::nth(1),
+            ambre_core::Seq::nth(1),
             "one listing"
         );
         drain(&rx);
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: ambre_core::Generation::nth(1),
+            asked: ambre_core::Seq::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2821,7 +2821,7 @@ mod tests {
         }
         assert_eq!(
             state.documents[&local].directory_asked.latest(),
-            ambre_core::Generation::nth(0)
+            ambre_core::Seq::nth(0)
         );
         assert!(
             !drain(&rx)
@@ -3663,7 +3663,7 @@ mod tests {
         state: &mut SyncState,
         doc: Id<Document>,
         signature: FixedBytes<Signature>,
-    ) -> ambre_core::Generation<crate::generation::ResendTicket> {
+    ) -> ambre_core::Seq<crate::generation::ResendTicket> {
         state.handle_ws_message(WsServerMsg::DeltaRefused {
             document_id: doc,
             signature,

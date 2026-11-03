@@ -21,7 +21,7 @@ use x25519_dalek::StaticSecret;
 use ambre_bus::{
     ApiFailure, ApiRequest, ChannelDocumentKind, LogicEvent, MemberInfo, Request, Role,
 };
-use ambre_core::Generation;
+use ambre_core::Seq;
 use ambre_core::id::{Channel, Document, Id, Message, Segment, Space, User};
 
 use crate::http;
@@ -428,7 +428,7 @@ fn failed(logic_tx: &LogicSink, request: ApiRequest, error: impl http::Reported)
 
 /// Inputs for [`invite_task`], gathered from `SyncState` before spawning.
 pub(crate) struct InviteParams {
-    pub id: Generation<Request>,
+    pub id: Seq<Request>,
     pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::Url<crate::http::RelayHost>,
@@ -621,7 +621,7 @@ pub(crate) enum InviteeName {
 
 /// Inputs for [`fetch_invitee_key_task`] (TOFU phase 1).
 pub(crate) struct FetchInviteeKeyParams {
-    pub id: Generation<Request>,
+    pub id: Seq<Request>,
     pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::Url<crate::http::RelayHost>,
@@ -681,7 +681,7 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
 
 /// Inputs for [`fetch_member_key_task`].
 pub(crate) struct FetchMemberKeyParams {
-    pub id: Generation<Request>,
+    pub id: Seq<Request>,
     pub user_id: Id<User>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::Url<crate::http::RelayHost>,
@@ -725,7 +725,7 @@ const ROTATION_TRIES: usize = 3;
 
 /// Inputs for [`revoke_task`], gathered from `SyncState` before spawning.
 pub(crate) struct RevokeParams {
-    pub id: Generation<Request>,
+    pub id: Seq<Request>,
     pub document_id: Id<Document>,
     pub user_id: Id<User>,
     pub url_scheme: crate::http::UrlScheme,
@@ -867,7 +867,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
 
 /// Inputs for [`leave_task`].
 pub(crate) struct LeaveParams {
-    pub id: Generation<Request>,
+    pub id: Seq<Request>,
     pub document_id: Id<Document>,
     /// This user, who signs their own revoke: a departure removes no one else.
     pub author: Author,
@@ -1172,7 +1172,7 @@ pub(crate) struct SettleParams {
 
 /// Inputs for [`role_change_task`].
 pub(crate) struct RoleChangeParams {
-    pub id: Generation<Request>,
+    pub id: Seq<Request>,
     pub document_id: Id<Document>,
     /// The member whose role changes.
     pub user_id: Id<User>,
@@ -1448,10 +1448,10 @@ async fn rotate_channel<H: ShareHttp>(
 /// Inputs for [`list_members_task`].
 pub(crate) struct ListMembersParams {
     /// The request to answer, `None` for a refresh of the directory alone.
-    pub id: Option<Generation<Request>>,
+    pub id: Option<Seq<Request>>,
     /// Which listing of this document this is, so an answer older than the
     /// directory held changes nothing (`SYNC-037`).
-    pub asked: ambre_core::Generation<crate::generation::Listing>,
+    pub asked: ambre_core::Seq<crate::generation::Listing>,
     pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::Url<crate::http::RelayHost>,
@@ -3185,7 +3185,7 @@ mod tests {
     fn list_params() -> ListMembersParams {
         ListMembersParams {
             id: Some(ambre_bus::next_request()),
-            asked: ambre_core::Generation::nth(1),
+            asked: ambre_core::Seq::nth(1),
             document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),

@@ -31,7 +31,7 @@ pub(crate) struct ReplayStops {
     /// The last delta the latest stop named.
     after: Seq<Relay>,
     /// The ticket of the timer armed for the latest stop, if any.
-    ticket: ambre_core::Generation<crate::generation::ReplayTicket>,
+    ticket: ambre_core::Seq<crate::generation::ReplayTicket>,
 }
 
 impl SyncState {
@@ -361,7 +361,7 @@ impl SyncState {
     fn retry_replay(
         &mut self,
         document_id: Id<Document>,
-        ticket: ambre_core::Generation<crate::generation::ReplayTicket>,
+        ticket: ambre_core::Seq<crate::generation::ReplayTicket>,
     ) {
         let live = self
             .replay_stops
@@ -2083,7 +2083,7 @@ mod tests {
 
     fn retry(
         document_id: Id<Document>,
-        ticket: ambre_core::Generation<crate::generation::ReplayTicket>,
+        ticket: ambre_core::Seq<crate::generation::ReplayTicket>,
     ) -> SyncEvent {
         SyncEvent::ReplayRetry {
             document_id,
@@ -2095,7 +2095,7 @@ mod tests {
     fn armed(
         state: &SyncState,
         id: Id<Document>,
-    ) -> ambre_core::Generation<crate::generation::ReplayTicket> {
+    ) -> ambre_core::Seq<crate::generation::ReplayTicket> {
         state.replay_stops[&id].ticket
     }
 

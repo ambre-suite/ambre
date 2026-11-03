@@ -845,7 +845,7 @@ impl SyncState {
     /// which `meta` it may watch.
     pub(crate) fn member_channels_listed(
         &mut self,
-        asked: ambre_core::Generation<crate::generation::Listing>,
+        asked: ambre_core::Seq<crate::generation::Listing>,
         result: Result<MemberListing, http::HttpError>,
     ) {
         if asked != self.member_channels_asked.latest() {
@@ -1646,7 +1646,7 @@ pub(crate) mod tests {
         }
         assert_eq!(
             state.member_channels_asked.latest(),
-            ambre_core::Generation::nth(1),
+            ambre_core::Seq::nth(1),
             "one listing"
         );
         let shared = rx
@@ -1688,7 +1688,7 @@ pub(crate) mod tests {
         }
         assert_eq!(
             state.member_channels_asked.latest(),
-            ambre_core::Generation::nth(2),
+            ambre_core::Seq::nth(2),
             "one listing per channel loss"
         );
         let revoked = rx
@@ -1761,16 +1761,16 @@ pub(crate) mod tests {
         };
         let empty = (Vec::new(), Vec::new(), Vec::new());
         state.member_channels_listed(
-            ambre_core::Generation::nth(1),
+            ambre_core::Seq::nth(1),
             Ok(listing(empty, Vec::new(), Vec::new())),
         );
         let keys = vec![(listed, key.clone())];
         state.member_channels_listed(
-            ambre_core::Generation::nth(2),
+            ambre_core::Seq::nth(2),
             Ok(listing(answer.listing(), named.clone(), keys)),
         );
         state.member_channels_listed(
-            ambre_core::Generation::nth(2),
+            ambre_core::Seq::nth(2),
             Err(crate::http::HttpError::Local("HTTP 500".into())),
         );
         let events: Vec<_> = rx

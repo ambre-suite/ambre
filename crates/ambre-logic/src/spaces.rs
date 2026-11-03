@@ -578,7 +578,7 @@ impl LogicState {
     /// viewer: the same member on every client that reads the same rows.
     pub(crate) fn hand_off_before_leave(
         &mut self,
-        leave: Generation<Request>,
+        leave: Seq<Request>,
         document_id: Id<Document>,
     ) -> bool {
         let (Some(space), Some(me)) = (
@@ -618,7 +618,7 @@ impl LogicState {
     /// The answer to a role change this thread asked for before a leave.
     /// The leave it held goes now, under the id the view gave it. Returns
     /// `false` for any other answer.
-    pub(crate) fn handed_off(&mut self, id: Generation<Request>, evt: &RestEvent) -> bool {
+    pub(crate) fn handed_off(&mut self, id: Seq<Request>, evt: &RestEvent) -> bool {
         let Some((leave, document_id)) = self.handing_off.remove(&id) else {
             return false;
         };
@@ -2052,7 +2052,7 @@ mod tests {
     // --- The members of a space, and their presence ---
 
     use ambre_bus::{MemberInfo, MemberView, Presence, Request, RestCommand};
-    use ambre_core::Generation;
+    use ambre_core::Seq;
     use ambre_murmure::PRESENCE_EXPIRY;
 
     /// The member list of the last members event the view got.
@@ -2085,7 +2085,7 @@ mod tests {
     }
 
     /// The member listing this thread asked for, with the document it names.
-    fn member_request(sent: &[SyncCommand]) -> Option<(Generation<Request>, Id<Document>)> {
+    fn member_request(sent: &[SyncCommand]) -> Option<(Seq<Request>, Id<Document>)> {
         sent.iter().find_map(|c| match c {
             SyncCommand::Rest {
                 id,

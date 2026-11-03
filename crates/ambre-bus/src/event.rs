@@ -23,7 +23,7 @@ use crate::{
 use ambre_core::id::{
     Channel, Document, Id, Lease, Meeting, Message, Segment, Snapshot, Space, User,
 };
-use ambre_core::{FixedBytes, Generation, Relay, Seq, SessionNonce};
+use ambre_core::{FixedBytes, Relay, Seq, SessionNonce};
 use ambre_core::{Ms, TimeSpan};
 
 // -----------------------------------------------------------------------------
@@ -38,7 +38,7 @@ pub enum LogicEvent {
     /// A [`RestEvent`] service response echoing the originating [`Request`],
     /// or `None` for an answer no request asked for.
     Rest {
-        id: Option<Generation<Request>>,
+        id: Option<Seq<Request>>,
         evt: RestEvent,
     },
 
@@ -443,7 +443,7 @@ pub enum LogicEvent {
     /// pending import waiting on it. `None` for a spontaneous error with no originating
     /// request.
     ApiError {
-        id: Option<Generation<Request>>,
+        id: Option<Seq<Request>>,
         request: ApiRequest,
         failure: ambre_core::ApiFailure,
         message: String,

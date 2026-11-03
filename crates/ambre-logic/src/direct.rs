@@ -94,11 +94,7 @@ impl LogicState {
     /// notice too many is harmless, a missing one is not. Returns `true` when
     /// the invite does not leave now. It waits for the active segment to be
     /// writable, or it is refused because the notice could not be written.
-    pub(crate) fn announce_before_invite(
-        &mut self,
-        id: Generation<Request>,
-        cmd: &RestCommand,
-    ) -> bool {
+    pub(crate) fn announce_before_invite(&mut self, id: Seq<Request>, cmd: &RestCommand) -> bool {
         let RestCommand::InviteToDocument {
             document_id,
             invitee,
@@ -161,7 +157,7 @@ impl LogicState {
     /// again, and announce a member who never left.
     pub(crate) fn invite_to_channel(
         &mut self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         channel_id: Id<Channel>,
         invitee: DirectMember,
         now: Instant<Authored>,
@@ -188,7 +184,7 @@ impl LogicState {
     }
 
     /// Refuse an invite this thread did not let leave.
-    pub(crate) fn refuse_invite(&self, id: Generation<Request>, message: String) {
+    pub(crate) fn refuse_invite(&self, id: Seq<Request>, message: String) {
         tracing::warn!("Logic: invite refused: {message}");
         self.send_to_ui(UiEvent::ApiError {
             id: Some(id),

@@ -221,7 +221,7 @@ pub(crate) enum HeldCommand {
     Space(Id<Space>, ambre_bus::SpaceCommand),
     /// An invite into a direct message, held until its notice can be
     /// written (the Murmure channels spec).
-    Invite(Generation<Request>, ambre_bus::RestCommand),
+    Invite(Seq<Request>, ambre_bus::RestCommand),
 }
 
 /// The counts of an open channel, `None` when a part of them is unknown
@@ -3805,9 +3805,7 @@ mod tests {
     }
 
     /// The erase a delete asks for, as `(request, document, file)`.
-    fn erases(
-        sent: &[SyncCommand],
-    ) -> Vec<(Generation<Request>, Id<Document>, ambre_core::ContentHash)> {
+    fn erases(sent: &[SyncCommand]) -> Vec<(Seq<Request>, Id<Document>, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3832,7 +3830,7 @@ mod tests {
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
-        let (up, down) = (Generation::nth(41), Generation::nth(42));
+        let (up, down) = (Seq::nth(41), Seq::nth(42));
         drain(&sync);
 
         for asked in [
@@ -3965,7 +3963,7 @@ mod tests {
     /// The image of a preview, as `(request, document, file)`.
     fn downloads(
         sent: &[SyncCommand],
-    ) -> Vec<(Generation<Request>, Id<Document>, ambre_core::ContentHash)> {
+    ) -> Vec<(Seq<Request>, Id<Document>, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {

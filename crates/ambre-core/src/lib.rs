@@ -58,7 +58,6 @@ pub mod fixtures;
 pub mod flag;
 /// Font attributes every application shares: [`FontSize`].
 pub mod font;
-pub mod generation;
 pub mod id;
 /// Index families: a position, a count, a difference, a span and a list, one
 /// generic type each over an axis marker.
@@ -145,7 +144,6 @@ pub use font::{
     FontFamily, FontSize, FontWeight, InvalidFontSize, Slant, Strikethrough, Underline, Weight,
     WordBreak,
 };
-pub use generation::{Generation, GenerationKind, Issuer, SharedIssuer};
 pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::LangTag;
@@ -185,7 +183,9 @@ pub use secret::{
     AccessToken, Credential, CredentialKind, OidcCode, OidcState, Passphrase, PresignedUrl,
     RefreshToken, Secret, SecretBytes, SecretString, WireCredential,
 };
-pub use seq::{CountsSince, Deltas, Relay, Seq, SeqColumn, SeqKind};
+pub use seq::{
+    Before, CountsSince, Deltas, Issuer, Relay, Seq, SeqColumn, SeqKind, SharedIssuer, Wire,
+};
 pub use space::{
     Board, CanvasCss, Css, Device, Doc, Image, ScalesTo, Space, StoredBoard, Surface, Texel, View,
 };

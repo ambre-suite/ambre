@@ -44,7 +44,7 @@ fn bold_patch() -> crate::StylePatch {
 /// Read the text at a single grid cell through a viewport request.
 fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(999),
+        version: ambre_core::Seq::nth(999),
         row_start: Pos::<Row>::new(row),
         row_end: Pos::<Row>::new(row),
         col_start: Pos::<Col>::new(col),
@@ -60,7 +60,7 @@ fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
 /// request (the reconstructed display form, not the stored canonical form).
 fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(999),
+        version: ambre_core::Seq::nth(999),
         row_start: Pos::<Row>::new(row),
         row_end: Pos::<Row>::new(row),
         col_start: Pos::<Col>::new(col),
@@ -75,7 +75,7 @@ fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
 /// Read the full DisplayCell at a single grid position.
 fn read_display(state: &mut TrameState, row: u32, col: u32) -> crate::DisplayCell {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(5000),
+        version: ambre_core::Seq::nth(5000),
         row_start: Pos::<Row>::new(row),
         row_end: Pos::<Row>::new(row),
         col_start: Pos::<Col>::new(col),
@@ -99,7 +99,7 @@ fn second_sheet_id(state: &TrameState) -> Id<Sheet> {
 /// Read column `col` over rows `[0..=row_end]` as display strings.
 fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec<String> {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(version),
+        version: ambre_core::Seq::nth(version),
         row_start: Pos::<Row>::new(0),
         row_end: Pos::<Row>::new(row_end),
         col_start: Pos::<Col>::new(0),
@@ -229,7 +229,7 @@ fn viewport_metrics(
     c1: u32,
 ) -> (Vec<f32>, Vec<f32>) {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(99),
+        version: ambre_core::Seq::nth(99),
         row_start: Pos::<Row>::new(r0),
         row_end: Pos::<Row>::new(r1),
         col_start: Pos::<Col>::new(c0),

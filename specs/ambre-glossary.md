@@ -92,7 +92,7 @@
 | broadcast | one message sent to every subscriber | | `1-Foundations/ambre-spec-broadcast.md` |
 | wire message | one message on the socket between a client and the relay | inbound frame | `1-Foundations/ambre-spec-broadcast.md` |
 | sequencer | the relay half that numbers deltas | | `1-Foundations/ambre-spec-sequencer.md` |
-| seq | the number one issuer hands out going up; the sequencer's is `Seq<Relay>` | | `1-Foundations/ambre-spec-architecture.md` |
+| seq | a number one issuer hands out going up, each once | | `1-Foundations/ambre-spec-architecture.md` |
 | membership | who may open a document, and as what | | `1-Foundations/ambre-spec-membership.md` |
 | invite | the two-phase gesture adding a member | | `1-Foundations/ambre-spec-membership.md` |
 | session | one authenticated connection of one client | | `1-Foundations/ambre-spec-session.md` |
@@ -174,8 +174,7 @@
 | mechanism ladder | the ordered strengths a verification can claim | | `1-Foundations/ambre-spec-testing.md` |
 | regime | the verification a component shape owes | | `1-Foundations/ambre-spec-testing.md` |
 | primitive allowlist | the file naming each site that keeps a bare primitive, and why | | `1-Foundations/ambre-spec-testing.md` |
-| generation | a counted number that tells a late answer from the current one | | `1-Foundations/ambre-spec-architecture.md` |
-| issuer | the one source of the generations of a family | | `1-Foundations/ambre-spec-architecture.md` |
+| issuer | the one source of the sequence numbers of a family | | `1-Foundations/ambre-spec-architecture.md` |
 | IssueRight | the value that opens an issuer of a family | | `1-Foundations/ambre-spec-architecture.md` |
 | fixture | a stored artifact a test reads instead of building | | `1-Foundations/ambre-spec-fixtures.md` |
 | freeze | pin an artifact at a version | | `1-Foundations/ambre-spec-fixtures.md` |

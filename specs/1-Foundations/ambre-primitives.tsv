@@ -171,7 +171,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.r
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
-ambre-bus | src/app/prose.rs | crate::app::prose | <TextChangeSeq as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-bus | src/app/prose.rs | crate::app::prose | <TextChangeSeq as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -355,7 +355,7 @@ ambre-bus | src/lib.rs | crate | ClipboardBlob::mark_html(html) | param | &str	g
 ambre-bus | src/lib.rs | crate | CopyOutcome::Text.0 | field | String	free-text	clipboard text/html halves
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_CLOSE | const | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_OPEN | const | &str	generic	HTML comment marker over &str
-ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/logic.rs | crate::logic | AppCommand::is_mutating() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | is_lossy_class() | ret | bool	generic	predicate
@@ -368,7 +368,7 @@ ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
-ambre-bus | src/rest.rs | crate::rest | <Request as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-bus | src/rest.rs | crate::rest | <Request as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/token.rs | crate::token | <Token<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-bus | src/app/toile.rs | crate::app::toile | <ElementCreation as crate::token::TokenKind>::NAME | const | &'static str	free-text	the family name a token prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <Reactions as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
@@ -660,7 +660,7 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::info(message) | param | imp
 ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
-ambre-chrome | src/toast.rs | crate::toast | <ToastId as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-chrome | src/toast.rs | crate::toast | <ToastId as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.0 | field | u8	newtype-inner	the private bit set of the three named members, built only from the named constants
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
@@ -964,13 +964,12 @@ ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | 
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
-ambre-core | src/residency.rs | crate::residency | <ViewTick as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-core | src/generation.rs | crate::generation | <Generation<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-core | src/generation.rs | crate::generation | Generation.raw | field | u64	newtype-inner	the generation's own number; the marker is a PhantomData
-ambre-core | src/generation.rs | crate::generation | Generation<K>::at(raw) | param | u64	newtype-inner	the generation's own number; the marker is a PhantomData
-ambre-core | src/generation.rs | crate::generation | Generation<K>::from_stored(raw) | param | u64	newtype-inner	the number a store row keeps, read back for a wire family alone
-ambre-core | src/generation.rs | crate::generation | Generation<K>::nth(n) | param | u64	newtype-inner	the count a test names, behind the testing feature (ARCH-055)
-ambre-core | src/generation.rs | crate::generation | Generation<K>::stored() | ret | u64	newtype-inner	the number a store row keeps, for a wire family alone
+ambre-core | src/residency.rs | crate::residency | <ViewTick as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-core | src/seq.rs | crate::seq | <Seq<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/seq.rs | crate::seq | Seq.raw | field | u64	newtype-inner	the sequence number's own number; the marker is a PhantomData
+ambre-core | src/seq.rs | crate::seq | Seq<K>::at(raw) | param | u64	newtype-inner	the sequence number's own number; the marker is a PhantomData
+ambre-core | src/seq.rs | crate::seq | Seq<K>::new(raw) | param | u64	newtype-inner	the number a wire, a store row or a peer wrote, read back for a wire family alone
+ambre-core | src/seq.rs | crate::seq | Seq<K>::nth(n) | param | u64	newtype-inner	the count a test names, behind the testing feature (ARCH-055)
 ambre-core | src/role.rs | crate::role | <Role as FromStr>::from_str(s) | param | &str	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | <Role as TryFrom<String>>::try_from(word) | param | String	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | <Role as std::convert::TryFrom<u8>>::try_from(value) | param | u8	newtype-inner	the discriminant byte the enum's own fallible constructor reads
@@ -1217,7 +1216,7 @@ ambre-logic | src/replay.rs | crate::replay | LogicState::replaying() | ret | bo
 ambre-logic | src/replay.rs | crate::replay | REPLAY_SLICE_BYTES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::reopen_evicted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/seal_queue.rs | crate::seal_queue | <SealTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-logic | src/seal_queue.rs | crate::seal_queue | <SealTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-logic | src/segments.rs | crate::segments | LogicState::amendments_link_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_close_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -1358,9 +1357,9 @@ ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param 
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
-ambre-murmure | src/drafts.rs | crate::drafts | <ShelfVersion as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-murmure | src/pictures.rs | crate::pictures | <PaintNumber as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-murmure | src/view.rs | crate::view | <ListsRevision as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/drafts.rs | crate::drafts | <ShelfVersion as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/pictures.rs | crate::pictures | <PaintNumber as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/view.rs | crate::view | <ListsRevision as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::from_bytes(bytes) | param | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
@@ -2075,8 +2074,8 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect::contains() | ret | bool	generic	whether a point falls inside a rectangle on screen
 ambre-prose | src/view/cache.rs | crate::view::cache | <Builds as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-prose | src/view/cache.rs | crate::view::cache | <CachedRuns as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-prose | src/view/cache.rs | crate::view::cache | <PaintTick as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-prose | src/ui.rs | crate::ui | <DraftRevision as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/view/cache.rs | crate::view::cache | <PaintTick as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/ui.rs | crate::ui | <DraftRevision as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::holds() | ret | bool	generic	whether a key holds drawing state for this very run
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::is_empty() | ret | bool	generic	whether no run holds drawing state
 ambre-prose | src/view/cache.rs | crate::view::cache | <LineItem as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -3043,7 +3042,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple.0 
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::new(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-prose | src/layout/run.rs | crate::layout::run | <LayoutVersion as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/layout/run.rs | crate::layout::run | <LayoutVersion as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/layout/run.rs | crate::layout::run | <CellBlock as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/layout/run.rs | crate::layout::run | <Flow as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/layout/run.rs | crate::layout::run | <LocalByte as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -3394,9 +3393,9 @@ ambre-sync | src/http.rs | crate::http | Url<K>::at(text) | param | String	newty
 ambre-sync | src/http.rs | crate::http | Url<RelayHost>::is_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Url<RelayHost>::new(host) | param | String	newtype-inner	Url newtype, the address text a fetch or a socket reads
 ambre-sync | src/http.rs | crate::http | Url<Route>::query(value) | param | &str	free-text	the text a query parameter carries, a user's search among them, percent-encoded whole before it joins the address
-ambre-sync | src/generation.rs | crate::generation | <Listing as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-sync | src/generation.rs | crate::generation | <ReplayTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-sync | src/generation.rs | crate::generation | <ResendTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <Listing as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <ReplayTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <ResendTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-primitives | src/depinfo.rs | crate::depinfo | dependencies() | ret | Result<Vec<PathBuf>,String>	free-text	error messages printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | package() | ret | String	generic	the package name cargo prints in a package id, put in an error message
 ambre-primitives | src/depinfo.rs | crate::depinfo | parses_as_items() | ret | bool	generic	a predicate or a file read of the scanner
@@ -3935,7 +3934,7 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::Erro
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <TextAck as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-bus | src/app/prose.rs | crate::app::prose | <TextAck as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <HttpsAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/toile.rs | crate::app::toile | <HttpsAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/id.rs | crate::id | <CondFormat as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
@@ -4045,12 +4044,9 @@ ambre-core | src/fixtures.rs | crate::fixtures | <Sheets as crate::TallyKind>::R
 ambre-core | src/member_count.rs | crate::member_count | <Members as TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-core | src/seq.rs | crate::seq | <Deltas as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-core | src/seq.rs | crate::seq | <Deltas as TallyKind>::Repr | assoc | u64	newtype-inner	the number a tally of this kind holds, the inside of Tally, u64 wide on the wire
-ambre-core | src/seq.rs | crate::seq | <Relay as SeqKind>::NAME | const | &'static str	free-text	the name a series number prints through Debug, for a log line
-ambre-core | src/seq.rs | crate::seq | <Seq<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/seq.rs | crate::seq | <Relay as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
 ambre-core | src/seq.rs | crate::seq | <Seq<K> as TryFrom<i64>>::try_from(value) | param | i64	newtype-inner	the i64 column the fallible constructor of Seq validates, refusing a negative
-ambre-core | src/seq.rs | crate::seq | Seq.raw | field | u64	newtype-inner	the number Seq holds
 ambre-core | src/seq.rs | crate::seq | Seq<K>::get() | ret | u64	newtype-inner	the Seq newtype unwrapped, for a caller outside its module
-ambre-core | src/seq.rs | crate::seq | Seq<K>::new(value) | param | u64	newtype-inner	the constructor of the Seq newtype
 ambre-core | src/seq.rs | crate::seq | Seq<K>::to_i64_saturating() | ret | i64	newtype-inner	the number as the signed 64-bit store column holds it
 ambre-core | src/span.rs | crate::span | <Failures as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-core | src/tally.rs | crate::tally | <Cells as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
@@ -4076,13 +4072,13 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | <ShapedRuns as am
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | <Passes as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-prose | src/logic/mod.rs | crate::logic | <Faces as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-prose | src/numbering.rs | crate::numbering | <ListDepth as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
-ambre-prose | src/probe.rs | crate::probe | <AnimationFrame as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the name a series number prints through Debug, for a log line
+ambre-prose | src/probe.rs | crate::probe | <AnimationFrame as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
 ambre-prose | src/probe.rs | crate::probe | <AnimationFrames as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-prose | src/view/cache.rs | crate::view::cache | <Builds as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-prose | src/view/cache.rs | crate::view::cache | <CachedRuns as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-prose | src/view/walk.rs | crate::view::walk | <Highlights as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
-ambre-protocol | src/messages.rs | crate::messages | <AuthorKey as SeqKind>::NAME | const | &'static str	free-text	the name a series number prints through Debug, for a log line
-ambre-protocol | src/messages.rs | crate::messages | <Ephemerals as SeqKind>::NAME | const | &'static str	free-text	the name a series number prints through Debug, for a log line
+ambre-protocol | src/messages.rs | crate::messages | <AuthorKey as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
+ambre-protocol | src/messages.rs | crate::messages | <Ephemerals as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
 ambre-server | src/db/content.rs | crate::db::content | <Snapshots as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | <Requests as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-server | src/s3.rs | crate::s3 | <DrainedEntries as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire

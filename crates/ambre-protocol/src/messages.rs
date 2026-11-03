@@ -20,10 +20,10 @@ pub use ambre_core::envelope::{Ciphertext, CommitmentTag, Nonce, Signature};
 
 // -----------------------------------------------------------------------------
 // Core wire messages
+use ambre_core::{Before, SeqColumn, SeqKind, Wire};
 /// The series number and the relay's marker: `Seq<Relay>` is the number the
 /// sequencer assigns, shared with the client threads.
 pub use ambre_core::{Relay, Seq};
-use ambre_core::{SeqColumn, SeqKind};
 
 /// The author key that numbers its own deltas (`ambre-spec-delta-order.md`).
 /// `Seq<AuthorKey>` is the clock a delta carries. Every session of one author
@@ -33,8 +33,15 @@ use ambre_core::{SeqColumn, SeqKind};
 pub enum AuthorKey {}
 
 impl SeqKind for AuthorKey {
+    type IssueRight = ();
     const NAME: &'static str = "Clock";
 }
+
+/// The clock crosses the wire in every update.
+impl Wire for AuthorKey {}
+
+/// A rotation hands back the clock before the one a refused frame took.
+impl Before for AuthorKey {}
 
 /// The relay stores the clock of each delta in Postgres.
 impl SeqColumn for AuthorKey {}
@@ -45,8 +52,12 @@ impl SeqColumn for AuthorKey {}
 pub enum Ephemerals {}
 
 impl SeqKind for Ephemerals {
+    type IssueRight = ();
     const NAME: &'static str = "Counter";
 }
+
+/// The counter crosses the wire in every ephemeral.
+impl Wire for Ephemerals {}
 
 // -----------------------------------------------------------------------------
 

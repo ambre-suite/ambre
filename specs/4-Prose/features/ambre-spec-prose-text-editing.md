@@ -132,16 +132,16 @@ from the document. It logs each text command sent inside one block, with its ack
 number. It holds no structure (`PROSE-UI-135`):
 
 ```rust
-pub struct DraftBuffer { /* private: the entries in the order sent, and a generation */ }
+pub struct DraftBuffer { /* private: the entries in the order sent, and a sequence number */ }
 
 impl DraftBuffer {
     pub fn is_empty(&self) -> bool;
     /// One entry per keystroke sent (`PROSE-UI-138`).
-    pub fn push_str(&mut self, seq: Generation<TextAck>, text: &str, block_id: &BlockId, pos: Pos<DocChar>);
-    pub fn push_delete(&mut self, seq: Generation<TextAck>, block_id: &BlockId, start: Pos<DocChar>,
+    pub fn push_str(&mut self, seq: Seq<TextAck>, text: &str, block_id: &BlockId, pos: Pos<DocChar>);
+    pub fn push_delete(&mut self, seq: Seq<TextAck>, block_id: &BlockId, start: Pos<DocChar>,
                        end: Pos<DocChar>);
     /// The command numbered `seq` was taken as drawn (`PROSE-UI-005`).
-    pub fn confirm(&mut self, seq: Generation<TextAck>);
+    pub fn confirm(&mut self, seq: Seq<TextAck>);
     /// A layout was taken: the confirmed entries leave.
     pub fn laid(&mut self);
     /// Carry every entry over a collaborator's change (`PROSE-UI-028`).

@@ -11,14 +11,14 @@ use std::collections::HashMap;
 use std::hash::Hash;
 
 use crate::ByteSize;
-use crate::generation::{Generation, GenerationKind, Wire};
+use crate::seq::{Seq, SeqKind, Wire};
 
 /// The order of a view among the views of one tier: a counter, not a clock.
 /// A lower tick was viewed earlier, so it leaves first (`RESID-008`). The
 /// local store keeps it across a reload, so the family is [`Wire`].
 pub enum ViewTick {}
 
-impl GenerationKind for ViewTick {
+impl SeqKind for ViewTick {
     type IssueRight = ();
     const NAME: &'static str = "ViewTick";
 }
@@ -69,13 +69,13 @@ pub struct Held {
     /// (`RESID-009`, `RESID-019`).
     pub unsent: Delivery,
     /// The tick of its last view. A lower tick leaves first (`RESID-008`).
-    viewed: Generation<ViewTick>,
+    viewed: Seq<ViewTick>,
 }
 
 impl Held {
     /// The tick of its last view, kept so a reload restores the order.
     #[must_use]
-    pub fn viewed(&self) -> Generation<ViewTick> {
+    pub fn viewed(&self) -> Seq<ViewTick> {
         self.viewed
     }
 }
@@ -85,14 +85,14 @@ impl Held {
 pub struct Residency<K> {
     held: HashMap<K, Held>,
     /// A counter, not a clock: it orders the views and reads no time.
-    tick: Generation<ViewTick>,
+    tick: Seq<ViewTick>,
 }
 
 impl<K> Default for Residency<K> {
     fn default() -> Self {
         Self {
             held: HashMap::new(),
-            tick: Generation::ZERO,
+            tick: Seq::ZERO,
         }
     }
 }
@@ -105,7 +105,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     }
 
     /// The next tick, so the latest view always sorts last.
-    fn next_tick(&mut self) -> Generation<ViewTick> {
+    fn next_tick(&mut self) -> Seq<ViewTick> {
         self.tick = self.tick.next();
         self.tick
     }
@@ -162,7 +162,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     /// Hold a document as an earlier run of the tier knew it, its view tick
     /// included, so the order survives a reload (`RESID-008`). Later ticks
     /// are drawn past it.
-    pub fn restore(&mut self, key: K, held: Held, viewed: Generation<ViewTick>) {
+    pub fn restore(&mut self, key: K, held: Held, viewed: Seq<ViewTick>) {
         self.tick = self.tick.max(viewed);
         self.held.insert(key, Held { viewed, ..held });
     }

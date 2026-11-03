@@ -34,7 +34,7 @@ use ambre_core::id::{
     Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
 use ambre_core::index::{Count, Pos};
-use ambre_core::{Board, Generation, Px};
+use ambre_core::{Board, Px, Seq};
 use ambre_core::{Ms, PageLoad, TimeSpan};
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -201,7 +201,7 @@ fn request_id_is_strictly_monotonic() {
     let a = next_request();
     let b = next_request();
     let c = next_request();
-    assert!(Generation::ZERO < a, "no request carries the zero id");
+    assert!(Seq::ZERO < a, "no request carries the zero id");
     assert!(a < b, "ids must increase");
     assert!(b < c);
 }
@@ -243,7 +243,7 @@ fn sync_command_roundtrips_through_postcard() {
     let doc = Id::<Document>::mint();
     let chan = Id::<Channel>::mint();
     roundtrip_sync(&SyncCommand::Rest {
-        id: Generation::nth(42),
+        id: Seq::nth(42),
         cmd: RestCommand::CreateDocument {
             doc_type: DocType::Trame,
             name: ambre_core::Name::new("Budget").unwrap(),
@@ -286,7 +286,7 @@ fn logic_event_roundtrips_through_postcard() {
     let doc = Id::<Document>::mint();
     let user = Id::<User>::mint();
     roundtrip_event(&LogicEvent::Rest {
-        id: Some(Generation::nth(7)),
+        id: Some(Seq::nth(7)),
         evt: RestEvent::DocumentCreated {
             document_id: doc,
             doc_type: DocType::Trame,
@@ -466,7 +466,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     };
     let commands = [
         SyncCommand::Rest {
-            id: Generation::nth(5),
+            id: Seq::nth(5),
             cmd: RestCommand::CreateDocument {
                 doc_type: DocType::Toile,
                 name: ambre_core::Name::new("Plan").unwrap(),
@@ -623,7 +623,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     ];
     let events = [
         LogicEvent::Rest {
-            id: Some(Generation::nth(6)),
+            id: Some(Seq::nth(6)),
             evt: RestEvent::DocumentCreated {
                 document_id: doc,
                 doc_type: DocType::Toile,
@@ -885,7 +885,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             message: "expired".to_owned(),
         },
         LogicEvent::ApiError {
-            id: Some(Generation::nth(8)),
+            id: Some(Seq::nth(8)),
             request: ambre_bus::ApiRequest::InviteToDocument,
             failure: ambre_bus::ApiFailure::refused(ambre_bus::RefusalCode::MembersChanged),
             message: "conflict".to_owned(),
@@ -977,7 +977,7 @@ fn read_only_and_local_commands_are_not_mutating() {
     let cases: Vec<AppCommand> = vec![
         // Trame: local view state.
         AppCommand::Trame(TrameCommand::ScrollViewport {
-            version: ambre_core::Generation::nth(1),
+            version: ambre_core::Seq::nth(1),
             row_start: Pos::<Row>::new(0),
             row_end: Pos::<Row>::new(4),
             col_start: Pos::<Col>::new(0),

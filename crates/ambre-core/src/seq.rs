@@ -1,126 +1,244 @@
-//! A series number: the numbers one issuer hands out going up, each once.
+//! Sequences: the numbers one issuer hands out going up, each once.
 //!
-//! Every series is one generic type, [`Seq<K>`], over a marker `K` that names
-//! the issuer. The relay's number of an update never stands in for an
-//! author's clock:
+//! A timer, a request or a cache key carries the number it was armed, asked
+//! or built under. The answer is live only while that number is the latest
+//! one. The relay numbers each update of a document, an author numbers
+//! its own deltas, and a probe numbers the animation frames. Each family
+//! counts on its own axis, so each family is its own marker type, and a
+//! [`Seq`] of one family never compares to another:
 //!
 //! ```compile_fail,E0308
-//! use ambre_core::seq::{Relay, Seq, SeqKind};
-//! enum AuthorKey {}
-//! impl SeqKind for AuthorKey {
+//! use ambre_core::{Relay, Seq, SeqKind};
+//! enum Author {}
+//! impl SeqKind for Author {
+//!     type IssueRight = ();
 //!     const NAME: &'static str = "Clock";
 //! }
-//! let _: Seq<AuthorKey> = Seq::<Relay>::ZERO;
+//! let _: Seq<Author> = Seq::<Relay>::ZERO;
 //! ```
 //!
-//! The marker carries what differs between two series:
-//! * [`SeqKind::NAME`], the name `Debug` prints;
-//! * [`CountsSince`], for a series whose gap between two numbers is a tally;
-//! * [`SeqColumn`], for a series a store keeps in a signed 64-bit column.
+//! An [`Issuer`] is the one source of a family. It opens on the family's
+//! [`SeqKind::IssueRight`]. A family whose right is `()` is open, and any
+//! crate may count it on with [`Seq::next`]. A sealed family has a right with
+//! a private constructor. Only the module of the right opens an issuer, so no
+//! other crate forges a number of it.
 //!
-//! A number is a `u64`, and its wire form is the bare number: `Seq<K>` is
-//! transparent to serde.
+//! The marker carries what differs between two families:
+//! * [`SeqKind::NAME`], the name `Debug` prints;
+//! * [`Wire`], for a family whose number crosses a wire or a store;
+//! * [`Before`], for a family that steps back to the number before;
+//! * [`CountsSince`], for a family whose gap between two numbers is a tally;
+//! * [`SeqColumn`], for a family a store keeps in a signed 64-bit column.
 
-use std::cmp::Ordering;
+use std::cmp::Ordering as CmpOrdering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-
-use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::tally::{Tally, TallyColumn, TallyKind};
 
-/// The marker of one issuer of a series.
+/// The marker of one family of sequence numbers.
 ///
-/// The marker is an uninhabited type: it names the issuer and holds no
-/// value. The trait is open, because a series may live in the crate that
-/// issues it.
+/// The marker is an uninhabited type: it names the family and holds no
+/// value. The trait is open, because the families live in the crates that
+/// count them.
+///
+/// A sealed family keeps its right private, and its module opens the issuer:
+///
+/// ```
+/// mod seal {
+///     use ambre_core::{Issuer, SeqKind};
+///     pub enum Ticket {}
+///     #[derive(Clone, Copy)]
+///     pub struct Right(());
+///     impl SeqKind for Ticket {
+///         type IssueRight = Right;
+///         const NAME: &'static str = "Ticket";
+///     }
+///     pub fn issuer() -> Issuer<Ticket> {
+///         Issuer::new(Right(()))
+///     }
+/// }
+/// let mut issuer = seal::issuer();
+/// assert!(issuer.issue() > ambre_core::Seq::ZERO);
+/// ```
+///
+/// Outside that module, the right cannot be built:
+///
+/// ```compile_fail,E0603
+/// mod seal {
+///     use ambre_core::SeqKind;
+///     pub enum Ticket {}
+///     #[derive(Clone, Copy)]
+///     pub struct Right(());
+///     impl SeqKind for Ticket {
+///         type IssueRight = Right;
+///         const NAME: &'static str = "Ticket";
+///     }
+/// }
+/// let _ = ambre_core::Issuer::<seal::Ticket>::new(seal::Right(()));
+/// ```
+///
+/// And a sealed number has no successor of its own:
+///
+/// ```compile_fail,E0599
+/// mod seal {
+///     use ambre_core::SeqKind;
+///     pub enum Ticket {}
+///     #[derive(Clone, Copy)]
+///     pub struct Right(());
+///     impl SeqKind for Ticket {
+///         type IssueRight = Right;
+///         const NAME: &'static str = "Ticket";
+///     }
+/// }
+/// let _ = ambre_core::Seq::<seal::Ticket>::ZERO.next();
+/// ```
 pub trait SeqKind: 'static {
+    /// What opens an [`Issuer`] of the family: `()` for an open family, or
+    /// a type with a private constructor for a sealed one. It is `Copy`, so
+    /// a `const` constructor can take it.
+    type IssueRight: Copy;
+
     /// The name `Debug` prints, as the hand-written type printed its own.
     const NAME: &'static str;
 }
 
-/// A series whose gap between two numbers counts the things it numbered, as
+/// A family whose number crosses a wire or a store.
+///
+/// The number is then read back from bytes another party wrote, so the
+/// family cannot be sealed: the bound asks for an open right. Only such a
+/// family has a serde form, and the [`Seq::new`] and [`Seq::get`] doors.
+pub trait Wire: SeqKind<IssueRight = ()> {}
+
+/// A family whose number steps back to the one before, for the last number
+/// a reader holds once it has the next one.
+///
+/// A capability that each family opts in to:
+///
+/// ```compile_fail,E0599
+/// use ambre_core::{Seq, SeqKind};
+/// enum Pings {}
+/// impl SeqKind for Pings {
+///     type IssueRight = ();
+///     const NAME: &'static str = "Ping";
+/// }
+/// let _ = Seq::<Pings>::ZERO.before();
+/// ```
+pub trait Before: SeqKind {}
+
+/// A family whose gap between two numbers counts the things it numbered, as
 /// a tally of [`CountsSince::Tally`].
 ///
-/// A capability that each series opts in to. A series that numbers nothing
+/// A capability that each family opts in to. A family that numbers nothing
 /// countable has no `since`:
 ///
 /// ```compile_fail,E0599
-/// use ambre_core::seq::{Seq, SeqKind};
+/// use ambre_core::{Seq, SeqKind};
 /// enum Pings {}
 /// impl SeqKind for Pings {
+///     type IssueRight = ();
 ///     const NAME: &'static str = "Ping";
 /// }
-/// let _ = Seq::<Pings>::new(3).since(Seq::<Pings>::ZERO);
+/// let _ = Seq::<Pings>::ZERO.since(Seq::<Pings>::ZERO);
 /// ```
 pub trait CountsSince: SeqKind {
     /// The kind of tally a gap counts.
     type Tally: TallyKind;
 }
 
-/// A series a store keeps in a signed 64-bit column.
+/// A wire family a store keeps in a signed 64-bit column.
 ///
-/// A capability that each series opts in to. Such a number writes itself
+/// A capability that each family opts in to. Such a number writes itself
 /// with [`Seq::to_i64_saturating`], and a column reads back through
 /// `TryFrom<i64>`, which refuses a negative value rather than clamping it.
-/// A series no store keeps has neither:
+/// A family no store keeps has neither:
 ///
 /// ```compile_fail,E0277
-/// use ambre_core::seq::{Seq, SeqKind};
+/// use ambre_core::{Seq, SeqKind, Wire};
 /// enum Pings {}
 /// impl SeqKind for Pings {
+///     type IssueRight = ();
 ///     const NAME: &'static str = "Ping";
 /// }
+/// impl Wire for Pings {}
 /// let _ = Seq::<Pings>::try_from(3_i64);
 /// ```
-pub trait SeqColumn: SeqKind {}
+pub trait SeqColumn: Wire {}
 
-/// One number of the series `K`. Zero is "before the first number": the
-/// start of a cursor, or no number recorded.
-#[derive(Serialize, Deserialize)]
-#[serde(transparent, bound = "")]
+/// One number of the family `K`. It starts at [`ZERO`](Self::ZERO), only
+/// grows, and compares to its own family alone.
+///
+/// Its serde form, for a [`Wire`] family, is the bare `u64`.
 pub struct Seq<K: SeqKind> {
     raw: u64,
-    #[serde(skip)]
     kind: PhantomData<fn() -> K>,
 }
 
 impl<K: SeqKind> Seq<K> {
-    /// Before the first number of the series.
-    pub const ZERO: Self = Self::new(0);
+    /// The number before the first one issued. No issuer hands it out, so
+    /// it never matches an answer to a real request.
+    pub const ZERO: Self = Self::at(0);
 
-    /// Wraps a raw value. The constructor checks nothing.
-    #[must_use]
-    pub const fn new(value: u64) -> Self {
+    /// The number `raw`, for this module alone.
+    const fn at(raw: u64) -> Self {
         Self {
-            raw: value,
+            raw,
             kind: PhantomData,
         }
     }
 
-    /// Returns the raw value.
+    /// The one after this one. It saturates, which no session reaches: one
+    /// per millisecond takes half a billion years.
+    const fn successor(self) -> Self {
+        Self::at(self.raw.saturating_add(1))
+    }
+
+    /// The `n`th one after [`ZERO`](Self::ZERO), for a test that names a
+    /// count. The `testing` feature reaches the tests of other crates, and
+    /// a check of the manifests keeps it out of every other build.
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub const fn nth(n: u64) -> Self {
+        Self::at(n)
+    }
+}
+
+impl<K: SeqKind<IssueRight = ()>> Seq<K> {
+    /// The one after this one, for an open family. A sealed family has no
+    /// such method: its issuer alone counts on.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        self.successor()
+    }
+}
+
+impl<K: Wire> Seq<K> {
+    /// The number `raw`, as a wire, a store row or a peer wrote it. The
+    /// constructor checks nothing: every `u64` is a number of the family.
+    #[must_use]
+    pub const fn new(raw: u64) -> Self {
+        Self::at(raw)
+    }
+
+    /// The number, as a wire or a store row keeps it.
     #[must_use]
     pub const fn get(self) -> u64 {
         self.raw
     }
+}
 
-    /// The number just before this one, `ZERO` at the start.
+impl<K: Before> Seq<K> {
+    /// The number just before this one, [`ZERO`](Self::ZERO) at the start.
     #[must_use]
     pub const fn before(self) -> Self {
-        Self::new(self.raw.saturating_sub(1))
-    }
-
-    /// The number just after this one: the next one the issuer hands out,
-    /// held at the top.
-    #[must_use]
-    pub const fn after(self) -> Self {
-        Self::new(self.raw.saturating_add(1))
+        Self::at(self.raw.saturating_sub(1))
     }
 }
 
 impl<K: CountsSince> Seq<K> {
-    /// The things the issuer numbered after `earlier`, up to this number.
+    /// The things the family numbered after `earlier`, up to this number.
     /// Zero when this number is not past `earlier`, and held at the top of
     /// the tally's width.
     #[must_use]
@@ -144,7 +262,7 @@ impl<K: SeqColumn> TryFrom<i64> for Seq<K> {
     type Error = std::num::TryFromIntError;
 
     fn try_from(value: i64) -> Result<Self, Self::Error> {
-        u64::try_from(value).map(Self::new)
+        u64::try_from(value).map(Self::at)
     }
 }
 
@@ -168,13 +286,13 @@ impl<K: SeqKind> PartialEq for Seq<K> {
 impl<K: SeqKind> Eq for Seq<K> {}
 
 impl<K: SeqKind> PartialOrd for Seq<K> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
         Some(self.cmp(other))
     }
 }
 
 impl<K: SeqKind> Ord for Seq<K> {
-    fn cmp(&self, other: &Self) -> Ordering {
+    fn cmp(&self, other: &Self) -> CmpOrdering {
         self.raw.cmp(&other.raw)
     }
 }
@@ -191,7 +309,7 @@ impl<K: SeqKind> Default for Seq<K> {
     }
 }
 
-/// `NAME(n)`, as the derived `Debug` of the hand-written type printed it.
+/// `NAME(n)`, as the hand-written counter printed itself.
 impl<K: SeqKind> fmt::Debug for Seq<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple(K::NAME).field(&self.raw).finish()
@@ -205,14 +323,120 @@ impl<K: SeqKind> fmt::Display for Seq<K> {
     }
 }
 
+impl<K: Wire> serde::Serialize for Seq<K> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u64(self.raw)
+    }
+}
+
+impl<'de, K: Wire> serde::Deserialize<'de> for Seq<K> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        <u64 as serde::Deserialize>::deserialize(deserializer).map(Self::at)
+    }
+}
+
+/// The one source of the family `K`, held by one owner.
+///
+/// It is not `Clone`: two copies would hand out one number twice.
+pub struct Issuer<K: SeqKind> {
+    latest: Seq<K>,
+}
+
+impl<K: SeqKind> Issuer<K> {
+    /// An issuer that has handed out nothing yet. Only a holder of the
+    /// family's right opens one.
+    #[must_use]
+    pub const fn new(_right: K::IssueRight) -> Self {
+        Self { latest: Seq::ZERO }
+    }
+
+    /// A number past every number this issuer handed out.
+    #[must_use = "a number issued and dropped is wasted"]
+    pub const fn issue(&mut self) -> Seq<K> {
+        self.latest = self.latest.successor();
+        self.latest
+    }
+
+    /// The last number handed out, or [`Seq::ZERO`] before the first. An
+    /// answer is live while it carries this number.
+    #[must_use]
+    pub const fn latest(&self) -> Seq<K> {
+        self.latest
+    }
+}
+
+impl<K: SeqKind<IssueRight = ()>> Default for Issuer<K> {
+    fn default() -> Self {
+        Self::new(())
+    }
+}
+
+impl<K: SeqKind> fmt::Debug for Issuer<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Issuer")
+            .field("latest", &self.latest)
+            .finish()
+    }
+}
+
+/// The one source of the family `K`, shared by the threads of one memory.
+///
+/// It lives in a `static`, so its constructor is `const`. A Web Worker has
+/// its own memory, and so its own static: the family decides which instance
+/// may issue (`BUS-004` for a service request).
+pub struct SharedIssuer<K: SeqKind> {
+    latest: AtomicU64,
+    kind: PhantomData<fn() -> K>,
+}
+
+impl<K: SeqKind> SharedIssuer<K> {
+    /// An issuer that has handed out nothing yet.
+    #[must_use]
+    pub const fn new(_right: K::IssueRight) -> Self {
+        Self {
+            latest: AtomicU64::new(0),
+            kind: PhantomData,
+        }
+    }
+
+    /// A number past every number this issuer handed out, to any thread.
+    #[must_use = "a number issued and dropped is wasted"]
+    pub fn issue(&self) -> Seq<K> {
+        // Relaxed: the number orders nothing but itself. The closure never
+        // refuses, so both arms carry the number before the update.
+        let before = match self
+            .latest
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |raw| {
+                Some(raw.saturating_add(1))
+            }) {
+            Ok(raw) | Err(raw) => raw,
+        };
+        Seq::at(before).successor()
+    }
+}
+
+impl<K: SeqKind> fmt::Debug for SharedIssuer<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SharedIssuer").finish_non_exhaustive()
+    }
+}
+
 /// The relay's sequencer: it numbers each update of a document as it stores
 /// it, from 1 up. A read cursor, a snapshot horizon and the place of a
-/// message are all such a number. None of them takes the place of a count.
+/// message are all such a number, and zero is "before the first update".
+/// None of them takes the place of a count.
 pub enum Relay {}
 
 impl SeqKind for Relay {
+    type IssueRight = ();
     const NAME: &'static str = "Seq";
 }
+
+/// The relay's numbers cross the wire to every client.
+impl Wire for Relay {}
+
+/// A reader holds the number before the next one it waits for.
+impl Before for Relay {}
 
 /// The gap between two of the relay's numbers counts the deltas it stored.
 impl CountsSince for Relay {
@@ -237,9 +461,26 @@ impl TallyColumn for Deltas {}
 
 #[cfg(test)]
 mod tests {
-    use super::{Deltas, Relay, Seq, SeqKind};
+    use super::{Deltas, Issuer, Relay, Seq, SeqKind, SharedIssuer, Wire};
     use crate::span::StoredAsI64;
     use crate::tally::Tally;
+
+    /// An open test family.
+    enum Tick {}
+    impl SeqKind for Tick {
+        type IssueRight = ();
+        const NAME: &'static str = "Tick";
+    }
+    impl Wire for Tick {}
+
+    /// A sealed test family: only this module builds its right.
+    enum Ticket {}
+    #[derive(Clone, Copy)]
+    struct TicketRight(());
+    impl SeqKind for Ticket {
+        type IssueRight = TicketRight;
+        const NAME: &'static str = "Ticket";
+    }
 
     fn seq(n: u64) -> Seq<Relay> {
         Seq::<Relay>::new(n)
@@ -247,6 +488,54 @@ mod tests {
 
     fn deltas(n: u64) -> Tally<Deltas> {
         Tally::<Deltas>::new(n)
+    }
+
+    #[test]
+    fn a_counter_only_grows_and_saturates() {
+        let first = Seq::<Tick>::ZERO.next();
+        assert!(first > Seq::ZERO);
+        assert!(first.next() > first);
+        assert_eq!(Seq::<Tick>::default(), Seq::ZERO);
+        assert_eq!(Seq::<Tick>::nth(2), first.next());
+        let last = Seq::<Tick>::nth(u64::MAX);
+        assert_eq!(last.next(), last);
+    }
+
+    #[test]
+    fn an_issuer_hands_out_each_number_once_and_never_zero() {
+        let mut issuer = Issuer::<Ticket>::new(TicketRight(()));
+        assert_eq!(issuer.latest(), Seq::ZERO);
+        let (one, two) = (issuer.issue(), issuer.issue());
+        assert!(Seq::ZERO < one && one < two);
+        assert_eq!(issuer.latest(), two);
+        assert_eq!(issuer.issue(), Seq::nth(3));
+    }
+
+    #[test]
+    fn a_shared_issuer_counts_like_an_issuer() {
+        static SHARED: SharedIssuer<Tick> = SharedIssuer::new(());
+        let one = SHARED.issue();
+        assert_eq!(one, Seq::nth(1));
+        assert_eq!(SHARED.issue(), one.next());
+    }
+
+    #[test]
+    fn debug_prints_the_family_name() {
+        assert_eq!(format!("{:?}", Seq::<Ticket>::nth(3)), "Ticket(3)");
+        assert_eq!(format!("{:?}", seq(3)), "Seq(3)");
+        assert_eq!(seq(3).to_string(), "3");
+    }
+
+    #[test]
+    fn a_wire_family_round_trips_as_its_bare_number() {
+        let tick = Seq::<Tick>::nth(300);
+        let json = serde_json::to_string(&tick).expect("serialize");
+        assert_eq!(json, "300");
+        assert_eq!(serde_json::from_str::<Seq<Tick>>(&json).ok(), Some(tick));
+        let bytes = postcard::to_allocvec(&tick).expect("serialize");
+        assert_eq!(bytes, postcard::to_allocvec(&300_u64).expect("serialize"));
+        assert_eq!(postcard::from_bytes::<Seq<Tick>>(&bytes).ok(), Some(tick));
+        assert_eq!(Seq::<Tick>::new(tick.get()), tick);
     }
 
     /// The history past a horizon counts the deltas after it, and a horizon
@@ -262,6 +551,7 @@ mod tests {
     fn the_number_before_the_start_is_the_start() {
         assert_eq!(seq(5).before(), seq(4));
         assert_eq!(Seq::<Relay>::ZERO.before(), Seq::<Relay>::ZERO);
+        assert_eq!(seq(5).next(), seq(6));
     }
 
     #[test]
@@ -282,12 +572,6 @@ mod tests {
         assert_eq!(format!("{:?}", deltas(2)), "DeltaCount(2)");
     }
 
-    #[test]
-    fn the_number_after_a_number_is_the_next_one() {
-        assert_eq!(seq(5).after(), seq(6));
-        assert_eq!(seq(u64::MAX).after(), seq(u64::MAX));
-    }
-
     /// The hand-written `Seq` the generic replaced, as it derived its serde.
     #[derive(serde::Serialize)]
     #[serde(transparent)]
@@ -298,34 +582,27 @@ mod tests {
     #[derive(serde::Serialize, serde::Deserialize)]
     struct OldClock(u64);
 
-    /// A test issuer, for the shape the generic writes.
-    enum Issuer {}
-    impl SeqKind for Issuer {
-        const NAME: &'static str = "Clock";
-    }
-
-    /// Postcard and JSON write a newtype struct as its inside, so the
-    /// transparent generic writes the bytes each hand-written type wrote,
-    /// and reads them back.
+    /// Postcard and JSON write a newtype struct as its inside. So the bare
+    /// number the generic writes is the bytes each hand-written type wrote,
+    /// and each reads the other's bytes back.
     #[test]
     fn a_number_writes_the_bytes_of_the_type_it_replaced() {
         for n in [0, 1, 300, u64::MAX] {
-            let new = Seq::<Issuer>::new(n);
+            let new = Seq::<Tick>::new(n);
             let bytes = postcard::to_allocvec(&new).expect("a number encodes");
             assert_eq!(bytes, postcard::to_allocvec(&OldClock(n)).expect("encodes"));
             assert_eq!(bytes, postcard::to_allocvec(&OldSeq(n)).expect("encodes"));
-            let back: Seq<Issuer> = postcard::from_bytes(&bytes).expect("decodes");
+            let back: Seq<Tick> = postcard::from_bytes(&bytes).expect("decodes");
             assert_eq!(back, new);
+            let old: OldClock = postcard::from_bytes(&bytes).expect("decodes");
+            assert_eq!(old.0, n);
             let json = serde_json::to_string(&new).expect("a number encodes");
             assert_eq!(json, serde_json::to_string(&OldClock(n)).expect("encodes"));
             assert_eq!(json, serde_json::to_string(&OldSeq(n)).expect("encodes"));
-            let back: Seq<Issuer> = serde_json::from_str(&json).expect("decodes");
+            let back: Seq<Tick> = serde_json::from_str(&json).expect("decodes");
             assert_eq!(back, new);
             let old: OldClock = serde_json::from_str(&json).expect("decodes");
             assert_eq!(old.0, n);
         }
-        assert_eq!(serde_json::to_string(&seq(42)).expect("encodes"), "42");
-        assert_eq!(format!("{:?}", Seq::<Issuer>::new(3)), "Clock(3)");
-        assert_eq!(format!("{:?}", seq(3)), "Seq(3)");
     }
 }

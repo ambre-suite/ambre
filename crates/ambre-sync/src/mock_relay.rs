@@ -112,7 +112,7 @@ impl MockBlindRelay {
                         subscribers: Vec::new(),
                     });
                 let seq = self.next_seq;
-                self.next_seq = seq.after();
+                self.next_seq = seq.next();
                 state.updates.push((seq, update.clone()));
                 for tx in self.clients.values() {
                     let _ = tx.send(WsServerMsg::Update {

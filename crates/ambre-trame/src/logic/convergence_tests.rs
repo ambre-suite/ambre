@@ -345,7 +345,7 @@ type Snapshot = Vec<(
 
 fn read_window(state: &mut TrameState) -> Snapshot {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(u64::MAX),
+        version: ambre_core::Seq::nth(u64::MAX),
         row_start: Pos::<Row>::new(0),
         row_end: Pos::<Row>::new(ROWS - 1),
         col_start: Pos::<Col>::new(0),
@@ -476,7 +476,7 @@ type StyleView = (
 /// Read A1's style through a viewport request, the way the UI thread sees it.
 fn read_style(state: &mut TrameState) -> StyleView {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(u64::MAX),
+        version: ambre_core::Seq::nth(u64::MAX),
         row_start: Pos::<Row>::new(0),
         row_end: Pos::<Row>::new(0),
         col_start: Pos::<Col>::new(0),

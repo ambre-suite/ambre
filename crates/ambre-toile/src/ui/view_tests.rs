@@ -85,7 +85,7 @@ impl Rig {
     /// A fresh frame from the Logic thread holding these nodes and no other.
     fn show(&mut self, nodes: Vec<DisplayNode>) {
         self.answer(ToileEvent::ViewportData(DisplayViewport {
-            version: ambre_core::Generation::ZERO,
+            version: ambre_core::Seq::ZERO,
             grid_unit: Px::<Board>::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
@@ -533,7 +533,7 @@ fn a_board_change_refetches_the_selection_data_and_a_camera_move_does_not() {
     rig.frame();
     rig.sent();
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
-        version: ambre_core::Generation::ZERO,
+        version: ambre_core::Seq::ZERO,
         grid_unit: Px::<Board>::new(20.0),
         pins: Vec::new(),
         reactions: Default::default(),
@@ -1075,7 +1075,7 @@ fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
 /// A frame from the Logic thread at `version`, holding these nodes alone.
 fn frame_at(version: u64, nodes: Vec<DisplayNode>) -> ToileEvent {
     ToileEvent::ViewportData(DisplayViewport {
-        version: ambre_core::Generation::nth(version),
+        version: ambre_core::Seq::nth(version),
         grid_unit: Px::<Board>::new(20.0),
         pins: Vec::new(),
         reactions: Default::default(),
@@ -2625,7 +2625,7 @@ fn a_shared_board(peer: Id<User>) -> Rig {
         },
     );
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
-        version: ambre_core::Generation::ZERO,
+        version: ambre_core::Seq::ZERO,
         grid_unit: Px::<Board>::new(20.0),
         pins: vec![ambre_bus::app::toile::CommentPin {
             thread: Id::<Thread>::from_text("t".to_owned()),

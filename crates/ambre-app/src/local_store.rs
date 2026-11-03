@@ -332,7 +332,7 @@ impl LocalStore {
 mod tests {
     use ambre_bus::conduit::{self, Receiver};
     use ambre_bus::{Request, RestCommand, RestEvent, SecretBytes};
-    use ambre_core::Generation;
+    use ambre_core::Seq;
     use ambre_core::{Payload, SealedRowBytes};
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -359,7 +359,7 @@ mod tests {
     }
 
     /// The next service request the vault sent.
-    async fn request(rx: &Receiver<LogicCommand>) -> (Generation<Request>, RestCommand) {
+    async fn request(rx: &Receiver<LogicCommand>) -> (Seq<Request>, RestCommand) {
         match next(rx).await {
             LogicCommand::Rest { id, cmd } => (id, cmd),
             other => panic!("expected a service request, got {other:?}"),

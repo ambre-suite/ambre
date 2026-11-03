@@ -6,7 +6,7 @@ use ambre_bus::{Authored, Instant};
 impl SyncState {
     // -- Document CRUD (HTTP REST) ---------------------------------------------
 
-    pub(crate) fn handle_list_documents(&self, id: Generation<Request>) {
+    pub(crate) fn handle_list_documents(&self, id: Seq<Request>) {
         let event_tx = self.event_tx.clone();
 
         if let Some(tx) = event_tx {
@@ -124,7 +124,7 @@ impl SyncState {
 
     pub(crate) fn handle_create_document(
         &mut self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         doc_type: DocType,
         name: ambre_core::Name,
     ) {
@@ -220,11 +220,7 @@ impl SyncState {
         }
     }
 
-    pub(crate) fn handle_delete_document(
-        &mut self,
-        id: Generation<Request>,
-        document_id: Id<Document>,
-    ) {
+    pub(crate) fn handle_delete_document(&mut self, id: Seq<Request>, document_id: Id<Document>) {
         let event_tx = self.event_tx.clone();
 
         if let Some(tx) = event_tx {
@@ -256,7 +252,7 @@ impl SyncState {
 
     pub(crate) fn handle_rename_document(
         &mut self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         name: ambre_core::Name,
     ) {

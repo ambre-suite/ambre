@@ -45,7 +45,7 @@ impl SeqLedger {
     pub(crate) fn reset(&mut self, covered: Seq<Relay>, base: VersionVector) {
         self.floor = covered;
         self.base = base;
-        self.ends = self.ends.split_off(&covered.after());
+        self.ends = self.ends.split_off(&covered.next());
     }
 
     /// Start again from a snapshot covering every delta up to `covered`, for
@@ -89,7 +89,7 @@ impl SeqLedger {
     pub(crate) fn contiguous_end(&self) -> Seq<Relay> {
         let mut end = self.floor;
         for seq in self.ends.keys() {
-            if *seq != end.after() {
+            if *seq != end.next() {
                 break;
             }
             end = *seq;
@@ -103,7 +103,7 @@ impl SeqLedger {
         if covered <= self.floor || self.contiguous_end() < covered {
             return;
         }
-        let rest = self.ends.split_off(&covered.after());
+        let rest = self.ends.split_off(&covered.next());
         for (peer, end) in std::mem::replace(&mut self.ends, rest)
             .into_values()
             .flatten()
@@ -413,7 +413,7 @@ mod tests {
         let from = bob.oplog_vv();
         bob.get_text("t").insert(0, "B").expect("insert");
         bob.commit();
-        let seq = ledger.contiguous_end().after();
+        let seq = ledger.contiguous_end().next();
         ledger.record(seq, Some(&delta(&bob, &from).into()));
         assert_eq!(
             check_snapshot(
@@ -431,7 +431,7 @@ mod tests {
     fn a_gap_in_the_covered_deltas_leaves_the_snapshot_unchecked() {
         let (alice, bob, ledger) = typed_history();
         let snapshot = alice.export(ExportMode::Snapshot).expect("snapshot");
-        let past = ledger.contiguous_end().after().after();
+        let past = ledger.contiguous_end().next().next();
         assert_eq!(
             check_snapshot(
                 &bob,

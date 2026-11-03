@@ -986,7 +986,7 @@ impl PartialEq for ShapedRun {
 /// (`PROSE-UI-016`).
 pub enum LayoutVersion {}
 
-impl ambre_core::GenerationKind for LayoutVersion {
+impl ambre_core::SeqKind for LayoutVersion {
     type IssueRight = ();
     const NAME: &'static str = "LayoutVersion";
 }
@@ -1005,7 +1005,7 @@ impl ambre_core::GenerationKind for LayoutVersion {
 /// the tables are those of the pages in [`ShapedLayout::pages`] alone.
 #[derive(Clone, Debug, Default)]
 pub struct ShapedLayout {
-    pub version: ambre_core::Generation<LayoutVersion>,
+    pub version: ambre_core::Seq<LayoutVersion>,
     /// The page geometry of the document, with the blocks of the window.
     pub layout: Arc<PageLayout>,
     /// The run of every block the window draws text for: body, bands and
@@ -1079,7 +1079,7 @@ impl ShapedLayout {
     /// from them.
     #[must_use]
     pub fn new(
-        version: ambre_core::Generation<LayoutVersion>,
+        version: ambre_core::Seq<LayoutVersion>,
         layout: Arc<PageLayout>,
         blocks: HashMap<TreeID, ShapedRun>,
         notes: HashMap<Id<Footnote>, ShapedRun>,

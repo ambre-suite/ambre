@@ -43,8 +43,8 @@ pub struct Splitting {
 /// The held text is document content, so `Debug` prints its length alone.
 #[derive(Clone, PartialEq)]
 struct Key {
-    generation: ambre_core::Generation<crate::ui::DraftRevision>,
-    version: ambre_core::Generation<LayoutVersion>,
+    generation: ambre_core::Seq<crate::ui::DraftRevision>,
+    version: ambre_core::Seq<LayoutVersion>,
     splitting: Option<Splitting>,
     held: String,
 }
@@ -449,8 +449,8 @@ mod tests {
     #[test]
     fn a_shaping_key_prints_its_held_text_by_length_alone() {
         let key = super::Key {
-            generation: ambre_core::Generation::ZERO,
-            version: ambre_core::Generation::ZERO,
+            generation: ambre_core::Seq::ZERO,
+            version: ambre_core::Seq::ZERO,
             splitting: None,
             held: "held behind".into(),
         };

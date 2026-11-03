@@ -596,7 +596,7 @@ fn create_sheet_lists_and_isolates() {
 fn first_scroll_viewport_hydrates_sheet_list_once() {
     let mut state = TrameState::new();
     let scroll = || TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(1),
+        version: ambre_core::Seq::nth(1),
         row_start: Pos::<Row>::new(0),
         row_end: Pos::<Row>::new(4),
         col_start: Pos::<Col>::new(0),
@@ -1201,13 +1201,13 @@ fn deleted_sheet_leaves_no_data() {
         });
     }
     state.handle_command(TrameCommand::ResizeCol {
-        version: ambre_core::Generation::nth(1),
+        version: ambre_core::Seq::nth(1),
         sheet_id: gone.clone(),
         col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
     });
     state.handle_command(TrameCommand::ResizeRow {
-        version: ambre_core::Generation::nth(2),
+        version: ambre_core::Seq::nth(2),
         sheet_id: gone.clone(),
         row: Pos::<Row>::new(0),
         height: ambre_core::Px::<ambre_core::Doc>::new(40.0),

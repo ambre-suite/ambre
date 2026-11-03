@@ -167,12 +167,12 @@ impl ClipboardBlob {
 /// rather than wraps, so a wrapped answer never reads as an older one.
 pub enum ViewportVersion {}
 
-impl ambre_core::GenerationKind for ViewportVersion {
+impl ambre_core::SeqKind for ViewportVersion {
     type IssueRight = ();
     const NAME: &'static str = "ViewportVersion";
 }
 
-impl ambre_core::generation::Wire for ViewportVersion {}
+impl ambre_core::seq::Wire for ViewportVersion {}
 
 /// This tab's clipboard ownership token (`UI-THREAD-007`): written beside a
 /// copy, and read back to know a paste is of this tab's own copy. A distinct

@@ -476,13 +476,13 @@ pub enum MurmureCommand {
     /// `MediaUploaded` of request `id`, or an `ApiError` naming it. The view
     /// holds no document of the channel, so the Logic thread names it.
     UploadFile {
-        id: ambre_core::Generation<crate::Request>,
+        id: ambre_core::Seq<crate::Request>,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
     /// Fetch the file `media_ref` of a message, stored under the channel's
     /// `meta`. The answer is the `MediaDownloaded` of request `id`.
     FetchFile {
-        id: ambre_core::Generation<crate::Request>,
+        id: ambre_core::Seq<crate::Request>,
         media_ref: ContentHash,
     },
     /// Fetch the image `media_ref` of a message and decode it for its

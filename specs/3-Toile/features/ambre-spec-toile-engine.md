@@ -337,7 +337,7 @@ the whole contract between the two threads.
 pub struct DisplayViewport {
     /// The viewport requests applied when the frame was built: the view drops
     /// a frame older than the one it last accepted (`BUS-017`).
-    pub version:   Generation<ViewportVersion>,
+    pub version:   Seq<ViewportVersion>,
     pub viewport:  Viewport,
     /// The board's grid unit, in world units, as its `board` register holds it.
     pub grid_unit: Px<Board>,

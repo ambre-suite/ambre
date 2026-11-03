@@ -230,7 +230,7 @@ pub struct ProseState {
     faces:            Vec<FontBytes>,
     handed:           Option<(loro::Frontiers, usize, Span<Page>)>,
     window:           Span<Page>,
-    handed_version:   Generation<LayoutVersion>,
+    handed_version:   Seq<LayoutVersion>,
     in_view:          Vec<Arc<ShapedLayout>>,
     ids:              ids::IdSource,
     word_count:       WordCount,
@@ -332,7 +332,7 @@ list is `ambre-roadmap.md` E5.
 pub enum ProseCommand {
     Noop,
     /// The view has taken every text change up to `seen`; the answer is `Synced`.
-    Sync          { seen: Generation<TextChangeSeq> },
+    Sync          { seen: Seq<TextChangeSeq> },
 
     // -- Text editing (`features/ambre-spec-prose-text-editing.md`) --
     InsertText    { block_id: BlockId, pos: Pos<DocChar>, text: String },
@@ -553,14 +553,14 @@ pub enum ProseEvent {
     DocUpdated    { payload: LoroPayload },
     /// What that change did to the text, in code points, for a view that holds no document
     /// (`PROSE-UI-001`). The draft and the caret follow it.
-    TextChanged   { origin: ChangeOrigin, seq: Generation<TextChangeSeq>, acked: Generation<TextAck>,
+    TextChanged   { origin: ChangeOrigin, seq: Seq<TextChangeSeq>, acked: Seq<TextAck>,
                     edits: Vec<TextEdit>, removed: Vec<BlockId> },
     /// The paragraph that parted, and the one that carries its tail. The view needs the new
     /// block's identity to leave the caret at its start (`PROSE-UI-141`): it cannot mint the
     /// id and it holds no document to read it from.
     BlockSplit    { source: BlockId, new_block: BlockId },
     /// Every command sent before the `ProseCommand::Sync` it answers has landed.
-    Synced        { acked: Generation<TextAck> },
+    Synced        { acked: Seq<TextAck> },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
     /// A picture finished decrypting, and the blocks that show it are stale (`PROSE-059`,
@@ -758,7 +758,7 @@ pub struct ProseUiState {
     /// (`features/ambre-spec-prose-page-rendering.md`).
     shaped:          Arc<ShapedLayout>,
     /// An older layout is dropped (`features/ambre-spec-prose-page-rendering.md`).
-    layout_version:  Generation<LayoutVersion>,
+    layout_version:  Seq<LayoutVersion>,
     /// The whole live peer set, replaced on each event (`PRESENCE-009`).
     remote_cursors:  Vec<RemoteCursor>,
     word_count:      WordCount,

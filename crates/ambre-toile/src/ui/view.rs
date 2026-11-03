@@ -437,7 +437,7 @@ pub struct ToileView {
     pending_viewport: Option<Viewport>,
     /// The version of the last frame the view accepted. An older one is a
     /// stale answer, and the view drops it (`BUS-017`).
-    accepted_version: ambre_core::Generation<ambre_bus::ViewportVersion>,
+    accepted_version: ambre_core::Seq<ambre_bus::ViewportVersion>,
     initial_viewport_sent: bool,
     fatal: bool,
 
@@ -756,7 +756,7 @@ impl ToileView {
                 canvas_height.get(),
             )),
             display: DisplayViewport {
-                version: ambre_core::Generation::ZERO,
+                version: ambre_core::Seq::ZERO,
                 grid_unit: super::grid::BASE_GRID,
                 reactions: Default::default(),
                 pins: Vec::new(),
@@ -805,7 +805,7 @@ impl ToileView {
             viewport_changed: false,
             data_dirty: false,
             pending_viewport: None,
-            accepted_version: ambre_core::Generation::ZERO,
+            accepted_version: ambre_core::Seq::ZERO,
             initial_viewport_sent: false,
             fatal: false,
             pending_clipboard: None,
@@ -4388,7 +4388,7 @@ impl ToileView {
         self.close_all_embeds();
         self.document_id = document_id;
         self.display = DisplayViewport {
-            version: ambre_core::Generation::ZERO,
+            version: ambre_core::Seq::ZERO,
             grid_unit: super::grid::BASE_GRID,
             reactions: Default::default(),
             pins: Vec::new(),
@@ -4420,7 +4420,7 @@ impl ToileView {
         self.gesture_commit_pending = false;
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
-        self.accepted_version = ambre_core::Generation::ZERO;
+        self.accepted_version = ambre_core::Seq::ZERO;
         self.needs_full = true;
         // Keep the transparent text pipe focused so the keyboard works on the
         // freshly-routed board without a click.

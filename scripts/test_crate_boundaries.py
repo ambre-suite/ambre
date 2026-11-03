@@ -1123,9 +1123,9 @@ class CrateBoundaries(unittest.TestCase):
         for line in (
             "fn f() { let id = ambre_bus::next_request(); }\n",
             "fn f(c: TrameCommand) {}\n",
-            "fn f() { let id = Generation::<Request>::ZERO.next(); }\n",
-            "fn f() { let id = Generation::from_stored(1); }\n",
-            "fn f() { let id = ambre_core::Generation::ZERO.next(); }\n",
+            "fn f() { let id = Seq::<Request>::ZERO.next(); }\n",
+            "fn f() { let id = Seq::new(1); }\n",
+            "fn f() { let id = ambre_core::Seq::ZERO.next(); }\n",
             "static ISSUER: SharedIssuer<ambre_bus::Request> = SharedIssuer::new(());\n",
             "fn f() { let issuer = Issuer::<Request>::new(()); }\n",
         ):

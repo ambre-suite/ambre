@@ -652,13 +652,13 @@ mod tests {
             col_end: Pos::<Col>::new(5),
         };
         let mut queue = ViewportQueue::default();
-        queue.coalesce(scroll(ambre_core::Generation::nth(1)));
-        queue.coalesce(scroll(ambre_core::Generation::nth(2)));
+        queue.coalesce(scroll(ambre_core::Seq::nth(1)));
+        queue.coalesce(scroll(ambre_core::Seq::nth(2)));
         assert!(
             matches!(
                 queue.take(),
                 Some(TrameCommand::ScrollViewport { version, .. })
-                    if version == ambre_core::Generation::nth(2)
+                    if version == ambre_core::Seq::nth(2)
             ),
             "the newer request wins"
         );
@@ -710,7 +710,7 @@ mod tests {
 
     fn scroll_cmd(version: u64) -> TrameCommand {
         TrameCommand::ScrollViewport {
-            version: ambre_core::Generation::nth(version),
+            version: ambre_core::Seq::nth(version),
             row_start: Pos::<Row>::ZERO,
             row_end: Pos::<Row>::ZERO,
             col_start: Pos::<Col>::ZERO,
@@ -731,7 +731,7 @@ mod tests {
             matches!(
                 sent,
                 TrameCommand::ScrollViewport { version, .. }
-                    if version == ambre_core::Generation::nth(2)
+                    if version == ambre_core::Seq::nth(2)
             ),
             "the newest request wins"
         );
@@ -749,7 +749,7 @@ mod tests {
         assert!(matches!(
             again,
             TrameCommand::ScrollViewport { version, .. }
-                if version == ambre_core::Generation::nth(3)
+                if version == ambre_core::Seq::nth(3)
         ));
         assert!(q.take().is_none());
     }

@@ -34,7 +34,7 @@ impl LogicState {
 
     /// The answer to an erase this thread asked for, which no view awaits.
     /// Returns `false` for any other answer.
-    pub(crate) fn erased(&mut self, id: Generation<Request>, evt: &RestEvent) -> bool {
+    pub(crate) fn erased(&mut self, id: Seq<Request>, evt: &RestEvent) -> bool {
         if self.erasing.remove(&id).is_none() {
             return false;
         }
@@ -47,7 +47,7 @@ impl LogicState {
     /// An erase that did not reach the relay waits for the next connection
     /// (`ambre-spec-murmure-attachments.md`). Returns `false` for any other
     /// request.
-    pub(crate) fn erase_failed(&mut self, id: Generation<Request>) -> bool {
+    pub(crate) fn erase_failed(&mut self, id: Seq<Request>) -> bool {
         let Some(erase) = self.erasing.remove(&id) else {
             return false;
         };

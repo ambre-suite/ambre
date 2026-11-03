@@ -12,7 +12,7 @@ use ambre_core::index::Pos;
 use std::collections::HashMap;
 
 use ambre_bus::{ContentHash, MediaType, Picture};
-use ambre_core::{ByteSize, Generation, GenerationKind, KnownMediaType};
+use ambre_core::{ByteSize, KnownMediaType, Seq, SeqKind};
 use ambre_draw::ImageKey;
 
 use crate::Region;
@@ -39,7 +39,7 @@ pub fn previews(media_type: &MediaType) -> bool {
 /// one.
 enum PaintNumber {}
 
-impl GenerationKind for PaintNumber {
+impl SeqKind for PaintNumber {
     type IssueRight = ();
     const NAME: &'static str = "PaintNumber";
 }
@@ -58,7 +58,7 @@ enum Held {
     /// Decoded, and the paint that last drew it.
     Shown {
         picture: Picture,
-        painted: Generation<PaintNumber>,
+        painted: Seq<PaintNumber>,
     },
     /// Neither fetched nor decoded: its chip stands alone.
     Failed,
@@ -67,13 +67,13 @@ enum Held {
 /// The paint each screen last started: what it drew is on screen.
 #[derive(Default)]
 struct Screens {
-    channel: Generation<PaintNumber>,
-    thread: Generation<PaintNumber>,
+    channel: Seq<PaintNumber>,
+    thread: Seq<PaintNumber>,
 }
 
 impl Screens {
     /// Whether the last paint of a screen is `paint`.
-    fn last_painted(&self, paint: Generation<PaintNumber>) -> bool {
+    fn last_painted(&self, paint: Seq<PaintNumber>) -> bool {
         self.channel == paint || self.thread == paint
     }
 }
@@ -84,7 +84,7 @@ pub struct Pictures {
     bytes: ByteSize,
     cap: ByteSize,
     /// The latest paint, which orders the pictures by their last one.
-    paint: Generation<PaintNumber>,
+    paint: Seq<PaintNumber>,
     screens: Screens,
 }
 
@@ -101,7 +101,7 @@ impl Pictures {
             held: HashMap::new(),
             bytes: ByteSize::new(0),
             cap,
-            paint: Generation::ZERO,
+            paint: Seq::ZERO,
             screens: Screens::default(),
         }
     }

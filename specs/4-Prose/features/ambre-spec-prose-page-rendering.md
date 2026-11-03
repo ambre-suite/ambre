@@ -98,7 +98,7 @@ pub struct ShapedRun(Arc<ParleyRunData>);
 /// blocks, runs, notes and tables of the pages the view asked for (`PROSE-125`).
 #[derive(Clone, Debug, Default)]
 pub struct ShapedLayout {
-    pub version: Generation<LayoutVersion>,
+    pub version: Seq<LayoutVersion>,
     pub layout:  Arc<PageLayout>,
     pub blocks:  HashMap<TreeID, ShapedRun>,
     pub notes:   HashMap<Id<Footnote>, ShapedRun>,

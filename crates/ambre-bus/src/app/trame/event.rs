@@ -154,7 +154,7 @@ pub enum TrameEvent {
     /// [`TrameCommand::ScrollViewport`](super::TrameCommand::ScrollViewport)
     /// so stale responses can be dropped.
     ViewportData {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
         row_start: Pos<Row>,
         col_start: Pos<Col>,
         cells: Vec<DisplayCell>,
@@ -390,7 +390,7 @@ pub enum TrameEvent {
     /// The accompanying [`DataReset`](Self::DataReset) prompts a viewport
     /// re-fetch with the new style overrides applied.
     CondFormatsUpdated {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
     },
 
     /// A local edit was rejected by a [`ValidationOnInvalid::Reject`] rule
@@ -399,7 +399,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Reject`]: super::ValidationOnInvalid::Reject
     ValidationError {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         message: String,
@@ -411,7 +411,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Warn`]: super::ValidationOnInvalid::Warn
     ValidationWarning {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         message: String,
@@ -421,7 +421,7 @@ pub enum TrameEvent {
     /// edit (`trame-cell-editing`, Post-MVP). No CRDT delta was
     /// produced; the chrome surfaces `description`.
     ProtectionDenied {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         description: String,

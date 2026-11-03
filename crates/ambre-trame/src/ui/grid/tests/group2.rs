@@ -52,7 +52,7 @@ fn snap_keeps_multi_block_fill_selection() {
     // Three stacked 2x1 (1 col, 2 rows) merges in column 0: a source block
     // filled down into two more, as a merge-aware autofill leaves them.
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: ambre_core::Generation::ZERO,
+        version: ambre_core::Seq::ZERO,
         row_start: Pos::<Row>::new(0),
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
@@ -113,7 +113,7 @@ fn filtered_rows_collapse_geometry_and_nav() {
     };
     // Rows 0..=4; rows 2 and 3 are filtered out.
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: ambre_core::Generation::ZERO,
+        version: ambre_core::Seq::ZERO,
         row_start: Pos::<Row>::new(0),
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
@@ -224,7 +224,7 @@ fn move_to_and_content_scans() {
     assert_eq!(state.last_content_cell(), None);
 
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: ambre_core::Generation::nth(1),
+        version: ambre_core::Seq::nth(1),
         row_start: Pos::<Row>::new(0),
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
@@ -286,7 +286,7 @@ fn move_to_and_content_scans() {
 fn viewport_data_preserves_formula_raw_for_editing() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: ambre_core::Generation::nth(1),
+        version: ambre_core::Seq::nth(1),
         row_start: Pos::<Row>::new(0),
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
@@ -361,7 +361,7 @@ fn dirty_and_error_lifecycle() {
     assert!(state.formula_errors.contains(&at(0, 0)));
 
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: ambre_core::Generation::nth(1),
+        version: ambre_core::Seq::nth(1),
         row_start: Pos::<Row>::new(0),
         col_start: Pos::<Col>::new(0),
         col_widths: vec![],
@@ -483,15 +483,15 @@ fn a_stale_viewport_answer_is_dropped_by_its_version() {
             ..Default::default()
         }],
     };
-    state.on_viewport_data(answer(ambre_core::Generation::nth(5), "new"));
-    state.on_viewport_data(answer(ambre_core::Generation::nth(3), "old"));
+    state.on_viewport_data(answer(ambre_core::Seq::nth(5), "new"));
+    state.on_viewport_data(answer(ambre_core::Seq::nth(3), "old"));
     let text = |state: &TrameUiState| state.cell_cache.get(&at(0, 0)).map(|c| c.text.clone());
     assert_eq!(
         text(&state).as_deref(),
         Some("new"),
         "the older answer is dropped"
     );
-    state.on_viewport_data(answer(ambre_core::Generation::nth(5), "same"));
+    state.on_viewport_data(answer(ambre_core::Seq::nth(5), "same"));
     assert_eq!(
         text(&state).as_deref(),
         Some("same"),

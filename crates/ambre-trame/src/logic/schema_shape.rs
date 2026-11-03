@@ -369,13 +369,13 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         },
     });
     state.handle_command(TrameCommand::ResizeCol {
-        version: ambre_core::Generation::ZERO,
+        version: ambre_core::Seq::ZERO,
         sheet_id: default_sheet(),
         col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
     });
     state.handle_command(TrameCommand::ResizeRow {
-        version: ambre_core::Generation::ZERO,
+        version: ambre_core::Seq::ZERO,
         sheet_id: default_sheet(),
         row: Pos::<Row>::new(0),
         height: ambre_core::Px::<ambre_core::Doc>::new(33.0),
