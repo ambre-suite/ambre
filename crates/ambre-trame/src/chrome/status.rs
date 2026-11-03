@@ -30,7 +30,7 @@ use crate::chrome::commands::status_label;
 /// only when there is one.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub count: ambre_core::Tally<ambre_bus::app::trame::Cells>,
+    pub count: ambre_core::Count<ambre_bus::app::trame::Cells>,
     pub numbers: Option<ambre_bus::app::trame::NumericStats>,
 }
 

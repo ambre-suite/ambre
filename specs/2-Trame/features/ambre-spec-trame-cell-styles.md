@@ -174,7 +174,7 @@ pub enum CondFormatKind {
     ColorScale2 { min_color: Rgb, max_color: Rgb },
     ColorScale3 { min_color: Rgb, mid_color: Rgb, max_color: Rgb },
     DataBar { color: Rgb },
-    TopN(Tally<Ranks>), BottomN(Tally<Ranks>), TopNPercent(Bounded<Percent>), // 0 to 100, unrounded (`TRAME-239`, `TRAME-240`)
+    TopN(Count<Ranks>), BottomN(Count<Ranks>), TopNPercent(Bounded<Percent>), // 0 to 100, unrounded (`TRAME-239`, `TRAME-240`)
 }
 ```
 

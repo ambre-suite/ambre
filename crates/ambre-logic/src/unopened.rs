@@ -308,7 +308,7 @@ mod tests {
         drain(&sync);
         let message = ActivityCounters {
             active: ambre_bus::Activity::Active,
-            content: ambre_core::Tally::<ambre_core::activity::ContentUpdates>::new(1),
+            content: ambre_core::Count::<ambre_core::activity::ContentUpdates>::new(1),
             ..ActivityCounters::default()
         };
         state.handle_logic_event(LogicEvent::Activity {

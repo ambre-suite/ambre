@@ -27,8 +27,8 @@ use ambre_core::index::Pos;
 use std::collections::BTreeMap;
 
 use ambre_core::{
-    Cells, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Formulas, Generator,
-    ShapeBody, Sheets, Tally, Version, fixture_peer_count, seeded_document_id,
+    Cells, Count, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Formulas, Generator,
+    ShapeBody, Sheets, Version, fixture_peer_count, seeded_document_id,
 };
 
 use super::*;
@@ -44,8 +44,8 @@ impl TrameState {
     /// engine's bytecode cache. The cache is a derived, local structure, and the
     /// manifest describes the document.
     pub fn fixture_shape(&self) -> FixtureShape {
-        let mut cells = Tally::<Cells>::ZERO;
-        let mut formulas = Tally::<Formulas>::ZERO;
+        let mut cells = Count::<Cells>::ZERO;
+        let mut formulas = Count::<Formulas>::ZERO;
         let sheet_ids = self.fixture_sheet_ids();
         for sheet in &sheet_ids {
             if let LoroValue::Map(map) = self
@@ -65,7 +65,7 @@ impl TrameState {
             peers: self.fixture_peer_count(),
             body: ShapeBody::Trame {
                 cells,
-                sheets: Tally::<Sheets>::of_len(sheet_ids.len()),
+                sheets: Count::<Sheets>::of(sheet_ids.len()),
                 formulas,
             },
         }
@@ -205,7 +205,7 @@ impl TrameState {
     /// `oplog_vv()` derefs to a map keyed by `PeerID`; the codebase already calls
     /// it on both engines' sync paths. The count drops the loader's own pinned
     /// peer, so a restored solo document still reports one author.
-    fn fixture_peer_count(&self) -> ambre_core::Tally<ambre_core::Peers> {
+    fn fixture_peer_count(&self) -> ambre_core::Count<ambre_core::Peers> {
         fixture_peer_count(
             self.doc
                 .oplog_vv()

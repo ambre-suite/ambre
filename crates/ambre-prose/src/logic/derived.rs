@@ -133,7 +133,7 @@ impl ProseState {
         toc::build(&self.doc, &tree, &crate::events::tree_id(*id), &pages)
     }
 
-    /// Recount the four text tallies and answer the five figures
+    /// Recount the four text counts and answer the five figures
     /// (`PROSE-FEAT-119`).
     ///
     /// The page count is kept as the last layout stamped it: a recount is not
@@ -163,7 +163,7 @@ impl ProseState {
     }
 
     /// Take the page count of the layout on hand into the figures, and leave
-    /// the four tallies alone (`PROSE-FEAT-126`, `PROSE-FEAT-127`).
+    /// the four counts alone (`PROSE-FEAT-126`, `PROSE-FEAT-127`).
     pub(super) fn stamp_pages(&mut self) {
         if let Some(paginator) = self.paginator.as_ref() {
             self.word_count.pages = paginator.layout().page_count;

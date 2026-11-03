@@ -34,9 +34,7 @@ fn draft(text: &str) -> MessageDraft {
 fn closed_with(texts: &[&str]) -> (ChannelState, Id<Segment>) {
     let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
-        .with_segment_size(ambre_core::Tally::<ambre_bus::Messages>::of_len(
-            texts.len(),
-        ))
+        .with_segment_size(ambre_core::Count::<ambre_bus::Messages>::of(texts.len()))
         .identify();
     let author = Id::<User>::mint();
     for text in texts {
@@ -361,7 +359,7 @@ fn finalized_for(
 ) {
     let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
-        .with_segment_size(ambre_core::Tally::<ambre_bus::Messages>::new(2))
+        .with_segment_size(ambre_core::Count::<ambre_bus::Messages>::new(2))
         .identify();
     let mut bob = peer_of(&alice);
     let segment = alice.active_id();

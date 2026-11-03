@@ -117,7 +117,7 @@ impl TrameState {
     /// the formula cache. Rows a filter hides count, as they do in `SUM`, so the
     /// bar and a formula over the same cells read one total (`TRAME-FEAT-029`).
     /// The sum is the exact one `SUM` takes, for the same reason. `count`
-    /// tallies non-empty cells; numeric cells additionally feed the
+    /// counts non-empty cells; numeric cells additionally feed the
     /// `NumericStats` totals. A read-only query: no CRDT delta.
     ///
     /// A number that is not finite counts as a non-empty cell and enters no
@@ -131,7 +131,7 @@ impl TrameState {
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
 
-        let mut count = ambre_core::Tally::<Cells>::ZERO;
+        let mut count = ambre_core::Count::<Cells>::ZERO;
         let mut numbers: Vec<CellNumber> = Vec::new();
         // The whole selection, deduplicated across every rectangle (`TRAME-UI-104`).
         for at in self.selected_cells() {

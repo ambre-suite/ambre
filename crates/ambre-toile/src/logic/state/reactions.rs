@@ -1,7 +1,7 @@
 //! Reactions / votes for [`ToileState`](super::ToileState) (`toile-reactions`).
 //! Placing an emoji reaction or a vote on an element or frame is shared,
 //! persisted state, keyed by target + canonical `Id<User>`. One user has exactly
-//! one entry per target (a re-vote is LWW on their own key), and tallies are
+//! one entry per target (a re-vote is LWW on their own key), and counts are
 //! convergent.
 //!
 //! **Physical layout.** A single `reactions` root `LoroMap`, keyed by the
@@ -22,13 +22,13 @@
 //! unambiguous, and `target` is recovered by splitting on the first `/`.
 //!
 //! Keyed by `Id<User>`, never `PeerID`: a reaction is a per-user decision that must
-//! survive reload and multi-device use. The tally (count per emoji, vote totals)
+//! survive reload and multi-device use. The count (count per emoji, vote totals)
 //! is **derived on read** ([`reaction_tally`](ToileState::reaction_tally)), never
 //! stored, so it can never drift from the entry set. A reaction on a
 //! concurrently-deleted target is skipped at derivation, never destroyed
 //! (data-never-destroyed).
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use std::collections::{BTreeMap, HashSet};
 
 use loro::LoroValue;
@@ -56,7 +56,7 @@ fn encode<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, ToileError> {
 /// whole-viewport [`ToileState::reaction_tallies`] so both derive identically.
 fn accumulate(
     kind: ReactionKind,
-    emoji: &mut BTreeMap<ambre_bus::Emoji, Tally<Reactions>>,
+    emoji: &mut BTreeMap<ambre_bus::Emoji, Count<Reactions>>,
     tally: &mut ReactionTally,
 ) {
     match kind {
@@ -124,8 +124,8 @@ impl ToileState {
         self.emit_with_update(vec![ToileEvent::ReactionsUpdated(target.clone())])
     }
 
-    /// The read-time reaction tally of `target`, aggregated from the
-    /// per-user entries. A deleted target (no element map) yields an empty tally:
+    /// The read-time reaction count of `target`, aggregated from the
+    /// per-user entries. A deleted target (no element map) yields an empty count:
     /// its orphan entries are skipped at derivation, never rendered, never
     /// destroyed. Scans the shared `reactions` map for the target's prefix.
     pub fn reaction_tally(&self, target: &Id<Element>) -> ReactionTally {
@@ -134,7 +134,7 @@ impl ToileState {
         if self.element_map(target).is_none() {
             return ReactionTally::default();
         }
-        let mut emoji: BTreeMap<ambre_bus::Emoji, Tally<Reactions>> = BTreeMap::new();
+        let mut emoji: BTreeMap<ambre_bus::Emoji, Count<Reactions>> = BTreeMap::new();
         let mut tally = ReactionTally::default();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {
@@ -155,7 +155,7 @@ impl ToileState {
         tally
     }
 
-    /// Derive the reaction tallies of every `visible`, still-existing target in
+    /// Derive the reaction counts of every `visible`, still-existing target in
     /// one scan of the `reactions` map, for the display viewport. Keyed only by
     /// targets that carry at least one reaction. A target absent from `visible`
     /// (culled or deleted) is skipped, so its orphan entries never render. This
@@ -166,7 +166,7 @@ impl ToileState {
         &self,
         visible: &HashSet<Id<Element>>,
     ) -> BTreeMap<Id<Element>, ReactionTally> {
-        let mut emoji: BTreeMap<Id<Element>, BTreeMap<ambre_bus::Emoji, Tally<Reactions>>> =
+        let mut emoji: BTreeMap<Id<Element>, BTreeMap<ambre_bus::Emoji, Count<Reactions>>> =
             BTreeMap::new();
         let mut tallies: BTreeMap<Id<Element>, ReactionTally> = BTreeMap::new();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
@@ -191,7 +191,7 @@ impl ToileState {
                 );
             }
         }
-        // Flush the per-target sorted emoji maps into their tally vectors.
+        // Flush the per-target sorted emoji maps into their count vectors.
         for (target, e) in emoji {
             if let Some(tally) = tallies.get_mut(&target) {
                 tally.emoji = e.into_iter().collect();

@@ -25,7 +25,7 @@
 //! (`MURMURE-523`). A box under its field sends the reply to the channel as
 //! well, and unchecks once sent (`MURMURE-531`).
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::index::{Delta, IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet};
 
@@ -549,7 +549,7 @@ pub struct Composer {
     /// go (`MURMURE-212`).
     sent: Vec<DraftOf>,
     /// How many losses of the shelf the composer applied.
-    losses_seen: Tally<ShelfLosses>,
+    losses_seen: Count<ShelfLosses>,
     /// The files each draft carries, and those still uploading.
     uploads: Uploads,
     /// Each file chip of the last paint that a press takes off the draft, as

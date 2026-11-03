@@ -1,8 +1,8 @@
-//! The word count: four tallies of the text, and the page count beside them
+//! The word count: four counts of the text, and the page count beside them
 //! (`features/ambre-spec-prose-word-count.md`).
 //!
-//! Nothing here writes. The tallies are a function of the text, recomputed on
-//! demand and stored nowhere (`PROSE-FEAT-018`). The page count is not a tally
+//! Nothing here writes. The counts are a function of the text, recomputed on
+//! demand and stored nowhere (`PROSE-FEAT-018`). The page count is not a count
 //! at all: the engine stamps it from the layout it last took.
 //!
 //! **The units.** A character is a grapheme cluster, the unit a reader sees
@@ -11,14 +11,14 @@
 //! paragraph is a text block holding a visible character, so the empty
 //! paragraph a new document opens on counts nothing (`PROSE-FEAT-122`).
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use loro::{LoroDoc, LoroTree, TreeID};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::doc;
 use crate::events::{Graphemes, Paragraphs, WordCount, Words};
 
-/// The four text tallies of the whole document, `pages` left at zero.
+/// The four text counts of the whole document, `pages` left at zero.
 ///
 /// Every text block of the tree is counted, the ones inside a table cell
 /// included, in the order of the document flow. A table of contents stores no
@@ -52,7 +52,7 @@ fn collect(tree: &LoroTree, parent: Option<TreeID>, out: &mut Vec<TreeID>) {
     }
 }
 
-/// Add one block's text to the running tallies.
+/// Add one block's text to the running counts.
 ///
 /// The break between two paragraphs is whitespace the tree does not store. It
 /// counts once with the spaces, between two blocks that each hold a visible
@@ -67,18 +67,18 @@ fn tally(text: &str, count: &mut WordCount) {
         }
     }
     // A document past four billion clusters reads as the largest figure
-    // rather than wrapping: every tally holds at its top.
+    // rather than wrapping: every count holds at its top.
     count.words = count
         .words
-        .plus(Tally::<Words>::of_len(text.unicode_words().count()));
-    count.characters = count.characters.plus(Tally::<Graphemes>::of_len(visible));
+        .plus(Count::<Words>::of(text.unicode_words().count()));
+    count.characters = count.characters.plus(Count::<Graphemes>::of(visible));
     count.characters_with_spaces = count
         .characters_with_spaces
-        .plus(Tally::<Graphemes>::of_len(clusters));
+        .plus(Count::<Graphemes>::of(clusters));
     if visible == 0 {
         return;
     }
-    if count.paragraphs > Tally::<Paragraphs>::ZERO {
+    if count.paragraphs > Count::<Paragraphs>::ZERO {
         count.characters_with_spaces = count.characters_with_spaces.incremented();
     }
     count.paragraphs = count.paragraphs.incremented();

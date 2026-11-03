@@ -120,7 +120,7 @@ pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<Ordinal<List
 
 /// How deep an item sits in its list, counting the items above it in the parent chain
 /// (`PROSE-005`). A top-level item is at depth zero.
-pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Tally<ListDepth>;
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Count<ListDepth>;
 
 /// The numbering style of a block, when it is an ordered item. A bullet, a checkbox and a
 /// block that is not a list item all answer `None`, and each of those breaks a run.

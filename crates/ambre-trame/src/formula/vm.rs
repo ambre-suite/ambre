@@ -21,13 +21,13 @@ use super::compile::SheetIndices;
 use super::functions::call_builtin;
 use super::text::fold_cmp;
 use super::types::{CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal};
-use ambre_core::{Cells, Instant, SheetDateTime, Tally};
+use ambre_core::{Cells, Count, Instant, SheetDateTime};
 
 /// Upper bound on the number of cells a single range reference may materialize
 /// during evaluation. Protects the WASM Logic worker from a peer-supplied
 /// formula (for example `=SUM(A1:ZZ100000)`) whose range would allocate gigabytes.
 /// 1M cells covers any realistic used area while capping the blast radius.
-const MAX_RANGE_CELLS: Tally<Cells> = Tally::<Cells>::new(1_000_000);
+const MAX_RANGE_CELLS: Count<Cells> = Count::<Cells>::new(1_000_000);
 
 /// Ceiling on the range cells one recomputation pass may read, all ranges
 /// together (`TRAME-210`). `MAX_RANGE_CELLS` bounds the memory of one range,
@@ -35,19 +35,19 @@ const MAX_RANGE_CELLS: Tally<Cells> = Tally::<Cells>::new(1_000_000);
 /// formulas each just under it cost a hundred million reads on every recompute.
 /// The ceiling clears a running total over ten thousand rows (`SUM(A$1:An)`,
 /// fifty million reads), the heaviest shape a real sheet takes.
-pub(crate) const MAX_PASS_RANGE_CELLS: Tally<Cells> = Tally::<Cells>::new(64_000_000);
+pub(crate) const MAX_PASS_RANGE_CELLS: Count<Cells> = Count::<Cells>::new(64_000_000);
 
 /// Leave to materialize one range: the count of member cells it may hold.
 /// Only [`grant_range`] makes one, and the range buffer is sized by it alone.
 /// So no range over the caps is ever allocated (`TRAME-209`).
 #[derive(Debug, PartialEq, Eq)]
-struct RangeGrant(Tally<Cells>);
+struct RangeGrant(Count<Cells>);
 
 /// Grant a `rows` x `cols` range against the per-range cap and what the pass
 /// has `left`. A grant debits `left`. A refusal leaves it whole and allocates
 /// nothing (`TRAME-209`, `TRAME-210`).
-fn grant_range(rows: Len<Row>, cols: Len<Col>, left: &mut Tally<Cells>) -> Option<RangeGrant> {
-    let cells = Tally::<Cells>::new(u64::from(rows.get()) * u64::from(cols.get()));
+fn grant_range(rows: Len<Row>, cols: Len<Col>, left: &mut Count<Cells>) -> Option<RangeGrant> {
+    let cells = Count::<Cells>::new(u64::from(rows.get()) * u64::from(cols.get()));
     if cells > MAX_RANGE_CELLS || cells > *left {
         return None;
     }
@@ -81,7 +81,7 @@ pub struct EvalContext<'a> {
     pub current_col: Option<Pos<Col>>,
     /// Range cells this pass may still read ([`MAX_PASS_RANGE_CELLS`]). A range
     /// that would overdraw it reads as `#REF!`, like one over `MAX_RANGE_CELLS`.
-    pub range_cells_left: Tally<Cells>,
+    pub range_cells_left: Count<Cells>,
 }
 
 impl<'a> EvalContext<'a> {
@@ -728,10 +728,10 @@ mod tests {
         );
         assert_eq!(ctx.range_cells_left, MAX_PASS_RANGE_CELLS);
         // Room for two reads of the hundred cells, not three.
-        ctx.range_cells_left = Tally::<Cells>::new(250);
+        ctx.range_cells_left = Count::<Cells>::new(250);
         assert_eq!(ctx.execute(&bc).to_display(), "0");
         assert_eq!(ctx.execute(&bc).to_display(), "0");
-        assert_eq!(ctx.range_cells_left, Tally::<Cells>::new(50));
+        assert_eq!(ctx.range_cells_left, Count::<Cells>::new(50));
         assert_eq!(ctx.execute(&bc).to_display(), "#REF!");
     }
 

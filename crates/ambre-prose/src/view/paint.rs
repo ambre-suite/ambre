@@ -9,7 +9,7 @@
 //! writes nothing to the document (`PROSE-UI-120`).
 
 use ambre_core::index::{Len, Pos, Span};
-use ambre_core::{Byte, Tally};
+use ambre_core::{Byte, Count};
 use ambre_core::{Px, Surface};
 use ambre_draw::{Affine, DocumentWalk, DrawSurface, Point, Rect};
 
@@ -276,7 +276,7 @@ impl ProseUiState {
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
-            highlights_walked: Tally::<Highlights>::ZERO,
+            highlights_walked: Count::<Highlights>::ZERO,
         };
         walk.walk(&view, region, surface);
         self.highlights_walked = self.highlights_walked.plus(walk.highlights_walked);
@@ -766,7 +766,7 @@ mod tests {
 
     use ambre_core::Byte;
     use ambre_core::id::{Id, User};
-    use ambre_core::{Doc, Px, Surface, Tally, View};
+    use ambre_core::{Count, Doc, Px, Surface, View};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Color, DocumentWalk};
 
@@ -865,10 +865,10 @@ mod tests {
         let mut ui = ProseUiState::default();
         ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
         ui.apply_layout(shaped);
-        assert_eq!(ui.runs.built(), Tally::<Builds>::ZERO);
+        assert_eq!(ui.runs.built(), Count::<Builds>::ZERO);
         let first_paint = paint(&mut ui);
         let built = ui.runs.built();
-        assert!(built >= Tally::<Builds>::new(6));
+        assert!(built >= Count::<Builds>::new(6));
         let second_paint = paint(&mut ui);
         assert_eq!(ui.runs.built(), built);
         // A paint reads the layout and changes nothing: two paints agree.
@@ -1127,7 +1127,7 @@ mod tests {
         let drawn: usize = built.into_iter().map(|page| ui.blocks_on(page).len()).sum();
         assert_eq!(
             ui.highlights_walked,
-            ambre_core::Tally::<crate::view::walk::Highlights>::of_len(drawn)
+            ambre_core::Count::<crate::view::walk::Highlights>::of(drawn)
         );
         assert!(drawn < ids.len());
     }
@@ -2157,10 +2157,10 @@ mod tests {
             let mut walked = RecordingSurface::new();
             PageWalk {
                 runs: &mut runs,
-                highlights_walked: ambre_core::Tally::<crate::view::walk::Highlights>::ZERO,
+                highlights_walked: ambre_core::Count::<crate::view::walk::Highlights>::ZERO,
             }
             .walk(&view, region, &mut walked);
-            proptest::prop_assert!(walked.count(glyphs) > ambre_core::Tally::<ambre_draw::testing::Ops>::ZERO);
+            proptest::prop_assert!(walked.count(glyphs) > ambre_core::Count::<ambre_draw::testing::Ops>::ZERO);
             proptest::prop_assert!(screen.holds_walk(&walked));
         }
     }

@@ -5,7 +5,7 @@
 //! holds a shaper. It measures and returns; it writes nothing back to the
 //! document it read (`PROSE-079`).
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::index::{Axis, Delta, Len, MeasuresAs, Pos, Span};
 use parley::{
     Alignment, AlignmentOptions, FontContext, FontFamily, FontStyle, FontWeight, Layout,
@@ -279,7 +279,7 @@ pub(crate) fn shipped_measurer() -> Measurer {
 /// How many runs a measurer shaped.
 pub enum ShapedRuns {}
 
-impl ambre_core::TallyKind for ShapedRuns {
+impl ambre_core::CountKind for ShapedRuns {
     type Repr = u32;
     const NAME: &'static str = "ShapedCount";
 }
@@ -293,7 +293,7 @@ pub struct Measurer {
     layout_cx: LayoutContext<ParleyBrush>,
     /// How many runs have been shaped. It is what makes a reflow that
     /// re-shapes an untouched block observable (`PROSE-083`).
-    shaped: Tally<ShapedRuns>,
+    shaped: Count<ShapedRuns>,
     /// The scripts met since the last full run that no loaded face covers
     /// (`PROSE-110`). A layout carries it so a consumer can tell a settled
     /// measurement from one still waiting for a face.
@@ -317,14 +317,14 @@ impl Measurer {
         Self {
             font_cx: ambre_draw::sealed_font_context(),
             layout_cx: LayoutContext::new(),
-            shaped: Tally::<ShapedRuns>::ZERO,
+            shaped: Count::<ShapedRuns>::ZERO,
             missing: ScriptSet::new(),
         }
     }
 
     /// How many runs this measurer has shaped since it was built.
     #[must_use]
-    pub fn shaped(&self) -> Tally<ShapedRuns> {
+    pub fn shaped(&self) -> Count<ShapedRuns> {
         self.shaped
     }
 
@@ -992,7 +992,7 @@ mod tests {
                 &[],
                 None,
             );
-            assert_eq!(measurer.shaped(), before.plus(Tally::<ShapedRuns>::new(2)));
+            assert_eq!(measurer.shaped(), before.plus(Count::<ShapedRuns>::new(2)));
             if next.data().segment_count() > Len::<RunSegment>::ONE {
                 partial += 1;
             }

@@ -376,7 +376,7 @@ struct Wiring {
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
-    /// Toile status-bar selection aggregates (toile-status-bar): element tally +
+    /// Toile status-bar selection aggregates (toile-status-bar): element count +
     /// combined world bounds; `None` on an empty selection. Set by the per-frame
     /// relay on `ToileEvent::SelectionStats`.
     sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
@@ -646,7 +646,7 @@ pub fn main() {
     // `SelectionStats` event and cleared by the view on a single cell. Also the
     // live perf snapshot pumped from `perf_pub` below.
     let sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
-    // Toile selection aggregates (toile-status-bar): element tally + world bounds,
+    // Toile selection aggregates (toile-status-bar): element count + world bounds,
     // mirrored from `ToileEvent::SelectionStats`. Cleared to `None` on an empty
     // selection so the band shows only the zoom chip.
     let sel_stats_toile = RwSignal::new(None::<toile_chrome::SelStats>);

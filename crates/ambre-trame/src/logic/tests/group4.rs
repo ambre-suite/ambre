@@ -599,7 +599,7 @@ fn active_column_values_are_distinct_sorted_and_visible() {
 }
 
 /// `RequestSelectionStats` aggregates the tracked selection for the status bar
-/// (`trame-status-bar`): `count` tallies non-empty cells, the numeric ones feed
+/// (`trame-status-bar`): `count` counts non-empty cells, the numeric ones feed
 /// `count_num`/`sum`/`avg`/`min`/`max`.
 #[test]
 fn selection_stats_aggregate_numeric_cells() {

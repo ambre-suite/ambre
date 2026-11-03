@@ -42,7 +42,7 @@ use crate::view::column::PageColumn;
 pub use crate::view::column::Viewport;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
-/// How long the text must stay still before the four tallies are recounted
+/// How long the text must stay still before the four counts are recounted
 /// (`PROSE-FEAT-124`).
 ///
 /// A fast typist then pays for one recount per pause rather than one per
@@ -472,7 +472,7 @@ pub struct ProseUiState {
     pub(crate) remote_at: HashMap<BlockId, Vec<RemoteCursor>>,
     /// How many highlights paints have read, for the tests to hold
     /// `PROSE-UI-020` against.
-    pub(crate) highlights_walked: ambre_core::Tally<crate::view::walk::Highlights>,
+    pub(crate) highlights_walked: ambre_core::Count<crate::view::walk::Highlights>,
     /// A link target a press asked to open, until the host takes it
     /// (`PROSE-UI-071`).
     pub followed: Option<ambre_core::LinkUrl>,
@@ -1090,10 +1090,10 @@ mod tests {
     #[test]
     fn the_status_bar_reads_the_five_figures() {
         let count = WordCount {
-            words: ambre_core::Tally::<crate::events::Words>::new(12),
-            characters: ambre_core::Tally::<crate::events::Graphemes>::new(1),
-            characters_with_spaces: ambre_core::Tally::<crate::events::Graphemes>::new(70),
-            paragraphs: ambre_core::Tally::<crate::events::Paragraphs>::new(3),
+            words: ambre_core::Count::<crate::events::Words>::new(12),
+            characters: ambre_core::Count::<crate::events::Graphemes>::new(1),
+            characters_with_spaces: ambre_core::Count::<crate::events::Graphemes>::new(70),
+            paragraphs: ambre_core::Count::<crate::events::Paragraphs>::new(3),
             pages: Len::<crate::events::Page>::new(1),
         };
         assert_eq!(

@@ -184,19 +184,19 @@ pub struct FixtureManifest {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct FixtureShape {
     /// Distinct peers whose ops are present; 1 for a solo document.
-    pub peers: Tally<Peers>,
+    pub peers: Count<Peers>,
     pub body: ShapeBody,
 }
 
 /// Per-application rather than a union of nullable counters: an application
 /// that joins later adds a variant instead of widening every existing row with
-/// a field that means nothing to it. Each count is a tally of its own kind,
+/// a field that means nothing to it. Each count is a count of its own kind,
 /// and serde sees the bare number.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
-    Trame { cells: Tally<Cells>, sheets: Tally<Sheets>, formulas: Tally<Formulas> },
-    Toile { elements: Tally<Elements>, frames: Tally<BoardFrames>, connectors: Tally<Connectors> },
-    Prose { blocks: Tally<DocBlocks>, characters: Len<Char> },
+    Trame { cells: Count<Cells>, sheets: Count<Sheets>, formulas: Count<Formulas> },
+    Toile { elements: Count<Elements>, frames: Count<BoardFrames>, connectors: Count<Connectors> },
+    Prose { blocks: Count<DocBlocks>, characters: Len<Char> },
 }
 ```
 

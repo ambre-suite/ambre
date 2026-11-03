@@ -421,7 +421,7 @@ pub struct AskedAll {
     /// The channel the send writes in.
     pub channel: Id<Channel>,
     /// How many members the channel holds, as the question says.
-    pub members: ambre_core::Tally<ambre_core::Members>,
+    pub members: ambre_core::Count<ambre_core::Members>,
     /// The draft, and the thread it answers for a reply.
     pub held: HeldSend,
 }
@@ -470,7 +470,7 @@ impl AskedAll {
 }
 
 /// The question an `@channel` past the member threshold asks.
-pub fn asked_all_title(members: ambre_core::Tally<ambre_core::Members>) -> String {
+pub fn asked_all_title(members: ambre_core::Count<ambre_core::Members>) -> String {
     format!("Notify all {} members of this channel?", members.get())
 }
 
@@ -786,7 +786,7 @@ mod tests {
         };
         let asked = AskedAll {
             channel,
-            members: ambre_core::Tally::<ambre_core::Members>::new(12),
+            members: ambre_core::Count::<ambre_core::Members>::new(12),
             held: HeldSend {
                 draft: draft.clone(),
                 attachments: Vec::new(),
@@ -828,7 +828,7 @@ mod tests {
             } if channel_id == channel && r == root && d == draft && now.get() == 8
         ));
         assert_eq!(
-            asked_all_title(ambre_core::Tally::<ambre_core::Members>::new(12)),
+            asked_all_title(ambre_core::Count::<ambre_core::Members>::new(12)),
             "Notify all 12 members of this channel?"
         );
     }

@@ -314,14 +314,14 @@ fn too_many_elements_aborts_atomically() {
     }
     svg.push_str("</svg>");
     let limits = Limits {
-        max_elements: ambre_core::Tally::<ambre_core::Elements>::new(4),
+        max_elements: ambre_core::Count::<ambre_core::Elements>::new(4),
         ..Limits::default()
     };
     let err = import_svg(svg.as_bytes(), &limits).unwrap_err();
     assert_eq!(
         err,
         ImportError::TooManyElements {
-            limit: ambre_core::Tally::<ambre_core::Elements>::new(4)
+            limit: ambre_core::Count::<ambre_core::Elements>::new(4)
         }
     );
 }
@@ -339,14 +339,14 @@ fn too_deep_nesting_aborts_atomically() {
     }
     svg.push_str("</svg>");
     let limits = Limits {
-        max_depth: ambre_core::Tally::<super::ImportDepth>::new(3),
+        max_depth: ambre_core::Count::<super::ImportDepth>::new(3),
         ..Limits::default()
     };
     let err = import_svg(svg.as_bytes(), &limits).unwrap_err();
     assert_eq!(
         err,
         ImportError::TooDeep {
-            limit: ambre_core::Tally::<super::ImportDepth>::new(3)
+            limit: ambre_core::Count::<super::ImportDepth>::new(3)
         }
     );
 }

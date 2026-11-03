@@ -1304,7 +1304,7 @@ fn a_closing_segment_not_held_blocks_the_next_close() {
     let Ok(Opening::Open(state)) = opening.ready(stored.active_id.document_id()) else {
         panic!("the active segment opens the channel");
     };
-    let mut state = (*state).with_segment_size(ambre_core::Tally::<ambre_bus::Messages>::ZERO);
+    let mut state = (*state).with_segment_size(ambre_core::Count::<ambre_bus::Messages>::ZERO);
     assert_eq!(state.wants_close(), None);
 }
 
@@ -1312,7 +1312,7 @@ fn a_closing_segment_not_held_blocks_the_next_close() {
 #[test]
 fn a_channel_with_no_closing_segment_asks_to_close_at_the_size() {
     let (stored, _, _) = two_finals();
-    let mut state = open(&stored).with_segment_size(ambre_core::Tally::<ambre_bus::Messages>::ZERO);
+    let mut state = open(&stored).with_segment_size(ambre_core::Count::<ambre_bus::Messages>::ZERO);
     assert_eq!(state.wants_close(), Some(stored.active_id));
 }
 

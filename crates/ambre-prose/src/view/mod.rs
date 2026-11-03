@@ -595,7 +595,7 @@ pub(crate) mod tests {
         // The view holds the runs it was handed and built none of them.
         assert_eq!(
             ui.runs.built(),
-            ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+            ambre_core::Count::<crate::view::cache::Builds>::ZERO
         );
     }
 

@@ -27,7 +27,7 @@
 //! * [`SeqKind::NAME`], the name `Debug` prints;
 //! * [`Wire`], for a family whose number crosses a wire or a store;
 //! * [`Before`], for a family that steps back to the number before;
-//! * [`CountsSince`], for a family whose gap between two numbers is a tally;
+//! * [`CountsSince`], for a family whose gap between two numbers is a count;
 //! * [`SeqColumn`], for a family a store keeps in a signed 64-bit column.
 
 use std::cmp::Ordering as CmpOrdering;
@@ -36,7 +36,7 @@ use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::tally::{Tally, TallyColumn, TallyKind};
+use crate::count::{Count, CountColumn, CountKind};
 
 /// The marker of one family of sequence numbers.
 ///
@@ -129,7 +129,7 @@ pub trait Wire: SeqKind<IssueRight = ()> {}
 pub trait Before: SeqKind {}
 
 /// A family whose gap between two numbers counts the things it numbered, as
-/// a tally of [`CountsSince::Tally`].
+/// a count of [`CountsSince::Count`].
 ///
 /// A capability that each family opts in to. A family that numbers nothing
 /// countable has no `since`:
@@ -144,8 +144,8 @@ pub trait Before: SeqKind {}
 /// let _ = Seq::<Pings>::ZERO.since(Seq::<Pings>::ZERO);
 /// ```
 pub trait CountsSince: SeqKind {
-    /// The kind of tally a gap counts.
-    type Tally: TallyKind;
+    /// The kind of count a gap counts.
+    type Count: CountKind;
 }
 
 /// A wire family a store keeps in a signed 64-bit column.
@@ -240,10 +240,10 @@ impl<K: Before> Seq<K> {
 impl<K: CountsSince> Seq<K> {
     /// The things the family numbered after `earlier`, up to this number.
     /// Zero when this number is not past `earlier`, and held at the top of
-    /// the tally's width.
+    /// the count's width.
     #[must_use]
-    pub fn since(self, earlier: Self) -> Tally<K::Tally> {
-        Tally::<K::Tally>::saturating_from_u64(self.raw.saturating_sub(earlier.raw))
+    pub fn since(self, earlier: Self) -> Count<K::Count> {
+        Count::<K::Count>::saturating_from_u64(self.raw.saturating_sub(earlier.raw))
     }
 }
 
@@ -440,7 +440,7 @@ impl Before for Relay {}
 
 /// The gap between two of the relay's numbers counts the deltas it stored.
 impl CountsSince for Relay {
-    type Tally = Deltas;
+    type Count = Deltas;
 }
 
 /// The relay stores its numbers in Postgres.
@@ -451,19 +451,19 @@ impl SeqColumn for Relay {}
 /// numbers are.
 pub enum Deltas {}
 
-impl TallyKind for Deltas {
+impl CountKind for Deltas {
     type Repr = u64;
     const NAME: &'static str = "DeltaCount";
 }
 
 /// The relay reads a `COUNT` of rows from Postgres.
-impl TallyColumn for Deltas {}
+impl CountColumn for Deltas {}
 
 #[cfg(test)]
 mod tests {
     use super::{Deltas, Issuer, Relay, Seq, SeqKind, SharedIssuer, Wire};
+    use crate::count::Count;
     use crate::span::StoredAsI64;
-    use crate::tally::Tally;
 
     /// An open test family.
     enum Tick {}
@@ -486,8 +486,8 @@ mod tests {
         Seq::<Relay>::new(n)
     }
 
-    fn deltas(n: u64) -> Tally<Deltas> {
-        Tally::<Deltas>::new(n)
+    fn deltas(n: u64) -> Count<Deltas> {
+        Count::<Deltas>::new(n)
     }
 
     #[test]
@@ -566,8 +566,8 @@ mod tests {
     /// returns, reads as zero, and a count past `i64::MAX` saturates.
     #[test]
     fn a_delta_count_round_trips_through_a_signed_column() {
-        assert_eq!(Tally::<Deltas>::from_i64(12), deltas(12));
-        assert_eq!(Tally::<Deltas>::from_i64(-3), deltas(0));
+        assert_eq!(Count::<Deltas>::from_i64(12), deltas(12));
+        assert_eq!(Count::<Deltas>::from_i64(-3), deltas(0));
         assert_eq!(deltas(u64::MAX).to_i64_saturating(), i64::MAX);
         assert_eq!(format!("{:?}", deltas(2)), "DeltaCount(2)");
     }

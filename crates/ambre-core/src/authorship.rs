@@ -82,7 +82,7 @@ impl OpCounter {
 /// id, or a Trame row or column uid. One session mints each value once, so
 /// the pair with its PeerID names one thing.
 ///
-/// An id part, not a tally: two mints of one value would give two things
+/// An id part, not a count: two mints of one value would give two things
 /// one id. So it has no step that holds at the top or wraps, only
 /// [`next`](Self::next), which ends at `u32::MAX`.
 /// `#[serde(transparent)]`, so it reads and writes the bare integer.

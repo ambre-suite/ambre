@@ -245,8 +245,8 @@ fn activity(
         channels: vec![ChannelActivity {
             channel_id,
             active,
-            unread: counts.map(|(m, _)| ambre_core::Tally::<Unread>::new(m)),
-            mentions: counts.map(|(_, n)| ambre_core::Tally::<Mentions>::new(n)),
+            unread: counts.map(|(m, _)| ambre_core::Count::<Unread>::new(m)),
+            mentions: counts.map(|(_, n)| ambre_core::Count::<Mentions>::new(n)),
         }],
     }
 }
@@ -1294,7 +1294,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         channels: vec![ChannelMatches {
             channel_id: acme.general,
             covered: vec![segment],
-            listed: ambre_core::Tally::<ambre_bus::Segments>::new(1),
+            listed: ambre_core::Count::<ambre_bus::Segments>::new(1),
             matches: vec![SearchMatch { segment, message }],
         }],
     };

@@ -10,7 +10,7 @@
 //! when the answer reaches the view. No clock crosses a thread.
 
 use ambre_bus::app::prose::ProseEvent;
-use ambre_core::{Seq, Tally};
+use ambre_core::{Count, Seq};
 
 use crate::ui::DraftBuffer;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
@@ -123,7 +123,7 @@ pub struct KeyProbe {
     /// The animation frames begun so far.
     frame: Seq<AnimationFrame>,
     /// The frame counts of the confirmations since the last take.
-    counts: Vec<Tally<AnimationFrames>>,
+    counts: Vec<Count<AnimationFrames>>,
     /// The highest acknowledgement number seen in the draft.
     seen: Option<ambre_core::Seq<ambre_bus::app::prose::TextAck>>,
     undrawn: Vec<Undrawn>,
@@ -137,7 +137,7 @@ impl KeyProbe {
     }
 
     /// The frame counts of the confirmations since the last call.
-    pub fn take_counts(&mut self) -> Vec<Tally<AnimationFrames>> {
+    pub fn take_counts(&mut self) -> Vec<Count<AnimationFrames>> {
         std::mem::take(&mut self.counts)
     }
 
@@ -236,7 +236,7 @@ impl KeyProbe {
 /// The animation frames a confirmation waited for.
 pub enum AnimationFrames {}
 
-impl ambre_core::TallyKind for AnimationFrames {
+impl ambre_core::CountKind for AnimationFrames {
     type Repr = u32;
     const NAME: &'static str = "FrameCount";
 }
@@ -252,9 +252,9 @@ impl ambre_core::SeqKind for AnimationFrame {
 }
 
 /// The gap between two frame numbers counts the frames a confirmation
-/// waited for, held at the top of the 32-bit tally.
+/// waited for, held at the top of the 32-bit count.
 impl ambre_core::CountsSince for AnimationFrame {
-    type Tally = AnimationFrames;
+    type Count = AnimationFrames;
 }
 
 /// The median and the 95th percentile of a set of samples, in the unit the
@@ -507,7 +507,7 @@ mod tests {
         probe.frame();
         draft.confirm(ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1));
         probe.answered(Instant::<PageLoad>::new(33.0), &draft, Answer::Other);
-        assert_eq!(probe.take_counts(), [Tally::<AnimationFrames>::new(2)]);
+        assert_eq!(probe.take_counts(), [Count::<AnimationFrames>::new(2)]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
     }
 
@@ -523,11 +523,11 @@ mod tests {
         assert_eq!(probe.frame, Seq::<AnimationFrame>::nth(u64::MAX));
         assert_eq!(
             Seq::<AnimationFrame>::nth(1).since(Seq::<AnimationFrame>::nth(3)),
-            Tally::<AnimationFrames>::ZERO
+            Count::<AnimationFrames>::ZERO
         );
         assert_eq!(
             Seq::<AnimationFrame>::nth(u64::MAX).since(Seq::<AnimationFrame>::ZERO),
-            Tally::<AnimationFrames>::new(u32::MAX)
+            Count::<AnimationFrames>::new(u32::MAX)
         );
     }
 
@@ -545,13 +545,13 @@ mod tests {
                 p95: TimeSpan::<FracMs>::new(95.0)
             })
         );
-        let frames: Vec<Tally<AnimationFrames>> =
-            (1..=100).rev().map(Tally::<AnimationFrames>::new).collect();
+        let frames: Vec<Count<AnimationFrames>> =
+            (1..=100).rev().map(Count::<AnimationFrames>::new).collect();
         assert_eq!(
-            percentiles(&frames, Tally::<AnimationFrames>::cmp),
+            percentiles(&frames, Count::<AnimationFrames>::cmp),
             Some(Percentiles {
-                median: Tally::<AnimationFrames>::new(51),
-                p95: Tally::<AnimationFrames>::new(95)
+                median: Count::<AnimationFrames>::new(51),
+                p95: Count::<AnimationFrames>::new(95)
             })
         );
     }

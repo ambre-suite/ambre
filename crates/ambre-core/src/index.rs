@@ -153,7 +153,7 @@ pub struct Pos<A: Axis> {
 ///
 /// The name is `Len`, never `Length`: a length is geometric, as `Px<S>` and
 /// `PrintLength<U>` measure it. A len addresses positions; a count of things
-/// that addresses nothing is a `Tally<K>`.
+/// that addresses nothing is a `Count<K>`.
 #[derive(PartialEq, Eq)]
 pub struct Len<A: Axis> {
     raw: u32,

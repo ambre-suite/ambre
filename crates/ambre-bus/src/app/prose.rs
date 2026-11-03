@@ -33,7 +33,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
-use ambre_core::{Pt, Rgb, Tally};
+use ambre_core::{Count, Pt, Rgb};
 
 use super::grid::{CellPos, Col, Row};
 
@@ -850,7 +850,7 @@ pub struct CellBorder {
 /// A number of words, as Unicode word boundaries split the text.
 pub enum Words {}
 
-impl ambre_core::TallyKind for Words {
+impl ambre_core::CountKind for Words {
     type Repr = u32;
     const NAME: &'static str = "WordTotal";
 }
@@ -858,7 +858,7 @@ impl ambre_core::TallyKind for Words {
 /// A number of grapheme clusters: the characters a reader counts.
 pub enum Graphemes {}
 
-impl ambre_core::TallyKind for Graphemes {
+impl ambre_core::CountKind for Graphemes {
     type Repr = u32;
     const NAME: &'static str = "GraphemeCount";
 }
@@ -866,25 +866,25 @@ impl ambre_core::TallyKind for Graphemes {
 /// A number of paragraphs that hold a visible character.
 pub enum Paragraphs {}
 
-impl ambre_core::TallyKind for Paragraphs {
+impl ambre_core::CountKind for Paragraphs {
     type Repr = u32;
     const NAME: &'static str = "ParagraphCount";
 }
 
 /// The five figures of the status bar (`features/ambre-spec-prose-word-count.md`).
 ///
-/// Four are tallies of the text. The fifth is read off the layout, and each
+/// Four are counts of the text. The fifth is read off the layout, and each
 /// half is refreshed by its own trigger.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WordCount {
-    pub words: Tally<Words>,
+    pub words: Count<Words>,
     /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
-    pub characters: Tally<Graphemes>,
+    pub characters: Count<Graphemes>,
     /// The same clusters, whitespace and paragraph breaks included
     /// (`PROSE-FEAT-121`).
-    pub characters_with_spaces: Tally<Graphemes>,
-    pub paragraphs: Tally<Paragraphs>,
-    /// From the layout, never from the tally (`PROSE-FEAT-038`).
+    pub characters_with_spaces: Count<Graphemes>,
+    pub paragraphs: Count<Paragraphs>,
+    /// From the layout, never from the count (`PROSE-FEAT-038`).
     pub pages: Len<Page>,
 }
 
@@ -1616,7 +1616,7 @@ pub enum ProseCommand {
     },
 
     // -- Word count (`features/ambre-spec-prose-word-count.md`) --
-    /// Recount the four text tallies. The view sends it once a run of changes
+    /// Recount the four text counts. The view sends it once a run of changes
     /// has stopped (`PROSE-FEAT-124`); it writes nothing.
     CountWords,
 
@@ -2120,7 +2120,7 @@ impl ConversionReport {
 /// warning carries in place of a repeat.
 pub enum ConversionLosses {}
 
-impl ambre_core::TallyKind for ConversionLosses {
+impl ambre_core::CountKind for ConversionLosses {
     type Repr = u32;
     const NAME: &'static str = "WarningCount";
 }
@@ -2133,19 +2133,19 @@ pub enum ConversionWarning {
     FeatureNotSupported {
         feature: UnsupportedFeature,
         format: ConversionFormat,
-        count: Tally<ConversionLosses>,
+        count: Count<ConversionLosses>,
     },
     /// An element the reader does not recognise, dropped with its markup
     /// and its text kept where it has any (`PROSE-IO-005`).
     ElementDropped {
         element: DroppedElement,
-        count: Tally<ConversionLosses>,
+        count: Count<ConversionLosses>,
     },
     /// A block the tree refuses where the file put it, moved to the nearest
     /// place it allows (`PROSE-IO-026`, `PROSE-IO-052`).
     BlockLifted {
         block: LiftedBlock,
-        count: Tally<ConversionLosses>,
+        count: Count<ConversionLosses>,
     },
 }
 

@@ -10,7 +10,7 @@
 
 use ambre_core::Rgba;
 use ambre_core::index::Pos;
-use ambre_core::{Px, Surface, Tally};
+use ambre_core::{Count, Px, Surface};
 use ambre_draw::{
     Affine, Brush, Color, DocumentWalk, DrawSurface, Point, PositionedLayoutItem, Rect,
 };
@@ -141,13 +141,13 @@ pub struct PageView<'v> {
 pub struct PageWalk<'t> {
     pub(crate) runs: &'t mut RunCache,
     /// The highlights the last call drew.
-    pub(crate) highlights_walked: Tally<Highlights>,
+    pub(crate) highlights_walked: Count<Highlights>,
 }
 
 /// How many highlights a paint read.
 pub enum Highlights {}
 
-impl ambre_core::TallyKind for Highlights {
+impl ambre_core::CountKind for Highlights {
     type Repr = u32;
     const NAME: &'static str = "HighlightCount";
 }
@@ -156,7 +156,7 @@ impl DocumentWalk for PageWalk<'_> {
     type View<'v> = PageView<'v>;
 
     fn walk<S: DrawSurface>(&mut self, view: &PageView<'_>, region: Rect, surface: &mut S) {
-        self.highlights_walked = Tally::<Highlights>::ZERO;
+        self.highlights_walked = Count::<Highlights>::ZERO;
         surface.push_clip(region);
         for page in view.pages {
             let bounds = Rect::new(

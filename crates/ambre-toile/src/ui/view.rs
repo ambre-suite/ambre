@@ -1246,8 +1246,8 @@ impl ToileView {
                 }
                 self.needs_full = true;
             }
-            // A local reaction changed the tally (`toile-reactions`).
-            // The tally rides in `DisplayViewport.reactions`, derived on the
+            // A local reaction changed the count (`toile-reactions`).
+            // The count rides in `DisplayViewport.reactions`, derived on the
             // Logic thread, so the view requests a fresh viewport for the
             // current camera. The resulting `ViewportData` carries the updated
             // badges. (Remote reactions already push a fresh `ViewportData`
@@ -4048,7 +4048,7 @@ impl ToileView {
         }
 
         // Reaction badges (`toile-reactions`): a chip row under each
-        // element carrying a tally. Always visible (edit + present), above content
+        // element carrying a count. Always visible (edit + present), above content
         // and presence.
         reactions::paint_reactions(
             surface,

@@ -294,12 +294,13 @@ in whole days from 1899-12-30, and `SheetDateTime` adds the time of day. The sea
 An instant and a `LamportStamp` share `StoredAsI64`, the signed integer a CRDT or a Postgres row
 keeps. Each type writes the bare number of its unit on the wire and in the store.
 
-**Counts.** A tally is `Tally<K>`, a running count that addresses nothing. Its `TallyKind` marker
-fixes the width, a `u32` or a `u64`, and serde writes the bare number at that width. A len is
-`Len<A>`, an extent in the index space of an axis, beside `Pos<A>`.
+**Counts and lens.** A count is `Count<K>`: how many things of one kind, addressing nothing. Its
+`CountKind` marker fixes the width, a `u32` or a `u64`, and serde writes the bare number at that
+width. A len is `Len<A>`, an extent in the index space of an axis, beside `Pos<A>`. A len is never
+a `Length`: a length is geometric, as `Px<S>` measures it.
 
 **The capabilities of a family.** A family opts in to what it needs, and no other family gets it.
-`Before` steps back one number, `CountsSince` counts the gap between two numbers as a tally, and
+`Before` steps back one number, `CountsSince` counts the gap between two numbers as a `Count`, and
 `SeqColumn` writes the number to a signed 64-bit column. `Seq<Relay>` is the seq of the sequencer,
 and `Seq<DeltaAuthor>` is the clock of a delta. A `LamportStamp` is no sequence number, since many
 peers issue stamps and two may share one.

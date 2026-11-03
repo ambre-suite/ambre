@@ -21,7 +21,7 @@
 // `postMessage`. `LogicEvent`s arrive the same way in reverse.
 // ============================================================================
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use std::collections::{HashMap, HashSet};
 
 /// IndexedDB-backed local snapshot store. Compiled only for wasm, since its
@@ -406,11 +406,11 @@ impl DocState {
     /// How many faces this document measures on, zero for an engine that
     /// measures nothing on this thread (`PROSE-115`).
     #[cfg(test)]
-    fn face_count(&self) -> ambre_core::Tally<ambre_prose::logic::Faces> {
+    fn face_count(&self) -> ambre_core::Count<ambre_prose::logic::Faces> {
         match self {
             DocState::Prose(state) => state.face_count(),
             DocState::Trame(_) | DocState::Toile(_) => {
-                ambre_core::Tally::<ambre_prose::logic::Faces>::ZERO
+                ambre_core::Count::<ambre_prose::logic::Faces>::ZERO
             }
         }
     }
@@ -495,7 +495,7 @@ struct LiveDoc {
     /// `None` until this session saved one, since a delta only makes sense on
     /// top of a snapshot. A document freshly seeded holds a root block of its
     /// own, which a replay of deltas alone would duplicate.
-    logged: Option<Tally<LoggedDeltas>>,
+    logged: Option<Count<LoggedDeltas>>,
     /// Starts `Role::Owner` because a document is materialised optimistically at
     /// `OpenDocument`, before Sync has fetched the members response. Edits route
     /// immediately, exactly as they did before this gate existed. The real role
@@ -662,13 +662,13 @@ fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::Channe
 /// How many deltas a document's local log holds before the next save folds
 /// them into a snapshot. A keystroke then costs a delta, not a whole export,
 /// while a restore never replays more than this many.
-const DELTAS_PER_SNAPSHOT: Tally<LoggedDeltas> = Tally::<LoggedDeltas>::new(256);
+const DELTAS_PER_SNAPSHOT: Count<LoggedDeltas> = Count::<LoggedDeltas>::new(256);
 
 mod logged {
     /// How many deltas a document's local log holds past its last snapshot.
     pub enum LoggedDeltas {}
 
-    impl ambre_core::TallyKind for LoggedDeltas {
+    impl ambre_core::CountKind for LoggedDeltas {
         type Repr = u32;
         const NAME: &'static str = "LoggedDeltas";
     }
@@ -1048,18 +1048,18 @@ impl LogicState {
         };
         let logged = doc
             .logged
-            .map(|n| n.plus(Tally::<LoggedDeltas>::of_len(owed.deltas.len())));
+            .map(|n| n.plus(Count::<LoggedDeltas>::of(owed.deltas.len())));
         let written = !owed.deltas.is_empty();
         let compact = owed.snapshot
             || match logged {
                 None => written,
                 Some(n) => {
                     n > DELTAS_PER_SNAPSHOT
-                        || (moment == AnswerFor::Closing && n > Tally::<LoggedDeltas>::ZERO)
+                        || (moment == AnswerFor::Closing && n > Count::<LoggedDeltas>::ZERO)
                 }
             };
         if compact {
-            doc.logged = Some(Tally::<LoggedDeltas>::ZERO);
+            doc.logged = Some(Count::<LoggedDeltas>::ZERO);
             let snapshot = doc.state.export_snapshot();
             self.send_to_persist(document_id, PersistWrite::Snapshot(snapshot));
         } else {
@@ -1597,7 +1597,7 @@ mod pass_tests {
     fn elements(
         state: &LogicState,
         document_id: Id<Document>,
-    ) -> ambre_core::Tally<ambre_core::Elements> {
+    ) -> ambre_core::Count<ambre_core::Elements> {
         match &state.docs[&document_id].state {
             DocState::Toile(board) => board.element_count(),
             other => panic!("the registry opened {other:?}"),
@@ -1623,8 +1623,8 @@ mod pass_tests {
         state.drain_pass(&from_ui, &from_sync);
         let first = elements(&state, document_id);
         assert!(
-            first > ambre_core::Tally::<ambre_core::Elements>::ZERO
-                && first < ambre_core::Tally::<ambre_core::Elements>::new(1_000),
+            first > ambre_core::Count::<ambre_core::Elements>::ZERO
+                && first < ambre_core::Count::<ambre_core::Elements>::new(1_000),
             "one slice landed: {first}"
         );
         assert!(state.has_pending_work(), "the loop comes back unasked");
@@ -1636,7 +1636,7 @@ mod pass_tests {
         assert!(passes > 2, "the import took {passes} passes");
         assert_eq!(
             elements(&state, document_id),
-            ambre_core::Tally::<ambre_core::Elements>::new(1_000)
+            ambre_core::Count::<ambre_core::Elements>::new(1_000)
         );
     }
 
@@ -1678,7 +1678,7 @@ mod pass_tests {
         );
         assert_eq!(
             elements(&reopened.state, reopened.document_id),
-            ambre_core::Tally::<ambre_core::Elements>::new(1_000)
+            ambre_core::Count::<ambre_core::Elements>::new(1_000)
         );
     }
 
@@ -1716,7 +1716,7 @@ mod pass_tests {
         assert!(!state.has_pending_work(), "the import landed first");
         assert_eq!(
             elements(&state, document_id),
-            ambre_core::Tally::<ambre_core::Elements>::new(1_001)
+            ambre_core::Count::<ambre_core::Elements>::new(1_001)
         );
         state.handle_logic_command(LogicCommand::App {
             document_id,
@@ -1724,7 +1724,7 @@ mod pass_tests {
         });
         assert_eq!(
             elements(&state, document_id),
-            ambre_core::Tally::<ambre_core::Elements>::new(1),
+            ambre_core::Count::<ambre_core::Elements>::new(1),
             "one Undo takes the file back"
         );
     }

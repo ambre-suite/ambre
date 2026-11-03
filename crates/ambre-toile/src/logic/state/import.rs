@@ -8,7 +8,7 @@
 //! each, so the Logic thread answers other messages between them
 //! (`TOILE-IO-028`). One Loro undo group spans every slice.
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::index::Pos;
 use std::collections::HashMap;
 
@@ -69,7 +69,7 @@ pub(super) struct PendingImport {
 /// or one connector.
 pub enum ImportUnits {}
 
-impl ambre_core::TallyKind for ImportUnits {
+impl ambre_core::CountKind for ImportUnits {
     type Repr = u32;
     const NAME: &'static str = "ImportUnitCount";
 }
@@ -77,7 +77,7 @@ impl ambre_core::TallyKind for ImportUnits {
 /// How many entries the board's `media` map holds, or a seed added.
 pub enum MediaEntries {}
 
-impl ambre_core::TallyKind for MediaEntries {
+impl ambre_core::CountKind for MediaEntries {
     type Repr = u32;
     const NAME: &'static str = "MediaEntryCount";
 }
@@ -85,32 +85,32 @@ impl ambre_core::TallyKind for MediaEntries {
 /// How many imports wait on their media uploads.
 pub enum PendingImports {}
 
-impl ambre_core::TallyKind for PendingImports {
+impl ambre_core::CountKind for PendingImports {
     type Repr = u32;
     const NAME: &'static str = "PendingImportCount";
 }
 
 /// How many units one slice of an import applies (`TOILE-IO-028`). A slice
-/// size is a bound, not a tally: nothing counts it up. A running import only
+/// size is a bound, not a count: nothing counts it up. A running import only
 /// adds it to the units it has applied.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct ImportSlice(Tally<ImportUnits>);
+pub(super) struct ImportSlice(Count<ImportUnits>);
 
 impl ImportSlice {
     /// The units applied once one more slice runs after `done` of them.
-    fn end_after(self, done: Tally<ImportUnits>) -> Tally<ImportUnits> {
+    fn end_after(self, done: Count<ImportUnits>) -> Count<ImportUnits> {
         done.plus(self.get())
     }
 
     /// The units one slice applies.
-    pub(super) const fn get(self) -> Tally<ImportUnits> {
+    pub(super) const fn get(self) -> Count<ImportUnits> {
         self.0
     }
 }
 
 /// The slice a running import applies per call. The `import` bench reads its
 /// cost against the keystroke pass row of `ambre-spec-budgets.md`.
-pub(super) const IMPORT_SLICE: ImportSlice = ImportSlice(Tally::<ImportUnits>::new(64));
+pub(super) const IMPORT_SLICE: ImportSlice = ImportSlice(Count::<ImportUnits>::new(64));
 
 /// How much of a running import one call applies.
 #[derive(Clone, Copy)]
@@ -129,7 +129,7 @@ pub(super) struct ImportJob {
     /// The creates not applied yet, in slot order.
     commands: std::vec::IntoIter<ToileCommand>,
     /// How many creates the batch carried.
-    creates: Tally<ImportUnits>,
+    creates: Count<ImportUnits>,
     styles: Vec<Option<ElementStyle>>,
     groups: Vec<ImportGroup>,
     connectors: Vec<ImportConnector>,
@@ -140,7 +140,7 @@ pub(super) struct ImportJob {
     /// The group each group entry built, `None` when it was not.
     group_ids: Vec<Option<Id<Element>>>,
     /// Units applied so far, across the four phases in order.
-    done: Tally<ImportUnits>,
+    done: Count<ImportUnits>,
 }
 
 impl ImportJob {
@@ -148,7 +148,7 @@ impl ImportJob {
         let creates = batch.commands.len();
         Self {
             commands: batch.commands.into_iter(),
-            creates: Tally::<ImportUnits>::of_len(creates),
+            creates: Count::<ImportUnits>::of(creates),
             styles: batch.styles,
             group_ids: Vec::with_capacity(batch.groups.len()),
             groups: batch.groups,
@@ -156,15 +156,15 @@ impl ImportJob {
             media: batch.media,
             report: batch.report,
             slot_ids: Vec::with_capacity(creates),
-            done: Tally::<ImportUnits>::ZERO,
+            done: Count::<ImportUnits>::ZERO,
         }
     }
 
-    fn total(&self) -> Tally<ImportUnits> {
+    fn total(&self) -> Count<ImportUnits> {
         self.creates
-            .plus(Tally::<ImportUnits>::of_len(self.styles.len()))
-            .plus(Tally::<ImportUnits>::of_len(self.groups.len()))
-            .plus(Tally::<ImportUnits>::of_len(self.connectors.len()))
+            .plus(Count::<ImportUnits>::of(self.styles.len()))
+            .plus(Count::<ImportUnits>::of(self.groups.len()))
+            .plus(Count::<ImportUnits>::of(self.connectors.len()))
     }
 
     /// Where the next unit falls: its phase, and its rank in that phase. A
@@ -381,8 +381,7 @@ impl ToileState {
         self.doc.commit();
         self.undo.group_end();
         self.rebuild_caches();
-        report.imported =
-            Tally::<Elements>::of_len(slot_ids.iter().filter(|s| s.is_some()).count());
+        report.imported = Count::<Elements>::of(slot_ids.iter().filter(|s| s.is_some()).count());
         vec![
             self.viewport_event(),
             ToileEvent::ImportReport {
@@ -448,8 +447,8 @@ impl ToileState {
     }
 
     /// Number of imports awaiting media uploads. Test / integration accessor.
-    pub fn pending_import_count(&self) -> Tally<PendingImports> {
-        Tally::<PendingImports>::of_len(self.pending_imports.len())
+    pub fn pending_import_count(&self) -> Count<PendingImports> {
+        Count::<PendingImports>::of(self.pending_imports.len())
     }
 
     /// Apply one unit of the running import. The units run in a strict order,
@@ -590,9 +589,9 @@ impl ToileState {
     ///
     /// Commit-free by design: the caller (`apply_import`) folds this into the one
     /// import undo group alongside the element creates.
-    pub(super) fn seed_media(&mut self, blobs: &[MediaBlob]) -> Tally<MediaEntries> {
+    pub(super) fn seed_media(&mut self, blobs: &[MediaBlob]) -> Count<MediaEntries> {
         let media = self.doc.get_map(Root::Media.as_str());
-        let mut created = Tally::<MediaEntries>::ZERO;
+        let mut created = Count::<MediaEntries>::ZERO;
         for blob in blobs {
             let Some(key) = blob.media.stored().map(ContentHash::as_str) else {
                 // No address from Sync yet: a pending slot never becomes a key.
@@ -621,10 +620,10 @@ impl ToileState {
     }
 
     /// Number of entries in the `media` map. Test / integration accessor.
-    pub fn media_count(&self) -> Tally<MediaEntries> {
+    pub fn media_count(&self) -> Count<MediaEntries> {
         match self.doc.get_map(Root::Media.as_str()).get_deep_value() {
-            LoroValue::Map(m) => Tally::<MediaEntries>::of_len(m.len()),
-            _ => Tally::<MediaEntries>::ZERO,
+            LoroValue::Map(m) => Count::<MediaEntries>::of(m.len()),
+            _ => Count::<MediaEntries>::ZERO,
         }
     }
 
@@ -657,7 +656,7 @@ impl ToileState {
 #[cfg(test)]
 mod tests {
     use ambre_core::index::Pos;
-    use ambre_core::{Elements, Rgba, Tally};
+    use ambre_core::{Count, Elements, Rgba};
     use kurbo::{Point, Size};
 
     use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
@@ -691,7 +690,7 @@ mod tests {
         };
         let (report, outcome) = st.apply_import(batch);
         assert_eq!(report.imported.get(), 5);
-        assert_eq!(st.element_count(), Tally::<Elements>::new(5));
+        assert_eq!(st.element_count(), Count::<Elements>::new(5));
         assert!(outcome.update.is_some(), "one CRDT delta is broadcast");
         assert!(
             outcome.requests.is_empty(),
@@ -699,7 +698,7 @@ mod tests {
         );
         // The single strongest invariant: one Undo empties the whole import.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), Tally::<Elements>::ZERO);
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
     }
 
     #[test]
@@ -755,10 +754,10 @@ mod tests {
         let (report, _) = st.apply_import(batch);
         assert_eq!(report.imported.get(), 3);
         // Three rects plus two group elements.
-        assert_eq!(st.element_count(), Tally::<Elements>::new(5));
+        assert_eq!(st.element_count(), Count::<Elements>::new(5));
         // Still one undo group: a single Undo removes every element AND group.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), Tally::<Elements>::ZERO);
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
     }
 
     #[test]
@@ -771,7 +770,7 @@ mod tests {
             ..Default::default()
         };
         st.apply_import(batch);
-        assert_eq!(st.media_count(), Tally::<MediaEntries>::new(1));
+        assert_eq!(st.media_count(), Count::<MediaEntries>::new(1));
         assert_eq!(
             st.media_meta(&hx("img-hash")),
             Some((32, 32, "image/png".to_owned()))
@@ -804,8 +803,8 @@ mod tests {
     fn seed_media_writes_load_info() {
         let mut st = ToileState::new();
         let n = st.seed_media(&[blob("abc", 640, 480, "image/png")]);
-        assert_eq!(n, Tally::<MediaEntries>::new(1));
-        assert_eq!(st.media_count(), Tally::<MediaEntries>::new(1));
+        assert_eq!(n, Count::<MediaEntries>::new(1));
+        assert_eq!(st.media_count(), Count::<MediaEntries>::new(1));
         assert_eq!(
             st.media_meta(&hx("abc")),
             Some((640, 480, "image/png".to_owned()))
@@ -822,16 +821,16 @@ mod tests {
         ]);
         assert_eq!(
             n,
-            Tally::<MediaEntries>::new(1),
+            Count::<MediaEntries>::new(1),
             "identical hashes seed exactly one entry"
         );
-        assert_eq!(st.media_count(), Tally::<MediaEntries>::new(1));
+        assert_eq!(st.media_count(), Count::<MediaEntries>::new(1));
         // A later seed of the same hash is a no-op (already present).
         assert_eq!(
             st.seed_media(&[blob("dup", 10, 10, "image/png")]),
-            Tally::<MediaEntries>::ZERO
+            Count::<MediaEntries>::ZERO
         );
-        assert_eq!(st.media_count(), Tally::<MediaEntries>::new(1));
+        assert_eq!(st.media_count(), Count::<MediaEntries>::new(1));
     }
 
     #[test]
@@ -845,8 +844,8 @@ mod tests {
             ..blob("unused", 10, 10, "image/png")
         };
         let n = st.seed_media(&[pending]);
-        assert_eq!(n, Tally::<MediaEntries>::ZERO);
-        assert_eq!(st.media_count(), Tally::<MediaEntries>::ZERO);
+        assert_eq!(n, Count::<MediaEntries>::ZERO);
+        assert_eq!(st.media_count(), Count::<MediaEntries>::ZERO);
     }
 
     /// `TOILE-IO-059`: the slot an import names a blob by until Sync answers
@@ -867,12 +866,12 @@ mod tests {
         };
         assert_eq!(
             st.seed_media(&[minted, pending]),
-            Tally::<MediaEntries>::ZERO
+            Count::<MediaEntries>::ZERO
         );
-        assert_eq!(st.media_count(), Tally::<MediaEntries>::ZERO);
+        assert_eq!(st.media_count(), Count::<MediaEntries>::ZERO);
         assert_eq!(
             st.seed_media(&[blob("realhash", 1, 1, "image/png")]),
-            Tally::<MediaEntries>::new(1)
+            Count::<MediaEntries>::new(1)
         );
     }
 
@@ -920,8 +919,8 @@ mod tests {
         assert!(out.update.is_some());
         assert!(out.requests.is_empty());
         assert!(has_report(&out), "an ImportReport is surfaced");
-        assert_eq!(st.element_count(), Tally::<Elements>::new(1));
-        assert_eq!(st.pending_import_count(), Tally::<PendingImports>::ZERO);
+        assert_eq!(st.element_count(), Count::<Elements>::new(1));
+        assert_eq!(st.pending_import_count(), Count::<PendingImports>::ZERO);
     }
 
     /// A file lands where the user dropped it, not at the coordinates it carried
@@ -961,7 +960,7 @@ mod tests {
                 .any(|e| matches!(e, ToileEvent::ImportFailed(_)))
         );
         assert!(out.update.is_none());
-        assert_eq!(st.element_count(), Tally::<Elements>::ZERO);
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
     }
 
     /// Covers `TOILE-IO-071`: an import onto a populated board leaves each
@@ -996,7 +995,7 @@ mod tests {
             at: Point::ZERO,
         });
         assert!(
-            st.element_count() > Tally::<Elements>::new(1),
+            st.element_count() > Count::<Elements>::new(1),
             "the file landed"
         );
         assert_eq!(
@@ -1036,7 +1035,7 @@ mod tests {
                 out.display
             );
         }
-        assert_eq!(st.element_count(), Tally::<Elements>::ZERO);
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
     }
 
     #[test]
@@ -1050,8 +1049,8 @@ mod tests {
         // Async: one upload issued, nothing applied yet.
         assert_eq!(out.requests.len(), 1);
         assert!(out.update.is_none(), "board unchanged until media resolves");
-        assert_eq!(st.element_count(), Tally::<Elements>::ZERO);
-        assert_eq!(st.pending_import_count(), Tally::<PendingImports>::new(1));
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
+        assert_eq!(st.pending_import_count(), Count::<PendingImports>::new(1));
 
         // Sync returns the real hash: the batch lands with it, no `pending:` left.
         let id = first_upload_id(&out);
@@ -1067,13 +1066,13 @@ mod tests {
             done.update.is_some(),
             "the applied batch broadcasts a delta"
         );
-        assert_eq!(st.element_count(), Tally::<Elements>::new(1));
-        assert_eq!(st.media_count(), Tally::<MediaEntries>::new(1));
+        assert_eq!(st.element_count(), Count::<Elements>::new(1));
+        assert_eq!(st.media_count(), Count::<MediaEntries>::new(1));
         assert!(st.media_meta(&hx("realhash")).is_some());
-        assert_eq!(st.pending_import_count(), Tally::<PendingImports>::ZERO);
+        assert_eq!(st.pending_import_count(), Count::<PendingImports>::ZERO);
         // One Undo removes the whole (now-resolved) import.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), Tally::<Elements>::ZERO);
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
     }
 
     /// Covers `TOILE-IO-031`: a picture on the board reaches the page as its
@@ -1141,17 +1140,17 @@ mod tests {
         );
         assert_eq!(
             (st.element_count(), st.media_count()),
-            (Tally::<Elements>::new(1), Tally::<MediaEntries>::new(1))
+            (Count::<Elements>::new(1), Count::<MediaEntries>::new(1))
         );
         st.handle_command(ToileCommand::Undo);
         assert_eq!(
             (st.element_count(), st.media_count()),
-            (Tally::<Elements>::ZERO, Tally::<MediaEntries>::ZERO)
+            (Count::<Elements>::ZERO, Count::<MediaEntries>::ZERO)
         );
         st.handle_command(ToileCommand::Redo);
         assert_eq!(
             (st.element_count(), st.media_count()),
-            (Tally::<Elements>::new(1), Tally::<MediaEntries>::new(1))
+            (Count::<Elements>::new(1), Count::<MediaEntries>::new(1))
         );
         assert!(st.media_meta(&hx("realhash")).is_some());
     }
@@ -1174,12 +1173,12 @@ mod tests {
         );
         assert_eq!(
             st.element_count(),
-            Tally::<Elements>::ZERO,
+            Count::<Elements>::ZERO,
             "board untouched (atomicity)"
         );
         assert_eq!(
             st.pending_import_count(),
-            Tally::<PendingImports>::ZERO,
+            Count::<PendingImports>::ZERO,
             "the registry is drained"
         );
     }
@@ -1198,7 +1197,7 @@ mod tests {
         );
         assert!(out.display.is_empty());
         assert!(out.update.is_none());
-        assert_eq!(st.element_count(), Tally::<Elements>::ZERO);
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
     }
 
     // -- slicing (`TOILE-IO-028`) -------------------------------------------
@@ -1232,7 +1231,7 @@ mod tests {
         assert!(!has_report(&first), "the import is not over");
         assert_eq!(
             st.element_count(),
-            Tally::<Elements>::new(super::IMPORT_SLICE.get().get())
+            Count::<Elements>::new(super::IMPORT_SLICE.get().get())
         );
         assert!(st.has_pending_work());
         let mut resumes = 0;
@@ -1246,7 +1245,7 @@ mod tests {
         // A unit is a create or a style, and the SVG converter styles every slot.
         assert_eq!(resumes, (2 * LARGE).div_ceil(SLICE) - 1);
         assert!(has_report(&last.expect("a last slice")));
-        assert_eq!(st.element_count(), Tally::<Elements>::of_len(LARGE));
+        assert_eq!(st.element_count(), Count::<Elements>::of(LARGE));
         assert!(st.resume().update.is_none(), "nothing left to resume");
     }
 
@@ -1264,7 +1263,7 @@ mod tests {
         assert!(out.update.is_none());
         assert_eq!(
             st.element_count(),
-            Tally::<Elements>::new(super::IMPORT_SLICE.get().get())
+            Count::<Elements>::new(super::IMPORT_SLICE.get().get())
         );
         assert!(st.has_pending_work());
     }
@@ -1282,8 +1281,8 @@ mod tests {
         assert!(!st.has_pending_work(), "the edit finished the import");
         assert!(has_report(&edit), "the edit's answer closes the import");
         peer.apply_remote(&edit.update.expect("one delta"));
-        assert_eq!(st.element_count(), Tally::<Elements>::of_len(LARGE + 1));
-        assert_eq!(peer.element_count(), Tally::<Elements>::of_len(LARGE + 1));
+        assert_eq!(st.element_count(), Count::<Elements>::of(LARGE + 1));
+        assert_eq!(peer.element_count(), Count::<Elements>::of(LARGE + 1));
     }
 
     /// One Undo removes a sliced import whole: every slice shares one undo
@@ -1296,11 +1295,11 @@ mod tests {
         while st.has_pending_work() {
             st.resume();
         }
-        assert_eq!(st.element_count(), Tally::<Elements>::of_len(LARGE + 1));
+        assert_eq!(st.element_count(), Count::<Elements>::of(LARGE + 1));
         st.handle_command(ToileCommand::Undo);
         assert_eq!(
             st.element_count(),
-            Tally::<Elements>::new(1),
+            Count::<Elements>::new(1),
             "the earlier rect stays"
         );
     }
@@ -1314,6 +1313,6 @@ mod tests {
         st.handle_command(large_import());
         st.handle_command(ToileCommand::Undo);
         assert!(!st.has_pending_work());
-        assert_eq!(st.element_count(), Tally::<Elements>::new(1));
+        assert_eq!(st.element_count(), Count::<Elements>::new(1));
     }
 }

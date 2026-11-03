@@ -7,7 +7,7 @@
 
 use ambre_bus::{Authored, Instant, Messages, MurmureEvent};
 use ambre_core::id::{Id, Segment};
-use ambre_core::{ByteSize, DeltaBytes, Failures, Ms, Payload, PeerEntryBytes, Tally, TimeSpan};
+use ambre_core::{ByteSize, Count, DeltaBytes, Failures, Ms, Payload, PeerEntryBytes, TimeSpan};
 use loro::{ExportMode, LoroDoc};
 
 use super::{
@@ -21,7 +21,7 @@ use crate::session::Session;
 
 /// The messages past which an active segment asks to close: the segment size
 /// row of `ambre-spec-budgets.md section 6`.
-pub const SEGMENT_MESSAGES: Tally<Messages> = Tally::<Messages>::new(5000);
+pub const SEGMENT_MESSAGES: Count<Messages> = Count::<Messages>::new(5000);
 
 /// The snapshot bytes past which an active segment asks to close, whatever
 /// its message count: the 2 MB bound of the same row (`MURMURE-481`).
@@ -32,14 +32,14 @@ pub const SEGMENT_SNAPSHOT_SIZE: ByteSize = ByteSize::new(2 * 1024 * 1024);
 pub const SUCCESSOR_RETRY: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_000);
 
 /// The failures past which a successor is no longer fetched again.
-const SUCCESSOR_FAILURES: Tally<Failures> = Tally::<Failures>::new(5);
+const SUCCESSOR_FAILURES: Count<Failures> = Count::<Failures>::new(5);
 
 /// A successor that failed to open, and when to fetch it again
 /// (`MURMURE-482`).
 #[derive(Debug)]
 pub(super) struct Retry {
     segment: Id<Segment>,
-    failures: Tally<Failures>,
+    failures: Count<Failures>,
     /// Stamped by the first tick past the failure: the engine reads no clock.
     at: Option<Instant<Authored>>,
 }
@@ -61,7 +61,7 @@ pub struct Closed {
 impl ChannelState {
     /// This channel, with segments that ask to close past `messages`.
     #[must_use]
-    pub fn with_segment_size(mut self, messages: Tally<Messages>) -> Self {
+    pub fn with_segment_size(mut self, messages: Count<Messages>) -> Self {
         self.segment_size = messages;
         self
     }
@@ -88,9 +88,8 @@ impl ChannelState {
         {
             return None;
         }
-        let messages = Tally::<Messages>::of_len(
-            crate::schema::root_list(&self.active.doc, Root::Messages).len(),
-        );
+        let messages =
+            Count::<Messages>::of(crate::schema::root_list(&self.active.doc, Root::Messages).len());
         if self.key_rotated == Rotation::Settled
             && messages < self.segment_size
             && !self.passes_bytes(messages)
@@ -110,7 +109,7 @@ impl ChannelState {
     /// An export costs milliseconds at 5000 messages, so it is not paid at
     /// each send. Each probe spaces the next by half the messages that would
     /// fill the bound at the mean size seen so far.
-    fn passes_bytes(&mut self, messages: Tally<Messages>) -> bool {
+    fn passes_bytes(&mut self, messages: Count<Messages>) -> bool {
         if messages < self.active.probe_at {
             return false;
         }
@@ -125,7 +124,7 @@ impl ChannelState {
         let per_message = (snapshot.len() / held.max(1)).max(1);
         let room = self.segment_snapshot_size.saturating_sub(bytes).as_len();
         let step = (room / per_message / 2).max(1);
-        self.active.probe_at = messages.plus(Tally::<Messages>::of_len(step));
+        self.active.probe_at = messages.plus(Count::<Messages>::of(step));
         false
     }
 
@@ -259,7 +258,7 @@ impl ChannelState {
             _ => {
                 self.successor_retry = Some(Retry {
                     segment,
-                    failures: Tally::<Failures>::new(1),
+                    failures: Count::<Failures>::new(1),
                     at: None,
                 });
             }
@@ -282,7 +281,7 @@ impl ChannelState {
             return None;
         }
         let Some(at) = retry.at else {
-            let delay = SUCCESSOR_RETRY.doubled(retry.failures.minus(Tally::<Failures>::new(1)));
+            let delay = SUCCESSOR_RETRY.doubled(retry.failures.minus(Count::<Failures>::new(1)));
             retry.at = Some(now.plus(delay));
             return None;
         };

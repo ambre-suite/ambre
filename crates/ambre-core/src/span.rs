@@ -35,7 +35,7 @@
 //! spreadsheet counts its days apart from any clock, so [`Day`] and
 //! [`FracDay`] stay off that trait and never meet a [`Duration`].
 
-use crate::Tally;
+use crate::Count;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -50,7 +50,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// backs off by.
 pub enum Failures {}
 
-impl crate::TallyKind for Failures {
+impl crate::CountKind for Failures {
     type Repr = u32;
     const NAME: &'static str = "FailureCount";
 }
@@ -386,7 +386,7 @@ impl<U: ClockUnit<Repr = u64>> TimeSpan<U> {
     /// The span doubled once per failure of `failures`, saturating at
     /// `u64::MAX` ticks: the delay of a retry that backs off.
     #[must_use]
-    pub const fn doubled(self, failures: Tally<Failures>) -> Self {
+    pub const fn doubled(self, failures: Count<Failures>) -> Self {
         match 1_u64.checked_shl(failures.get()) {
             Some(factor) => self.times(factor),
             None => Self::new(u64::MAX),
@@ -952,7 +952,7 @@ mod tests {
         Authored, Day, Failures, FracMs, Instant, LamportStamp, Ms, Ns, PageLoad, Sec,
         SheetDateTime, SheetDay, StoredAsI64, TimeSpan, UnixMs, UnixSec,
     };
-    use crate::Tally;
+    use crate::Count;
     use std::time::Duration;
 
     #[test]
@@ -993,8 +993,8 @@ mod tests {
     fn a_millisecond_span_scales_and_backs_off_without_overflow() {
         let ms = TimeSpan::<Ms>::new;
         assert_eq!(ms(2_000).times(3), ms(6_000));
-        assert_eq!(ms(2_000).doubled(Tally::<Failures>::new(2)), ms(8_000));
-        assert_eq!(ms(2).doubled(Tally::<Failures>::new(64)), ms(u64::MAX));
+        assert_eq!(ms(2_000).doubled(Count::<Failures>::new(2)), ms(8_000));
+        assert_eq!(ms(2).doubled(Count::<Failures>::new(64)), ms(u64::MAX));
         assert_eq!(ms(u64::MAX).times(2), ms(u64::MAX));
         assert_eq!(ms(1_000).to_timer_i32(), 1_000);
         assert_eq!(ms(u64::MAX).to_timer_i32(), i32::MAX);

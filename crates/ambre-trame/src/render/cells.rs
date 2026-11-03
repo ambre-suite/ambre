@@ -57,7 +57,7 @@ pub(super) fn spill_width<E: Fn(CellPos) -> bool>(
 ///
 /// Grid lines are *not* drawn here: call [`draw_grid_lines_on`] afterwards so the
 /// separators sit on top of the fills. Returns the number of cells that actually
-/// had non-empty text drawn (font-independent tally for stats/tests).
+/// had non-empty text drawn (font-independent count for stats/tests).
 #[allow(clippy::too_many_arguments)]
 pub fn draw_cells_on<'a, S, I, E>(
     surface: &mut S,
@@ -68,13 +68,13 @@ pub fn draw_cells_on<'a, S, I, E>(
     text_pass: TextPass,
     cells: I,
     is_empty: E,
-) -> ambre_core::Tally<ambre_canvas::CellsDrawn>
+) -> ambre_core::Count<ambre_canvas::CellsDrawn>
 where
     S: DrawSurface,
     I: IntoIterator<Item = (CellPos, CellContent<'a>)>,
     E: Fn(CellPos) -> bool,
 {
-    let mut drawn = ambre_core::Tally::<ambre_canvas::CellsDrawn>::ZERO;
+    let mut drawn = ambre_core::Count::<ambre_canvas::CellsDrawn>::ZERO;
 
     for (at, content) in cells {
         let CellPos { row, col } = at;

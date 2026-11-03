@@ -468,7 +468,7 @@ impl std::fmt::Debug for SearchGroup {
 }
 
 /// "1 segment", or "2 segments": the coverage line counts in segments.
-fn segments(count: ambre_core::Tally<ambre_bus::Segments>) -> String {
+fn segments(count: ambre_core::Count<ambre_bus::Segments>) -> String {
     match count.get() {
         1 => "1 segment".to_owned(),
         n => format!("{n} segments"),
@@ -481,7 +481,7 @@ pub fn coverage(channels: &[ChannelMatches]) -> String {
     let covered: usize = channels.iter().map(|c| c.covered.len()).sum();
     let listed = channels
         .iter()
-        .fold(ambre_core::Tally::<ambre_bus::Segments>::ZERO, |all, c| {
+        .fold(ambre_core::Count::<ambre_bus::Segments>::ZERO, |all, c| {
             all.plus(c.listed)
         });
     let open = match channels.len() {

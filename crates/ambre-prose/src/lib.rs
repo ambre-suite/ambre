@@ -19,7 +19,7 @@
 //!   (`features/ambre-spec-prose-cross-references.md`).
 //! * [`suggest`] -- the pending suggestions, read off their marks and entries
 //!   (`features/ambre-spec-prose-track-changes.md`).
-//! * [`count`] -- the word count's four text tallies
+//! * [`count`] -- the word count's four text counts
 //!   (`features/ambre-spec-prose-word-count.md`).
 //! * [`mark`] -- the inline mark registry: the expansion policy and the
 //!   canonical value.

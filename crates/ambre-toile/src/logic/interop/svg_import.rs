@@ -44,7 +44,7 @@
 //! enforced while walking. Any breach aborts the whole import atomically: the
 //! returned `Err` carries no commands.
 
-use ambre_core::{Elements, Rgb, Rgba, Tally};
+use ambre_core::{Count, Elements, Rgb, Rgba};
 use ambre_core::{Px, StoredBoard, index::Pos};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
@@ -98,7 +98,7 @@ pub fn import_svg(
     walk_group(
         tree.root(),
         root_xml,
-        Tally::<ImportDepth>::ZERO,
+        Count::<ImportDepth>::ZERO,
         limits,
         &mut batch,
     )?;
@@ -107,7 +107,7 @@ pub fn import_svg(
         return Err(ImportError::Empty);
     }
     batch.report.imported =
-        ambre_core::Tally::<ambre_bus::app::toile::Elements>::of_len(batch.commands.len());
+        ambre_core::Count::<ambre_bus::app::toile::Elements>::of(batch.commands.len());
     Ok(batch)
 }
 
@@ -140,7 +140,7 @@ fn import_text_node(
             .skip("text: a node the reader could not read a body from");
         return Ok(None);
     }
-    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
+    limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
     let x = node
         .attribute("x")
         .and_then(|v| v.parse::<f64>().ok())
@@ -195,7 +195,7 @@ fn is_drawn(node: roxmltree::Node) -> bool {
 fn walk_group(
     group: &usvg::Group,
     xml: Option<roxmltree::Node>,
-    depth: Tally<ImportDepth>,
+    depth: Count<ImportDepth>,
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Vec<ImportRef>, ImportError> {
@@ -284,7 +284,7 @@ fn import_path(
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<ImportRef, ImportError> {
-    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
+    limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
 
     let bez = to_bezpath(path.data(), &path.abs_transform(), limits);
     let bounds = bez.bounding_box();
@@ -313,7 +313,7 @@ fn import_image(
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Option<ImportRef>, ImportError> {
-    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
+    limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
 
     let raw: &[u8] = match image.kind() {
         usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) => d.as_slice(),

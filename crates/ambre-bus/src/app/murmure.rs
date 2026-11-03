@@ -13,7 +13,7 @@
 //! document (`BUS-027`).
 
 use ambre_core::index::{IdxVec, Len, Pos, Span};
-use ambre_core::{Byte, Char, Recounts, Rule, Tally, TallyKind, Validated};
+use ambre_core::{Byte, Char, Count, CountKind, Recounts, Rule, Validated};
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Category, Channel, Document, Id, Message, Meta, Segment, Space, User};
@@ -55,18 +55,18 @@ pub struct ChannelActivity {
     pub active: crate::Activity,
     /// The new messages of the channel, once the loaded document gives the
     /// number (`MURMURE-120`). `None` while only the mark is known.
-    pub unread: Option<Tally<Unread>>,
+    pub unread: Option<Count<Unread>>,
     /// The new messages that name this user or the channel. A loaded
     /// document counts its marks, so a false summary does not stay
     /// (`MURMURE-104`). `None` while only the mark is known.
-    pub mentions: Option<Tally<Mentions>>,
+    pub mentions: Option<Count<Mentions>>,
 }
 
 /// How many messages a segment or a list holds, or how many a segment
 /// holds before it asks to close.
 pub enum Messages {}
 
-impl TallyKind for Messages {
+impl CountKind for Messages {
     type Repr = u32;
     const NAME: &'static str = "MessageCount";
 }
@@ -75,7 +75,7 @@ impl TallyKind for Messages {
 /// (`MURMURE-233`). A marker of its own beside [`Unread`].
 pub enum Mentions {}
 
-impl TallyKind for Mentions {
+impl CountKind for Mentions {
     type Repr = u32;
     const NAME: &'static str = "MentionCount";
 }
@@ -155,7 +155,7 @@ pub struct DirectPeers {
 /// its own, so a count of mentions never takes its place.
 pub enum Unread {}
 
-impl TallyKind for Unread {
+impl CountKind for Unread {
     type Repr = u32;
     const NAME: &'static str = "UnreadCount";
 }
@@ -597,7 +597,7 @@ impl std::fmt::Debug for MessageView {
 /// How many replies a thread holds, deleted ones aside.
 pub enum Replies {}
 
-impl TallyKind for Replies {
+impl CountKind for Replies {
     type Repr = u32;
     const NAME: &'static str = "ReplyCount";
 }
@@ -605,7 +605,7 @@ impl TallyKind for Replies {
 /// How many segments a channel lists.
 pub enum Segments {}
 
-impl TallyKind for Segments {
+impl CountKind for Segments {
     type Repr = u32;
     const NAME: &'static str = "SegmentCount";
 }
@@ -617,7 +617,7 @@ pub struct ThreadHead {
     pub document: Id<Document>,
     /// The replies the thread document holds, deleted ones aside. Zero
     /// until the document is held.
-    pub replies: Tally<Replies>,
+    pub replies: Count<Replies>,
     /// The author of the latest reply, `None` until the document is held.
     pub last_replier: Option<Id<User>>,
 }
@@ -704,7 +704,7 @@ pub struct ChannelMatches {
     /// The segments searched: the ones the client holds, in list order.
     pub covered: Vec<Id<Segment>>,
     /// How many segments `meta` lists, searched or not.
-    pub listed: Tally<Segments>,
+    pub listed: Count<Segments>,
     /// The matches, segment by segment in list order, each segment's in
     /// message order.
     pub matches: Vec<SearchMatch>,
@@ -772,7 +772,7 @@ pub enum MurmureEvent {
     /// Nothing was sent: the view asks the author, then sends `held` again
     /// confirmed (`MURMURE-231`).
     ConfirmChannelMention {
-        members: Tally<ambre_core::Members>,
+        members: Count<ambre_core::Members>,
         held: HeldSend,
     },
     /// A member reported the snapshot of `segment` as false, and the relay

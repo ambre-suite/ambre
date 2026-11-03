@@ -4,7 +4,7 @@
 //! geometry is derived (never in the CRDT) and lives only in the `bounds` /
 //! R-tree caches.
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use std::collections::HashSet;
 
 use ambre_core::id::{Element, Id};
@@ -301,7 +301,7 @@ impl ToileState {
         // Remove first, so a same-id remove+add re-appends at the end. Every
         // entry goes: two concurrent adds leave one id on the list twice.
         for id in remove {
-            if self.delete_entries(&list, frame, id) > Tally::<Elements>::ZERO {
+            if self.delete_entries(&list, frame, id) > Count::<Elements>::ZERO {
                 changed = true;
             }
         }
@@ -535,7 +535,7 @@ impl ToileState {
             self.unlink_parent(child, parent);
             return;
         };
-        if self.delete_entries(&list, parent, child) == Tally::<Elements>::ZERO {
+        if self.delete_entries(&list, parent, child) == Count::<Elements>::ZERO {
             self.unlink_parent(child, parent);
         }
     }
@@ -548,11 +548,11 @@ impl ToileState {
         list: &LoroMovableList,
         parent: &Id<Element>,
         child: &Id<Element>,
-    ) -> Tally<Elements> {
+    ) -> Count<Elements> {
         let LoroValue::List(items) = list.get_deep_value() else {
-            return Tally::<Elements>::ZERO;
+            return Count::<Elements>::ZERO;
         };
-        let mut gone = Tally::<Elements>::ZERO;
+        let mut gone = Count::<Elements>::ZERO;
         let at = items
             .iter()
             .enumerate()

@@ -15,7 +15,7 @@ use super::{CellNumber, CellRect, Col, SourceForm};
 use crate::app::trame::CellText;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Len;
-use ambre_core::{Bounded, Bounds, Instant, Refusal, Rgb, SheetDateTime, Tally};
+use ambre_core::{Bounded, Bounds, Count, Instant, Refusal, Rgb, SheetDateTime};
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -109,8 +109,8 @@ pub enum CondFormatKind {
     DataBar {
         color: Rgb,
     },
-    TopN(Tally<Ranks>),
-    BottomN(Tally<Ranks>),
+    TopN(Count<Ranks>),
+    BottomN(Count<Ranks>),
     TopNPercent(Bounded<Percent>),
 }
 
@@ -165,7 +165,7 @@ impl std::fmt::Debug for CondFormatKind {
 /// How many of the top or bottom values a rule marks.
 pub enum Ranks {}
 
-impl ambre_core::TallyKind for Ranks {
+impl ambre_core::CountKind for Ranks {
     type Repr = u32;
     const NAME: &'static str = "RankCount";
 }

@@ -1784,7 +1784,7 @@ mod tests {
         let _ = reopened.import_snapshot(&payload);
         assert_eq!(
             reopened.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(1)
+            ambre_core::Count::<ambre_core::Elements>::new(1)
         );
     }
 
@@ -2235,7 +2235,7 @@ mod tests {
         state.open_with_identity(before, DocType::Prose);
         assert_eq!(
             state.docs[&before].state.face_count(),
-            ambre_core::Tally::<ambre_prose::logic::Faces>::ZERO,
+            ambre_core::Count::<ambre_prose::logic::Faces>::ZERO,
             "nothing has been delivered yet"
         );
 
@@ -2244,7 +2244,7 @@ mod tests {
         });
         assert_eq!(
             state.docs[&before].state.face_count(),
-            ambre_core::Tally::<ambre_prose::logic::Faces>::of_len(faces.len()),
+            ambre_core::Count::<ambre_prose::logic::Faces>::of(faces.len()),
             "a document open at delivery takes the faces"
         );
 
@@ -2252,7 +2252,7 @@ mod tests {
         state.open_with_identity(after, DocType::Prose);
         assert_eq!(
             state.docs[&after].state.face_count(),
-            ambre_core::Tally::<ambre_prose::logic::Faces>::of_len(faces.len()),
+            ambre_core::Count::<ambre_prose::logic::Faces>::of(faces.len()),
             "a document opened afterwards takes the same set"
         );
 
@@ -2263,7 +2263,7 @@ mod tests {
         for id in [before, after] {
             assert_eq!(
                 state.docs[&id].state.face_count(),
-                ambre_core::Tally::<ambre_prose::logic::Faces>::of_len(faces.len() + 1),
+                ambre_core::Count::<ambre_prose::logic::Faces>::of(faces.len() + 1),
                 "a face fetched later reaches an open document too"
             );
         }

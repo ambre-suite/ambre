@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-240` | `INV` | The visible set MUST NOT drop an element that meets the viewport. | this spec section 3 | `ambre_toile::logic::index::tests::query_visible_culls_offscreen` -- what the viewport meets and what it does not | none | verified |
 | `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_off_screen_is_culled` | none | verified |
 | `TOILE-017` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same board and the same derived caches. | this spec section 2; `ambre-spec-testing.md` | `ambre_toile::logic::convergence_tests::two_peers_converge` -- the same operations in two interleavings, under both orders of two pinned peer ids, each peer's caches equal to a rebuild; `::a_delete_concurrent_with_a_reorder_leaves_no_frame_member_behind` -- the history the proptest found, replayed under its pinned ids; `::deleting_a_frame_drops_the_links_its_list_held` -- the deleter's parent cache against a rebuild once a frame goes; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws create, move, resize, rotate, restyle, delete, reorder, group, ungroup, connect, stroke, frame, slide order, auto-layout and react | none | verified |
-| `TOILE-208` | `INV` | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level -- `DisplayViewport` has four fields (the camera, the paint order, the reaction tallies and the comment pins), no display event acknowledges a command, and the absence is the proof | none | verified |
+| `TOILE-208` | `INV` | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level -- `DisplayViewport` has four fields (the camera, the paint order, the reaction counts and the comment pins), no display event acknowledges a command, and the absence is the proof | none | verified |
 | `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
 | `TOILE-089` | `INV` | A command handler MUST NOT send on a queue: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level -- `ToileState` holds no sink and no sender, every handler returns `ToileOutcome` by value, and the absence is the proof | none | verified |
 | `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_open`) each hand a command to the Logic queue, there is no other sender, and `TOILE-UI-001` bans the CRDT on this side | none | verified |
@@ -328,7 +328,7 @@ The child is an ordinary entry keyed by its own document id. Why that is the sha
 
 The answer is one culled, paint-ordered snapshot of the board, built for the visible set alone. It carries the
 camera it was culled against, and a single back-to-front sequence of elements and connectors. It carries the
-reaction tallies of the visible targets, and the comment pins whose anchor resolves in it. It carries no board
+reaction counts of the visible targets, and the comment pins whose anchor resolves in it. It carries no board
 data beyond that: the render side never links the CRDT (`TOILE-UI-001`). One snapshot per relevant change is
 the whole contract between the two threads.
 
@@ -414,7 +414,7 @@ error rather than a silent drop (`TOILE-UI-101`).
 | the selection aggregates | refresh the status band (`features/ambre-spec-toile-status-bar.md`) |
 | a peer's presence | store it under its user id and repaint the overlay (`features/ambre-spec-toile-presence.md`) |
 | a slide change, a mode change | drive the camera pass (`features/ambre-spec-toile-presentation.md`) |
-| a reaction change | re-request the visible set, which carries the tallies |
+| a reaction change | re-request the visible set, which carries the counts |
 | an import report, an import failure | surface the count and the dropped constructs (`features/ambre-spec-toile-import-export.md`) |
 | a dangling connector, the undo availability, the two presenter roles | an explicit no-op on the canvas -- the chrome relay owns them |
 | an error | log it, and nothing else: the user is never told (`TOILE-214`) |

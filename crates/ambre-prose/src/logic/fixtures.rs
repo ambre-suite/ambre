@@ -18,8 +18,8 @@ use ambre_bus::app::grid::{CellPos, Col, Row};
 use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Footnote, Id, User};
 use ambre_core::{
-    Char, DocBlocks, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Generator,
-    ShapeBody, Tally, fixture_peer_count, seeded_document_id,
+    Char, Count, DocBlocks, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Generator,
+    ShapeBody, fixture_peer_count, seeded_document_id,
 };
 use loro::{LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -38,7 +38,7 @@ impl ProseState {
     /// declaring its own shape would assert only that it agrees with itself.
     #[must_use]
     pub fn fixture_shape(&self) -> FixtureShape {
-        let blocks = Tally::<DocBlocks>::of_len(self.document_order().len());
+        let blocks = Count::<DocBlocks>::of(self.document_order().len());
         let characters = self
             .document_order()
             .iter()
@@ -600,11 +600,11 @@ mod tests {
             text: "hello".to_owned(),
         });
         let shape = state.fixture_shape();
-        assert_eq!(shape.peers, ambre_core::Tally::<ambre_core::Peers>::new(1));
+        assert_eq!(shape.peers, ambre_core::Count::<ambre_core::Peers>::new(1));
         assert_eq!(
             shape.body,
             ambre_core::ShapeBody::Prose {
-                blocks: ambre_core::Tally::<ambre_core::DocBlocks>::new(1),
+                blocks: ambre_core::Count::<ambre_core::DocBlocks>::new(1),
                 characters: Len::<ambre_core::Char>::new(5)
             }
         );

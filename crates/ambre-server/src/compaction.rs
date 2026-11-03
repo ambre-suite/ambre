@@ -8,23 +8,23 @@ use tokio::sync::mpsc;
 use crate::state::AppState;
 use crate::{db, redis_ops};
 use ambre_core::id::{Document, Id};
-use ambre_core::{Sec, Tally, TimeSpan};
+use ambre_core::{Count, Sec, TimeSpan};
 
 /// The deltas past a document's served snapshot at which the relay asks for a
 /// new one (`ambre-spec-budgets.md section 6`, the snapshot threshold row).
-pub const SNAPSHOT_THRESHOLD: Tally<db::Deltas> = Tally::<db::Deltas>::new(500);
+pub const SNAPSHOT_THRESHOLD: Count<db::Deltas> = Count::<db::Deltas>::new(500);
 
 /// The threshold of a Murmure segment, whose cold open replays its deltas one
 /// by one (`ambre-spec-budgets.md section 6`, the active segment row). A
 /// crossing is seen at most `CHECK_EVERY - 1` deltas late, so the ask leaves
 /// before the 250th delta past the snapshot (the Murmure segments spec).
-pub const SEGMENT_SNAPSHOT_THRESHOLD: Tally<db::Deltas> =
-    Tally::<db::Deltas>::new(250 - CHECK_EVERY.get());
+pub const SEGMENT_SNAPSHOT_THRESHOLD: Count<db::Deltas> =
+    Count::<db::Deltas>::new(250 - CHECK_EVERY.get());
 
 /// How often, in deltas, the write path compares a document to the threshold.
 /// The numbers of a document are consecutive, so one write in this many reads
 /// the horizon, and no crossing goes unseen.
-const CHECK_EVERY: Tally<db::Deltas> = Tally::<db::Deltas>::new(32);
+const CHECK_EVERY: Count<db::Deltas> = Count::<db::Deltas>::new(32);
 
 /// How long one request stands before the relay may ask again. A client that
 /// never answers is asked again on the next crossing past it.
@@ -34,7 +34,7 @@ const ASK_TTL: TimeSpan<Sec> = TimeSpan::<Sec>::new(300);
 pub fn past_threshold(
     seq: ambre_core::Seq<ambre_core::Relay>,
     horizon: ambre_core::Seq<ambre_core::Relay>,
-    threshold: Tally<db::Deltas>,
+    threshold: Count<db::Deltas>,
 ) -> bool {
     seq.since(horizon) >= threshold
 }
@@ -46,7 +46,7 @@ fn is_checked(seq: ambre_core::Seq<ambre_core::Relay>) -> bool {
 }
 
 /// The threshold of a document: a Murmure segment's own, or the default.
-async fn threshold_of(state: &AppState, document_id: &Id<Document>) -> Tally<db::Deltas> {
+async fn threshold_of(state: &AppState, document_id: &Id<Document>) -> Count<db::Deltas> {
     match db::channel_document_kind(&state.db, document_id).await {
         Ok(Some(ambre_core::ChannelDocumentKind::Segment)) => SEGMENT_SNAPSHOT_THRESHOLD,
         Ok(_) => SNAPSHOT_THRESHOLD,
@@ -370,7 +370,7 @@ mod db_tests {
         .unwrap();
         let newer = snapshot(&state, &doc, &CAROL, 3).await;
         let dropped =
-            db::find_compactable_snapshots(&state.db, ambre_core::Tally::<db::Snapshots>::new(1))
+            db::find_compactable_snapshots(&state.db, ambre_core::Count::<db::Snapshots>::new(1))
                 .await
                 .unwrap();
         let ids: Vec<Id<Snapshot>> = dropped.into_iter().map(|s| s.id).collect();

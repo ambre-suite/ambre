@@ -425,7 +425,7 @@ mod tests {
         ui.viewport.scroll_y = ui.column.page_top_y(page);
         assert_eq!(
             ui.runs.built(),
-            ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+            ambre_core::Count::<crate::view::cache::Builds>::ZERO
         );
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);
@@ -436,7 +436,7 @@ mod tests {
         // Resolving built nothing: the drawing state is a paint's alone.
         assert_eq!(
             ui.runs.built(),
-            ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+            ambre_core::Count::<crate::view::cache::Builds>::ZERO
         );
     }
 

@@ -41,8 +41,8 @@ pub enum Activity {
     Some,
     /// The count a loaded document gives.
     Count {
-        messages: ambre_core::Tally<Unread>,
-        mentions: ambre_core::Tally<Mentions>,
+        messages: ambre_core::Count<Unread>,
+        mentions: ambre_core::Count<Mentions>,
     },
 }
 
@@ -53,9 +53,9 @@ impl Activity {
             (None, None) if answer.active == ambre_bus::Activity::Active => Self::Some,
             (None, None) => Self::None,
             (messages, mentions) => {
-                let messages = messages.unwrap_or(ambre_core::Tally::<Unread>::ZERO);
-                let mentions = mentions.unwrap_or(ambre_core::Tally::<Mentions>::ZERO);
-                if messages.is_zero() && mentions == ambre_core::Tally::<Mentions>::ZERO {
+                let messages = messages.unwrap_or(ambre_core::Count::<Unread>::ZERO);
+                let mentions = mentions.unwrap_or(ambre_core::Count::<Mentions>::ZERO);
+                if messages.is_zero() && mentions == ambre_core::Count::<Mentions>::ZERO {
                     Self::None
                 } else {
                     Self::Count { messages, mentions }
@@ -1023,8 +1023,8 @@ mod tests {
             |channel_id, active, unread: Option<u32>, mentions: Option<u32>| ChannelActivity {
                 channel_id,
                 active,
-                unread: unread.map(ambre_core::Tally::<Unread>::new),
-                mentions: mentions.map(ambre_core::Tally::<Mentions>::new),
+                unread: unread.map(ambre_core::Count::<Unread>::new),
+                mentions: mentions.map(ambre_core::Count::<Mentions>::new),
             };
         let of = |sidebar: &Sidebar, id| sidebar.entry(id).activity;
         assert_eq!(of(&sidebar, a), Activity::None);
@@ -1040,8 +1040,8 @@ mod tests {
         assert_eq!(
             of(&sidebar, a),
             Activity::Count {
-                messages: ambre_core::Tally::<Unread>::new(3),
-                mentions: ambre_core::Tally::<Mentions>::new(1)
+                messages: ambre_core::Count::<Unread>::new(3),
+                mentions: ambre_core::Count::<Mentions>::new(1)
             }
         );
         sidebar.set_activity(&[answer(b, ambre_bus::Activity::Active, None, None)]);

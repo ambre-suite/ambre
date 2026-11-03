@@ -5,7 +5,7 @@
 // Built on the app-agnostic `ambre-chrome` status toolkit so the two apps read
 // and behave identically.
 //
-// Left: app label + selection tally + combined world bounds. An empty
+// Left: app label + selection count + combined world bounds. An empty
 //         or single-element selection shows only the count (no meaningful
 //         multi-element bounds); the pure model + formatting live in
 //         `ui::status` and are host-tested there.

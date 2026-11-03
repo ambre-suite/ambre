@@ -71,7 +71,7 @@ mod schema_shape;
 #[cfg(test)]
 mod schema_reading;
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::HashMap;
 
@@ -96,7 +96,7 @@ use crate::schema;
 /// How many font faces a document measures on (`PROSE-115`).
 pub enum Faces {}
 
-impl ambre_core::TallyKind for Faces {
+impl ambre_core::CountKind for Faces {
     type Repr = u32;
     const NAME: &'static str = "FaceCount";
 }
@@ -125,7 +125,7 @@ struct LayoutBasis {
     /// The document's state.
     frontiers: loro::Frontiers,
     /// How many faces the layout was shaped on.
-    faces: Tally<Faces>,
+    faces: Count<Faces>,
     /// The pages it carries.
     window: Span<Page>,
 }
@@ -207,7 +207,7 @@ pub struct ProseState {
     /// fresh on a live document, a sequence on a pinned one (`FIXTURE-002`).
     ids: ids::IdSource,
     /// The five figures as last answered (`PROSE-FEAT-018`). Session state:
-    /// the tallies move on a recount and the page count on a layout, and
+    /// the counts move on a recount and the page count on a layout, and
     /// neither ever reaches the document.
     word_count: crate::events::WordCount,
     /// The open search, if any. Session state: it never enters the document
@@ -460,9 +460,9 @@ impl ProseState {
 
     /// How many runs the paginator has shaped, over its life.
     #[cfg(test)]
-    pub(crate) fn shaped_count(&self) -> ambre_core::Tally<crate::layout::measure::ShapedRuns> {
+    pub(crate) fn shaped_count(&self) -> ambre_core::Count<crate::layout::measure::ShapedRuns> {
         self.paginator.as_ref().map_or(
-            ambre_core::Tally::<crate::layout::measure::ShapedRuns>::ZERO,
+            ambre_core::Count::<crate::layout::measure::ShapedRuns>::ZERO,
             Paginator::shaped,
         )
     }
@@ -472,8 +472,8 @@ impl ProseState {
     /// Zero means every run shapes into tofu: the measuring context is sealed
     /// and nothing has been handed to it yet.
     #[must_use]
-    pub fn face_count(&self) -> Tally<Faces> {
-        Tally::<Faces>::of_len(self.faces.len())
+    pub fn face_count(&self) -> Count<Faces> {
+        Count::<Faces>::of(self.faces.len())
     }
 
     /// Hand the document the faces pagination measures on (`PROSE-114`).

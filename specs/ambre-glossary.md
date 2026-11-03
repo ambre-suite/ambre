@@ -83,7 +83,7 @@
 | `ClockUnit` | a unit a clock reads, which converts to a `Duration` | | `1-Foundations/ambre-spec-architecture.md` |
 | `TimeBase` | the marker of the clock and epoch an instant counts from | | `1-Foundations/ambre-spec-architecture.md` |
 | `StoredAsI64` | a whole count that a store keeps as a signed integer | | `1-Foundations/ambre-spec-architecture.md` |
-| tally | a running count of one kind of thing, that addresses nothing | | `1-Foundations/ambre-spec-architecture.md` |
+| count | how many things of one kind, addressing nothing, as `Count<K>` | tally | `1-Foundations/ambre-spec-architecture.md` |
 | len | an extent in the index space of one axis, as `Len<A>` | | `1-Foundations/ambre-spec-architecture.md` |
 | `Instant<Authored>` | the author's wall clock in Unix milliseconds, shown and never trusted | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | page clock | the page's monotonic milliseconds, restarted on every load | | `1-Foundations/ambre-spec-frame.md` |

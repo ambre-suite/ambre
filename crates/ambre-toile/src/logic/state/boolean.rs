@@ -191,7 +191,7 @@ mod tests {
         // Sources consumed, one result element remains.
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(1)
+            ambre_core::Count::<ambre_core::Elements>::new(1)
         );
         assert!(out.update.is_some(), "should broadcast a CRDT delta");
     }
@@ -208,7 +208,7 @@ mod tests {
         });
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(3)
+            ambre_core::Count::<ambre_core::Elements>::new(3)
         ); // two sources + result
     }
 
@@ -224,13 +224,13 @@ mod tests {
         });
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(1)
+            ambre_core::Count::<ambre_core::Elements>::new(1)
         );
         // One undo restores both sources and removes the result.
         st.handle_command(ToileCommand::Undo);
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(2)
+            ambre_core::Count::<ambre_core::Elements>::new(2)
         );
     }
 
@@ -245,7 +245,7 @@ mod tests {
         });
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(1)
+            ambre_core::Count::<ambre_core::Elements>::new(1)
         );
         assert!(matches!(
             out.display.first(),
