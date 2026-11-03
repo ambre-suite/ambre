@@ -189,8 +189,9 @@ pub use space::{
     Board, CanvasCss, Css, Device, Doc, Image, ScalesTo, Space, StoredBoard, Surface, Texel, View,
 };
 pub use span::{
-    Authored, Failures, FracMs, FrameRate, Instant, LamportStamp, Ms, Ns, PageLoad, Rfc3339, Sec,
-    StoredAsI64, Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
+    Authored, ClockTick, ClockUnit, Day, Failures, FracDay, FracMs, FrameRate, Instant,
+    LamportStamp, Ms, Ns, PageLoad, Rfc3339, Sec, SheetDateTime, SheetDay, StoredAsI64, Tick,
+    TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
 };
 pub use static_key::{Canvases, Categories, Commands, Icons, KeyKind, StaticKey};
 pub use status::{

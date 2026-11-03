@@ -208,7 +208,7 @@ pub enum ValidationKind {
     ListRange { sheet: Id<Sheet>, range: CellRect },      // the values of a range, resolved at input
     NumberRange { limits: NumberBounds, bounds: RangeBounds }, // two `CellNumber`s, `min` at most `max`
     NumberInteger,
-    DateRange { min: Option<DateSerial>, max: Option<DateSerial> },
+    DateRange { min: Option<Instant<SheetDateTime>>, max: Option<Instant<SheetDateTime>> },
     TextLength { min: Option<Count<Char>>, max: Option<Count<Char>> },
     Regex(String),
     Formula(CellText<SourceForm>),                       // must return TRUE

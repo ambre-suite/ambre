@@ -68,7 +68,7 @@ fn cell(row: u32, col: u32) -> CellId {
 /// test ignore all three fields).
 fn fnctx() -> FnCtx {
     FnCtx {
-        now_serial: ambre_bus::DateSerial::new(0.0),
+        now_serial: ambre_core::Instant::<ambre_core::SheetDateTime>::new(0.0),
         cell_row: None,
         cell_col: None,
     }
@@ -247,7 +247,12 @@ fn eval_ast(ast: &Expr) -> CellValue {
     bcc.insert(c, bc);
     let owned = bcc.get(&c).expect("just inserted").clone();
     let cache: HashMap<CellId, CellValue> = HashMap::new();
-    let mut ctx = EvalContext::new(&bcc, &cache, &indices, ambre_bus::DateSerial::new(0.0));
+    let mut ctx = EvalContext::new(
+        &bcc,
+        &cache,
+        &indices,
+        ambre_core::Instant::<ambre_core::SheetDateTime>::new(0.0),
+    );
     ctx.execute(&owned)
 }
 

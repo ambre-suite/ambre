@@ -21,8 +21,8 @@ use super::compile::SheetIndices;
 use super::functions::call_builtin;
 use super::text::fold_cmp;
 use super::types::{CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal};
-use ambre_bus::DateSerial;
 use ambre_core::CellCount;
+use ambre_core::{Instant, SheetDateTime};
 
 /// Upper bound on the number of cells a single range reference may materialize
 /// during evaluation. Protects the WASM Logic worker from a peer-supplied
@@ -73,7 +73,7 @@ pub struct EvalContext<'a> {
     pub indices: &'a SheetIndices,
     /// Evaluation clock as an Excel serial number. Shared by every cell in the
     /// pass so `TODAY()`/`NOW()` are stable within one recomputation.
-    pub now_serial: DateSerial,
+    pub now_serial: Instant<SheetDateTime>,
     /// Row of the cell currently being evaluated, used by the no-argument
     /// `ROW()`. `None` means "unknown" (for example a bare `execute` call in
     /// tests). Set by [`EvalContext::eval_cell`].
@@ -92,7 +92,7 @@ impl<'a> EvalContext<'a> {
         bc: &'a BytecodeCache,
         formula_cache: &'a HashMap<CellId, CellValue>,
         indices: &'a SheetIndices,
-        now_serial: DateSerial,
+        now_serial: Instant<SheetDateTime>,
     ) -> Self {
         Self {
             eval_stack: HashSet::new(),
@@ -453,7 +453,7 @@ mod tests {
         let bc = compile(&parse_formula(src).unwrap(), &indices);
         let mut bcc = BytecodeCache::new();
         bcc.insert(cell(0, fcol), bc);
-        let mut ctx = EvalContext::new(&bcc, &cache, &indices, DateSerial::new(0.0));
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices, Instant::<SheetDateTime>::new(0.0));
         ctx.eval_cell(cell(0, fcol)).to_display()
     }
 
@@ -486,7 +486,7 @@ mod tests {
         indices.insert(ACTIVE_SHEET, idx);
 
         let cache = HashMap::new();
-        let mut ctx = EvalContext::new(&bcc, &cache, &indices, DateSerial::new(0.0));
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices, Instant::<SheetDateTime>::new(0.0));
         assert!(matches!(
             ctx.eval_cell(cell(0, 1)),
             CellValue::Error(FormulaError::BrokenRef)
@@ -522,7 +522,7 @@ mod tests {
         let bcc = BytecodeCache::new();
         let cache = HashMap::new();
         let indices = indices_with(10, 10);
-        let mut ctx = EvalContext::new(&bcc, &cache, &indices, DateSerial::new(0.0));
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices, Instant::<SheetDateTime>::new(0.0));
         assert!(matches!(
             ctx.execute(&bc),
             CellValue::Error(FormulaError::BrokenRef)
@@ -652,7 +652,12 @@ mod tests {
         let mut bc_cache_mut = BytecodeCache::new();
         bc_cache_mut.insert(cell(0, 0), bc);
         let bc_ref = bc_cache_mut.get(&cell(0, 0)).unwrap();
-        let mut ctx = EvalContext::new(&bc_cache_mut, &cache, &indices, DateSerial::new(0.0));
+        let mut ctx = EvalContext::new(
+            &bc_cache_mut,
+            &cache,
+            &indices,
+            Instant::<SheetDateTime>::new(0.0),
+        );
         // SAFETY-free: execute borrows bc_ref immutably; ctx borrows the same
         // cache immutably. Clone the bytecode to avoid the double borrow.
         let owned = bc_ref.clone();
@@ -708,7 +713,12 @@ mod tests {
         let indices = indices_with(10, 10);
         let bc = compile(&ast, &indices);
         let (cache, bc_cache) = (HashMap::new(), BytecodeCache::new());
-        let mut ctx = EvalContext::new(&bc_cache, &cache, &indices, DateSerial::new(0.0));
+        let mut ctx = EvalContext::new(
+            &bc_cache,
+            &cache,
+            &indices,
+            Instant::<SheetDateTime>::new(0.0),
+        );
         assert_eq!(ctx.execute(&bc).to_display(), "#REF!");
         assert_eq!(ctx.range_cells_left, MAX_PASS_RANGE_CELLS);
     }
@@ -722,7 +732,12 @@ mod tests {
         let bc = compile(&ast, &indices);
         let cache = HashMap::new();
         let bc_cache = BytecodeCache::new();
-        let mut ctx = EvalContext::new(&bc_cache, &cache, &indices, DateSerial::new(0.0));
+        let mut ctx = EvalContext::new(
+            &bc_cache,
+            &cache,
+            &indices,
+            Instant::<SheetDateTime>::new(0.0),
+        );
         assert_eq!(ctx.range_cells_left, MAX_PASS_RANGE_CELLS);
         // Room for two reads of the hundred cells, not three.
         ctx.range_cells_left = CellCount::new(250);

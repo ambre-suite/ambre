@@ -1,10 +1,11 @@
-// ambre-bus/src/app/trame/calendar.rs The spreadsheet calendar: the two
-// serials a date travels as, and the date parts between them.
+// ambre-bus/src/app/trame/calendar.rs The spreadsheet calendar: the date
+// parts between the two serials a date travels as.
 //
 // A formula reads a date as a number of days from the spreadsheet epoch,
-// 1899-12-30. A whole-day count is a `DaySerial`; a date with its time of day
-// in the fraction is a `DateSerial`. `DateParts` names the year, the month and
-// the day, so no call can pass them in the wrong order.
+// 1899-12-30. A whole-day count is an `Instant<SheetDay>`; a date with its
+// time of day in the fraction is an `Instant<SheetDateTime>`. Both live in
+// `ambre_core::span`, beside the other time bases. `DateParts` names the
+// year, the month and the day, so no call can pass them in the wrong order.
 //
 // The calendar lives on the bus: a validation rule carries its date bounds
 // across the seam as serials. The view parses the text once, at input.
@@ -12,74 +13,8 @@
 // The year and the month live in `ambre-core`, which Prose shares. The day
 // stays here: it runs past either end of its month, as `DATE` reads it.
 
+use ambre_core::{Day, Instant, SheetDay, TimeSpan};
 pub use ambre_core::{Month, Year};
-
-/// Days from the spreadsheet epoch to the Unix epoch, 1970-01-01.
-const UNIX_EPOCH_SERIAL: i64 = 25_569;
-
-/// A whole number of days from the spreadsheet epoch, 1899-12-30.
-///
-/// Every count of days is a date, so the constructor takes any.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DaySerial(i64);
-
-impl DaySerial {
-    /// The serial `days` after the epoch, or before it when negative.
-    pub const fn new(days: i64) -> Self {
-        Self(days)
-    }
-
-    /// The count of days, for the number a formula returns.
-    pub const fn get(self) -> i64 {
-        self.0
-    }
-
-    /// The days from `earlier` to `self`.
-    pub const fn days_since(self, earlier: Self) -> DayCount {
-        DayCount(self.0 - earlier.0)
-    }
-
-    /// The proleptic-Gregorian date of this day. The inverse of
-    /// [`DateParts::serial`], after Howard Hinnant's `civil_from_days`.
-    pub const fn parts(self) -> DateParts {
-        let z = self.0 - UNIX_EPOCH_SERIAL + 719_468;
-        let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-        let doe = z - era * 146_097;
-        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-        let y = yoe + era * 400;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        let mp = (5 * doy + 2) / 153;
-        let day = doy - (153 * mp + 2) / 5 + 1;
-        let month = if mp < 10 { mp + 3 } else { mp - 9 };
-        debug_assert!(matches!(month, 1..=12), "civil_from_days gives a month");
-        DateParts {
-            year: Year::new(if month <= 2 { y + 1 } else { y }),
-            // The arithmetic keeps the month in 1 to 12; January stands in
-            // for a value it never computes.
-            month: match Month::new(month) {
-                Some(month) => month,
-                None => Month::JANUARY,
-            },
-            day: DayOfMonth(day),
-        }
-    }
-}
-
-/// A signed number of days between two dates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DayCount(i64);
-
-impl DayCount {
-    /// A count of `days`, negative when the later date comes first.
-    pub const fn new(days: i64) -> Self {
-        Self(days)
-    }
-
-    /// The count itself.
-    pub const fn get(self) -> i64 {
-        self.0
-    }
-}
 
 /// A count of months, from January of some year. It may run past December
 /// or below January, as `DATE` and `EDATE` read a month out of range.
@@ -124,42 +59,8 @@ impl DayOfMonth {
     }
 
     /// The last day of a month that holds `days` days.
-    pub const fn last_of(days: DayCount) -> Self {
-        Self(days.0)
-    }
-}
-
-/// A date and a time of day: whole days from the epoch, and the time of day
-/// in the fraction.
-///
-/// Every number reads as one, so the constructor takes any.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct DateSerial(f64);
-
-impl DateSerial {
-    /// The serial a cell's number reads as.
-    pub const fn new(serial: f64) -> Self {
-        Self(serial)
-    }
-
-    /// The number a formula returns for it.
-    pub const fn get(self) -> f64 {
-        self.0
-    }
-
-    /// The day it falls on, its time of day dropped.
-    pub fn day(self) -> DaySerial {
-        DaySerial(self.0.floor() as i64)
-    }
-
-    /// The time of day, as a fraction of a day from 0 up to 1.
-    pub fn time_of_day(self) -> f64 {
-        self.0 - self.0.floor()
-    }
-
-    /// The serial of the instant `unix_days` days after the Unix epoch.
-    pub fn from_unix_days(unix_days: f64) -> Self {
-        Self(unix_days + UNIX_EPOCH_SERIAL as f64)
+    pub const fn last_of(days: TimeSpan<Day>) -> Self {
+        Self(days.get())
     }
 }
 
@@ -177,6 +78,31 @@ pub struct DateParts {
 }
 
 impl DateParts {
+    /// The proleptic-Gregorian date of the day `day`. The inverse of
+    /// [`DateParts::serial`], after Howard Hinnant's `civil_from_days`.
+    pub const fn of_day(day: Instant<SheetDay>) -> Self {
+        let z = day.get() - Instant::<SheetDay>::UNIX_EPOCH.get() + 719_468;
+        let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let day = doy - (153 * mp + 2) / 5 + 1;
+        let month = if mp < 10 { mp + 3 } else { mp - 9 };
+        debug_assert!(matches!(month, 1..=12), "civil_from_days gives a month");
+        Self {
+            year: Year::new(if month <= 2 { y + 1 } else { y }),
+            // The arithmetic keeps the month in 1 to 12; January stands in
+            // for a value it never computes.
+            month: match Month::new(month) {
+                Some(month) => month,
+                None => Month::JANUARY,
+            },
+            day: DayOfMonth(day),
+        }
+    }
+
     /// The date `months` months after January of `year`, on `day`. The count
     /// runs past either end of the year and carries into it, as `DATE` and
     /// `EDATE` read a month out of range. Twelve months after January 2024
@@ -199,7 +125,7 @@ impl DateParts {
     }
 
     /// The day this date names, after Howard Hinnant's `days_from_civil`.
-    pub const fn serial(self) -> DaySerial {
+    pub const fn serial(self) -> Instant<SheetDay> {
         let (year, month, day) = (self.year.get(), self.month.get() as i64, self.day.0);
         let yy = year - if month <= 2 { 1 } else { 0 };
         let era = if yy >= 0 { yy } else { yy - 399 } / 400;
@@ -207,7 +133,7 @@ impl DateParts {
         let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
         let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
         let unix_days = era * 146_097 + doe - 719_468;
-        DaySerial(unix_days + UNIX_EPOCH_SERIAL)
+        Instant::new(unix_days + Instant::<SheetDay>::UNIX_EPOCH.get())
     }
 
     /// The first day of the month after this date's month.
@@ -230,16 +156,16 @@ mod tests {
 
     #[test]
     fn the_epoch_and_a_known_day_read_their_serials() {
-        assert_eq!(date(1899, 12, 30).serial(), DaySerial::new(0));
-        assert_eq!(date(1970, 1, 1).serial(), DaySerial::new(25_569));
-        assert_eq!(date(2026, 9, 29).serial(), DaySerial::new(46_294));
+        assert_eq!(date(1899, 12, 30).serial(), Instant::<SheetDay>::new(0));
+        assert_eq!(date(1970, 1, 1).serial(), Instant::<SheetDay>::new(25_569));
+        assert_eq!(date(2026, 9, 29).serial(), Instant::<SheetDay>::new(46_294));
     }
 
     #[test]
     fn a_serial_reads_back_the_date_it_came_from() {
         for days in -800_000..800_000 {
-            let serial = DaySerial::new(days);
-            assert_eq!(serial.parts().serial(), serial, "{days}");
+            let serial = Instant::<SheetDay>::new(days);
+            assert_eq!(DateParts::of_day(serial).serial(), serial, "{days}");
         }
     }
 
@@ -263,17 +189,8 @@ mod tests {
         let back = DateParts::of_months(Year::new(2024), MonthCount::new(-1), DayOfMonth::new(5));
         assert_eq!((back.year.get(), back.month.get()), (2023, 12));
         assert_eq!(
-            date(2024, 3, 1)
-                .serial()
-                .days_since(date(2024, 2, 1).serial()),
-            DayCount::new(29)
+            date(2024, 3, 1).serial() - date(2024, 2, 1).serial(),
+            TimeSpan::<Day>::new(29)
         );
-    }
-
-    #[test]
-    fn a_date_time_falls_on_its_day_and_keeps_its_time() {
-        let at = DateSerial::new(46_294.75);
-        assert_eq!(at.day(), DaySerial::new(46_294));
-        assert!((at.time_of_day() - 0.75).abs() < f64::EPSILON);
     }
 }

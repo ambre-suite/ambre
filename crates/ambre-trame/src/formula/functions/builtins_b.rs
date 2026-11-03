@@ -490,7 +490,7 @@ pub(crate) fn date_part(args: &[CellValue], pick: fn(DateParts) -> i64) -> CellV
     }
     match arg(args, Pos::<Arg>::new(0)).as_number() {
         Ok(serial) => {
-            let date = DateSerial::new(serial).day().parts();
+            let date = DateParts::of_day(Instant::<SheetDateTime>::new(serial).day());
             CellValue::Number(pick(date) as f64)
         }
         Err(_) => CellValue::Error(FormulaError::TypeError),
