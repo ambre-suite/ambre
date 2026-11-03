@@ -20,7 +20,7 @@
 // `SheetIndex` is the *only* translation layer between grid positions and uids.
 // ============================================================================
 
-use ambre_core::index::{Count, IdxVec, Pos};
+use ambre_core::index::{IdxVec, Len, Pos};
 use std::collections::HashMap;
 
 use ambre_bus::{CellPos, CellRect, Col, Row};
@@ -163,10 +163,10 @@ impl SheetIndex {
     }
 
     /// Number of materialized rows / columns (the used-range high-water mark).
-    pub fn row_len(&self) -> Count<Row> {
+    pub fn row_len(&self) -> Len<Row> {
         self.row_by_pos.len()
     }
-    pub fn col_len(&self) -> Count<Col> {
+    pub fn col_len(&self) -> Len<Col> {
         self.col_by_pos.len()
     }
 
@@ -404,8 +404,8 @@ mod tests {
     #[test]
     fn build_maps_positions_to_stable_ids() {
         let (_doc, idx) = index_with(5, 3);
-        assert_eq!(idx.row_len(), Count::<Row>::new(5));
-        assert_eq!(idx.col_len(), Count::<Col>::new(3));
+        assert_eq!(idx.row_len(), Len::<Row>::new(5));
+        assert_eq!(idx.col_len(), Len::<Col>::new(3));
 
         // Every resolvable position round-trips through contains_*.
         let (r2, c1) = idx
@@ -453,7 +453,7 @@ mod tests {
             counter: ambre_core::IdCounter::new(7),
         };
         idx.apply_insert_row(Pos::<Row>::new(0), new_id);
-        assert_eq!(idx.row_len(), Count::<Row>::new(4));
+        assert_eq!(idx.row_len(), Len::<Row>::new(4));
         assert_eq!(
             idx.resolve(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
                 .unwrap()

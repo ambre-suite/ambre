@@ -3,7 +3,7 @@
 // edit does to it (`TRAME-008`, `TRAME-171`, `TRAME-226` to `TRAME-230`).
 
 use super::*;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {
@@ -102,7 +102,7 @@ fn a_sort_keeps_the_range_and_moves_the_cell() {
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(0)),
         ),
-        sort_col: Count::<Col>::new(0),
+        sort_col: Len::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });

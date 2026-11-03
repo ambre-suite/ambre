@@ -7,7 +7,7 @@
 use super::*;
 use crate::formula::text::CellText;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 /// One axis of the cell an edit session opened on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,7 +17,7 @@ enum Pin<L: Line> {
     /// A line past the used range, `offset` lines after the last materialized
     /// one, or at `offset` itself when the axis had none. A line a peer appends
     /// past `last` moves nothing, so the position holds.
-    Past { last: Option<Uid>, offset: Count<L> },
+    Past { last: Option<Uid>, offset: Len<L> },
 }
 
 impl<L: Line> Pin<L> {
@@ -29,11 +29,11 @@ impl<L: Line> Pin<L> {
         match L::len(index).last() {
             None => Self::Past {
                 last: None,
-                offset: pos.count_from(Pos::ZERO),
+                offset: pos.len_from(Pos::ZERO),
             },
             Some(last) => Self::Past {
                 last: L::uid(index, last),
-                offset: pos.count_from(last),
+                offset: pos.len_from(last),
             },
         }
     }

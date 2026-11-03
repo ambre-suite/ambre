@@ -17,9 +17,9 @@ use std::fmt;
 
 pub use ambre_core::FontFamily;
 use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
-use ambre_core::index::{Axis, Count, Numbered, Pos, Shown};
+use ambre_core::index::{Axis, Len, Numbered, Pos, Shown};
 use ambre_core::{
-    Board, Bounded, DocType, FontSize, Px, Rgba, Rule, Slant, StoredBoard, Strikethrough, Tally,
+    Board, Bounded, Count, DocType, FontSize, Px, Rgba, Rule, Slant, StoredBoard, Strikethrough,
     Underline, Validated,
 };
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
@@ -272,7 +272,7 @@ impl Default for ElementStyle {
 /// title names a region of a board and is read in a one-line field, so nothing
 /// legible reaches this. The cut is what keeps an unbounded register out of a
 /// document every peer replicates.
-pub const FRAME_NAME_MAX: Count<ambre_core::Char> = Count::<ambre_core::Char>::new(120);
+pub const FRAME_NAME_MAX: Len<ambre_core::Char> = Len::<ambre_core::Char>::new(120);
 
 /// The default sticky-note card colour (RGBA): a warm pastel yellow, the Miro /
 /// Figma-whiteboard default. Used as the seeded fill for a `sticky` element and
@@ -1169,7 +1169,7 @@ pub struct FindResults {
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct TextDelta {
     pub at: Pos<ambre_core::Char>,
-    pub delete: Count<ambre_core::Char>,
+    pub delete: Len<ambre_core::Char>,
     pub insert: String,
 }
 
@@ -1189,10 +1189,10 @@ impl TextDelta {
     /// end.
     pub fn clamped(
         &self,
-        len: Count<ambre_core::Char>,
-    ) -> (Pos<ambre_core::Char>, Count<ambre_core::Char>) {
+        len: Len<ambre_core::Char>,
+    ) -> (Pos<ambre_core::Char>, Len<ambre_core::Char>) {
         let at = self.at.min(len.as_end());
-        (at, self.delete.min(len.as_end().count_from(at)))
+        (at, self.delete.min(len.as_end().len_from(at)))
     }
 }
 
@@ -1299,7 +1299,7 @@ impl std::fmt::Display for SkipReason {
 /// How many votes were cast on one target.
 pub enum Votes {}
 
-impl ambre_core::TallyKind for Votes {
+impl ambre_core::CountKind for Votes {
     type Repr = u32;
     const NAME: &'static str = "VoteCount";
 }
@@ -1307,7 +1307,7 @@ impl ambre_core::TallyKind for Votes {
 /// How many users reacted to one target with one emoji.
 pub enum Reactions {}
 
-impl ambre_core::TallyKind for Reactions {
+impl ambre_core::CountKind for Reactions {
     type Repr = u32;
     const NAME: &'static str = "ReactionCount";
 }
@@ -1315,16 +1315,16 @@ impl ambre_core::TallyKind for Reactions {
 pub use ambre_core::IdCounter;
 use ambre_core::{Authored, Instant, PageLoad};
 
-/// Read-time tally derived from a target's reaction sub-map
+/// Read-time count derived from a target's reaction sub-map
 /// (`toile-reactions`). Never stored
 /// -- recomputed on read so it can never drift from the per-user entry set.
 /// `emoji` is sorted for a stable render order; `vote_total` / `vote_count`
 /// aggregate the `Vote` entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionTally {
-    pub emoji: Vec<(crate::app::murmure::Emoji, Tally<Reactions>)>,
+    pub emoji: Vec<(crate::app::murmure::Emoji, Count<Reactions>)>,
     pub vote_total: VoteTotal,
-    pub vote_count: Tally<Votes>,
+    pub vote_count: Count<Votes>,
 }
 
 // -----------------------------------------------------------------------------
@@ -1389,7 +1389,7 @@ pub struct CommentThread {
 pub struct CommentPin {
     pub thread: Id<Thread>,
     pub at: Point,
-    pub messages: Count<ThreadMessage>,
+    pub messages: Len<ThreadMessage>,
     pub resolved: ambre_core::ThreadState,
 }
 
@@ -1405,7 +1405,7 @@ pub struct CommentSummary {
     pub id: Id<Thread>,
     pub anchor: CommentAnchor,
     pub resolved: ambre_core::ThreadState,
-    pub messages: Count<ThreadMessage>,
+    pub messages: Len<ThreadMessage>,
     pub preview: String,
 }
 
@@ -1589,10 +1589,10 @@ impl Axis for Slide {
 /// The number a person reads for a slide: the first slide is 1. It is the
 /// count of slides up to and with this one, so it saturates with the axis.
 impl Numbered for Slide {
-    type Number = Count<Slide>;
+    type Number = Len<Slide>;
 
-    fn number_of(pos: Pos<Slide>) -> Count<Slide> {
-        Count::through(pos)
+    fn number_of(pos: Pos<Slide>) -> Len<Slide> {
+        Len::through(pos)
     }
 }
 
@@ -1690,12 +1690,12 @@ impl Broadcast {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SlidePosition {
     index: Pos<Slide>,
-    count: Count<Slide>,
+    count: Len<Slide>,
 }
 
 impl SlidePosition {
     /// Slide `index` of a deck of `count`, the index pulled back into the deck.
-    pub fn new(index: Pos<Slide>, count: Count<Slide>) -> Self {
+    pub fn new(index: Pos<Slide>, count: Len<Slide>) -> Self {
         Self {
             index: index.within(count),
             count,
@@ -1708,7 +1708,7 @@ impl SlidePosition {
     }
 
     /// How many slides the deck holds.
-    pub fn count(self) -> Count<Slide> {
+    pub fn count(self) -> Len<Slide> {
         self.count
     }
 }
@@ -1990,7 +1990,7 @@ pub enum ToileCommand {
     /// Place, change or remove the local user's reaction on a target (element or
     /// frame). Shared, persisted CRDT: a sub-map keyed by target + canonical
     /// `Id<User>`, so one user has exactly one entry per target (a re-vote is LWW on
-    /// their own key). `reaction: None` removes the user's own entry. Tallies are
+    /// their own key). `reaction: None` removes the user's own entry. Counts are
     /// derived on read, never stored. One commit = one undo item.
     React {
         target: Id<Element>,
@@ -2600,11 +2600,11 @@ pub enum StatsRequestKind {
     CommentFocus,
 }
 
-/// Selection aggregates (`toile-status-bar`): element tally + union AABB
+/// Selection aggregates (`toile-status-bar`): element count + union AABB
 /// (world).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionStats {
-    pub count: Tally<Elements>,
+    pub count: Count<Elements>,
     pub bounds: Option<Rect>,
     pub kind: StatsRequestKind,
 }
@@ -2697,8 +2697,8 @@ pub enum ToileEvent {
     /// state.
     FollowingChanged(Option<Id<User>>),
     /// A target's reaction set changed (`toile-reactions`): the UI
-    /// re-reads the derived tally for this target. Emitted on a local `React`; the
-    /// derived tally is never carried in the CRDT, only recomputed on read.
+    /// re-reads the derived count for this target. Emitted on a local `React`; the
+    /// derived count is never carried in the CRDT, only recomputed on read.
     ReactionsUpdated(Id<Element>),
     /// A thread changed (`toile-comments`): created, replied to, edited or
     /// resolved. The panel holds no authoritative state, so it re-reads the
@@ -2739,7 +2739,7 @@ pub enum ToileEvent {
     /// importer left behind. The whole import is one undo item
     /// (`toile-import-export`).
     ImportReport {
-        imported: Tally<Elements>,
+        imported: Count<Elements>,
         skipped: Vec<SkipReason>,
     },
     /// A foreign-file import aborted before touching the board (a parse error, a
@@ -2886,7 +2886,7 @@ pub struct DisplayViewport {
     /// (`toile-z-order`): elements and connectors interleaved by
     /// z-order, painted in one pass.
     pub nodes: Vec<DisplayNode>,
-    /// Derived reaction tallies (`toile-reactions`), keyed by target,
+    /// Derived reaction counts (`toile-reactions`), keyed by target,
     /// for the visible, still-existing targets that carry at least one reaction.
     /// Derived on read
     /// (never stored in the CRDT); the derivation skips a deleted target's
@@ -3101,7 +3101,7 @@ mod tests {
             id: thread.clone(),
             anchor: CommentAnchor::Element(id.clone()),
             resolved: ambre_core::ThreadState::default(),
-            messages: Count::<ThreadMessage>::new(1),
+            messages: Len::<ThreadMessage>::new(1),
             preview: secret.clone(),
         };
         let frame = DeckFrame {

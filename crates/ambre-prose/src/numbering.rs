@@ -15,8 +15,8 @@
 //! walk, every heading. [`compute_heading_number`] answers for one heading and
 //! stops there, so neither form turns a numbering pass into a walk per heading.
 
+use ambre_core::Count;
 use ambre_core::Ordinal;
-use ambre_core::Tally;
 use std::ops::ControlFlow;
 
 use loro::{LoroTree, TreeID};
@@ -154,8 +154,8 @@ pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<Ordinal<List
 /// answer is the tree's own parent chain, so it cannot disagree with the shape
 /// the peers converged on.
 #[must_use]
-pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Tally<ListDepth> {
-    let mut depth = Tally::<ListDepth>::ZERO;
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Count<ListDepth> {
+    let mut depth = Count::<ListDepth>::ZERO;
     let mut here = *item_id;
     while let Some(loro::TreeParentId::Node(parent)) = tree.parent(here) {
         if doc::block_type_of(tree, &parent) != Some(crate::events::BlockType::ListItem) {
@@ -170,7 +170,7 @@ pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Tally<ListDepth> {
 /// How many list items an item nests inside: zero for a top item.
 pub enum ListDepth {}
 
-impl ambre_core::TallyKind for ListDepth {
+impl ambre_core::CountKind for ListDepth {
     type Repr = u32;
     const NAME: &'static str = "ListDepth";
 }
@@ -441,11 +441,11 @@ mod tests {
         let tree = doc::blocks(state.document());
         assert_eq!(
             list_depth(&tree, &crate::events::tree_id(first)),
-            Tally::<ListDepth>::ZERO
+            Count::<ListDepth>::ZERO
         );
         assert_eq!(
             list_depth(&tree, &crate::events::tree_id(second)),
-            Tally::<ListDepth>::new(1)
+            Count::<ListDepth>::new(1)
         );
         // The nested item opens a run of its own under its new parent.
         assert_eq!(ordinal(&state, &second), Some(1));

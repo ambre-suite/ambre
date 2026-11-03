@@ -7,7 +7,7 @@
 //! Nothing in this module writes.
 
 use ambre_core::StoredAsI64;
-use ambre_core::index::{self, Axis, Count, Pos};
+use ambre_core::index::{self, Axis, Len, Pos};
 use std::collections::HashMap;
 
 use ambre_bus::app::prose::DocChar;
@@ -81,7 +81,7 @@ impl Axis for ReplySlot {
 /// Every place of a reply list, the head first.
 #[must_use]
 pub(crate) fn reply_slots(list: &LoroList) -> index::Span<ReplySlot> {
-    Count::<ReplySlot>::from_len(list.len()).span()
+    Len::<ReplySlot>::of(list.len()).span()
 }
 
 /// Reply `slot` of a list.

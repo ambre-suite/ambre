@@ -36,7 +36,7 @@
 //! (`TOILE-FEAT-017`).
 
 use ambre_core::StoredAsI64;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use std::collections::HashSet;
 
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
@@ -56,7 +56,7 @@ use ambre_core::{Authored, Instant};
 /// How many characters of the opening message the board-wide list carries. The
 /// panel shows a row per thread, and a row is a line: the rest of the
 /// conversation arrives when the thread is opened (`TOILE-205`).
-const PREVIEW_CHARS: Count<Char> = Count::<Char>::new(80);
+const PREVIEW_CHARS: Len<Char> = Len::<Char>::new(80);
 
 impl ToileState {
     /// Open a thread at `anchor`, seeded with its first message.
@@ -191,7 +191,7 @@ impl ToileState {
         };
         // Clamp to the current length: `at` and the deletion span never run past
         // the end of the buffer.
-        let (at, del) = delta.clamped(Count::<Char>::from_len(text.len_unicode()));
+        let (at, del) = delta.clamped(Len::<Char>::of(text.len_unicode()));
         if !del.is_zero() {
             let _ = text.delete(at.to_usize(), del.to_usize());
         }
@@ -291,7 +291,7 @@ impl ToileState {
                     id: thread.id,
                     anchor: thread.anchor,
                     resolved: thread.resolved,
-                    messages: Count::<ThreadMessage>::from_len(thread.messages.len()),
+                    messages: Len::<ThreadMessage>::of(thread.messages.len()),
                     preview,
                 })
             })
@@ -338,7 +338,7 @@ impl ToileState {
                 Some(CommentPin {
                     thread: thread.id,
                     at,
-                    messages: Count::<ThreadMessage>::from_len(thread.messages.len()),
+                    messages: Len::<ThreadMessage>::of(thread.messages.len()),
                     resolved: thread.resolved,
                 })
             })

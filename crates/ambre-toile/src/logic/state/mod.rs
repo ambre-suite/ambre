@@ -65,7 +65,7 @@ mod schema_shape;
 #[cfg(test)]
 mod schema_reading;
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
@@ -97,7 +97,7 @@ pub(crate) use names::{
 /// (`TOILE-056`).
 pub enum BoardWalks {}
 
-impl ambre_core::TallyKind for BoardWalks {
+impl ambre_core::CountKind for BoardWalks {
     type Repr = u32;
     const NAME: &'static str = "BoardWalkCount";
 }
@@ -133,7 +133,7 @@ pub struct ToileState {
     /// How many times the whole element map has been resolved. A cost probe a
     /// test reads to show a read walks no board (`TOILE-056`); a `Cell`, since
     /// the reads that would walk take `&self`.
-    board_walks: Cell<Tally<BoardWalks>>,
+    board_walks: Cell<Count<BoardWalks>>,
     /// Per-session monotonic id-minting counter.
     counter: IdCounter,
     peer: ambre_core::PeerId,
@@ -201,7 +201,7 @@ pub struct ToileState {
     /// helpers set it, and every import drains it. A `Cell`, because a caller
     /// reads a board through `&self` and the read is where the failure surfaces.
     ///
-    /// * A flag rather than a tally. Every later read meets the same unreadable
+    /// * A flag rather than a count. Every later read meets the same unreadable
     ///   register, so a count would measure how often the board redrew.
     /// * An import drains it, a repaint never does. A register a display-only
     ///   read met first therefore reaches the user at the next import, not at
@@ -366,7 +366,7 @@ impl ToileState {
             _watch: watch,
             wires: std::cell::RefCell::default(),
             wires_gone: std::cell::RefCell::default(),
-            board_walks: Cell::new(Tally::<BoardWalks>::ZERO),
+            board_walks: Cell::new(Count::<BoardWalks>::ZERO),
             counter: IdCounter::ZERO,
             peer: ambre_core::PeerId::new(peer),
             viewport: Viewport::default(),
@@ -1000,7 +1000,7 @@ impl ToileState {
 
     fn selection_stats(&self, ids: &[Id<Element>], kind: StatsRequestKind) -> ToileOutcome {
         let mut union: Option<Rect> = None;
-        let mut count = Tally::<Elements>::ZERO;
+        let mut count = Count::<Elements>::ZERO;
         // Empty ids = whole-board extent: the union of every element's bounds.
         // Used by the View -> Fit action (`toile-viewport`), which needs
         // the full board rect the UI does not hold (it sees only the culled
@@ -1205,12 +1205,12 @@ impl ToileState {
     // -- test / integration accessors -----------------------------------------
 
     /// Number of elements currently in the CRDT. Test helper.
-    pub fn element_count(&self) -> ambre_core::Tally<ambre_core::Elements> {
-        ambre_core::Tally::<ambre_core::Elements>::of_len(self.bounds.len())
+    pub fn element_count(&self) -> ambre_core::Count<ambre_core::Elements> {
+        ambre_core::Count::<ambre_core::Elements>::of(self.bounds.len())
     }
 
     /// How many times the whole element map has been resolved. Test helper.
-    pub fn board_walks(&self) -> Tally<BoardWalks> {
+    pub fn board_walks(&self) -> Count<BoardWalks> {
         self.board_walks.get()
     }
 
@@ -1442,7 +1442,7 @@ mod schema_tests {
         );
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(1),
+            ambre_core::Count::<ambre_core::Elements>::new(1),
             "nothing was merged in"
         );
         assert_eq!(

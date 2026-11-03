@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::tally::{Tally, TallyKind};
+use crate::count::{Count, CountKind};
 
 /// The members on a document, as the relay counts them. More than one means
 /// the document is shared.
@@ -11,12 +11,12 @@ use crate::tally::{Tally, TallyKind};
 /// [`TryFrom<i64>`] is the one checked way in from there.
 pub enum Members {}
 
-impl TallyKind for Members {
+impl CountKind for Members {
     type Repr = u32;
     const NAME: &'static str = "MemberCount";
 }
 
-impl Tally<Members> {
+impl Count<Members> {
     /// The count of a document no one shares.
     pub const ONE: Self = Self::new(1);
 
@@ -44,7 +44,7 @@ impl MemberCountError {
     }
 }
 
-impl TryFrom<i64> for Tally<Members> {
+impl TryFrom<i64> for Count<Members> {
     type Error = MemberCountError;
 
     fn try_from(n: i64) -> Result<Self, Self::Error> {
@@ -60,19 +60,19 @@ mod tests {
 
     #[test]
     fn a_count_reads_from_the_store_checked_and_crosses_the_wire_bare() {
-        assert_eq!(Tally::<Members>::try_from(3), Ok(Tally::<Members>::new(3)));
-        assert_eq!(Tally::<Members>::try_from(-1), Err(MemberCountError(-1)));
+        assert_eq!(Count::<Members>::try_from(3), Ok(Count::<Members>::new(3)));
+        assert_eq!(Count::<Members>::try_from(-1), Err(MemberCountError(-1)));
         let past = i64::from(u32::MAX) + 1;
         assert_eq!(
-            Tally::<Members>::try_from(past),
+            Count::<Members>::try_from(past),
             Err(MemberCountError(past))
         );
-        assert!(Tally::<Members>::new(2).is_shared());
-        assert!(!Tally::<Members>::ONE.is_shared());
+        assert!(Count::<Members>::new(2).is_shared());
+        assert!(!Count::<Members>::ONE.is_shared());
         assert_eq!(
-            serde_json::to_string(&Tally::<Members>::new(7)).unwrap(),
+            serde_json::to_string(&Count::<Members>::new(7)).unwrap(),
             "7"
         );
-        assert_eq!(format!("{:?}", Tally::<Members>::new(7)), "MemberCount(7)");
+        assert_eq!(format!("{:?}", Count::<Members>::new(7)), "MemberCount(7)");
     }
 }

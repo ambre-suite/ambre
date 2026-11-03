@@ -9,7 +9,7 @@ use super::*;
 use crate::formula::SheetQualifier;
 use crate::formula::identity::{self, AxisEdit, LineEdit};
 use crate::model::{delete_line, insert_line, move_line};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 impl TrameState {
     /// Carry every formula that reads the active sheet across one structural
@@ -82,7 +82,7 @@ impl TrameState {
         if insert_line(&self.line_list::<L>(), at, &uid).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
-        self.reanchor_formulas(L::edit(LineEdit::Insert { at, n: Count::ONE }));
+        self.reanchor_formulas(L::edit(LineEdit::Insert { at, n: Len::ONE }));
         self.doc.commit();
         self.after_structural()
     }
@@ -97,7 +97,7 @@ impl TrameState {
         let Some(filter_dropped) = self.remove_line(at) else {
             return TrameOutcome::display_only(vec![]);
         };
-        self.reanchor_formulas(L::edit(LineEdit::Delete { at, n: Count::ONE }));
+        self.reanchor_formulas(L::edit(LineEdit::Delete { at, n: Len::ONE }));
         self.doc.commit();
         self.after_line_removal(filter_dropped)
     }
@@ -179,7 +179,7 @@ impl TrameState {
             return TrameOutcome::display_only(vec![]);
         }
         // The removed lines are the materialized run from `start`.
-        let n = Count::from_len(removals.len());
+        let n = Len::of(removals.len());
         self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }));
         self.doc.commit();
         self.after_line_removal(removals.contains(&true))
@@ -209,7 +209,7 @@ impl TrameState {
     pub(super) fn sort_selection(&mut self, order: SortOrder) -> TrameOutcome {
         let rect = self.selection_bounds();
         let sheet = self.active_sheet.clone();
-        self.sort_range(&sheet, rect, Count::<Col>::ZERO, order, HeaderRow::Absent)
+        self.sort_range(&sheet, rect, Len::<Col>::ZERO, order, HeaderRow::Absent)
     }
 
     /// Whole-sheet single-column sort by the active cell's column (`trame-sort`,
@@ -227,7 +227,7 @@ impl TrameState {
                 Col::len(&self.index).last().unwrap_or(Pos::<Col>::ZERO),
             ),
         );
-        let sort_col = self.active.col.count_from(Pos::<Col>::ZERO);
+        let sort_col = self.active.col.len_from(Pos::<Col>::ZERO);
         let sheet = self.active_sheet.clone();
         self.sort_range(&sheet, rect, sort_col, order, HeaderRow::Absent)
     }

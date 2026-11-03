@@ -364,14 +364,14 @@ fn a_reaction_never_counts_as_unread() {
     };
     assert_eq!(
         count(&bob),
-        ambre_core::Tally::<Unread>::new(1),
+        ambre_core::Count::<Unread>::new(1),
         "Alice's message is unread"
     );
     let sent = alice.react(message, THUMB);
     bob.receive(&alice, &sent, 2);
     assert_eq!(
         count(&bob),
-        ambre_core::Tally::<Unread>::new(1),
+        ambre_core::Count::<Unread>::new(1),
         "her reaction adds nothing"
     );
 }

@@ -24,12 +24,12 @@ use crate::{
     Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush,
     Rect, Stroke,
 };
-use ambre_core::{Image, Instant, PageLoad, Px, Size, Surface, Tally};
+use ambre_core::{Count, Image, Instant, PageLoad, Px, Size, Surface};
 
 /// How many glyphs one recorded run holds.
 pub enum Glyphs {}
 
-impl ambre_core::TallyKind for Glyphs {
+impl ambre_core::CountKind for Glyphs {
     type Repr = u32;
     const NAME: &'static str = "GlyphCount";
 }
@@ -37,7 +37,7 @@ impl ambre_core::TallyKind for Glyphs {
 /// How many recorded operations match a predicate.
 pub enum Ops {}
 
-impl ambre_core::TallyKind for Ops {
+impl ambre_core::CountKind for Ops {
     type Repr = u32;
     const NAME: &'static str = "OpCount";
 }
@@ -86,7 +86,7 @@ pub enum DrawOp {
     /// A pre-shaped glyph run: how many glyphs, the solid brush colour (if any),
     /// and the run origin transform.
     Glyphs {
-        glyph_count: Tally<Glyphs>,
+        glyph_count: Count<Glyphs>,
         color: Option<Color>,
         transform: Affine,
     },
@@ -165,8 +165,8 @@ impl RecordingSurface {
 
     /// Count the ops matching `pred`, for example
     /// `count(|op| matches!(op, DrawOp::FillRect { .. }))`.
-    pub fn count(&self, pred: impl Fn(&DrawOp) -> bool) -> Tally<Ops> {
-        Tally::<Ops>::of_len(self.ops.iter().filter(|op| pred(op)).count())
+    pub fn count(&self, pred: impl Fn(&DrawOp) -> bool) -> Count<Ops> {
+        Count::<Ops>::of(self.ops.iter().filter(|op| pred(op)).count())
     }
 
     /// Every distinct fill colour seen, in first-seen order. Handy for asserting
@@ -217,7 +217,7 @@ impl DrawSurface for RecordingSurface {
 
     fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
         self.ops.push(DrawOp::Glyphs {
-            glyph_count: Tally::<Glyphs>::of_len(run.glyphs().count()),
+            glyph_count: Count::<Glyphs>::of(run.glyphs().count()),
             color: brush_color(brush),
             transform,
         });

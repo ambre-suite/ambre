@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::formula::types::Arg;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 /// STDEV / VAR over the sample (denominator `n - 1`).
 pub(crate) fn variance(args: &[CellValue]) -> CellValue {
@@ -522,10 +522,10 @@ pub(crate) fn choose(args: &[CellValue]) -> CellValue {
 
 /// Dimensions of the first argument: a `Range` yields `(rows, cols)`, a scalar
 /// behaves like a 1x1 range.
-pub(crate) fn range_dims(args: &[CellValue]) -> Option<(Count<Row>, Count<Col>)> {
+pub(crate) fn range_dims(args: &[CellValue]) -> Option<(Len<Row>, Len<Col>)> {
     match args.first()? {
         CellValue::Range(r) => Some((r.rows, r.cols)),
-        _ => Some((Count::<Row>::ONE, Count::<Col>::ONE)),
+        _ => Some((Len::<Row>::ONE, Len::<Col>::ONE)),
     }
 }
 

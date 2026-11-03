@@ -44,7 +44,7 @@ pub struct DocItem {
     /// Epoch milliseconds of the last modification (routing metadata, plaintext).
     pub updated_at: Instant<Authored>,
     /// Total member count; `> 1` => shared.
-    pub member_count: ambre_core::Tally<ambre_core::Members>,
+    pub member_count: ambre_core::Count<ambre_core::Members>,
 }
 
 /// How the server lets a user sign in, as `/api/auth/config` reports it.
@@ -1066,7 +1066,7 @@ mod tests {
             doc_type: DocType::Prose,
             name: Some(ambre_core::Name::new("Plan").unwrap()),
             updated_at: Instant::<Authored>::new(0),
-            member_count: ambre_core::Tally::<ambre_core::Members>::ONE,
+            member_count: ambre_core::Count::<ambre_core::Members>::ONE,
         };
         let docs = RwSignal::new(vec![item.clone()]);
         let pending_delete = RwSignal::new(None);

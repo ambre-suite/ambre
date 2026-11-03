@@ -505,7 +505,7 @@ mod peer_geometry_tests {
             assert_eq!(rect.x1, 1_000_000.0, "a huge width is held at the bound");
             assert_eq!(
                 st.index.len(),
-                ambre_core::Tally::<ambre_core::Elements>::new(8)
+                ambre_core::Count::<ambre_core::Elements>::new(8)
             );
         }
         victim.handle_command(ToileCommand::MoveElements {

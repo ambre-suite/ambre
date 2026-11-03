@@ -9,7 +9,7 @@
 use std::fmt::Debug;
 
 use ambre_bus::{Col, Row};
-use ambre_core::index::{Axis, Count, Pos};
+use ambre_core::index::{Axis, Len, Pos};
 use loro::LoroMovableList;
 
 use super::{SheetIndex, Uid};
@@ -26,7 +26,7 @@ pub trait Line: Axis + Copy + Debug {
     fn pos(index: &SheetIndex, uid: &Uid) -> Option<Pos<Self>>;
 
     /// How many lines the axis holds.
-    fn len(index: &SheetIndex) -> Count<Self>;
+    fn len(index: &SheetIndex) -> Len<Self>;
 }
 
 impl Line for Row {
@@ -36,7 +36,7 @@ impl Line for Row {
     fn pos(index: &SheetIndex, uid: &Uid) -> Option<Pos<Row>> {
         index.row_pos(uid)
     }
-    fn len(index: &SheetIndex) -> Count<Row> {
+    fn len(index: &SheetIndex) -> Len<Row> {
         index.row_len()
     }
 }
@@ -48,7 +48,7 @@ impl Line for Col {
     fn pos(index: &SheetIndex, uid: &Uid) -> Option<Pos<Col>> {
         index.col_pos(uid)
     }
-    fn len(index: &SheetIndex) -> Count<Col> {
+    fn len(index: &SheetIndex) -> Len<Col> {
         index.col_len()
     }
 }

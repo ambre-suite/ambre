@@ -312,8 +312,8 @@ pub struct IrTableStyle {
 
 /// The fields below replace `styled`.
 pub struct IrTableCell {
-    pub rowspan:      Count<Row>,
-    pub colspan:      Count<Col>,
+    pub rowspan:      Len<Row>,
+    pub colspan:      Len<Col>,
     pub bg:           Option<Rgb>,
     pub borders:      bool,
     pub border_color: Option<Rgb>,

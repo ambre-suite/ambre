@@ -85,14 +85,14 @@ impl SheetAxes<'_> {
 
     /// The column whose band holds `x`, clamped to the grid.
     pub fn col_at(&self, x: Px<Surface>) -> Pos<Col> {
-        Span::<Col>::from_count(Pos::<Col>::ZERO, TOTAL_COLS)
+        Span::<Col>::from_len(Pos::<Col>::ZERO, TOTAL_COLS)
             .first_where(|c| self.col_x(c.next()) > x)
             .min(LAST_COL)
     }
 
     /// The row whose band holds `y`, clamped to the grid.
     pub fn row_at(&self, y: Px<Surface>) -> Pos<Row> {
-        Span::<Row>::from_count(Pos::<Row>::ZERO, TOTAL_ROWS)
+        Span::<Row>::from_len(Pos::<Row>::ZERO, TOTAL_ROWS)
             .first_where(|r| self.row_y(r.next()) > y)
             .min(LAST_ROW)
     }
@@ -128,7 +128,7 @@ pub struct SheetWalk<'t> {
     /// The shaped-text cache.
     pub text_cache: &'t mut TextCache,
     /// Cells whose text the last call drew.
-    pub cells_drawn: ambre_core::Tally<ambre_canvas::CellsDrawn>,
+    pub cells_drawn: ambre_core::Count<ambre_canvas::CellsDrawn>,
 }
 
 impl DocumentWalk for SheetWalk<'_> {

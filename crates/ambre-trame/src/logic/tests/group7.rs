@@ -4,7 +4,7 @@
 
 use super::*;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 const COL_1: Pos<Col> = Pos::<Col>::new(1);
 
@@ -395,21 +395,21 @@ fn copy_range_covers_the_full_selection_not_a_viewport() {
     };
     assert_eq!(payload.src_row, Pos::<Row>::new(0));
     assert_eq!(payload.src_col, Pos::<Col>::new(0));
-    assert_eq!(payload.rows, Count::<Row>::new(501));
-    assert_eq!(payload.cols, Count::<Col>::new(4));
+    assert_eq!(payload.rows, Len::<Row>::new(501));
+    assert_eq!(payload.cols, Len::<Col>::new(4));
     // Both non-empty cells are present, including the far one a viewport-based
     // build would have dropped; blanks in between are omitted.
     assert_eq!(payload.cells.len(), 2);
     let top = payload
         .cells
         .iter()
-        .find(|c| c.dr == Count::<Row>::new(0) && c.dc == Count::<Col>::new(0))
+        .find(|c| c.dr == Len::<Row>::new(0) && c.dc == Len::<Col>::new(0))
         .unwrap();
     assert_eq!(top.raw, "top");
     let bottom = payload
         .cells
         .iter()
-        .find(|c| c.dr == Count::<Row>::new(500) && c.dc == Count::<Col>::new(3))
+        .find(|c| c.dr == Len::<Row>::new(500) && c.dc == Len::<Col>::new(3))
         .unwrap();
     assert_eq!(bottom.raw, "bottom");
     // Non-mutating: no CRDT delta emitted.

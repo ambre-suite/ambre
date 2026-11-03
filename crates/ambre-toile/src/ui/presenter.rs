@@ -12,7 +12,7 @@
 // No DOM, no Loro: this stays in `ui` and is host-tested, like `ui::find`.
 // ============================================================================
 
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Char, Utf16, char_len, char_to_utf16, utf16_to_char};
 
 use ambre_bus::app::toile::Broadcast;
@@ -68,7 +68,7 @@ impl std::fmt::Debug for PresenterIntent {
 pub fn slide_counter_label(slide: SlidePosition) -> String {
     let count = slide.count();
     let human = if count.is_zero() {
-        Count::<Slide>::ZERO
+        Len::<Slide>::ZERO
     } else {
         slide.index().number()
     };
@@ -111,7 +111,7 @@ pub fn notes_delta(old: &str, new: &str) -> Option<TextDelta> {
         .collect();
     Some(TextDelta {
         at: Pos::<Char>::from_usize(prefix),
-        delete: Count::<Char>::from_len(delete),
+        delete: Len::<Char>::of(delete),
         insert,
     })
 }
@@ -184,7 +184,7 @@ mod tests {
     }
 
     fn position(index: u32, count: u32) -> SlidePosition {
-        SlidePosition::new(Pos::<Slide>::new(index), Count::<Slide>::new(count))
+        SlidePosition::new(Pos::<Slide>::new(index), Len::<Slide>::new(count))
     }
 
     #[test]
@@ -221,7 +221,7 @@ mod tests {
             notes_delta("abc", "abcd"),
             Some(TextDelta {
                 at: Pos::<Char>::new(3),
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: "d".to_owned()
             })
         );
@@ -234,7 +234,7 @@ mod tests {
             notes_delta("bc", "abc"),
             Some(TextDelta {
                 at: Pos::<Char>::ZERO,
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: "a".to_owned()
             })
         );
@@ -247,7 +247,7 @@ mod tests {
             notes_delta("abcd", "abd"),
             Some(TextDelta {
                 at: Pos::<Char>::new(2),
-                delete: Count::<Char>::new(1),
+                delete: Len::<Char>::new(1),
                 insert: String::new()
             })
         );
@@ -260,7 +260,7 @@ mod tests {
             notes_delta("abXYcd", "abZcd"),
             Some(TextDelta {
                 at: Pos::<Char>::new(2),
-                delete: Count::<Char>::new(2),
+                delete: Len::<Char>::new(2),
                 insert: "Z".to_owned()
             })
         );
@@ -272,7 +272,7 @@ mod tests {
             notes_delta("", "hi"),
             Some(TextDelta {
                 at: Pos::<Char>::ZERO,
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: "hi".to_owned()
             })
         );
@@ -284,7 +284,7 @@ mod tests {
             notes_delta("hi", ""),
             Some(TextDelta {
                 at: Pos::<Char>::ZERO,
-                delete: Count::<Char>::new(2),
+                delete: Len::<Char>::new(2),
                 insert: String::new()
             })
         );
@@ -298,7 +298,7 @@ mod tests {
             notes_delta("\u{e9}\u{e9}", "\u{e9}\u{e9}!"),
             Some(TextDelta {
                 at: Pos::<Char>::new(2),
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: "!".to_owned()
             })
         );
@@ -313,7 +313,7 @@ mod tests {
             notes_delta("x\u{e9}y", "x\u{fc}y"),
             Some(TextDelta {
                 at: Pos::<Char>::new(1),
-                delete: Count::<Char>::new(1),
+                delete: Len::<Char>::new(1),
                 insert: "\u{fc}".to_owned()
             })
         );
@@ -327,7 +327,7 @@ mod tests {
             notes_delta("aaa", "aa"),
             Some(TextDelta {
                 at: Pos::<Char>::new(2),
-                delete: Count::<Char>::new(1),
+                delete: Len::<Char>::new(1),
                 insert: String::new()
             })
         );

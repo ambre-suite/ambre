@@ -14,7 +14,7 @@ use crate::formula::text::CellText;
 use ambre_bus::app::trame::CellNumber;
 use ambre_bus::{Col, FillMode, Row};
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Delta};
+use ambre_core::index::{Delta, Len};
 
 /// A cell's or a tile's place in its fill line's series, counted from the
 /// source origin. Signed: a fill runs either way.
@@ -68,7 +68,7 @@ pub(super) struct Tile<L: Line> {
     /// The tile's first line.
     pub(super) first: Pos<L>,
     /// How many lines the tile covers, cut at the drag edge.
-    pub(super) len: Count<L>,
+    pub(super) len: Len<L>,
 }
 
 impl TrameState {
@@ -308,7 +308,7 @@ impl TrameState {
                 // Signed: fill may go up or down.
                 let term = Term::of_row(row - origin);
                 let k = term.0.rem_euclid(sources.len().max(1) as i64) as u32;
-                let from = CellPos::new(origin + Count::<Row>::new(k), col);
+                let from = CellPos::new(origin + Len::<Row>::new(k), col);
                 self.fill_one(CellPos::new(row, col), from, term, &sources, series);
             }
         }
@@ -330,7 +330,7 @@ impl TrameState {
                 }
                 let term = Term::of_col(col - origin);
                 let k = term.0.rem_euclid(sources.len().max(1) as i64) as u32;
-                let from = CellPos::new(row, origin + Count::<Col>::new(k));
+                let from = CellPos::new(row, origin + Len::<Col>::new(k));
                 self.fill_one(CellPos::new(row, col), from, term, &sources, series);
             }
         }
@@ -412,7 +412,7 @@ pub(super) fn merged_tiles<L: Line>(
     s2: Pos<L>,
     d1: Pos<L>,
     d2: Pos<L>,
-    block: Count<L>,
+    block: Len<L>,
 ) -> Vec<Tile<L>> {
     let mut tiles = Vec::new();
     // Before the source, walking back from it one block at a time.
@@ -428,7 +428,7 @@ pub(super) fn merged_tiles<L: Line>(
         tiles.push(Tile {
             term: Term(term),
             first: lo,
-            len: last.count_from(lo) + Count::ONE,
+            len: last.len_from(lo) + Len::ONE,
         });
         let Some(first) = first else { break };
         next = first;
@@ -444,7 +444,7 @@ pub(super) fn merged_tiles<L: Line>(
             tiles.push(Tile {
                 term: Term(term),
                 first,
-                len: last.count_from(first) + Count::ONE,
+                len: last.len_from(first) + Len::ONE,
             });
         }
         let next = first + block;

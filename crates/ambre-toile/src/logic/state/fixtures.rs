@@ -19,14 +19,14 @@
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
 
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use ambre_core::{Px, Version};
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{
-    Board, BoardFrames, Connectors, DocType, Elements, FixtureGen, FixtureName, FixtureSeed,
-    FixtureShape, Generator, ShapeBody, Tally, fixture_peer_count, seeded_document_id,
+    Board, BoardFrames, Connectors, Count, DocType, Elements, FixtureGen, FixtureName, FixtureSeed,
+    FixtureShape, Generator, ShapeBody, fixture_peer_count, seeded_document_id,
 };
 use loro::LoroValue;
 
@@ -46,8 +46,8 @@ impl ToileState {
     /// checks the manifest against a recomputed shape; a generator declaring
     /// its own would assert only that it agrees with itself.
     pub fn fixture_shape(&self) -> FixtureShape {
-        let mut elements = Tally::<Elements>::ZERO;
-        let mut frames = Tally::<BoardFrames>::ZERO;
+        let mut elements = Count::<Elements>::ZERO;
+        let mut frames = Count::<BoardFrames>::ZERO;
         if let LoroValue::Map(map) = self.doc.get_map(Root::Elements.as_str()).get_deep_value() {
             for value in map.values() {
                 elements = elements.incremented();
@@ -59,8 +59,8 @@ impl ToileState {
             }
         }
         let connectors = match self.doc.get_map(Root::Connectors.as_str()).get_value() {
-            LoroValue::Map(map) => Tally::<Connectors>::of_len(map.len()),
-            _ => Tally::<Connectors>::ZERO,
+            LoroValue::Map(map) => Count::<Connectors>::of(map.len()),
+            _ => Count::<Connectors>::ZERO,
         };
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
@@ -505,7 +505,7 @@ impl FixtureGen for ToileBenchFixture {
             // viewport, so a cull that returned everything shows up as a figure.
             Self::Board50k => build_spread_board(
                 &mut state,
-                Tally::<Tiles>::new(100),
+                Count::<Tiles>::new(100),
                 Px::<Board>::new(4_000.0),
                 Px::<Board>::new(160.0),
             ),
@@ -513,11 +513,11 @@ impl FixtureGen for ToileBenchFixture {
             // camera, so every element of this board is a visible element.
             Self::DenseViewport2k => build_spread_board(
                 &mut state,
-                Tally::<Tiles>::new(4),
+                Count::<Tiles>::new(4),
                 Px::<Board>::new(600.0),
                 Px::<Board>::new(24.0),
             ),
-            Self::Deck50 => build_deck(&mut state, Count::<ambre_bus::app::toile::Slide>::new(50)),
+            Self::Deck50 => build_deck(&mut state, Len::<ambre_bus::app::toile::Slide>::new(50)),
         }
         state
             .export_ambre_plaintext(seeded_document_id(seed))
@@ -528,7 +528,7 @@ impl FixtureGen for ToileBenchFixture {
 /// How many copies of the one built block a spread board holds.
 pub enum Tiles {}
 
-impl ambre_core::TallyKind for Tiles {
+impl ambre_core::CountKind for Tiles {
     type Repr = u32;
     const NAME: &'static str = "TileCount";
 }
@@ -550,7 +550,7 @@ impl ambre_core::TallyKind for Tiles {
 ///   meets a mix rather than one geometry repeated.
 fn build_spread_board(
     state: &mut ToileState,
-    tiles: Tally<Tiles>,
+    tiles: Count<Tiles>,
     tile_pitch: Px<Board>,
     element_pitch: Px<Board>,
 ) {
@@ -608,7 +608,7 @@ fn copy_payload(state: &mut ToileState, ids: Vec<Id<Element>>) -> Option<Clipboa
 ///
 /// The frames declare their children and the deck declares its order. The
 /// export walks that order and that membership, never the spatial overlap.
-fn build_deck(state: &mut ToileState, slides: Count<ambre_bus::app::toile::Slide>) {
+fn build_deck(state: &mut ToileState, slides: Len<ambre_bus::app::toile::Slide>) {
     const PITCH: Px<Board> = Px::<Board>::new(1_400.0);
     let mut order = Vec::with_capacity(slides.to_usize());
     for slide in 0..slides.get() {

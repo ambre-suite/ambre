@@ -119,10 +119,7 @@ pub(crate) fn fragment(
             run_top: Px::<Doc>::ZERO,
         });
     }
-    let k = page
-        .count_from(block.page_start)
-        .to_usize()
-        .checked_sub(1)?;
+    let k = page.len_from(block.page_start).to_usize().checked_sub(1)?;
     let height = *block.continuation_heights.get(k)?;
     let first_line = block.split_points.get(k)?.to_usize();
     Some(Fragment {
@@ -428,7 +425,7 @@ mod tests {
         ui.viewport.scroll_y = ui.column.page_top_y(page);
         assert_eq!(
             ui.runs.built(),
-            ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+            ambre_core::Count::<crate::view::cache::Builds>::ZERO
         );
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);
@@ -439,7 +436,7 @@ mod tests {
         // Resolving built nothing: the drawing state is a paint's alone.
         assert_eq!(
             ui.runs.built(),
-            ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+            ambre_core::Count::<crate::view::cache::Builds>::ZERO
         );
     }
 

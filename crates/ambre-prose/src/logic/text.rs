@@ -13,7 +13,7 @@
 //! case (`PROSE-039`).
 
 use ambre_bus::app::prose::{DocChar, MarkKey};
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroText, TreeID, TreeParentId};
 
 use crate::doc;
@@ -66,7 +66,7 @@ impl ProseState {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
-        if pos > Count::<DocChar>::from_len(body.len_unicode()).as_end() {
+        if pos > Len::<DocChar>::of(body.len_unicode()).as_end() {
             return Self::err_bad_range();
         }
         if text.is_empty() {
@@ -80,7 +80,7 @@ impl ProseState {
         // (`PROSE-FEAT-307`).
         if let Err(e) = crate::suggest::strip_inherited(
             &body,
-            Span::<DocChar>::from_count(pos, ambre_core::char_len(text).as_axis::<DocChar>()),
+            Span::<DocChar>::from_len(pos, ambre_core::char_len(text).as_axis::<DocChar>()),
         ) {
             return Self::err_write(e);
         }
@@ -93,7 +93,7 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         let range = normalize(range);
-        if range.end > Count::<DocChar>::from_len(body.len_unicode()).as_end() {
+        if range.end > Len::<DocChar>::of(body.len_unicode()).as_end() {
             return Self::err_bad_range();
         }
         if range.is_empty() {
@@ -139,8 +139,8 @@ impl ProseState {
         let (Some(head_body), Some(tail_body)) = (self.body_of(&head), self.body_of(&tail)) else {
             return Self::err_no_block(&head);
         };
-        let head_len = Count::<DocChar>::from_len(head_body.len_unicode()).as_end();
-        let tail_len = Count::<DocChar>::from_len(tail_body.len_unicode()).as_end();
+        let head_len = Len::<DocChar>::of(head_body.len_unicode()).as_end();
+        let tail_len = Len::<DocChar>::of(tail_body.len_unicode()).as_end();
         if head_off > head_len || tail_off > tail_len {
             return Self::err_bad_range();
         }
@@ -158,10 +158,9 @@ impl ProseState {
         // What survives of the last paragraph, before anything is written
         // (`PROSE-037`), with the marks it carries (`PROSE-042`).
         let surviving = marked_runs(&tail_body, Span::<DocChar>::new(tail_off, tail_len));
-        if let Err(e) = head_body.delete(
-            head_off.to_usize(),
-            head_len.count_from(head_off).to_usize(),
-        ) {
+        if let Err(e) =
+            head_body.delete(head_off.to_usize(), head_len.len_from(head_off).to_usize())
+        {
             return Self::err_write(e);
         }
         if let Err(e) = write_runs(&head_body, head_off, &surviving) {
@@ -220,7 +219,7 @@ impl ProseState {
         if doc::is_aside(&doc::blocks(&self.doc), id) {
             return Self::err_nesting();
         }
-        let len = Count::<DocChar>::from_len(body.len_unicode()).as_end();
+        let len = Len::<DocChar>::of(body.len_unicode()).as_end();
         if pos > len {
             return Self::err_bad_range();
         }
@@ -248,7 +247,7 @@ impl ProseState {
             return Self::err_write(e);
         }
         if pos < len {
-            if let Err(e) = body.delete(pos.to_usize(), len.count_from(pos).to_usize()) {
+            if let Err(e) = body.delete(pos.to_usize(), len.len_from(pos).to_usize()) {
                 return Self::err_write(e);
             }
             let new_body = doc::get_block_text(&self.doc, &new_block);
@@ -265,10 +264,7 @@ impl ProseState {
 
 /// The span of every code point `body` holds.
 pub(super) fn body_span(body: &LoroText) -> Span<DocChar> {
-    Span::<DocChar>::from_count(
-        Pos::<DocChar>::ZERO,
-        Count::<DocChar>::from_len(body.len_unicode()),
-    )
+    Span::<DocChar>::from_len(Pos::<DocChar>::ZERO, Len::<DocChar>::of(body.len_unicode()))
 }
 
 /// One run of body text and the marks it carries. The text is content, so

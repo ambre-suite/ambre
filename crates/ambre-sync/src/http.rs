@@ -1428,7 +1428,7 @@ pub(crate) struct DocumentEntry {
     pub wrapper_exchange_pub_key: Option<ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     /// Total member count; `> 1` => shared.
     #[serde(default)]
-    pub member_count: ambre_core::Tally<ambre_core::Members>,
+    pub member_count: ambre_core::Count<ambre_core::Members>,
     pub updated_at: ambre_core::Rfc3339,
 }
 

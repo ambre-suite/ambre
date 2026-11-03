@@ -106,7 +106,7 @@ fn nothing_runs_into_the_notes(layout: &PageLayout) {
             let bottom = if entry.page_start == page {
                 entry.y_in_page + entry.height
             } else {
-                let index = page.count_from(entry.page_start).to_usize() - 1;
+                let index = page.len_from(entry.page_start).to_usize() - 1;
                 entry
                     .continuation_heights
                     .get(index)

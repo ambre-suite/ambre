@@ -25,8 +25,8 @@
 //! (`MURMURE-523`). A box under its field sends the reply to the channel as
 //! well, and unchecks once sent (`MURMURE-531`).
 
-use ambre_core::Tally;
-use ambre_core::index::{Count, Delta, IdxVec, Pos, Span};
+use ambre_core::Count;
+use ambre_core::index::{Delta, IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
@@ -447,7 +447,7 @@ fn kept_mentions(edit: DraftEdit<'_>, mentions: &[Mention]) -> Vec<Mention> {
                 let start = range.start + (after_end - before_end);
                 Some(Mention {
                     target: mention.target,
-                    range: Span::<Char>::from_count(start, range.len()),
+                    range: Span::<Char>::from_len(start, range.len()),
                 })
             } else {
                 None
@@ -549,7 +549,7 @@ pub struct Composer {
     /// go (`MURMURE-212`).
     sent: Vec<DraftOf>,
     /// How many losses of the shelf the composer applied.
-    losses_seen: Tally<ShelfLosses>,
+    losses_seen: Count<ShelfLosses>,
     /// The files each draft carries, and those still uploading.
     uploads: Uploads,
     /// Each file chip of the last paint that a press takes off the draft, as
@@ -1161,7 +1161,7 @@ impl Composer {
         let written = offer.written();
         editor.push(EditIntent::Replace {
             start: at,
-            end: at + Count::<Byte>::from_len(1 + query.len()),
+            end: at + Len::<Byte>::of(1 + query.len()),
             text: format!("{written} "),
         });
         editor.flush(
@@ -1178,7 +1178,7 @@ impl Composer {
         marks.follow(&editor.text());
         marks.mentions.push(Mention {
             target: offer.target,
-            range: Span::<Char>::from_count(start, char_len(&written)),
+            range: Span::<Char>::from_len(start, char_len(&written)),
         });
         marks.mentions.sort_by_key(|mention| mention.range.start);
     }

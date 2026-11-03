@@ -11,15 +11,15 @@
 //! `ProseState::import_snapshot`.
 
 use ambre_core::Version;
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_bus::app::grid::{CellPos, Col, Row};
 use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Footnote, Id, User};
 use ambre_core::{
-    Char, DocBlocks, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Generator,
-    ShapeBody, Tally, fixture_peer_count, seeded_document_id,
+    Char, Count, DocBlocks, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Generator,
+    ShapeBody, fixture_peer_count, seeded_document_id,
 };
 use loro::{LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -38,13 +38,13 @@ impl ProseState {
     /// declaring its own shape would assert only that it agrees with itself.
     #[must_use]
     pub fn fixture_shape(&self) -> FixtureShape {
-        let blocks = Tally::<DocBlocks>::of_len(self.document_order().len());
+        let blocks = Count::<DocBlocks>::of(self.document_order().len());
         let characters = self
             .document_order()
             .iter()
             .filter_map(|id| self.body_of(id))
-            .fold(Count::<Char>::ZERO, |total, body| {
-                total + Count::<Char>::from_len(body.len_unicode())
+            .fold(Len::<Char>::ZERO, |total, body| {
+                total + Len::<Char>::of(body.len_unicode())
             });
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
@@ -482,8 +482,8 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(block_id(body)),
-            rows: Count::<Row>::new(2),
-            cols: Count::<Col>::new(2),
+            rows: Len::<Row>::new(2),
+            cols: Len::<Col>::new(2),
         },
     )?;
     let table = root_after(&state, body)?;
@@ -583,7 +583,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
 mod tests {
     use ambre_bus::app::prose::DocChar;
     use ambre_core::FixtureGen;
-    use ambre_core::index::{Count, Pos};
+    use ambre_core::index::{Len, Pos};
 
     use super::{ProseFixture, build_styled_document};
     use crate::events::ProseCommand;
@@ -600,12 +600,12 @@ mod tests {
             text: "hello".to_owned(),
         });
         let shape = state.fixture_shape();
-        assert_eq!(shape.peers, ambre_core::Tally::<ambre_core::Peers>::new(1));
+        assert_eq!(shape.peers, ambre_core::Count::<ambre_core::Peers>::new(1));
         assert_eq!(
             shape.body,
             ambre_core::ShapeBody::Prose {
-                blocks: ambre_core::Tally::<ambre_core::DocBlocks>::new(1),
-                characters: Count::<ambre_core::Char>::new(5)
+                blocks: ambre_core::Count::<ambre_core::DocBlocks>::new(1),
+                characters: Len::<ambre_core::Char>::new(5)
             }
         );
     }

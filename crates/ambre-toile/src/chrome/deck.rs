@@ -12,7 +12,7 @@
 
 use ambre_bus::app::toile::{DeckView, Slide};
 use ambre_core::id::{Frame, Id};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use leptos::prelude::*;
 use wasm_bindgen::JsCast as _;
 
@@ -64,7 +64,7 @@ pub fn DeckPanel(
                     <ol class="ambre-deck-list">
                         {move || {
                             let slides = view.get().slides;
-                            let last = Pos::<Slide>::MAX.within(Count::from_len(slides.len()));
+                            let last = Pos::<Slide>::MAX.within(Len::of(slides.len()));
                             slides
                                 .into_iter()
                                 .enumerate()

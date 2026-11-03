@@ -19,7 +19,7 @@ use ambre_bus::app::prose::{
     DroppedElement, FootnoteCall, LiftedBlock, UnsupportedFeature,
 };
 
-use ambre_core::{Ordinal, Slant, Strikethrough, Tally, Underline, Weight};
+use ambre_core::{Count, Ordinal, Slant, Strikethrough, Underline, Weight};
 
 use crate::doc::StoredLevel;
 use crate::mark::{InlineCode, Subscript, Superscript};
@@ -334,7 +334,7 @@ impl Warnings {
         self.list.push(ConversionWarning::FeatureNotSupported {
             feature,
             format,
-            count: Tally::<ConversionLosses>::new(1),
+            count: Count::<ConversionLosses>::new(1),
         });
     }
 
@@ -353,7 +353,7 @@ impl Warnings {
         }
         self.list.push(ConversionWarning::ElementDropped {
             element,
-            count: Tally::<ConversionLosses>::new(1),
+            count: Count::<ConversionLosses>::new(1),
         });
     }
 
@@ -372,7 +372,7 @@ impl Warnings {
         }
         self.list.push(ConversionWarning::BlockLifted {
             block,
-            count: Tally::<ConversionLosses>::new(1),
+            count: Count::<ConversionLosses>::new(1),
         });
     }
 

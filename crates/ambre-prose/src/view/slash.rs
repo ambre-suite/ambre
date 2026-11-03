@@ -14,7 +14,7 @@ use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
 use ambre_bus::app::grid::{Col, Row};
 use ambre_bus::app::prose::DocChar;
-use ambre_core::index::{Axis, Count, IdxVec, Pos, Span};
+use ambre_core::index::{Axis, IdxVec, Len, Pos, Span};
 use ambre_core::{Doc, Point, Px, View};
 
 /// The place of an item in the menu as a query filters it.
@@ -26,9 +26,9 @@ impl Axis for SlashChoice {
 }
 
 /// The rows of the table the menu inserts.
-const TABLE_ROWS: Count<Row> = Count::<Row>::new(3);
+const TABLE_ROWS: Len<Row> = Len::<Row>::new(3);
 /// The columns of the table the menu inserts.
-const TABLE_COLS: Count<Col> = Count::<Col>::new(3);
+const TABLE_COLS: Len<Col> = Len::<Col>::new(3);
 
 /// The deepest heading a table of contents from the menu lists.
 const TOC_LEVEL: HeadingLevel = HeadingLevel::H3;
@@ -183,7 +183,7 @@ impl SlashMenu {
         let start = self.origin.1;
         Span::<DocChar>::new(
             start,
-            start + Count::<DocChar>::ONE + ambre_core::char_len(&self.query).as_axis::<DocChar>(),
+            start + Len::<DocChar>::ONE + ambre_core::char_len(&self.query).as_axis::<DocChar>(),
         )
     }
 }

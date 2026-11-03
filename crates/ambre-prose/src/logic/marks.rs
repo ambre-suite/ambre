@@ -8,7 +8,7 @@
 //! registry.
 
 use ambre_bus::app::prose::{DocChar, MarkKey};
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 
 use loro::TreeID;
 
@@ -190,7 +190,7 @@ impl ProseState {
                     continue;
                 };
                 let len = ambre_core::char_len(text).as_axis::<DocChar>();
-                let covered = span.end.min(at + len).count_from(span.start.max(at));
+                let covered = span.end.min(at + len).len_from(span.start.max(at));
                 if !covered.is_zero() {
                     fold.take(&marks_of_run(run));
                 }
@@ -274,7 +274,7 @@ impl ProseState {
             .unwrap_or_default()
             .iter()
             .filter_map(|id| {
-                let len = Count::<DocChar>::from_len(self.body_of(id)?.len_unicode()).as_end();
+                let len = Len::<DocChar>::of(self.body_of(id)?.len_unicode()).as_end();
                 let block = crate::events::block_id(*id);
                 let start = if block == head.0 {
                     head.1

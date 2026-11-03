@@ -71,8 +71,8 @@ mod schema_shape;
 #[cfg(test)]
 mod schema_reading;
 
-use ambre_core::Tally;
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::Count;
+use ambre_core::index::{Len, Pos, Span};
 use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};
@@ -96,17 +96,17 @@ use crate::schema;
 /// How many font faces a document measures on (`PROSE-115`).
 pub enum Faces {}
 
-impl ambre_core::TallyKind for Faces {
+impl ambre_core::CountKind for Faces {
     type Repr = u32;
     const NAME: &'static str = "FaceCount";
 }
 
 /// The pages a layout carries before the view asks for any (`PROSE-125`).
-pub const WINDOW_PAGES: Count<Page> = Count::<Page>::new(8);
+pub const WINDOW_PAGES: Len<Page> = Len::<Page>::new(8);
 
 /// The pages carried on each side of a block the view reveals
 /// (`PROSE-UI-212`).
-pub const WINDOW_MARGIN: Count<Page> = Count::<Page>::new(4);
+pub const WINDOW_MARGIN: Len<Page> = Len::<Page>::new(4);
 
 ambre_core::define_flag! {
     /// Whether this session owes a newcomer its presence.
@@ -125,7 +125,7 @@ struct LayoutBasis {
     /// The document's state.
     frontiers: loro::Frontiers,
     /// How many faces the layout was shaped on.
-    faces: Tally<Faces>,
+    faces: Count<Faces>,
     /// The pages it carries.
     window: Span<Page>,
 }
@@ -207,7 +207,7 @@ pub struct ProseState {
     /// fresh on a live document, a sequence on a pinned one (`FIXTURE-002`).
     ids: ids::IdSource,
     /// The five figures as last answered (`PROSE-FEAT-018`). Session state:
-    /// the tallies move on a recount and the page count on a layout, and
+    /// the counts move on a recount and the page count on a layout, and
     /// neither ever reaches the document.
     word_count: crate::events::WordCount,
     /// The open search, if any. Session state: it never enters the document
@@ -460,9 +460,9 @@ impl ProseState {
 
     /// How many runs the paginator has shaped, over its life.
     #[cfg(test)]
-    pub(crate) fn shaped_count(&self) -> ambre_core::Tally<crate::layout::measure::ShapedRuns> {
+    pub(crate) fn shaped_count(&self) -> ambre_core::Count<crate::layout::measure::ShapedRuns> {
         self.paginator.as_ref().map_or(
-            ambre_core::Tally::<crate::layout::measure::ShapedRuns>::ZERO,
+            ambre_core::Count::<crate::layout::measure::ShapedRuns>::ZERO,
             Paginator::shaped,
         )
     }
@@ -472,8 +472,8 @@ impl ProseState {
     /// Zero means every run shapes into tofu: the measuring context is sealed
     /// and nothing has been handed to it yet.
     #[must_use]
-    pub fn face_count(&self) -> Tally<Faces> {
-        Tally::<Faces>::of_len(self.faces.len())
+    pub fn face_count(&self) -> Count<Faces> {
+        Count::<Faces>::of(self.faces.len())
     }
 
     /// Hand the document the faces pagination measures on (`PROSE-114`).
@@ -1650,7 +1650,7 @@ mod tests {
         });
         let before = state.doc.get_deep_value();
         let pages = state.paginate(&[]).page_count;
-        assert!(pages >= Count::<Page>::ONE);
+        assert!(pages >= Len::<Page>::ONE);
         // `PROSE-033`, `PROSE-065`, `PROSE-079`: laying out reads, and the
         // document holds no page number, no break and no height afterwards.
         assert_eq!(state.doc.get_deep_value(), before);

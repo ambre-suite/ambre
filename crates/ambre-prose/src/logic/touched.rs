@@ -7,7 +7,7 @@
 //! A subscription notes the block behind every container a commit or an import
 //! wrote to, and the next layout re-measures those (`PROSE-123`).
 
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -173,20 +173,20 @@ fn record(change: &ContainerDiff<'_>, moves: &mut TextMoves) {
             for item in delta {
                 match item {
                     TextDelta::Retain { retain, .. } => {
-                        at += Count::<DocChar>::from_len(*retain);
+                        at += Len::<DocChar>::of(*retain);
                     }
                     TextDelta::Insert { insert, .. } => {
                         let len = ambre_core::char_len(insert).as_axis::<DocChar>();
                         moves
                             .edits
-                            .push((block, at, Delta::<DocChar>::from_count(len)));
+                            .push((block, at, Delta::<DocChar>::from_len(len)));
                         at += len;
                     }
                     TextDelta::Delete { delete } => {
-                        let len = Count::<DocChar>::from_len(*delete);
+                        let len = Len::<DocChar>::of(*delete);
                         moves
                             .edits
-                            .push((block, at, Delta::<DocChar>::from_count(len).reversed()));
+                            .push((block, at, Delta::<DocChar>::from_len(len).reversed()));
                     }
                 }
             }

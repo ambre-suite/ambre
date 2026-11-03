@@ -7,7 +7,7 @@
 //! out of a row's place, and one struct per pair fixes the order of the pair.
 //! Every position is 0-based.
 
-use ambre_core::index::{Axis, Count, Pos, Span};
+use ambre_core::index::{Axis, Len, Pos, Span};
 use serde::{Deserialize, Serialize};
 
 /// A grid row, 0-based.
@@ -91,12 +91,12 @@ impl CellRect {
     }
 
     /// How many rows the rectangle covers.
-    pub const fn row_count(self) -> Count<Row> {
+    pub const fn row_count(self) -> Len<Row> {
         self.rows().len()
     }
 
     /// How many columns the rectangle covers.
-    pub const fn col_count(self) -> Count<Col> {
+    pub const fn col_count(self) -> Len<Col> {
         self.cols().len()
     }
 
@@ -150,16 +150,16 @@ impl CellRect {
 /// columns it covers, the top-left cell included. A 1 x 1 extent is no merge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MergeSpan {
-    pub rows: Count<Row>,
-    pub cols: Count<Col>,
+    pub rows: Len<Row>,
+    pub cols: Len<Col>,
 }
 
 impl MergeSpan {
     /// The extent of one cell alone.
-    pub const CELL: Self = Self::new(Count::<Row>::ONE, Count::<Col>::ONE);
+    pub const CELL: Self = Self::new(Len::<Row>::ONE, Len::<Col>::ONE);
 
     /// The extent of `rows` rows by `cols` columns.
-    pub const fn new(rows: Count<Row>, cols: Count<Col>) -> Self {
+    pub const fn new(rows: Len<Row>, cols: Len<Col>) -> Self {
         Self { rows, cols }
     }
 

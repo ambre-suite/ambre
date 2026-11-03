@@ -264,7 +264,7 @@ pub struct TrameState {
     /// the style reseed, drained at every import; a `Cell` because the reseed
     /// reads through a shared borrow of the document.
     ///
-    /// A flag rather than a tally. The same unreadable register is met again on
+    /// A flag rather than a count. The same unreadable register is met again on
     /// every later reseed, so a count would measure how often the grid was
     /// rebuilt.
     ///

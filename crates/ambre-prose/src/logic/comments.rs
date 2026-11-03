@@ -964,7 +964,7 @@ mod tests {
                 prop_assert_eq!(span(&alice, id), span(&bob, id));
                 let text: String = whole.chars()
                     .skip(here.anchor_start.to_usize())
-                    .take(here.anchor_end.count_from(here.anchor_start).to_usize())
+                    .take(here.anchor_end.len_from(here.anchor_start).to_usize())
                     .collect();
                 // Typing inside the passage joins it, and no text around it
                 // ever does.

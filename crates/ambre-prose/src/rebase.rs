@@ -12,34 +12,34 @@
 //! sequential: each one counts positions in the text the previous one left.
 
 use ambre_bus::app::prose::DocChar;
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 
 use crate::events::{BlockId, TextEdit};
 
 /// The code points an edit covers.
-fn len(edit: &TextEdit) -> Count<DocChar> {
+fn len(edit: &TextEdit) -> Len<DocChar> {
     edit.delta.magnitude()
 }
 
-fn insertion(block_id: BlockId, at: Pos<DocChar>, n: Count<DocChar>) -> TextEdit {
+fn insertion(block_id: BlockId, at: Pos<DocChar>, n: Len<DocChar>) -> TextEdit {
     TextEdit {
         block_id,
         at,
-        delta: Delta::<DocChar>::from_count(n),
+        delta: Delta::<DocChar>::from_len(n),
     }
 }
 
 /// A deletion of `n` code points, or `None` when there is nothing to delete.
-fn deletion(block_id: BlockId, at: Pos<DocChar>, n: Count<DocChar>) -> Option<TextEdit> {
+fn deletion(block_id: BlockId, at: Pos<DocChar>, n: Len<DocChar>) -> Option<TextEdit> {
     (!n.is_zero()).then(|| TextEdit {
         block_id,
         at,
-        delta: Delta::<DocChar>::from_count(n).reversed(),
+        delta: Delta::<DocChar>::from_len(n).reversed(),
     })
 }
 
 /// Where a position lands once a deletion of `[at, at + n)` applied.
-fn through_deletion(pos: Pos<DocChar>, at: Pos<DocChar>, n: Count<DocChar>) -> Pos<DocChar> {
+fn through_deletion(pos: Pos<DocChar>, at: Pos<DocChar>, n: Len<DocChar>) -> Pos<DocChar> {
     if pos <= at {
         pos
     } else if pos >= at + n {
@@ -119,8 +119,8 @@ pub(crate) fn transform(c: &TextEdit, o: &TextEdit) -> (Option<TextEdit>, Vec<Te
             } else {
                 // The insertion survives where the deletion was, and the
                 // deletion goes around it.
-                let before = deletion(block, q, p.count_from(q));
-                let after = deletion(block, q + n, (q + m).count_from(p));
+                let before = deletion(block, q, p.len_from(q));
+                let after = deletion(block, q + n, (q + m).len_from(p));
                 (
                     Some(insertion(block, q, n)),
                     before.into_iter().chain(after).collect(),
@@ -139,17 +139,9 @@ pub(crate) fn transform(c: &TextEdit, o: &TextEdit) -> (Option<TextEdit>, Vec<Te
         }
         (false, false) => {
             let start = through_deletion(p, q, m);
-            let c_after = deletion(
-                block,
-                start,
-                through_deletion(p + n, q, m).count_from(start),
-            );
+            let c_after = deletion(block, start, through_deletion(p + n, q, m).len_from(start));
             let start = through_deletion(q, p, n);
-            let o_after = deletion(
-                block,
-                start,
-                through_deletion(q + m, p, n).count_from(start),
-            );
+            let o_after = deletion(block, start, through_deletion(q + m, p, n).len_from(start));
             (c_after, o_after.into_iter().collect())
         }
     }
@@ -208,7 +200,7 @@ mod tests {
     const B: BlockId = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(1));
 
     fn ins(at: u32, n: u32) -> TextEdit {
-        insertion(A, Pos::<DocChar>::new(at), Count::<DocChar>::new(n))
+        insertion(A, Pos::<DocChar>::new(at), Len::<DocChar>::new(n))
     }
 
     fn del(at: u32, n: u32) -> TextEdit {
@@ -282,7 +274,7 @@ mod tests {
 
     #[test]
     fn another_block_is_left_alone() {
-        let other = insertion(B, Pos::<DocChar>::ZERO, Count::<DocChar>::new(5));
+        let other = insertion(B, Pos::<DocChar>::ZERO, Len::<DocChar>::new(5));
         assert_eq!(
             transform(&ins(2, 1), &other),
             (Some(ins(2, 1)), vec![other])

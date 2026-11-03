@@ -3,7 +3,7 @@
 //! [`TrameCommand::PasteRange`](super::TrameCommand).
 
 use super::{CellStyle, Col, Row, Slant, Weight};
-use ambre_core::index::{Count, IdxVec, Pos, Span};
+use ambre_core::index::{IdxVec, Len, Pos, Span};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -29,9 +29,9 @@ pub struct ClipboardPayload {
     pub src_col: Pos<Col>,
     /// Source range height in rows (so a cut can clear the whole rectangle and
     /// the renderer can draw marching-ants over it).
-    pub rows: Count<Row>,
+    pub rows: Len<Row>,
     /// Source range width in columns.
-    pub cols: Count<Col>,
+    pub cols: Len<Col>,
     /// The range's non-empty cells. Blank cells are omitted; the paste leaves
     /// the corresponding destination cells untouched (Excel/Sheets behaviour).
     pub cells: Vec<ClipboardCell>,
@@ -44,13 +44,13 @@ impl ClipboardPayload {
     /// gaps (blank source cells, omitted from `cells`) render as empty fields. A
     /// formula cell contributes its raw text (for example `=A1*2`).
     pub fn to_tsv(&self) -> String {
-        let width = Count::<Col>::new(self.cols.get().max(1));
-        let height = Count::<Row>::new(self.rows.get().max(1));
+        let width = Len::<Col>::new(self.cols.get().max(1));
+        let height = Len::<Row>::new(self.rows.get().max(1));
         let mut grid: IdxVec<Row, IdxVec<Col, String>> =
-            Span::<Row>::from_count(Pos::<Row>::ZERO, height)
+            Span::<Row>::from_len(Pos::<Row>::ZERO, height)
                 .into_iter()
                 .map(|_| {
-                    Span::<Col>::from_count(Pos::<Col>::ZERO, width)
+                    Span::<Col>::from_len(Pos::<Col>::ZERO, width)
                         .into_iter()
                         .map(|_| String::new())
                         .collect()
@@ -77,9 +77,9 @@ impl ClipboardPayload {
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardCell {
     /// Row offset from [`ClipboardPayload::src_row`].
-    pub dr: Count<Row>,
+    pub dr: Len<Row>,
     /// Column offset from [`ClipboardPayload::src_col`].
-    pub dc: Count<Col>,
+    pub dc: Len<Col>,
     /// Raw cell text (for example `=SUM(A1:B1)` for a formula), in display form. A
     /// formula's relative references are reindexed by the Logic thread on paste.
     pub raw: String,

@@ -1,7 +1,7 @@
 // ambre-toile/src/ui/reactions.rs
 // ============================================================================
 // Reaction badge overlay (toile-reactions). Each element carrying a derived
-// reaction tally (in `DisplayViewport.reactions`) gets a row of chips painted
+// reaction count (in `DisplayViewport.reactions`) gets a row of chips painted
 // just below its bottom edge. They are drawn in screen space above all content
 // and never culled -- the same overlay pass as presence. Badges are ALWAYS
 // visible (edit and present modes).
@@ -20,7 +20,7 @@
 
 use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ReactionTally, VoteTotal, Votes};
 use ambre_canvas::{Palette, TextCache};
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
 };
@@ -40,7 +40,7 @@ const ROW_MARGIN: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core
 /// Corner radius of a chip pill, in logical pixels.
 const CHIP_RADIUS: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(8.0);
 
-/// Paint the reaction badge row for every element with a tally. Pure over
+/// Paint the reaction badge row for every element with a count. Pure over
 /// `DrawSurface`: host-testable. Called from the overlay pass, unconditionally
 /// (badges are always visible), after presence so chips sit above ghosts.
 pub fn paint_reactions<S: DrawSurface>(
@@ -81,7 +81,7 @@ fn paint_chip_row<S: DrawSurface>(
     let mut x = rect.x0;
     let y = rect.y1 + f64::from(ROW_MARGIN.get());
 
-    // Emoji chips first, in the tally's stable sorted order.
+    // Emoji chips first, in the count's stable sorted order.
     for (emoji, count) in &tally.emoji {
         let label = format!("{} {count}", emoji.as_str());
         let edge = paint_chip(
@@ -97,7 +97,7 @@ fn paint_chip_row<S: DrawSurface>(
 
     // A single trailing vote badge when any vote exists: signed weight sum
     // and voter count, for example "+3 (5)".
-    if tally.vote_count > Tally::<Votes>::ZERO {
+    if tally.vote_count > Count::<Votes>::ZERO {
         let label = vote_label(tally.vote_total, tally.vote_count);
         paint_chip(
             surface,
@@ -112,7 +112,7 @@ fn paint_chip_row<S: DrawSurface>(
 
 /// The trailing vote chip's label: the signed total, then the number of
 /// voters in parentheses (`TOILE-UI-304`).
-fn vote_label(total: VoteTotal, count: Tally<Votes>) -> String {
+fn vote_label(total: VoteTotal, count: Count<Votes>) -> String {
     format!("{total:+} ({count})")
 }
 
@@ -246,16 +246,16 @@ mod tests {
         ReactionTally {
             emoji: emoji
                 .iter()
-                .map(|(e, n)| (ambre_bus::Emoji::from(*e), Tally::<Reactions>::new(*n)))
+                .map(|(e, n)| (ambre_bus::Emoji::from(*e), Count::<Reactions>::new(*n)))
                 .collect(),
             vote_total: VoteTotal::new(vote_total),
-            vote_count: Tally::<Votes>::new(vote_count),
+            vote_count: Count::<Votes>::new(vote_count),
         }
     }
 
-    /// `TOILE-UI-302`: of a tallied and an untallied element, only the tallied
+    /// `TOILE-UI-302`: of a counted and an uncounted element, only the counted
     /// one paints a chip. Exactly one pill is painted, and it sits under the
-    /// tallied element.
+    /// counted element.
     #[test]
     fn chip_row_paints_only_tallied_elements() {
         let a = Rect::new(0.0, 0.0, 40.0, 40.0);
@@ -279,7 +279,7 @@ mod tests {
         );
     }
 
-    /// `TOILE-UI-080`: the same tally paints the same pills at 1x and at 4x.
+    /// `TOILE-UI-080`: the same count paints the same pills at 1x and at 4x.
     /// Only where the row starts follows the zoom.
     #[test]
     fn a_badge_keeps_one_screen_size_through_the_zoom() {
@@ -328,7 +328,7 @@ mod tests {
             pills.windows(2).all(|w| w[0].x1 < w[1].x0),
             "left to right, the vote chip last: {pills:?}"
         );
-        let label = |total, count| vote_label(VoteTotal::new(total), Tally::<Votes>::new(count));
+        let label = |total, count| vote_label(VoteTotal::new(total), Count::<Votes>::new(count));
         assert_eq!(label(-2, 3), "-2 (3)");
         assert_eq!(label(4, 2), "+4 (2)");
         assert_eq!(label(0, 2), "+0 (2)", "a zero total keeps its sign");

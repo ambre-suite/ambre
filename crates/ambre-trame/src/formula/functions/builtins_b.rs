@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::formula::types::{Arg, Value};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 /// PROPER(text) -- capitalize the first letter of each word, lowercase the rest.
 pub(crate) fn proper(args: &[CellValue]) -> CellValue {
@@ -322,8 +322,8 @@ pub(crate) fn index(args: &[CellValue]) -> CellValue {
     };
     let (row, col) = match args.get(2).and_then(to_index) {
         Some(c) => (n1, c),
-        None if range.rows == Count::<Row>::ONE => (1, n1),
-        None if range.cols == Count::<Col>::ONE => (n1, 1),
+        None if range.rows == Len::<Row>::ONE => (1, n1),
+        None if range.cols == Len::<Col>::ONE => (n1, 1),
         None => (n1, 1),
     };
     match range.get(

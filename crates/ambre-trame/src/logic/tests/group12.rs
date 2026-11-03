@@ -7,7 +7,7 @@ use super::*;
 use crate::formula::types::CellValue;
 use crate::logic::schema::{SheetContainer, SheetRoot};
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use loro::LoroValue;
 
 /// A sheet with one plain edit, so an undo has something to take back that
@@ -243,8 +243,8 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
         reference: "A1:A3".to_owned(),
     });
     let formula = |raw: &str| crate::ClipboardCell {
-        dr: Count::<Row>::new(0),
-        dc: Count::<Col>::new(0),
+        dr: Len::<Row>::new(0),
+        dc: Len::<Col>::new(0),
         raw: raw.to_owned(),
         bold: ambre_bus::Weight::Regular,
         italic: ambre_bus::Slant::Upright,
@@ -256,8 +256,8 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
         payload: crate::ClipboardPayload {
             src_row: Pos::<Row>::new(0),
             src_col: Pos::<Col>::new(0),
-            rows: Count::<Row>::new(1),
-            cols: Count::<Col>::new(1),
+            rows: Len::<Row>::new(1),
+            cols: Len::<Col>::new(1),
             cells: vec![formula("=SUM(TOTAL)+A1")],
         },
     });
@@ -443,7 +443,7 @@ fn a_line_element_in_a_non_canonical_spelling_is_refused_and_said() {
     );
     assert_eq!(
         opened.index.row_len(),
-        Count::<Row>::ZERO,
+        Len::<Row>::ZERO,
         "the line is skipped"
     );
 }

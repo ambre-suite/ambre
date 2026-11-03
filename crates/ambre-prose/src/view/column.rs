@@ -6,7 +6,7 @@
 //! nothing reads the document, and nothing is sent.
 
 use ambre_bus::app::prose::Page;
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 
 use ambre_core::{Doc, Point, Px, View};
 
@@ -80,7 +80,7 @@ pub struct PageColumn {
     pub page_height: Px<Doc>,
     pub gutter: Px<Doc>,
     /// Zero until a layout has arrived.
-    pub page_count: Count<Page>,
+    pub page_count: Len<Page>,
     pub total_height: Px<Doc>,
 }
 
@@ -179,7 +179,7 @@ impl PageColumn {
     pub fn built_pages(&self, viewport: &Viewport) -> Option<Span<Page>> {
         let visible = self.visible_pages(viewport)?;
         let last = self.page_count.last()?;
-        let first = visible.start - Count::<Page>::ONE;
+        let first = visible.start - Len::<Page>::ONE;
         let end = visible.last()?.next().min(last);
         Some(first.through(end))
     }
@@ -227,7 +227,7 @@ mod tests {
         PageColumn::of(&PageLayout {
             page_width: Px::<Doc>::new(800.0),
             page_height: Px::<Doc>::new(1000.0),
-            page_count: Count::<Page>::new(pages),
+            page_count: Len::<Page>::new(pages),
             ..PageLayout::default()
         })
     }
@@ -285,7 +285,7 @@ mod tests {
             let view = viewport(scroll, height, 1.0);
             let visible = column.visible_pages(&view).expect("a page");
             let built = column.built_pages(&view).expect("a page");
-            prop_assert_eq!(built.start, visible.start - Count::<Page>::ONE);
+            prop_assert_eq!(built.start, visible.start - Len::<Page>::ONE);
             prop_assert_eq!(
                 built.last().expect("a page").get(),
                 (visible.last().expect("a page").get() + 1).min(pages - 1)

@@ -8,8 +8,8 @@
 use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
 use crate::token::Token;
 use ambre_core::id::{FilterView, Id, Sheet, User};
-use ambre_core::index::{Axis, Count, Pos};
-use ambre_core::{Doc, Px, Rgb, Tally};
+use ambre_core::index::{Axis, Len, Pos};
+use ambre_core::{Count, Doc, Px, Rgb};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- events (Logic -> UI)
@@ -82,7 +82,7 @@ impl std::fmt::Display for CellNumber {
 /// aggregate is ever an empty one's zero.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericStats {
-    count: Tally<Cells>,
+    count: Count<Cells>,
     /// The total `of_all` was handed. Its caller passes the exact total of
     /// the numbers, `None` when it is past the largest finite number.
     sum: Option<CellNumber>,
@@ -105,7 +105,7 @@ impl NumericStats {
             .iter()
             .fold((first, first), |(min, max), &n| (min.min(n), max.max(n)));
         Some(Self {
-            count: Tally::<Cells>::of_len(numbers.len()),
+            count: Count::<Cells>::of(numbers.len()),
             sum,
             min,
             max,
@@ -114,7 +114,7 @@ impl NumericStats {
 
     /// How many numbers were totalled, never zero.
     #[must_use]
-    pub const fn count(&self) -> Tally<Cells> {
+    pub const fn count(&self) -> Count<Cells> {
         self.count
     }
 
@@ -310,7 +310,7 @@ pub enum TrameEvent {
     /// grid column the filter targets, so the UI can draw the funnel badge on its
     /// header (`trame-shared-filter`).
     FilterApplied {
-        hidden_row_count: Count<Row>,
+        hidden_row_count: Len<Row>,
         col: Pos<Col>,
     },
 
@@ -327,7 +327,7 @@ pub enum TrameEvent {
     /// cells, and is `None` when it holds none: the UI then shows no numeric
     /// aggregate.
     SelectionStats {
-        count: Tally<Cells>,
+        count: Count<Cells>,
         numbers: Option<NumericStats>,
     },
 
@@ -353,7 +353,7 @@ pub enum TrameEvent {
     /// [`DataReset`](Self::DataReset) that prompts the viewport re-fetch; the
     /// chrome surfaces the count as a toast.
     ReplaceDone {
-        replaced: Count<crate::app::find::Match>,
+        replaced: Len<crate::app::find::Match>,
     },
 
     /// A local [`PasteRange`](super::TrameCommand::PasteRange) was refused
@@ -434,8 +434,8 @@ pub enum TrameEvent {
     /// `sheet_id` is the (possibly freshly created) target sheet.
     ImportComplete {
         sheet_id: Id<Sheet>,
-        rows: Count<Row>,
-        cols: Count<Col>,
+        rows: Len<Row>,
+        cols: Len<Col>,
     },
 
     /// An export ([`ExportCsv`](super::TrameCommand::ExportCsv)) produced

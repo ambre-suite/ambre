@@ -51,7 +51,7 @@ pub fn import_raster(
         correlate: None,
     });
     batch.media.push(blob);
-    batch.report.imported = ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(1);
+    batch.report.imported = ambre_core::Count::<ambre_bus::app::toile::Elements>::new(1);
     Ok(batch)
 }
 

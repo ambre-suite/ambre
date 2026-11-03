@@ -5,7 +5,7 @@
 use super::*;
 use crate::logic::schema::{SheetContainer, SheetRoot};
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 /// Hidden rows are excluded from the viewport but still counted by `=SUM`
 /// (`trame-shared-filter`): the filter is a display concern, not a data one.
@@ -90,7 +90,7 @@ fn shared_filter_hidden_follows_sort() {
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(0)),
         ),
-        sort_col: Count::<Col>::new(0),
+        sort_col: Len::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -561,18 +561,18 @@ fn paste_reindexes_relative_formula() {
     let payload = ClipboardPayload {
         src_row: Pos::<Row>::new(0),
         src_col: Pos::<Col>::new(0),
-        rows: Count::<Row>::new(1),
-        cols: Count::<Col>::new(2),
+        rows: Len::<Row>::new(1),
+        cols: Len::<Col>::new(2),
         cells: vec![
             ClipboardCell {
-                dr: Count::<Row>::new(0),
-                dc: Count::<Col>::new(0),
+                dr: Len::<Row>::new(0),
+                dc: Len::<Col>::new(0),
                 raw: "10".to_owned(),
                 ..Default::default()
             },
             ClipboardCell {
-                dr: Count::<Row>::new(0),
-                dc: Count::<Col>::new(1),
+                dr: Len::<Row>::new(0),
+                dc: Len::<Col>::new(1),
                 raw: "=A1*2".to_owned(),
                 ..Default::default()
             },

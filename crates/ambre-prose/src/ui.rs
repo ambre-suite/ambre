@@ -16,7 +16,7 @@
 //! text empties it. The input-method composition lands with the "Toolbar,
 //! slash menu and composition" Story (`ambre-roadmap.md` E5).
 
-use ambre_core::index::{Count, Delta, Pos, Span};
+use ambre_core::index::{Delta, Len, Pos, Span};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ use crate::view::column::PageColumn;
 pub use crate::view::column::Viewport;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
-/// How long the text must stay still before the four tallies are recounted
+/// How long the text must stay still before the four counts are recounted
 /// (`PROSE-FEAT-124`).
 ///
 /// A fast typist then pays for one recount per pause rather than one per
@@ -104,7 +104,7 @@ ambre_core::define_flag! {
 #[derive(Clone, PartialEq, Eq)]
 enum Change {
     Insert(String),
-    Delete(Count<DocChar>),
+    Delete(Len<DocChar>),
 }
 
 impl std::fmt::Debug for Change {
@@ -168,7 +168,7 @@ impl DraftBuffer {
     ) {
         let (start, end) = (start.min(end), start.max(end));
         if end > start {
-            self.push(seq, *block_id, start, Change::Delete(end.count_from(start)));
+            self.push(seq, *block_id, start, Change::Delete(end.len_from(start)));
         }
     }
 
@@ -282,7 +282,7 @@ impl DraftBuffer {
             let start = char_to_byte(&text, edit.at.as_axis::<ambre_core::Char>());
             match &edit.change {
                 Change::Insert(inserted) => {
-                    let n = Count::<Byte>::from_len(inserted.len());
+                    let n = Len::<Byte>::of(inserted.len());
                     // A mark expands after its range: text typed at its end
                     // joins it, text typed at its start does not.
                     for mark in &mut marks {
@@ -297,7 +297,7 @@ impl DraftBuffer {
                 }
                 Change::Delete(len) => {
                     let end = char_to_byte(&text, (edit.at + *len).as_axis::<ambre_core::Char>());
-                    let gone = end.count_from(start);
+                    let gone = end.len_from(start);
                     let squeeze = |at: Pos<Byte>| {
                         if at <= start {
                             at
@@ -326,9 +326,9 @@ impl DraftBuffer {
         self.of(block)
             .map(|edit| match &edit.change {
                 Change::Insert(text) => {
-                    Delta::<DocChar>::from_count(ambre_core::char_len(text).as_axis::<DocChar>())
+                    Delta::<DocChar>::from_len(ambre_core::char_len(text).as_axis::<DocChar>())
                 }
-                Change::Delete(len) => Delta::<DocChar>::from_count(*len).reversed(),
+                Change::Delete(len) => Delta::<DocChar>::from_len(*len).reversed(),
             })
             .sum()
     }
@@ -472,7 +472,7 @@ pub struct ProseUiState {
     pub(crate) remote_at: HashMap<BlockId, Vec<RemoteCursor>>,
     /// How many highlights paints have read, for the tests to hold
     /// `PROSE-UI-020` against.
-    pub(crate) highlights_walked: ambre_core::Tally<crate::view::walk::Highlights>,
+    pub(crate) highlights_walked: ambre_core::Count<crate::view::walk::Highlights>,
     /// A link target a press asked to open, until the host takes it
     /// (`PROSE-UI-071`).
     pub followed: Option<ambre_core::LinkUrl>,
@@ -1090,11 +1090,11 @@ mod tests {
     #[test]
     fn the_status_bar_reads_the_five_figures() {
         let count = WordCount {
-            words: ambre_core::Tally::<crate::events::Words>::new(12),
-            characters: ambre_core::Tally::<crate::events::Graphemes>::new(1),
-            characters_with_spaces: ambre_core::Tally::<crate::events::Graphemes>::new(70),
-            paragraphs: ambre_core::Tally::<crate::events::Paragraphs>::new(3),
-            pages: Count::<crate::events::Page>::new(1),
+            words: ambre_core::Count::<crate::events::Words>::new(12),
+            characters: ambre_core::Count::<crate::events::Graphemes>::new(1),
+            characters_with_spaces: ambre_core::Count::<crate::events::Graphemes>::new(70),
+            paragraphs: ambre_core::Count::<crate::events::Paragraphs>::new(3),
+            pages: Len::<crate::events::Page>::new(1),
         };
         assert_eq!(
             super::status_figures(&count).labels(),

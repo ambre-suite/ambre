@@ -6,7 +6,7 @@ use crate::layout::run::{Affinity, RunChar};
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocChar;
 use ambre_commands::ClipboardWrite;
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Commands, StaticKey};
 use ambre_core::{Doc, Px, View};
 use ambre_draw::HitTest;
@@ -478,8 +478,8 @@ fn deleting_a_table_drops_the_draft_in_its_cell() {
     rig.logic.handle_command(ProseCommand::InsertTable {
         parent_id: None,
         after_id: Some(first),
-        rows: Count::<crate::events::grid::Row>::new(1),
-        cols: Count::<crate::events::grid::Col>::new(1),
+        rows: Len::<crate::events::grid::Row>::new(1),
+        cols: Len::<crate::events::grid::Col>::new(1),
     });
     rig.lay();
     let table = the_table(&rig.logic);
@@ -540,7 +540,7 @@ fn a_press_places_the_caret_and_collapses_the_selection() {
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     assert_eq!(
         rig.ui.runs.built(),
-        ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+        ambre_core::Count::<crate::view::cache::Builds>::ZERO
     );
     assert!(rig.ui.provisional_run(block).is_none());
 }
@@ -713,7 +713,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
         Arc::new(crate::layout::pass::PageLayout {
             page_width: Px::<Doc>::new(800.0),
             page_height: Px::<Doc>::new(1000.0),
-            page_count: Count::<crate::events::Page>::ONE,
+            page_count: Len::<crate::events::Page>::ONE,
             ..crate::layout::pass::PageLayout::default()
         }),
         HashMap::new(),
@@ -910,7 +910,7 @@ fn home_and_end_honour_the_wrapped_line() {
     };
     rig.ui.set_caret((
         block,
-        (second_line + Count::<RunChar>::new(2)).as_axis::<DocChar>(),
+        (second_line + Len::<RunChar>::new(2)).as_axis::<DocChar>(),
     ));
     rig.key(ProseKey::End, false, false);
     let end = rig.caret().offset.as_axis::<RunChar>();
@@ -1805,8 +1805,8 @@ fn enter_erases_the_query_then_sends_one_command() {
             ProseCommand::InsertTable {
                 parent_id: None,
                 after_id: Some(block),
-                rows: Count::<crate::events::grid::Row>::new(3),
-                cols: Count::<crate::events::grid::Col>::new(3),
+                rows: Len::<crate::events::grid::Row>::new(3),
+                cols: Len::<crate::events::grid::Col>::new(3),
             },
         ]
     );

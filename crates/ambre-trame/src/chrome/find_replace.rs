@@ -10,7 +10,7 @@
 // the tracked active cell, so the panel never carries the cursor.
 // ============================================================================
 
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -75,20 +75,20 @@ impl std::fmt::Debug for ReplaceRequest {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FindPosition {
     focus: Option<Pos<Match>>,
-    total: Count<Match>,
+    total: Len<Match>,
 }
 
 impl FindPosition {
     /// The position a `FindResult` reports: `active` indexes its `total`
     /// matches from zero. An index past the end focuses nothing.
-    pub fn new(active: Option<Pos<Match>>, total: Count<Match>) -> Self {
+    pub fn new(active: Option<Pos<Match>>, total: Len<Match>) -> Self {
         let focus = active.filter(|i| *i < total.as_end());
         Self { focus, total }
     }
 
     /// The "k/n" counter.
     pub fn label(self) -> String {
-        let focus = self.focus.map_or(Count::ZERO, Pos::<Match>::number);
+        let focus = self.focus.map_or(Len::ZERO, Pos::<Match>::number);
         format!("{focus}/{}", self.total.get())
     }
 }

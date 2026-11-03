@@ -5,8 +5,8 @@
 //! header and the words of each row. Pure, so the host tests hold it. The painter in
 //! `paint` lays the rows out and draws them.
 
-use ambre_core::Tally;
-use ambre_core::index::{Axis, Count, IdxVec, Pos, Span};
+use ambre_core::Count;
+use ambre_core::index::{Axis, IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
@@ -188,14 +188,14 @@ impl MessageList {
     }
 
     /// How many messages the list holds.
-    pub fn len(&self) -> Tally<Messages> {
-        Tally::<Messages>::of_len(self.segments.iter().map(|s| s.messages.len()).sum())
+    pub fn len(&self) -> Count<Messages> {
+        Count::<Messages>::of(self.segments.iter().map(|s| s.messages.len()).sum())
     }
 
     /// The rows the list draws: a row per message and per band. A capacity,
     /// so a paint allocates once.
-    fn row_capacity(&self) -> Count<ListRow> {
-        Count::<ListRow>::from_len(
+    fn row_capacity(&self) -> Len<ListRow> {
+        Len::<ListRow>::of(
             self.segments
                 .iter()
                 .map(|s| s.messages.len() + usize::from(s.band.is_some()))
@@ -333,7 +333,7 @@ pub struct HeaderWords {
 impl std::fmt::Debug for HeaderWords {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HeaderWords")
-            .field("author", &Count::<Byte>::from_len(self.author.len()))
+            .field("author", &Len::<Byte>::of(self.author.len()))
             .field("time", &self.time)
             .finish()
     }
@@ -369,7 +369,7 @@ impl std::fmt::Debug for RowWords {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RowWords")
             .field("header", &self.header)
-            .field("body", &Count::<Byte>::from_len(self.body.len()))
+            .field("body", &Len::<Byte>::of(self.body.len()))
             .field("ink", &self.ink)
             .field("marks", &self.marks.len())
             .field("replies", &self.replies)
@@ -427,7 +427,7 @@ impl<'a> Row<'a> {
         };
         let replies = message
             .thread
-            .filter(|t| t.replies > ambre_core::Tally::<ambre_bus::Replies>::ZERO)
+            .filter(|t| t.replies > ambre_core::Count::<ambre_bus::Replies>::ZERO)
             .map(|t| match t.replies.get() {
                 1 => "1 reply".to_owned(),
                 n => format!("{n} replies"),
@@ -547,13 +547,13 @@ fn body_marks(message: &MessageView, bytes: &IdxVec<Char, Pos<Byte>>) -> Vec<Bod
 /// Walked from the bottom, and `measure` is asked only for a row the walk
 /// reaches: a row above the viewport is never laid out (`MURMURE-187`).
 pub fn from_bottom(
-    count: Count<ListRow>,
+    count: Len<ListRow>,
     height: Px<View>,
     mut measure: impl FnMut(Pos<ListRow>) -> Px<View>,
 ) -> Vec<(Pos<ListRow>, Px<View>)> {
     let mut shown = Vec::new();
     let mut bottom = height;
-    for i in Span::<ListRow>::from_count(Pos::<ListRow>::ZERO, count)
+    for i in Span::<ListRow>::from_len(Pos::<ListRow>::ZERO, count)
         .into_iter()
         .rev()
     {
@@ -603,7 +603,7 @@ pub struct Window {
 /// inside the viewport rests the list on its latest row. Each row is
 /// measured once, and only the rows the walk reaches (`MURMURE-187`).
 pub fn window(
-    count: Count<ListRow>,
+    count: Len<ListRow>,
     height: Px<View>,
     anchor: Option<(Pos<ListRow>, Px<View>)>,
     mut measure: impl FnMut(Pos<ListRow>) -> Px<View>,
@@ -652,7 +652,7 @@ pub fn window(
 fn fill_down(
     rows: &mut VecDeque<(Pos<ListRow>, Px<View>, Px<View>)>,
     (next, y): (&mut Pos<ListRow>, &mut Px<View>),
-    (count, height): (Count<ListRow>, Px<View>),
+    (count, height): (Len<ListRow>, Px<View>),
     tall: &mut impl FnMut(Pos<ListRow>) -> Px<View>,
 ) -> bool {
     while *next < count.as_end() && *y < height {
@@ -666,7 +666,7 @@ fn fill_down(
 
 /// The window of a list resting on its latest row.
 fn at_bottom(
-    count: Count<ListRow>,
+    count: Len<ListRow>,
     height: Px<View>,
     tall: &mut impl FnMut(Pos<ListRow>) -> Px<View>,
 ) -> Window {
@@ -990,7 +990,7 @@ pub(crate) mod tests {
             [true, false, true],
             "a band breaks the group"
         );
-        assert_eq!(list.len(), Tally::<Messages>::new(2));
+        assert_eq!(list.len(), Count::<Messages>::new(2));
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("c"));
 
         let keys = band(Unreadable::KeyNotReceived, 20, Some(30));
@@ -1062,7 +1062,7 @@ pub(crate) mod tests {
             ],
         );
         assert_eq!(texts(&list), ["a", "b", "c", "d"]);
-        assert_eq!(list.len(), Tally::<Messages>::new(4));
+        assert_eq!(list.len(), Count::<Messages>::new(4));
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("d"));
         list.absorb(
             active,
@@ -1201,7 +1201,7 @@ pub(crate) mod tests {
         assert_eq!(row.announcement(name_of, time_of), "Ada, t7: hello");
         grouped.thread = Some(ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_core::Tally::<ambre_bus::Replies>::new(2),
+            replies: ambre_core::Count::<ambre_bus::Replies>::new(2),
             last_replier: None,
         });
         let row = Row::Message {
@@ -1255,7 +1255,7 @@ pub(crate) mod tests {
         let mut root = message(Id::<User>::mint(), Instant::<Authored>::new(0), "root");
         let head = |replies| ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_core::Tally::<ambre_bus::Replies>::new(replies),
+            replies: ambre_core::Count::<ambre_bus::Replies>::new(replies),
             last_replier: None,
         };
         root.thread = Some(head(0));
@@ -1290,14 +1290,14 @@ pub(crate) mod tests {
     #[test]
     fn the_walk_from_the_bottom_measures_only_the_rows_it_reaches() {
         let mut measured = Vec::new();
-        let shown = from_bottom(Count::<ListRow>::new(10_000), px(100.0), |i| {
+        let shown = from_bottom(Len::<ListRow>::new(10_000), px(100.0), |i| {
             measured.push(i.get());
             px(20.0)
         });
         assert_eq!(measured, [9_999, 9_998, 9_997, 9_996, 9_995]);
         assert_eq!(shown.first(), Some(&(Pos::<ListRow>::new(9_999), px(80.0))));
         assert_eq!(shown.last(), Some(&(Pos::<ListRow>::new(9_995), px(0.0))));
-        assert!(from_bottom(Count::<ListRow>::ZERO, px(100.0), |_| px(1.0)).is_empty());
+        assert!(from_bottom(Len::<ListRow>::ZERO, px(100.0), |_| px(1.0)).is_empty());
     }
 
     /// The indices and tops of a window's rows.
@@ -1319,7 +1319,7 @@ pub(crate) mod tests {
     #[test]
     fn a_window_on_a_row_keeps_it_in_place_as_rows_arrive_below() {
         let rested = window(
-            Count::<ListRow>::new(10),
+            Len::<ListRow>::new(10),
             px(100.0),
             Some((Pos::<ListRow>::new(3), px(-5.0))),
             |_| px(20.0),
@@ -1339,7 +1339,7 @@ pub(crate) mod tests {
             (OnScreen::Hidden, OnScreen::Hidden)
         );
         let grown = window(
-            Count::<ListRow>::new(12),
+            Len::<ListRow>::new(12),
             px(100.0),
             Some((Pos::<ListRow>::new(3), px(-5.0))),
             |_| px(20.0),
@@ -1352,7 +1352,7 @@ pub(crate) mod tests {
     #[test]
     fn a_window_past_the_bottom_rests_on_the_latest_row() {
         let rested = window(
-            Count::<ListRow>::new(10),
+            Len::<ListRow>::new(10),
             px(100.0),
             Some((Pos::<ListRow>::new(8), px(0.0))),
             |_| px(20.0),
@@ -1362,7 +1362,7 @@ pub(crate) mod tests {
         assert_eq!(tops(&rested).last(), Some(&(9, 80.0)));
         assert_eq!(rested.latest, OnScreen::Shown);
         let flush = window(
-            Count::<ListRow>::new(10),
+            Len::<ListRow>::new(10),
             px(100.0),
             Some((Pos::<ListRow>::new(5), px(0.0))),
             |_| px(20.0),
@@ -1373,7 +1373,7 @@ pub(crate) mod tests {
         );
         assert_eq!(
             window(
-                Count::<ListRow>::new(10),
+                Len::<ListRow>::new(10),
                 px(100.0),
                 Some((Pos::<ListRow>::new(10), px(0.0))),
                 |_| px(20.0)
@@ -1382,7 +1382,7 @@ pub(crate) mod tests {
             None
         );
         let short = window(
-            Count::<ListRow>::new(2),
+            Len::<ListRow>::new(2),
             px(100.0),
             Some((Pos::<ListRow>::new(0), px(0.0))),
             |_| px(20.0),
@@ -1402,7 +1402,7 @@ pub(crate) mod tests {
     #[test]
     fn a_window_past_the_top_rests_the_oldest_row_at_the_top() {
         let rested = window(
-            Count::<ListRow>::new(10),
+            Len::<ListRow>::new(10),
             px(100.0),
             Some((Pos::<ListRow>::new(1), px(30.0))),
             |_| px(20.0),
@@ -1414,7 +1414,7 @@ pub(crate) mod tests {
             (OnScreen::Shown, OnScreen::Hidden)
         );
         let short = window(
-            Count::<ListRow>::new(4),
+            Len::<ListRow>::new(4),
             px(100.0),
             Some((Pos::<ListRow>::new(1), px(30.0))),
             |_| px(20.0),
@@ -1431,7 +1431,7 @@ pub(crate) mod tests {
     fn a_window_measures_only_the_rows_it_reaches_once_each() {
         let mut measured = Vec::new();
         let rested = window(
-            Count::<ListRow>::new(10_000),
+            Len::<ListRow>::new(10_000),
             px(100.0),
             Some((Pos::<ListRow>::new(5_000), px(0.0))),
             |i| {
@@ -1442,7 +1442,7 @@ pub(crate) mod tests {
         assert_eq!(measured, [5_000, 5_001, 5_002, 5_003, 5_004]);
         assert_eq!(rested.rows.len(), 5);
         let flung = window(
-            Count::<ListRow>::new(10_000),
+            Len::<ListRow>::new(10_000),
             px(100.0),
             Some((Pos::<ListRow>::new(5_000), px(-45.0))),
             |_| px(20.0),

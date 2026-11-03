@@ -15,7 +15,7 @@ use ambre_bus::{
 use ambre_commands::{Command, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale, Modifiers};
 use ambre_core::Byte;
 use ambre_core::id::{Channel, Document, Id, Message, User};
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use ambre_core::{Categories, Commands, StaticKey};
 
 use crate::{MessageRef, MurmurePane, Region};
@@ -259,7 +259,7 @@ impl std::fmt::Debug for MessageTarget {
             .field("at", &self.at)
             .field("message", &self.message)
             .field("author", &self.author)
-            .field("text", &Count::<Byte>::from_len(self.text.len()))
+            .field("text", &Len::<Byte>::of(self.text.len()))
             .field("mentions", &self.mentions.len())
             .field("styles", &self.styles.len())
             .field("writer", &self.writer)
@@ -307,7 +307,7 @@ impl std::fmt::Debug for MessageAction {
             Self::Send(command) => f.debug_tuple("Send").field(command).finish(),
             Self::Copy(text) => f
                 .debug_tuple("Copy")
-                .field(&Count::<Byte>::from_len(text.len()))
+                .field(&Len::<Byte>::of(text.len()))
                 .finish(),
             Self::ConfirmDelete(delete) => f.debug_tuple("ConfirmDelete").field(delete).finish(),
             Self::Edit(edit) => f.debug_tuple("Edit").field(edit).finish(),
@@ -380,7 +380,7 @@ impl std::fmt::Debug for PendingEdit {
             .field("channel", &self.channel)
             .field("at", &self.at)
             .field("message", &self.message)
-            .field("text", &Count::<Byte>::from_len(self.text.len()))
+            .field("text", &Len::<Byte>::of(self.text.len()))
             .field("mentions", &self.mentions.len())
             .field("styles", &self.styles.len())
             .finish()
@@ -421,7 +421,7 @@ pub struct AskedAll {
     /// The channel the send writes in.
     pub channel: Id<Channel>,
     /// How many members the channel holds, as the question says.
-    pub members: ambre_core::Tally<ambre_core::Members>,
+    pub members: ambre_core::Count<ambre_core::Members>,
     /// The draft, and the thread it answers for a reply.
     pub held: HeldSend,
 }
@@ -470,7 +470,7 @@ impl AskedAll {
 }
 
 /// The question an `@channel` past the member threshold asks.
-pub fn asked_all_title(members: ambre_core::Tally<ambre_core::Members>) -> String {
+pub fn asked_all_title(members: ambre_core::Count<ambre_core::Members>) -> String {
     format!("Notify all {} members of this channel?", members.get())
 }
 
@@ -786,7 +786,7 @@ mod tests {
         };
         let asked = AskedAll {
             channel,
-            members: ambre_core::Tally::<ambre_core::Members>::new(12),
+            members: ambre_core::Count::<ambre_core::Members>::new(12),
             held: HeldSend {
                 draft: draft.clone(),
                 attachments: Vec::new(),
@@ -828,7 +828,7 @@ mod tests {
             } if channel_id == channel && r == root && d == draft && now.get() == 8
         ));
         assert_eq!(
-            asked_all_title(ambre_core::Tally::<ambre_core::Members>::new(12)),
+            asked_all_title(ambre_core::Count::<ambre_core::Members>::new(12)),
             "Notify all 12 members of this channel?"
         );
     }

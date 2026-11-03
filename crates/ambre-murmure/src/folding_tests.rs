@@ -80,7 +80,7 @@ fn amended() -> Amended {
     let author = Id::<User>::mint();
     let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
-        .with_segment_size(ambre_core::Tally::<ambre_bus::Messages>::new(3))
+        .with_segment_size(ambre_core::Count::<ambre_bus::Messages>::new(3))
         .identify();
     for text in ["one", "two", "three"] {
         alice.send(&draft(text), author, NOW).expect("send");

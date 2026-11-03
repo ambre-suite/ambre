@@ -7,7 +7,7 @@
 
 use ambre_bus::MentionTarget;
 use ambre_core::id::{Id, User};
-use ambre_core::index::{Axis, Circular, Count, IdxVec, Pos};
+use ambre_core::index::{Axis, Circular, IdxVec, Len, Pos};
 use ambre_core::{Byte, Point, Px, View};
 
 use crate::Region;
@@ -39,7 +39,7 @@ impl std::fmt::Debug for Offer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Offer")
             .field("target", &self.target)
-            .field("name", &Count::<Byte>::from_len(self.name.as_str().len()))
+            .field("name", &Len::<Byte>::of(self.name.as_str().len()))
             .finish()
     }
 }
@@ -227,7 +227,7 @@ mod tests {
     /// choice on its last entry.
     #[test]
     fn the_choice_goes_round_the_list_and_stays_on_it() {
-        let three = Count::<MentionEntry>::new(3);
+        let three = Len::<MentionEntry>::new(3);
         let (first, last) = (Pos::<MentionEntry>::ZERO, Pos::<MentionEntry>::new(2));
         let (down, up) = (Delta::new(1), Delta::new(-1));
         assert_eq!(

@@ -17,7 +17,7 @@
 
 use ambre_commands::{Command, Locale};
 use ambre_core::id::{Channel, Id, User};
-use ambre_core::index::{Axis, Circular, Count, Delta, Pos};
+use ambre_core::index::{Axis, Circular, Delta, Len, Pos};
 use ambre_core::{Commands, StaticKey};
 use leptos::html;
 use leptos::prelude::*;
@@ -196,7 +196,7 @@ pub fn CommandPalette(
     };
 
     let on_keydown = move |ev: web_sys::KeyboardEvent| {
-        let len = Count::<PaletteLine>::from_len(rows.get_untracked().len());
+        let len = Len::<PaletteLine>::of(rows.get_untracked().len());
         // An empty list has no row to wrap to, and the focus stays on the first.
         let step = move |by: Delta<PaletteLine>| {
             focused.update(|at| *at = at.wrapped(by, len).unwrap_or(Pos::ZERO));

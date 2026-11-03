@@ -8,7 +8,7 @@
 use super::*;
 use crate::formula::identity::{AxisEdit, LineEdit};
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 
 impl TrameState {
     /// Single-column sort of a row range (`trame-sort`).
@@ -37,7 +37,7 @@ impl TrameState {
         &mut self,
         sheet_id: &Id<Sheet>,
         rect: CellRect,
-        sort_col: Count<Col>,
+        sort_col: Len<Col>,
         order: SortOrder,
         header: HeaderRow,
     ) -> TrameOutcome {
@@ -82,7 +82,7 @@ impl TrameState {
 
     /// The rows of `rect` a sort reorders: clamped to the materialized rows,
     /// past its `header` rows. `None` with fewer than two rows to order.
-    fn sortable_rows(&self, rect: CellRect, header: Count<Row>) -> Option<Span<Row>> {
+    fn sortable_rows(&self, rect: CellRect, header: Len<Row>) -> Option<Span<Row>> {
         // Virtual rows carry no cell data to reorder and no value to sort on.
         let row_end = rect.bottom_right.row.min(Row::len(&self.index).last()?);
         if rect.top_left.row > row_end {
@@ -247,10 +247,10 @@ impl TrameState {
 }
 
 /// The rows a sort leaves in place at the top of its range.
-fn header_rows(header: HeaderRow) -> Count<Row> {
+fn header_rows(header: HeaderRow) -> Len<Row> {
     match header {
-        HeaderRow::Absent => Count::<Row>::ZERO,
-        HeaderRow::Present => Count::<Row>::new(1),
+        HeaderRow::Absent => Len::<Row>::ZERO,
+        HeaderRow::Present => Len::<Row>::new(1),
     }
 }
 

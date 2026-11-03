@@ -7,7 +7,7 @@
 //! first time a run is painted (`PROSE-UI-119`) and reused after
 //! (`PROSE-UI-173`). The glyph atlas itself belongs to the drawing surface.
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::index::{Axis, Pos};
 use std::collections::HashMap;
 
@@ -20,7 +20,7 @@ use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
 /// How many runs hold drawing state, or may.
 pub enum CachedRuns {}
 
-impl ambre_core::TallyKind for CachedRuns {
+impl ambre_core::CountKind for CachedRuns {
     type Repr = u32;
     const NAME: &'static str = "CachedRunCount";
 }
@@ -28,7 +28,7 @@ impl ambre_core::TallyKind for CachedRuns {
 /// How many times the cache built the drawing state of a run.
 pub enum Builds {}
 
-impl ambre_core::TallyKind for Builds {
+impl ambre_core::CountKind for Builds {
     type Repr = u32;
     const NAME: &'static str = "BuildCount";
 }
@@ -43,7 +43,7 @@ impl Axis for LineItem {
 
 /// How many runs the cache keeps drawing state for, about fifty pages
 /// (`ambre-spec-budgets.md section 6`).
-pub const RUN_CACHE_RUNS: Tally<CachedRuns> = Tally::<CachedRuns>::new(500);
+pub const RUN_CACHE_RUNS: Count<CachedRuns> = Count::<CachedRuns>::new(500);
 
 /// When an entry was last painted: the cache counts each paint. Only the
 /// order of two ticks means something.
@@ -122,9 +122,9 @@ struct Entry {
 #[derive(Clone, Debug)]
 pub struct RunCache {
     entries: HashMap<RunKey, Entry>,
-    capacity: Tally<CachedRuns>,
+    capacity: Count<CachedRuns>,
     tick: Seq<PaintTick>,
-    built: Tally<Builds>,
+    built: Count<Builds>,
 }
 
 impl Default for RunCache {
@@ -136,19 +136,19 @@ impl Default for RunCache {
 impl RunCache {
     /// A cache holding at most `capacity` runs, and always at least one.
     #[must_use]
-    pub fn with_capacity(capacity: Tally<CachedRuns>) -> Self {
+    pub fn with_capacity(capacity: Count<CachedRuns>) -> Self {
         Self {
             entries: HashMap::new(),
-            capacity: capacity.max(Tally::<CachedRuns>::new(1)),
+            capacity: capacity.max(Count::<CachedRuns>::new(1)),
             tick: Seq::ZERO,
-            built: Tally::<Builds>::ZERO,
+            built: Count::<Builds>::ZERO,
         }
     }
 
     /// How many runs hold drawing state now.
     #[must_use]
-    pub fn len(&self) -> Tally<CachedRuns> {
-        Tally::<CachedRuns>::of_len(self.entries.len())
+    pub fn len(&self) -> Count<CachedRuns> {
+        Count::<CachedRuns>::of(self.entries.len())
     }
 
     /// Whether no run holds drawing state.
@@ -159,7 +159,7 @@ impl RunCache {
 
     /// How many times drawing state was built, over the life of the cache.
     #[must_use]
-    pub fn built(&self) -> Tally<Builds> {
+    pub fn built(&self) -> Count<Builds> {
         self.built
     }
 
@@ -235,17 +235,17 @@ mod tests {
                 )
             })
             .collect();
-        let mut cache = RunCache::with_capacity(Tally::<CachedRuns>::new(2));
+        let mut cache = RunCache::with_capacity(Count::<CachedRuns>::new(2));
         cache.draw_state(runs[0].0, &runs[0].1);
         cache.draw_state(runs[1].0, &runs[1].1);
         // Touch the first again, so the second is now the oldest.
         cache.draw_state(runs[0].0, &runs[0].1);
         cache.draw_state(runs[2].0, &runs[2].1);
-        assert_eq!(cache.len(), Tally::<CachedRuns>::new(2));
+        assert_eq!(cache.len(), Count::<CachedRuns>::new(2));
         assert!(cache.holds(runs[0].0, &runs[0].1));
         assert!(!cache.holds(runs[1].0, &runs[1].1));
         assert!(cache.holds(runs[2].0, &runs[2].1));
-        assert_eq!(cache.built(), Tally::<Builds>::new(3));
+        assert_eq!(cache.built(), Count::<Builds>::new(3));
     }
 
     #[test]
@@ -261,7 +261,7 @@ mod tests {
         let mut cache = RunCache::default();
         cache.draw_state(RunKey::Block(id), &old);
         cache.draw_state(RunKey::Block(id), &new);
-        assert_eq!(cache.built(), Tally::<Builds>::new(2));
+        assert_eq!(cache.built(), Count::<Builds>::new(2));
         assert!(!cache.holds(RunKey::Block(id), &old));
     }
 }

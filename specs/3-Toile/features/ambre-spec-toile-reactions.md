@@ -22,10 +22,10 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-007` | `CONC` | A reaction MUST be keyed by the person, not the session: the same user reacting from two devices MUST count once. | this spec section 3; section 5 | `ambre_toile::logic::convergence_tests::same_user_two_devices_is_one_entry` -- it reacts from two states carrying one identity, syncs both ways and reads a single voter on each | none | verified |
 | `TOILE-FEAT-055` | `CONC` | Two users reacting at once on the same target MUST both keep their reaction, however fresh the target is. | this spec section 3; section 5 | `ambre_toile::logic::convergence_tests::concurrent_reactions_distinct_users_converge` -- it syncs two identities both ways and reads one chip counting two on each | none | verified |
-| `TOILE-FEAT-019` | `INV` | A tally MUST be derived on read rather than stored. | this spec section 3; section 5 | structural -- no container holds a count (`ambre-spec-toile-schema.md section 3`) and both derivations fold the entry set on every read | none | verified |
+| `TOILE-FEAT-019` | `INV` | A count MUST be derived on read rather than stored. | this spec section 3; section 5 | structural -- no container holds a count (`ambre-spec-toile-schema.md section 3`) and both derivations fold the entry set on every read | none | verified |
 | `TOILE-FEAT-010` | `OBS` | A deleted target MUST NOT carry a badge on the board, rather than surface a dangling one. | this spec section 3; section 5 | `ambre_toile::logic::convergence_tests::derive_viewport_carries_tally_and_skips_deleted_target` -- it deletes a reacted target and reads a derived map that no longer holds it | none | verified |
-| `TOILE-FEAT-056` | `OBS` | Asking one deleted target for its tally MUST answer nothing, on the same terms. | this spec section 3 | `ambre_toile::logic::convergence_tests::tally_skips_a_deleted_target` -- it asks the single-target path after the delete. That path is a second guard, on the element map rather than on the visible set, and the only caller it has is that test (section 6) | none | verified |
-| `TOILE-FEAT-057` | `OBS` | The board's tallies MUST cover what is on screen, so a reacted target scrolled out of view costs nothing to derive. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_toile::logic::convergence_tests::a_reacted_target_out_of_view_is_left_out_of_the_frame` -- the frame leaves the target out, and the board still counts it | none | verified |
+| `TOILE-FEAT-056` | `OBS` | Asking one deleted target for its count MUST answer nothing, on the same terms. | this spec section 3 | `ambre_toile::logic::convergence_tests::tally_skips_a_deleted_target` -- it asks the single-target path after the delete. That path is a second guard, on the element map rather than on the visible set, and the only caller it has is that test (section 6) | none | verified |
+| `TOILE-FEAT-057` | `OBS` | The board's counts MUST cover what is on screen, so a reacted target scrolled out of view costs nothing to derive. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_toile::logic::convergence_tests::a_reacted_target_out_of_view_is_left_out_of_the_frame` -- the frame leaves the target out, and the board still counts it | none | verified |
 | `TOILE-FEAT-058` | `INV` | The chips of one target MUST keep the same order from one read to the next, so a count does not shuffle under the reader. | this spec section 3 | `ambre_toile::logic::convergence_tests::the_chips_of_a_target_keep_one_order` -- two emoji in two arrival orders, read twice and through the frame | none | verified |
 | `TOILE-FEAT-059` | `OBS` | Votes on a target MUST fold into one signed total and one voter count. | this spec section 3 | `ambre_toile::logic::convergence_tests::same_user_two_devices_is_one_entry` -- it reads the voter count for a single positive weight; `ambre_toile::logic::convergence_tests::votes_fold_into_one_signed_total_and_one_count` -- weights of opposite signs, and a zero total that still counts its voters | none | verified |
 | `TOILE-UI-080` | `OBS` | A badge MUST keep one screen size through the whole zoom range. | this spec section 4 | `ambre_toile::ui::reactions::tests::a_badge_keeps_one_screen_size_through_the_zoom` -- the same pills at 1x and 4x | none | verified |
@@ -47,7 +47,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 | `TOILE-FEAT-067` | `POST` | A reaction that changes something MUST repaint the badges of that target, on this screen too. | this spec section 4 | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it reads an outcome announcing that target, and the view queues a fresh board for an announced target | none | verified |
 | `TOILE-FEAT-020` | `POST` | Clearing a reaction the user does not have MUST do nothing at all: no delta, and nothing to undo. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it clears twice and reads nothing broadcast by the second clear | none | verified |
 | `TOILE-FEAT-063` | `POST` | Placing again the reaction the user already has MUST do nothing at all, on the same terms. | this spec section 3 | `ambre_toile::logic::convergence_tests::placing_the_same_reaction_again_does_nothing` -- no delta, no event, and no undo item | none | verified |
-| `TOILE-FEAT-021` | `FAIL` | A reaction MUST NOT be written before the user's canonical identity is known. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_before_session_ready_is_a_noop` -- it reacts on a state with no identity and reads nothing broadcast and no tally | none | verified |
+| `TOILE-FEAT-021` | `FAIL` | A reaction MUST NOT be written before the user's canonical identity is known. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_before_session_ready_is_a_noop` -- it reacts on a state with no identity and reads nothing broadcast and no count | none | verified |
 | `TOILE-FEAT-064` | `FAIL` | A reaction the client cannot write MUST tell the user, rather than leave the gesture looking applied. | this spec section 3; section 6 | `ambre_toile::logic::state::reactions::tests::a_reaction_that_will_not_encode_answers_a_write_failure` -- it encodes a value that refuses to be written and requires a typed write failure back, so the warning-and-empty-outcome the code used to answer fails it; `ambre_toile::logic::state::reactions::tests::a_reaction_encodes` -- the other side: the reaction the board stores encodes, so only the failing arm answers an error | none | verified |
 | `TOILE-FEAT-065` | `FRAME` | Reacting MUST NOT touch anybody else's reaction on that target. | this spec section 3; section 5 | structural -- the write is one insert or one delete under the key built from this user's identity, so no other user's key is reachable | none | verified |
 
@@ -55,7 +55,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-FEAT-023` | `POST` | Undoing a reaction MUST remove that user's own entry. | this spec section 3; `TOILE-014` | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it undoes the reaction and reads the tally empty again | none | verified |
+| `TOILE-FEAT-023` | `POST` | Undoing a reaction MUST remove that user's own entry. | this spec section 3; `TOILE-014` | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it undoes the reaction and reads the count empty again | none | verified |
 | `TOILE-FEAT-066` | `FRAME` | Undoing a reaction MUST NOT touch every other entry on that target. | this spec section 3 | structural -- one reaction is one commit over one key, so the history has one key to put back | none | verified |
 
 ### 1.4 Pick an emoji from the menu
@@ -70,13 +70,13 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-079` | `POST` | Every visible target carrying a tally MUST paint a badge row. | this spec section 4 | `ambre_toile::ui::reactions::tests::chip_row_paints_only_tallied_elements` -- it paints a tallied element and reads a filled chip pill | none | verified |
-| `TOILE-UI-302` | `POST` | A visible target with no tally MUST paint nothing, so an untouched element stays untouched. | this spec section 4 | `ambre_toile::ui::reactions::tests::chip_row_paints_only_tallied_elements` -- exactly one pill, under the tallied element; `ambre_toile::ui::reactions::tests::empty_reactions_paint_nothing` | none | verified |
+| `TOILE-UI-079` | `POST` | Every visible target carrying a count MUST paint a badge row. | this spec section 4 | `ambre_toile::ui::reactions::tests::chip_row_paints_only_tallied_elements` -- it paints a counted element and reads a filled chip pill | none | verified |
+| `TOILE-UI-302` | `POST` | A visible target with no count MUST paint nothing, so an untouched element stays untouched. | this spec section 4 | `ambre_toile::ui::reactions::tests::chip_row_paints_only_tallied_elements` -- exactly one pill, under the counted element; `ambre_toile::ui::reactions::tests::empty_reactions_paint_nothing` | none | verified |
 | `TOILE-UI-303` | `POST` | A board nobody has reacted to MUST cost no drawing at all. | this spec section 4 | `ambre_toile::ui::reactions::tests::empty_reactions_paint_nothing` -- it reads a pass that records no operation whatsoever | none | verified |
 | `TOILE-UI-304` | `POST` | Votes on a target MUST collapse into one trailing chip: the signed total, then the number of voters. | this spec section 4 | `ambre_toile::ui::reactions::tests::votes_collapse_into_one_trailing_chip` -- one chip after the emoji chips, and the label format | none | verified |
 | `TOILE-UI-305` | `FRAME` | Painting badges MUST NOT change the board. | this spec section 4 | type-level -- the pass takes the derived board by shared reference and a drawing surface, so it has nothing to write to | none | verified |
 
-* **Budget.** the whole-viewport tally in one scan of the reactions map, the reaction-tally row of
+* **Budget.** the whole-viewport count in one scan of the reactions map, the reaction-count row of
   `ambre-spec-budgets.md section 1`. The derivation is one pass over the reactions, not one
   pass per element. It costs what the board has reacted to and not what it holds.
 * **Boundary.** none of its own: a reaction is written to the document, and `ZK-001` seals every
@@ -97,7 +97,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 | reacts from her laptop | -- | one entry | one heart, counting one, however many devices Alice opens (`TOILE-FEAT-007`) | `logic::convergence_tests::same_user_two_devices_is_one_entry` |
 | replaces her heart with a check | watches | Alice's one entry, now a check | the heart gone and the check counting one (`TOILE-FEAT-061`) | `logic::convergence_tests::react_add_change_remove_updates_tally` |
 | reacts on a note | deletes that note | the note gone, the entry kept | no badge, and no arrow to nowhere (`TOILE-FEAT-010`) | `logic::convergence_tests::derive_viewport_carries_tally_and_skips_deleted_target` |
-| scrolls the note off screen | -- | the entry kept | the same nothing: the board's tallies are culled with the board, and no test tells the two cases apart (`TOILE-FEAT-057`) | none |
+| scrolls the note off screen | -- | the entry kept | the same nothing: the board's counts are culled with the board, and no test tells the two cases apart (`TOILE-FEAT-057`) | none |
 | clears her reaction twice | watches | one delete, then nothing | no second change reaching Bob (`TOILE-FEAT-020`) | `logic::convergence_tests::react_broadcasts_delta_and_is_undoable` |
 | places the heart she already has | watches | one entry, unchanged | nothing at all -- and nothing drives that skip (`TOILE-FEAT-063`) | none |
 
@@ -120,9 +120,9 @@ pub struct Reaction {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionTally {
-    pub emoji:      Vec<(Emoji, Tally<Reactions>)>, // sorted, so the chip order is stable
+    pub emoji:      Vec<(Emoji, Count<Reactions>)>, // sorted, so the chip order is stable
     pub vote_total: VoteTotal,
-    pub vote_count: Tally<Votes>,
+    pub vote_count: Count<Votes>,
 }
 ```
 
@@ -153,13 +153,13 @@ opens before an identity is known, so there is no gesture to explain (`TOILE-FEA
    (`TOILE-FEAT-010`);
 3. fold each entry into its target's counts: one per emoji, and a signed total plus a voter count.
 
-A single-target tally takes the same path over the target's key prefix, and checks that the element
+A single-target count takes the same path over the target's key prefix, and checks that the element
 still exists first (`TOILE-FEAT-056`). That is a second guard, on a different condition, with no
 caller outside its test (section 6).
 
 **Code:**
 
-* `crates/ambre-toile/src/logic/state/reactions.rs` -- the write, the two derivations and the tally;
+* `crates/ambre-toile/src/logic/state/reactions.rs` -- the write, the two derivations and the count;
 * `ui/reactions.rs` -- the badge pass;
 * `ui/menu.rs` -- the picker's command ids and their resolution against the selection.
 
@@ -171,7 +171,7 @@ caller outside its test (section 6).
 |---|---|
 | one of the four emoji entries of the context menu | places that emoji on every selected element (`TOILE-UI-081`) |
 | the clear entry of the context menu | removes this user's own reaction from every selected element (`TOILE-UI-300`) |
-| any change to a tally | repaints the badge row of that element (`TOILE-FEAT-067`) |
+| any change to a count | repaints the badge row of that element (`TOILE-FEAT-067`) |
 
 **The badges.** One chip per emoji, the glyph then its count, laid left to right under the element's
 bottom edge. Votes collapse into one trailing chip: the signed total, then the number of voters. The
@@ -190,7 +190,7 @@ resolve and are tested like every other menu entry
 | :--- | :--- | :--- |
 | One flat map keyed by target and user together | a sub-map per target, created by the first reactor | two users reacting at once on a fresh element create two rival containers and the merge keeps one. The root map always exists, so the flat shape writes two keys and both survive; ids never contain the separator, so the target is recovered by splitting |
 | Keyed by `Id<User>`, never `PeerID` | keying by the writing peer | a per-session key would let one user count twice and would strand the entry on the next session. A reaction is a decision by a person, and it must survive a reload, a key rotation and a second device |
-| The tally is derived, never stored | a counter per emoji, incremented on write | a stored count is a second truth that drifts the first time a write is lost or replayed. Deriving it costs one pass and can be wrong in one place only |
+| The count is derived, never stored | a counter per emoji, incremented on write | a stored count is a second truth that drifts the first time a write is lost or replayed. Deriving it costs one pass and can be wrong in one place only |
 | A deleted target keeps its entries | deleting the entries with their target | the delete may be undone, and destroying data on a read is how a concurrent edit loses work. The entries are skipped at derivation and reclaimed by compaction |
 | A reaction is an undo item | excluding it from the history, as a comment is (`features/ambre-spec-toile-comments.md section 3`) | a reaction is a write to the document like any other, and the history is the one place a mistaken write is corrected |
 | The picker is four fixed emoji | a full emoji browser | a workshop needs agreement, approval and applause, not a search field. Four ids are four registry commands, tested like the rest of the menu |
@@ -214,7 +214,7 @@ resolve and are tested like every other menu entry
 * **Undo retracts a reaction, and the same argument says it should not.** A comment is excluded from
   the history because `Ctrl+Z` must not withdraw something a teammate has read (`TOILE-FEAT-017`). A
   reaction is as visible and is undoable. One of the two rules is wrong, and no document says which.
-* **Two public read paths, and neither has a caller.** The single-target tally and the accessor
+* **Two public read paths, and neither has a caller.** The single-target count and the accessor
   that answers "what did I put here" are both `pub`, both tested, and named nowhere else in the
   workspace. The badge pass reads the derived map instead, so the guard on element existence that
   only the single-target path carries protects nothing that renders (`TOILE-FEAT-056`).

@@ -153,7 +153,7 @@ impl ClosedChannel {
     pub(crate) fn mark(
         &self,
         channel_id: Id<Channel>,
-        threads: ambre_core::Tally<Mentions>,
+        threads: ambre_core::Count<Mentions>,
     ) -> Option<ChannelActivity> {
         let since = self
             .counted
@@ -163,7 +163,7 @@ impl ClosedChannel {
         match self.base {
             Some(base) => Some(base.plus(&since).activity(channel_id)),
             None => (!since.unread.is_zero()
-                || since.mentions != ambre_core::Tally::<Mentions>::ZERO)
+                || since.mentions != ambre_core::Count::<Mentions>::ZERO)
                 .then_some(ChannelActivity {
                     channel_id,
                     active: ambre_bus::Activity::Active,
@@ -177,8 +177,8 @@ impl ClosedChannel {
 /// The new messages of a channel, and those of them that mention this user.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct Counts {
-    unread: ambre_core::Tally<Unread>,
-    mentions: ambre_core::Tally<Mentions>,
+    unread: ambre_core::Count<Unread>,
+    mentions: ambre_core::Count<Mentions>,
 }
 
 impl Counts {
@@ -190,9 +190,9 @@ impl Counts {
     }
 
     /// The same counts, with the mentions of the threads not held.
-    fn with_mentions(self, mentions: ambre_core::Tally<Mentions>) -> Self {
+    fn with_mentions(self, mentions: ambre_core::Count<Mentions>) -> Self {
         self.plus(&Self {
-            unread: ambre_core::Tally::<Unread>::default(),
+            unread: ambre_core::Count::<Unread>::default(),
             mentions,
         })
     }
@@ -203,7 +203,7 @@ impl Counts {
         ChannelActivity {
             channel_id,
             active: ambre_bus::Activity::from_bool(
-                !self.unread.is_zero() || self.mentions != ambre_core::Tally::<Mentions>::ZERO,
+                !self.unread.is_zero() || self.mentions != ambre_core::Count::<Mentions>::ZERO,
             ),
             unread: Some(self.unread),
             mentions: Some(self.mentions),
@@ -675,8 +675,8 @@ impl LogicState {
             return false;
         };
         let now = Counts {
-            unread: ambre_core::Tally::<Unread>::recount(counters.content),
-            mentions: ambre_core::Tally::<Mentions>::recount(counters.mentions),
+            unread: ambre_core::Count::<Unread>::recount(counters.content),
+            mentions: ambre_core::Count::<Mentions>::recount(counters.mentions),
         };
         let before = closed.counted.insert(document_id, now).unwrap_or_default();
         // The summaries counted a message since the last count: that is
@@ -2526,7 +2526,7 @@ mod tests {
     fn activity(content: u32) -> ambre_core::activity::ActivityCounters {
         ambre_core::activity::ActivityCounters {
             active: ambre_bus::Activity::Active,
-            content: ambre_core::Tally::<ambre_core::activity::ContentUpdates>::new(content),
+            content: ambre_core::Count::<ambre_core::activity::ContentUpdates>::new(content),
             ..Default::default()
         }
     }
@@ -2569,8 +2569,8 @@ mod tests {
             vec![ChannelActivity {
                 channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(ambre_core::Tally::<Unread>::new(unread)),
-                mentions: Some(ambre_core::Tally::<Mentions>::ZERO),
+                unread: Some(ambre_core::Count::<Unread>::new(unread)),
+                mentions: Some(ambre_core::Count::<Mentions>::ZERO),
             }]
         };
         assert_eq!(marks, vec![mark(2), mark(3), mark(3)]);
@@ -2588,7 +2588,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::Activity {
             document_id: active.document_id(),
             counters: ambre_core::activity::ActivityCounters {
-                mentions: ambre_core::Tally::<ambre_core::activity::MentionUpdates>::new(1),
+                mentions: ambre_core::Count::<ambre_core::activity::MentionUpdates>::new(1),
                 ..activity(2)
             },
         });
@@ -2610,8 +2610,8 @@ mod tests {
             &[ChannelActivity {
                 channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(ambre_core::Tally::<Unread>::new(2)),
-                mentions: Some(ambre_core::Tally::<Mentions>::new(1)),
+                unread: Some(ambre_core::Count::<Unread>::new(2)),
+                mentions: Some(ambre_core::Count::<Mentions>::new(1)),
             }]
         );
     }
@@ -3104,8 +3104,8 @@ mod tests {
             [ChannelActivity {
                 channel_id,
                 active: ambre_bus::Activity::Quiet,
-                unread: Some(ambre_core::Tally::<Unread>::ZERO),
-                mentions: Some(ambre_core::Tally::<Mentions>::ZERO),
+                unread: Some(ambre_core::Count::<Unread>::ZERO),
+                mentions: Some(ambre_core::Count::<Mentions>::ZERO),
             }]
         );
     }
@@ -4405,7 +4405,7 @@ mod tests {
             styles: Vec::new(),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
-            members: ambre_core::Tally::<ambre_core::Members>::new(
+            members: ambre_core::Count::<ambre_core::Members>::new(
                 ambre_murmure::CONFIRM_CHANNEL_PAST.get() + 1,
             ),
             held: HeldSend {
@@ -4447,7 +4447,7 @@ mod tests {
             }),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
-            members: ambre_core::Tally::<ambre_core::Members>::new(
+            members: ambre_core::Count::<ambre_core::Members>::new(
                 ambre_murmure::CONFIRM_CHANNEL_PAST.get() + 1,
             ),
             held,
@@ -4464,7 +4464,7 @@ mod tests {
         let channel_id = Id::<Channel>::mint();
         let channel = ChannelState::create(channel_id, ChannelType::Public, None, NOW)
             .expect("create")
-            .with_segment_size(ambre_core::Tally::<ambre_bus::Messages>::of_len(size));
+            .with_segment_size(ambre_core::Count::<ambre_bus::Messages>::of(size));
         let active = channel.active_id();
         state.hold_channel(channel);
         (channel_id, active)
@@ -5750,7 +5750,7 @@ mod tests {
         assert!(drain(&ui).iter().any(|event| matches!(
             event,
             UiEvent::ChannelActivity { channels }
-                if channels.first().is_some_and(|mark| mark.unread == Some(ambre_core::Tally::<Unread>::new(2)))
+                if channels.first().is_some_and(|mark| mark.unread == Some(ambre_core::Count::<Unread>::new(2)))
         )));
     }
 
@@ -6257,8 +6257,8 @@ mod tests {
             Some(ChannelActivity {
                 channel_id: m.channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(ambre_core::Tally::<Unread>::new(0)),
-                mentions: Some(ambre_core::Tally::<Mentions>::new(1)),
+                unread: Some(ambre_core::Count::<Unread>::new(0)),
+                mentions: Some(ambre_core::Count::<Mentions>::new(1)),
             })
         );
     }
@@ -6303,7 +6303,7 @@ mod tests {
         };
         assert_eq!(
             channels[0].mentions,
-            Some(ambre_core::Tally::<Mentions>::new(0))
+            Some(ambre_core::Count::<Mentions>::new(0))
         );
         assert_eq!(channels[0].active, ambre_bus::Activity::Quiet);
     }
@@ -6528,7 +6528,7 @@ mod tests {
             state.handle_logic_event(LogicEvent::Activity {
                 document_id: thread,
                 counters: ambre_core::activity::ActivityCounters {
-                    mentions: ambre_core::Tally::<ambre_core::activity::MentionUpdates>::new(1),
+                    mentions: ambre_core::Count::<ambre_core::activity::MentionUpdates>::new(1),
                     ..activity(2)
                 },
             });
@@ -6550,8 +6550,8 @@ mod tests {
                 &[ChannelActivity {
                     channel_id,
                     active: ambre_bus::Activity::Active,
-                    unread: Some(ambre_core::Tally::<Unread>::new(0)),
-                    mentions: Some(ambre_core::Tally::<Mentions>::new(1)),
+                    unread: Some(ambre_core::Count::<Unread>::new(0)),
+                    mentions: Some(ambre_core::Count::<Mentions>::new(1)),
                 }]
             );
         }
@@ -6576,7 +6576,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::Activity {
             document_id: thread,
             counters: ambre_core::activity::ActivityCounters {
-                mentions: ambre_core::Tally::<ambre_core::activity::MentionUpdates>::new(1),
+                mentions: ambre_core::Count::<ambre_core::activity::MentionUpdates>::new(1),
                 ..activity(0)
             },
         });

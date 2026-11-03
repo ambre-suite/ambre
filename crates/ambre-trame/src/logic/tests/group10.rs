@@ -5,7 +5,7 @@
 use super::*;
 use crate::FillMode;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {
@@ -108,7 +108,7 @@ fn the_merged_tiles_cover_the_destination_outside_the_source() {
             Pos::<Row>::new(d1),
             Pos::<Row>::new(d2),
         );
-        let mut covered: Vec<u32> = tiles(r1, r2, rd1, rd2, Count::<Row>::new(b))
+        let mut covered: Vec<u32> = tiles(r1, r2, rd1, rd2, Len::<Row>::new(b))
             .iter()
             .flat_map(|t| t.first.get()..t.first.get() + t.len.get())
             .collect();
@@ -235,8 +235,8 @@ fn a_pasted_style_short_of_a_line_says_so() {
     let payload = crate::ClipboardPayload {
         src_row: Pos::<Row>::new(0),
         src_col: Pos::<Col>::new(0),
-        rows: Count::<Row>::ONE,
-        cols: Count::<Col>::ONE,
+        rows: Len::<Row>::ONE,
+        cols: Len::<Col>::ONE,
         cells: vec![crate::ClipboardCell {
             bold: ambre_bus::Weight::Bold,
             ..Default::default()

@@ -15,7 +15,7 @@
 //! yields **no** commands, so a caller applying the batch can never land a partial
 //! board.
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::index::{Axis, Pos};
 use kurbo::{BezPath, Point, Rect};
 
@@ -159,7 +159,7 @@ pub fn place_batch_at(batch: &mut ImportBatch, at: Point) {
 /// pattern, an unhandled node) so the user knows the import was lossy.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ImportReport {
-    pub imported: ambre_core::Tally<ambre_bus::app::toile::Elements>,
+    pub imported: ambre_core::Count<ambre_bus::app::toile::Elements>,
     pub skipped: Vec<ambre_bus::app::toile::SkipReason>,
 }
 
@@ -196,10 +196,10 @@ pub enum ImportError {
     Decode(String),
     #[error("import exceeds the element limit ({limit})")]
     TooManyElements {
-        limit: ambre_core::Tally<ambre_core::Elements>,
+        limit: ambre_core::Count<ambre_core::Elements>,
     },
     #[error("import exceeds the nesting-depth limit ({limit})")]
-    TooDeep { limit: Tally<ImportDepth> },
+    TooDeep { limit: Count<ImportDepth> },
     #[error(
         "decoded image {}x{} exceeds the dimension limit ({}x{})",
         size.width,

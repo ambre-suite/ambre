@@ -9,7 +9,7 @@
 use ambre_bus::app::grid::Row;
 use ambre_bus::app::prose::{DocChar, Page};
 use ambre_core::Rgba;
-use ambre_core::index::{Axis, Count, CountsAs, Delta, IdxVec, MapsTo, Pos, Span};
+use ambre_core::index::{Axis, Delta, IdxVec, Len, MapsTo, MeasuresAs, Pos, Span};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -42,19 +42,19 @@ impl Axis for RunChar {
 /// * the Logic thread answered the offset.
 ///
 /// `ProseUiState::to_doc` is the bridge otherwise.
-impl CountsAs<DocChar> for RunChar {}
+impl MeasuresAs<DocChar> for RunChar {}
 
 /// A position crosses too: both axes start at the same place.
 impl MapsTo<DocChar> for RunChar {}
 
 /// The way back, under the condition the crossing above states.
-impl CountsAs<RunChar> for DocChar {}
+impl MeasuresAs<RunChar> for DocChar {}
 
 /// A position crosses too: both axes start at the same place.
 impl MapsTo<RunChar> for DocChar {}
 
 /// A text the run holds whole counts the same code points in the run.
-impl CountsAs<RunChar> for Char {}
+impl MeasuresAs<RunChar> for Char {}
 
 /// A block's place in the flow of the document, the first being zero.
 /// A window of the layout carries a stretch of them.
@@ -128,10 +128,10 @@ impl Axis for LocalByte {
 
 /// A segment's text is a slice of the run's text: a count of bytes is the
 /// same in both.
-impl CountsAs<Byte> for LocalByte {}
+impl MeasuresAs<Byte> for LocalByte {}
 
 /// The way back: a count of the run's bytes, taken into one segment's text.
-impl CountsAs<LocalByte> for Byte {}
+impl MeasuresAs<LocalByte> for Byte {}
 
 /// A line of one run, counted across its segments, the first being zero.
 #[derive(PartialEq, Eq)]
@@ -143,7 +143,7 @@ impl Axis for RunLine {
 
 /// A text block is one run, so the paginator cuts the block at the run's
 /// own lines.
-impl CountsAs<BlockLine> for RunLine {}
+impl MeasuresAs<BlockLine> for RunLine {}
 
 /// A position crosses too: both axes start at the same place.
 impl MapsTo<BlockLine> for RunLine {}
@@ -160,10 +160,10 @@ impl Axis for LocalLine {
 
 /// A number of lines is the same counted in the run or in one segment's
 /// layout; a position is not, and `ParleyRunData::lines` maps those.
-impl CountsAs<LocalLine> for RunLine {}
+impl MeasuresAs<LocalLine> for RunLine {}
 
 /// The way back, for a number of lines.
-impl CountsAs<RunLine> for LocalLine {}
+impl MeasuresAs<RunLine> for LocalLine {}
 
 /// A segment of one run, the first being zero.
 #[derive(PartialEq, Eq)]
@@ -191,7 +191,7 @@ struct Segment {
     skip: Pos<LocalLine>,
     /// How many of the layout's lines the run keeps from `skip` on. The
     /// lines after them were replaced the same way.
-    lines: Count<LocalLine>,
+    lines: Len<LocalLine>,
     /// Its first kept line, among the run's lines.
     first_line: Pos<RunLine>,
 }
@@ -199,12 +199,12 @@ struct Segment {
 impl Segment {
     /// A byte of the layout's text, in the run's text.
     fn to_run(&self, local: Pos<LocalByte>) -> Pos<Byte> {
-        self.start + local.count_from(self.local_start).as_axis()
+        self.start + local.len_from(self.local_start).as_axis()
     }
 
     /// A byte of the run's text, in the layout's text.
     fn to_local(&self, byte: Pos<Byte>) -> Pos<LocalByte> {
-        self.local_start + byte.count_from(self.start).as_axis::<LocalByte>()
+        self.local_start + byte.len_from(self.start).as_axis::<LocalByte>()
     }
 
     /// The line of the layout's text, `parley` numbering it.
@@ -214,7 +214,7 @@ impl Segment {
 
     /// The lines of the layout the run keeps.
     fn kept(&self) -> Span<LocalLine> {
-        Span::<LocalLine>::from_count(self.skip, self.lines)
+        Span::<LocalLine>::from_len(self.skip, self.lines)
     }
 }
 
@@ -223,7 +223,7 @@ impl Segment {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Resume {
     /// How many of the window's lines the run keeps.
-    pub kept: Count<LocalLine>,
+    pub kept: Len<LocalLine>,
     /// The first line of the previous run kept after them.
     pub line: Pos<RunLine>,
     /// How many bytes the edit added to the text, negative when it removed.
@@ -278,8 +278,8 @@ impl ParleyRunData {
             .char_indices()
             .map(|(at, _)| Pos::<Byte>::from_usize(at))
             .collect();
-        char_starts.push(Count::<Byte>::from_len(text.len()).as_end());
-        let lines = Count::<LocalLine>::from_len(layout.len());
+        char_starts.push(Len::<Byte>::of(text.len()).as_end());
+        let lines = Len::<LocalLine>::of(layout.len());
         let mut data = Self {
             segments: IdxVec::<RunSegment, _>::from(vec![Segment {
                 layout: Arc::new(layout),
@@ -328,13 +328,11 @@ impl ParleyRunData {
                 break;
             }
             let mut kept = segment.clone();
-            let above = cut.count_from(segment.first_line).as_axis::<LocalLine>();
+            let above = cut.len_from(segment.first_line).as_axis::<LocalLine>();
             kept.lines = kept.lines.min(above);
             segments.push(kept);
         }
-        let lines = resume.map_or(Count::<LocalLine>::from_len(window.len()), |resume| {
-            resume.kept
-        });
+        let lines = resume.map_or(Len::<LocalLine>::of(window.len()), |resume| resume.kept);
         segments.push(Segment {
             layout: Arc::new(window),
             start,
@@ -352,7 +350,7 @@ impl ParleyRunData {
                     if at.local < segment.skip {
                         return None;
                     }
-                    let dropped = at.local.count_from(segment.skip);
+                    let dropped = at.local.len_from(segment.skip);
                     if dropped > segment.lines {
                         return None;
                     }
@@ -396,7 +394,7 @@ impl ParleyRunData {
     /// How many shaped stretches the run holds: one for a run shaped whole,
     /// or shaped again from its first line to its end.
     #[must_use]
-    pub fn segment_count(&self) -> Count<RunSegment> {
+    pub fn segment_count(&self) -> Len<RunSegment> {
         self.segments.len()
     }
 
@@ -496,7 +494,7 @@ impl ParleyRunData {
     /// (`ambre-spec-prose-schema.md section 3`).
     #[must_use]
     pub fn marks_before(&self, offset: Pos<RunChar>) -> MarkedSpan {
-        let Some(previous) = offset.checked_sub(Count::<RunChar>::ONE) else {
+        let Some(previous) = offset.checked_sub(Len::<RunChar>::ONE) else {
             return MarkedSpan::default();
         };
         let byte = self.byte_of(previous);
@@ -566,8 +564,8 @@ impl ParleyRunData {
 
     /// How many code points the run holds.
     #[must_use]
-    pub fn len(&self) -> Count<RunChar> {
-        self.char_starts.len().saturating_sub(Count::<RunChar>::ONE)
+    pub fn len(&self) -> Len<RunChar> {
+        self.char_starts.len().saturating_sub(Len::<RunChar>::ONE)
     }
 
     /// Whether the run holds no text.
@@ -696,8 +694,8 @@ impl ParleyRunData {
 
     /// How many lines the run is broken into, never fewer than one.
     #[must_use]
-    pub fn line_count(&self) -> Count<RunLine> {
-        self.lines.len().max(Count::<RunLine>::ONE)
+    pub fn line_count(&self) -> Len<RunLine> {
+        self.lines.len().max(Len::<RunLine>::ONE)
     }
 
     /// The caret on line `line` nearest to `x`, and its affinity.
@@ -765,7 +763,7 @@ impl ParleyRunData {
         let byte = self.byte_of(offset);
         let tail = self.text.get(byte.to_usize()..)?;
         let first = tail.graphemes(true).next()?;
-        Some(self.offset_of_byte(byte + Count::<Byte>::from_len(first.len())))
+        Some(self.offset_of_byte(byte + Len::<Byte>::of(first.len())))
     }
 
     /// The start of the word before an offset, or `None` at the start.
@@ -796,7 +794,7 @@ impl ParleyRunData {
             .split_word_bound_indices()
             .find(|(_, word)| word.chars().any(char::is_alphanumeric))
             .map_or(tail.len(), |(at, word)| at + word.len());
-        Some(self.offset_of_byte(byte + Count::<Byte>::from_len(end)))
+        Some(self.offset_of_byte(byte + Len::<Byte>::of(end)))
     }
 
     /// The word under an offset, as a code-point range. A space or a
@@ -852,9 +850,7 @@ impl ParleyRunData {
     fn segment_end(&self, index: Pos<RunSegment>) -> Pos<Byte> {
         self.segments
             .get(index.next())
-            .map_or(Count::<Byte>::from_len(self.text.len()).as_end(), |next| {
-                next.start
-            })
+            .map_or(Len::<Byte>::of(self.text.len()).as_end(), |next| next.start)
     }
 
     /// The run's line that a box of segment `index` sits on. The middle of
@@ -863,7 +859,7 @@ impl ParleyRunData {
         let segment = self.segments.get(index)?;
         let middle = ((rect.y0 + rect.y1) / 2.0) as f32;
         let kept =
-            Span::<LocalLine>::from_count(segment.skip, segment.lines.max(Count::<LocalLine>::ONE));
+            Span::<LocalLine>::from_len(segment.skip, segment.lines.max(Len::<LocalLine>::ONE));
         let local = kept
             .into_iter()
             .find(|&local| {
@@ -872,7 +868,7 @@ impl ParleyRunData {
                     .is_some_and(|line| middle < line.metrics().block_max_coord)
             })
             .or(kept.last())?;
-        let below = local.count_from(segment.skip).as_axis();
+        let below = local.len_from(segment.skip).as_axis();
         self.lines.get(segment.first_line + below).copied()
     }
 
@@ -1042,7 +1038,7 @@ impl Axis for WindowPage {
 }
 
 /// The window counts the document's pages: a count of pages is the same.
-impl CountsAs<WindowPage> for Page {}
+impl MeasuresAs<WindowPage> for Page {}
 
 /// Where a text block sits in the tables of a layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1059,7 +1055,7 @@ pub struct TextEnds {
     pub first: TreeID,
     pub last: TreeID,
     /// The length of the last block, in code points.
-    pub last_len: Count<RunChar>,
+    pub last_len: Len<RunChar>,
 }
 
 /// Where a window sits in the document it was cut from.
@@ -1145,7 +1141,7 @@ impl ShapedLayout {
             for page in block.page_span() {
                 let at = page_offset(first, page);
                 if let Some(blocks) = at.and_then(|at| page_blocks.get_mut(at)) {
-                    blocks.push(window.first_index + Count::<Flow>::from_len(local));
+                    blocks.push(window.first_index + Len::<Flow>::of(local));
                 }
             }
         }
@@ -1172,7 +1168,7 @@ impl ShapedLayout {
         }
         self.layout
             .blocks
-            .get(index.count_from(self.first_index).to_usize())
+            .get(index.len_from(self.first_index).to_usize())
     }
 
     /// The blocks the window carries, each with its place in the flow.
@@ -1182,13 +1178,13 @@ impl ShapedLayout {
             .blocks
             .iter()
             .enumerate()
-            .map(move |(local, block)| (first + Count::<Flow>::from_len(local), block))
+            .map(move |(local, block)| (first + Len::<Flow>::of(local), block))
     }
 
     /// How many blocks the document holds, carried or not.
     #[must_use]
-    pub fn block_count(&self) -> Count<Flow> {
-        Count::<Flow>::from_len(self.order.len())
+    pub fn block_count(&self) -> Len<Flow> {
+        Len::<Flow>::of(self.order.len())
     }
 
     /// Whether the window carries a block.
@@ -1223,7 +1219,7 @@ impl ShapedLayout {
 
 /// The place of `page` in a window that starts at `first`, `None` before it.
 fn page_offset(first: Pos<Page>, page: Pos<Page>) -> Option<Pos<WindowPage>> {
-    (page >= first).then(|| page.count_from(first).as_axis::<WindowPage>().as_end())
+    (page >= first).then(|| page.len_from(first).as_axis::<WindowPage>().as_end())
 }
 
 /// Every block of `blocks`, by its place in the flow.
@@ -1243,7 +1239,7 @@ pub fn order_of(blocks: &[BlockLayout]) -> HashMap<TreeID, Pos<Flow>> {
 /// once.
 pub fn text_ends<I>(blocks: I) -> Option<TextEnds>
 where
-    I: DoubleEndedIterator<Item = (TreeID, Option<Count<RunChar>>)> + Clone,
+    I: DoubleEndedIterator<Item = (TreeID, Option<Len<RunChar>>)> + Clone,
 {
     let first = blocks.clone().find_map(|(id, len)| len.map(|_| id))?;
     let (last, last_len) = blocks.rev().find_map(|(id, len)| Some((id, len?)))?;
@@ -1395,7 +1391,7 @@ mod tests {
         let (metrics, run) = measurer.measure_run(text, &indented, Px::<Doc>::new(120.0));
         let run = run.data();
         assert!(metrics.line_count >= plain_metrics.line_count);
-        let lines = run.range_boxes(Span::<RunChar>::from_count(Pos::<RunChar>::ZERO, run.len()));
+        let lines = run.range_boxes(Span::<RunChar>::from_len(Pos::<RunChar>::ZERO, run.len()));
         assert!((lines[0].x0 - 40.0).abs() < 1e-3);
         assert!(lines[1..].iter().all(|line| line.x0.abs() < 1e-3));
         assert!((run.caret_box(Pos::<RunChar>::ZERO).x0 - 40.0).abs() < 1e-3);
@@ -1425,7 +1421,7 @@ mod tests {
         let text = "one two three four five six seven eight nine ten eleven";
         let (metrics, run) = measurer.measure_run(text, &style(), Px::<Doc>::new(90.0));
         assert!(metrics.line_count.get() > 2);
-        let whole = run.data().range_boxes(Span::<RunChar>::from_count(
+        let whole = run.data().range_boxes(Span::<RunChar>::from_len(
             Pos::<RunChar>::ZERO,
             run.data().len(),
         ));

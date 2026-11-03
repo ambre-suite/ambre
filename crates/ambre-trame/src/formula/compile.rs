@@ -12,7 +12,7 @@
 //! position beyond it stays a [`AxisId::Virtual`] grid coordinate
 //! (`trame-formula-engine`).
 
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use ambre_core::index::Pos;
 use std::collections::HashMap;
 
@@ -168,7 +168,7 @@ fn compile_into(
             }
             ops.push(Op::CallFn {
                 name: name.clone(),
-                n_args: Count::<super::types::Arg>::from_len(args.len()),
+                n_args: Len::<super::types::Arg>::of(args.len()),
             });
         }
         // `SheetRef`/`Name` are eliminated by `parser::resolve_refs` before
@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(bc.ops.len(), 2); // EvalRange + CallFn
         assert!(matches!(&bc.ops[0], Op::EvalRange(_)));
         assert!(
-            matches!(&bc.ops[1], Op::CallFn { name, n_args } if name.as_str() == "SUM" && *n_args == Count::<super::super::types::Arg>::new(1))
+            matches!(&bc.ops[1], Op::CallFn { name, n_args } if name.as_str() == "SUM" && *n_args == Len::<super::super::types::Arg>::new(1))
         );
     }
 

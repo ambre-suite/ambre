@@ -4,7 +4,7 @@
 
 use super::*;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 /// A multi-cell batch (Ctrl+Enter fill / Delete over a range) is a SINGLE
 /// undo item. Every write shares one undo group, so one `Undo` restores all
@@ -385,7 +385,7 @@ fn a_spent_uid_counter_refuses_new_lines_and_overwrites_nothing() {
     assert_eq!(read_cell(&mut state, 1, 0), "last");
     assert_eq!(read_cell(&mut state, 2, 0), "");
     let rows = state.index.row_ids();
-    assert_eq!(rows.len(), Count::<Row>::new(2));
+    assert_eq!(rows.len(), Len::<Row>::new(2));
     assert_ne!(
         rows.get(Pos::<Row>::new(0)),
         rows.get(Pos::<Row>::new(1)),
@@ -421,8 +421,8 @@ fn a_cell_short_of_uids_pushes_no_line_and_keeps_the_undo_stack() {
         text: "both".to_owned(),
     });
     assert!(says_ids_exhausted(&out));
-    assert_eq!(state.index.row_len(), Count::<Row>::new(1));
-    assert_eq!(state.index.col_len(), Count::<Col>::new(1));
+    assert_eq!(state.index.row_len(), Len::<Row>::new(1));
+    assert_eq!(state.index.col_len(), Len::<Col>::new(1));
     assert_eq!(state.uid_counter, last, "the last uid is handed back");
     state.doc.commit();
     assert_eq!(state.doc.oplog_vv(), vv_before, "nothing left pending");

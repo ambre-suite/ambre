@@ -185,7 +185,7 @@ impl LogicState {
             thread,
             WatchedThread {
                 channel_id,
-                mentions: ambre_core::Tally::<Mentions>::ZERO,
+                mentions: ambre_core::Count::<Mentions>::ZERO,
             },
         );
         self.send_to_sync(SyncCommand::WatchThread {
@@ -206,8 +206,8 @@ impl LogicState {
         let Some(watched) = self.watched_threads.get_mut(&thread) else {
             return false;
         };
-        let named = ambre_core::Tally::<Mentions>::recount(counters.mentions) > watched.mentions;
-        watched.mentions = ambre_core::Tally::<Mentions>::recount(counters.mentions);
+        let named = ambre_core::Count::<Mentions>::recount(counters.mentions) > watched.mentions;
+        watched.mentions = ambre_core::Count::<Mentions>::recount(counters.mentions);
         let channel_id = watched.channel_id;
         let mark = match self.closed_channels.get(&channel_id) {
             Some(closed) => closed.mark(channel_id, self.thread_mentions(channel_id)),
@@ -230,7 +230,7 @@ impl LogicState {
     }
 
     /// The mentions the watched threads of `channel_id` counted.
-    pub(crate) fn thread_mentions(&self, channel_id: Id<Channel>) -> ambre_core::Tally<Mentions> {
+    pub(crate) fn thread_mentions(&self, channel_id: Id<Channel>) -> ambre_core::Count<Mentions> {
         mentions_of(&self.watched_threads, channel_id)
     }
 
@@ -268,18 +268,18 @@ pub(crate) struct WatchedThread {
     /// The channel the thread counts on.
     channel_id: Id<Channel>,
     /// The replies past the read cursor that mention this user.
-    mentions: ambre_core::Tally<Mentions>,
+    mentions: ambre_core::Count<Mentions>,
 }
 
 /// The mentions the watched threads of `channel_id` counted.
 pub(crate) fn mentions_of(
     watched: &HashMap<Id<Document>, WatchedThread>,
     channel_id: Id<Channel>,
-) -> ambre_core::Tally<Mentions> {
+) -> ambre_core::Count<Mentions> {
     watched
         .values()
         .filter(|thread| thread.channel_id == channel_id)
-        .fold(ambre_core::Tally::<Mentions>::ZERO, |sum, thread| {
+        .fold(ambre_core::Count::<Mentions>::ZERO, |sum, thread| {
             sum.plus(thread.mentions)
         })
 }

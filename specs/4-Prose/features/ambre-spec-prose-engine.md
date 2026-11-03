@@ -160,7 +160,7 @@ is total over every key (`PROSE-090`).
 pub fn get_block_text(doc: &LoroDoc, id: &TreeID) -> LoroText;
 
 // ambre-prose/src/numbering.rs
-pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Tally<ListDepth>;
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Count<ListDepth>;
 
 // ambre-prose/src/mark.rs
 pub fn expand_type_for(mark_key: &MarkKey) -> ExpandType;
@@ -385,8 +385,8 @@ pub enum ProseCommand {
 
     // -- Tables (`features/ambre-spec-prose-tables.md`) --
     /// A table of `rows` by `cols`, one empty paragraph per cell.
-    InsertTable      { parent_id: Option<BlockId>, after_id: Option<BlockId>, rows: Count<Row>,
-                       cols: Count<Col> },
+    InsertTable      { parent_id: Option<BlockId>, after_id: Option<BlockId>, rows: Len<Row>,
+                       cols: Len<Col> },
     InsertTableRow   { table_id: BlockId, after_row: Option<BlockId> },
     DeleteTableRow   { row_id: BlockId },
     /// `at_col` is the index the new column takes; `None` width takes the document default

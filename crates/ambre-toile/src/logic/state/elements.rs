@@ -692,7 +692,7 @@ mod inner_tests {
         );
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::ZERO
+            ambre_core::Count::<ambre_core::Elements>::ZERO
         );
     }
 
@@ -705,13 +705,13 @@ mod inner_tests {
         st.doc.commit();
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(5)
+            ambre_core::Count::<ambre_core::Elements>::new(5)
         );
         // A single Undo unwinds all five: they landed in one commit.
         st.handle_command(ToileCommand::Undo);
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::ZERO
+            ambre_core::Count::<ambre_core::Elements>::ZERO
         );
     }
 
@@ -732,13 +732,13 @@ mod inner_tests {
         // Two rects plus the group element.
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(3)
+            ambre_core::Count::<ambre_core::Elements>::new(3)
         );
         // One Undo removes the whole batch (creates + restyle + group).
         st.handle_command(ToileCommand::Undo);
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::ZERO
+            ambre_core::Count::<ambre_core::Elements>::ZERO
         );
     }
 
@@ -779,7 +779,7 @@ mod inner_tests {
         st.doc.commit();
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(2)
+            ambre_core::Count::<ambre_core::Elements>::new(2)
         );
         assert_eq!(
             st.bounds.get(&last).map(|r| (r.x0, r.width())),
@@ -1011,7 +1011,7 @@ mod inner_tests {
         st.handle_command(ToileCommand::Undo);
         assert_eq!(
             st.element_count(),
-            ambre_core::Tally::<ambre_core::Elements>::new(1)
+            ambre_core::Count::<ambre_core::Elements>::new(1)
         );
         assert!(st.bounds_of(&a).is_some());
     }

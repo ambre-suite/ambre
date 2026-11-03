@@ -5,7 +5,7 @@
 // so the count/bounds formatting is host-unit-tested. The DOM `StatusBar`
 // component (chrome/status.rs) is a thin wasm-only view over these helpers.
 //
-// The band's left side reports the selection tally and its combined world
+// The band's left side reports the selection count and its combined world
 // bounds (x / y / w / h). The right side hosts the shared zoom + fps chips
 // (`ambre-chrome`). An empty or single-element selection shows only the count
 // (no meaningful multi-element bounds), matching Trame's "lone cell shows
@@ -13,7 +13,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::Elements;
-use ambre_core::{Board, Px, Tally};
+use ambre_core::{Board, Count, Px};
 use ambre_draw::Rect;
 
 /// Selection aggregates rendered by the status bar, mirrored from
@@ -22,14 +22,14 @@ use ambre_draw::Rect;
 /// world units, `None` when the selection is empty (nothing to frame).
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub count: Tally<Elements>,
+    pub count: Count<Elements>,
     pub bounds: Option<Rect>,
 }
 
 impl SelStats {
-    /// Build the aggregates from a Logic-computed reply: the element tally and
+    /// Build the aggregates from a Logic-computed reply: the element count and
     /// the optional union rectangle (world space).
-    pub fn from_reply(count: Tally<Elements>, bounds: Option<Rect>) -> Self {
+    pub fn from_reply(count: Count<Elements>, bounds: Option<Rect>) -> Self {
         Self { count, bounds }
     }
 }
@@ -91,7 +91,7 @@ mod tests {
     fn single_element_shows_count_only() {
         // A lone element: count is shown, but no combined bounds.
         let s = SelStats::from_reply(
-            Tally::<Elements>::new(1),
+            Count::<Elements>::new(1),
             Some(Rect::new(0.0, 0.0, 10.0, 20.0)),
         );
         assert_eq!(count_label(&s).as_deref(), Some("1 element"));
@@ -102,7 +102,7 @@ mod tests {
     fn multi_element_shows_count_and_bounds() {
         // Union rect (10,20)->(50,80): x=10 y=20 w=40 h=60.
         let s = SelStats::from_reply(
-            Tally::<Elements>::new(3),
+            Count::<Elements>::new(3),
             Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
         );
         assert_eq!(count_label(&s).as_deref(), Some("3 elements"));
@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn fractional_world_values_get_one_decimal() {
         let s = SelStats::from_reply(
-            Tally::<Elements>::new(2),
+            Count::<Elements>::new(2),
             Some(Rect::new(1.25, 0.0, 4.0, 3.5)),
         );
         // x=1.25 -> "1.2" (one decimal), w=2.75 -> "2.8", h=3.5 -> "3.5".

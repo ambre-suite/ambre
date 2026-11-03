@@ -5,7 +5,7 @@
 
 use ambre_canvas::PointerButton;
 use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers};
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -206,8 +206,8 @@ fn the_caret_blinks_on_the_clock_the_view_is_handed() {
 fn clip(src_row: u32, text: &str) -> ambre_bus::ClipboardBlob {
     let payload = ambre_bus::ClipboardPayload {
         src_row: Pos::<Row>::new(src_row),
-        rows: Count::<Row>::new(1),
-        cols: Count::<Col>::new(1),
+        rows: Len::<Row>::new(1),
+        cols: Len::<Col>::new(1),
         ..Default::default()
     };
     ambre_bus::ClipboardBlob {
@@ -417,7 +417,7 @@ fn a_theme_switch_repaints_the_content_in_the_new_palette() {
 fn in_view(rig: &Rig, at: CellPos) -> bool {
     let state = &rig.view.state;
     at.row >= state.top_row
-        && state.visible_offset(at.row) < Delta::<Row>::from_count(state.viewport_rows)
+        && state.visible_offset(at.row) < Delta::<Row>::from_len(state.viewport_rows)
         && at.col >= state.left_col
         && at.col < state.left_col + state.viewport_cols
 }

@@ -11,7 +11,7 @@ use crate::formula::ACTIVE_SHEET;
 use crate::formula::text::CellText;
 use crate::{CsvDelimiter, TOTAL_COLS, TOTAL_ROWS};
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 impl TrameState {
     /// Import CSV bytes into the workbook (`trame-import-export`). Parses the
@@ -60,8 +60,8 @@ impl TrameState {
         // The grid ends at `LAST_ROW` and `LAST_COL`, and a field past either
         // would land outside it: cut the records there, and say so
         // (`TRAME-IO-050`).
-        let room_rows = TOTAL_ROWS.as_end().count_from(start.row).to_usize();
-        let room_cols = TOTAL_COLS.as_end().count_from(start.col).to_usize();
+        let room_rows = TOTAL_ROWS.as_end().len_from(start.row).to_usize();
+        let room_cols = TOTAL_COLS.as_end().len_from(start.col).to_usize();
         let cut_records = records.len().saturating_sub(room_rows);
         records.truncate(room_rows);
         let cut_fields: usize = records
@@ -118,13 +118,10 @@ impl TrameState {
         self.active_sheet = sheet_id.clone();
         self.reseed_active_sheet();
 
-        let rows = Count::<Row>::from_len(records.len());
-        let cols = Count::<Col>::from_len(records.iter().map(Vec::len).max().unwrap_or(0));
+        let rows = Len::<Row>::of(records.len());
+        let cols = Len::<Col>::of(records.iter().map(Vec::len).max().unwrap_or(0));
         let land = |r: usize, c: usize| {
-            CellPos::new(
-                start.row + Count::<Row>::from_len(r),
-                start.col + Count::<Col>::from_len(c),
-            )
+            CellPos::new(start.row + Len::<Row>::of(r), start.col + Len::<Col>::of(c))
         };
 
         // Pre-materialize every written cell first (same reasoning as

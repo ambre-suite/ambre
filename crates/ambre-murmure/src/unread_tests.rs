@@ -110,17 +110,17 @@ fn a_message_takes_the_number_of_the_update_that_created_it() {
     assert_eq!(
         bob.unread(segment, Seq::<Relay>::new(4), me)
             .expect("count"),
-        ambre_core::Tally::<Unread>::new(2)
+        ambre_core::Count::<Unread>::new(2)
     );
     assert_eq!(
         bob.unread(segment, Seq::<Relay>::new(5), me)
             .expect("count"),
-        ambre_core::Tally::<Unread>::new(1)
+        ambre_core::Count::<Unread>::new(1)
     );
     assert_eq!(
         bob.unread(segment, Seq::<Relay>::new(6), me)
             .expect("count"),
-        ambre_core::Tally::<Unread>::ZERO
+        ambre_core::Count::<Unread>::ZERO
     );
     assert_eq!(bob.delivered(segment.document_id()), Seq::<Relay>::new(6));
 }
@@ -139,7 +139,7 @@ fn the_authors_own_message_is_numbered_by_its_echo_and_never_counts() {
         alice
             .unread(segment, Seq::<Relay>::ZERO, me)
             .expect("count"),
-        ambre_core::Tally::<Unread>::ZERO
+        ambre_core::Count::<Unread>::ZERO
     );
 
     // The relay hands every member the update, its author included.
@@ -213,12 +213,12 @@ fn a_message_known_only_from_a_snapshot_lies_within_its_horizon() {
     assert_eq!(
         bob.unread(segment, Seq::<Relay>::new(11), me)
             .expect("count"),
-        ambre_core::Tally::<Unread>::new(1)
+        ambre_core::Count::<Unread>::new(1)
     );
     assert_eq!(
         bob.unread(segment, Seq::<Relay>::new(12), me)
             .expect("count"),
-        ambre_core::Tally::<Unread>::ZERO
+        ambre_core::Count::<Unread>::ZERO
     );
 }
 
@@ -262,7 +262,7 @@ fn an_edit_creates_no_message_and_never_counts() {
     assert_eq!(
         bob.unread(segment, Seq::<Relay>::new(5), Id::<User>::mint())
             .expect("count"),
-        ambre_core::Tally::<Unread>::ZERO
+        ambre_core::Count::<Unread>::ZERO
     );
 }
 

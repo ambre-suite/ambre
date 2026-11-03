@@ -11,7 +11,7 @@
 // percentile of each measure.
 // ============================================================================
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use std::collections::BTreeMap;
 
 use wasm_bindgen::{JsCast, JsValue};
@@ -45,7 +45,7 @@ pub(crate) struct Timeline {
     /// The samples per measure, kept only under `?probes`.
     samples: Option<BTreeMap<ProbeName, Vec<TimeSpan<FracMs>>>>,
     /// The samples per count, kept only under `?probes`.
-    counts: Option<BTreeMap<ProbeName, Vec<Tally<AnimationFrames>>>>,
+    counts: Option<BTreeMap<ProbeName, Vec<Count<AnimationFrames>>>>,
     last_summary: Instant<PageLoad>,
     /// A sample landed since the last summary.
     fresh: bool,
@@ -85,7 +85,7 @@ impl Timeline {
 
     /// Stamp each count as a mark carrying it in its detail, and keep it
     /// under `?probes`.
-    pub(crate) fn count(&mut self, name: ProbeName, values: Vec<Tally<AnimationFrames>>) {
+    pub(crate) fn count(&mut self, name: ProbeName, values: Vec<Count<AnimationFrames>>) {
         for value in values {
             mark_count(name.as_str(), value);
             if let Some(counts) = self.counts.as_mut() {
@@ -119,7 +119,7 @@ impl Timeline {
         }
         for (name, values) in self.counts.iter().flatten() {
             if let Some(Percentiles { median, p95 }) =
-                percentiles(values, Tally::<AnimationFrames>::cmp)
+                percentiles(values, Count::<AnimationFrames>::cmp)
             {
                 let (p50, p95) = (median.get(), p95.get());
                 web_sys::console::log_1(&JsValue::from_str(&format!(
@@ -142,7 +142,7 @@ pub(crate) fn mark(name: ProbeName) {
 
 /// One `performance.mark(name, { detail: value })`, through `Reflect` like
 /// the measures.
-fn mark_count(name: &str, value: Tally<AnimationFrames>) {
+fn mark_count(name: &str, value: Count<AnimationFrames>) {
     let Some(performance) = web_sys::window().and_then(|w| w.performance()) else {
         return;
     };

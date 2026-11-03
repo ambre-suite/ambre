@@ -402,12 +402,12 @@ impl fmt::Display for Finding {
 pub struct SiteTally(usize);
 
 impl SiteTally {
-    /// A tally of `n` sites.
+    /// A count of `n` sites.
     pub const fn new(n: usize) -> Self {
         Self(n)
     }
 
-    /// The tally one site later.
+    /// The count one site later.
     const fn incremented(self) -> Self {
         Self(self.0.saturating_add(1))
     }

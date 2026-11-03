@@ -11,7 +11,7 @@
 //! range reads `Empty`. The lookup is normalized to the bound `(row_uid,
 //! col_uid)` form so it matches the keys fed by the host.
 
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{Col, Row};
@@ -21,13 +21,13 @@ use super::compile::SheetIndices;
 use super::functions::call_builtin;
 use super::text::fold_cmp;
 use super::types::{CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal};
-use ambre_core::{Cells, Instant, SheetDateTime, Tally};
+use ambre_core::{Cells, Count, Instant, SheetDateTime};
 
 /// Upper bound on the number of cells a single range reference may materialize
 /// during evaluation. Protects the WASM Logic worker from a peer-supplied
 /// formula (for example `=SUM(A1:ZZ100000)`) whose range would allocate gigabytes.
 /// 1M cells covers any realistic used area while capping the blast radius.
-const MAX_RANGE_CELLS: Tally<Cells> = Tally::<Cells>::new(1_000_000);
+const MAX_RANGE_CELLS: Count<Cells> = Count::<Cells>::new(1_000_000);
 
 /// Ceiling on the range cells one recomputation pass may read, all ranges
 /// together (`TRAME-210`). `MAX_RANGE_CELLS` bounds the memory of one range,
@@ -35,19 +35,19 @@ const MAX_RANGE_CELLS: Tally<Cells> = Tally::<Cells>::new(1_000_000);
 /// formulas each just under it cost a hundred million reads on every recompute.
 /// The ceiling clears a running total over ten thousand rows (`SUM(A$1:An)`,
 /// fifty million reads), the heaviest shape a real sheet takes.
-pub(crate) const MAX_PASS_RANGE_CELLS: Tally<Cells> = Tally::<Cells>::new(64_000_000);
+pub(crate) const MAX_PASS_RANGE_CELLS: Count<Cells> = Count::<Cells>::new(64_000_000);
 
 /// Leave to materialize one range: the count of member cells it may hold.
 /// Only [`grant_range`] makes one, and the range buffer is sized by it alone.
 /// So no range over the caps is ever allocated (`TRAME-209`).
 #[derive(Debug, PartialEq, Eq)]
-struct RangeGrant(Tally<Cells>);
+struct RangeGrant(Count<Cells>);
 
 /// Grant a `rows` x `cols` range against the per-range cap and what the pass
 /// has `left`. A grant debits `left`. A refusal leaves it whole and allocates
 /// nothing (`TRAME-209`, `TRAME-210`).
-fn grant_range(rows: Count<Row>, cols: Count<Col>, left: &mut Tally<Cells>) -> Option<RangeGrant> {
-    let cells = Tally::<Cells>::new(u64::from(rows.get()) * u64::from(cols.get()));
+fn grant_range(rows: Len<Row>, cols: Len<Col>, left: &mut Count<Cells>) -> Option<RangeGrant> {
+    let cells = Count::<Cells>::new(u64::from(rows.get()) * u64::from(cols.get()));
     if cells > MAX_RANGE_CELLS || cells > *left {
         return None;
     }
@@ -81,7 +81,7 @@ pub struct EvalContext<'a> {
     pub current_col: Option<Pos<Col>>,
     /// Range cells this pass may still read ([`MAX_PASS_RANGE_CELLS`]). A range
     /// that would overdraw it reads as `#REF!`, like one over `MAX_RANGE_CELLS`.
-    pub range_cells_left: Tally<Cells>,
+    pub range_cells_left: Count<Cells>,
 }
 
 impl<'a> EvalContext<'a> {
@@ -307,10 +307,10 @@ impl<'a> EvalContext<'a> {
             None => return RangeValue::broken_ref(),
         };
         if re < rs || ce < cs {
-            return RangeValue::new(Count::<Row>::ZERO, Count::<Col>::ZERO, Vec::new());
+            return RangeValue::new(Len::<Row>::ZERO, Len::<Col>::ZERO, Vec::new());
         }
-        let rows = re.count_from(rs) + Count::<Row>::ONE;
-        let cols = ce.count_from(cs) + Count::<Col>::ONE;
+        let rows = re.len_from(rs) + Len::<Row>::ONE;
+        let cols = ce.len_from(cs) + Len::<Col>::ONE;
         // Bound the materialized range. A compiled range stores only its two
         // endpoints (O(1) to register), but evaluating it allocates one
         // `CellValue` per member cell. With remote apply live, a malicious peer
@@ -633,7 +633,7 @@ mod tests {
         // `CellValue::Range`, so we can assert on its shape and content.
         match eval_formula("A1:ZZ100000") {
             CellValue::Range(r) => {
-                assert_eq!((r.rows, r.cols), (Count::<Row>::ONE, Count::<Col>::ONE));
+                assert_eq!((r.rows, r.cols), (Len::<Row>::ONE, Len::<Col>::ONE));
                 assert!(matches!(
                     r.values.as_slice(),
                     [CellValue::Error(FormulaError::BrokenRef)]
@@ -669,38 +669,30 @@ mod tests {
     fn a_range_over_the_cap_is_granted_nothing() {
         let mut left = MAX_PASS_RANGE_CELLS;
         assert_eq!(
+            grant_range(Len::<Row>::new(100_000), Len::<Col>::new(702), &mut left),
+            None
+        );
+        assert_eq!(
             grant_range(
-                Count::<Row>::new(100_000),
-                Count::<Col>::new(702),
+                Len::<Row>::new(u32::MAX),
+                Len::<Col>::new(u32::MAX),
                 &mut left
             ),
             None
         );
         assert_eq!(
             grant_range(
-                Count::<Row>::new(u32::MAX),
-                Count::<Col>::new(u32::MAX),
-                &mut left
-            ),
-            None
-        );
-        assert_eq!(
-            grant_range(
-                Count::<Row>::new(
+                Len::<Row>::new(
                     u32::try_from(MAX_RANGE_CELLS.get() + 1).expect("fits a row count")
                 ),
-                Count::<Col>::ONE,
+                Len::<Col>::ONE,
                 &mut left
             ),
             None
         );
         assert_eq!(left, MAX_PASS_RANGE_CELLS, "a refusal debits nothing");
         assert_eq!(
-            grant_range(
-                Count::<Row>::new(1_000),
-                Count::<Col>::new(1_000),
-                &mut left
-            ),
+            grant_range(Len::<Row>::new(1_000), Len::<Col>::new(1_000), &mut left),
             Some(RangeGrant(MAX_RANGE_CELLS))
         );
         assert_eq!(left, MAX_PASS_RANGE_CELLS.minus(MAX_RANGE_CELLS));
@@ -736,10 +728,10 @@ mod tests {
         );
         assert_eq!(ctx.range_cells_left, MAX_PASS_RANGE_CELLS);
         // Room for two reads of the hundred cells, not three.
-        ctx.range_cells_left = Tally::<Cells>::new(250);
+        ctx.range_cells_left = Count::<Cells>::new(250);
         assert_eq!(ctx.execute(&bc).to_display(), "0");
         assert_eq!(ctx.execute(&bc).to_display(), "0");
-        assert_eq!(ctx.range_cells_left, Tally::<Cells>::new(50));
+        assert_eq!(ctx.range_cells_left, Count::<Cells>::new(50));
         assert_eq!(ctx.execute(&bc).to_display(), "#REF!");
     }
 

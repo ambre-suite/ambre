@@ -5,7 +5,7 @@
 use super::*;
 use crate::formula::types::Arg;
 use ambre_core::Char;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 /// The argument at `i`, or an empty cell when the call passed fewer. Every
 /// builtin checks its arity first, so the fallback only guards a slip there.
@@ -516,7 +516,7 @@ pub(crate) fn concat_fn(args: &[CellValue]) -> CellValue {
 /// and an error passes through. A negative, infinite or NaN count is `#NUM!`.
 /// A bare `as usize` cast wraps a negative `f64` to a gigantic length. Excel
 /// returns an error here rather than silently taking the whole string.
-fn str_count_arg(args: &[CellValue], default: Count<Char>) -> Result<Count<Char>, FormulaError> {
+fn str_count_arg(args: &[CellValue], default: Len<Char>) -> Result<Len<Char>, FormulaError> {
     if args.len() < 2 {
         return Ok(default);
     }
@@ -525,7 +525,7 @@ fn str_count_arg(args: &[CellValue], default: Count<Char>) -> Result<Count<Char>
         return Err(FormulaError::NumError);
     }
     // The float truncates and saturates, as `as` does.
-    Ok(Count::<Char>::from_len(n as usize))
+    Ok(Len::<Char>::of(n as usize))
 }
 
 pub(crate) fn left(args: &[CellValue]) -> CellValue {
@@ -533,7 +533,7 @@ pub(crate) fn left(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let s = arg(args, Pos::<Arg>::new(0)).to_display();
-    let n = match str_count_arg(args, Count::<Char>::new(1)) {
+    let n = match str_count_arg(args, Len::<Char>::new(1)) {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
@@ -545,7 +545,7 @@ pub(crate) fn right(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let s = arg(args, Pos::<Arg>::new(0)).to_display();
-    let n = match str_count_arg(args, Count::<Char>::new(1)) {
+    let n = match str_count_arg(args, Len::<Char>::new(1)) {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
@@ -574,7 +574,7 @@ pub(crate) fn mid(args: &[CellValue]) -> CellValue {
     }
     // The float saturates as `as` does: a start past the text takes nothing.
     let start = Pos::<Char>::from_usize(start as usize - 1);
-    let n = Count::<Char>::from_len(n as usize);
+    let n = Len::<Char>::of(n as usize);
     CellValue::Text(
         s.chars()
             .skip(start.to_usize())

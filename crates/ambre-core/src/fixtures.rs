@@ -15,8 +15,8 @@
 //! artifact.
 
 use crate::id::{Document, Id};
-use crate::index::Count;
-use crate::{Cells, Char, DocType, Elements, Tally, Version};
+use crate::index::Len;
+use crate::{Cells, Char, Count, DocType, Elements, Version};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -94,7 +94,7 @@ impl crate::version::OpenRange for Generator {}
 /// How many distinct peers wrote ops into a fixture.
 pub enum Peers {}
 
-impl crate::TallyKind for Peers {
+impl crate::CountKind for Peers {
     type Repr = u32;
     const NAME: &'static str = "PeerCount";
 }
@@ -102,7 +102,7 @@ impl crate::TallyKind for Peers {
 /// How many sheets a workbook fixture holds.
 pub enum Sheets {}
 
-impl crate::TallyKind for Sheets {
+impl crate::CountKind for Sheets {
     type Repr = u32;
     const NAME: &'static str = "SheetCount";
 }
@@ -110,7 +110,7 @@ impl crate::TallyKind for Sheets {
 /// How many stored formula sources a workbook fixture holds.
 pub enum Formulas {}
 
-impl crate::TallyKind for Formulas {
+impl crate::CountKind for Formulas {
     type Repr = u32;
     const NAME: &'static str = "FormulaCount";
 }
@@ -118,7 +118,7 @@ impl crate::TallyKind for Formulas {
 /// How many frame elements a board fixture holds.
 pub enum BoardFrames {}
 
-impl crate::TallyKind for BoardFrames {
+impl crate::CountKind for BoardFrames {
     type Repr = u32;
     const NAME: &'static str = "BoardFrameCount";
 }
@@ -126,7 +126,7 @@ impl crate::TallyKind for BoardFrames {
 /// How many connectors a board fixture holds.
 pub enum Connectors {}
 
-impl crate::TallyKind for Connectors {
+impl crate::CountKind for Connectors {
     type Repr = u32;
     const NAME: &'static str = "ConnectorCount";
 }
@@ -134,7 +134,7 @@ impl crate::TallyKind for Connectors {
 /// How many blocks a document fixture holds, in document order.
 pub enum DocBlocks {}
 
-impl crate::TallyKind for DocBlocks {
+impl crate::CountKind for DocBlocks {
     type Repr = u32;
     const NAME: &'static str = "DocBlockCount";
 }
@@ -203,8 +203,8 @@ pub const FIXTURE_IMPORT_PEER: crate::PeerId = crate::PeerId::new(0x10AD_0000_00
 pub fn fixture_peer_count(
     peers: impl IntoIterator<Item = crate::PeerId>,
     scaffold: crate::PeerId,
-) -> Tally<Peers> {
-    Tally::<Peers>::of_len(
+) -> Count<Peers> {
+    Count::<Peers>::of(
         peers
             .into_iter()
             .filter(|peer| *peer != FIXTURE_IMPORT_PEER && *peer != scaffold)
@@ -319,7 +319,7 @@ pub struct FixtureManifest {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct FixtureShape {
     /// Number of distinct peers whose ops are present (1 for a solo document).
-    pub peers: Tally<Peers>,
+    pub peers: Count<Peers>,
     pub body: ShapeBody,
 }
 
@@ -329,18 +329,18 @@ pub struct FixtureShape {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
     Trame {
-        cells: Tally<Cells>,
-        sheets: Tally<Sheets>,
-        formulas: Tally<Formulas>,
+        cells: Count<Cells>,
+        sheets: Count<Sheets>,
+        formulas: Count<Formulas>,
     },
     Toile {
-        elements: Tally<Elements>,
-        frames: Tally<BoardFrames>,
-        connectors: Tally<Connectors>,
+        elements: Count<Elements>,
+        frames: Count<BoardFrames>,
+        connectors: Count<Connectors>,
     },
     Prose {
-        blocks: Tally<DocBlocks>,
-        characters: Count<Char>,
+        blocks: Count<DocBlocks>,
+        characters: Len<Char>,
     },
 }
 
@@ -359,11 +359,11 @@ mod tests {
             schema_version: crate::SCHEMA_VERSION_ABSENT,
             digest: crate::FixedBytes::from_array([0xAB; 32]),
             shape: FixtureShape {
-                peers: Tally::<Peers>::new(2),
+                peers: Count::<Peers>::new(2),
                 body: ShapeBody::Trame {
-                    cells: Tally::<Cells>::new(12),
-                    sheets: Tally::<Sheets>::new(2),
-                    formulas: Tally::<Formulas>::new(4),
+                    cells: Count::<Cells>::new(12),
+                    sheets: Count::<Sheets>::new(2),
+                    formulas: Count::<Formulas>::new(4),
                 },
             },
         }
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn the_typed_fields_keep_the_bare_json_of_the_manifest() {
-        // The names, seeds, versions and tallies are newtypes. A committed
+        // The names, seeds, versions and counts are newtypes. A committed
         // manifest is a frozen artifact, so the sidecar must read as it did
         // when they were bare.
         let json = serde_json::to_string(&sample()).expect("serializes");
@@ -436,9 +436,9 @@ mod tests {
         // The Toile variant carries no Trame field and vice versa: a later app
         // adds a variant rather than widening every row.
         let toile = ShapeBody::Toile {
-            elements: Tally::<Elements>::new(5),
-            frames: Tally::<BoardFrames>::new(1),
-            connectors: Tally::<Connectors>::new(2),
+            elements: Count::<Elements>::new(5),
+            frames: Count::<BoardFrames>::new(1),
+            connectors: Count::<Connectors>::new(2),
         };
         let json = serde_json::to_string(&toile).expect("serializes");
         assert!(json.contains("Toile"), "{json}");

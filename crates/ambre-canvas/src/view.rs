@@ -15,7 +15,7 @@
 // ============================================================================
 
 use ambre_commands::{Key, Modifiers};
-use ambre_core::{FracMs, Point, Px, Tally, TimeSpan, View};
+use ambre_core::{Count, FracMs, Point, Px, TimeSpan, View};
 use ambre_draw::{Color, Rect};
 
 use crate::{ContentRepaint, LayerRepaint, WheelDelta};
@@ -46,15 +46,15 @@ pub struct PerfSnapshot {
     pub background: TimeSpan<FracMs>,
     pub cells: TimeSpan<FracMs>,
     pub headers: TimeSpan<FracMs>,
-    pub cells_drawn: Tally<CellsDrawn>,
+    pub cells_drawn: Count<CellsDrawn>,
     pub input_latency: TimeSpan<FracMs>,
-    pub glyph_misses: Tally<GlyphMisses>,
+    pub glyph_misses: Count<GlyphMisses>,
 }
 
 /// The cells one frame drew, for the performance panel.
 pub enum CellsDrawn {}
 
-impl ambre_core::TallyKind for CellsDrawn {
+impl ambre_core::CountKind for CellsDrawn {
     type Repr = u32;
     const NAME: &'static str = "CellsDrawn";
 }
@@ -62,7 +62,7 @@ impl ambre_core::TallyKind for CellsDrawn {
 /// The glyphs one frame shaped afresh rather than read from the cache.
 pub enum GlyphMisses {}
 
-impl ambre_core::TallyKind for GlyphMisses {
+impl ambre_core::CountKind for GlyphMisses {
     type Repr = u32;
     const NAME: &'static str = "GlyphMisses";
 }

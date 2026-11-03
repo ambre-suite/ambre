@@ -12,7 +12,7 @@ use ambre_bus::app::prose::{
 };
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
-use ambre_core::{Slant, Strikethrough, Tally, Weight};
+use ambre_core::{Count, Slant, Strikethrough, Weight};
 
 use super::{
     IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableCell, IrTableRow, Merging, OwnStyle,
@@ -26,7 +26,7 @@ pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize::new(16 * 1024 *
 
 /// The deepest list the form keeps. A deeper item lands at this depth, so a
 /// hostile file cannot grow the recursion of the passes that follow.
-pub const MAX_LIST_DEPTH: Tally<ListDepth> = Tally::<ListDepth>::new(16);
+pub const MAX_LIST_DEPTH: Count<ListDepth> = Count::<ListDepth>::new(16);
 
 pub use crate::numbering::ListDepth;
 
@@ -419,7 +419,7 @@ impl Reader {
     /// item that would nest past [`MAX_LIST_DEPTH`] waits to land after the
     /// deepest item allowed, as its sibling.
     fn place(&mut self, block: IrBlock) {
-        let depth = Tally::<ListDepth>::of_len(
+        let depth = Count::<ListDepth>::of(
             self.frames
                 .iter()
                 .filter(|f| matches!(f, Frame::Item { .. }))
@@ -618,7 +618,7 @@ mod tests {
                 .unwrap_or(0)
         }
         assert!(
-            Tally::<ListDepth>::of_len(depth(&ir.blocks)) <= MAX_LIST_DEPTH,
+            Count::<ListDepth>::of(depth(&ir.blocks)) <= MAX_LIST_DEPTH,
             "{}",
             depth(&ir.blocks)
         );

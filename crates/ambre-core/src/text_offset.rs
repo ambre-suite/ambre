@@ -7,7 +7,7 @@
 //! then lands off by some bytes. One family per unit makes that a type error.
 //! The functions below are the only crossings between the units.
 
-use crate::index::{Axis, Count, Pos, Span};
+use crate::index::{Axis, Len, Pos, Span};
 
 /// The code points of a text. A [`Pos`] of it is the place before the code
 /// point it names.
@@ -35,15 +35,15 @@ impl Axis for Utf16 {
 }
 
 /// The number of code points in `text`, saturating past `u32::MAX`.
-pub fn char_len(text: &str) -> Count<Char> {
-    Count::<Char>::from_len(text.chars().count())
+pub fn char_len(text: &str) -> Len<Char> {
+    Len::<Char>::of(text.chars().count())
 }
 
 /// The `Debug` form of a text a log must not carry: its length alone, spelled
 /// `N chars`. Every hand-written redacted `Debug` hands its text here, so each
 /// one prints the same spelling, `Variant(N chars)`.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct RedactedChars(Count<Char>);
+pub struct RedactedChars(Len<Char>);
 
 impl RedactedChars {
     /// The length of `text`, in code points.
@@ -78,7 +78,7 @@ pub fn byte_to_char(text: &str, at: Pos<Byte>) -> Pos<Char> {
         .char_indices()
         .take_while(|(byte, _)| *byte < at.to_usize())
         .count();
-    Count::<Char>::from_len(before).as_end()
+    Len::<Char>::of(before).as_end()
 }
 
 /// The bytes that the code points of `span` cover in `text`.
@@ -104,7 +104,7 @@ pub fn utf16_to_char(text: &str, at: Pos<Utf16>) -> Pos<Char> {
             at.to_index().is_some_and(|at| units <= at)
         })
         .count();
-    Count::<Char>::from_len(before).as_end()
+    Len::<Char>::of(before).as_end()
 }
 
 /// The UTF-16 offset of code point `at` of `text`. An offset past the last
@@ -112,7 +112,7 @@ pub fn utf16_to_char(text: &str, at: Pos<Utf16>) -> Pos<Char> {
 pub fn char_to_utf16(text: &str, at: Pos<Char>) -> Pos<Utf16> {
     let take = at.to_index().unwrap_or(usize::MAX);
     let units: usize = text.chars().take(take).map(char::len_utf16).sum();
-    Count::<Utf16>::from_len(units).as_end()
+    Len::<Utf16>::of(units).as_end()
 }
 
 #[cfg(test)]
@@ -138,9 +138,9 @@ mod tests {
 
     #[test]
     fn a_text_counts_its_code_points_not_its_bytes() {
-        assert_eq!(char_len(""), Count::<Char>::ZERO);
-        assert_eq!(char_len("abc"), Count::<Char>::new(3));
-        assert_eq!(char_len(MIXED), Count::<Char>::new(5));
+        assert_eq!(char_len(""), Len::<Char>::ZERO);
+        assert_eq!(char_len("abc"), Len::<Char>::new(3));
+        assert_eq!(char_len(MIXED), Len::<Char>::new(5));
     }
 
     #[test]

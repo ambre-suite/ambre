@@ -37,6 +37,7 @@ pub mod calendar;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
 pub mod color;
+pub mod count;
 pub mod crdt;
 pub mod credential;
 pub mod doc_type;
@@ -97,7 +98,6 @@ pub mod space;
 pub mod span;
 pub mod static_key;
 pub mod status;
-pub mod tally;
 pub mod text_offset;
 /// Lengths and angles, one type per unit and per pixel space.
 pub mod unit;
@@ -115,6 +115,7 @@ pub use bounded::{
 pub use calendar::{Month, Year};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
+pub use count::{Cells, Count, CountColumn, CountKind, CountRepr, Divisor, Elements, Recounts};
 pub use credential::ProviderUrl;
 pub use doc_type::DocType;
 pub use docfile::{
@@ -200,7 +201,6 @@ pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
 };
-pub use tally::{Cells, Divisor, Elements, Recounts, Tally, TallyColumn, TallyKind, TallyRepr};
 pub use text_offset::{
     Byte, Char, RedactedChars, Utf16, byte_span_to_chars, byte_to_char, char_len,
     char_span_to_bytes, char_to_byte, char_to_utf16, utf16_to_char,

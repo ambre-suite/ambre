@@ -23,9 +23,9 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-103` | `INV` | The aggregates MUST be computed by the Logic thread, never by the UI thread. | this spec section 2 | type-level -- the reply `TrameEvent::SelectionStats` carries a count and the numeric totals, with no cell in them, and the signal the band reads has one writer, the launcher's relay on that event (`ambre-app`); `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the Logic side | none | verified |
 | `TRAME-UI-106` | `INV` | A query for the aggregates MUST emit no CRDT delta. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- it asserts the outcome carries no update | none | verified |
-| `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | `ambre_trame::logic::tests::group4::selection_stats_covers_the_whole_band` -- a whole-column band tallies an off-screen row; `::selection_stats_totals_a_disjoint_selection` -- two rectangles are tallied together | none | verified |
-| `TRAME-UI-105` | `OBS` | `count` MUST tally every non-empty cell. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- a column holding numbers, a blank and a word, asserting the count of the non-empty ones | none | verified |
-| `TRAME-UI-172` | `OBS` | A numeric aggregate MUST tally the numbers alone. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the same column, where the word and the blank leave the sum, the average and the extremes untouched | none | verified |
+| `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | `ambre_trame::logic::tests::group4::selection_stats_covers_the_whole_band` -- a whole-column band counts an off-screen row; `::selection_stats_totals_a_disjoint_selection` -- two rectangles are counted together | none | verified |
+| `TRAME-UI-105` | `OBS` | `count` MUST count every non-empty cell. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- a column holding numbers, a blank and a word, asserting the count of the non-empty ones | none | verified |
+| `TRAME-UI-172` | `OBS` | A numeric aggregate MUST count the numbers alone. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the same column, where the word and the blank leave the sum, the average and the extremes untouched | none | verified |
 | `TRAME-UI-107` | `OBS` | The band MUST show a numeric aggregate only when the selection holds a number. | this spec section 3 | `ambre_trame::tests::chrome_ui::a_selection_with_no_number_shows_no_numeric_aggregate`; `::status_bar_renders_label_and_aggregates` | none | verified |
 | `TRAME-UI-108` | `OBS` | A selection of one cell MUST show no aggregate. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_lone_cell_asks_for_no_aggregate`; `ambre_trame::ui::view::lifecycle::tests::a_single_cell_clears_and_sends_nothing` | none | verified |
 | `TRAME-UI-110` | `OBS` | A row the filter hides MUST count in an aggregate, as it counts in a formula over the same cells. | this spec section 4 | `ambre_trame::logic::tests::group5::status_bar_total_matches_sum_under_a_filter` | none | verified |
@@ -40,12 +40,12 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-109` | `POST` | A change to the selection MUST refresh the aggregates. | this spec section 2 | `ambre_trame::ui::grid::tests::group1::extending_a_header_band_makes_the_selection_multi` -- the extend path yields a multi-cell band; `ambre_trame::ui::view::lifecycle::tests::a_sent_request_keeps_the_last_answer` -- a multi-cell band sends the request | none | verified |
 | `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | `ambre_trame::ui::view::lifecycle::tests::a_dropped_request_clears_the_band` -- the clear decision in `stats_band_clears`; `::a_single_cell_clears_and_sends_nothing`; `::a_sent_request_keeps_the_last_answer` -- the other two sides | none | verified |
 
-* **Budget.** none: the tallies are one walk over the selection, and
+* **Budget.** none: the counts are one walk over the selection, and
   `ambre-spec-budgets.md` budgets no aggregate. The band paints inside the frame
   phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path,
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 13 `verified`. The walk, the tallies, the read-only guarantee, the
+* **Verification.** 13 `verified`. The walk, the counts, the read-only guarantee, the
   whole-selection coverage, the refresh on a selection change and the clear decision each have a
   host test. The band, its number format and its overflow are read back on the wasm tier. The
   count and the numeric aggregates are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
@@ -68,7 +68,7 @@ status values are normative in `ambre-spec-template.md`.
 ```rust
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub count:   Tally<Cells>,          // non-empty cells
+    pub count:   Count<Cells>,          // non-empty cells
     pub numbers: Option<NumericStats>,  // `None` hides sum, avg, min and max
 }
 
@@ -98,7 +98,7 @@ read two totals. Excel's own band leaves them out the same way. Every other tota
 
 1. bring the formula cache up to date, so each cell is read at its computed value;
 2. walk every tracked selection rectangle, the rows the filter hides included (`TRAME-UI-110`);
-3. tally every non-empty cell into `count`;
+3. count every non-empty cell into `count`;
 4. fold each cell number into the count, the minimum and the maximum. Sum them as `SUM` does,
    exactly and then rounded once, so their order changes nothing (`TRAME-FEAT-029`). The sum is
    an overflow only when that exact total is past the largest finite number (`TRAME-UI-179`);

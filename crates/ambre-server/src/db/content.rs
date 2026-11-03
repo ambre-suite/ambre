@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::payload::StoredPayload;
-use ambre_core::Tally;
+use ambre_core::Count;
 
 /// Row from `snapshots`.
 #[derive(Debug)]
@@ -75,7 +75,7 @@ pub struct UpdateRow {
 /// How many snapshots of one document a compaction keeps.
 pub enum Snapshots {}
 
-impl ambre_core::TallyKind for Snapshots {
+impl ambre_core::CountKind for Snapshots {
     type Repr = u32;
     const NAME: &'static str = "SnapshotCount";
 }
@@ -86,7 +86,7 @@ use ambre_core::{Sec, StoredAsI64, TimeSpan};
 /// The bounds of a document's inline tail (`SRV-150`).
 #[derive(Debug, Clone, Copy)]
 pub struct InlineCap {
-    pub deltas: Tally<Deltas>,
+    pub deltas: Count<Deltas>,
     pub bytes: ambre_core::ByteSize,
 }
 
@@ -96,7 +96,7 @@ impl InlineCap {
     #[must_use]
     pub const fn three_quarters(self) -> Self {
         Self {
-            deltas: Tally::<Deltas>::new(self.deltas.get().saturating_mul(3).div_ceil(4)),
+            deltas: Count::<Deltas>::new(self.deltas.get().saturating_mul(3).div_ceil(4)),
             bytes: ambre_core::ByteSize::new(self.bytes.get().saturating_mul(3).div_ceil(4)),
         }
     }
@@ -106,7 +106,7 @@ impl InlineCap {
     #[must_use]
     pub const fn quarter(self) -> Self {
         Self {
-            deltas: Tally::<Deltas>::new(self.deltas.get() / 4),
+            deltas: Count::<Deltas>::new(self.deltas.get() / 4),
             bytes: ambre_core::ByteSize::new(self.bytes.get() / 4),
         }
     }
@@ -118,7 +118,7 @@ pub enum InlineInsert {
     /// The row holds the frame. The tail now holds `deltas` rows and `bytes`
     /// bytes, counting this one.
     Stored {
-        deltas: Tally<Deltas>,
+        deltas: Count<Deltas>,
         bytes: ambre_core::ByteSize,
     },
     /// The tail is at its cap, and nothing was written.
@@ -404,7 +404,7 @@ pub async fn insert_inline_update(
         return Ok(InlineInsert::Full);
     }
     Ok(InlineInsert::Stored {
-        deltas: Tally::<Deltas>::from_i64(deltas).incremented(),
+        deltas: Count::<Deltas>::from_i64(deltas).incremented(),
         bytes: ambre_core::ByteSize::from_i64(bytes)
             .saturating_add(ambre_core::ByteSize::of_len(wire.len())),
     })
@@ -810,7 +810,7 @@ pub struct CompactSnapshot {
 /// other (`SRV-131`).
 pub async fn find_compactable_snapshots(
     pool: &PgPool,
-    keep: Tally<Snapshots>,
+    keep: Count<Snapshots>,
 ) -> Result<Vec<CompactSnapshot>, AppError> {
     let rows = sqlx::query_as::<_, CompactSnapshot>(
         "WITH ranked AS (

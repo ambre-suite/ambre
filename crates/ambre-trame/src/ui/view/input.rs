@@ -4,7 +4,7 @@
 use super::*;
 use ambre_canvas::PointerButton;
 use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers, SelectionMode};
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{Instant, PageLoad};
 use ambre_core::{Point, Px, View};
 use ambre_draw::Consumed;
@@ -386,9 +386,8 @@ impl TrameView {
                     }
                     // Page Down / Up move by a full viewport height.
                     Key::PageDown | Key::PageUp => {
-                        let page = Delta::<Row>::from_count(
-                            self.state.viewport_rows.max(Count::<Row>::ONE),
-                        );
+                        let page =
+                            Delta::<Row>::from_len(self.state.viewport_rows.max(Len::<Row>::ONE));
                         let step = if *key == Key::PageUp {
                             page.reversed()
                         } else {

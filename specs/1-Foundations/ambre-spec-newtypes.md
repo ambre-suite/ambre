@@ -56,8 +56,8 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A print length: points, millimetres | `PrintLength<U>` | `PrintUnit`, sealed | -- |
 | A span of time in a unit | `TimeSpan<U>` | `TimeUnit`, sealed | `ClockUnit` |
 | An instant on a time base | `Instant<C>` | `TimeBase`, sealed | -- |
-| A position, a length, a difference and a range in an index space | `Pos<A>`, `Count<A>`, `Delta<A>`, `Span<A>`, `IdxVec<A, T>` | `Axis` | `Numbered`, `Shown`, `Circular`, `CountsAs<B>`, `MapsTo<B>` |
-| How many things, addressing nothing | `Tally<K>` | `TallyKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `TallyColumn` |
+| A position, a length, a difference and a range in an index space | `Pos<A>`, `Len<A>`, `Delta<A>`, `Span<A>`, `IdxVec<A, T>` | `Axis` | `Numbered`, `Shown`, `Circular`, `MeasuresAs<B>`, `MapsTo<B>` |
+| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `CountColumn` |
 | A number one issuer hands out going up, each once | `Seq<K>` | `SeqKind`, with its `IssueRight` | `Wire`, `Before`, `CountsSince`, `SeqColumn` |
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
 | A format or a schema version | `Version<K>` | `VersionKind`, with its `Repr` | `Current`, `OpenRange` |
@@ -80,7 +80,7 @@ A marker is written one way, so a reader meets no variant of it.
 | The serde form | the bare representation, transparent | the wire and the store keep the bytes of the type it replaced |
 | A closed set | a sealed marker trait | a crate downstream adds no marker where the set is a decision |
 | A capability | a trait the marker implements, one line per marker | a method that some markers must not have is never inherent |
-| A name | the family and its marker in full: `Tally<Cells>` | a type alias hides the family, and the workspace writes none |
+| A name | the family and its marker in full: `Count<EditUpdates>` | a type alias hides the family, and the workspace writes none |
 | The fields | private, read through `new` and `get` | a family that checks nothing still has one door |
 
 ---

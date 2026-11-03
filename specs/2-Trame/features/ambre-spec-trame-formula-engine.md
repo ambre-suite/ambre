@@ -230,7 +230,7 @@ pub enum CellValue {
 }
 
 #[derive(Debug, Clone)]
-pub struct RangeValue { pub rows: Count<Row>, pub cols: Count<Col>, pub values: Vec<CellValue> }
+pub struct RangeValue { pub rows: Len<Row>, pub cols: Len<Col>, pub values: Vec<CellValue> }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FormulaError {

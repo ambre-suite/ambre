@@ -24,7 +24,7 @@
 //! with, so a command needs no conversion on the write path. A caret moves by
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
-use ambre_core::index::{Axis, Count, CountsAs, Delta, MapsTo, Numbered, Pos, Shown, Span};
+use ambre_core::index::{Axis, Delta, Len, MapsTo, MeasuresAs, Numbered, Pos, Shown, Span};
 use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted};
 use std::any::Any;
 use std::fmt;
@@ -33,7 +33,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
-use ambre_core::{Pt, Rgb, Tally};
+use ambre_core::{Count, Pt, Rgb};
 
 use super::grid::{CellPos, Col, Row};
 
@@ -53,13 +53,13 @@ impl Axis for DocChar {
 
 /// A block's body counts code points, so an offset of it is a code-point
 /// offset of the block's text.
-impl CountsAs<ambre_core::Char> for DocChar {}
+impl MeasuresAs<ambre_core::Char> for DocChar {}
 
 /// A position crosses too: both axes start at the same place.
 impl MapsTo<ambre_core::Char> for DocChar {}
 
 /// The code points of a block's text are the code points its body counts.
-impl CountsAs<DocChar> for ambre_core::Char {}
+impl MeasuresAs<DocChar> for ambre_core::Char {}
 
 /// The number of a text change the view did not draw: a remote one, or a
 /// local one the Logic thread rewrote. The view hands back the last it
@@ -850,7 +850,7 @@ pub struct CellBorder {
 /// A number of words, as Unicode word boundaries split the text.
 pub enum Words {}
 
-impl ambre_core::TallyKind for Words {
+impl ambre_core::CountKind for Words {
     type Repr = u32;
     const NAME: &'static str = "WordTotal";
 }
@@ -858,7 +858,7 @@ impl ambre_core::TallyKind for Words {
 /// A number of grapheme clusters: the characters a reader counts.
 pub enum Graphemes {}
 
-impl ambre_core::TallyKind for Graphemes {
+impl ambre_core::CountKind for Graphemes {
     type Repr = u32;
     const NAME: &'static str = "GraphemeCount";
 }
@@ -866,26 +866,26 @@ impl ambre_core::TallyKind for Graphemes {
 /// A number of paragraphs that hold a visible character.
 pub enum Paragraphs {}
 
-impl ambre_core::TallyKind for Paragraphs {
+impl ambre_core::CountKind for Paragraphs {
     type Repr = u32;
     const NAME: &'static str = "ParagraphCount";
 }
 
 /// The five figures of the status bar (`features/ambre-spec-prose-word-count.md`).
 ///
-/// Four are tallies of the text. The fifth is read off the layout, and each
+/// Four are counts of the text. The fifth is read off the layout, and each
 /// half is refreshed by its own trigger.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WordCount {
-    pub words: Tally<Words>,
+    pub words: Count<Words>,
     /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
-    pub characters: Tally<Graphemes>,
+    pub characters: Count<Graphemes>,
     /// The same clusters, whitespace and paragraph breaks included
     /// (`PROSE-FEAT-121`).
-    pub characters_with_spaces: Tally<Graphemes>,
-    pub paragraphs: Tally<Paragraphs>,
-    /// From the layout, never from the tally (`PROSE-FEAT-038`).
-    pub pages: Count<Page>,
+    pub characters_with_spaces: Count<Graphemes>,
+    pub paragraphs: Count<Paragraphs>,
+    /// From the layout, never from the count (`PROSE-FEAT-038`).
+    pub pages: Len<Page>,
 }
 
 /// What a format command does to one presence mark over a selection.
@@ -1534,8 +1534,8 @@ pub enum ProseCommand {
     InsertTable {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
-        rows: Count<Row>,
-        cols: Count<Col>,
+        rows: Len<Row>,
+        cols: Len<Col>,
     },
     /// A row of one cell per column. `None` puts it first.
     InsertTableRow {
@@ -1616,7 +1616,7 @@ pub enum ProseCommand {
     },
 
     // -- Word count (`features/ambre-spec-prose-word-count.md`) --
-    /// Recount the four text tallies. The view sends it once a run of changes
+    /// Recount the four text counts. The view sends it once a run of changes
     /// has stopped (`PROSE-FEAT-124`); it writes nothing.
     CountWords,
 
@@ -2120,7 +2120,7 @@ impl ConversionReport {
 /// warning carries in place of a repeat.
 pub enum ConversionLosses {}
 
-impl ambre_core::TallyKind for ConversionLosses {
+impl ambre_core::CountKind for ConversionLosses {
     type Repr = u32;
     const NAME: &'static str = "WarningCount";
 }
@@ -2133,19 +2133,19 @@ pub enum ConversionWarning {
     FeatureNotSupported {
         feature: UnsupportedFeature,
         format: ConversionFormat,
-        count: Tally<ConversionLosses>,
+        count: Count<ConversionLosses>,
     },
     /// An element the reader does not recognise, dropped with its markup
     /// and its text kept where it has any (`PROSE-IO-005`).
     ElementDropped {
         element: DroppedElement,
-        count: Tally<ConversionLosses>,
+        count: Count<ConversionLosses>,
     },
     /// A block the tree refuses where the file put it, moved to the nearest
     /// place it allows (`PROSE-IO-026`, `PROSE-IO-052`).
     BlockLifted {
         block: LiftedBlock,
-        count: Tally<ConversionLosses>,
+        count: Count<ConversionLosses>,
     },
 }
 
@@ -2781,7 +2781,7 @@ impl ProseError {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TableValue {
     /// A table of no row or no column (`PROSE-FEAT-228`).
-    Size { rows: Count<Row>, cols: Count<Col> },
+    Size { rows: Len<Row>, cols: Len<Col> },
     /// A column width.
     Width(PrintLength<Pt>),
     /// A cell border's width.

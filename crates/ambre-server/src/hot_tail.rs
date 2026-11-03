@@ -10,7 +10,7 @@ use crate::db::{Deltas, InlineCap};
 use crate::error::AppError;
 use crate::payload::StoredPayload;
 use crate::state::AppState;
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::{Sec, TimeSpan};
 
 /// A delta whose sealed envelope is under this size lives in its index row
@@ -20,7 +20,7 @@ pub const INLINE_DELTA_MAX_SIZE: ByteSize = ByteSize::new(64 * 1024);
 /// The most a document holds inline (`ambre-spec-budgets.md`, the inline
 /// deltas per document row; `SRV-150`).
 pub const INLINE_CAP: InlineCap = InlineCap {
-    deltas: Tally::<Deltas>::new(256),
+    deltas: Count::<Deltas>::new(256),
     bytes: ByteSize::new(256 * 1024),
 };
 
@@ -34,7 +34,7 @@ const IDLE_PASS_LIMIT: ambre_core::Bounded<crate::db::QueryLimit> =
 
 /// Whether a tail of `deltas` rows and `bytes` bytes should move now. The move
 /// starts at three quarters of the cap, so a write rarely meets a full tail.
-pub fn past_watermark(deltas: Tally<Deltas>, bytes: ByteSize) -> bool {
+pub fn past_watermark(deltas: Count<Deltas>, bytes: ByteSize) -> bool {
     let mark = INLINE_CAP.three_quarters();
     deltas >= mark.deltas || bytes >= mark.bytes
 }
@@ -43,7 +43,7 @@ pub fn past_watermark(deltas: Tally<Deltas>, bytes: ByteSize) -> bool {
 /// most a quarter of the cap, in deltas and in bytes alike.
 fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)]) -> usize {
     let quarter = INLINE_CAP.quarter();
-    let mut kept = Tally::<Deltas>::new(0);
+    let mut kept = Count::<Deltas>::new(0);
     let mut bytes = ByteSize::new(0);
     for (_, wire) in tail.iter().rev() {
         let next = bytes.saturating_add(ByteSize::of_len(wire.len()));
@@ -249,14 +249,14 @@ mod tests {
     /// `SRV-151`: the move starts at three quarters of the count or the bytes.
     #[test]
     fn a_move_starts_at_three_quarters_of_either_bound() {
-        assert!(!past_watermark(Tally::<Deltas>::new(191), ByteSize::new(0)));
-        assert!(past_watermark(Tally::<Deltas>::new(192), ByteSize::new(0)));
+        assert!(!past_watermark(Count::<Deltas>::new(191), ByteSize::new(0)));
+        assert!(past_watermark(Count::<Deltas>::new(192), ByteSize::new(0)));
         assert!(!past_watermark(
-            Tally::<Deltas>::new(1),
+            Count::<Deltas>::new(1),
             ByteSize::new(192 * 1024 - 1)
         ));
         assert!(past_watermark(
-            Tally::<Deltas>::new(1),
+            Count::<Deltas>::new(1),
             ByteSize::new(192 * 1024)
         ));
     }
@@ -376,7 +376,7 @@ mod db_tests {
         for seq in 1..=cap {
             let got = inline(&state, &doc, seq, &frame(seq), INLINE_CAP).await;
             assert!(
-                matches!(got, InlineInsert::Stored { deltas, .. } if deltas == Tally::<Deltas>::from_i64(seq))
+                matches!(got, InlineInsert::Stored { deltas, .. } if deltas == Count::<Deltas>::from_i64(seq))
             );
         }
         let full = inline(&state, &doc, cap + 1, &frame(cap + 1), INLINE_CAP).await;
@@ -389,7 +389,7 @@ mod db_tests {
         let owner = create_test_user(&state.db, "bytes@ambre.app").await;
         let other = create_test_document(&state.db, owner, "prose").await;
         let small = InlineCap {
-            deltas: Tally::<Deltas>::new(100),
+            deltas: Count::<Deltas>::new(100),
             bytes: ByteSize::new(10),
         };
         assert!(matches!(

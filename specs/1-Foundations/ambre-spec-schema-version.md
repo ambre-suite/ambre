@@ -97,7 +97,7 @@ now say it.
 | Trame | the cell is skipped during the reseed, and the reseed sets the flag | the cell loses its formatting, and one warning toast says formatting could not be read |
 | Toile | the register reads as the default style, and the read sets the flag | the element is drawn plain, and one warning toast says the same |
 
-The flag is a **fact, not a tally**. Every later read meets the same unreadable register again, so
+The flag is a **fact, not a count**. Every later read meets the same unreadable register again, so
 a count would measure how often the document was redrawn. The import drains it, which is what keeps
 the notice to one per open rather than one per frame. An **empty** register is not a failure. An
 element with no style and a cell with no formatting carry no bytes. Reading those as the default is

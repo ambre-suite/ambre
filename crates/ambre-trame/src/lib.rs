@@ -47,7 +47,7 @@ pub use ambre_bus::{
     HAlign, HeaderRow, MergeSpan, Row, SelectionKind, SortKey, SortOrder, StylePatch, TabStrip,
     TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Doc, Px};
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 pub use logic::{
@@ -71,9 +71,9 @@ pub const MAX_COL_WIDTH: Px<Doc> = Px::<Doc>::new(4096.0);
 pub const MAX_ROW_HEIGHT: Px<Doc> = Px::<Doc>::new(2048.0);
 
 /// Total number of rows in a Trame grid (0-based indices `0..TOTAL_ROWS`).
-pub const TOTAL_ROWS: Count<Row> = Count::<Row>::new(100_000);
+pub const TOTAL_ROWS: Len<Row> = Len::<Row>::new(100_000);
 /// Total number of columns in a Trame grid (0-based indices `0..TOTAL_COLS`).
-pub const TOTAL_COLS: Count<Col> = Count::<Col>::new(1_000);
+pub const TOTAL_COLS: Len<Col> = Len::<Col>::new(1_000);
 /// The last row of a Trame grid.
 pub const LAST_ROW: Pos<Row> = Pos::<Row>::new(TOTAL_ROWS.get() - 1);
 /// The last column of a Trame grid.

@@ -4,7 +4,7 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
-use ambre_core::index::{Count, Delta, Pos, Span};
+use ambre_core::index::{Delta, Len, Pos, Span};
 use std::collections::HashMap;
 
 use ambre_core::{Doc, Px, Surface};
@@ -65,9 +65,9 @@ pub struct GridLayout<'a> {
     /// Full surface height in device pixels (header strip included).
     pub height: Px<Surface>,
     /// Total columns in the grid (iteration bound).
-    pub total_cols: Count<Col>,
+    pub total_cols: Len<Col>,
     /// Total rows in the grid (iteration bound).
-    pub total_rows: Count<Row>,
+    pub total_rows: Len<Row>,
     /// Application zoom factor (1.0 = 100%). Scales the content-area metrics
     /// (`col_width`/`row_height` and the per-axis maps, which store BASE px). The
     /// header strip sizes (`header_width`/`header_height`) are passed already
@@ -226,15 +226,15 @@ impl GridLayout<'_> {
 
     /// The absolute grid row drawn at visible slot `slot` (0 = the row at
     /// `origin_row`, skipping hidden rows). `None` once the grid is exhausted.
-    pub fn row_at_slot(&self, slot: Count<Row>) -> Option<Pos<Row>> {
+    pub fn row_at_slot(&self, slot: Len<Row>) -> Option<Pos<Row>> {
         let mut row = self.origin_row;
-        let mut seen = Count::<Row>::ZERO;
+        let mut seen = Len::<Row>::ZERO;
         while row < self.total_rows.as_end() {
             if !self.is_hidden(row) {
                 if seen == slot {
                     return Some(row);
                 }
-                seen += Count::<Row>::ONE;
+                seen += Len::<Row>::ONE;
             }
             row = row.next();
         }
@@ -266,18 +266,16 @@ impl GridLayout<'_> {
         let base = self.cell_rect(master);
         // Variable-metric span: sum the covered columns' widths and the visible
         // covered rows' heights (a merge across a filtered row shrinks).
-        let width: Px<Surface> =
-            Span::<Col>::from_count(master.col, span.cols.max(Count::<Col>::ONE))
-                .into_iter()
-                .map(|c| self.col_w(c))
-                .sum();
-        let height: Px<Surface> =
-            Span::<Row>::from_count(master.row, span.rows.max(Count::<Row>::ONE))
-                .into_iter()
-                .filter(|&r| !self.is_hidden(r))
-                .map(|r| self.row_h(r))
-                .sum::<Px<Surface>>()
-                .max(self.row_h(master.row));
+        let width: Px<Surface> = Span::<Col>::from_len(master.col, span.cols.max(Len::<Col>::ONE))
+            .into_iter()
+            .map(|c| self.col_w(c))
+            .sum();
+        let height: Px<Surface> = Span::<Row>::from_len(master.row, span.rows.max(Len::<Row>::ONE))
+            .into_iter()
+            .filter(|&r| !self.is_hidden(r))
+            .map(|r| self.row_h(r))
+            .sum::<Px<Surface>>()
+            .max(self.row_h(master.row));
         Rect::new(
             base.x0,
             base.y0,

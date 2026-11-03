@@ -229,7 +229,7 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     deliver(&mut held, &state, author, &claimed, 2);
     assert_eq!(
         count(&held, bob),
-        ambre_core::Tally::<Mentions>::new(0),
+        ambre_core::Count::<Mentions>::new(0),
         "the claim reads as nothing"
     );
 
@@ -244,8 +244,8 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     assert_eq!(
         (count(&held, bob), count(&held, carol)),
         (
-            ambre_core::Tally::<Mentions>::new(1),
-            ambre_core::Tally::<Mentions>::new(0)
+            ambre_core::Count::<Mentions>::new(1),
+            ambre_core::Count::<Mentions>::new(0)
         )
     );
 
@@ -260,13 +260,13 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     assert_eq!(
         (count(&held, bob), count(&held, carol)),
         (
-            ambre_core::Tally::<Mentions>::new(2),
-            ambre_core::Tally::<Mentions>::new(1)
+            ambre_core::Count::<Mentions>::new(2),
+            ambre_core::Count::<Mentions>::new(1)
         )
     );
     assert_eq!(
         count(&held, author),
-        ambre_core::Tally::<Mentions>::new(0),
+        ambre_core::Count::<Mentions>::new(0),
         "her own messages never count"
     );
 }
@@ -374,7 +374,7 @@ fn an_at_channel_past_the_threshold_waits_for_confirmation() {
             ambre_bus::Confirmation::Unconfirmed
         ),
         Screened::Confirm {
-            members: ambre_core::Tally::<ambre_core::Members>::new(CONFIRM_CHANNEL_PAST.get() + 1),
+            members: ambre_core::Count::<ambre_core::Members>::new(CONFIRM_CHANNEL_PAST.get() + 1),
             draft: all.clone(),
         }
     );

@@ -34,7 +34,7 @@ use ambre_chrome::CommandStates;
 use ambre_commands::Locale;
 use ambre_core::id::Sheet;
 use ambre_core::id::{Document, Id};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Commands, StaticKey};
 use ambre_trame::chrome::{
     self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindQuery, FindReplace, FindReplaceState,
@@ -282,7 +282,7 @@ where
 fn status_bar_renders_label_and_aggregates() {
     let container = mount_in_container(|| {
         let stats = RwSignal::new(Some(SelStats {
-            count: ambre_core::Tally::<ambre_bus::app::trame::Cells>::new(3),
+            count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(3),
             numbers: totals(&[1.0, 2.0, 3.0]),
         }));
         let perf = RwSignal::new(PerfSnapshot::default());
@@ -303,19 +303,19 @@ fn status_bar_renders_label_and_aggregates() {
 #[wasm_bindgen_test]
 fn a_find_position_counts_from_one_and_never_past_the_matches() {
     assert_eq!(
-        chrome::FindPosition::new(Some(Pos::<Match>::new(0)), Count::<Match>::new(3)).label(),
+        chrome::FindPosition::new(Some(Pos::<Match>::new(0)), Len::<Match>::new(3)).label(),
         "1/3"
     );
     assert_eq!(
-        chrome::FindPosition::new(Some(Pos::<Match>::new(2)), Count::<Match>::new(3)).label(),
+        chrome::FindPosition::new(Some(Pos::<Match>::new(2)), Len::<Match>::new(3)).label(),
         "3/3"
     );
     assert_eq!(
-        chrome::FindPosition::new(Some(Pos::<Match>::new(3)), Count::<Match>::new(3)).label(),
+        chrome::FindPosition::new(Some(Pos::<Match>::new(3)), Len::<Match>::new(3)).label(),
         "0/3"
     );
     assert_eq!(
-        chrome::FindPosition::new(None, Count::<Match>::new(0)).label(),
+        chrome::FindPosition::new(None, Len::<Match>::new(0)).label(),
         "0/0"
     );
 }
@@ -789,7 +789,7 @@ fn status_text(stats: Option<SelStats>) -> String {
 #[wasm_bindgen_test]
 fn a_selection_with_no_number_shows_no_numeric_aggregate() {
     let text = status_text(Some(SelStats {
-        count: ambre_core::Tally::<ambre_bus::app::trame::Cells>::new(4),
+        count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(4),
         ..SelStats::default()
     }));
     assert!(text.contains("Count: 4"), "{text}");
@@ -797,7 +797,7 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
         assert!(!text.contains(absent), "{absent} in {text}");
     }
     let text = status_text(Some(SelStats {
-        count: ambre_core::Tally::<ambre_bus::app::trame::Cells>::new(4),
+        count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(4),
         numbers: totals(&[5.0]),
     }));
     for present in ["Sum: 5", "Avg: 5", "Min: 5", "Max: 5", "Count: 4"] {
@@ -811,7 +811,7 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
 #[wasm_bindgen_test]
 fn an_aggregate_reads_whole_or_with_two_decimals() {
     let text = status_text(Some(SelStats {
-        count: ambre_core::Tally::<ambre_bus::app::trame::Cells>::new(3),
+        count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(3),
         numbers: totals(&[-2.0, 1.0 / 3.0, 9.5 - 1.0 / 3.0]),
     }));
     for present in ["Sum: 7.50", "Avg: 2.50", "Min: -2", "Max: 9.17"] {
@@ -825,7 +825,7 @@ fn an_aggregate_reads_whole_or_with_two_decimals() {
 #[wasm_bindgen_test]
 fn a_sum_past_the_largest_number_reads_num() {
     let text = status_text(Some(SelStats {
-        count: ambre_core::Tally::<ambre_bus::app::trame::Cells>::new(2),
+        count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(2),
         numbers: totals(&[f64::MAX, f64::MAX]),
     }));
     for present in ["Sum: #NUM!", "Avg: #NUM!", "Count: 2"] {
@@ -921,7 +921,7 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
         &UiEvent::Viewport {
             document_id: Id::<Document>::mint(),
             event: AppEvent::Trame(TrameEvent::FilterApplied {
-                hidden_row_count: Count::<Row>::new(37),
+                hidden_row_count: Len::<Row>::new(37),
                 col: Pos::<Col>::new(2),
             }),
         },

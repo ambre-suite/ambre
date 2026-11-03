@@ -29,7 +29,7 @@
 
 use ambre_bus::app::prose::{DocChar, FootnoteCall};
 use ambre_core::Rgba;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Ordinal, PrintLength, Pt};
 use std::collections::BTreeSet;
 
@@ -468,7 +468,7 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
             let at = stored.at(3)?;
             let stored_widths = doc::col_widths(&tree, id);
             let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width;
-            let cols = Count::<crate::events::grid::Col>::from_len(stored_widths.len());
+            let cols = Len::<crate::events::grid::Col>::of(stored_widths.len());
             let widths = column_widths(&stored_widths, cols, content);
             format!("column {} is {} px wide", at + 1, widths.get(at)?.get())
         }
@@ -611,9 +611,7 @@ fn mark_reading(
     let what = if mark.starts_with("f:") {
         let pages = reader
             .full_layout()
-            .map_or(Count::<crate::events::Page>::ONE, |layout| {
-                layout.page_count
-            });
+            .map_or(Len::<crate::events::Page>::ONE, |layout| layout.page_count);
         format!(
             "band shows {:?} on page 1",
             crate::band::resolve(&reader.doc, block, Pos::<crate::events::Page>::ZERO, pages)

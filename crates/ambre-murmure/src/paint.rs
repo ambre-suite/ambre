@@ -5,7 +5,7 @@
 //! It paints them on any drawing surface: the page's canvas, or the
 //! recording surface of a host test.
 
-use ambre_core::index::{Count, IdxVec, Pos, Span};
+use ambre_core::index::{IdxVec, Len, Pos, Span};
 use std::collections::HashMap;
 
 use ambre_bus::{Attachment, Authored, ContentHash, Emoji, Instant, TextStyle};
@@ -145,7 +145,7 @@ pub(crate) fn text_height(layout: &Layout<ParleyBrush>) -> Px<View> {
 pub struct Painted {
     /// The rows laid out: the ones the viewport reaches, never the whole
     /// list.
-    pub laid_out: Count<ListRow>,
+    pub laid_out: Len<ListRow>,
     /// Whether the latest row is on screen.
     pub latest_shown: OnScreen,
     /// Whether the oldest row the list holds is on screen (`MURMURE-191`).
@@ -300,7 +300,7 @@ pub fn paint_list<S: DrawSurface>(
         };
         let band = selection
             .zip(keys.get(i))
-            .and_then(|(s, &key)| s.range_in(&keys, key, Count::<Byte>::from_len(row.body.len())));
+            .and_then(|(s, &key)| s.range_in(&keys, key, Len::<Byte>::of(row.body.len())));
         let tints: Vec<(Span<Byte>, Color)> = row
             .marks
             .iter()
@@ -358,7 +358,7 @@ pub fn paint_list<S: DrawSurface>(
         }
     }
     Painted {
-        laid_out: Count::<ListRow>::from_len(words.len()),
+        laid_out: Len::<ListRow>::of(words.len()),
         latest_shown: reached.latest,
         oldest_shown: reached.oldest,
         line_shown,
@@ -1380,7 +1380,7 @@ pub(crate) mod tests {
         gone.deleted = ambre_bus::Deletion::Deleted;
         gone.thread = Some(ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_core::Tally::<ambre_bus::Replies>::new(2),
+            replies: ambre_core::Count::<ambre_bus::Replies>::new(2),
             last_replier: None,
         });
         let mut list = MessageList::default();
@@ -1968,7 +1968,7 @@ pub(crate) mod tests {
         assert_eq!(
             painted,
             Painted {
-                laid_out: Count::<ListRow>::ZERO,
+                laid_out: Len::<ListRow>::ZERO,
                 latest_shown: OnScreen::Hidden,
                 oldest_shown: OnScreen::Hidden,
                 line_shown: OnScreen::Hidden,

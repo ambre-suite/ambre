@@ -6,7 +6,7 @@ use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
 use ambre_canvas::PointerButton;
 use ambre_commands::{Key, KeyChar};
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{Doc, Point, Px, View};
 use ambre_draw::Consumed;
 
@@ -237,9 +237,9 @@ impl TrameView {
             };
             n == 1
         } else if vertical {
-            src.row_count() == Count::<Row>::ONE
+            src.row_count() == Len::<Row>::ONE
         } else {
-            src.col_count() == Count::<Col>::ONE
+            src.col_count() == Len::<Col>::ONE
         };
         let mode = match (mods.primary(), single_line) {
             (false, _) => FillMode::Auto,
@@ -529,14 +529,14 @@ impl TrameView {
         let at = self.state.active_cell();
         let normalized = text.replace('\r', "");
         let mut cells = Vec::new();
-        let mut rows = Count::<Row>::ZERO;
-        let mut cols = Count::<Col>::ZERO;
+        let mut rows = Len::<Row>::ZERO;
+        let mut cols = Len::<Col>::ZERO;
         for (dr, line) in normalized.trim_end_matches('\n').split('\n').enumerate() {
-            let dr = Count::<Row>::from_len(dr);
-            rows = rows.max(dr + Count::<Row>::ONE);
+            let dr = Len::<Row>::of(dr);
+            rows = rows.max(dr + Len::<Row>::ONE);
             for (dc, field) in line.split('\t').enumerate() {
-                let dc = Count::<Col>::from_len(dc);
-                cols = cols.max(dc + Count::<Col>::ONE);
+                let dc = Len::<Col>::of(dc);
+                cols = cols.max(dc + Len::<Col>::ONE);
                 if field.is_empty() {
                     continue;
                 }

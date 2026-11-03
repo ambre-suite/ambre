@@ -9,7 +9,7 @@
 //! never synced. This mirrors the durable-intent vs momentary-gesture split
 //! already used for presence (`toile-presence`).
 
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use std::collections::HashSet;
 
 use ambre_core::id::{Element, Frame, Id, User};
@@ -80,7 +80,7 @@ impl ToileState {
         self.doc.commit();
 
         // Clamp the local cursor to the new deck length (empty deck -> 0).
-        self.playback.active = self.playback.active.within(Count::from_len(target.len()));
+        self.playback.active = self.playback.active.within(Len::of(target.len()));
         self.emit_with_update(vec![ToileEvent::DeckChanged])
     }
 
@@ -295,7 +295,7 @@ impl ToileState {
         };
         let frame = slide(to_idx).cloned();
         SlideChange {
-            position: SlidePosition::new(to_idx, Count::<Slide>::from_len(order.len())),
+            position: SlidePosition::new(to_idx, Len::<Slide>::of(order.len())),
             from: from_idx.map(snap).unwrap_or_default(),
             to: snap(to_idx),
             to_rect: slide(to_idx).and_then(|f| self.element_rect(&f.clone().into())),
@@ -361,10 +361,10 @@ impl ToileState {
     }
 
     /// Number of slides in the shared deck (`0` if absent). Local read.
-    pub(super) fn slide_len(&self) -> Count<Slide> {
+    pub(super) fn slide_len(&self) -> Len<Slide> {
         match self.order_list().get_deep_value() {
-            LoroValue::List(items) => Count::<Slide>::from_len(items.len()),
-            _ => Count::<Slide>::ZERO,
+            LoroValue::List(items) => Len::<Slide>::of(items.len()),
+            _ => Len::<Slide>::ZERO,
         }
     }
 
@@ -433,7 +433,7 @@ impl ToileState {
         }
         // Clamp to the current length: `at` and the deletion span never run past
         // the end of the buffer.
-        let (at, del) = delta.clamped(Count::<Char>::from_len(text.len_unicode()));
+        let (at, del) = delta.clamped(Len::<Char>::of(text.len_unicode()));
         if !del.is_zero() {
             let _ = text.delete(at.to_usize(), del.to_usize());
         }
@@ -553,7 +553,7 @@ impl ToileState {
             let _ = list.push(id.as_str());
         }
         // Clamp this viewer's cursor, as a shorter deck does anywhere else.
-        self.playback.active = self.playback.active.within(Count::from_len(kept.len()));
+        self.playback.active = self.playback.active.within(Len::of(kept.len()));
         true
     }
 

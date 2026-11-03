@@ -9,10 +9,10 @@ use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, S
 use ambre_bus::conduit::Receiver;
 use ambre_bus::{Instant, PageLoad};
 use ambre_commands::KeyChar;
+use ambre_core::Count;
 use ambre_core::Rgba;
-use ambre_core::Tally;
 use ambre_core::id::User;
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use ambre_core::{Board, Px, StoredBoard};
 use ambre_core::{Commands, StaticKey};
 use kurbo::Rect;
@@ -893,7 +893,7 @@ fn the_current_match_is_brought_into_view() {
     assert!(!rig.view.cam.visible_world().contains(far.center()));
     let stats = |kind| {
         ToileEvent::SelectionStats(SelectionStats {
-            count: Tally::<Elements>::new(1),
+            count: Count::<Elements>::new(1),
             bounds: Some(far),
             kind,
         })
@@ -1705,7 +1705,7 @@ fn a_find_step_recentres_without_a_zoom_or_a_selection() {
             if ids == &[eid("far")]
     ));
     rig.answer(ToileEvent::SelectionStats(SelectionStats {
-        count: Tally::<Elements>::new(1),
+        count: Count::<Elements>::new(1),
         bounds: Some(far),
         kind: StatsRequestKind::FindFocus,
     }));
@@ -2124,7 +2124,7 @@ fn asks_for_the_frame(sent: &[ToileCommand]) -> bool {
 /// board no longer holds.
 fn fit_reply(bounds: Option<Rect>) -> ToileEvent {
     ToileEvent::SelectionStats(ambre_bus::app::toile::SelectionStats {
-        count: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(u32::from(
+        count: ambre_core::Count::<ambre_bus::app::toile::Elements>::new(u32::from(
             bounds.is_some(),
         )),
         bounds,
@@ -2618,10 +2618,10 @@ fn a_shared_board(peer: Id<User>) -> Rig {
         ambre_bus::app::toile::ReactionTally {
             emoji: vec![(
                 ambre_bus::Emoji::from("+1"),
-                ambre_core::Tally::<ambre_bus::app::toile::Reactions>::new(2),
+                ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(2),
             )],
             vote_total: ambre_bus::app::toile::VoteTotal::ZERO,
-            vote_count: ambre_core::Tally::<ambre_bus::app::toile::Votes>::ZERO,
+            vote_count: ambre_core::Count::<ambre_bus::app::toile::Votes>::ZERO,
         },
     );
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
@@ -2630,7 +2630,7 @@ fn a_shared_board(peer: Id<User>) -> Rig {
         pins: vec![ambre_bus::app::toile::CommentPin {
             thread: Id::<Thread>::from_text("t".to_owned()),
             at: kurbo::Point::new(50.0, 50.0),
-            messages: Count::<ambre_bus::app::toile::ThreadMessage>::new(1),
+            messages: Len::<ambre_bus::app::toile::ThreadMessage>::new(1),
             resolved: ambre_core::ThreadState::Open,
         }],
         reactions,
@@ -2840,7 +2840,7 @@ fn a_thread_brings_the_camera_to_its_anchor() {
     assert!(asked, "the view asks for the anchor's box");
     rig.answer(ToileEvent::SelectionStats(
         ambre_bus::app::toile::SelectionStats {
-            count: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(1),
+            count: ambre_core::Count::<ambre_bus::app::toile::Elements>::new(1),
             bounds: Some(Rect::new(4000.0, 4000.0, 4100.0, 4200.0)),
             kind: StatsRequestKind::CommentFocus,
         },

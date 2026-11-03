@@ -10,7 +10,7 @@
 //! The key of a row starts with the user's identifier. So a second person
 //! signed in on the device reads none of the first's.
 
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::index::{Pos, Span};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -90,7 +90,7 @@ impl SeqKind for ShelfVersion {
 /// starts past them.
 pub enum ShelfLosses {}
 
-impl ambre_core::TallyKind for ShelfLosses {
+impl ambre_core::CountKind for ShelfLosses {
     type Repr = u32;
     const NAME: &'static str = "LossCount";
 }
@@ -222,14 +222,14 @@ impl DraftShelf {
     }
 
     /// The losses after the first `seen`, and how many there are in all.
-    pub fn losses_since(&self, seen: Tally<ShelfLosses>) -> (Vec<Loss>, Tally<ShelfLosses>) {
+    pub fn losses_since(&self, seen: Count<ShelfLosses>) -> (Vec<Loss>, Count<ShelfLosses>) {
         let shelf = self.0.borrow();
         let losses = usize::try_from(seen.get())
             .ok()
             .and_then(|seen| shelf.losses.get(seen..))
             .unwrap_or_default()
             .to_vec();
-        (losses, Tally::<ShelfLosses>::of_len(shelf.losses.len()))
+        (losses, Count::<ShelfLosses>::of(shelf.losses.len()))
     }
 }
 

@@ -1,4 +1,4 @@
-use ambre_core::Tally;
+use ambre_core::Count;
 use ambre_core::id::{Id, User};
 use axum::extract::Request;
 use axum::http::StatusCode;
@@ -173,7 +173,7 @@ fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
 /// is left of the limit.
 pub enum Requests {}
 
-impl ambre_core::TallyKind for Requests {
+impl ambre_core::CountKind for Requests {
     type Repr = u32;
     const NAME: &'static str = "RequestCount";
 }
@@ -182,7 +182,7 @@ impl ambre_core::TallyKind for Requests {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RateLimit {
     /// The most requests one bucket makes in a window.
-    max_requests: Tally<Requests>,
+    max_requests: Count<Requests>,
     /// The span of the sliding window.
     window: TimeSpan<Sec>,
 }
@@ -201,7 +201,7 @@ enum RateLimitCategory {
 impl RateLimitCategory {
     /// The limit of the category.
     fn limits(&self) -> RateLimit {
-        let max_requests = Tally::<Requests>::new(match self {
+        let max_requests = Count::<Requests>::new(match self {
             RateLimitCategory::Auth | RateLimitCategory::WebSocket => 10,
             RateLimitCategory::Api => 300,
         });
@@ -331,7 +331,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Verdict {
     /// The request fits, with `remaining` more allowed in the window.
-    Allowed { remaining: Tally<Requests> },
+    Allowed { remaining: Count<Requests> },
     /// The window is full.
     Refused,
 }
@@ -347,7 +347,7 @@ async fn check_sliding_window(
     bucket: &RateBucket,
     now: Instant<UnixMs>,
     window: TimeSpan<Ms>,
-    max_requests: Tally<Requests>,
+    max_requests: Count<Requests>,
 ) -> Result<Verdict, AppError> {
     // No window bucket in the key: the sorted set is the sliding window.
     let key = format!("rate:{}:{bucket}", category.prefix());
@@ -366,7 +366,7 @@ async fn check_sliding_window(
         .await
         .map_err(|e| AppError::Redis(format!("rate limit sliding-window eval: {e}")))?;
 
-    let count = Tally::<Requests>::new(u32::try_from(count.max(0)).unwrap_or(u32::MAX));
+    let count = Count::<Requests>::new(u32::try_from(count.max(0)).unwrap_or(u32::MAX));
     Ok(if count <= max_requests {
         Verdict::Allowed {
             remaining: max_requests.minus(count),
@@ -654,7 +654,7 @@ mod tests {
         assert_eq!(
             category.limits(),
             RateLimit {
-                max_requests: Tally::<Requests>::new(10),
+                max_requests: Count::<Requests>::new(10),
                 window: TimeSpan::<Sec>::new(60),
             }
         );
@@ -666,7 +666,7 @@ mod tests {
         assert_eq!(
             category.limits(),
             RateLimit {
-                max_requests: Tally::<Requests>::new(300),
+                max_requests: Count::<Requests>::new(300),
                 window: TimeSpan::<Sec>::new(60),
             }
         );
@@ -678,7 +678,7 @@ mod tests {
         assert_eq!(
             category.limits(),
             RateLimit {
-                max_requests: Tally::<Requests>::new(10),
+                max_requests: Count::<Requests>::new(10),
                 window: TimeSpan::<Sec>::new(60),
             }
         );

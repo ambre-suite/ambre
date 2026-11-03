@@ -83,7 +83,7 @@ status values are normative in `ambre-spec-template.md`.
 
 **What the Logic thread hands over** (`ambre-bus`): one snapshot per relevant change. It carries
 the camera it was culled against and a single back-to-front sequence of nodes, elements and
-connectors interleaved by z-order. Beside that sequence rides the reaction tally per target, which
+connectors interleaved by z-order. Beside that sequence rides the reaction count per target, which
 is not z-ordered with the board. It carries no comment pins: nothing does yet (section 5). Its shape is
 declared in `features/ambre-spec-toile-engine.md section 3`; this document does not restate it.
 
@@ -182,7 +182,7 @@ override at all, which is what stops a fade half-way (`TOILE-UI-085`).
   feature relies on is owned by `ambre-spec-drawing-surface.md`; no test of this crate observes a
   cache hit.
 * **The comment pins paint outside this walk.** They ride the visible set beside the reaction
-  tallies. Their pass is the last overlay of the frame rather than a node of the content walk. No
+  counts. Their pass is the last overlay of the frame rather than a node of the content walk. No
   rule of this document covers them (`features/ambre-spec-toile-comments.md section 4`).
 * **Some changes still repaint the content they do not touch.** A selection change, a press and a
   marquee mark the overlay alone (`TOILE-UI-271`). Other handlers, such as a restyle or a group
