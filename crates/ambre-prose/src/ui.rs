@@ -112,7 +112,7 @@ impl std::fmt::Debug for Change {
         match self {
             Self::Insert(text) => f
                 .debug_tuple("Insert")
-                .field(&crate::redact::Redacted(text))
+                .field(&ambre_core::Redacted::new(text))
                 .finish(),
             Self::Delete(count) => f.debug_tuple("Delete").field(count).finish(),
         }
@@ -587,7 +587,7 @@ impl std::fmt::Debug for ProseUiState {
             .field("cursor", &self.cursor)
             .field("caret_affinity", &self.caret_affinity)
             .field("draft", &self.draft)
-            .field("composing", &crate::redact::Redacted(&self.composing))
+            .field("composing", &ambre_core::Redacted::new(&self.composing))
             .field("compose_shape", &self.compose_shape.is_some())
             .field("slash", &self.slash.is_some())
             .field("seen", &self.seen)

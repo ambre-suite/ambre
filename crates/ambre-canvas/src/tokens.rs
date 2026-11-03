@@ -83,7 +83,7 @@ struct Tokens {
     effects: ThemePair<Effects>,
     photo: Photo,
     canvas: ThemePair<CanvasColors>,
-    scale: Vec<(ScaleName, Px)>,
+    scale: Vec<(ScaleName, TokenPx)>,
 }
 
 #[derive(Deserialize)]
@@ -96,9 +96,9 @@ struct ThemePair<T> {
 /// stylesheet writes it with `px`, and the Rust module as a `Px<View>`.
 #[derive(Deserialize, Clone, Copy)]
 #[serde(transparent)]
-struct Px(u32);
+struct TokenPx(u32);
 
-impl fmt::Display for Px {
+impl fmt::Display for TokenPx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -256,8 +256,8 @@ impl ChromeColors {
 /// A drop shadow: a vertical offset and a blur, and a colour.
 #[derive(Deserialize)]
 struct Shadow {
-    y: Px,
-    blur: Px,
+    y: TokenPx,
+    blur: TokenPx,
     colour: TokenColour,
 }
 
@@ -369,7 +369,7 @@ impl fmt::Display for RustColour {
 }
 
 /// Refuse a scale name declared twice. Each name is snake_case by its type.
-fn check_scale(scale: &[(ScaleName, Px)]) -> Result<(), String> {
+fn check_scale(scale: &[(ScaleName, TokenPx)]) -> Result<(), String> {
     let mut seen = BTreeSet::new();
     scale.iter().try_for_each(|(name, _)| {
         if seen.insert(name) {

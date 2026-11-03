@@ -129,8 +129,8 @@ fn element_world_path(em: &Fields<ElementKey>) -> Option<BezPath> {
     let bounds = stored_rect(em);
     let kind = shape_of(em);
     let local = match kind {
-        ShapeKind::Rect => bounds.to_path(FLATTEN_TOL.get()),
-        ShapeKind::Ellipse => Ellipse::from_rect(bounds).to_path(FLATTEN_TOL.get()),
+        ShapeKind::Rect => bounds.to_path(FLATTEN_TOL.get().get()),
+        ShapeKind::Ellipse => Ellipse::from_rect(bounds).to_path(FLATTEN_TOL.get().get()),
         ShapeKind::Triangle => crate::ui::hit::triangle_path(bounds),
         ShapeKind::Line => {
             let mut p = BezPath::new();

@@ -2,7 +2,7 @@
 // Snapshot / update / media rows and their queries (incl. compaction).
 
 use super::*;
-use crate::payload::Payload;
+use crate::payload::StoredPayload;
 use ambre_core::Tally;
 
 /// Row from `snapshots`.
@@ -65,7 +65,7 @@ pub struct UpdateRow {
     /// The object of its own, for a delta over the inline size (`SRV-149`).
     pub s3_key: Option<ambre_core::ObjectKey>,
     /// The sealed envelope itself, for a delta in the hot tail (`SRV-148`).
-    pub wire: Option<Payload>,
+    pub wire: Option<StoredPayload>,
     /// The batch object that holds the frame (`SRV-151`).
     pub batch_key: Option<ambre_core::ObjectKey>,
     #[allow(dead_code)]
@@ -373,7 +373,7 @@ pub async fn insert_inline_update(
     snapshot_id: &Id<Snapshot>,
     clock: ambre_protocol::messages::Clock,
     seq: ambre_core::Seq,
-    wire: &Payload,
+    wire: &StoredPayload,
     cap: InlineCap,
 ) -> Result<InlineInsert, AppError> {
     let (deltas, bytes, room): (i64, i64, bool) = sqlx::query_as(
@@ -417,7 +417,7 @@ pub async fn attach_wire(
     pool: &PgPool,
     document_id: &Id<Document>,
     seq: ambre_core::Seq,
-    wire: &Payload,
+    wire: &StoredPayload,
 ) -> Result<bool, AppError> {
     let attached = sqlx::query(
         "UPDATE updates SET wire = $3, s3_key = NULL \
@@ -437,8 +437,8 @@ pub async fn attach_wire(
 pub async fn lock_inline_tail(
     tx: &mut sqlx::PgConnection,
     document_id: &Id<Document>,
-) -> Result<Option<Vec<(ambre_core::Seq, Payload)>>, AppError> {
-    let rows: Result<Vec<(i64, Payload)>, _> = sqlx::query_as(
+) -> Result<Option<Vec<(ambre_core::Seq, StoredPayload)>>, AppError> {
+    let rows: Result<Vec<(i64, StoredPayload)>, _> = sqlx::query_as(
         "SELECT seq, wire FROM updates WHERE document_id = $1 AND wire IS NOT NULL \
          ORDER BY seq FOR UPDATE NOWAIT",
     )

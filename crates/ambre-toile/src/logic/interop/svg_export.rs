@@ -342,12 +342,12 @@ mod tests {
         let element = format!("{el:?}");
         assert!(!element.contains("rival"), "{element}");
         assert!(!element.contains("2468"), "{element}");
-        assert!(element.contains("<13 chars>"), "{element}");
-        assert!(element.contains("<2 path elements>"), "{element}");
+        assert!(element.contains("text: Some(13 chars)"), "{element}");
+        assert!(element.contains("path: Some(2 path elements)"), "{element}");
         let export = export_svg(&[el]);
         let form = format!("{export:?}");
         assert!(!form.contains("rival") && !form.contains("<svg"), "{form}");
-        let size = format!("<{} bytes>", export.document.len());
+        let size = format!("document: {} bytes", export.document.len());
         assert!(form.contains(&size), "{form}");
     }
 

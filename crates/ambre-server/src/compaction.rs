@@ -91,7 +91,7 @@ pub fn ask_when_due(
     state: &Arc<AppState>,
     document_id: Id<Document>,
     seq: ambre_core::Seq,
-    writer: &mpsc::Sender<crate::payload::Payload>,
+    writer: &mpsc::Sender<crate::payload::StoredPayload>,
 ) {
     if !is_checked(seq) {
         return;
@@ -100,7 +100,7 @@ pub fn ask_when_due(
     let writer = writer.clone();
     tokio::spawn(async move {
         if should_ask(&state, &document_id, seq).await {
-            let ask = crate::payload::Payload::server_msg(
+            let ask = crate::payload::StoredPayload::server_msg(
                 &ambre_protocol::ws::WsServerMsg::SnapshotRequired { document_id },
             );
             let _ = writer.send(ask).await;

@@ -48,7 +48,7 @@ use tracing;
 use ambre_core::id::{Document, Id, Snapshot};
 
 use crate::error::AppError;
-use crate::payload::Payload;
+use crate::payload::StoredPayload;
 use crate::redis_keys::{DocKey, FlushLock, PendingKey};
 use ambre_core::{Instant, Sec, TimeSpan, UnixSec};
 
@@ -335,7 +335,7 @@ pub async fn fetch_object(
     s3: &S3Client,
     bucket: &StoreText<BucketName>,
     key: &ambre_core::ObjectKey,
-) -> Result<Option<Payload>, AppError> {
+) -> Result<Option<StoredPayload>, AppError> {
     match s3
         .get_object()
         .bucket(bucket.as_str())
@@ -343,7 +343,7 @@ pub async fn fetch_object(
         .send()
         .await
     {
-        Ok(out) => Payload::read_body(out.body)
+        Ok(out) => StoredPayload::read_body(out.body)
             .await
             .map(Some)
             .map_err(|e| AppError::S3(format!("read object body: {e}"))),
@@ -578,10 +578,10 @@ trait DrainSink {
     fn store(
         &mut self,
         s3_key: &ambre_core::ObjectKey,
-        wire: Payload,
+        wire: StoredPayload,
     ) -> impl Future<Output = Result<(), String>> + Send;
     /// Keeps an entry that will never parse where an operator can read it.
-    fn dead_letter(&mut self, entry: &Payload) -> impl Future<Output = ()> + Send;
+    fn dead_letter(&mut self, entry: &StoredPayload) -> impl Future<Output = ()> + Send;
 }
 
 /// The production sink: the object store, and the document's dead letters.
@@ -591,7 +591,11 @@ struct S3Sink<'a> {
 }
 
 impl DrainSink for S3Sink<'_> {
-    async fn store(&mut self, s3_key: &ambre_core::ObjectKey, wire: Payload) -> Result<(), String> {
+    async fn store(
+        &mut self,
+        s3_key: &ambre_core::ObjectKey,
+        wire: StoredPayload,
+    ) -> Result<(), String> {
         self.state
             .s3
             .put_object()
@@ -604,7 +608,7 @@ impl DrainSink for S3Sink<'_> {
             .map_err(|e| e.to_string())
     }
 
-    async fn dead_letter(&mut self, entry: &Payload) {
+    async fn dead_letter(&mut self, entry: &StoredPayload) {
         let _ = crate::redis_ops::push_poison_entry(&self.state.redis, &self.document, entry).await;
     }
 }
@@ -617,14 +621,14 @@ impl DrainSink for S3Sink<'_> {
 /// therefore never removes an entry that was neither stored nor dead-lettered.
 async fn drain_front(
     pending_key: &PendingKey,
-    entries: &[Payload],
+    entries: &[StoredPayload],
     sink: &mut impl DrainSink,
 ) -> Tally<DrainedEntries> {
     let mut processed = Tally::<DrainedEntries>::ZERO;
     for entry in entries {
-        // An entry carries `update_b64`, the E2EE ciphertext, and a `Payload`
-        // cannot be logged. Only routing metadata (redis key, byte length, and
-        // once parsed the s3_key / seq) is surfaced (C1).
+        // An entry carries `update_b64`, the E2EE ciphertext, and a
+        // `StoredPayload` cannot be logged. Only routing metadata (redis key,
+        // byte length, and once parsed the s3_key / seq) is surfaced (C1).
         //
         // Resolve the routing fields. Any structural defect is a permanent
         // poison entry that will never parse, so dead-letter it and advance
@@ -708,7 +712,7 @@ mod tests {
     /// the trim keeps the failed entry and every one after it.
     #[tokio::test]
     async fn a_partial_flush_trims_only_what_it_stored() {
-        let entries: Vec<Payload> = [
+        let entries: Vec<StoredPayload> = [
             entry(&ambre_core::ObjectKey::from("d/1"), 1),
             "not json".to_owned(),
             entry(&ambre_core::ObjectKey::from("d/3"), 3),
@@ -716,7 +720,7 @@ mod tests {
             entry(&ambre_core::ObjectKey::from("d/5"), 5),
         ]
         .into_iter()
-        .map(|b| Payload::new(b.into_bytes()))
+        .map(|b| StoredPayload::new(b.into_bytes()))
         .collect();
         /// Refuses one key, and records what it stored and dead-lettered.
         #[derive(Default)]
@@ -728,7 +732,7 @@ mod tests {
             async fn store(
                 &mut self,
                 s3_key: &ambre_core::ObjectKey,
-                _wire: Payload,
+                _wire: StoredPayload,
             ) -> Result<(), String> {
                 if s3_key.as_str() == "d/4" {
                     return Err("unavailable".to_owned());
@@ -736,7 +740,7 @@ mod tests {
                 self.stored.push(s3_key.as_str().to_owned());
                 Ok(())
             }
-            async fn dead_letter(&mut self, entry: &Payload) {
+            async fn dead_letter(&mut self, entry: &StoredPayload) {
                 self.dead.push(entry.expose_bytes().to_vec());
             }
         }
@@ -755,7 +759,7 @@ mod tests {
         // The fifth entry was never tried, and the trim keeps it with the fourth.
         let kept: Vec<&[u8]> = entries[processed.get() as usize..]
             .iter()
-            .map(Payload::expose_bytes)
+            .map(StoredPayload::expose_bytes)
             .collect();
         assert_eq!(
             kept,

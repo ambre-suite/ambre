@@ -104,7 +104,7 @@ impl std::fmt::Debug for DeckIntent {
             Self::Rename(frame, name) => f
                 .debug_tuple("Rename")
                 .field(frame)
-                .field(&crate::logic::TextLen(name))
+                .field(&ambre_core::Redacted::new(name))
                 .finish(),
         }
     }
@@ -140,7 +140,7 @@ mod tests {
             )
         );
         assert!(!form.contains("layoffs"), "{form}");
-        assert!(form.contains("<10 chars>"), "{form}");
+        assert!(form.contains(", 10 chars)"), "{form}");
     }
 
     fn frame(id: &str, name: &str) -> DeckFrame {

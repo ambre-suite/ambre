@@ -152,7 +152,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 ## 3. MODEL
 
 **CRDT containers.** the `meta` document of `ambre-spec-murmure-schema.md section 3`: its
-`channel` map holds the type, the optional name and the topic.
+`channel` map holds the type, the optional name and the channel topic, a `ChannelTopic`. A channel
+topic is the text a member types, never the relay topic that `ambre-spec-broadcast.md` names.
 
 **A direct message is reused.** The relay holds the members of every channel, so it finds a direct
 message whose members are exactly the requested set. It learns nothing new by doing so

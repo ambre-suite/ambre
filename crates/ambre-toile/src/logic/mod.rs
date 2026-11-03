@@ -38,23 +38,13 @@ pub use model::{
 };
 pub use state::ToileState;
 
-/// A board text as a `Debug` form prints it: its length in characters and
-/// none of its content (`ZK-006`).
-pub(crate) struct TextLen<'a>(pub(crate) &'a str);
-
-impl std::fmt::Debug for TextLen<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<{} chars>", self.0.chars().count())
-    }
-}
-
 /// A board document as a `Debug` form prints it: its length in bytes and
 /// none of its content (`ZK-006`).
 pub(crate) struct ByteLen<'a>(pub(crate) &'a str);
 
 impl std::fmt::Debug for ByteLen<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<{} bytes>", self.0.len())
+        write!(f, "{} bytes", self.0.len())
     }
 }
 
@@ -64,7 +54,7 @@ pub(crate) struct PathLen<'a>(pub(crate) &'a kurbo::BezPath);
 
 impl std::fmt::Debug for PathLen<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<{} path elements>", self.0.elements().len())
+        write!(f, "{} path elements", self.0.elements().len())
     }
 }
 

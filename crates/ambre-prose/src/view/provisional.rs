@@ -55,7 +55,7 @@ impl std::fmt::Debug for Key {
             .field("generation", &self.generation)
             .field("version", &self.version)
             .field("splitting", &self.splitting)
-            .field("held", &crate::redact::Redacted(&self.held))
+            .field("held", &ambre_core::Redacted::new(&self.held))
             .finish()
     }
 }

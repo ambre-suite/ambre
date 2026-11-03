@@ -99,8 +99,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Replies as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Segments as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of Topic gives a caller, and serde's try_from hands its deserialisation error
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of Topic validates
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of ChannelTopic gives a caller, and serde's try_from hands its deserialisation error
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ChannelTopic validates
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Attachment.name | field | String	free-text	file name as the author's file system gave it
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | std::borrow::Cow<'static,str>	newtype-inner	Emoji newtype, borrowed for a static table and owned otherwise
@@ -117,8 +117,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_byte
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::as_str() | ret | &str	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::new(text) | param | impl Into<String>	newtype-inner	newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelTopic::as_str() | ret | &str	newtype-inner	newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelTopic::new(text) | param | impl Into<String>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
@@ -2047,8 +2047,6 @@ ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	local
 ambre-prose | src/probe.rs | crate::probe | <AnimationFrames as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-prose | src/probe.rs | crate::probe | FrameNumber.0 | field | u64	newtype-inner	how many animation frames began before a moment, held at the top
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	whether an event lays the document out again, when a moved caret can first be drawn
-ambre-prose | src/redact.rs | crate::redact | Redacted.0 | field | &'a str	newtype-inner	document content that Debug prints the length of alone
-ambre-prose | src/redact.rs | crate::redact | optional(text) | param | Option<&String>	free-text	an optional document text, wrapped for a Debug that prints its length alone
 ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	the scale a heading level is drawn at, local to the cascade
 ambre-prose | src/style.rs | crate::style | StoredMarkValue.0 | field | String	newtype-inner	a mark value as the document holds it, never checked; Debug prints its length alone
 ambre-prose | src/style.rs | crate::style | StoredMarkValue::as_str() | ret | &str	newtype-inner	a mark value as stored, for the parse that reads it
@@ -2208,10 +2206,10 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	free-text	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
-ambre-server | src/payload.rs | crate::payload | Payload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/payload.rs | crate::payload | Payload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/payload.rs | crate::payload | Payload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/payload.rs | crate::payload | Payload::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/payload.rs | crate::payload | StoredPayload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/payload.rs | crate::payload | StoredPayload::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_ops.rs | crate::redis_ops | CLOCK_AND_SEQ_LUA | const | &str	free-text	Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | DOCUMENT_GONE | const | &str	generic	refusal word shared with the Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken.0 | field | String	newtype-inner	newtype inner, accessor or constructor
@@ -2423,7 +2421,6 @@ ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64() | ret | 
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(a) | param | f64	generic	the start value of the interpolation: a coordinate or a colour channel by caller
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(b) | param | f64	generic	the end value of the interpolation: a coordinate or a colour channel by caller
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Contour | alias | Vec<[f64;2]>	foreign-api	the point ring i_overlay takes and returns
-ambre-toile | src/logic/boolean.rs | crate::logic::boolean | FlattenTol::get() | ret | f64	newtype-inner	the tolerance as the f64 kurbo flatten takes
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Shape | alias | Vec<Contour>	foreign-api	the contour list i_overlay takes and returns
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | flatten_to_contours() | ret | Shape	foreign-api	the contour list i_overlay takes as a subject or clip
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | shapes_to_bezpath(shapes) | param | &[Shape]	foreign-api	the shapes an i_overlay overlay returns
@@ -2464,7 +2461,6 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/mod.rs | crate::logic | ByteLen.0 | field | &'a str	newtype-inner	the board document a debug form measures in bytes and never prints
-ambre-toile | src/logic/mod.rs | crate::logic | TextLen.0 | field | &'a str	newtype-inner	the board text a debug form measures and never prints
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -3744,8 +3740,8 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | Ret::of(owner) | param | Opti
 ambre-primitives | src/unwrap.rs | crate::unwrap | SHARED_ACCESSORS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | STD_RETURNS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | STD_TYPES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
-ambre-primitives | src/unwrap.rs | crate::unwrap | Tally.0 | field | usize	newtype-inner	the inside of Tally, or its constructor
-ambre-primitives | src/unwrap.rs | crate::unwrap | Tally::new(n) | param | usize	newtype-inner	the inside of Tally, or its constructor
+ambre-primitives | src/unwrap.rs | crate::unwrap | SiteTally.0 | field | usize	newtype-inner	the inside of SiteTally, or its constructor
+ambre-primitives | src/unwrap.rs | crate::unwrap | SiteTally::new(n) | param | usize	newtype-inner	the inside of SiteTally, or its constructor
 ambre-primitives | src/unwrap.rs | crate::unwrap | Unwrap.accessor | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Unwrap.newtype | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | body_methods(accessors) | param | &mut BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3880,7 +3876,7 @@ ambre-canvas | src/space.rs | crate::space | <Parley as Space>::NAME | const | &
 ambre-canvas | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-canvas | src/tokens.rs | crate::tokens | Px.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
+ambre-canvas | src/tokens.rs | crate::tokens | TokenPx.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
 ambre-core | src/span.rs | crate::span | <Authored as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <PageLoad as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <UnixMs as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
@@ -3951,9 +3947,9 @@ ambre-core | src/unit.rs | crate::unit | ViewSpeed.0 | field | f32	newtype-inner
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::get() | ret | f32	newtype-inner	the number of view pixels per millisecond, for a foreign API that takes the float
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::new(value) | param | f32	newtype-inner	the number of view pixels per millisecond a speed wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Mentions as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-bus | src/app/prose.rs | crate::app::prose | <TextAck as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <HttpsAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps

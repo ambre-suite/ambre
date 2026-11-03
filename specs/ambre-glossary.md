@@ -59,6 +59,7 @@
 | boundary | the line between what the relay learns and what it never learns | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | channel | a Murmure conversation: public, private or direct | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | topic | a publish-subscribe address of the relay fan-out | | `1-Foundations/ambre-spec-broadcast.md` |
+| channel topic | the text a member types under a Murmure channel name | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | forum | a Murmure channel of titled, tagged posts, each with its thread | | `5-Murmure/features/ambre-spec-murmure-forums.md` |
 | space | a group of Murmure channels, itself a document | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | catalogue | the sealed list of the public channels of a space | | `5-Murmure/ambre-spec-murmure-schema.md` |

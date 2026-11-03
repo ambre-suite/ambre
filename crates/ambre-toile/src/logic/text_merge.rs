@@ -56,7 +56,7 @@ impl std::fmt::Debug for Edit {
         f.debug_struct("Edit")
             .field("at", &self.at)
             .field("delete", &self.delete)
-            .field("insert", &super::TextLen(&self.insert))
+            .field("insert", &ambre_core::Redacted::new(&self.insert))
             .finish()
     }
 }
@@ -520,7 +520,7 @@ mod tests {
         };
         let form = format!("{edit:?}");
         assert!(!form.contains("funds"), "{form}");
-        assert!(form.contains("<10 chars>"), "{form}");
+        assert!(form.contains("insert: 10 chars"), "{form}");
     }
 
     /// `TOILE-UI-381`: two changes to separate runs of the body both apply.

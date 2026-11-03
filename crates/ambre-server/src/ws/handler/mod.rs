@@ -24,7 +24,7 @@ use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{FixedBytes, PublicKey, RefusalCode};
 use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg};
 
-use crate::payload::{self, Payload};
+use crate::payload::{self, StoredPayload};
 
 use crate::auth;
 use crate::db;
@@ -204,7 +204,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
-    let (outbound_tx, mut outbound_rx) = mpsc::channel::<Payload>(256);
+    let (outbound_tx, mut outbound_rx) = mpsc::channel::<StoredPayload>(256);
 
     let user_id = session.user_id;
     let connection_id = ConnectionId::new();

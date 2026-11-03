@@ -256,14 +256,14 @@ pub enum CommentIntent {
 /// A message body prints as its length alone (`ZK-006`).
 impl std::fmt::Debug for CommentIntent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use crate::logic::TextLen;
+        use ambre_core::Redacted;
         match self {
-            Self::Post(body) => f.debug_tuple("Post").field(&TextLen(body)).finish(),
+            Self::Post(body) => f.debug_tuple("Post").field(&Redacted::new(body)).finish(),
             Self::Discard => f.write_str("Discard"),
             Self::Reply { thread, body } => f
                 .debug_struct("Reply")
                 .field("thread", thread)
-                .field("body", &TextLen(body))
+                .field("body", &Redacted::new(body))
                 .finish(),
             Self::Resolve { thread, state } => f
                 .debug_struct("Resolve")
@@ -334,7 +334,10 @@ mod tests {
         );
         for form in [post, reply] {
             assert!(!form.contains("secret"), "{form}");
-            assert!(form.contains("<11 chars>"), "{form}");
+            assert!(
+                form.contains("Post(11 chars)") || form.contains("body: 11 chars"),
+                "{form}"
+            );
         }
     }
 

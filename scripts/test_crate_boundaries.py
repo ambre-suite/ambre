@@ -826,11 +826,11 @@ class CrateBoundaries(unittest.TestCase):
 
     def test_a_file_that_reads_bytes_without_logging_stays_free(self):
         text = (
-            "fn keep(c: &Ciphertext, frame: &Payload) {\n    put(&c.0, frame.expose_bytes());\n}\n"
+            "fn keep(c: &Ciphertext, frame: &StoredPayload) {\n    put(&c.0, frame.expose_bytes());\n}\n"
             '#[cfg(test)]\nmod tests {\n    fn t() { tracing::info!("x"); }\n}\n'
         )
         self.assertEqual(self.breach(f"{cb.RELAY}/store.rs", text), [])
-        logs = 'fn put(frame: &Payload) {\n    tracing::info!(len = frame.len(), "stored");\n}\n'
+        logs = 'fn put(frame: &StoredPayload) {\n    tracing::info!(len = frame.len(), "stored");\n}\n'
         self.assertEqual(self.breach(f"{cb.RELAY}/handler.rs", logs), [])
 
     def test_a_handler_that_sends_on_a_queue_is_refused(self):

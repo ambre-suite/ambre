@@ -80,9 +80,9 @@ carry identifiers, lengths and sequence numbers. So no log macro or span of
 `ambre-server` names a value called for a payload, a blob, a body or its
 bytes, unless it reads only the length. A payload under a neutral name
 passes that scan, so `SRV-001` adds a second: a file that reads a payload's
-bytes -- `Payload::expose_bytes`, a ciphertext's field, or a ciphertext taken
-whole -- holds no log line. Every other binding is a `Payload`, which has no
-`Debug`.
+bytes -- `StoredPayload::expose_bytes`, a ciphertext's field, or a
+ciphertext taken whole -- holds no log line. Every other binding is a
+`StoredPayload`, which has no `Debug`.
 
 **A fixture benchmark reports no frame rate** (`FIXTURE-024`). A fixture is a
 document, not a screen, so a figure measured on one is the cost of an

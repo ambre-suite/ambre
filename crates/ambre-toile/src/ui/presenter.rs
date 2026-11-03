@@ -18,8 +18,8 @@ use ambre_core::{Char, Utf16, char_len, char_to_utf16, utf16_to_char};
 use ambre_bus::app::toile::Broadcast;
 use ambre_core::id::{Id, User};
 
-use crate::logic::TextLen;
 use crate::logic::command::{Slide, SlidePosition, TextDelta};
+use ambre_core::Redacted;
 
 /// An intent emitted by the presenter panel. The launcher maps each variant to a
 /// `ToileCommand` sent to Logic. `Prev`/`Next` -> `PrevSlide`/`NextSlide`,
@@ -52,10 +52,10 @@ impl std::fmt::Debug for PresenterIntent {
             Self::Exit => f.write_str("Exit"),
             Self::EditNotes { base, delta } => f
                 .debug_struct("EditNotes")
-                .field("base", &TextLen(base))
+                .field("base", &Redacted::new(base))
                 .field("at", &delta.at)
                 .field("delete", &delta.delete)
-                .field("insert", &TextLen(&delta.insert))
+                .field("insert", &Redacted::new(&delta.insert))
                 .finish(),
             Self::ToggleBroadcast(b) => f.debug_tuple("ToggleBroadcast").field(b).finish(),
             Self::Follow(who) => f.debug_tuple("Follow").field(who).finish(),
@@ -150,8 +150,8 @@ mod tests {
         let form = format!("{:?}", PresenterIntent::EditNotes { base, delta });
         assert!(!form.contains("merger"), "{form}");
         assert!(!form.contains("friday"), "{form}");
-        assert!(form.contains("<11 chars>"), "{form}");
-        assert!(form.contains("<7 chars>"), "{form}");
+        assert!(form.contains("base: 11 chars"), "{form}");
+        assert!(form.contains("insert: 7 chars"), "{form}");
     }
 
     /// `TOILE-UI-316`: the notes caret shifts past a peer's prefix and stays put
