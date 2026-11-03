@@ -92,6 +92,10 @@ pub(crate) const COMPILES: &[Compile] = &[
         target: Target::Wasm,
         args: &["-p", "ambre-app", "--tests"],
     },
+    Compile {
+        target: Target::Wasm,
+        args: &["-p", "ambre-chrome", "--tests"],
+    },
 ];
 
 /// The target triple of the wasm compiles.
