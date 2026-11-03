@@ -161,7 +161,7 @@ fn set_cell_style_round_trips_and_formats_numbers() {
     let out = state.handle_command(TrameCommand::SetCellStyle {
         patch: StylePatch {
             format: Some(CellFormat::Percent),
-            decimals: Some(crate::Decimals::new(1)),
+            decimals: Some(ambre_core::Bounded::new(1)),
             h_align: Some(HAlign::Right),
             underline: Some(ambre_bus::Underline::Underlined),
             ..Default::default()

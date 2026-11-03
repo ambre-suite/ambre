@@ -106,7 +106,7 @@ pub struct CellStyle {
     pub font: Option<FontFamily>,
     pub size: Option<FontSize>,   // points, stored as a whole `u16`
     pub format: CellFormat,       // `features/ambre-spec-trame-number-formats.md`
-    pub decimals: Option<Decimals>,
+    pub decimals: Option<Bounded<Decimals>>, // 0 to 15 places, one byte
     pub borders: Borders,         // four independent Option<CellBorder> edges
 }
 
@@ -131,7 +131,7 @@ pub struct StylePatch {           // one toolbar control, one sparse edit
     pub font: Option<Option<FontFamily>>,
     pub size: Option<Option<FontSize>>,
     pub format: Option<CellFormat>,
-    pub decimals: Option<Option<Decimals>>,
+    pub decimals: Option<Option<Bounded<Decimals>>>,
     pub decimals_step: Option<DecimalsStep>, // added to each cell's own count (`TRAME-105`)
     pub border: Option<BorderEdit>,    // a preset and a pen, resolved per cell
 }

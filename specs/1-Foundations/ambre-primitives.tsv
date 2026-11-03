@@ -299,20 +299,16 @@ ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::is_single_cell() | re
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::overlaps() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | <Col as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-bus | src/app/grid.rs | crate::app::grid | <Row as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::Custom.0 | field | String	free-text	the user's format code; its grammar is total, so every text is a format and no parse can refuse one
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::has_decimals() | ret | bool	generic	predicate
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | FilterKind::Condition.value | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | FilterKind::Values.0 | field | Vec<String>	free-text	cell text / query / user message
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as TryFrom<u8>>::try_from(places) | param | u8	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals.0 | field | u8	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals::get() | ret | u8	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals::new(places) | param | u8	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals::precision() | ret | usize	foreign-api	the count as the usize precision std::fmt takes
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep.0 | field | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals.0 | field | u8	newtype-inner	the refused count an error reports
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals::get() | ret | u8	newtype-inner	the InvalidDecimals newtype unwrapped, for a caller outside its module
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals::new(value) | param | u8	newtype-inner	the constructor of the InvalidDecimals newtype
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it

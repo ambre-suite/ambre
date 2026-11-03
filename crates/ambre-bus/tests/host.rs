@@ -135,14 +135,52 @@ fn has_decimals_is_true_only_for_numeric_families() {
 /// A decimal count holds between zero and fifteen places, stepped or decoded.
 #[test]
 fn a_decimal_count_stays_within_fifteen_places() {
-    assert_eq!(Decimals::new(16), None);
-    assert_eq!(Decimals::MAX.stepped(DecimalsStep::MORE), Decimals::MAX);
-    assert_eq!(Decimals::ZERO.stepped(DecimalsStep::FEWER), Decimals::ZERO);
-    assert_eq!(Decimals::TWO.stepped(DecimalsStep::MORE).get(), 3);
-    let past: Result<Decimals, _> = postcard::from_bytes(&[16]);
+    let two = Bounded::<Decimals>::new(2).unwrap();
+    assert_eq!(Bounded::<Decimals>::new(16), None);
+    assert_eq!(DecimalsStep::MORE.apply_to(Bounded::MAX), Bounded::MAX);
+    assert_eq!(DecimalsStep::FEWER.apply_to(Bounded::MIN), Bounded::MIN);
+    assert_eq!(DecimalsStep::MORE.apply_to(two).get(), 3);
+    assert_eq!(DecimalsStep::new(i8::MAX).apply_to(two), Bounded::MAX);
+    assert_eq!(DecimalsStep::new(i8::MIN).apply_to(two), Bounded::MIN);
+    let past: Result<Bounded<Decimals>, _> = postcard::from_bytes(&[16]);
     assert!(past.is_err(), "a decoded count past fifteen is refused");
-    let bytes = postcard::to_allocvec(&Decimals::TWO).unwrap();
+    let bytes = postcard::to_allocvec(&two).unwrap();
     assert_eq!(bytes, [2], "the count travels as one byte");
+}
+
+/// A decimal count keeps the bytes and the words of its hand-written type. It
+/// travels as one bare byte in postcard and a bare number in JSON. `Debug`
+/// prints `Decimals(n)`, and a refusal keeps its text.
+#[test]
+fn a_decimal_count_keeps_its_wire_form_and_its_refusal() {
+    for places in 0..=15_u8 {
+        let count = Bounded::<Decimals>::new(places).unwrap();
+        let bytes = postcard::to_allocvec(&count).unwrap();
+        assert_eq!(bytes, [places]);
+        assert_eq!(
+            postcard::from_bytes::<Bounded<Decimals>>(&bytes).unwrap(),
+            count
+        );
+        let json = serde_json::to_string(&count).unwrap();
+        assert_eq!(json, places.to_string());
+        assert_eq!(
+            serde_json::from_str::<Bounded<Decimals>>(&json).unwrap(),
+            count
+        );
+    }
+    let refused = serde_json::from_str::<Bounded<Decimals>>("16").unwrap_err();
+    assert!(
+        refused
+            .to_string()
+            .starts_with("a cell carries at most 15 decimal places, not 16"),
+        "{refused}"
+    );
+    assert!(postcard::from_bytes::<Bounded<Decimals>>(&[255]).is_err());
+    assert_eq!(
+        Bounded::<Decimals>::try_new(16).unwrap_err().to_string(),
+        "a cell carries at most 15 decimal places, not 16"
+    );
+    assert_eq!(format!("{:?}", Bounded::<Decimals>::MAX), "Decimals(15)");
 }
 
 /// A line-height multiple is finite and above zero, and a stored number that
