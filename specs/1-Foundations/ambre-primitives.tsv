@@ -3757,8 +3757,8 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | Ret::of(owner) | param | Opti
 ambre-primitives | src/unwrap.rs | crate::unwrap | SHARED_ACCESSORS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | STD_RETURNS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | STD_TYPES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
-ambre-primitives | src/unwrap.rs | crate::unwrap | Tally.0 | field | usize	newtype-inner	the inside of Tally, or its constructor
-ambre-primitives | src/unwrap.rs | crate::unwrap | Tally::new(n) | param | usize	newtype-inner	the inside of Tally, or its constructor
+ambre-primitives | src/unwrap.rs | crate::unwrap | SiteTally.0 | field | usize	newtype-inner	the inside of SiteTally, or its constructor
+ambre-primitives | src/unwrap.rs | crate::unwrap | SiteTally::new(n) | param | usize	newtype-inner	the inside of SiteTally, or its constructor
 ambre-primitives | src/unwrap.rs | crate::unwrap | Unwrap.accessor | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Unwrap.newtype | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | body_methods(accessors) | param | &mut BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3893,7 +3893,7 @@ ambre-canvas | src/space.rs | crate::space | <Parley as Space>::NAME | const | &
 ambre-canvas | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-canvas | src/tokens.rs | crate::tokens | Px.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
+ambre-canvas | src/tokens.rs | crate::tokens | TokenPx.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
 ambre-core | src/span.rs | crate::span | <Authored as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <PageLoad as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <UnixMs as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
