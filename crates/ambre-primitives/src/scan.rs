@@ -273,6 +273,9 @@ pub struct Scan {
     /// Each name of a secret reader or of the `zeroize` crate outside the
     /// code the secret checks admit (`ARCH-045`, `ARCH-046`).
     pub secrets: Vec<String>,
+    /// The key of each hand-written newtype over a primitive, which the
+    /// exceptions file holds to a reason (`ARCH-062`).
+    pub newtypes: BTreeSet<String>,
     /// Each crate root the walk starts from, and every file it reads from
     /// that root outside test code, both canonical. The dep-info check holds
     /// it to the files rustc reads (`ARCH-033`).
@@ -3061,6 +3064,9 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         }
         let file_name = relative.to_string_lossy().replace('\\', "/");
         let shown = format!("crates/{name}/{file_name}");
+        result
+            .newtypes
+            .extend(crate::newtypes::census(&name, &file_name, &module, &file));
         result.sources.push(Source {
             krate: name.clone(),
             file: file_name.clone(),
@@ -3802,7 +3808,7 @@ fn mod_path(attrs: &[syn::Attribute]) -> ModPath {
 
 /// A token stream as one line: a space stays only between two words, so
 /// `& 'static str` reads `&'static str` and `Vec < u8 >` reads `Vec<u8>`.
-fn normalise(tokens: &str) -> String {
+pub(crate) fn normalise(tokens: &str) -> String {
     let word = |c: char| c.is_alphanumeric() || c == '_';
     let chars: Vec<char> = tokens.chars().collect();
     let mut out = String::with_capacity(tokens.len());

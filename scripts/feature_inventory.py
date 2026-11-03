@@ -53,13 +53,14 @@ ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 FOUNDATIONS = SPECS / "1-Foundations"
 
-# The Foundations documents an inventory counts nothing from. Both are registers
-# of `ambre-spec-template.md section 4` -- every budget of the workspace, and how
-# the workspace is verified -- so they declare no contract table and describe no
-# product surface. Everything else in the layer is a horizontal feature and
-# belongs in the table.
+# The Foundations documents an inventory counts nothing from. All three are
+# registers of `ambre-spec-template.md section 4` -- every budget of the
+# workspace, how the workspace is verified, and which generic each newtype is --
+# so they declare no contract table and describe no product surface. Everything
+# else in the layer is a horizontal feature and belongs in the table.
 NOT_A_FEATURE = {
     "ambre-spec-budgets.md",
+    "ambre-spec-newtypes.md",
     "ambre-spec-testing.md",
 }
 

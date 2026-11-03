@@ -8,7 +8,7 @@
 //!
 //! Three modes, one per recipe:
 //!
-//!   * `check`, the default, fails on seven defects, then prints the lines
+//!   * `check`, the default, fails on eight defects, then prints the lines
 //!     per category. Two defects compare the file with the sites: a site no
 //!     line names, and a line that names no site. Three read the site: a
 //!     claimed shape the site lacks, a privacy refusal, and a `Deref` of a
@@ -20,10 +20,15 @@
 //!     reads that the walk neither reads nor names as data, and a `.rs` file
 //!     no compile reads. It refuses a build lever that enables an
 //!     unstable feature too, in the build configuration or in the gate's
-//!     own environment (`ARCH-033`);
+//!     own environment (`ARCH-033`).
+//!
+//!     The eighth is the newtype census (`ARCH-062`, `newtypes.rs`). It
+//!     refuses a hand-written newtype over a primitive that no exception line
+//!     names, and a line that names none;
 //!   * `files` runs the seventh check alone, so a red allowlist hides no
 //!     file the walk misses;
-//!   * `--prune` removes the lines that name no site, and nothing else;
+//!   * `--prune` removes the lines that name no site, and the exception
+//!     lines that name no newtype, and nothing else;
 //!   * `unwrap` reports each workspace newtype unwrapped before a workspace
 //!     call, rather than at the foreign call that takes the primitive
 //!     (`unwrap.rs`). Report mode fails only on an unwrap allowlist that
@@ -33,6 +38,7 @@
 
 mod allowlist;
 mod depinfo;
+mod newtypes;
 mod scan;
 mod secrets;
 mod unwrap;
@@ -133,9 +139,22 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let census = root.join(newtypes::NEWTYPES);
+    let exceptions = std::fs::read_to_string(&census).ok();
     match mode {
-        Mode::Check | Mode::Files | Mode::Unwrap(..) => check(&list, &scan, &unread),
-        Mode::Prune => prune(&list, &scan.sites, &path),
+        Mode::Check | Mode::Files | Mode::Unwrap(..) => {
+            let refused = newtypes::judge(exceptions.as_deref(), &scan.newtypes);
+            check(&list, &scan, &unread, &refused)
+        }
+        Mode::Prune => {
+            if let Some(text) = exceptions
+                && let Err(e) = std::fs::write(&census, newtypes::pruned(&text, &scan.newtypes))
+            {
+                eprintln!("primitives: cannot write {}: {e}", newtypes::NEWTYPES);
+                return ExitCode::FAILURE;
+            }
+            prune(&list, &scan.sites, &path)
+        }
     }
 }
 
@@ -253,7 +272,7 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn check(list: &Allowlist, scan: &Scan, unread: &[String]) -> ExitCode {
+fn check(list: &Allowlist, scan: &Scan, unread: &[String], newtypes: &[String]) -> ExitCode {
     let sites = &scan.sites;
     let verdict = list.compare(sites);
     for key in &verdict.missing {
@@ -329,6 +348,15 @@ fn check(list: &Allowlist, scan: &Scan, unread: &[String]) -> ExitCode {
             scan.secrets.len()
         );
     }
+    for refusal in newtypes {
+        eprintln!("primitives: {refusal}");
+    }
+    if !newtypes.is_empty() {
+        eprintln!(
+            "primitives: {} refusals of the newtype census (ARCH-062).",
+            newtypes.len()
+        );
+    }
     let counts: Vec<String> = Category::ALL
         .iter()
         .map(|category| {
@@ -344,6 +372,7 @@ fn check(list: &Allowlist, scan: &Scan, unread: &[String]) -> ExitCode {
         && scan.derefs.is_empty()
         && scan.secrets.is_empty()
         && unread.is_empty()
+        && newtypes.is_empty()
     {
         ExitCode::SUCCESS
     } else {

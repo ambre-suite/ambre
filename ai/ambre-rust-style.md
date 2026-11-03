@@ -141,6 +141,11 @@
     enables an `impl` block. Hand-written copies drift, and the gate reads no site a macro writes.
     A macro writes a type only where a generic cannot, for example an enum whose variants differ
     per type, as `define_flag!` writes.
+  * **A newtype over a primitive is an instance of a family.** Over an integer, a float, a
+    `String` or a `Vec<u8>`, it is an instance of a generic of `ambre-core`. If none fits, a line
+    of `specs/1-Foundations/ambre-newtypes.tsv` gives the reason. The families and the marker
+    grammar are `specs/1-Foundations/ambre-spec-newtypes.md`, and the gate holds the rule
+    (`ARCH-062`).
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
