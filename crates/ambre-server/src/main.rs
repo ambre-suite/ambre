@@ -137,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(
                 oidc::OidcRegistration::google(
                     openidconnect::ClientId::new(client_id),
-                    oidc::OidcSecret::new(secret),
+                    ambre_core::Confidential::<oidc::OidcSecret>::new(secret),
                     redirect_uri,
                 )
                 .map_err(|e| format!("OIDC initialization failed: {e}"))?,

@@ -10,13 +10,13 @@ use ambre_core::{
 };
 
 /// A passphrase as a prompt hands it over.
-fn pass(text: &str) -> ambre_core::Passphrase {
-    ambre_core::Passphrase::new(text.to_owned())
+fn pass(text: &str) -> ambre_core::Confidential<ambre_core::Passphrase> {
+    ambre_core::Confidential::<ambre_core::Passphrase>::new(text.to_owned())
 }
 
 /// Plaintext bytes as the envelope takes them.
-fn secret(bytes: &[u8]) -> ambre_core::SecretBytes {
-    ambre_core::SecretBytes::new(bytes.to_vec())
+fn secret(bytes: &[u8]) -> ambre_core::Confidential<ambre_core::Plaintext> {
+    ambre_core::Confidential::<ambre_core::Plaintext>::new(bytes.to_vec())
 }
 
 /// The ciphertext with the byte at `at` XORed by `mask`, as an attacker
@@ -314,7 +314,7 @@ fn the_store_key_matches_its_frozen_domain() {
 fn the_recovery_words_spell_the_seed_in_hex() {
     let words = MasterSeed::from_array([0xa7; 32]).recovery_words();
     assert_eq!(words.secret().expose(), &"a7".repeat(32));
-    assert_eq!(format!("{words:?}"), "SecretString(Secret([REDACTED]))");
+    assert_eq!(format!("{words:?}"), "RecoveryWords(Secret([REDACTED]))");
 }
 
 /// A row opens under its own key and its own place, and under nothing else.
@@ -322,7 +322,7 @@ fn the_recovery_words_spell_the_seed_in_hex() {
 fn a_store_row_opens_only_where_it_was_sealed() {
     let key = fixed_seed().derive_store_key();
     let row = aead::seal_row(
-        &ambre_core::SecretBytes::new(b"a copy".to_vec()),
+        &ambre_core::Confidential::<ambre_core::Plaintext>::new(b"a copy".to_vec()),
         &Aad::of(b"doc:0a"),
         &key,
     )
@@ -837,7 +837,7 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     let aad = &Aad::of(b"the-sealed-header");
     let plaintext = b"a whole plaintext container";
     let key = FileKey::from_passphrase(&pass("open sesame"), &salt).unwrap();
-    let sealed = ambre_core::SecretBytes::new(plaintext.to_vec());
+    let sealed = ambre_core::Confidential::<ambre_core::Plaintext>::new(plaintext.to_vec());
     let (nonce, ciphertext) = aead::seal_file(&sealed, aad, &key).unwrap();
     assert_eq!(
         aead::open_file(&nonce, &ciphertext, aad, &key)

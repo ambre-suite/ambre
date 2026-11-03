@@ -50,9 +50,9 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ApiFailure, ApiRequest, DocType, DocumentSummary, LogicEvent, MemberInfo, OpenFailure, Request,
-    RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotPurpose,
-    SnapshotVerdict, SyncCommand, UserInfo,
+    ApiFailure, ApiRequest, Confidential, DocType, DocumentSummary, LogicEvent, MemberInfo,
+    OpenFailure, Plaintext, RecoveryWords, Request, RestCommand, RestEvent, Role, SignedDelta,
+    SnapshotPurpose, SnapshotVerdict, SyncCommand, UserInfo,
 };
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::{FixedBytes, Generation, KeyId, Payload, PublicKey, SessionNonce};
@@ -285,7 +285,7 @@ enum SyncEvent {
     },
     AccountCreated {
         id: Generation<Request>,
-        recovery_words: ambre_bus::SecretString,
+        recovery_words: ambre_bus::Confidential<ambre_bus::RecoveryWords>,
         master_seed: MasterSeed,
         signing_key: SigningKey,
         exchange_key: StaticSecret,

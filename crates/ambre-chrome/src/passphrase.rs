@@ -9,7 +9,7 @@
 // not into a log line.
 // ============================================================================
 
-use ambre_core::Passphrase;
+use ambre_core::{Confidential, Passphrase};
 use leptos::prelude::*;
 
 use crate::Dialog;
@@ -37,8 +37,8 @@ pub enum PassphraseIntent {
 /// mistake as a mismatched one, and the message says so rather than counting
 /// characters at the user.
 fn vet(
-    first: &Passphrase,
-    second: &Passphrase,
+    first: &Confidential<Passphrase>,
+    second: &Confidential<Passphrase>,
     intent: PassphraseIntent,
 ) -> Result<(), PassphraseRefusal> {
     if first.is_empty() {
@@ -83,7 +83,7 @@ pub fn PassphraseDialog(
     intent: PassphraseIntent,
     /// The passphrase the user settled on. Fired once per submission.
     #[prop(into)]
-    on_submit: Callback<Passphrase>,
+    on_submit: Callback<Confidential<Passphrase>>,
 ) -> impl IntoView {
     let first = RwSignal::new(String::new());
     let second = RwSignal::new(String::new());
@@ -97,8 +97,8 @@ pub fn PassphraseDialog(
     };
 
     let submit = move || {
-        let typed = Passphrase::new(first.get_untracked());
-        let confirmed = Passphrase::new(second.get_untracked());
+        let typed = Confidential::<Passphrase>::new(first.get_untracked());
+        let confirmed = Confidential::<Passphrase>::new(second.get_untracked());
         if let Err(refusal) = vet(&typed, &confirmed, intent) {
             error.set(Some(refusal));
             return;
@@ -184,8 +184,8 @@ mod tests {
         intent: PassphraseIntent,
     ) -> Result<(), PassphraseRefusal> {
         vet(
-            &Passphrase::new(first.to_owned()),
-            &Passphrase::new(second.to_owned()),
+            &Confidential::<Passphrase>::new(first.to_owned()),
+            &Confidential::<Passphrase>::new(second.to_owned()),
             intent,
         )
     }

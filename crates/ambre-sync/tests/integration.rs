@@ -67,7 +67,9 @@ fn unlock_returns_session_ready() {
         &mut state,
         id,
         RestCommand::Unlock {
-            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "secret".to_owned(),
+            ),
         },
     );
 
@@ -86,7 +88,9 @@ fn setup_account_returns_created_with_recovery_words() {
         &mut state,
         id,
         RestCommand::SetupAccount {
-            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "secret".to_owned(),
+            ),
             email: "alice@example.com".into(),
             display_name: ambre_core::DisplayName::new("Alice").unwrap(),
         },
@@ -111,7 +115,9 @@ fn logout_returns_logged_out_and_clears_session() {
         &mut state,
         next_request(),
         RestCommand::Unlock {
-            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "secret".to_owned(),
+            ),
         },
     );
     rx.try_iter().count(); // drain SessionReady
@@ -294,7 +300,9 @@ fn open_document_subscribes_via_mock_ws() {
         &mut state,
         next_request(),
         RestCommand::Unlock {
-            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "secret".to_owned(),
+            ),
         },
     );
     rx.try_iter().count(); // drain SessionReady
@@ -334,7 +342,9 @@ fn close_document_unsubscribes_via_mock_ws() {
         &mut state,
         next_request(),
         RestCommand::Unlock {
-            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "secret".to_owned(),
+            ),
         },
     );
     rx.try_iter().count();
@@ -369,7 +379,9 @@ fn send_update_after_open_document_encrypts_and_sends() {
         &mut state,
         next_request(),
         RestCommand::Unlock {
-            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "secret".to_owned(),
+            ),
         },
     );
     rx.try_iter().count();
@@ -416,7 +428,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
         &mut state,
         id1,
         RestCommand::Unlock {
-            passphrase: ambre_core::Passphrase::new("pass".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new("pass".to_owned()),
         },
     );
     match drain_rest(&rx, id1) {
@@ -527,7 +539,9 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         seal_id,
         RestCommand::SealDocFile {
             plaintext: plaintext.as_bytes().to_vec().into(),
-            passphrase: ambre_core::Passphrase::new("correct horse".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "correct horse".to_owned(),
+            ),
         },
     );
     let sealed = match drain_rest(&rx, seal_id) {
@@ -554,7 +568,9 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         open_id,
         RestCommand::OpenDocFile {
             sealed: ambre_core::Payload::new(sealed),
-            passphrase: ambre_core::Passphrase::new("correct horse".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "correct horse".to_owned(),
+            ),
         },
     );
     match drain_rest(&rx, open_id) {
@@ -587,7 +603,9 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
         seal_id,
         RestCommand::SealDocFile {
             plaintext: plaintext.into_bytes().into(),
-            passphrase: ambre_core::Passphrase::new("correct horse".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "correct horse".to_owned(),
+            ),
         },
     );
     let sealed = match drain_rest(&rx, seal_id) {
@@ -623,7 +641,9 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
             id,
             RestCommand::OpenDocFile {
                 sealed: ambre_core::Payload::new(bytes),
-                passphrase: ambre_core::Passphrase::new(passphrase.to_owned()),
+                passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                    passphrase.to_owned(),
+                ),
             },
         );
         match drain_rest(&rx, id) {
@@ -650,7 +670,9 @@ fn opening_a_plaintext_file_fails_without_deriving_a_key() {
         id,
         RestCommand::OpenDocFile {
             sealed: ambre_core::Payload::new(plaintext.into_bytes()),
-            passphrase: ambre_core::Passphrase::new("anything".to_owned()),
+            passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                "anything".to_owned(),
+            ),
         },
     );
     match drain_rest(&rx, id) {

@@ -771,7 +771,7 @@ class CrateBoundaries(unittest.TestCase):
             "pub(crate) struct Body {\n    user_password: Vec<u8>,\n}\n",
             "#[derive(Serialize)]\nstruct Body {\n    #[serde(rename = \"passphrase\")]\n    p: String,\n}\n",
             "fn send() { let b = serde_json::json!({ \"passphrase\": p }); }\n",
-            "#[derive(Serialize)]\nstruct Body {\n    secret: Option<SecretBytes>,\n}\n",
+            "#[derive(Serialize)]\nstruct Body {\n    secret: Option<Confidential<Plaintext>>,\n}\n",
         ):
             with tempfile.TemporaryDirectory() as tmp:
                 root = scratch(tmp)
@@ -784,11 +784,11 @@ class CrateBoundaries(unittest.TestCase):
         import tempfile
 
         text = (
-            "fn unlock(passphrase: SecretBytes) {\n"
+            "fn unlock(passphrase: Confidential<Passphrase>) {\n"
             "    tracing::warn!(\"wrong passphrase\");\n}\n"
             "#[derive(Deserialize)]\nstruct Reply {\n    passphrase_hint: String,\n}\n"
             "#[derive(Serialize)]\nstruct Body {\n    salt: Vec<u8>,\n}\n"
-            "fn later(passphrase: SecretBytes) {}\n"
+            "fn later(passphrase: Confidential<Passphrase>) {}\n"
         )
         with tempfile.TemporaryDirectory() as tmp:
             root = scratch(tmp)

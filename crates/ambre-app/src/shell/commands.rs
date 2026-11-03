@@ -106,7 +106,7 @@ impl CommandPath {
     }
 
     /// End the sealed save with the passphrase the prompt collected.
-    pub(crate) fn seal(&self, passphrase: ambre_core::Passphrase) {
+    pub(crate) fn seal(&self, passphrase: ambre_core::Confidential<ambre_core::Passphrase>) {
         if let Some(command) = self.handler.get().sealed_save(passphrase) {
             self.send(command);
         }

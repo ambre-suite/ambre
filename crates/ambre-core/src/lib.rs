@@ -181,8 +181,9 @@ pub use schema::{
 };
 pub use search::{SearchQuery, SearchQueryRule, UserSearch, UserSearchRule};
 pub use secret::{
-    AccessToken, Credential, CredentialKind, OidcCode, OidcState, Passphrase, PresignedUrl,
-    RefreshToken, Secret, SecretBytes, SecretString, WireCredential,
+    AccessToken, Confidential, ConfidentialKind, Credential, CredentialKind, OidcCode, OidcState,
+    Passphrase, Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret, WireConfidential,
+    WireCredential,
 };
 pub use seq::{DeltaCount, Seq};
 pub use space::{

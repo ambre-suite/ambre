@@ -512,7 +512,7 @@ mod tests {
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let seal = |bytes: Vec<u8>| {
             let sealed = pipeline::seal_object(
-                &ambre_core::SecretBytes::new(bytes),
+                &ambre_core::Confidential::<ambre_core::Plaintext>::new(bytes),
                 &pipeline::name_aad(document_id),
                 &doc_key,
                 &signing_key,

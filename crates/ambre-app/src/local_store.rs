@@ -201,7 +201,7 @@ impl LocalStore {
                 let copy = opened.map(|rows| {
                     rows.into_iter().collect::<Option<Vec<_>>>().map(|rows| {
                         rows.into_iter()
-                            .map(ambre_core::SecretBytes::into_plaintext)
+                            .map(ambre_core::Confidential::<ambre_core::Plaintext>::into_plaintext)
                             .collect::<Vec<_>>()
                     })
                 });
@@ -331,7 +331,7 @@ impl LocalStore {
 #[cfg(test)]
 mod tests {
     use ambre_bus::conduit::{self, Receiver};
-    use ambre_bus::{Request, RestCommand, RestEvent, SecretBytes};
+    use ambre_bus::{Confidential, Plaintext, Request, RestCommand, RestEvent};
     use ambre_core::Generation;
     use ambre_core::{Payload, SealedRowBytes};
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -454,8 +454,8 @@ mod tests {
             Some(id),
             RestEvent::LocalRowsOpened {
                 rows: vec![
-                    Some(SecretBytes::new(b"the document".to_vec())),
-                    Some(SecretBytes::new(b"an edit".to_vec())),
+                    Some(Confidential::<Plaintext>::new(b"the document".to_vec())),
+                    Some(Confidential::<Plaintext>::new(b"an edit".to_vec())),
                 ],
             },
         );
@@ -475,7 +475,10 @@ mod tests {
         vault.answer(
             Some(id),
             RestEvent::LocalRowsOpened {
-                rows: vec![Some(SecretBytes::new(b"the document".to_vec())), None],
+                rows: vec![
+                    Some(Confidential::<Plaintext>::new(b"the document".to_vec())),
+                    None,
+                ],
             },
         );
         assert_eq!(restored(&logic_rx).await, (None, Vec::new()));

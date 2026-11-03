@@ -9,7 +9,7 @@
 
 use std::collections::VecDeque;
 
-use ambre_bus::SecretBytes;
+use ambre_bus::{Confidential, Plaintext};
 use ambre_core::id::{Document, Id};
 use ambre_core::{Generation, GenerationKind, Issuer, Payload, SealedRowBytes};
 
@@ -82,7 +82,7 @@ impl SealQueue {
         &mut self,
         document_id: Id<Document>,
         write: PersistWrite,
-    ) -> Option<(Generation<SealTicket>, SecretBytes)> {
+    ) -> Option<(Generation<SealTicket>, Confidential<Plaintext>)> {
         let (slot, plaintext) = match write {
             PersistWrite::Snapshot(bytes) => {
                 let ticket = self.ticket();
@@ -114,7 +114,7 @@ impl SealQueue {
             PersistWrite::Sent => (Slot::Ready(SealedWrite::Sent), None),
         };
         self.entries.push_back(Entry { document_id, slot });
-        plaintext.map(|(ticket, bytes)| (ticket, SecretBytes::new(bytes)))
+        plaintext.map(|(ticket, bytes)| (ticket, Confidential::<Plaintext>::new(bytes)))
     }
 
     fn ticket(&mut self) -> Generation<SealTicket> {

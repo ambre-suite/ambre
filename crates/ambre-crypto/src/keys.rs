@@ -16,8 +16,8 @@
 use std::sync::Arc;
 
 use ambre_core::{
-    Encoded, EntryDigest, FileSalt, FixedBytes, KeyId, SALT_LEN, Secret, SecretString,
-    WrappedMasterKey,
+    Confidential, Encoded, EntryDigest, FileSalt, FixedBytes, KeyId, RecoveryWords, SALT_LEN,
+    Secret, WrappedMasterKey,
 };
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
@@ -125,7 +125,7 @@ impl MasterSeed {
     /// The recovery phrase of the seed: its 32 bytes in lowercase hex, as the
     /// screen of a new account shows them once. The one way out of the root
     /// seed, and it hands out a secret that is wiped in turn.
-    pub fn recovery_words(&self) -> SecretString {
+    pub fn recovery_words(&self) -> Confidential<RecoveryWords> {
         const HEX: &[u8; 16] = b"0123456789abcdef";
         // Sized once, so no reallocation leaves a copy behind; the move into
         // the wrapper moves the buffer, not the bytes.
@@ -137,7 +137,7 @@ impl MasterSeed {
                 }
             }
         }
-        SecretString::new(text)
+        Confidential::<RecoveryWords>::new(text)
     }
 
     /// Seals the raw seed under `key` (the passphrase-derived user key) with the
@@ -247,7 +247,8 @@ impl DocumentKey {
         aad: &ambre_core::Aad,
         signing_key: &SigningKey,
     ) -> Result<crate::Sealed, CryptoError> {
-        let plaintext = ambre_core::SecretBytes::new(previous.as_bytes().to_vec());
+        let plaintext =
+            ambre_core::Confidential::<ambre_core::Plaintext>::new(previous.as_bytes().to_vec());
         crate::envelope::seal(&plaintext, aad, self, signing_key)
     }
 
@@ -326,7 +327,7 @@ impl FileKey {
     /// [`CryptoError::Argon2Failed`] from the first step, on a `salt` Argon2id
     /// refuses. The BLAKE2b pass is infallible.
     pub fn from_passphrase(
-        passphrase: &ambre_core::Passphrase,
+        passphrase: &ambre_core::Confidential<ambre_core::Passphrase>,
         salt: &FixedBytes<FileSalt>,
     ) -> Result<Self, CryptoError> {
         let intermediate = crate::passphrase::argon2id(passphrase, salt.as_array())?;
@@ -346,7 +347,7 @@ impl FileKey {
     /// [`CryptoError::Argon2Failed`] from [`Self::from_passphrase`]. The salt it
     /// draws is [`SALT_LEN`] bytes wide, which Argon2id accepts.
     pub fn for_new_file(
-        passphrase: &ambre_core::Passphrase,
+        passphrase: &ambre_core::Confidential<ambre_core::Passphrase>,
     ) -> Result<(Self, FixedBytes<FileSalt>), CryptoError> {
         let salt = FixedBytes::from_array(random::bytes::<SALT_LEN>());
         let key = Self::from_passphrase(passphrase, &salt)?;

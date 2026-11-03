@@ -888,7 +888,7 @@ pub enum TrameCommand {
     ExportAmbreFileSealed {
         /// The passphrase the user typed for this file, and not the account's:
         /// nothing on this path can reach a session (`DOCFILE-014`).
-        passphrase: ambre_core::Passphrase,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
 
     // -------------------------------------------------------------------------

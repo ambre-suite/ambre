@@ -390,7 +390,7 @@ mod handler_tests {
         let clients = crate::oidc::start_oidc_clients(Some(&crate::oidc::OidcRegistration {
             issuer: openidconnect::IssuerUrl::new(stub.issuer.clone()).unwrap(),
             client_id: openidconnect::ClientId::new(CLIENT_ID.to_owned()),
-            client_secret: crate::oidc::OidcSecret::new("s".to_owned()),
+            client_secret: ambre_core::Confidential::<crate::oidc::OidcSecret>::new("s".to_owned()),
             redirect_uri: openidconnect::RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
         }))
         .await

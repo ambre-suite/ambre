@@ -14,8 +14,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
 /// A passphrase as a prompt hands it over.
-fn pass(text: &str) -> ambre_core::Passphrase {
-    ambre_core::Passphrase::new(text.to_owned())
+fn pass(text: &str) -> ambre_core::Confidential<ambre_core::Passphrase> {
+    ambre_core::Confidential::<ambre_core::Passphrase>::new(text.to_owned())
 }
 
 fn bench_envelope(c: &mut Criterion) {
@@ -25,7 +25,7 @@ fn bench_envelope(c: &mut Criterion) {
         signing.verifying_key().to_bytes(),
     );
     let aad = &ambre_core::Aad::of(b"public-data-metadata");
-    let payload = ambre_core::SecretBytes::new(vec![0x42u8; 1024]);
+    let payload = ambre_core::Confidential::<ambre_core::Plaintext>::new(vec![0x42u8; 1024]);
 
     c.bench_function("seal_1kb", |b| {
         b.iter(|| envelope::seal(black_box(&payload), black_box(aad), &doc_key, &signing).unwrap());

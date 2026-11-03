@@ -7,7 +7,7 @@ use rustis::commands::{
 };
 use rustis::resp::RefBulkString;
 
-use crate::oidc::{OidcAuthState, OidcSecret};
+use crate::oidc::{OidcAuthState, OidcSecret, OidcSecretSinks};
 use crate::payload::Payload;
 use crate::redis_keys::{
     Clocks, DeadLetter, DocKey, DocumentStateKeys, FlushDirtySet, FlushLock, Gone, Locked,
@@ -1146,7 +1146,7 @@ pub async fn oidc_state_take(
         .map_err(|e| AppError::Redis(format!("oidc state delete: {e}")))?;
 
     Ok(OidcAuthState {
-        pkce_verifier_secret: OidcSecret::new(verifier),
+        pkce_verifier_secret: ambre_core::Confidential::<OidcSecret>::new(verifier),
         nonce: openidconnect::Nonce::new(nonce),
     })
 }
@@ -1898,7 +1898,9 @@ mod redis_integration_tests {
         let csrf =
             ambre_core::Credential::<ambre_core::OidcState>::new(uuid::Uuid::new_v4().to_string());
         let kept = OidcAuthState {
-            pkce_verifier_secret: OidcSecret::new("verifier-xyz".to_owned()),
+            pkce_verifier_secret: ambre_core::Confidential::<OidcSecret>::new(
+                "verifier-xyz".to_owned(),
+            ),
             nonce: openidconnect::Nonce::new("nonce-abc".to_owned()),
         };
         oidc_state_set(&redis, &csrf, &kept)

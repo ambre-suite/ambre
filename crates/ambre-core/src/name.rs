@@ -100,8 +100,8 @@ impl Name {
     /// The UTF-8 bytes of the name, as the plaintext its seal takes. A
     /// document's name is sealed for the relay.
     #[must_use]
-    pub fn to_plaintext(&self) -> crate::SecretBytes {
-        crate::SecretBytes::new(self.0.as_str().as_bytes().to_vec())
+    pub fn to_plaintext(&self) -> crate::Confidential<crate::Plaintext> {
+        crate::Confidential::new(self.0.as_str().as_bytes().to_vec())
     }
 }
 

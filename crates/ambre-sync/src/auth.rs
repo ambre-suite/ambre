@@ -6,7 +6,7 @@ impl SyncState {
     pub(crate) fn handle_unlock(
         &mut self,
         id: Generation<Request>,
-        passphrase: ambre_core::Passphrase,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         tracing::info!("Sync: Unlock");
 
@@ -335,7 +335,7 @@ impl SyncState {
     pub(crate) fn handle_setup_account(
         &mut self,
         id: Generation<Request>,
-        passphrase: ambre_core::Passphrase,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
         email: ambre_core::Email,
         display_name: ambre_core::DisplayName,
     ) {
@@ -433,26 +433,26 @@ impl SyncState {
 
     pub(crate) fn handle_change_passphrase(
         &mut self,
-        current_passphrase: ambre_core::Passphrase,
-        new_passphrase: ambre_core::Passphrase,
+        current_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+        new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         tracing::info!("Sync: ChangePassphrase");
         // Placeholder until the passphrase-rotation flow lands. The secrets are
-        // wiped when they leave scope here. `SecretBytes` zeroizes its bytes on
-        // drop, so binding-and-dropping no longer leaves passphrase material in
+        // wiped when they leave scope here. `Confidential<Passphrase>` zeroizes
+        // its text on drop, so binding-and-dropping no longer leaves passphrase material in
         // freed memory (H4).
         drop((current_passphrase, new_passphrase));
     }
 
     pub(crate) fn handle_recover_account(
         &mut self,
-        recovery_words: SecretString,
-        new_passphrase: ambre_core::Passphrase,
+        recovery_words: Confidential<RecoveryWords>,
+        new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         tracing::info!("Sync: RecoverAccount");
         // Placeholder until account recovery lands. The BIP39 recovery phrase
         // (master-key equivalent) and the new passphrase are zeroized on drop by
-        // `SecretString` / `SecretBytes` (H4).
+        // `Confidential<RecoveryWords>` / `Confidential<Passphrase>` (H4).
         drop((recovery_words, new_passphrase));
     }
 

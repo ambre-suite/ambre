@@ -1805,7 +1805,7 @@ mod tests {
         let master_seed = MasterSeed::from_array([7u8; 32]);
         state.handle_sync_event(SyncEvent::AccountCreated {
             id: ambre_bus::next_request(),
-            recovery_words: ambre_bus::SecretString::default(),
+            recovery_words: ambre_bus::Confidential::<ambre_bus::RecoveryWords>::default(),
             signing_key: master_seed.derive_signing_key(),
             exchange_key: master_seed.derive_exchange_key(),
             master_seed,

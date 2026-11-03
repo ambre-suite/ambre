@@ -15,8 +15,8 @@ use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::SessionNonce;
 use ambre_core::id::{Document, Id};
 use ambre_core::{
-    Aad, ByteSize, EphemeralBytes, FixedBytes, KeyId, MediaBytes, Payload, PublicKey, SecretBytes,
-    SnapshotBytes,
+    Aad, ByteSize, Confidential, EphemeralBytes, FixedBytes, KeyId, MediaBytes, Payload, Plaintext,
+    PublicKey, SnapshotBytes,
 };
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
@@ -358,7 +358,7 @@ fn seal_payload(
     plaintext.push(version.byte());
     plaintext.extend_from_slice(&body);
     ambre_core::Secret::wipe(body);
-    let plaintext = ambre_core::SecretBytes::new(plaintext);
+    let plaintext = ambre_core::Confidential::<ambre_core::Plaintext>::new(plaintext);
     Ok(envelope::seal(&plaintext, aad, doc_key, signing_key)?)
 }
 
@@ -768,7 +768,7 @@ pub fn snapshot_blob(
 
 /// Seals a media blob into a standalone object bound for object storage, in
 /// the layout and under the AAD of [`seal_object`]. The cipher reads the
-/// blob where it lies, with no copy into a `SecretBytes` first.
+/// blob where it lies, with no copy into a `Confidential<Plaintext>` first.
 ///
 /// # Errors
 ///
@@ -862,7 +862,7 @@ fn check_layout(bytes: &[u8]) -> Result<(), PipelineError> {
 /// Layout: `layout || key id || author key || signature || commitment tag ||
 /// nonce || ciphertext`.
 pub fn seal_object(
-    plaintext: &SecretBytes,
+    plaintext: &Confidential<Plaintext>,
     aad: &Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -936,7 +936,7 @@ pub fn open_object(
     object: &impl StoredObject,
     aad: &Aad,
     doc_key: &DocumentKey,
-) -> Result<SecretBytes, PipelineError> {
+) -> Result<Confidential<Plaintext>, PipelineError> {
     let (key_id, author, sealed) = object_parts(object, doc_key)?;
     Ok(envelope::open(
         &sealed,
@@ -1061,8 +1061,8 @@ mod tests {
     use ambre_protocol::messages::{Clock, Counter};
 
     /// Plaintext as the object seal takes it.
-    fn secret(bytes: &[u8]) -> SecretBytes {
-        SecretBytes::new(bytes.to_vec())
+    fn secret(bytes: &[u8]) -> Confidential<Plaintext> {
+        Confidential::<Plaintext>::new(bytes.to_vec())
     }
 
     /// Object bytes as a download returns them.

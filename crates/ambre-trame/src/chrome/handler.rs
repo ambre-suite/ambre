@@ -160,7 +160,10 @@ impl CommandHandler for TrameHandler {
         KeyRoute::Run(Vec::new())
     }
 
-    fn sealed_save(&self, passphrase: ambre_core::Passphrase) -> Option<AppCommand> {
+    fn sealed_save(
+        &self,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+    ) -> Option<AppCommand> {
         // The passphrase goes into the command and nowhere else (`ARCH-004`).
         Some(AppCommand::Trame(TrameCommand::ExportAmbreFileSealed {
             passphrase,
