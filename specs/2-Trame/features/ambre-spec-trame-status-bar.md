@@ -68,7 +68,7 @@ status values are normative in `ambre-spec-template.md`.
 ```rust
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub count:   CellCount,             // non-empty cells
+    pub count:   Tally<Cells>,          // non-empty cells
     pub numbers: Option<NumericStats>,  // `None` hides sum, avg, min and max
 }
 

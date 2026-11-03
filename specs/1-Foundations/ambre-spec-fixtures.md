@@ -194,7 +194,7 @@ pub struct FixtureShape {
 /// and serde sees the bare number.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
-    Trame { cells: CellCount, sheets: Tally<Sheets>, formulas: Tally<Formulas> },
+    Trame { cells: Tally<Cells>, sheets: Tally<Sheets>, formulas: Tally<Formulas> },
     Toile { elements: Tally<Elements>, frames: Tally<BoardFrames>, connectors: Tally<Connectors> },
     Prose { blocks: Tally<DocBlocks>, characters: Count<Char> },
 }

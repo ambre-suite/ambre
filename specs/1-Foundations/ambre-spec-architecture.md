@@ -285,6 +285,14 @@ reader's own clock, and `PageLoad` is the page clock. An instant and a `LamportS
 `StoredAsI64`, the signed integer a CRDT or a Postgres row keeps. Each type writes the bare number
 of its unit on the wire and in the store.
 
+**Counts.** A tally is `Tally<K>`, a running count that addresses nothing. Its `TallyKind` marker
+fixes the width, a `u32` or a `u64`, and serde writes the bare number at that width. A count is
+`Count<A>`, a length in the index space of an axis, beside `Pos<A>`.
+
+**Series.** A series number is `Seq<K>`: one issuer hands out its numbers going up, each once.
+`Seq<Relay>` is the seq of the sequencer, and `Seq<AuthorKey>` is the clock of a delta. A
+`LamportStamp` is no series, since many peers issue stamps and two may share one.
+
 **Code.** `crates/ambre-app/src/lib.rs` for the boot and the relay, and `crates/ambre-app/src/host/`
 for the frame driver and the view registry. Then `crates/ambre-logic/src/lib.rs` for the Logic
 runtime, `crates/ambre-sync/src/worker.rs` for the worker entry, `.cargo/config.toml` and

@@ -50,7 +50,7 @@
 | :--- | :--- | :--- | :--- |
 | delta | one encrypted change to a document | | `1-Foundations/ambre-spec-delta-order.md` |
 | delta order | the rule placing a delta against its peers | | `1-Foundations/ambre-spec-delta-order.md` |
-| clock | the per-author counter carried by a delta | | `1-Foundations/ambre-spec-delta-order.md` |
+| clock | the per-author counter carried by a delta, a `Seq<AuthorKey>` | | `1-Foundations/ambre-spec-delta-order.md` |
 | quarantine | the hold for a delta that cannot apply yet | | `1-Foundations/ambre-spec-delta-order.md` |
 | snapshot | a full document state, encrypted and signed | | `1-Foundations/ambre-spec-delta-order.md` |
 | reference snapshot | the latest snapshot a member other than its author confirmed | | `1-Foundations/ambre-spec-sequencer.md` |
@@ -81,6 +81,8 @@
 | `TimeUnit` | the marker of a unit: `Ms`, `Sec`, `Ns` or `FracMs` | | `1-Foundations/ambre-spec-architecture.md` |
 | `TimeBase` | the marker of the clock and epoch an instant counts from | | `1-Foundations/ambre-spec-architecture.md` |
 | `StoredAsI64` | a whole count that a store keeps as a signed integer | | `1-Foundations/ambre-spec-architecture.md` |
+| tally | a running count of one kind of thing, that addresses nothing | | `1-Foundations/ambre-spec-architecture.md` |
+| count | a length in the index space of one axis | | `1-Foundations/ambre-spec-architecture.md` |
 | `Instant<Authored>` | the author's wall clock in Unix milliseconds, shown and never trusted | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | page clock | the page's monotonic milliseconds, restarted on every load | | `1-Foundations/ambre-spec-frame.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |
@@ -90,7 +92,7 @@
 | broadcast | one message sent to every subscriber | | `1-Foundations/ambre-spec-broadcast.md` |
 | wire message | one message on the socket between a client and the relay | inbound frame | `1-Foundations/ambre-spec-broadcast.md` |
 | sequencer | the relay half that numbers deltas | | `1-Foundations/ambre-spec-sequencer.md` |
-| seq | the number the sequencer assigns | | `1-Foundations/ambre-spec-sequencer.md` |
+| seq | the number one issuer hands out going up; the sequencer's is `Seq<Relay>` | | `1-Foundations/ambre-spec-architecture.md` |
 | membership | who may open a document, and as what | | `1-Foundations/ambre-spec-membership.md` |
 | invite | the two-phase gesture adding a member | | `1-Foundations/ambre-spec-membership.md` |
 | session | one authenticated connection of one client | | `1-Foundations/ambre-spec-session.md` |
