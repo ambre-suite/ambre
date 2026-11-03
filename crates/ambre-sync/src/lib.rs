@@ -55,7 +55,7 @@ use ambre_bus::{
     SnapshotPurpose, SnapshotVerdict, SyncCommand, UserInfo,
 };
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
-use ambre_core::{FixedBytes, KeyId, Payload, PublicKey, SessionNonce};
+use ambre_core::{Bounded, FixedBytes, KeyId, Payload, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{DeltaAuthor, Ephemerals, Relay, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -229,7 +229,7 @@ enum SyncEvent {
     /// The socket closed with `code`, or failed with no close frame, which
     /// carries no code (`SYNC-070`).
     WsDisconnected {
-        code: Option<CloseCode>,
+        code: Option<Bounded<CloseCode>>,
         reason: String,
     },
     WsError,

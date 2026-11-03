@@ -5,9 +5,6 @@ key	reason
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition | u32	a rank in a space's catalogue: it orders, ties broken by id, and counts and addresses nothing
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, which no Payload role offers
 ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang | String	a language tag that is never empty: a block with no language carries None
-ambre-bus | src/app/prose.rs | crate::app::prose | InvalidHeadingLevel | u8	the error of a refused heading level: it echoes the refused byte
-ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple | f32	the error of a refused line-height multiple: it echoes the refused value
-ambre-bus | src/app/prose.rs | crate::app::prose | InvalidOrderedStyle | u8	the error of a refused ordinal style code: it echoes the refused byte
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple | f32	a ratio that is finite and above zero, checked where it is built
 ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason | String	free text the user reads: why an import or an export left a construct behind
@@ -16,10 +13,8 @@ ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed w
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount | i64	a signed count of months that may run past December or below January, as DATE and EDATE read it
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidCsvDelimiter | u8	the error of a refused CSV delimiter: it echoes the refused byte
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber | f64	a finite f64, checked where it is built: a NaN or an infinity the engine yields is refused
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority | i64	the evaluation order of conditional-format rules: it orders and counts nothing
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NotACellNumber | f64	the error of a refused cell number: it echoes the refused value
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength | usize	a usize length compared in a const fn, so a Marks pair checks at compile time
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity | usize	a usize capacity whose zero holds one value, as the channel constructor reads it
@@ -37,7 +32,6 @@ ambre-core | src/authorship.rs | crate::authorship | IdCounter | u32	an id part:
 ambre-core | src/authorship.rs | crate::authorship | OpCounter | i32	the counter half of a Loro ID, an i32 Loro defines
 ambre-core | src/authorship.rs | crate::authorship | PeerId | u64	a Loro PeerID, a u64 Loro defines
 ambre-core | src/authorship.rs | crate::authorship | PeerKey | String	sixteen lowercase hex digits built from a PeerID alone (AUTHOR-004)
-ambre-core | src/calendar.rs | crate::calendar | Month | u8	a month from 1 to 12, checked where it is built
 ambre-core | src/calendar.rs | crate::calendar | Year | i64	a proleptic Gregorian year: any i64 is one, and the calendar arithmetic reads it
 ambre-core | src/color.rs | crate::color | Alpha | u8	the alpha byte of a packed colour, which Rgba packs last
 ambre-core | src/color.rs | crate::color | Rgb | u32	a colour packed 0x00RRGGBB whose top byte is zero, with channel operations
@@ -47,12 +41,10 @@ ambre-core | src/envelope.rs | crate::envelope | Aad | Vec<u8>	associated data b
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint | String	a key fingerprint grouped for reading aloud, which the trust check compares
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed | u64	the constant a fixture author picks: it pins the PeerID, the commit clock and the document id
 ambre-core | src/font.rs | crate::font | FontSize | f32	points, finite and not negative, read capped at FontSize::MAX (CANVAS-088)
-ambre-core | src/font.rs | crate::font | InvalidFontSize | f32	the error of a refused font size: it echoes the refused value
 ambre-core | src/lang.rs | crate::lang | LangTag | String	a BCP 47 tag, checked to the shape of RFC 5646 where it is built
 ambre-core | src/media.rs | crate::media | ByteSize | u64	the u64 size of a file or a blob: an index length is u32, and a file may pass 4 GiB
 ambre-core | src/media.rs | crate::media | ContentHash | String	sixty-four lowercase hex characters, checked where it is built and by serde
 ambre-core | src/media.rs | crate::media | MediaType | String	a media type as the browser names it, such as image/png, carried whole
-ambre-core | src/member_count.rs | crate::member_count | MemberCountError | i64	the error of a refused member count: it echoes the store's i64
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey | String	the relay's name for one object of the object store, which the client carries whole
 ambre-core | src/schema.rs | crate::schema | Fnv | u64	the running state of an FNV-1a hash, private to the step fingerprint
 ambre-core | src/schema.rs | crate::schema | StepFingerprint | u64	a migration step fingerprint, only compared and printed as sixteen hex digits
@@ -60,11 +52,9 @@ ambre-core | src/span.rs | crate::span | FrameRate | f32	frames per second of th
 ambre-core | src/span.rs | crate::span | LamportStamp | u64	a Lamport stamp: many peers issue stamps and two may share a value, so it is no Seq
 ambre-core | src/span.rs | crate::span | Rfc3339 | String	a timestamp text the relay formats, which a client reads through a lenient parser
 ambre-core | src/status.rs | crate::status | HttpStatus | u16	an HTTP status the relay answered, a u16 the HTTP standard defines
-ambre-core | src/status.rs | crate::status | StatusError | String	the error of an unknown status word: it echoes the refused text
 ambre-core | src/unit.rs | crate::unit | Radians | f64	the one angle unit of the workspace, with to_degrees for a format that takes degrees
 ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millisecond: Px::per writes it and ViewSpeed::over turns it back into a move
 ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller chooses, read for equality alone and never a hash of the pixels
-ambre-draw | src/peer.rs | crate::peer | Hue | u16	a whole hue in degrees below 360, private to the peer colour
 ambre-draw | src/testing.rs | crate::testing | StackDepth | u32	the open pushes of a test double: popped answers None below zero, the renderer bug the double catches
 ambre-draw | src/text.rs | crate::text | ScriptSet | u8	a set of lazy scripts held as bits, with set operations
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports, a length only once WheelDelta::to_px reads it
@@ -89,7 +79,6 @@ ambre-protocol | src/membership.rs | crate::membership | LogPosition | u64	the p
 ambre-protocol | src/signaling.rs | crate::signaling | IceCandidate | String	a browser ICE candidate the relay forwards unread: Debug prints its length alone
 ambre-protocol | src/signaling.rs | crate::signaling | SessionDescription | String	a browser session description the relay forwards unread: Debug prints its length alone
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript | Vec<u8>	the bytes one signature covers, built in its own crate alone, while Payload has a public constructor
-ambre-protocol | src/ws.rs | crate::ws | CloseCode | u16	a WebSocket close code, 1000 to 4999 as RFC 6455 defines it
 ambre-server | src/db/mod.rs | crate::db | PgKey | Vec<u8>	a stored public key as sqlx reads it, decoded through try_from
 ambre-server | src/payload.rs | crate::payload | StoredPayload | Vec<u8>	payload bytes with a sqlx::Type impl, which the orphan rule bars on ambre_core::Payload
 ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken | String	the value a lock holder writes, which a release compares
@@ -99,7 +88,6 @@ ambre-sync | src/http.rs | crate::http | ShownTarget | String	a relay route, or 
 ambre-sync | src/pipeline.rs | crate::pipeline | OpenedPayload | Vec<u8>	an opened payload that moves with no copy into the one role it reads, private to the pipeline
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob | Vec<u8>	bytes the seal alone builds, so a blob leaves the worker sealed (SYNC-049, ZK-001)
 ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame | Vec<u8>	a transient frame of document plaintext that its owner wipes through UpdateFrame::wipe (ARCH-015)
-ambre-toile | src/logic/animate.rs | crate::logic::animate | Phase | f64	a transition phase in zero to one, never NaN
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey | String	a target id and a user id joined by a slash (TOILE-229)
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Depth | isize	the edit steps of a Myers path, signed for the diagonal arithmetic, private to the search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Diagonal | isize	a signed diagonal of the Myers graph, private to the search

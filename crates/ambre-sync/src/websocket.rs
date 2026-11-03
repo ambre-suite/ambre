@@ -1,6 +1,6 @@
 use super::*;
 use crate::rekey::Refusal;
-use ambre_core::RefusalCode;
+use ambre_core::{Bounded, RefusalCode};
 use ambre_core::{Ms, TimeSpan};
 
 /// The delay before Sync asks again for the first stopped replay of a
@@ -176,7 +176,7 @@ impl SyncState {
                     Err(_) => return,
                 };
                 let _ = tx.send(SyncEvent::WsDisconnected {
-                    code: CloseCode::new(ce.code()),
+                    code: Bounded::<CloseCode>::new(ce.code()),
                     reason: ce.reason(),
                 });
             }) as Box<dyn FnMut(JsValue)>);
@@ -384,9 +384,10 @@ impl SyncState {
     }
 
     /// Silently renews the access token after a WS auth rejection (close
-    /// [`CloseCode::UNAUTHORIZED`]) and signals the outcome via
-    /// [`SyncEvent::Reauthenticated`]. Runs the refresh off the select loop so it
-    /// does not block; the shared token store is updated in place on success.
+    /// [`ambre_protocol::ws::RelayClose::UNAUTHORIZED`]) and signals the
+    /// outcome via [`SyncEvent::Reauthenticated`]. Runs the refresh off the
+    /// select loop so it does not block; the shared token store is updated in
+    /// place on success.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn reauthenticate(&mut self) {
         let Some(tx) = self.event_tx.clone() else {
@@ -451,7 +452,11 @@ impl SyncState {
     /// and notifies the Logic thread that every open document lost its
     /// connection. A reconnection is attempted immediately.
     #[allow(dead_code)]
-    pub(crate) fn handle_ws_disconnected(&mut self, code: Option<CloseCode>, reason: String) {
+    pub(crate) fn handle_ws_disconnected(
+        &mut self,
+        code: Option<Bounded<CloseCode>>,
+        reason: String,
+    ) {
         tracing::warn!("Sync: WS disconnected (code={code:?}): {reason}");
         self.ws = None;
         self._onmessage = None;
@@ -467,7 +472,7 @@ impl SyncState {
 
     /// Hands a close with `code`, or an error with none, to the lifecycle,
     /// then carries out what it decided.
-    fn socket_closed(&mut self, code: Option<CloseCode>) {
+    fn socket_closed(&mut self, code: Option<Bounded<CloseCode>>) {
         let demand = if self.documents.is_empty() {
             crate::lifecycle::Demand::Unneeded
         } else {
@@ -1670,10 +1675,10 @@ mod tests {
     use crate::{LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState};
     use ambre_bus::DocType;
     use ambre_core::id::{Document, Id, User};
+    use ambre_core::{Bounded, RefusalCode, Relay, Seq};
     use ambre_core::{Instant, Sec, TimeSpan, UnixMs};
-    use ambre_core::{RefusalCode, Relay, Seq};
     use ambre_crypto::{DocumentKey, MasterSeed};
-    use ambre_protocol::ws::CloseCode;
+    use ambre_protocol::ws::{CloseCode, RelayClose};
     use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg};
 
     /// A worker holding one open document, and the queue of what it tells Logic.
@@ -1696,7 +1701,7 @@ mod tests {
         (state, rx)
     }
 
-    fn closed(code: Option<CloseCode>) -> SyncEvent {
+    fn closed(code: Option<Bounded<CloseCode>>) -> SyncEvent {
         SyncEvent::WsDisconnected {
             code,
             reason: String::new(),
@@ -1719,20 +1724,20 @@ mod tests {
             state.socket_opens
         };
 
-        state.handle_sync_event(closed(CloseCode::new(1006)));
+        state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
         assert_eq!(fire_at(&mut state, 249), 0, "early: nothing reopens");
         assert_eq!(fire_at(&mut state, 250), 1);
 
         // Opened, then refused before any frame: the wait doubles.
         state.handle_sync_event(SyncEvent::WsOpened);
-        state.handle_sync_event(closed(CloseCode::new(1006)));
+        state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
         assert_eq!(fire_at(&mut state, 749), 1);
         assert_eq!(fire_at(&mut state, 750), 2);
 
         // A frame proves the session live, so the next wait is the first.
         let document_id = *state.documents.keys().next().expect("one document");
         state.handle_ws_message(ambre_protocol::ws::WsServerMsg::Subscribed { document_id });
-        state.handle_sync_event(closed(CloseCode::new(1006)));
+        state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
         assert_eq!(fire_at(&mut state, 999), 2);
         assert_eq!(fire_at(&mut state, 1000), 3);
         assert_eq!(fire_at(&mut state, 5000), 3, "one open per deadline");
@@ -1747,7 +1752,7 @@ mod tests {
             let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
             let clock = now.clone();
             state.clock = std::rc::Rc::new(move || Instant::<UnixMs>::new(clock.get()));
-            state.handle_sync_event(closed(CloseCode::new(1006)));
+            state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
             now.set(60_000);
             state.handle_sync_event(SyncEvent::ReconnectNow);
             state.socket_opens
@@ -1793,11 +1798,11 @@ mod tests {
         // Control: the authentication code does reopen, so a count of zero
         // below is the refusal's doing and not the harness's.
         let (mut renewed, _rx) = with_open_document();
-        renewed.handle_sync_event(closed(Some(CloseCode::UNAUTHORIZED)));
+        renewed.handle_sync_event(closed(Some(Bounded::<CloseCode>::UNAUTHORIZED)));
         assert_eq!(renewed.socket_opens, 1);
 
         let (mut state, _rx) = with_open_document();
-        state.handle_sync_event(closed(Some(CloseCode::SETUP_REQUIRED)));
+        state.handle_sync_event(closed(Some(Bounded::<CloseCode>::SETUP_REQUIRED)));
         state.handle_sync_event(SyncEvent::ReconnectNow);
         state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
         assert_eq!(state.socket_opens, 0);
@@ -1823,7 +1828,7 @@ mod tests {
     #[test]
     fn a_socket_refused_for_a_setup_owed_reaches_logic_as_a_setup() {
         let (mut state, rx) = with_open_document();
-        state.handle_sync_event(closed(Some(CloseCode::SETUP_REQUIRED)));
+        state.handle_sync_event(closed(Some(Bounded::<CloseCode>::SETUP_REQUIRED)));
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(told.iter().any(|e| matches!(e, LogicEvent::SetupRequired)));
         assert!(!told.iter().any(|e| matches!(
@@ -1840,7 +1845,7 @@ mod tests {
         let (mut state, rx) = with_open_document();
         state.handle_sync_event(SyncEvent::WireOutdated);
         state.handle_sync_event(SyncEvent::WireOutdated);
-        state.handle_sync_event(closed(Some(CloseCode::UNAUTHORIZED)));
+        state.handle_sync_event(closed(Some(Bounded::<CloseCode>::UNAUTHORIZED)));
         state.handle_sync_event(SyncEvent::ReconnectNow);
         state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
         assert_eq!(state.socket_opens, 0);
@@ -1885,7 +1890,7 @@ mod tests {
             .insert(id, ambre_core::FixedBytes::from_array([1; 16]));
 
         state.handle_command(SyncCommand::HoldInbound);
-        state.handle_sync_event(closed(CloseCode::new(1006)));
+        state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
         state.handle_sync_event(SyncEvent::ReconnectNow);
         state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
         assert_eq!(state.socket_opens, 0, "held: nothing reopens");

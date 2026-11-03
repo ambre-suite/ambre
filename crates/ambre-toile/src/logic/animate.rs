@@ -20,7 +20,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::Rgba;
+use ambre_core::{Bounded, Bounds, Refusal, Rgba};
 use kurbo::Rect;
 
 use ambre_core::id::{Element, Id};
@@ -30,43 +30,50 @@ use ambre_core::id::{Element, Id};
 // thread owns no board state. This solver stays here as the sole consumer.
 pub use ambre_bus::app::toile::{FrameSnapshot, SnapElement};
 
-/// A transition phase, in `0.0 ..= 1.0`: `START` shows the source, `END` the
-/// target. It is never NaN, so no interpolation it weights turns NaN.
+/// A transition phase, in `0.0 ..= 1.0`: the marker of a [`Bounded<Phase>`].
+/// The lowest value shows the source, the highest the target. It is never
+/// NaN, so no interpolation it weights turns NaN.
 ///
 /// It says how far a transition has come. `TransitionPhase` in the UI says
-/// only whether it still runs, and reads `Done` once this phase is `END`.
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub struct Phase(f64);
+/// only whether it still runs, and reads `Done` once this phase is at its
+/// highest.
+pub enum Phase {}
 
-impl Phase {
-    /// The source of the transition.
-    pub const START: Self = Self(0.0);
-    /// The target of the transition.
-    pub const END: Self = Self(1.0);
+impl Bounds for Phase {
+    type Repr = f64;
+    const MIN: f64 = 0.0;
+    const MAX: f64 = 1.0;
+    const NAME: &'static str = "Phase";
+    const REFUSAL: Refusal = Refusal::new("a transition phase lies in 0..=1, not ", "");
+}
 
-    /// The phase `t`, clamped to `0.0 ..= 1.0`. A NaN maps to [`Self::START`].
-    pub fn clamped(t: f64) -> Self {
-        if t.is_nan() {
-            Self::START
-        } else {
-            Self(t.clamp(0.0, 1.0))
-        }
-    }
-
-    /// The phase as a factor.
-    pub fn get(self) -> f64 {
-        self.0
-    }
+/// What a transition does with its phase: build one from any factor, and
+/// read it backwards or eased. A trait, since a crate adds no inherent item
+/// to [`Bounded`], which `ambre-core` owns.
+pub trait Tween: Sized {
+    /// The phase `t`, clamped to `0.0 ..= 1.0`. A NaN maps to the start.
+    fn clamped(t: f64) -> Self;
 
     /// The remaining share, `1 - t`.
     #[must_use]
-    pub fn rest(self) -> Self {
-        Self(1.0 - self.0)
+    fn rest(self) -> Self;
+
+    /// The phase after the ease-in-out cubic curve (see
+    /// [`ease_in_out_cubic`]).
+    #[must_use]
+    fn eased(self) -> Self;
+}
+
+impl Tween for Bounded<Phase> {
+    fn clamped(t: f64) -> Self {
+        Self::new(t.clamp(0.0, 1.0)).unwrap_or(Self::MIN)
     }
 
-    /// The phase after the ease-in-out cubic curve (see [`ease_in_out_cubic`]).
-    #[must_use]
-    pub fn eased(self) -> Self {
+    fn rest(self) -> Self {
+        Self::clamped(1.0 - self.get())
+    }
+
+    fn eased(self) -> Self {
         ease_in_out_cubic(self)
     }
 }
@@ -88,7 +95,7 @@ impl AnimatedElement {
     /// `t`. Every property is a plain `lerp`, so `t = 0` reproduces `a`
     /// exactly and `t = 1` reproduces `b` exactly (the endpoint guarantee tested
     /// in). `t` arrives already eased (see [`ease_in_out_cubic`]).
-    pub fn lerp(a: &SnapElement, b: &SnapElement, t: Phase) -> Self {
+    pub fn lerp(a: &SnapElement, b: &SnapElement, t: Bounded<Phase>) -> Self {
         Self {
             // The id is shared by construction; keep it as the animated identity.
             id: b.id.clone(),
@@ -101,7 +108,7 @@ impl AnimatedElement {
 
     /// An element new in B: hold its geometry, ramp opacity from 0 up to its own
     /// target with `t`. `t = 0` -> invisible, `t = 1` -> full.
-    pub fn fade_in(e: &SnapElement, t: Phase) -> Self {
+    pub fn fade_in(e: &SnapElement, t: Bounded<Phase>) -> Self {
         Self {
             id: e.id.clone(),
             bounds: e.bounds,
@@ -113,7 +120,7 @@ impl AnimatedElement {
 
     /// An element gone in B: hold its geometry, ramp opacity down from its own
     /// value to 0 with `t`. `t = 0` -> full, `t = 1` -> invisible.
-    pub fn fade_out(a: &SnapElement, t: Phase) -> Self {
+    pub fn fade_out(a: &SnapElement, t: Bounded<Phase>) -> Self {
         Self {
             id: a.id.clone(),
             bounds: a.bounds,
@@ -132,7 +139,11 @@ impl AnimatedElement {
 /// `by_id` scan, to fit the < 4 ms / 500-element transition-frame budget.
 /// The output paint order is `to`'s order (tweens + fade-ins) followed by the
 /// fade-outs, matching the pseudo-code map/chain of `toile-presentation`.
-pub fn smart_animate(from: &FrameSnapshot, to: &FrameSnapshot, t: Phase) -> Vec<AnimatedElement> {
+pub fn smart_animate(
+    from: &FrameSnapshot,
+    to: &FrameSnapshot,
+    t: Bounded<Phase>,
+) -> Vec<AnimatedElement> {
     let from_by_id: HashMap<&str, &SnapElement> =
         from.elements.iter().map(|e| (e.id.as_str(), e)).collect();
     let to_by_id: HashMap<&str, &SnapElement> =
@@ -157,9 +168,9 @@ pub fn smart_animate(from: &FrameSnapshot, to: &FrameSnapshot, t: Phase) -> Vec<
 /// `t` to [`smart_animate`] ("eased lerp"). Kept here so Phase 1 reuses the
 /// same easing the tests pin. A [`Phase`] is in `0.0 ..= 1.0` already; the
 /// curve is symmetric (`ease(0.5) == 0.5`) and monotonic.
-pub fn ease_in_out_cubic(t: Phase) -> Phase {
+pub fn ease_in_out_cubic(t: Bounded<Phase>) -> Bounded<Phase> {
     let t = t.get();
-    Phase::clamped(if t < 0.5 {
+    Bounded::<Phase>::clamped(if t < 0.5 {
         4.0 * t * t * t
     } else {
         let f = -2.0 * t + 2.0;
@@ -169,11 +180,11 @@ pub fn ease_in_out_cubic(t: Phase) -> Phase {
 
 // -- interpolation primitives -------------------------------------------------
 
-fn lerp_f64(a: f64, b: f64, t: Phase) -> f64 {
+fn lerp_f64(a: f64, b: f64, t: Bounded<Phase>) -> f64 {
     a + (b - a) * t.get()
 }
 
-fn lerp_rect(a: Rect, b: Rect, t: Phase) -> Rect {
+fn lerp_rect(a: Rect, b: Rect, t: Bounded<Phase>) -> Rect {
     Rect::new(
         lerp_f64(a.x0, b.x0, t),
         lerp_f64(a.y0, b.y0, t),
@@ -186,7 +197,7 @@ fn lerp_rect(a: Rect, b: Rect, t: Phase) -> Rect {
 /// is no common color to blend, so crossfade to the `t`-dominant side (`< 0.5`
 /// keeps `a`, `>= 0.5` takes `b`). This keeps the tween deterministic and never
 /// invents a color out of `None`.
-fn lerp_fill(a: Option<Rgba>, b: Option<Rgba>, t: Phase) -> Option<Rgba> {
+fn lerp_fill(a: Option<Rgba>, b: Option<Rgba>, t: Bounded<Phase>) -> Option<Rgba> {
     match (a, b) {
         (Some(ca), Some(cb)) => Some(lerp_rgba(ca, cb, t)),
         _ => {
@@ -200,7 +211,7 @@ fn lerp_fill(a: Option<Rgba>, b: Option<Rgba>, t: Phase) -> Option<Rgba> {
 }
 
 /// Per-channel lerp of two RGBA colors.
-fn lerp_rgba(a: Rgba, b: Rgba, t: Phase) -> Rgba {
+fn lerp_rgba(a: Rgba, b: Rgba, t: Bounded<Phase>) -> Rgba {
     let (a, b) = (a.bits(), b.bits());
     let ch = |shift: u32| {
         let ca = ((a >> shift) & 0xFF) as f64;
@@ -215,8 +226,8 @@ mod tests {
     use super::*;
 
     /// The phase `t`, for a test that names it by value.
-    fn at(t: f64) -> Phase {
-        Phase::clamped(t)
+    fn at(t: f64) -> Bounded<Phase> {
+        Bounded::<Phase>::clamped(t)
     }
 
     fn snap(
@@ -330,12 +341,12 @@ mod tests {
             Some(Rgba::from_bits(0xFFFF_FFFF)),
         );
         // t = 0 reproduces A, t = 1 reproduces B.
-        let at0 = AnimatedElement::lerp(&a, &b, Phase::START);
+        let at0 = AnimatedElement::lerp(&a, &b, Bounded::<Phase>::MIN);
         assert_eq!(at0.bounds, a.bounds);
         assert_eq!(at0.rotation, a.rotation);
         assert_eq!(at0.opacity, a.opacity);
         assert_eq!(at0.fill, a.fill);
-        let at1 = AnimatedElement::lerp(&a, &b, Phase::END);
+        let at1 = AnimatedElement::lerp(&a, &b, Bounded::<Phase>::MAX);
         assert_eq!(at1.bounds, b.bounds);
         assert_eq!(at1.rotation, b.rotation);
         // f32 lerp `a + (b - a) * 1.0` reproduces b within rounding.
@@ -343,15 +354,25 @@ mod tests {
         assert_eq!(at1.fill, b.fill);
         // Fade endpoints.
         assert_eq!(
-            AnimatedElement::fade_in(&b, Phase::START).opacity.get(),
+            AnimatedElement::fade_in(&b, Bounded::<Phase>::MIN)
+                .opacity
+                .get(),
             0.0
         );
-        assert_eq!(AnimatedElement::fade_in(&b, Phase::END).opacity, b.opacity);
         assert_eq!(
-            AnimatedElement::fade_out(&a, Phase::START).opacity,
+            AnimatedElement::fade_in(&b, Bounded::<Phase>::MAX).opacity,
+            b.opacity
+        );
+        assert_eq!(
+            AnimatedElement::fade_out(&a, Bounded::<Phase>::MIN).opacity,
             a.opacity
         );
-        assert_eq!(AnimatedElement::fade_out(&a, Phase::END).opacity.get(), 0.0);
+        assert_eq!(
+            AnimatedElement::fade_out(&a, Bounded::<Phase>::MAX)
+                .opacity
+                .get(),
+            0.0
+        );
     }
 
     #[test]
@@ -429,13 +450,16 @@ mod tests {
     /// so no interpolation it weights turns NaN.
     #[test]
     fn a_phase_stays_in_the_unit_interval_and_is_never_nan() {
-        assert_eq!(Phase::clamped(f64::NAN), Phase::START);
-        assert_eq!(Phase::clamped(-3.0), Phase::START);
-        assert_eq!(Phase::clamped(7.0), Phase::END);
-        assert_eq!(Phase::clamped(f64::INFINITY), Phase::END);
+        assert_eq!(Bounded::<Phase>::clamped(f64::NAN), Bounded::<Phase>::MIN);
+        assert_eq!(Bounded::<Phase>::clamped(-3.0), Bounded::<Phase>::MIN);
+        assert_eq!(Bounded::<Phase>::clamped(7.0), Bounded::<Phase>::MAX);
+        assert_eq!(
+            Bounded::<Phase>::clamped(f64::INFINITY),
+            Bounded::<Phase>::MAX
+        );
         let a = snap("a", rect(0.0, 0.0, 10.0, 10.0), 0.0, 1.0, None);
         let b = snap("a", rect(10.0, 10.0, 10.0, 10.0), 1.0, 0.5, None);
-        let mid = AnimatedElement::lerp(&a, &b, Phase::clamped(f64::NAN).eased());
+        let mid = AnimatedElement::lerp(&a, &b, Bounded::<Phase>::clamped(f64::NAN).eased());
         assert_eq!(mid.bounds, a.bounds);
         assert!(mid.opacity.get().is_finite());
     }

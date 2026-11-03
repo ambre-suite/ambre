@@ -353,7 +353,7 @@ impl FontSizeChoice {
 }
 
 impl TryFrom<f32> for FontSizeChoice {
-    type Error = ambre_core::InvalidFontSize;
+    type Error = ambre_core::Refused<ambre_core::FontPoints>;
 
     /// Zero points read as automatic; a negative or non-finite number is
     /// refused. A size past [`TEXT_FONT_SIZE_MAX`] reads as it (`CANVAS-088`).

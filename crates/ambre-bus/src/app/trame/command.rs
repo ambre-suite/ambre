@@ -8,7 +8,7 @@ use super::*;
 use ambre_core::id::{CondFormat, FilterView, Sheet};
 use ambre_core::id::{Id, User};
 use ambre_core::index::{Len, Pos};
-use ambre_core::{Redacted, Rule, Validated};
+use ambre_core::{Redacted, Refused, Refuses, Rule, Validated};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- commands (UI -> Logic)
@@ -230,20 +230,16 @@ impl std::fmt::Display for SheetName {
 }
 
 /// A byte refused as a CSV field separator: the double quote, CR, LF, or a
-/// byte outside ASCII.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("byte {0:#04x} cannot separate CSV fields")]
-pub struct InvalidCsvDelimiter(u8);
+/// byte outside ASCII. The marker of its [`Refused<DelimiterByte>`], which
+/// echoes the byte.
+pub enum DelimiterByte {}
 
-impl InvalidCsvDelimiter {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u8) -> Self {
-        Self(value)
-    }
+impl Refuses for DelimiterByte {
+    type Raw = u8;
+    const NAME: &'static str = "InvalidCsvDelimiter";
 
-    /// Returns the raw value.
-    pub const fn get(self) -> u8 {
-        self.0
+    fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "byte {raw:#04x} cannot separate CSV fields")
     }
 }
 
@@ -263,11 +259,11 @@ impl CsvDelimiter {
     ///
     /// # Errors
     ///
-    /// [`InvalidCsvDelimiter`] for the double quote, CR, LF and any byte
+    /// [`Refused<DelimiterByte>`] for the double quote, CR, LF and any byte
     /// outside ASCII.
-    pub const fn new(byte: u8) -> Result<Self, InvalidCsvDelimiter> {
+    pub const fn new(byte: u8) -> Result<Self, Refused<DelimiterByte>> {
         match byte {
-            b'"' | b'\r' | b'\n' | 0x80.. => Err(InvalidCsvDelimiter(byte)),
+            b'"' | b'\r' | b'\n' | 0x80.. => Err(Refused::new(byte)),
             _ => Ok(Self(byte)),
         }
     }
@@ -1445,5 +1441,9 @@ mod tests {
         for byte in [b'"', b'\r', b'\n', 0x80, 0xff] {
             assert!(CsvDelimiter::new(byte).is_err(), "{byte:#04x} is refused");
         }
+        let refused = CsvDelimiter::new(b'"').expect_err("a quote");
+        assert_eq!(refused.get(), b'"');
+        assert_eq!(refused.to_string(), "byte 0x22 cannot separate CSV fields");
+        assert_eq!(format!("{refused:?}"), "InvalidCsvDelimiter(34)");
     }
 }

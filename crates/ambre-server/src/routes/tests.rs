@@ -9,8 +9,9 @@ mod handler_tests {
     use crate::routes;
     use crate::state::{AppState, Config};
     use crate::ws;
+    use ambre_core::Bounded;
     use ambre_core::id::{Document, Id, Snapshot, User};
-    use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg, encode_client_msg};
+    use ambre_protocol::ws::{CloseCode, RelayClose, WsClientMsg, WsServerMsg, encode_client_msg};
 
     fn empty_oidc_clients() -> crate::oidc::OidcClients {
         Arc::new(std::collections::HashMap::new())
@@ -2041,7 +2042,7 @@ mod handler_tests {
             .unwrap();
         assert_eq!(
             first_close_code(state, tokens.access_token.secret().expose()).await,
-            Some(CloseCode::SETUP_REQUIRED)
+            Some(Bounded::<CloseCode>::SETUP_REQUIRED)
         );
     }
 
@@ -2053,7 +2054,7 @@ mod handler_tests {
         let state = test_app_state(pool).await;
         assert_eq!(
             first_close_code(state, "not-a-token").await,
-            Some(CloseCode::UNAUTHORIZED)
+            Some(Bounded::<CloseCode>::UNAUTHORIZED)
         );
     }
 
@@ -2463,7 +2464,7 @@ mod handler_tests {
 
     /// Opens the socket, authenticates with `token`, and returns the code of
     /// the close frame the server sends first.
-    async fn first_close_code(state: Arc<AppState>, token: &str) -> Option<CloseCode> {
+    async fn first_close_code(state: Arc<AppState>, token: &str) -> Option<Bounded<CloseCode>> {
         use tokio_tungstenite::tungstenite::Message;
 
         let first = WsClientMsg::Authenticate {
@@ -2473,7 +2474,7 @@ mod handler_tests {
         let Message::Close(Some(frame)) = reply else {
             panic!("expected a close frame, got {reply:?}");
         };
-        CloseCode::new(u16::from(frame.code))
+        Bounded::<CloseCode>::new(u16::from(frame.code))
     }
 
     /// Pull the `access_token` out of an auth response body (setup / dev-login

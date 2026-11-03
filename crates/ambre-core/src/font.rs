@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::bounded::{Bounded, Bounds, Defaulted, Refusal};
+use crate::refused::{Refused, Refuses};
 use crate::{Doc, Px};
 
 /// CSS pixels per typographic point: a point is 1/72 inch, a CSS pixel is
@@ -81,20 +82,22 @@ impl FontSize {
     }
 }
 
-/// The error of a decoded font size that is not finite or is negative.
-#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
-#[error("a font size must be a finite, non-negative number of points, not {0}")]
-pub struct InvalidFontSize(f32);
+/// The points of a font size refused for not being finite or for being
+/// negative: the marker of its [`Refused<FontPoints>`], which echoes them.
+///
+/// The error is no [`OutOfRange`](crate::OutOfRange): [`FontSize`] reads a
+/// value past its cap as the cap, so no upper bound refuses one.
+pub enum FontPoints {}
 
-impl InvalidFontSize {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: f32) -> Self {
-        Self(value)
-    }
+impl Refuses for FontPoints {
+    type Raw = f32;
+    const NAME: &'static str = "InvalidFontSize";
 
-    /// Returns the raw value.
-    pub const fn get(self) -> f32 {
-        self.0
+    fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "a font size must be a finite, non-negative number of points, not {raw}"
+        )
     }
 }
 
@@ -106,10 +109,10 @@ impl std::fmt::Display for FontSize {
 }
 
 impl TryFrom<f32> for FontSize {
-    type Error = InvalidFontSize;
+    type Error = Refused<FontPoints>;
 
     fn try_from(points: f32) -> Result<Self, Self::Error> {
-        Self::new(points).ok_or(InvalidFontSize(points))
+        Self::new(points).ok_or(Refused::new(points))
     }
 }
 
@@ -359,6 +362,13 @@ mod tests {
         assert_eq!(postcard::from_bytes::<FontSize>(&bytes).unwrap(), size);
         let nan = postcard::to_allocvec(&f32::NAN).unwrap();
         assert!(postcard::from_bytes::<FontSize>(&nan).is_err());
+        let refused = FontSize::try_from(-2.0).expect_err("negative");
+        assert_eq!(refused.get(), -2.0);
+        assert_eq!(
+            refused.to_string(),
+            "a font size must be a finite, non-negative number of points, not -2"
+        );
+        assert_eq!(format!("{refused:?}"), "InvalidFontSize(-2.0)");
     }
 
     /// A stored size past the cap reads as the cap (`CANVAS-088`). A peer

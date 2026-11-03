@@ -9,7 +9,7 @@ use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
 use crate::token::Token;
 use ambre_core::id::{FilterView, Id, Sheet, User};
 use ambre_core::index::{Axis, Len, Pos};
-use ambre_core::{Count, Doc, Px, Rgb};
+use ambre_core::{Count, Doc, Px, Refused, Refuses, Rgb};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- events (Logic -> UI)
@@ -21,20 +21,16 @@ use ambre_core::{Count, Doc, Px, Rgb};
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct CellNumber(f64);
 
-/// A value refused as a [`CellNumber`]: NaN or an infinity.
-#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
-#[error("{0} is not a finite number")]
-pub struct NotACellNumber(f64);
+/// A value refused as a [`CellNumber`], NaN or an infinity: the marker of
+/// its [`Refused<CellFloat>`], which echoes the value.
+pub enum CellFloat {}
 
-impl NotACellNumber {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: f64) -> Self {
-        Self(value)
-    }
+impl Refuses for CellFloat {
+    type Raw = f64;
+    const NAME: &'static str = "NotACellNumber";
 
-    /// Returns the raw value.
-    pub const fn get(self) -> f64 {
-        self.0
+    fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{raw} is not a finite number")
     }
 }
 
@@ -43,12 +39,12 @@ impl CellNumber {
     ///
     /// # Errors
     ///
-    /// [`NotACellNumber`] when `value` is NaN or infinite.
-    pub fn new(value: f64) -> Result<Self, NotACellNumber> {
+    /// [`Refused<CellFloat>`] when `value` is NaN or infinite.
+    pub fn new(value: f64) -> Result<Self, Refused<CellFloat>> {
         if value.is_finite() {
             Ok(Self(value))
         } else {
-            Err(NotACellNumber(value))
+            Err(Refused::new(value))
         }
     }
 
@@ -914,8 +910,11 @@ mod tests {
         assert_eq!(CellNumber::new(f64::MAX).map(CellNumber::get), Ok(f64::MAX));
         for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             let refused = CellNumber::new(value).expect_err("not finite");
-            assert_eq!(refused.0.to_bits(), value.to_bits());
+            assert_eq!(refused.get().to_bits(), value.to_bits());
         }
+        let refused = CellNumber::new(f64::INFINITY).expect_err("not finite");
+        assert_eq!(refused.to_string(), "inf is not a finite number");
+        assert_eq!(format!("{refused:?}"), "NotACellNumber(inf)");
     }
 
     /// A sum past the largest finite number is an overflow, never an

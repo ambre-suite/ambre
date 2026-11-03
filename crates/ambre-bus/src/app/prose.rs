@@ -25,7 +25,7 @@
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
 use ambre_core::index::{Axis, Delta, Len, MapsTo, MeasuresAs, Numbered, Pos, Shown, Span};
-use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted};
+use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted, Refused, Refuses};
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
@@ -340,28 +340,24 @@ impl OrderedStyle {
     }
 }
 
-/// The error of a decoded ordinal style outside the five codes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("an ordinal style is a code of zero to four, not {0}")]
-pub struct InvalidOrderedStyle(u8);
+/// A decoded ordinal style outside the five codes: the marker of its
+/// [`Refused<OrderedStyleCode>`], which echoes the code.
+pub enum OrderedStyleCode {}
 
-impl InvalidOrderedStyle {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u8) -> Self {
-        Self(value)
-    }
+impl Refuses for OrderedStyleCode {
+    type Raw = u8;
+    const NAME: &'static str = "InvalidOrderedStyle";
 
-    /// Returns the raw value.
-    pub const fn get(self) -> u8 {
-        self.0
+    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "an ordinal style is a code of zero to four, not {raw}")
     }
 }
 
 impl TryFrom<u8> for OrderedStyle {
-    type Error = InvalidOrderedStyle;
+    type Error = Refused<OrderedStyleCode>;
 
     fn try_from(code: u8) -> Result<Self, Self::Error> {
-        Self::from_code(code).ok_or(InvalidOrderedStyle(code))
+        Self::from_code(code).ok_or(Refused::new(code))
     }
 }
 
@@ -429,28 +425,24 @@ impl HeadingLevel {
     }
 }
 
-/// The error of a decoded heading level outside one to six.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("a heading level is one to six, not {0}")]
-pub struct InvalidHeadingLevel(u8);
+/// A decoded heading level outside one to six: the marker of its
+/// [`Refused<HeadingLevelCode>`], which echoes the level.
+pub enum HeadingLevelCode {}
 
-impl InvalidHeadingLevel {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u8) -> Self {
-        Self(value)
-    }
+impl Refuses for HeadingLevelCode {
+    type Raw = u8;
+    const NAME: &'static str = "InvalidHeadingLevel";
 
-    /// Returns the raw value.
-    pub const fn get(self) -> u8 {
-        self.0
+    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "a heading level is one to six, not {raw}")
     }
 }
 
 impl TryFrom<u8> for HeadingLevel {
-    type Error = InvalidHeadingLevel;
+    type Error = Refused<HeadingLevelCode>;
 
     fn try_from(level: u8) -> Result<Self, Self::Error> {
-        Self::new(level).ok_or(InvalidHeadingLevel(level))
+        Self::new(level).ok_or(Refused::new(level))
     }
 }
 
@@ -617,28 +609,27 @@ impl fmt::Display for LineSpacingMultiple {
     }
 }
 
-/// The error of a line-height multiple that is not finite and above zero.
-#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
-#[error("a line-height multiple is finite and above zero, not {0}")]
-pub struct InvalidLineSpacingMultiple(f32);
+/// A line-height multiple that is not finite and above zero: the marker of
+/// its [`Refused<LineSpacingRatio>`], which echoes the ratio.
+pub enum LineSpacingRatio {}
 
-impl InvalidLineSpacingMultiple {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: f32) -> Self {
-        Self(value)
-    }
+impl Refuses for LineSpacingRatio {
+    type Raw = f32;
+    const NAME: &'static str = "InvalidLineSpacingMultiple";
 
-    /// Returns the raw value.
-    pub const fn get(self) -> f32 {
-        self.0
+    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "a line-height multiple is finite and above zero, not {raw}"
+        )
     }
 }
 
 impl TryFrom<f32> for LineSpacingMultiple {
-    type Error = InvalidLineSpacingMultiple;
+    type Error = Refused<LineSpacingRatio>;
 
     fn try_from(ratio: f32) -> Result<Self, Self::Error> {
-        Self::new(ratio).ok_or(InvalidLineSpacingMultiple(ratio))
+        Self::new(ratio).ok_or(Refused::new(ratio))
     }
 }
 
@@ -2959,6 +2950,30 @@ impl fmt::Debug for ProseRefusal {
 mod tests {
     use super::*;
     use ambre_core::{Authored, Instant};
+
+    /// A refused heading level, ordinal style or line-height multiple echoes
+    /// the value, with the message and the `Debug` name it always had.
+    #[test]
+    fn a_refused_code_or_ratio_echoes_its_value() {
+        let level = HeadingLevel::try_from(7).expect_err("past six");
+        assert_eq!(level.get(), 7);
+        assert_eq!(level.to_string(), "a heading level is one to six, not 7");
+        assert_eq!(format!("{level:?}"), "InvalidHeadingLevel(7)");
+        let style = OrderedStyle::try_from(5).expect_err("past four");
+        assert_eq!(style.get(), 5);
+        assert_eq!(
+            style.to_string(),
+            "an ordinal style is a code of zero to four, not 5"
+        );
+        assert_eq!(format!("{style:?}"), "InvalidOrderedStyle(5)");
+        let ratio = LineSpacingMultiple::try_from(0.0).expect_err("not above zero");
+        assert_eq!(ratio.get(), 0.0);
+        assert_eq!(
+            ratio.to_string(),
+            "a line-height multiple is finite and above zero, not 0"
+        );
+        assert_eq!(format!("{ratio:?}"), "InvalidLineSpacingMultiple(0.0)");
+    }
 
     /// A style name and a mark value print their length alone in `Debug`,
     /// and none of the text a user may have typed.
