@@ -78,7 +78,8 @@
 | IdCounter | the per-session counter an id is minted from, beside a PeerID | | `3-Toile/ambre-spec-toile-schema.md` |
 | `TimeSpan<U>` | a span of time, counted in one unit | pagemillis | `1-Foundations/ambre-spec-architecture.md` |
 | `Instant<C>` | a point in time on one time base, never `std::time::Instant` | pagetime, unixmillis, unixseconds | `1-Foundations/ambre-spec-architecture.md` |
-| `TimeUnit` | the marker of a unit: `Ms`, `Sec`, `Ns` or `FracMs` | | `1-Foundations/ambre-spec-architecture.md` |
+| `TimeUnit` | the marker of a unit: `Ms`, `Sec`, `Ns`, `FracMs`, `Day` or `FracDay` | | `1-Foundations/ambre-spec-architecture.md` |
+| `ClockUnit` | a unit a clock reads, which converts to a `Duration` | | `1-Foundations/ambre-spec-architecture.md` |
 | `TimeBase` | the marker of the clock and epoch an instant counts from | | `1-Foundations/ambre-spec-architecture.md` |
 | `StoredAsI64` | a whole count that a store keeps as a signed integer | | `1-Foundations/ambre-spec-architecture.md` |
 | `Instant<Authored>` | the author's wall clock in Unix milliseconds, shown and never trusted | | `5-Murmure/ambre-spec-murmure-schema.md` |
@@ -195,7 +196,7 @@
 | stored formula | a cell's text bound to sheet ids and line identities | | `2-Trame/features/ambre-spec-trame-formula-engine.md` |
 | display formula | a cell's text as the formula bar shows it | | `2-Trame/features/ambre-spec-trame-formula-engine.md` |
 | function name | the name a formula calls a built-in function by | | `2-Trame/features/ambre-spec-trame-function-library.md` |
-| date serial | a date held as a count of days, time in the fraction | | `2-Trame/features/ambre-spec-trame-function-library.md` |
+| date serial | a spreadsheet date held as days, the time in the fraction: `Instant<SheetDateTime>` | | `2-Trame/features/ambre-spec-trame-function-library.md` |
 | date parts | a year, month and day whose day may pass its month | | `2-Trame/features/ambre-spec-trame-function-library.md` |
 | civil date | a valid UTC calendar year, month and day | | `4-Prose/features/ambre-spec-prose-headers-footers.md` |
 | cell rect | a rectangle of cells, both corners included | | `2-Trame/features/ambre-spec-trame-selection.md` |

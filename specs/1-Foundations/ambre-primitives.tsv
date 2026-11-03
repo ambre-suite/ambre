@@ -3902,17 +3902,25 @@ ambre-core | src/span.rs | crate::span | <PageLoad as TimeBase>::NAME | const | 
 ambre-core | src/span.rs | crate::span | <UnixMs as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <UnixSec as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <Ms as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
-ambre-core | src/span.rs | crate::span | <Ms as TimeUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Ms as ClockUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
 ambre-core | src/span.rs | crate::span | <Ms as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
 ambre-core | src/span.rs | crate::span | <Sec as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
-ambre-core | src/span.rs | crate::span | <Sec as TimeUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Sec as ClockUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
 ambre-core | src/span.rs | crate::span | <Sec as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
 ambre-core | src/span.rs | crate::span | <Ns as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
-ambre-core | src/span.rs | crate::span | <Ns as TimeUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Ns as ClockUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
 ambre-core | src/span.rs | crate::span | <Ns as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
 ambre-core | src/span.rs | crate::span | <FracMs as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
-ambre-core | src/span.rs | crate::span | <FracMs as TimeUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <FracMs as ClockUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
 ambre-core | src/span.rs | crate::span | <FracMs as TimeUnit>::Repr | assoc | f64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
+ambre-core | src/span.rs | crate::span | <Day as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <Day as TimeUnit>::Repr | assoc | i64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
+ambre-core | src/span.rs | crate::span | <FracDay as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <FracDay as TimeUnit>::Repr | assoc | f64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
+ambre-core | src/span.rs | crate::span | <SheetDateTime as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <SheetDay as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | Instant<SheetDateTime>::from_unix_days(unix_days) | param | f64	math	calendar arithmetic: days on the Unix clock
+ambre-core | src/span.rs | crate::span | Instant<SheetDateTime>::time_of_day() | ret | f64	math	calendar arithmetic: the fraction of a day
 ambre-core | src/span.rs | crate::span | <Instant<C> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/span.rs | crate::span | <TimeSpan<U> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/span.rs | crate::span | <Instant<C> as StoredAsI64>::from_stored_count(count) | param | u64	newtype-inner	the whole count an instant holds, read back by the shared store conversion
