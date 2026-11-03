@@ -2213,10 +2213,10 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	free-text	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
-ambre-server | src/payload.rs | crate::payload | Payload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/payload.rs | crate::payload | Payload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/payload.rs | crate::payload | Payload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/payload.rs | crate::payload | Payload::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/payload.rs | crate::payload | StoredPayload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/payload.rs | crate::payload | StoredPayload::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_ops.rs | crate::redis_ops | CLOCK_AND_SEQ_LUA | const | &str	free-text	Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | DOCUMENT_GONE | const | &str	generic	refusal word shared with the Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken.0 | field | String	newtype-inner	newtype inner, accessor or constructor

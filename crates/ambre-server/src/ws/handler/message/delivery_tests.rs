@@ -84,7 +84,7 @@ async fn a_refused_index_write_is_retried_until_the_row_lands(pool: sqlx::PgPool
     let key = ed25519_dalek::SigningKey::from_bytes(&[51u8; 32]);
     let (state, mut conn, doc_id) = writer(pool.clone(), &stub, &key).await;
     refuse_index_writes(&pool, 2).await;
-    let (tx, _rx) = mpsc::channel::<Payload>(8);
+    let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
 
     handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
 
@@ -114,7 +114,7 @@ async fn an_index_write_that_never_lands_leaves_the_whole_frame(pool: sqlx::PgPo
     let key = ed25519_dalek::SigningKey::from_bytes(&[52u8; 32]);
     let (state, mut conn, doc_id) = writer(pool.clone(), &stub, &key).await;
     refuse_index_writes(&pool, 1_000).await;
-    let (tx, _rx) = mpsc::channel::<Payload>(8);
+    let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
     let update = signed_update(&key, doc_id, 1, 16);
 
     handle_update(&state, &mut conn, update.clone(), &tx).await;
@@ -164,7 +164,7 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
         .set(format!("doc:{doc_id}:pending"), "not a list")
         .await
         .unwrap();
-    let (tx, _rx) = mpsc::channel::<Payload>(8);
+    let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
     let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE.as_len() + 1024;
     let update = signed_update(&key, doc_id, 1, large);
 
@@ -228,7 +228,7 @@ async fn a_replay_stopped_at_a_lost_delta_names_the_last_one_delivered(pool: sql
     let stub = S3Stub::spawn([]).await;
     let key = ed25519_dalek::SigningKey::from_bytes(&[56u8; 32]);
     let (state, mut conn, doc_id) = writer(pool.clone(), &stub, &key).await;
-    let (tx, _rx) = mpsc::channel::<Payload>(8);
+    let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
     for clock in 1..=3 {
         handle_update(
             &state,
@@ -280,7 +280,7 @@ async fn a_page_read_out_of_order_is_sent_in_order(pool: sqlx::PgPool) {
     let stub = S3Stub::spawn([]).await;
     let key = ed25519_dalek::SigningKey::from_bytes(&[55u8; 32]);
     let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
-    let (tx, _rx) = mpsc::channel::<Payload>(8);
+    let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
     let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE.as_len() + 1024;
     for clock in 1..=3 {
         handle_update(
@@ -329,7 +329,7 @@ async fn a_second_replay_inside_the_window_is_answered_with_nothing(pool: sqlx::
     let stub = S3Stub::spawn([]).await;
     let key = ed25519_dalek::SigningKey::from_bytes(&[56u8; 32]);
     let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
-    let (tx, mut rx) = mpsc::channel::<Payload>(8);
+    let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
     handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
     while rx.try_recv().is_ok() {}
 

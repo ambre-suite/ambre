@@ -180,7 +180,7 @@ pub async fn report_snapshot(
         }
         // Every member sees who sealed it and who reported it (the Murmure
         // segments spec).
-        let shown = crate::payload::Payload::server_msg(
+        let shown = crate::payload::StoredPayload::server_msg(
             &ambre_protocol::ws::WsServerMsg::SnapshotDropped {
                 document_id: doc_id,
                 snapshot_id: snap_id,
@@ -190,7 +190,7 @@ pub async fn report_snapshot(
             },
         );
         let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &shown).await;
-        let ask = crate::payload::Payload::server_msg(
+        let ask = crate::payload::StoredPayload::server_msg(
             &ambre_protocol::ws::WsServerMsg::SnapshotRequired {
                 document_id: doc_id,
             },
@@ -278,12 +278,13 @@ pub async fn create_snapshot(
         covered,
     )
     .await?;
-    let msg =
-        crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
+    let msg = crate::payload::StoredPayload::server_msg(
+        &ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
             document_id: doc_id,
             snapshot_id: sid,
             covered_seq: covered,
-        });
+        },
+    );
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
     Ok(axum::Json(CreateSnapshotResponse { snapshot_id: sid }))
 }

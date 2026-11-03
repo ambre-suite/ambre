@@ -13,14 +13,14 @@ pub(crate) fn refusal(document_id: Option<Id<Document>>, code: RefusalCode) -> W
 
 /// Sends [`refusal`] and logs `detail`, which holds no content (`SRV-170`).
 pub(crate) async fn refuse(
-    outbound_tx: &mpsc::Sender<Payload>,
+    outbound_tx: &mpsc::Sender<StoredPayload>,
     document_id: Option<Id<Document>>,
     code: RefusalCode,
     detail: &str,
 ) {
     tracing::debug!(?document_id, %code, detail, "wire message refused");
     let _ = outbound_tx
-        .send(Payload::server_msg(&refusal(document_id, code)))
+        .send(StoredPayload::server_msg(&refusal(document_id, code)))
         .await;
 }
 
@@ -38,7 +38,7 @@ pub(crate) fn delta_refusal(update: &ambre_protocol::Update, code: RefusalCode) 
 /// Sends [`delta_refusal`] and logs `detail`, which holds no content
 /// (`SRV-170`).
 async fn refuse_delta(
-    outbound_tx: &mpsc::Sender<Payload>,
+    outbound_tx: &mpsc::Sender<StoredPayload>,
     update: &ambre_protocol::Update,
     code: RefusalCode,
     detail: &str,
@@ -46,7 +46,7 @@ async fn refuse_delta(
     let document_id = update.public_data.document_id;
     tracing::debug!(%document_id, %code, detail, "delta refused");
     let _ = outbound_tx
-        .send(Payload::server_msg(&delta_refusal(update, code)))
+        .send(StoredPayload::server_msg(&delta_refusal(update, code)))
         .await;
 }
 
@@ -186,12 +186,12 @@ pub(crate) async fn handle_subscribe(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
     document_id: Id<Document>,
-    outbound_tx: &mpsc::Sender<Payload>,
+    outbound_tx: &mpsc::Sender<StoredPayload>,
 ) {
     let role = match verify_document_access(&state.db, document_id, conn.user_id).await {
         Ok(role) => role,
         Err(e) => {
-            let err = Payload::server_msg(&subscribe_refusal(document_id, &e));
+            let err = StoredPayload::server_msg(&subscribe_refusal(document_id, &e));
             let _ = outbound_tx.send(err).await;
             return;
         }
@@ -271,7 +271,7 @@ pub(crate) async fn handle_subscribe(
     // Cache the write capability so `handle_update` can reject a read-only
     // (`viewer`) member's delta without re-hitting the database per message.
     conn.doc_write.insert(document_id, DocWrite::of(role));
-    let ack = Payload::server_msg(&WsServerMsg::Subscribed { document_id });
+    let ack = StoredPayload::server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
 }
 
@@ -310,7 +310,7 @@ pub(crate) async fn announce_departure(
         return;
     }
     let _ = redis_ops::doc_presence_remove(&state.redis, document_id, signing_pubkey).await;
-    let broadcast = Payload::server_msg(&WsServerMsg::PeerLeft {
+    let broadcast = StoredPayload::server_msg(&WsServerMsg::PeerLeft {
         document_id: *document_id,
         pub_key: *signing_pubkey,
     });
@@ -321,7 +321,7 @@ pub(crate) async fn handle_update(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
     update: ambre_protocol::Update,
-    outbound_tx: &mpsc::Sender<Payload>,
+    outbound_tx: &mpsc::Sender<StoredPayload>,
 ) {
     let doc_id = update.public_data.document_id;
     if !conn.doc_subscriptions.contains(&doc_id) {
@@ -428,7 +428,7 @@ pub(crate) async fn handle_update(
             Err(e) => {
                 let answer = update_refusal(&update, &e);
                 conn.clock_fences.raise_for(&answer);
-                let _ = outbound_tx.send(Payload::server_msg(&answer)).await;
+                let _ = outbound_tx.send(StoredPayload::server_msg(&answer)).await;
                 return;
             }
         };
@@ -441,7 +441,7 @@ pub(crate) async fn handle_update(
     // `.expect()` would panic the whole connection task on the off chance it
     // isn't. Log and abort just this update instead: the seq is already assigned,
     // so a reconnecting client refetches it from the durable index.
-    let update_wire = match Payload::seal(&update) {
+    let update_wire = match StoredPayload::seal(&update) {
         Ok(wire) => wire,
         Err(e) => {
             tracing::error!("postcard encode Update failed doc={doc_id} seq={seq}: {e}");
@@ -516,7 +516,7 @@ pub(crate) async fn handle_update(
         }
     }
 
-    let broadcast = Payload::server_msg(&WsServerMsg::Update { seq, update });
+    let broadcast = StoredPayload::server_msg(&WsServerMsg::Update { seq, update });
     tracing::debug!("[Server->RedisPubSub] broadcast Update doc={doc_id} seq={seq}");
     if let Err(e) = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await {
         // A dropped broadcast only delays live delivery: subscribers replay the
@@ -556,7 +556,7 @@ async fn store_index_row(
     update: &ambre_protocol::Update,
     seq: ambre_core::Seq,
     s3_key: &ambre_core::ObjectKey,
-    wire: &Payload,
+    wire: &StoredPayload,
 ) -> Result<bool, AppError> {
     let author = &update.public_data.pub_key;
     let snapshot_id = &update.public_data.snapshot_id;
@@ -655,7 +655,7 @@ pub(crate) async fn handle_ephemeral(
         return;
     }
 
-    let broadcast = Payload::server_msg(&WsServerMsg::Ephemeral(eph));
+    let broadcast = StoredPayload::server_msg(&WsServerMsg::Ephemeral(eph));
     let _ = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await;
 }
 
@@ -664,7 +664,7 @@ pub(crate) async fn handle_request_missing(
     conn: &mut WsConnectionState,
     document_id: Id<Document>,
     after_seq: ambre_protocol::messages::Seq,
-    outbound_tx: &mpsc::Sender<Payload>,
+    outbound_tx: &mpsc::Sender<StoredPayload>,
 ) {
     if !conn.doc_subscriptions.contains(&document_id) {
         return;
@@ -719,7 +719,7 @@ pub(crate) async fn handle_request_missing(
                 // already sent stand, and the stop names the last delta they
                 // delivered, so the client asks again from there (`SRV-184`).
                 tracing::error!(error = %e, "failed to get updates after seq");
-                let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
+                let msg = StoredPayload::server_msg(&WsServerMsg::ReplayStopped {
                     document_id,
                     after_seq: cursor,
                 });
@@ -736,7 +736,7 @@ pub(crate) async fn handle_request_missing(
             // silence here leaves its loading overlay spinning forever. Send
             // an empty page to release it.
             if first_page {
-                let msg = Payload::server_msg(&WsServerMsg::MissingUpdates {
+                let msg = StoredPayload::server_msg(&WsServerMsg::MissingUpdates {
                     document_id,
                     updates: Vec::new(),
                 });
@@ -806,7 +806,7 @@ pub(crate) async fn handle_request_missing(
         // The last delta this page delivers, or the cursor it started past.
         let delivered = seq_updates.last().map_or(cursor, |u| u.seq);
 
-        let msg = Payload::server_msg(&WsServerMsg::MissingUpdates {
+        let msg = StoredPayload::server_msg(&WsServerMsg::MissingUpdates {
             document_id,
             updates: seq_updates,
         });
@@ -818,7 +818,7 @@ pub(crate) async fn handle_request_missing(
                 seq = seq.get(),
                 "replay stopped at a delta it could not read"
             );
-            let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
+            let msg = StoredPayload::server_msg(&WsServerMsg::ReplayStopped {
                 document_id,
                 after_seq: delivered,
             });
@@ -1540,7 +1540,7 @@ mod delta_size_cap_tests {
         for (fill, (mut update, expected)) in (1u8..).zip(cases) {
             update.signature = FixedBytes::<Signature>::from_array([fill; 64]);
             let mut conn = conn_with(session_key, doc_id);
-            let (tx, mut rx) = mpsc::channel::<Payload>(8);
+            let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
             handle_update(&state, &mut conn, update, &tx).await;
             let reply = rx.try_recv().expect("a refusal");
             let decoded = ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
@@ -1571,7 +1571,7 @@ mod delta_size_cap_tests {
         let _ = state.redis.del([&pending_key]).await;
 
         let mut conn = conn_with(session_key, doc_id);
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
 
         // 9 bytes > the 8-byte cap: rejected before any durable write.
         handle_update(&state, &mut conn, update_with(session_key, doc_id, 9), &tx).await;
@@ -1620,7 +1620,7 @@ mod delta_size_cap_tests {
         // read-only, exactly as `handle_subscribe` would set it for a `viewer`.
         let mut conn = conn_with(session_key, doc_id);
         conn.doc_write.insert(doc_id, DocWrite::ReadOnly);
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
 
         handle_update(&state, &mut conn, update_with(session_key, doc_id, 16), &tx).await;
 
@@ -1680,7 +1680,7 @@ mod delta_size_cap_tests {
         // A fresh doc_id with no rows in the durable index: the very first page
         // of the replay is empty.
         let mut conn = conn_with(session_key, doc_id);
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
 
         handle_request_missing(
             &state,
@@ -1780,7 +1780,7 @@ mod access_tests {
         }
     }
 
-    fn replies(rx: &mut mpsc::Receiver<Payload>) -> Vec<WsServerMsg> {
+    fn replies(rx: &mut mpsc::Receiver<StoredPayload>) -> Vec<WsServerMsg> {
         std::iter::from_fn(|| rx.try_recv().ok())
             .map(|wire| {
                 decode_server_msg(&ambre_core::Payload::new(wire.expose_bytes().to_vec())).unwrap()
@@ -1821,7 +1821,7 @@ mod access_tests {
         let key = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let mut conn = conn_of(editor, key, doc_id, Duration::ZERO);
         conn.doc_subscriptions.clear();
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
 
         handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
         assert!(matches!(
@@ -1878,7 +1878,7 @@ mod access_tests {
         )
         .await
         .unwrap();
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
 
         let mut conn = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
@@ -1917,7 +1917,7 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let key = FixedBytes::<PublicKey>::from_array([33u8; 32]);
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
 
         let mut kept = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_request_missing(
@@ -2538,7 +2538,7 @@ mod hot_tail_tests {
         doc_id: Id<Document>,
     ) -> Vec<Vec<u8>> {
         conn.last_replay_at.clear();
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
         handle_request_missing(
             state,
             conn,
@@ -2564,7 +2564,7 @@ mod hot_tail_tests {
         let stub = S3Stub::spawn([]).await;
         let key = ed25519_dalek::SigningKey::from_bytes(&[41u8; 32]);
         let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
-        let (tx, _rx) = mpsc::channel::<Payload>(8);
+        let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
         let pending_key = format!("doc:{doc_id}:pending");
 
         handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
@@ -2626,8 +2626,8 @@ mod hot_tail_tests {
             clock_fences: ClockFences::default(),
             doc_channels: HashMap::new(),
         };
-        let (tx, _rx) = mpsc::channel::<Payload>(8);
-        let (second_tx, mut second_rx) = mpsc::channel::<Payload>(8);
+        let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
+        let (second_tx, mut second_rx) = mpsc::channel::<StoredPayload>(8);
         let stored = |state: Arc<AppState>| async move {
             db::get_updates_after(
                 &state.db,
@@ -2687,7 +2687,7 @@ mod hot_tail_tests {
         let stub = S3Stub::spawn([]).await;
         let key = ed25519_dalek::SigningKey::from_bytes(&[42u8; 32]);
         let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
-        let (tx, _rx) = mpsc::channel::<Payload>(8);
+        let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
         for clock in 1..=6 {
             handle_update(
                 &state,
@@ -2820,7 +2820,7 @@ mod channel_gate_tests {
     }
 
     /// The code of a refusal, of a wire message or of a delta.
-    fn error_code(frame: &Payload) -> Option<RefusalCode> {
+    fn error_code(frame: &StoredPayload) -> Option<RefusalCode> {
         match ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
             frame.expose_bytes().to_vec(),
         ))
@@ -2844,7 +2844,7 @@ mod channel_gate_tests {
         let segment = segment_of_channel(&pool, owner, None).await;
         let state = test_app_state(pool).await;
         let mut conn = conn_of(eve, FixedBytes::<PublicKey>::from_array([2u8; 32]));
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
 
         handle_subscribe(&state, &mut conn, segment, &tx).await;
 
@@ -2868,7 +2868,7 @@ mod channel_gate_tests {
         let segment = segment_of_channel(&pool, owner, Some((bob, ambre_core::Role::Editor))).await;
         let state = test_app_state(pool).await;
         let mut conn = conn_of(bob, FixedBytes::<PublicKey>::from_array([3u8; 32]));
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
 
         handle_subscribe(&state, &mut conn, segment, &tx).await;
 
@@ -2896,7 +2896,7 @@ mod channel_gate_tests {
         let state = test_app_state(pool).await;
         let session_key = FixedBytes::<PublicKey>::from_array([4u8; 32]);
         let mut conn = conn_of(bob, session_key);
-        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
         handle_subscribe(&state, &mut conn, segment, &tx).await;
         let _ = rx.try_recv();
         let pending_key = format!("doc:{segment}:pending");
@@ -2944,7 +2944,7 @@ mod channel_gate_tests {
             owner,
             FixedBytes::<PublicKey>::from_array(key.verifying_key().to_bytes()),
         );
-        let (tx, mut rx) = mpsc::channel::<Payload>(16);
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(16);
         for document in [thread, segment] {
             handle_subscribe(&state, &mut conn, document, &tx).await;
         }

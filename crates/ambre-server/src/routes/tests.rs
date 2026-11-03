@@ -603,7 +603,7 @@ mod handler_tests {
             )
             .await
         ));
-        let frame = crate::payload::Payload::new(vec![1]);
+        let frame = crate::payload::StoredPayload::new(vec![1]);
         assert!(gone(
             crate::redis_ops::append_pending_delta(
                 redis,
