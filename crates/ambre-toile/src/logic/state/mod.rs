@@ -98,6 +98,7 @@ pub(crate) use names::{
 pub enum BoardWalks {}
 
 impl ambre_core::TallyKind for BoardWalks {
+    type Repr = u32;
     const NAME: &'static str = "BoardWalkCount";
 }
 

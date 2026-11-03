@@ -40,6 +40,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub enum Failures {}
 
 impl crate::TallyKind for Failures {
+    type Repr = u32;
     const NAME: &'static str = "FailureCount";
 }
 
@@ -720,7 +721,8 @@ where
 /// moves by no span. Unlike an [`Instant<Authored>`], a rule may order on
 /// it: a write made after another was seen carries a greater stamp. Two
 /// concurrent writes may share one, so such a rule breaks the tie on
-/// something else.
+/// something else. So it is no [`crate::Seq`]: many peers issue stamps, and
+/// two may hand out one value.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]

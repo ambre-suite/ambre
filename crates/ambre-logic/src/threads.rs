@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{Authored, Instant, Mentions, MurmureEvent, Seq};
+use ambre_bus::{Authored, Instant, Mentions, MurmureEvent, Relay, Seq};
 use ambre_murmure::{ChannelState, Replied};
 
 impl LogicState {
@@ -180,7 +180,7 @@ impl LogicState {
         let after = self
             .read_cursors
             .get(&thread)
-            .map_or(Seq::new(0), |cursor| cursor.read);
+            .map_or(Seq::<Relay>::new(0), |cursor| cursor.read);
         self.watched_threads.insert(
             thread,
             WatchedThread {

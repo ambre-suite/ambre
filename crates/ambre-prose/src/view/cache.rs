@@ -21,6 +21,7 @@ use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
 pub enum CachedRuns {}
 
 impl ambre_core::TallyKind for CachedRuns {
+    type Repr = u32;
     const NAME: &'static str = "CachedRunCount";
 }
 
@@ -28,6 +29,7 @@ impl ambre_core::TallyKind for CachedRuns {
 pub enum Builds {}
 
 impl ambre_core::TallyKind for Builds {
+    type Repr = u32;
     const NAME: &'static str = "BuildCount";
 }
 

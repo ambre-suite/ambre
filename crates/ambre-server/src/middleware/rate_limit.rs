@@ -174,6 +174,7 @@ fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
 pub enum Requests {}
 
 impl ambre_core::TallyKind for Requests {
+    type Repr = u32;
     const NAME: &'static str = "RequestCount";
 }
 

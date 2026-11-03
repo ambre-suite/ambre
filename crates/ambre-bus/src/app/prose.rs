@@ -851,6 +851,7 @@ pub struct CellBorder {
 pub enum Words {}
 
 impl ambre_core::TallyKind for Words {
+    type Repr = u32;
     const NAME: &'static str = "WordTotal";
 }
 
@@ -858,6 +859,7 @@ impl ambre_core::TallyKind for Words {
 pub enum Graphemes {}
 
 impl ambre_core::TallyKind for Graphemes {
+    type Repr = u32;
     const NAME: &'static str = "GraphemeCount";
 }
 
@@ -865,6 +867,7 @@ impl ambre_core::TallyKind for Graphemes {
 pub enum Paragraphs {}
 
 impl ambre_core::TallyKind for Paragraphs {
+    type Repr = u32;
     const NAME: &'static str = "ParagraphCount";
 }
 
@@ -2118,6 +2121,7 @@ impl ConversionReport {
 pub enum ConversionLosses {}
 
 impl ambre_core::TallyKind for ConversionLosses {
+    type Repr = u32;
     const NAME: &'static str = "WarningCount";
 }
 

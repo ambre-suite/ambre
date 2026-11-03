@@ -8,7 +8,7 @@
 use ambre_core::id::{self, Document, Id};
 use ambre_core::{FixedBytes, Payload, PublicKey};
 use ambre_crypto::{DocumentKey, MasterSeed, envelope};
-use ambre_protocol::messages::Clock;
+use ambre_protocol::messages::{AuthorKey, Seq};
 use ambre_protocol::public_data::UpdatePublicData;
 use ambre_protocol::{Snapshot, Update};
 
@@ -61,7 +61,7 @@ pub fn open_authenticated(plaintext: &[u8]) -> Result<Vec<u8>, PipelineError> {
         pub_key: FixedBytes::<PublicKey>::from_array(signing.verifying_key().to_bytes()),
         key_id: key.id(),
         snapshot_id: Id::<id::Snapshot>::mint(),
-        clock: Clock::new(1),
+        clock: Seq::<AuthorKey>::new(1),
     };
     let aad = postcard::to_allocvec(&public_data)
         .map(ambre_core::Aad::new)

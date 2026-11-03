@@ -160,7 +160,7 @@ pub fn format_s3_snapshot_key(
 pub fn format_s3_delta_key(
     env_prefix: &StoreText<EnvPrefix>,
     document_id: &Id<Document>,
-    seq: ambre_core::Seq,
+    seq: ambre_core::Seq<ambre_core::Relay>,
 ) -> ambre_core::ObjectKey {
     let seq = seq.get();
     ambre_core::ObjectKey::new(format!(
@@ -569,6 +569,7 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
 pub enum DrainedEntries {}
 
 impl ambre_core::TallyKind for DrainedEntries {
+    type Repr = u32;
     const NAME: &'static str = "ProcessedCount";
 }
 
@@ -792,21 +793,33 @@ mod tests {
     #[test]
     fn delta_key_zero_pads_seq() {
         let doc_id = Id::<Document>::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq::new(42));
+        let key = format_s3_delta_key(
+            &env("dev"),
+            &doc_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(42),
+        );
         assert!(key.as_str().ends_with("deltas/0000000042"));
     }
 
     #[test]
     fn delta_key_pads_small_seq() {
         let doc_id = Id::<Document>::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq::new(7));
+        let key = format_s3_delta_key(
+            &env("dev"),
+            &doc_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(7),
+        );
         assert!(key.as_str().ends_with("deltas/0000000007"));
     }
 
     #[test]
     fn delta_key_handles_large_seq() {
         let doc_id = Id::<Document>::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq::new(9999999999u64));
+        let key = format_s3_delta_key(
+            &env("dev"),
+            &doc_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(9999999999u64),
+        );
         assert!(key.as_str().ends_with("deltas/9999999999"));
     }
 

@@ -10,7 +10,7 @@
 //! when the answer reaches the view. No clock crosses a thread.
 
 use ambre_bus::app::prose::ProseEvent;
-use ambre_core::Tally;
+use ambre_core::{Seq, Tally};
 
 use crate::ui::DraftBuffer;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
@@ -118,10 +118,10 @@ pub struct KeyProbe {
     unconfirmed: Vec<(
         ambre_core::Generation<ambre_bus::app::prose::TextAck>,
         Instant<PageLoad>,
-        FrameNumber,
+        Seq<AnimationFrame>,
     )>,
     /// The animation frames begun so far.
-    frame: FrameNumber,
+    frame: Seq<AnimationFrame>,
     /// The frame counts of the confirmations since the last take.
     counts: Vec<Tally<AnimationFrames>>,
     /// The highest acknowledgement number seen in the draft.
@@ -133,7 +133,7 @@ impl KeyProbe {
     /// An animation frame began. Called once per frame, before its answers
     /// are applied, whether or not it paints.
     pub fn frame(&mut self) {
-        self.frame = self.frame.next();
+        self.frame = self.frame.after();
     }
 
     /// The frame counts of the confirmations since the last call.
@@ -237,26 +237,23 @@ impl KeyProbe {
 pub enum AnimationFrames {}
 
 impl ambre_core::TallyKind for AnimationFrames {
+    type Repr = u32;
     const NAME: &'static str = "FrameCount";
 }
 
-/// How many animation frames began before a moment, counted by the probe.
-/// It only grows, and holds at the top rather than wrap.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-struct FrameNumber(u64);
+/// The probe that numbers the animation frames as they begin. A
+/// `Seq<AnimationFrame>` is how many began before a moment: it only grows,
+/// and holds at the top rather than wrap.
+enum AnimationFrame {}
 
-impl FrameNumber {
-    /// The number once one more frame began.
-    fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+impl ambre_core::SeqKind for AnimationFrame {
+    const NAME: &'static str = "FrameNumber";
+}
 
-    /// The frames begun from `earlier` to this number, zero when `earlier`
-    /// is not before it, held at the top of a tally.
-    fn since(self, earlier: Self) -> Tally<AnimationFrames> {
-        let frames = self.0.saturating_sub(earlier.0);
-        Tally::<AnimationFrames>::new(u32::try_from(frames).unwrap_or(u32::MAX))
-    }
+/// The gap between two frame numbers counts the frames a confirmation
+/// waited for, held at the top of the 32-bit tally.
+impl ambre_core::CountsSince for AnimationFrame {
+    type Tally = AnimationFrames;
 }
 
 /// The median and the 95th percentile of a set of samples, in the unit the
@@ -518,17 +515,17 @@ mod tests {
     #[test]
     fn a_frame_begun_at_the_top_of_the_count_holds_there() {
         let mut probe = KeyProbe {
-            frame: FrameNumber(u64::MAX),
+            frame: Seq::<AnimationFrame>::new(u64::MAX),
             ..KeyProbe::default()
         };
         probe.frame();
-        assert_eq!(probe.frame, FrameNumber(u64::MAX));
+        assert_eq!(probe.frame, Seq::<AnimationFrame>::new(u64::MAX));
         assert_eq!(
-            FrameNumber(1).since(FrameNumber(3)),
+            Seq::<AnimationFrame>::new(1).since(Seq::<AnimationFrame>::new(3)),
             Tally::<AnimationFrames>::ZERO
         );
         assert_eq!(
-            FrameNumber(u64::MAX).since(FrameNumber(0)),
+            Seq::<AnimationFrame>::new(u64::MAX).since(Seq::<AnimationFrame>::ZERO),
             Tally::<AnimationFrames>::new(u32::MAX)
         );
     }

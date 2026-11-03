@@ -742,7 +742,7 @@ impl LogicState {
     pub(crate) fn track_waiting(
         &mut self,
         document_id: Id<Document>,
-        applied: &[(Seq, &ambre_core::Payload<ambre_core::DeltaBytes>)],
+        applied: &[(Seq<Relay>, &ambre_core::Payload<ambre_core::DeltaBytes>)],
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
@@ -781,7 +781,7 @@ impl LogicState {
     fn record_seq(
         &mut self,
         document_id: Id<Document>,
-        seq: Seq,
+        seq: Seq<Relay>,
         payload: Option<&ambre_core::Payload<ambre_core::DeltaBytes>>,
     ) {
         if let Some(doc) = self.docs.get_mut(&document_id) {
@@ -805,7 +805,7 @@ impl LogicState {
         {
             return;
         }
-        let accepted: Vec<(Seq, ambre_core::Payload<ambre_core::DeltaBytes>)> = deltas
+        let accepted: Vec<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)> = deltas
             .into_iter()
             .filter_map(|delta| {
                 let accepted = authored_by(&delta.payload, delta.peer);
@@ -1052,7 +1052,7 @@ impl LogicState {
     pub(crate) fn export_covered_snapshot(
         &self,
         document_id: Id<Document>,
-    ) -> Option<(ambre_core::Payload<ambre_core::SnapshotBytes>, Seq)> {
+    ) -> Option<(ambre_core::Payload<ambre_core::SnapshotBytes>, Seq<Relay>)> {
         let doc = self.docs.get(&document_id)?;
         Some((doc.state.export_snapshot(), doc.ledger.contiguous_end()))
     }
@@ -1082,7 +1082,7 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
-        covered: Seq,
+        covered: Seq<Relay>,
     ) {
         self.apply_remote(
             document_id,
@@ -1107,7 +1107,7 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
-        covered: Seq,
+        covered: Seq<Relay>,
         payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
         purpose: SnapshotPurpose,
     ) {

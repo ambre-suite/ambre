@@ -23,7 +23,7 @@ use crate::{
 use ambre_core::id::{
     Channel, Document, Id, Lease, Meeting, Message, Segment, Snapshot, Space, User,
 };
-use ambre_core::{FixedBytes, Generation, Seq, SessionNonce};
+use ambre_core::{FixedBytes, Generation, Relay, Seq, SessionNonce};
 use ambre_core::{Ms, TimeSpan};
 
 // -----------------------------------------------------------------------------
@@ -81,7 +81,7 @@ pub enum LogicEvent {
         payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         /// The last delta `seq` it folds in, 0 when unknown. The Logic thread
         /// counts the deltas a later snapshot must hold from it (`AUTHOR-016`).
-        covered_seq: Seq,
+        covered_seq: Seq<Relay>,
     },
 
     /// A snapshot to check before anything trusts it
@@ -92,7 +92,7 @@ pub enum LogicEvent {
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
         /// The last delta `seq` it claims to fold in.
-        covered_seq: Seq,
+        covered_seq: Seq<Relay>,
         /// Decrypted and decompressed, as in `RemoteSnapshot`.
         payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         purpose: SnapshotPurpose,
@@ -484,7 +484,7 @@ pub enum LeaseAnswer {
     /// snapshot covers the deltas up to `horizon`.
     Granted {
         lease: Id<Lease>,
-        horizon: Seq,
+        horizon: Seq<Relay>,
         expires_in: TimeSpan<Ms>,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The grace period
@@ -500,9 +500,9 @@ pub enum FoldAnswer {
     /// `amendments` up to at least `amendments_seq`.
     Granted {
         lease: Id<Lease>,
-        horizon: Seq,
+        horizon: Seq<Relay>,
         amendments: Id<Document>,
-        amendments_seq: Seq,
+        amendments_seq: Seq<Relay>,
         expires_in: TimeSpan<Ms>,
     },
     /// No lease yet: ask again in `retry_in` milliseconds. The fold delay
@@ -549,7 +549,7 @@ pub enum SnapshotVerdict {
 pub struct SignedDelta {
     /// The number the relay gave it. The Logic thread's snapshot check reads
     /// which deltas a horizon covers from it (`AUTHOR-016`).
-    pub seq: Seq,
+    pub seq: Seq<Relay>,
     /// The Loro update, decrypted and decompressed.
     pub payload: ambre_core::Payload<ambre_core::DeltaBytes>,
     /// The session nonce of its author, opened from inside the ciphertext.

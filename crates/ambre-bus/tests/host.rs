@@ -295,7 +295,7 @@ fn logic_event_roundtrips_through_postcard() {
     roundtrip_event(&LogicEvent::RemoteUpdate {
         document_id: doc,
         delta: ambre_bus::SignedDelta {
-            seq: ambre_bus::Seq::new(8),
+            seq: ambre_bus::Seq::<ambre_bus::Relay>::new(8),
             payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![3, 1, 4, 1, 5, 9]),
             nonce: ambre_core::FixedBytes::from_array([2; 16]),
             peer: ambre_core::PeerId::new(7),
@@ -442,8 +442,8 @@ const EVENT_VARIANTS: usize = 55;
 #[test]
 fn every_envelope_variant_roundtrips_through_postcard() {
     use ambre_bus::{
-        ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, SealedChannelKey,
-        Seq, SignedDelta, SnapshotPurpose, SnapshotVerdict,
+        ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, Relay,
+        SealedChannelKey, Seq, SignedDelta, SnapshotPurpose, SnapshotVerdict,
     };
     use ambre_core::FixedBytes;
     use std::collections::BTreeSet;
@@ -457,7 +457,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     let user = Id::<User>::mint();
     let snapshot = Id::<Snapshot>::genesis(doc);
     let delta = SignedDelta {
-        seq: ambre_bus::Seq::new(3),
+        seq: ambre_bus::Seq::<ambre_bus::Relay>::new(3),
         payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![1, 2, 255]),
         nonce: FixedBytes::from_array([4; 16]),
         peer: ambre_core::PeerId::new(9),
@@ -479,7 +479,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::CloseDocument { document_id: doc },
         SyncCommand::ReleaseDocument {
             document_id: doc,
-            applied_seq: ambre_bus::Seq::new(12),
+            applied_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(12),
         },
         SyncCommand::SendUpdate {
             document_id: doc,
@@ -499,7 +499,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::SendSnapshot {
             document_id: doc,
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![1; 4]),
-            covered_seq: ambre_bus::Seq::new(40),
+            covered_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(40),
         },
         SyncCommand::SnapshotVerdict {
             document_id: doc,
@@ -566,7 +566,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             lease: Id::<Lease>::mint(),
-            horizon: ambre_bus::Seq::new(42),
+            horizon: ambre_bus::Seq::<ambre_bus::Relay>::new(42),
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![4; 3]),
         },
         SyncCommand::TakeFoldLease {
@@ -577,21 +577,21 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             lease: Id::<Lease>::mint(),
-            horizon: ambre_bus::Seq::new(42),
-            amendments_seq: ambre_bus::Seq::new(7),
+            horizon: ambre_bus::Seq::<ambre_bus::Relay>::new(42),
+            amendments_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(7),
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![5; 3]),
         },
         SyncCommand::WatchSegment { segment, meta },
         SyncCommand::WatchThread {
             thread: doc,
             meta,
-            after: Seq::new(3),
+            after: Seq::<Relay>::new(3),
         },
         SyncCommand::WatchChannel {
             channel_id: chan,
             meta,
-            meta_last: Some(Seq::new(2)),
-            documents: vec![(doc, Some(Seq::new(3))), (doc, None)],
+            meta_last: Some(Seq::<Relay>::new(2)),
+            documents: vec![(doc, Some(Seq::<Relay>::new(3))), (doc, None)],
         },
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
@@ -614,7 +614,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             finals: Vec::new(),
         },
         SyncCommand::MoveReadCursors {
-            cursors: vec![(segment, Seq::new(4))],
+            cursors: vec![(segment, Seq::<Relay>::new(4))],
         },
         SyncCommand::MarkThreadRead { thread: doc },
         SyncCommand::MarkAllRead,
@@ -646,12 +646,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::RemoteSnapshot {
             document_id: doc,
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![9; 3]),
-            covered_seq: ambre_bus::Seq::new(30),
+            covered_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(30),
         },
         LogicEvent::PendingSnapshot {
             document_id: doc,
             snapshot_id: snapshot,
-            covered_seq: ambre_bus::Seq::new(31),
+            covered_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(31),
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![4]),
             purpose: SnapshotPurpose::Open,
         },
@@ -732,8 +732,8 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 document_id: segment.document_id(),
                 kind: ChannelDocumentKind::Segment,
                 active: ambre_bus::Activity::Active,
-                read: Seq::new(2),
-                last: Some(Seq::new(5)),
+                read: Seq::<Relay>::new(2),
+                last: Some(Seq::<Relay>::new(5)),
             }],
         },
         LogicEvent::ChannelCreated {
@@ -785,7 +785,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_bus::Seq::new(42),
+                horizon: ambre_bus::Seq::<ambre_bus::Relay>::new(42),
                 expires_in: TimeSpan::<Ms>::new(30_000),
             },
         },
@@ -804,9 +804,9 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             answer: FoldAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_bus::Seq::new(42),
+                horizon: ambre_bus::Seq::<ambre_bus::Relay>::new(42),
                 amendments: Id::<Document>::mint(),
-                amendments_seq: ambre_bus::Seq::new(7),
+                amendments_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(7),
                 expires_in: TimeSpan::<Ms>::new(30_000),
             },
         },
@@ -865,7 +865,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             metas: vec![ChannelMeta {
                 channel_id: chan,
                 meta: Id::<Meta>::from_document(doc),
-                last: Some(Seq::new(5)),
+                last: Some(Seq::<Relay>::new(5)),
             }],
         },
         LogicEvent::MeetingParticipantJoined {

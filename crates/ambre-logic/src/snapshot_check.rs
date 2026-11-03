@@ -15,7 +15,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ambre_bus::{SnapshotPurpose as Purpose, SnapshotVerdict as Outcome};
-use ambre_core::Seq;
+use ambre_core::{Relay, Seq};
 use loro::{
     Counter, IdSpan, Lamport, LoroDoc, LoroValue, PeerID, ValueOrContainer, VersionVector,
     json::JsonChange,
@@ -30,19 +30,19 @@ use loro::{
 pub(crate) struct SeqLedger {
     /// The last sequence number a snapshot this client imported covers. The
     /// deltas at or below it are folded into `base`.
-    floor: Seq,
+    floor: Seq<Relay>,
     /// The version the document held at `floor`.
     base: VersionVector,
     /// Each delta past `floor`: its PeerID and the counter it ends at, or
     /// `None` for a delta refused or unreadable, which carries nothing.
-    ends: BTreeMap<Seq, Option<(PeerID, Counter)>>,
+    ends: BTreeMap<Seq<Relay>, Option<(PeerID, Counter)>>,
 }
 
 impl SeqLedger {
     /// Start again from a snapshot covering every delta up to `covered`, after
     /// which the document stood at `base`. The deltas past `covered` already
     /// recorded stay.
-    pub(crate) fn reset(&mut self, covered: Seq, base: VersionVector) {
+    pub(crate) fn reset(&mut self, covered: Seq<Relay>, base: VersionVector) {
         self.floor = covered;
         self.base = base;
         self.ends = self.ends.split_off(&covered.after());
@@ -51,7 +51,7 @@ impl SeqLedger {
     /// Start again from a snapshot covering every delta up to `covered`, for
     /// a document no snapshot check reads: only its horizon counts. A
     /// snapshot covering less than the floor changes nothing.
-    pub(crate) fn raise_floor(&mut self, covered: Seq) {
+    pub(crate) fn raise_floor(&mut self, covered: Seq<Relay>) {
         if covered > self.floor {
             self.reset(covered, VersionVector::default());
         }
@@ -61,10 +61,10 @@ impl SeqLedger {
     /// delta was refused. A seq of 0 is no relay's number and is ignored.
     pub(crate) fn record(
         &mut self,
-        seq: Seq,
+        seq: Seq<Relay>,
         payload: Option<&ambre_core::Payload<ambre_core::DeltaBytes>>,
     ) {
-        if seq == Seq::ZERO || seq <= self.floor {
+        if seq == Seq::<Relay>::ZERO || seq <= self.floor {
             return;
         }
         let end = payload
@@ -80,13 +80,13 @@ impl SeqLedger {
     }
 
     /// The last seq a snapshot this client imported covers.
-    pub(crate) fn floor(&self) -> Seq {
+    pub(crate) fn floor(&self) -> Seq<Relay> {
         self.floor
     }
 
     /// The last seq this client holds with no gap below it. A snapshot built
     /// here covers up to it and no further.
-    pub(crate) fn contiguous_end(&self) -> Seq {
+    pub(crate) fn contiguous_end(&self) -> Seq<Relay> {
         let mut end = self.floor;
         for seq in self.ends.keys() {
             if *seq != end.after() {
@@ -99,7 +99,7 @@ impl SeqLedger {
 
     /// Fold every delta up to `covered` into the base, once a snapshot that
     /// covers them matched. A gap below `covered` leaves the ledger as it is.
-    pub(crate) fn fold_through(&mut self, covered: Seq) {
+    pub(crate) fn fold_through(&mut self, covered: Seq<Relay>) {
         if covered <= self.floor || self.contiguous_end() < covered {
             return;
         }
@@ -122,7 +122,7 @@ pub(crate) fn check_snapshot(
     own: &LoroDoc,
     ledger: &SeqLedger,
     snapshot: &ambre_core::Payload<ambre_core::SnapshotBytes>,
-    covered: Seq,
+    covered: Seq<Relay>,
     purpose: Purpose,
 ) -> Outcome {
     if covered < ledger.floor {
@@ -313,7 +313,10 @@ mod tests {
             let bytes = delta(&alice, &from);
             bob.import(&bytes).expect("import");
             seq += 1;
-            ledger.record(ambre_core::Seq::new(seq), Some(&bytes.clone().into()));
+            ledger.record(
+                ambre_core::Seq::<ambre_core::Relay>::new(seq),
+                Some(&bytes.clone().into()),
+            );
         };
         for (i, ch) in "hello world".chars().enumerate() {
             send(&|| text.insert(i, &ch.to_string()).expect("insert"));
@@ -484,7 +487,7 @@ mod tests {
             &bob,
             &ledger,
             &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(snapshot.to_vec()),
-            ambre_core::Seq::new(1),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
             Purpose::Confirm,
         );
         assert_eq!(before, (bob.oplog_vv(), bob.get_deep_value()));

@@ -18,7 +18,7 @@ pub struct SnapshotRow {
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into this snapshot. Clients gate their
     /// post-open `RequestMissing` on this value to skip the replayed history.
-    pub covered_seq: ambre_core::Seq,
+    pub covered_seq: ambre_core::Seq<ambre_core::Relay>,
     /// Who vouched for it (`SRV-126`).
     pub status: SnapshotStatus,
     #[allow(dead_code)]
@@ -60,8 +60,8 @@ pub struct UpdateRow {
     pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
     #[allow(dead_code)]
     pub snapshot_id: Id<Snapshot>,
-    pub clock: ambre_protocol::messages::Clock,
-    pub seq: ambre_core::Seq,
+    pub clock: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+    pub seq: ambre_core::Seq<ambre_core::Relay>,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
     pub s3_key: Option<ambre_core::ObjectKey>,
     /// The sealed envelope itself, for a delta in the hot tail (`SRV-148`).
@@ -76,16 +76,17 @@ pub struct UpdateRow {
 pub enum Snapshots {}
 
 impl ambre_core::TallyKind for Snapshots {
+    type Repr = u32;
     const NAME: &'static str = "SnapshotCount";
 }
 
-pub use ambre_core::DeltaCount;
-use ambre_core::{Sec, TimeSpan};
+pub use ambre_core::Deltas;
+use ambre_core::{Sec, StoredAsI64, TimeSpan};
 
 /// The bounds of a document's inline tail (`SRV-150`).
 #[derive(Debug, Clone, Copy)]
 pub struct InlineCap {
-    pub deltas: DeltaCount,
+    pub deltas: Tally<Deltas>,
     pub bytes: ambre_core::ByteSize,
 }
 
@@ -95,7 +96,7 @@ impl InlineCap {
     #[must_use]
     pub const fn three_quarters(self) -> Self {
         Self {
-            deltas: DeltaCount::new(self.deltas.get().saturating_mul(3).div_ceil(4)),
+            deltas: Tally::<Deltas>::new(self.deltas.get().saturating_mul(3).div_ceil(4)),
             bytes: ambre_core::ByteSize::new(self.bytes.get().saturating_mul(3).div_ceil(4)),
         }
     }
@@ -105,7 +106,7 @@ impl InlineCap {
     #[must_use]
     pub const fn quarter(self) -> Self {
         Self {
-            deltas: DeltaCount::new(self.deltas.get() / 4),
+            deltas: Tally::<Deltas>::new(self.deltas.get() / 4),
             bytes: ambre_core::ByteSize::new(self.bytes.get() / 4),
         }
     }
@@ -117,7 +118,7 @@ pub enum InlineInsert {
     /// The row holds the frame. The tail now holds `deltas` rows and `bytes`
     /// bytes, counting this one.
     Stored {
-        deltas: DeltaCount,
+        deltas: Tally<Deltas>,
         bytes: ambre_core::ByteSize,
     },
     /// The tail is at its cap, and nothing was written.
@@ -140,7 +141,7 @@ pub async fn create_snapshot(
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     update_clocks: &serde_json::Value,
     s3_key: &ambre_core::ObjectKey,
-    covered_seq: ambre_core::Seq,
+    covered_seq: ambre_core::Seq<ambre_core::Relay>,
 ) -> Result<Id<Snapshot>, AppError> {
     let did = id_to_uuid(*document_id);
     let snapshot_id = uuid::Uuid::now_v7();
@@ -302,7 +303,7 @@ pub async fn drop_pending_snapshot(
 pub async fn served_horizon(
     pool: &PgPool,
     document_id: &Id<Document>,
-) -> Result<ambre_core::Seq, AppError> {
+) -> Result<ambre_core::Seq<ambre_core::Relay>, AppError> {
     let horizon: Option<i64> = sqlx::query_scalar(
         "SELECT MAX(covered_seq) FROM snapshots WHERE document_id = $1 AND status <> 'pending'",
     )
@@ -341,8 +342,8 @@ pub async fn insert_update(
     document_id: &Id<Document>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     snapshot_id: &Id<Snapshot>,
-    clock: ambre_protocol::messages::Clock,
-    seq: ambre_core::Seq,
+    clock: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+    seq: ambre_core::Seq<ambre_core::Relay>,
     s3_key: &ambre_core::ObjectKey,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
@@ -371,8 +372,8 @@ pub async fn insert_inline_update(
     document_id: &Id<Document>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     snapshot_id: &Id<Snapshot>,
-    clock: ambre_protocol::messages::Clock,
-    seq: ambre_core::Seq,
+    clock: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+    seq: ambre_core::Seq<ambre_core::Relay>,
     wire: &Payload,
     cap: InlineCap,
 ) -> Result<InlineInsert, AppError> {
@@ -403,7 +404,7 @@ pub async fn insert_inline_update(
         return Ok(InlineInsert::Full);
     }
     Ok(InlineInsert::Stored {
-        deltas: DeltaCount::from_i64(deltas).plus_one(),
+        deltas: Tally::<Deltas>::from_i64(deltas).incremented(),
         bytes: ambre_core::ByteSize::from_i64(bytes)
             .saturating_add(ambre_core::ByteSize::of_len(wire.len())),
     })
@@ -416,7 +417,7 @@ pub async fn insert_inline_update(
 pub async fn attach_wire(
     pool: &PgPool,
     document_id: &Id<Document>,
-    seq: ambre_core::Seq,
+    seq: ambre_core::Seq<ambre_core::Relay>,
     wire: &Payload,
 ) -> Result<bool, AppError> {
     let attached = sqlx::query(
@@ -437,7 +438,7 @@ pub async fn attach_wire(
 pub async fn lock_inline_tail(
     tx: &mut sqlx::PgConnection,
     document_id: &Id<Document>,
-) -> Result<Option<Vec<(ambre_core::Seq, Payload)>>, AppError> {
+) -> Result<Option<Vec<(ambre_core::Seq<ambre_core::Relay>, Payload)>>, AppError> {
     let rows: Result<Vec<(i64, Payload)>, _> = sqlx::query_as(
         "SELECT seq, wire FROM updates WHERE document_id = $1 AND wire IS NOT NULL \
          ORDER BY seq FOR UPDATE NOWAIT",
@@ -462,7 +463,7 @@ pub async fn lock_inline_tail(
 pub async fn point_rows_at_batch(
     tx: &mut sqlx::PgConnection,
     document_id: &Id<Document>,
-    seqs: &[ambre_core::Seq],
+    seqs: &[ambre_core::Seq<ambre_core::Relay>],
     batch_key: &ambre_core::ObjectKey,
 ) -> Result<u64, AppError> {
     let moved = sqlx::query(
@@ -506,7 +507,7 @@ pub async fn idle_inline_documents(
 pub async fn get_updates_after(
     pool: &PgPool,
     document_id: &Id<Document>,
-    after_seq: ambre_core::Seq,
+    after_seq: ambre_core::Seq<ambre_core::Relay>,
     limit: ambre_core::Bounded<QueryLimit>,
 ) -> Result<Vec<UpdateRow>, AppError> {
     let did = id_to_uuid(*document_id);
@@ -548,11 +549,11 @@ pub async fn get_updates_after(
 #[derive(Debug, Default)]
 pub struct ClockState {
     /// Highest `seq` ever assigned for the document (0 when it has no updates).
-    pub max_seq: ambre_core::Seq,
+    pub max_seq: ambre_core::Seq<ambre_core::Relay>,
     /// Per-author `(author_pubkey, max_clock)` high-water marks.
     pub author_clocks: Vec<(
         FixedBytes<ambre_core::PublicKey>,
-        ambre_protocol::messages::Clock,
+        ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
     )>,
 }
 

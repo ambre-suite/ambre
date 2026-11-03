@@ -4,9 +4,9 @@
 use crate::Receipt;
 use ambre_bus::Char;
 use ambre_bus::{Authored, Instant, Mention, MentionTarget, Mentions, MessageDraft, MessageView};
-use ambre_core::Seq;
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::Span;
+use ambre_core::{Relay, Seq};
 use loro::{Container, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{Mark, MessageKey, Root};
@@ -69,7 +69,7 @@ fn deliver(to: &mut ChannelState, from: &ChannelState, author: Id<User>, sent: &
         peer: from.peer(document_id).expect("a session"),
         user: Some(author),
     };
-    to.apply_signed(document_id, Seq::new(seq), &sent.delta, signer)
+    to.apply_signed(document_id, Seq::<Relay>::new(seq), &sent.delta, signer)
         .expect("a delta the check passes");
 }
 
@@ -218,7 +218,7 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     let mut held = open_from(&state);
     let (bob, carol) = (Id::<User>::mint(), Id::<User>::mint());
     let count = |held: &ChannelState, user| {
-        held.mentions(held.active_id(), Seq::ZERO, user)
+        held.mentions(held.active_id(), Seq::<Relay>::ZERO, user)
             .expect("count")
     };
 
@@ -289,7 +289,7 @@ fn reading_the_mentions_changes_nothing() {
     let (version, value) = (doc.oplog_vv(), doc.get_deep_value());
     assert_eq!(messages(&state)[0].mentions.len(), 1);
     state
-        .mentions(state.active_id(), Seq::ZERO, bob)
+        .mentions(state.active_id(), Seq::<Relay>::ZERO, bob)
         .expect("count");
     let doc = state.doc(state.active_id().document_id()).expect("held");
     assert_eq!((doc.oplog_vv(), doc.get_deep_value()), (version, value));

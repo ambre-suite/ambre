@@ -1300,6 +1300,7 @@ impl std::fmt::Display for SkipReason {
 pub enum Votes {}
 
 impl ambre_core::TallyKind for Votes {
+    type Repr = u32;
     const NAME: &'static str = "VoteCount";
 }
 
@@ -1307,6 +1308,7 @@ impl ambre_core::TallyKind for Votes {
 pub enum Reactions {}
 
 impl ambre_core::TallyKind for Reactions {
+    type Repr = u32;
     const NAME: &'static str = "ReactionCount";
 }
 

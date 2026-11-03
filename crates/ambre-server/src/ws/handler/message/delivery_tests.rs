@@ -6,7 +6,7 @@
 use super::hot_tail_tests::{replay, signed_update, writer};
 use super::*;
 use crate::test_helpers::S3Stub;
-use ambre_protocol::messages::Seq;
+use ambre_protocol::messages::{Relay, Seq};
 use ambre_protocol::ws::decode_server_msg;
 use rustis::commands::{GenericCommands, ListCommands, StringCommands};
 
@@ -91,12 +91,14 @@ async fn a_refused_index_write_is_retried_until_the_row_lands(pool: sqlx::PgPool
     let rows = db::get_updates_after(
         &state.db,
         &doc_id,
-        ambre_core::Seq::new(0),
+        ambre_core::Seq::<ambre_core::Relay>::new(0),
         ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
     )
     .await
     .unwrap();
-    assert!(matches!(rows.as_slice(), [r] if r.seq == ambre_core::Seq::new(1) && r.wire.is_some()));
+    assert!(
+        matches!(rows.as_slice(), [r] if r.seq == ambre_core::Seq::<ambre_core::Relay>::new(1) && r.wire.is_some())
+    );
     assert!(dead_letters(&state, doc_id).await.is_empty());
     forget(&state, doc_id).await;
 }
@@ -123,7 +125,7 @@ async fn an_index_write_that_never_lands_leaves_the_whole_frame(pool: sqlx::PgPo
         db::get_updates_after(
             &state.db,
             &doc_id,
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>()
         )
         .await
@@ -133,7 +135,7 @@ async fn an_index_write_that_never_lands_leaves_the_whole_frame(pool: sqlx::PgPo
     let object = crate::s3::format_s3_delta_key(
         &state.config.s3_env_prefix,
         &doc_id,
-        ambre_core::Seq::new(1),
+        ambre_core::Seq::<ambre_core::Relay>::new(1),
     );
     match dead_letters(&state, doc_id).await.as_slice() {
         [(1, s3_key, wire)] => {
@@ -173,7 +175,7 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
     let rows = db::get_updates_after(
         &state.db,
         &doc_id,
-        ambre_core::Seq::new(0),
+        ambre_core::Seq::<ambre_core::Relay>::new(0),
         ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
     )
     .await
@@ -262,7 +264,7 @@ async fn a_replay_stopped_at_a_lost_delta_names_the_last_one_delivered(pool: sql
         ] => {
             let seqs: Vec<u64> = updates.iter().map(|u| u.seq.get()).collect();
             assert_eq!(seqs, [1], "delta 3 waits behind the lost one");
-            assert_eq!((*document_id, *after_seq), (doc_id, Seq::new(1)));
+            assert_eq!((*document_id, *after_seq), (doc_id, Seq::<Relay>::new(1)));
         }
         other => panic!("expected a page then a stop, got {other:?}"),
     }
@@ -294,7 +296,7 @@ async fn a_page_read_out_of_order_is_sent_in_order(pool: sqlx::PgPool) {
         let object = crate::s3::format_s3_delta_key(
             &state.config.s3_env_prefix,
             &doc_id,
-            ambre_core::Seq::new(clock),
+            ambre_core::Seq::<ambre_core::Relay>::new(clock),
         );
         stub.delay(
             object.into_inner(),
@@ -308,7 +310,7 @@ async fn a_page_read_out_of_order_is_sent_in_order(pool: sqlx::PgPool) {
     let first = crate::s3::format_s3_delta_key(
         &state.config.s3_env_prefix,
         &doc_id,
-        ambre_core::Seq::new(1),
+        ambre_core::Seq::<ambre_core::Relay>::new(1),
     );
     assert_eq!(
         stub.gets(first.as_str()),
@@ -334,9 +336,9 @@ async fn a_second_replay_inside_the_window_is_answered_with_nothing(pool: sqlx::
     while rx.try_recv().is_ok() {}
 
     conn.last_replay_at.clear();
-    handle_request_missing(&state, &mut conn, doc_id, Seq::new(0), &tx).await;
+    handle_request_missing(&state, &mut conn, doc_id, Seq::<Relay>::new(0), &tx).await;
     assert!(rx.try_recv().is_ok(), "the first replay is served");
-    handle_request_missing(&state, &mut conn, doc_id, Seq::new(0), &tx).await;
+    handle_request_missing(&state, &mut conn, doc_id, Seq::<Relay>::new(0), &tx).await;
     assert!(rx.try_recv().is_err(), "the second one sends nothing");
     forget(&state, doc_id).await;
 }

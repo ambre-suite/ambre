@@ -42,6 +42,7 @@ pub const TOC_SETTLE_PASSES: Tally<Passes> = Tally::<Passes>::new(3);
 pub enum Passes {}
 
 impl ambre_core::TallyKind for Passes {
+    type Repr = u32;
     const NAME: &'static str = "PassCount";
 }
 

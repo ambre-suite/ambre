@@ -4,7 +4,7 @@
 use crate::Receipt;
 use ambre_bus::{Authored, Instant, MessageDraft, Unread};
 use ambre_core::id::{Channel, Id, Segment, User};
-use ambre_core::{Payload, Seq, SnapshotBytes};
+use ambre_core::{Payload, Relay, Seq, SnapshotBytes};
 use loro::{Container, ValueOrContainer};
 
 use crate::schema::{MessageKey, Root};
@@ -42,7 +42,7 @@ fn pair() -> (ChannelState, ChannelState) {
 
 /// A member opening `state`'s channel over the relay: `meta`, then the
 /// active segment as one snapshot folding every update up to `covered`.
-fn open_from(state: &ChannelState, covered: Option<Seq>) -> ChannelState {
+fn open_from(state: &ChannelState, covered: Option<Seq<Relay>>) -> ChannelState {
     let meta_id = state.meta_id();
     let active = state.active_id().document_id();
     let mut opening = OpeningChannel::new(state.channel_id(), meta_id);
@@ -76,10 +76,20 @@ fn a_message_takes_the_number_of_the_update_that_created_it() {
     let first = alice.send(&draft("one"), author, NOW).expect("send");
     let second = alice.send(&draft("two"), author, NOW).expect("send");
     let by = signer(&alice, segment, author);
-    bob.apply_signed(segment.document_id(), Seq::new(5), &first.delta, by)
-        .expect("apply");
-    bob.apply_signed(segment.document_id(), Seq::new(6), &second.delta, by)
-        .expect("apply");
+    bob.apply_signed(
+        segment.document_id(),
+        Seq::<Relay>::new(5),
+        &first.delta,
+        by,
+    )
+    .expect("apply");
+    bob.apply_signed(
+        segment.document_id(),
+        Seq::<Relay>::new(6),
+        &second.delta,
+        by,
+    )
+    .expect("apply");
 
     let ids: Vec<_> = bob
         .messages(segment)
@@ -92,24 +102,27 @@ fn a_message_takes_the_number_of_the_update_that_created_it() {
             .map(|id| bob.position(segment, *id))
             .collect::<Vec<_>>(),
         [
-            Some(Position::Exact(Seq::new(5))),
-            Some(Position::Exact(Seq::new(6)))
+            Some(Position::Exact(Seq::<Relay>::new(5))),
+            Some(Position::Exact(Seq::<Relay>::new(6)))
         ]
     );
     let me = Id::<User>::mint();
     assert_eq!(
-        bob.unread(segment, Seq::new(4), me).expect("count"),
+        bob.unread(segment, Seq::<Relay>::new(4), me)
+            .expect("count"),
         ambre_core::Tally::<Unread>::new(2)
     );
     assert_eq!(
-        bob.unread(segment, Seq::new(5), me).expect("count"),
+        bob.unread(segment, Seq::<Relay>::new(5), me)
+            .expect("count"),
         ambre_core::Tally::<Unread>::new(1)
     );
     assert_eq!(
-        bob.unread(segment, Seq::new(6), me).expect("count"),
+        bob.unread(segment, Seq::<Relay>::new(6), me)
+            .expect("count"),
         ambre_core::Tally::<Unread>::ZERO
     );
-    assert_eq!(bob.delivered(segment.document_id()), Seq::new(6));
+    assert_eq!(bob.delivered(segment.document_id()), Seq::<Relay>::new(6));
 }
 
 #[test]
@@ -123,18 +136,20 @@ fn the_authors_own_message_is_numbered_by_its_echo_and_never_counts() {
     let id = alice.messages(segment).expect("messages")[0].id;
     assert_eq!(alice.position(segment, id), Some(Position::Unknown));
     assert_eq!(
-        alice.unread(segment, Seq::ZERO, me).expect("count"),
+        alice
+            .unread(segment, Seq::<Relay>::ZERO, me)
+            .expect("count"),
         ambre_core::Tally::<Unread>::ZERO
     );
 
     // The relay hands every member the update, its author included.
     let by = signer(&alice, segment, me);
     alice
-        .apply_signed(segment.document_id(), Seq::new(9), &sent.delta, by)
+        .apply_signed(segment.document_id(), Seq::<Relay>::new(9), &sent.delta, by)
         .expect("echo");
     assert_eq!(
         alice.position(segment, id),
-        Some(Position::Exact(Seq::new(9)))
+        Some(Position::Exact(Seq::<Relay>::new(9)))
     );
 }
 
@@ -145,16 +160,16 @@ fn a_snapshot_hands_on_the_numbers_its_writer_knew() {
     let author = Id::<User>::mint();
     let sent = alice.send(&draft("one"), author, NOW).expect("send");
     let by = signer(&alice, segment, author);
-    bob.apply_signed(segment.document_id(), Seq::new(3), &sent.delta, by)
+    bob.apply_signed(segment.document_id(), Seq::<Relay>::new(3), &sent.delta, by)
         .expect("apply");
     let id = bob.messages(segment).expect("messages")[0].id;
 
-    let carol = open_from(&bob, Some(Seq::new(3)));
+    let carol = open_from(&bob, Some(Seq::<Relay>::new(3)));
     assert_eq!(
         carol.position(segment, id),
-        Some(Position::Exact(Seq::new(3)))
+        Some(Position::Exact(Seq::<Relay>::new(3)))
     );
-    assert_eq!(carol.delivered(segment.document_id()), Seq::new(3));
+    assert_eq!(carol.delivered(segment.document_id()), Seq::<Relay>::new(3));
 }
 
 #[test]
@@ -164,16 +179,16 @@ fn a_snapshot_row_past_its_horizon_is_no_number() {
     let author = Id::<User>::mint();
     let sent = alice.send(&draft("one"), author, NOW).expect("send");
     let by = signer(&alice, segment, author);
-    bob.apply_signed(segment.document_id(), Seq::new(8), &sent.delta, by)
+    bob.apply_signed(segment.document_id(), Seq::<Relay>::new(8), &sent.delta, by)
         .expect("apply");
     let id = bob.messages(segment).expect("messages")[0].id;
 
     // A table claiming 8 inside a snapshot folding up to 4 is a writer's
     // mistake: the message reads as bounded by the horizon.
-    let carol = open_from(&bob, Some(Seq::new(4)));
+    let carol = open_from(&bob, Some(Seq::<Relay>::new(4)));
     assert_eq!(
         carol.position(segment, id),
-        Some(Position::AtMost(Seq::new(4)))
+        Some(Position::AtMost(Seq::<Relay>::new(4)))
     );
 }
 
@@ -189,18 +204,20 @@ fn a_message_known_only_from_a_snapshot_lies_within_its_horizon() {
     let id = alice.messages(segment).expect("messages")[0].id;
 
     // Alice knows no number, so her snapshot carries no table.
-    let bob = open_from(&alice, Some(Seq::new(12)));
+    let bob = open_from(&alice, Some(Seq::<Relay>::new(12)));
     let me = Id::<User>::mint();
     assert_eq!(
         bob.position(segment, id),
-        Some(Position::AtMost(Seq::new(12)))
+        Some(Position::AtMost(Seq::<Relay>::new(12)))
     );
     assert_eq!(
-        bob.unread(segment, Seq::new(11), me).expect("count"),
+        bob.unread(segment, Seq::<Relay>::new(11), me)
+            .expect("count"),
         ambre_core::Tally::<Unread>::new(1)
     );
     assert_eq!(
-        bob.unread(segment, Seq::new(12), me).expect("count"),
+        bob.unread(segment, Seq::<Relay>::new(12), me)
+            .expect("count"),
         ambre_core::Tally::<Unread>::ZERO
     );
 }
@@ -212,7 +229,7 @@ fn an_edit_creates_no_message_and_never_counts() {
     let author = Id::<User>::mint();
     let sent = alice.send(&draft("base"), author, NOW).expect("send");
     let by = signer(&alice, segment, author);
-    bob.apply_signed(segment.document_id(), Seq::new(5), &sent.delta, by)
+    bob.apply_signed(segment.document_id(), Seq::<Relay>::new(5), &sent.delta, by)
         .expect("apply");
 
     let doc = alice.doc(segment.document_id()).expect("segment");
@@ -234,16 +251,16 @@ fn an_edit_creates_no_message_and_never_counts() {
         &doc.export_json_updates_without_peer_compression(&before, &doc.oplog_vv()),
     )
     .expect("delta");
-    bob.apply_signed(segment.document_id(), Seq::new(6), &edit, by)
+    bob.apply_signed(segment.document_id(), Seq::<Relay>::new(6), &edit, by)
         .expect("apply");
 
     let id = bob.messages(segment).expect("messages")[0].id;
     assert_eq!(
         bob.position(segment, id),
-        Some(Position::Exact(Seq::new(5)))
+        Some(Position::Exact(Seq::<Relay>::new(5)))
     );
     assert_eq!(
-        bob.unread(segment, Seq::new(5), Id::<User>::mint())
+        bob.unread(segment, Seq::<Relay>::new(5), Id::<User>::mint())
             .expect("count"),
         ambre_core::Tally::<Unread>::ZERO
     );
@@ -260,12 +277,12 @@ fn a_truncated_table_is_refused_before_any_import() {
     assert!(matches!(
         bob.apply_remote_at(
             segment,
-            Some(Order::Snapshot(Seq::new(2))),
+            Some(Order::Snapshot(Seq::<Relay>::new(2))),
             (&payload).into()
         ),
         Err(MurmureError::Crdt(_))
     ));
-    assert_eq!(bob.delivered(segment), Seq::ZERO);
+    assert_eq!(bob.delivered(segment), Seq::<Relay>::ZERO);
 }
 
 // --- MURMURE-499 ---
@@ -279,8 +296,13 @@ fn the_first_unread_message_is_the_first_past_the_cursor_by_another() {
     for (seq, (text, from)) in (5..).zip(sent) {
         let sent = alice.send(&draft(text), from, NOW).expect("send");
         let by = signer(&alice, segment, from);
-        bob.apply_signed(segment.document_id(), Seq::new(seq), &sent.delta, by)
-            .expect("apply");
+        bob.apply_signed(
+            segment.document_id(),
+            Seq::<Relay>::new(seq),
+            &sent.delta,
+            by,
+        )
+        .expect("apply");
     }
     let ids: Vec<_> = bob
         .messages(segment)
@@ -288,12 +310,12 @@ fn the_first_unread_message_is_the_first_past_the_cursor_by_another() {
         .iter()
         .map(|m| m.id)
         .collect();
-    let first = |read: Seq| bob.first_unread(|_| read, me);
-    assert_eq!(first(Seq::new(4)), ids.first().copied());
+    let first = |read: Seq<Relay>| bob.first_unread(|_| read, me);
+    assert_eq!(first(Seq::<Relay>::new(4)), ids.first().copied());
     assert_eq!(
-        first(Seq::new(5)),
+        first(Seq::<Relay>::new(5)),
         ids.get(2).copied(),
         "the reader's own message is never the first unread"
     );
-    assert_eq!(first(Seq::new(7)), None);
+    assert_eq!(first(Seq::<Relay>::new(7)), None);
 }

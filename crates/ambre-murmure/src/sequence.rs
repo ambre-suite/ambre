@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use ambre_core::id::{Id, Message};
-use ambre_core::{ByteSize, LoroPayloadRef, Payload, Seq, SnapshotBytes};
+use ambre_core::{ByteSize, LoroPayloadRef, Payload, Relay, Seq, SnapshotBytes};
 use loro::{
     ContainerID, ContainerTrait, ID, ImportBlobMetadata, ImportStatus, LoroDoc, LoroError,
     VersionVector,
@@ -29,19 +29,19 @@ const ROW_SIZE: ByteSize = ByteSize::new(16 + 8);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Order {
     /// One update, at the number the relay gave it.
-    Update(Seq),
+    Update(Seq<Relay>),
     /// A snapshot folding every update up to this number.
-    Snapshot(Seq),
+    Snapshot(Seq<Relay>),
 }
 
 /// Where one message stands in the relay's order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Position {
     /// The relay numbered the update that created it.
-    Exact(Seq),
+    Exact(Seq<Relay>),
     /// It came in a snapshot that folds every update up to this number, and
     /// no table gave its own.
-    AtMost(Seq),
+    AtMost(Seq<Relay>),
     /// Not numbered yet: the author's own message, before the relay echoes it.
     Unknown,
 }
@@ -49,7 +49,7 @@ pub enum Position {
 /// The operations one numbered update holds, per peer.
 #[derive(Debug, Clone)]
 struct Range {
-    seq: Seq,
+    seq: Seq<Relay>,
     start: VersionVector,
     end: VersionVector,
 }
@@ -68,12 +68,12 @@ impl Range {
 pub(crate) struct Sequence {
     /// Each message whose number is known. The lowest wins: an operation
     /// re-sent in a later update was created by the first.
-    exact: HashMap<Id<Message>, Seq>,
+    exact: HashMap<Id<Message>, Seq<Relay>>,
     /// The horizon of the snapshots delivered: every message they held is
     /// numbered at most this.
-    covered: Seq,
+    covered: Seq<Relay>,
     /// The highest number delivered, snapshot or update.
-    delivered: Seq,
+    delivered: Seq<Relay>,
     /// The end of every operation delivered, per peer. A snapshot that holds
     /// less dropped a delta the relay sequenced (`MURMURE-072`).
     relayed: VersionVector,
@@ -126,7 +126,11 @@ impl Sequence {
 
     /// Note one JSON update the relay numbered `seq`, the form a segment
     /// delta travels in, by the range [`crate::delta::range`] read from it.
-    pub(crate) fn note_range(&mut self, seq: Seq, (start, end): (VersionVector, VersionVector)) {
+    pub(crate) fn note_range(
+        &mut self,
+        seq: Seq<Relay>,
+        (start, end): (VersionVector, VersionVector),
+    ) {
         self.passed(seq);
         self.relay(&end);
         self.unresolved.push(Range { seq, start, end });
@@ -147,7 +151,7 @@ impl Sequence {
 
     /// Note one JSON update of a document that holds no message, by the end
     /// of its range.
-    pub(crate) fn note_bare_range(&mut self, seq: Seq, end: &VersionVector) {
+    pub(crate) fn note_bare_range(&mut self, seq: Seq<Relay>, end: &VersionVector) {
         self.passed(seq);
         self.relay(end);
     }
@@ -168,7 +172,7 @@ impl Sequence {
 
     /// Note that the relay delivered `seq`, even when nothing of it was
     /// kept: a refused delta still counts as delivered.
-    pub(crate) fn passed(&mut self, seq: Seq) {
+    pub(crate) fn passed(&mut self, seq: Seq<Relay>) {
         self.delivered = self.delivered.max(seq);
     }
 
@@ -195,7 +199,7 @@ impl Sequence {
         }
     }
 
-    fn adopt(&mut self, id: Id<Message>, seq: Seq) {
+    fn adopt(&mut self, id: Id<Message>, seq: Seq<Relay>) {
         self.exact
             .entry(id)
             .and_modify(|known| *known = (*known).min(seq))
@@ -206,13 +210,13 @@ impl Sequence {
     pub(crate) fn position(&self, id: Id<Message>) -> Position {
         match self.exact.get(&id) {
             Some(&seq) => Position::Exact(seq),
-            None if self.covered > Seq::ZERO => Position::AtMost(self.covered),
+            None if self.covered > Seq::<Relay>::ZERO => Position::AtMost(self.covered),
             None => Position::Unknown,
         }
     }
 
     /// The highest number delivered for the document.
-    pub(crate) fn delivered(&self) -> Seq {
+    pub(crate) fn delivered(&self) -> Seq<Relay> {
         self.delivered
     }
 
@@ -345,7 +349,7 @@ fn blob_meta(payload: LoroPayloadRef<'_>) -> Result<ImportBlobMetadata, LoroErro
 /// The rows a framed snapshot carries, `None` for a bare one.
 fn table(
     payload: &Payload<SnapshotBytes>,
-) -> Option<impl Iterator<Item = (Id<Message>, Seq)> + '_> {
+) -> Option<impl Iterator<Item = (Id<Message>, Seq<Relay>)> + '_> {
     let framed = split(payload)?;
     Some(
         framed
@@ -354,7 +358,7 @@ fn table(
             .chunks_exact(ROW_SIZE.as_len())
             .filter_map(|row| {
                 let (id, seq) = row.split_first_chunk::<16>()?;
-                let seq = Seq::new(u64::from_le_bytes(seq.try_into().ok()?));
+                let seq = Seq::<Relay>::new(u64::from_le_bytes(seq.try_into().ok()?));
                 Some((Id::<Message>::from_bytes(*id), seq))
             }),
     )

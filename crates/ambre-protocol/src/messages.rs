@@ -20,74 +20,32 @@ pub use ambre_core::envelope::{Ciphertext, CommitmentTag, Nonce, Signature};
 
 // -----------------------------------------------------------------------------
 // Core wire messages
-/// Server-assigned monotonic sequence number, shared with the client threads.
-pub use ambre_core::Seq;
+/// The series number and the relay's marker: `Seq<Relay>` is the number the
+/// sequencer assigns, shared with the client threads.
+pub use ambre_core::{Relay, Seq};
+use ambre_core::{SeqColumn, SeqKind};
 
-/// The per-author counter a delta carries (`ambre-spec-delta-order.md`). Every
-/// session of one author key shares it, and each update takes a clock above
-/// every one the author used for the document (`SYNC-024`). It is not a
-/// Lamport clock: no peer's clock moves it (`SYNC-025`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Clock(u64);
+/// The author key that numbers its own deltas (`ambre-spec-delta-order.md`).
+/// `Seq<AuthorKey>` is the clock a delta carries. Every session of one author
+/// key shares the series, and each update takes a clock above every one the
+/// author used for the document (`SYNC-024`). It is not a Lamport clock: no
+/// peer's clock moves it (`SYNC-025`).
+pub enum AuthorKey {}
 
-impl Clock {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-
-    /// The clock just after this one: the next update its author seals.
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
-
-    /// The clock just before this one, zero at the start.
-    #[must_use]
-    pub const fn before(self) -> Self {
-        Self(self.0.saturating_sub(1))
-    }
-
-    /// The clock as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
-    pub fn to_i64_saturating(self) -> i64 {
-        i64::try_from(self.0).unwrap_or(i64::MAX)
-    }
+impl SeqKind for AuthorKey {
+    const NAME: &'static str = "Clock";
 }
 
-/// A stored clock: a negative one is refused, never clamped.
-impl TryFrom<i64> for Clock {
-    type Error = std::num::TryFromIntError;
+/// The relay stores the clock of each delta in Postgres.
+impl SeqColumn for AuthorKey {}
 
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
-        u64::try_from(value).map(Self)
-    }
-}
+/// The session that numbers its own ephemerals, client-side. `Seq<Ephemerals>`
+/// is the counter an ephemeral carries, which a receiver checks against a
+/// replay. The marker is plural, since `Ephemeral` names the message.
+pub enum Ephemerals {}
 
-impl std::fmt::Display for Clock {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-/// Ephemeral counter (client-side).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Counter(u64);
-
-impl Counter {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> u64 {
-        self.0
-    }
+impl SeqKind for Ephemerals {
+    const NAME: &'static str = "Counter";
 }
 
 // -----------------------------------------------------------------------------
@@ -127,7 +85,7 @@ impl Update {
         if self.ciphertext.as_bytes().is_empty() {
             return Err(ValidationError::EmptyCiphertext);
         }
-        if self.public_data.clock.0 == 0 {
+        if self.public_data.clock == Seq::<AuthorKey>::ZERO {
             return Err(ValidationError::ZeroClock);
         }
         Ok(())
@@ -213,7 +171,7 @@ impl Ephemeral {
         if self.ciphertext.as_bytes().is_empty() {
             return Err(ValidationError::EmptyCiphertext);
         }
-        if self.public_data.counter.0 == 0 {
+        if self.public_data.counter == Seq::<Ephemerals>::ZERO {
             return Err(ValidationError::ZeroCounter);
         }
         Ok(())
@@ -226,7 +184,7 @@ impl Ephemeral {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SeqUpdate {
     /// Monotonic sequence number assigned by the server.
-    pub seq: Seq,
+    pub seq: Seq<Relay>,
     /// The update itself.
     pub update: Update,
 }
@@ -247,7 +205,7 @@ mod validate_tests {
                 pub_key: FixedBytes::from_array([2u8; 32]),
                 key_id: FixedBytes::from_array([4u8; 16]),
                 snapshot_id: Id::from_bytes([3u8; 16]),
-                clock: Clock(clock),
+                clock: Seq::<AuthorKey>::new(clock),
             },
             commitment_tag: FixedBytes::from_array([0u8; 32]),
             signature: FixedBytes::from_array([0u8; 64]),
@@ -262,7 +220,7 @@ mod validate_tests {
                 document_id: Id::from_bytes([1u8; 16]),
                 pub_key: FixedBytes::from_array([2u8; 32]),
                 key_id: FixedBytes::from_array([4u8; 16]),
-                counter: Counter(counter),
+                counter: Seq::<Ephemerals>::new(counter),
             },
             commitment_tag: FixedBytes::from_array([0u8; 32]),
             signature: FixedBytes::from_array([0u8; 64]),
@@ -328,7 +286,7 @@ mod validate_tests {
     fn snapshot(
         cipher: Vec<u8>,
         proof: Option<FixedBytes<ambre_core::ChainHash>>,
-        clocks: Vec<(FixedBytes<PublicKey>, Clock)>,
+        clocks: Vec<(FixedBytes<PublicKey>, Seq<AuthorKey>)>,
     ) -> Snapshot {
         Snapshot {
             ciphertext: Payload::<Ciphertext>::new(cipher),
@@ -349,8 +307,8 @@ mod validate_tests {
     #[test]
     fn snapshot_valid() {
         let clocks = vec![
-            (FixedBytes::from_array([9u8; 32]), Clock(1)),
-            (FixedBytes::from_array([8u8; 32]), Clock(2)),
+            (FixedBytes::from_array([9u8; 32]), Seq::<AuthorKey>::new(1)),
+            (FixedBytes::from_array([8u8; 32]), Seq::<AuthorKey>::new(2)),
         ];
         assert!(
             snapshot(vec![1], Some(FixedBytes::from_array([1u8; 32])), clocks)
@@ -376,7 +334,10 @@ mod validate_tests {
     #[test]
     fn snapshot_rejects_duplicate_author() {
         let dup = FixedBytes::<PublicKey>::from_array([7u8; 32]);
-        let clocks = vec![(dup, Clock(1)), (dup, Clock(2))];
+        let clocks = vec![
+            (dup, Seq::<AuthorKey>::new(1)),
+            (dup, Seq::<AuthorKey>::new(2)),
+        ];
         assert_eq!(
             snapshot(vec![1], Some(FixedBytes::from_array([1u8; 32])), clocks).validate(),
             Err(ValidationError::DuplicatePublicKey)

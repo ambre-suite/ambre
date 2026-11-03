@@ -9,7 +9,7 @@
 
 use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Id, Lease, Segment};
-use ambre_core::{DeltaBytes, Failures, Ms, Payload, Seq, SnapshotBytes, Tally, TimeSpan};
+use ambre_core::{DeltaBytes, Failures, Ms, Payload, Relay, Seq, SnapshotBytes, Tally, TimeSpan};
 use loro::{ExportMode, LoroDoc};
 
 use super::ChannelState;
@@ -46,7 +46,7 @@ enum Step {
     /// The snapshot leaves once the deltas up to `horizon` are in.
     Held {
         lease: Id<Lease>,
-        horizon: Seq,
+        horizon: Seq<Relay>,
         expires_in: TimeSpan<Ms>,
         until: Option<Instant<Authored>>,
     },
@@ -63,7 +63,7 @@ pub struct FinalSnapshot {
     /// The lease the commit names.
     pub lease: Id<Lease>,
     /// The last delta it covers, the one the relay returned.
-    pub horizon: Seq,
+    pub horizon: Seq<Relay>,
     /// The shallow snapshot, framed as every channel snapshot is.
     pub payload: Payload<SnapshotBytes>,
 }
@@ -145,7 +145,7 @@ impl ChannelState {
         &mut self,
         segment: Id<Segment>,
         lease: Id<Lease>,
-        horizon: Seq,
+        horizon: Seq<Relay>,
         expires_in: TimeSpan<Ms>,
     ) {
         if let Some(finalizing) = self.finalize_step(segment) {
@@ -205,7 +205,7 @@ impl ChannelState {
     pub fn final_snapshot(
         &mut self,
         now: Instant<Authored>,
-        covered: Seq,
+        covered: Seq<Relay>,
     ) -> Result<Option<FinalSnapshot>, MurmureError> {
         let Some(segment) = self.finalizing_id() else {
             return Ok(None);

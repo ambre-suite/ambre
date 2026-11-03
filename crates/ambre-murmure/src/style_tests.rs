@@ -4,9 +4,9 @@
 use crate::Receipt;
 use ambre_bus::Char;
 use ambre_bus::{Authored, Instant, MessageDraft, MessageView, StyleMark, TextStyle};
-use ambre_core::Seq;
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::Span;
+use ambre_core::{Relay, Seq};
 use loro::{Container, LoroText, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{Mark, MessageKey, Root};
@@ -70,7 +70,7 @@ fn deliver(to: &mut ChannelState, from: &ChannelState, author: Id<User>, sent: &
         peer: from.peer(document_id).expect("a session"),
         user: Some(author),
     };
-    to.apply_signed(document_id, Seq::new(seq), &sent.delta, signer)
+    to.apply_signed(document_id, Seq::<Relay>::new(seq), &sent.delta, signer)
         .expect("a delta the check passes");
 }
 

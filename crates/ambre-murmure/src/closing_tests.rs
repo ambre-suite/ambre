@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent, StyleMark, TextStyle};
 use ambre_core::id::{Channel, Id, Lease, Segment, User};
-use ambre_core::{ByteSize, DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{ByteSize, DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 
 use crate::channel::live_segments;
 use crate::session::next_peer;
@@ -116,7 +116,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
     alice.lease_granted(
         closing,
         Id::<Lease>::mint(),
-        ambre_core::Seq::new(1),
+        ambre_core::Seq::<ambre_core::Relay>::new(1),
         TimeSpan::<Ms>::new(60_000),
     );
     alice.mark_final(closing).expect("mark").expect("a delta");
@@ -197,8 +197,13 @@ fn a_successor_that_fails_to_open_is_fetched_again() {
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(author),
     };
-    bob.apply_signed(successor.document_id(), Seq::new(1), &first, signer)
-        .expect("arrival");
+    bob.apply_signed(
+        successor.document_id(),
+        Seq::<Relay>::new(1),
+        &first,
+        signer,
+    )
+    .expect("arrival");
     bob.older_ready(successor.document_id()).expect("ready");
     assert_eq!((bob.active_id(), bob.closing_id()), (successor, Some(old)));
     assert_eq!(bob.successor_to_retry(at(1_000_000)), None, "nothing left");
@@ -345,8 +350,13 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(author),
     };
-    bob.apply_signed(successor.document_id(), Seq::new(1), &first, signer)
-        .expect("arrival");
+    bob.apply_signed(
+        successor.document_id(),
+        Seq::<Relay>::new(1),
+        &first,
+        signer,
+    )
+    .expect("arrival");
     let event = bob.older_ready(successor.document_id()).expect("ready");
     assert_eq!(
         event,
@@ -404,8 +414,13 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(alice_user),
     };
-    bob.apply_signed(successor.document_id(), Seq::new(1), &first, signer)
-        .expect("arrival");
+    bob.apply_signed(
+        successor.document_id(),
+        Seq::<Relay>::new(1),
+        &first,
+        signer,
+    )
+    .expect("arrival");
     bob.older_ready(successor.document_id()).expect("ready");
     let peer = next_peer();
     bob.adopt_session(
@@ -445,7 +460,12 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         user: Some(bob_user),
     };
     alice
-        .apply_signed(successor.document_id(), Seq::new(2), &sent.delta, signer)
+        .apply_signed(
+            successor.document_id(),
+            Seq::<Relay>::new(2),
+            &sent.delta,
+            signer,
+        )
         .expect("the check accepts the moved message");
     assert_eq!(
         alice.messages(successor).expect("successor"),

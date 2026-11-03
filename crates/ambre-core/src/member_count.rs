@@ -12,6 +12,7 @@ use crate::tally::{Tally, TallyKind};
 pub enum Members {}
 
 impl TallyKind for Members {
+    type Repr = u32;
     const NAME: &'static str = "MemberCount";
 }
 

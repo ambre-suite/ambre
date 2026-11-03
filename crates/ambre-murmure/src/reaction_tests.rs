@@ -4,7 +4,7 @@
 use crate::Receipt;
 use ambre_bus::{ActivityKind, Authored, Instant, MessageDraft, MessageView, Reaction, Unread};
 use ambre_core::id::{Channel, Id, Message, Segment, User};
-use ambre_core::{DeltaBytes, Payload, Seq};
+use ambre_core::{DeltaBytes, Payload, Relay, Seq};
 use loro::{Container, LoroMap, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -42,7 +42,7 @@ impl Member {
         self.state
             .apply_signed(
                 sent.segment.document_id(),
-                Seq::new(seq),
+                Seq::<Relay>::new(seq),
                 &sent.delta,
                 from.signer(),
             )
@@ -306,9 +306,10 @@ fn a_reaction_under_another_members_key_is_refused() {
 
     let document_id = alice.segment().document_id();
     for (seq, forged) in [(3, &inserted), (4, &removed)] {
-        let verdict = alice
-            .state
-            .apply_signed(document_id, Seq::new(seq), forged, bob.signer());
+        let verdict =
+            alice
+                .state
+                .apply_signed(document_id, Seq::<Relay>::new(seq), forged, bob.signer());
         assert_eq!(
             verdict.map(|_| ()),
             Err(MurmureError::Refused(Refusal::ForeignReaction))
@@ -342,7 +343,7 @@ fn a_reaction_under_another_members_key_is_refused() {
     let replaced = written_since(&alice, &before);
     assert_eq!(
         bob.state
-            .apply_signed(document_id, Seq::new(6), &replaced, alice.signer())
+            .apply_signed(document_id, Seq::<Relay>::new(6), &replaced, alice.signer())
             .map(|_| ()),
         Err(MurmureError::Refused(Refusal::ForeignReaction))
     );
@@ -358,7 +359,7 @@ fn a_reaction_never_counts_as_unread() {
     let segment = bob.segment();
     let count = |bob: &Member| {
         bob.state
-            .unread(segment, Seq::new(1), bob.user)
+            .unread(segment, Seq::<Relay>::new(1), bob.user)
             .expect("count")
     };
     assert_eq!(

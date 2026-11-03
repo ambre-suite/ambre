@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Category, Channel, Document, Id, Message, Meta, Segment, Space, User};
 
-use crate::{ChannelDocumentKind, Seq};
+use crate::{ChannelDocumentKind, Relay, Seq};
 
 /// One document a channel groups, as the relay lists it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,11 +39,11 @@ pub struct DocumentActivity {
     /// The caller's own read cursor on the document: the sequence number it
     /// has read up to. The client counts against it once it holds the
     /// document.
-    pub read: Seq,
+    pub read: Seq<Relay>,
     /// The document's last number when the relay answered. A watch of a
     /// document the client never held resumes after it; nothing counts with
     /// it. `None` from a relay that predates it.
-    pub last: Option<Seq>,
+    pub last: Option<Seq<Relay>>,
 }
 
 /// Whether a channel holds something new, and how much once the client
@@ -67,6 +67,7 @@ pub struct ChannelActivity {
 pub enum Messages {}
 
 impl TallyKind for Messages {
+    type Repr = u32;
     const NAME: &'static str = "MessageCount";
 }
 
@@ -75,6 +76,7 @@ impl TallyKind for Messages {
 pub enum Mentions {}
 
 impl TallyKind for Mentions {
+    type Repr = u32;
     const NAME: &'static str = "MentionCount";
 }
 
@@ -129,7 +131,7 @@ pub struct ChannelMeta {
     pub meta: Id<Meta>,
     /// The last number the relay gave in `meta`, none from a relay that
     /// lists none. A watch resumes after it.
-    pub last: Option<Seq>,
+    pub last: Option<Seq<Relay>>,
 }
 
 /// The name a channel not yet open shows, read from the name sealed beside
@@ -154,6 +156,7 @@ pub struct DirectPeers {
 pub enum Unread {}
 
 impl TallyKind for Unread {
+    type Repr = u32;
     const NAME: &'static str = "UnreadCount";
 }
 
@@ -595,6 +598,7 @@ impl std::fmt::Debug for MessageView {
 pub enum Replies {}
 
 impl TallyKind for Replies {
+    type Repr = u32;
     const NAME: &'static str = "ReplyCount";
 }
 
@@ -602,6 +606,7 @@ impl TallyKind for Replies {
 pub enum Segments {}
 
 impl TallyKind for Segments {
+    type Repr = u32;
     const NAME: &'static str = "SegmentCount";
 }
 

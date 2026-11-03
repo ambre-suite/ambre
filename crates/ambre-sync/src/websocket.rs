@@ -29,7 +29,7 @@ pub(crate) struct ReplayStops {
     /// The stops counted against the budget, from one.
     count: u32,
     /// The last delta the latest stop named.
-    after: Seq,
+    after: Seq<Relay>,
     /// The ticket of the timer armed for the latest stop, if any.
     ticket: ambre_core::Generation<crate::generation::ReplayTicket>,
 }
@@ -302,7 +302,7 @@ impl SyncState {
     /// each stop (`SYNC-153`). A stop past the one before starts the budget
     /// again (`SYNC-158`). Past the budget, report it once and wait for the
     /// next reconnect (`SYNC-154`).
-    fn replay_stopped(&mut self, document_id: Id<Document>, after_seq: Seq) {
+    fn replay_stopped(&mut self, document_id: Id<Document>, after_seq: Seq<Relay>) {
         let stop = match self.replay_stops.get(&document_id) {
             Some(last) if after_seq <= last.after => last.count.saturating_add(1),
             _ => 1,
@@ -736,7 +736,7 @@ impl SyncState {
                         .documents
                         .get(&document_id)
                         .map(|d| d.last_seq)
-                        .unwrap_or(Seq::new(0));
+                        .unwrap_or(Seq::<Relay>::new(0));
                     self.ws_send(&WsClientMsg::RequestMissing {
                         document_id,
                         after_seq,
@@ -1646,7 +1646,7 @@ impl SyncState {
         &mut self,
         document_id: Id<Document>,
         key_id: FixedBytes<KeyId>,
-        clock: Clock,
+        clock: Seq<AuthorKey>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
@@ -1671,7 +1671,7 @@ mod tests {
     use ambre_bus::DocType;
     use ambre_core::id::{Document, Id, User};
     use ambre_core::{Instant, Sec, TimeSpan, UnixMs};
-    use ambre_core::{RefusalCode, Seq};
+    use ambre_core::{RefusalCode, Relay, Seq};
     use ambre_crypto::{DocumentKey, MasterSeed};
     use ambre_protocol::ws::CloseCode;
     use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg};
@@ -1862,7 +1862,7 @@ mod tests {
     #[test]
     fn a_held_inbound_reopens_only_on_release_and_catches_up() {
         use ambre_bus::SyncCommand;
-        use ambre_protocol::messages::Seq;
+        use ambre_protocol::messages::{Relay, Seq};
         use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
 
         let (sink, _rx) = LogicSink::channel();
@@ -1878,7 +1878,7 @@ mod tests {
             DocType::Prose,
             crate::Existence::OnRelay,
         );
-        doc.last_seq = Seq::new(7);
+        doc.last_seq = Seq::<Relay>::new(7);
         state.documents.insert(id, doc);
         state
             .session_nonces
@@ -1922,7 +1922,7 @@ mod tests {
     /// (`SYNC-086`). A document the relay never created gets neither.
     #[test]
     fn a_reconnect_resubscribes_and_pulls_every_relay_document() {
-        use ambre_protocol::messages::Seq;
+        use ambre_protocol::messages::{Relay, Seq};
         use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
 
         let (sink, _rx) = LogicSink::channel();
@@ -1939,9 +1939,9 @@ mod tests {
                 DocType::Trame,
                 crate::Existence::OnRelay,
             );
-            doc.last_seq = Seq::new(last);
+            doc.last_seq = Seq::<Relay>::new(last);
             state.documents.insert(id, doc);
-            cursors.insert(id, Seq::new(last));
+            cursors.insert(id, Seq::<Relay>::new(last));
         }
         let local = Id::<Document>::mint();
         state.documents.insert(
@@ -1969,7 +1969,7 @@ mod tests {
                 _ => None,
             })
             .collect();
-        let pulled: std::collections::HashMap<Id<Document>, Seq> = sent
+        let pulled: std::collections::HashMap<Id<Document>, Seq<Relay>> = sent
             .iter()
             .filter_map(|m| match m {
                 WsClientMsg::RequestMissing {
@@ -2064,7 +2064,7 @@ mod tests {
         let id = *state.documents.keys().next().unwrap();
         let doc = state.documents.get_mut(&id).unwrap();
         doc.existence = crate::Existence::OnRelay;
-        doc.last_seq = Seq::new(7);
+        doc.last_seq = Seq::<Relay>::new(7);
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
         (state, rx, wire, id)
@@ -2077,7 +2077,7 @@ mod tests {
     fn stopped_after(document_id: Id<Document>, after: u64) -> SyncEvent {
         SyncEvent::WsMessage(WsServerMsg::ReplayStopped {
             document_id,
-            after_seq: Seq::new(after),
+            after_seq: Seq::<Relay>::new(after),
         })
     }
 

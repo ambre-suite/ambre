@@ -637,7 +637,7 @@ impl SyncState {
     /// in quarantine. Those are sequenced and not shown, and a cursor moved
     /// past them would skip them. The cursor then stays where it was, which
     /// leaves the channel unread rather than read too far.
-    pub(crate) fn read_up_to(&self, document_id: Id<Document>) -> Option<Seq> {
+    pub(crate) fn read_up_to(&self, document_id: Id<Document>) -> Option<Seq<Relay>> {
         let doc = self.documents.get(&document_id)?;
         (doc.last_seq.get() > 0 && doc.quarantine_len() == 0).then_some(doc.last_seq)
     }
@@ -647,7 +647,7 @@ impl SyncState {
     /// Each final segment no longer changes, so it moves to the relay's last
     /// number.
     pub(crate) fn handle_mark_read(&self, live: &[Id<Segment>], finals: Vec<Id<Segment>>) {
-        let cursors: Vec<(Id<Document>, Seq)> = live
+        let cursors: Vec<(Id<Document>, Seq<Relay>)> = live
             .iter()
             .map(Id::<Segment>::document_id)
             .filter_map(|document_id| self.read_up_to(document_id).map(|seq| (document_id, seq)))
@@ -678,7 +678,7 @@ impl SyncState {
     /// Move each listed cursor to the number Logic chose, back as well as
     /// forward: marking a message unread (the Murmure unread spec). No other
     /// cursor moves.
-    pub(crate) fn handle_move_read_cursors(&self, cursors: Vec<(Id<Segment>, Seq)>) {
+    pub(crate) fn handle_move_read_cursors(&self, cursors: Vec<(Id<Segment>, Seq<Relay>)>) {
         self.move_cursors(
             cursors
                 .into_iter()
@@ -697,7 +697,7 @@ impl SyncState {
         }
     }
 
-    fn move_cursors(&self, cursors: Vec<(Id<Document>, Seq)>) {
+    fn move_cursors(&self, cursors: Vec<(Id<Document>, Seq<Relay>)>) {
         if self.event_tx.is_none() {
             tracing::warn!("Sync: no relay on this transport, the read cursors stay");
             return;
@@ -952,7 +952,7 @@ async fn open_channel_names(
 /// leaves that cursor where it was and says so in the log.
 async fn put_cursors(
     base: &crate::http::Url<crate::http::ApiRoot>,
-    cursors: Vec<(Id<Document>, Seq)>,
+    cursors: Vec<(Id<Document>, Seq<Relay>)>,
     auth: http::AuthContext,
 ) {
     for (document_id, seq) in cursors {
@@ -1285,8 +1285,8 @@ pub(crate) mod tests {
                 document_id: segment,
                 kind: ChannelDocumentKind::Thread,
                 active: ambre_bus::Activity::Active,
-                read: Seq::new(7),
-                last: Some(Seq::new(9)),
+                read: Seq::<Relay>::new(7),
+                last: Some(Seq::<Relay>::new(9)),
             }]
         );
         let bad = activity(&channel.to_string(), "nope", false);
@@ -1305,7 +1305,7 @@ pub(crate) mod tests {
         .expect("ok");
         assert_eq!(
             older.first().map(|d| (d.read, d.last)),
-            Some((Seq::ZERO, None))
+            Some((Seq::<Relay>::ZERO, None))
         );
     }
 
@@ -1734,7 +1734,14 @@ pub(crate) mod tests {
         );
         let answer: http::MemberChannelsResponse = serde_json::from_str(&body).expect("decodes");
         let lasts: Vec<_> = answer.channels.iter().map(|c| c.meta_last).collect();
-        assert_eq!(lasts, [None, Some(ambre_core::Seq::new(6)), None]);
+        assert_eq!(
+            lasts,
+            [
+                None,
+                Some(ambre_core::Seq::<ambre_core::Relay>::new(6)),
+                None
+            ]
+        );
         let named = vec![ChannelName {
             channel_id: private,
             name: ambre_core::Name::new("Design").unwrap(),
@@ -1742,7 +1749,7 @@ pub(crate) mod tests {
         let listed = ambre_bus::ChannelMeta {
             channel_id: private,
             meta,
-            last: Some(ambre_core::Seq::new(6)),
+            last: Some(ambre_core::Seq::<ambre_core::Relay>::new(6)),
         };
         let key = DocumentKey::generate();
         let listing = |(channels, spaces, peers), names, keys| MemberListing {
@@ -1887,13 +1894,13 @@ pub(crate) mod tests {
         // Each keeps the last number of its meta, none where none is listed.
         let mut answer = answer;
         answer.channels[3].doc_key_enc = ambre_core::Encoded::new(vec![0]);
-        answer.channels[0].meta_last = Some(ambre_core::Seq::new(6));
+        answer.channels[0].meta_last = Some(ambre_core::Seq::<ambre_core::Relay>::new(6));
         let keys: Vec<_> = listed_keys(&answer, &own)
             .into_iter()
             .map(|(listed, opened)| (listed.meta, listed.last, opened.id()))
             .collect();
         let held = [
-            (named, Some(ambre_core::Seq::new(6))),
+            (named, Some(ambre_core::Seq::<ambre_core::Relay>::new(6))),
             (elsewhere, None),
             (cleared, None),
         ]

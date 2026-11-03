@@ -5,7 +5,8 @@
 //!   marker of [`id`], such as `Id<Document>` or `Id<Element>`
 //! - [`DocType`]: enum of document types (Prose, Trame, Toile, Murmure)
 //! - [`PublicKey`], [`ExchangePublicKey`]: `[u8; 32]` wrappers for Ed25519 and X25519
-//! - [`Seq`]: the relay's sequence number of a document
+//! - [`Seq`]: a number one issuer hands out going up, such as the relay's
+//!   `Seq<Relay>`
 //! - [`Version`]: version byte for serialization
 //! - [`schema`]: the persisted schema version and its migration walk
 //! - [`authorship`]: the session nonce and the peer registry entry
@@ -184,7 +185,7 @@ pub use secret::{
     AccessToken, Credential, CredentialKind, OidcCode, OidcState, Passphrase, PresignedUrl,
     RefreshToken, Secret, SecretBytes, SecretString, WireCredential,
 };
-pub use seq::{DeltaCount, Seq};
+pub use seq::{CountsSince, Deltas, Relay, Seq, SeqColumn, SeqKind};
 pub use space::{
     Board, CanvasCss, Css, Device, Doc, Image, ScalesTo, Space, StoredBoard, Surface, Texel, View,
 };
@@ -197,7 +198,7 @@ pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
 };
-pub use tally::{CellCount, Elements, Recounts, Tally, TallyKind};
+pub use tally::{Cells, Divisor, Elements, Recounts, Tally, TallyColumn, TallyKind, TallyRepr};
 pub use text_offset::{
     Byte, Char, RedactedChars, Utf16, byte_span_to_chars, byte_to_char, char_len,
     char_span_to_bytes, char_to_byte, char_to_utf16, utf16_to_char,

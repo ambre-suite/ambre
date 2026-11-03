@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_core::id::{Channel, Document, Id, Meta, Segment};
-use ambre_core::{DeltaBytes, LoroPayloadRef, Payload, Seq};
+use ambre_core::{DeltaBytes, LoroPayloadRef, Payload, Relay, Seq};
 use loro::LoroDoc;
 
 use crate::channel::{ChannelState, live_segments};
@@ -148,7 +148,7 @@ impl OpeningChannel {
     pub fn receive_signed(
         &mut self,
         document_id: Id<Document>,
-        seq: Seq,
+        seq: Seq<Relay>,
         payload: &Payload<DeltaBytes>,
         signer: Signer,
     ) -> Result<(), MurmureError> {

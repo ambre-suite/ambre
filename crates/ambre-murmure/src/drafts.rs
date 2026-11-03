@@ -91,6 +91,7 @@ impl GenerationKind for ShelfVersion {
 pub enum ShelfLosses {}
 
 impl ambre_core::TallyKind for ShelfLosses {
+    type Repr = u32;
     const NAME: &'static str = "LossCount";
 }
 

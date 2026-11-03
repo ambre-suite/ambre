@@ -171,6 +171,7 @@ pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Tally<ListDepth> {
 pub enum ListDepth {}
 
 impl ambre_core::TallyKind for ListDepth {
+    type Repr = u32;
     const NAME: &'static str = "ListDepth";
 }
 

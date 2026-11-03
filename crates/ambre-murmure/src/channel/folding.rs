@@ -12,7 +12,7 @@
 
 use ambre_bus::{Authored, FoldAnswer, Instant, MessageView, MurmureEvent, SnapshotVerdict};
 use ambre_core::id::{Channel, Document, Id, Lease, Segment};
-use ambre_core::{DeltaBytes, Failures, Ms, Payload, Seq, SnapshotBytes, Tally, TimeSpan};
+use ambre_core::{DeltaBytes, Failures, Ms, Payload, Relay, Seq, SnapshotBytes, Tally, TimeSpan};
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
@@ -59,9 +59,9 @@ enum Step {
 #[derive(Debug, Clone, Copy)]
 struct Grant {
     lease: Id<Lease>,
-    horizon: Seq,
+    horizon: Seq<Relay>,
     amendments: Id<Document>,
-    amendments_seq: Seq,
+    amendments_seq: Seq<Relay>,
     expires_in: TimeSpan<Ms>,
 }
 
@@ -73,11 +73,11 @@ pub struct FoldSnapshot {
     /// The lease the commit names.
     pub lease: Id<Lease>,
     /// The last delta of the segment it covers, the one the relay returned.
-    pub horizon: Seq,
+    pub horizon: Seq<Relay>,
     /// The amendments document it folds in.
     pub amendments: Id<Document>,
     /// The last delta number of those amendments it holds.
-    pub amendments_seq: Seq,
+    pub amendments_seq: Seq<Relay>,
     /// The shallow snapshot, framed as every channel snapshot is.
     pub payload: Payload<SnapshotBytes>,
 }
@@ -270,7 +270,7 @@ impl ChannelState {
         &self,
         segment: Id<Segment>,
         amendments: Id<Document>,
-        reached: Seq,
+        reached: Seq<Relay>,
     ) -> Result<LoroDoc, MurmureError> {
         let document_id = segment.document_id();
         let doc = self
@@ -321,7 +321,7 @@ impl ChannelState {
         document_id: Id<Document>,
         theirs: &LoroDoc,
         amendments: Id<Document>,
-        seq: Seq,
+        seq: Seq<Relay>,
     ) -> SnapshotVerdict {
         let segment = Id::<Segment>::from_document(document_id);
         let held = self.amendments.get(&segment).map(|held| held.id);
@@ -470,13 +470,13 @@ fn unsequenced(
 
 /// The amendments document and the number a snapshot header names, `None`
 /// for a snapshot that folds nothing.
-pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(Id<Document>, Seq)> {
+pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(Id<Document>, Seq<Relay>)> {
     let header = crate::schema::header(doc);
     let amendments =
         Id::<Document>::parse_str(&schema::string(&header, HeaderKey::Folded)?).ok()?;
     Some((
         amendments,
-        Seq::new(schema::unsigned(&header, HeaderKey::FoldedSeq)?),
+        Seq::<Relay>::new(schema::unsigned(&header, HeaderKey::FoldedSeq)?),
     ))
 }
 
@@ -496,7 +496,7 @@ fn fold_into(
     amendments: &LoroDoc,
     channel: Id<Channel>,
     amendments_id: Id<Document>,
-    reached: Seq,
+    reached: Seq<Relay>,
 ) -> Result<(), MurmureError> {
     let root = crate::schema::root_map(amendments, Root::Amendments);
     let threads = crate::schema::root_map(amendments, Root::Threads);

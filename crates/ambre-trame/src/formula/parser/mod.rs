@@ -527,6 +527,7 @@ pub const MAX_FORMULA_OPERATORS: Tally<Operators> = Tally::<Operators>::new(512)
 pub enum FormulaNesting {}
 
 impl ambre_core::TallyKind for FormulaNesting {
+    type Repr = u32;
     const NAME: &'static str = "FormulaNesting";
 }
 
@@ -534,6 +535,7 @@ impl ambre_core::TallyKind for FormulaNesting {
 pub enum Operators {}
 
 impl ambre_core::TallyKind for Operators {
+    type Repr = u32;
     const NAME: &'static str = "OperatorCount";
 }
 

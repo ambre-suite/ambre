@@ -90,7 +90,9 @@ impl Payload {
     /// A batch: each delta's number and its sealed envelope, unchanged
     /// (`SRV-153`). The number is written as the `i64` the stored batches
     /// already hold: a varint spells a signed and an unsigned integer apart.
-    pub fn batch(frames: &[(ambre_core::Seq, Payload)]) -> Result<Self, postcard::Error> {
+    pub fn batch(
+        frames: &[(ambre_core::Seq<ambre_core::Relay>, Payload)],
+    ) -> Result<Self, postcard::Error> {
         let frames: Vec<(i64, &[u8])> = frames
             .iter()
             .map(|(s, f)| (s.to_i64_saturating(), f.0.as_slice()))
@@ -100,12 +102,14 @@ impl Payload {
 
     /// The frames of a batch, by number. A negative number, which no relay
     /// writes, refuses the batch.
-    pub fn unbatch(&self) -> Result<BTreeMap<ambre_core::Seq, Payload>, postcard::Error> {
+    pub fn unbatch(
+        &self,
+    ) -> Result<BTreeMap<ambre_core::Seq<ambre_core::Relay>, Payload>, postcard::Error> {
         let frames: Vec<(i64, Vec<u8>)> = postcard::from_bytes(&self.0)?;
         frames
             .into_iter()
             .map(|(s, f)| {
-                ambre_core::Seq::try_from(s)
+                ambre_core::Seq::<ambre_core::Relay>::try_from(s)
                     .map(|s| (s, Self(f)))
                     .map_err(|_| postcard::Error::DeserializeBadVarint)
             })
@@ -115,7 +119,7 @@ impl Payload {
     /// A pending entry: the delta's number, its object key and its full sealed
     /// frame. The frame is what a replay and the flusher both read back.
     pub fn pending_entry(
-        seq: ambre_core::Seq,
+        seq: ambre_core::Seq<ambre_core::Relay>,
         s3_key: &ambre_core::ObjectKey,
         wire: &Payload,
     ) -> Self {
@@ -130,7 +134,13 @@ impl Payload {
 
     /// The number, the object key and the frame of a pending entry, or `None`
     /// when it does not parse.
-    pub fn read_pending(&self) -> Option<(ambre_core::Seq, ambre_core::ObjectKey, Payload)> {
+    pub fn read_pending(
+        &self,
+    ) -> Option<(
+        ambre_core::Seq<ambre_core::Relay>,
+        ambre_core::ObjectKey,
+        Payload,
+    )> {
         use base64::Engine;
         let entry: serde_json::Value = serde_json::from_slice(&self.0).ok()?;
         let s3_key = ambre_core::ObjectKey::new(entry.get("s3_key")?.as_str()?.to_owned());
@@ -141,14 +151,21 @@ impl Payload {
             .get("seq")
             .and_then(serde_json::Value::as_u64)
             .unwrap_or(0);
-        Some((ambre_core::Seq::new(seq), s3_key, Self(frame)))
+        Some((
+            ambre_core::Seq::<ambre_core::Relay>::new(seq),
+            s3_key,
+            Self(frame),
+        ))
     }
 
     /// The number a pending entry names, when it names one, even if the rest
     /// does not parse.
-    pub fn pending_seq(&self) -> Option<ambre_core::Seq> {
+    pub fn pending_seq(&self) -> Option<ambre_core::Seq<ambre_core::Relay>> {
         let entry: serde_json::Value = serde_json::from_slice(&self.0).ok()?;
-        entry.get("seq")?.as_u64().map(ambre_core::Seq::new)
+        entry
+            .get("seq")?
+            .as_u64()
+            .map(ambre_core::Seq::<ambre_core::Relay>::new)
     }
 }
 
@@ -188,8 +205,14 @@ mod tests {
     #[test]
     fn a_batch_reads_back_its_frames() {
         let frames = vec![
-            (ambre_core::Seq::new(3), Payload::new(vec![1, 2])),
-            (ambre_core::Seq::new(4), Payload::new(vec![])),
+            (
+                ambre_core::Seq::<ambre_core::Relay>::new(3),
+                Payload::new(vec![1, 2]),
+            ),
+            (
+                ambre_core::Seq::<ambre_core::Relay>::new(4),
+                Payload::new(vec![]),
+            ),
         ];
         let batch = Payload::batch(&frames).unwrap();
         let stored: Vec<(i64, Vec<u8>)> = vec![(3, vec![1, 2]), (4, vec![])];
@@ -218,18 +241,22 @@ mod tests {
     #[test]
     fn a_pending_entry_reads_back() {
         let entry = Payload::pending_entry(
-            ambre_core::Seq::new(7),
+            ambre_core::Seq::<ambre_core::Relay>::new(7),
             &ambre_core::ObjectKey::from("d/7"),
             &Payload::new(vec![9, 8]),
         );
         let (seq, key, frame) = entry.read_pending().unwrap();
         assert_eq!(
             (seq, key.as_str(), frame.expose_bytes()),
-            (ambre_core::Seq::new(7), "d/7", &[9u8, 8][..])
+            (
+                ambre_core::Seq::<ambre_core::Relay>::new(7),
+                "d/7",
+                &[9u8, 8][..]
+            )
         );
         assert_eq!(
             Payload::new(b"{\"seq\":4}".to_vec()).pending_seq(),
-            Some(ambre_core::Seq::new(4))
+            Some(ambre_core::Seq::<ambre_core::Relay>::new(4))
         );
         assert!(Payload::new(b"not json".to_vec()).read_pending().is_none());
     }

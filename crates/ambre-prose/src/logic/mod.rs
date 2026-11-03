@@ -97,6 +97,7 @@ use crate::schema;
 pub enum Faces {}
 
 impl ambre_core::TallyKind for Faces {
+    type Repr = u32;
     const NAME: &'static str = "FaceCount";
 }
 

@@ -70,6 +70,7 @@ pub(super) struct PendingImport {
 pub enum ImportUnits {}
 
 impl ambre_core::TallyKind for ImportUnits {
+    type Repr = u32;
     const NAME: &'static str = "ImportUnitCount";
 }
 
@@ -77,6 +78,7 @@ impl ambre_core::TallyKind for ImportUnits {
 pub enum MediaEntries {}
 
 impl ambre_core::TallyKind for MediaEntries {
+    type Repr = u32;
     const NAME: &'static str = "MediaEntryCount";
 }
 
@@ -84,6 +86,7 @@ impl ambre_core::TallyKind for MediaEntries {
 pub enum PendingImports {}
 
 impl ambre_core::TallyKind for PendingImports {
+    type Repr = u32;
     const NAME: &'static str = "PendingImportCount";
 }
 

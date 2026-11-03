@@ -10,7 +10,7 @@ use ambre_bus::{ChannelDocumentKind, ChannelMeta, DocumentActivity};
 
 /// The segments of a channel, each with the last number the activity
 /// answer gave, if any.
-type Segments = Vec<(Id<Document>, Option<Seq>)>;
+type Segments = Vec<(Id<Document>, Option<Seq<Relay>>)>;
 
 /// What the Logic thread knows of the channels it may watch unopened.
 #[derive(Debug, Default)]
@@ -128,7 +128,7 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{ChannelActivity, Seq};
+    use ambre_bus::{ChannelActivity, Relay, Seq};
     use ambre_core::activity::ActivityCounters;
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
@@ -144,10 +144,10 @@ mod tests {
     }
 
     /// The last number the activity answer gives every document.
-    const LAST: Seq = Seq::new(3);
+    const LAST: Seq<Relay> = Seq::<Relay>::new(3);
 
     /// The last number the listing gives every `meta`.
-    const META_LAST: Seq = Seq::new(8);
+    const META_LAST: Seq<Relay> = Seq::<Relay>::new(8);
 
     fn list(state: &mut LogicState, metas: &[(Id<Channel>, Id<Meta>)]) {
         state.handle_logic_event(LogicEvent::MemberChannels {
@@ -178,7 +178,7 @@ mod tests {
                     document_id,
                     kind,
                     active: ambre_bus::Activity::Quiet,
-                    read: Seq::ZERO,
+                    read: Seq::<Relay>::ZERO,
                     last: Some(LAST),
                 })
                 .collect(),
@@ -270,8 +270,8 @@ mod tests {
                 document_id: segment,
                 kind: ChannelDocumentKind::Segment,
                 active: ambre_bus::Activity::Active,
-                read: Seq::new(2),
-                last: Some(Seq::new(50)),
+                read: Seq::<Relay>::new(2),
+                last: Some(Seq::<Relay>::new(50)),
             }],
         });
         let mark = ChannelActivity {

@@ -126,12 +126,12 @@ impl TrameState {
     /// as such a number.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
         use crate::formula::functions::exact_sum;
-        use ambre_bus::app::trame::{CellCount, CellNumber, NumericStats};
+        use ambre_bus::app::trame::{CellNumber, Cells, NumericStats};
         // Make sure evaluated values are current before reading them.
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
 
-        let mut count = CellCount::ZERO;
+        let mut count = ambre_core::Tally::<Cells>::ZERO;
         let mut numbers: Vec<CellNumber> = Vec::new();
         // The whole selection, deduplicated across every rectangle (`TRAME-UI-104`).
         for at in self.selected_cells() {

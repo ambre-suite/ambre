@@ -11,7 +11,7 @@ use ambre_bus::{
     MessageView, MurmureEvent,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
-use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::json::{JsonOpContent, MapOp};
 use loro::{ExportMode, LoroDoc, VersionVector};
 
@@ -335,14 +335,14 @@ fn two_first_replies_converge_on_the_thread_the_relay_linked() {
     alice
         .apply_signed(
             doc,
-            Seq::new(10),
+            Seq::<Relay>::new(10),
             &bob_root.delta,
             signer(&bob, doc, bob_user),
         )
         .expect("the same value passes");
     bob.apply_signed(
         doc,
-        Seq::new(11),
+        Seq::<Relay>::new(11),
         &alice_root.delta,
         signer(&alice, doc, alice_user),
     )
@@ -443,7 +443,7 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
     alice
         .apply_signed(
             doc,
-            Seq::new(10),
+            Seq::<Relay>::new(10),
             &named.root.expect("named").delta,
             signer(&bob, doc, bob_user),
         )
@@ -455,7 +455,7 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
     assert_eq!(
         alice.apply_signed(
             doc,
-            Seq::new(11),
+            Seq::<Relay>::new(11),
             &other.root.expect("named").delta,
             signer(&carol, doc, carol_user),
         ),
@@ -475,7 +475,7 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
     assert_eq!(
         alice.apply_signed(
             doc,
-            Seq::new(12),
+            Seq::<Relay>::new(12),
             &json_since(bob_doc, &before),
             signer(&bob, doc, bob_user)
         ),
@@ -506,14 +506,14 @@ fn a_reply_takes_no_thread_field_from_another_member() {
     assert_eq!(bob.threads_to_open(), [thread]);
     bob.apply_signed(
         thread,
-        Seq::new(1),
+        Seq::<Relay>::new(1),
         &first,
         signer(&alice, thread, alice_user),
     )
     .expect("waits");
     bob.apply_signed(
         thread,
-        Seq::new(2),
+        Seq::<Relay>::new(2),
         &replied.reply.delta,
         signer(&alice, thread, alice_user),
     )
@@ -539,7 +539,7 @@ fn a_reply_takes_no_thread_field_from_another_member() {
     assert_eq!(
         alice.apply_signed(
             thread,
-            Seq::new(3),
+            Seq::<Relay>::new(3),
             &json_since(bob_doc, &before),
             signer(&bob, thread, bob_user)
         ),
@@ -561,8 +561,13 @@ fn peer_with_thread(
     let mut bob = peer_of(alice);
     assert_eq!(bob.threads_to_open(), [thread]);
     for (seq, update) in (1..).zip(updates) {
-        bob.apply_signed(thread, Seq::new(seq), update, signer(alice, thread, author))
-            .expect("waits");
+        bob.apply_signed(
+            thread,
+            Seq::<Relay>::new(seq),
+            update,
+            signer(alice, thread, author),
+        )
+        .expect("waits");
     }
     bob.older_ready(thread).expect("admitted");
     let peer = next_peer();
@@ -700,7 +705,7 @@ fn another_member_reacts_to_a_reply_and_never_edits_it() {
     alice
         .apply_signed(
             thread,
-            Seq::new(3),
+            Seq::<Relay>::new(3),
             &reacted.delta,
             signer(&bob, thread, bob_user),
         )
@@ -735,7 +740,7 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
     assert!(bob.holds(thread));
     bob.apply_signed(
         thread,
-        Seq::new(1),
+        Seq::<Relay>::new(1),
         &first,
         signer(&alice, thread, alice_user),
     )
@@ -756,7 +761,7 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
     let events = bob
         .apply_signed(
             thread,
-            Seq::new(2),
+            Seq::<Relay>::new(2),
             &replied.reply.delta,
             signer(&alice, thread, alice_user),
         )
@@ -779,7 +784,7 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
     carol
         .apply_signed(
             foreign,
-            Seq::new(1),
+            Seq::<Relay>::new(1),
             &foreign_first,
             signer(&alice, foreign, alice_user),
         )
@@ -836,27 +841,27 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
     state
         .apply_signed(
             thread,
-            Seq::new(4),
+            Seq::<Relay>::new(4),
             &replied.reply.delta,
             signer(&state, thread, bob),
         )
         .expect("echo");
     assert_eq!(
-        state.thread_mentions(thread, Seq::new(3), alice),
+        state.thread_mentions(thread, Seq::<Relay>::new(3), alice),
         Ok(ambre_core::Tally::<Mentions>::new(1))
     );
     assert_eq!(
-        state.thread_mentions(thread, Seq::new(4), alice),
+        state.thread_mentions(thread, Seq::<Relay>::new(4), alice),
         Ok(ambre_core::Tally::<Mentions>::new(0))
     );
     assert_eq!(
-        state.thread_mentions(thread, Seq::new(3), bob),
+        state.thread_mentions(thread, Seq::<Relay>::new(3), bob),
         Ok(ambre_core::Tally::<Mentions>::new(0))
     );
     assert_eq!(state.held_threads(), [thread]);
     let segment = state.active_id().document_id();
     assert_eq!(
-        state.thread_mentions(segment, Seq::ZERO, alice),
+        state.thread_mentions(segment, Seq::<Relay>::ZERO, alice),
         Err(MurmureError::NotHeld(segment))
     );
 }
@@ -931,7 +936,7 @@ fn the_reply_on_a_far_copy_loads_down_to_its_root() {
     assert_eq!(bob.seek_step(), Some(SeekStep::Wait));
     bob.apply_signed(
         thread,
-        Seq::new(1),
+        Seq::<Relay>::new(1),
         &first,
         signer(&alice, thread, alice_user),
     )
@@ -963,7 +968,7 @@ fn a_seek_ends_on_what_it_cannot_follow() {
         assert_eq!(bob.seek_root(thread), Some(thread));
         bob.apply_signed(
             thread,
-            Seq::new(1),
+            Seq::<Relay>::new(1),
             &first,
             signer(&alice, thread, alice_user),
         )

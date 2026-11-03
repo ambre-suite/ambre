@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use ambre_core::Payload;
 use ambre_core::id::{Document, Id, Snapshot, User};
-use ambre_protocol::messages::{Seq, Update};
+use ambre_protocol::messages::{Relay, Seq, Update};
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 
 /// In-process Blind Relay simulator for multi-client integration tests.
@@ -28,11 +28,11 @@ pub struct MockBlindRelay {
     /// Connected clients: user_id -> (client_tx for server->client msgs).
     clients: HashMap<Id<User>, ambre_bus::conduit::UnboundedSender<WsServerMsg>>,
     /// Global sequence number, monotonically increasing per relay instance.
-    next_seq: Seq,
+    next_seq: Seq<Relay>,
 }
 
 struct DocumentState {
-    updates: Vec<(Seq, Update)>,
+    updates: Vec<(Seq<Relay>, Update)>,
     snapshots: Vec<Id<Snapshot>>,
     #[allow(dead_code)]
     subscribers: Vec<Id<User>>,
@@ -43,7 +43,7 @@ impl MockBlindRelay {
         Self {
             documents: HashMap::new(),
             clients: HashMap::new(),
-            next_seq: Seq::new(1),
+            next_seq: Seq::<Relay>::new(1),
         }
     }
 
@@ -180,7 +180,10 @@ impl MockBlindRelay {
             });
         state.snapshots.push(snapshot_id);
         // The snapshot folds in every delta the document holds so far.
-        let covered_seq = state.updates.last().map_or(Seq::new(0), |(seq, _)| *seq);
+        let covered_seq = state
+            .updates
+            .last()
+            .map_or(Seq::<Relay>::new(0), |(seq, _)| *seq);
         for tx in self.clients.values() {
             let _ = tx.send(WsServerMsg::SnapshotAvailable {
                 document_id,
@@ -200,7 +203,7 @@ impl Default for MockBlindRelay {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_protocol::messages::Clock;
+    use ambre_protocol::messages::{AuthorKey, Seq};
     use ambre_protocol::public_data::UpdatePublicData;
     use ambre_protocol::ws::encode_client_msg;
 
@@ -222,7 +225,7 @@ mod tests {
                 pub_key: ambre_core::FixedBytes::from_array([1u8; 32]),
                 key_id: ambre_core::FixedBytes::from_array([2u8; 16]),
                 snapshot_id: Id::<Snapshot>::mint(),
-                clock: Clock::new(1),
+                clock: Seq::<AuthorKey>::new(1),
             },
             commitment_tag: ambre_core::FixedBytes::from_array([0u8; 32]),
             signature: ambre_core::FixedBytes::from_array([0u8; 64]),

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent, SnapshotVerdict};
 use ambre_core::id::{Channel, Id, Lease, Segment, User};
-use ambre_core::{Payload, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::schema::{MessageKey, Root};
@@ -167,20 +167,23 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
     state.lease_granted(
         closing,
         lease,
-        ambre_core::Seq::new(7),
+        ambre_core::Seq::<ambre_core::Relay>::new(7),
         TimeSpan::<Ms>::new(LEASE_MS),
     );
     let early = state
-        .final_snapshot(NOW, ambre_core::Seq::new(6))
+        .final_snapshot(NOW, ambre_core::Seq::<ambre_core::Relay>::new(6))
         .expect("export");
     assert!(early.is_none(), "a delta below the horizon is missing");
     let snapshot = state
-        .final_snapshot(at(1), ambre_core::Seq::new(7))
+        .final_snapshot(at(1), ambre_core::Seq::<ambre_core::Relay>::new(7))
         .expect("export");
     let snapshot = snapshot.expect("every delta is in");
     assert_eq!(snapshot.segment, closing);
     assert_eq!(snapshot.lease, lease);
-    assert_eq!(snapshot.horizon, ambre_core::Seq::new(7));
+    assert_eq!(
+        snapshot.horizon,
+        ambre_core::Seq::<ambre_core::Relay>::new(7)
+    );
     assert!(holds(snapshot.payload.as_bytes(), "zanzibar-quokka"));
     assert!(
         !holds(snapshot.payload.as_bytes(), "marzipan-wombat"),
@@ -188,7 +191,7 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
     );
     assert!(
         state
-            .final_snapshot(at(2), ambre_core::Seq::new(7))
+            .final_snapshot(at(2), ambre_core::Seq::<ambre_core::Relay>::new(7))
             .expect("export")
             .is_none(),
         "sealed once"
@@ -208,18 +211,18 @@ fn a_lease_that_runs_out_is_asked_again() {
     state.lease_granted(
         closing,
         Id::<Lease>::mint(),
-        ambre_core::Seq::new(9),
+        ambre_core::Seq::<ambre_core::Relay>::new(9),
         TimeSpan::<Ms>::new(LEASE_MS),
     );
     assert!(
         state
-            .final_snapshot(NOW, ambre_core::Seq::new(1))
+            .final_snapshot(NOW, ambre_core::Seq::<ambre_core::Relay>::new(1))
             .expect("export")
             .is_none()
     );
     assert_eq!(state.lease_to_ask(at(LEASE_MS - 1)), None, "still held");
     let late = state
-        .final_snapshot(at(LEASE_MS), ambre_core::Seq::new(9))
+        .final_snapshot(at(LEASE_MS), ambre_core::Seq::<ambre_core::Relay>::new(9))
         .expect("export");
     assert!(late.is_none(), "the lease ran out");
     assert_eq!(state.lease_to_ask(at(LEASE_MS)), Some(closing));
@@ -239,11 +242,11 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
     alice.lease_granted(
         closing,
         Id::<Lease>::mint(),
-        ambre_core::Seq::new(2),
+        ambre_core::Seq::<ambre_core::Relay>::new(2),
         TimeSpan::<Ms>::new(LEASE_MS),
     );
     let snapshot = alice
-        .final_snapshot(NOW, ambre_core::Seq::new(2))
+        .final_snapshot(NOW, ambre_core::Seq::<ambre_core::Relay>::new(2))
         .expect("export")
         .expect("in");
 
@@ -296,11 +299,11 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     alice.lease_granted(
         closing,
         Id::<Lease>::mint(),
-        ambre_core::Seq::new(2),
+        ambre_core::Seq::<ambre_core::Relay>::new(2),
         TimeSpan::<Ms>::new(LEASE_MS),
     );
     alice
-        .final_snapshot(NOW, ambre_core::Seq::new(2))
+        .final_snapshot(NOW, ambre_core::Seq::<ambre_core::Relay>::new(2))
         .expect("export")
         .expect("in");
     let meta = alice.mark_final(closing).expect("mark").expect("a delta");
@@ -319,11 +322,11 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     bob.lease_granted(
         closing,
         lease,
-        ambre_core::Seq::new(2),
+        ambre_core::Seq::<ambre_core::Relay>::new(2),
         TimeSpan::<Ms>::new(LEASE_MS),
     );
     let snapshot = bob
-        .final_snapshot(NOW, ambre_core::Seq::new(2))
+        .final_snapshot(NOW, ambre_core::Seq::<ambre_core::Relay>::new(2))
         .expect("export")
         .expect("in");
     assert_eq!((snapshot.segment, snapshot.lease), (closing, lease));
@@ -370,8 +373,13 @@ fn finalized_for(
     for (seq, text) in [(1, "one"), (2, "two")] {
         let sent = alice.send(&draft(text), author, NOW).expect("send");
         if seq <= received {
-            bob.apply_signed(segment.document_id(), Seq::new(seq), &sent.delta, signer)
-                .expect("delivered");
+            bob.apply_signed(
+                segment.document_id(),
+                Seq::<Relay>::new(seq),
+                &sent.delta,
+                signer,
+            )
+            .expect("delivered");
         }
     }
     let closing = alice.wants_close().expect("full");
@@ -387,11 +395,11 @@ fn finalized_for(
     alice.lease_granted(
         closing,
         Id::<Lease>::mint(),
-        ambre_core::Seq::new(2),
+        ambre_core::Seq::<ambre_core::Relay>::new(2),
         TimeSpan::<Ms>::new(LEASE_MS),
     );
     let snapshot = alice
-        .final_snapshot(NOW, ambre_core::Seq::new(2))
+        .final_snapshot(NOW, ambre_core::Seq::<ambre_core::Relay>::new(2))
         .expect("export")
         .expect("in");
     (alice, bob, closing, snapshot.payload)
@@ -425,16 +433,24 @@ fn a_member_holding_the_deltas_confirms_the_final_snapshot() {
     let messages = bob.messages(closing).expect("held");
     let sent = payload.clone();
     assert_eq!(
-        bob.check_snapshot(document_id, ambre_core::Seq::new(2), &payload)
-            .expect("check"),
+        bob.check_snapshot(
+            document_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(2),
+            &payload
+        )
+        .expect("check"),
         SnapshotVerdict::Match { extras: Vec::new() }
     );
     assert_eq!(bob.doc(document_id).expect("held").oplog_vv(), before);
     assert_eq!(bob.messages(closing).expect("held"), messages);
     assert_eq!(payload, sent, "the snapshot is only read");
     assert_eq!(
-        bob.check_snapshot(document_id, ambre_core::Seq::new(1), &payload)
-            .expect("check"),
+        bob.check_snapshot(
+            document_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            &payload
+        )
+        .expect("check"),
         SnapshotVerdict::Unchecked,
         "his copy holds a delta past what it covers"
     );
@@ -455,8 +471,12 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
             .expect("push");
     });
     assert_eq!(
-        bob.check_snapshot(document_id, ambre_core::Seq::new(2), &added)
-            .expect("check"),
+        bob.check_snapshot(
+            document_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(2),
+            &added
+        )
+        .expect("check"),
         SnapshotVerdict::Mismatch
     );
     let doc = alice.doc(document_id).expect("held");
@@ -474,14 +494,18 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
             .expect("export"),
     );
     assert_eq!(
-        bob.check_snapshot(document_id, ambre_core::Seq::new(2), &dropped)
-            .expect("check"),
+        bob.check_snapshot(
+            document_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(2),
+            &dropped
+        )
+        .expect("check"),
         SnapshotVerdict::Mismatch
     );
     assert_eq!(
         bob.check_snapshot(
             document_id,
-            ambre_core::Seq::new(2),
+            ambre_core::Seq::<ambre_core::Relay>::new(2),
             &Payload::<SnapshotBytes>::new(b"not a snapshot".to_vec())
         )
         .expect("check"),
@@ -501,7 +525,7 @@ fn a_copy_missing_purged_deltas_loads_the_final_snapshot() {
     assert_eq!(bob.messages(closing).expect("held").len(), 1);
     bob.apply_remote_at(
         document_id,
-        Some(Order::Snapshot(Seq::new(2))),
+        Some(Order::Snapshot(Seq::<Relay>::new(2))),
         (&payload).into(),
     )
     .expect("the snapshot loads");

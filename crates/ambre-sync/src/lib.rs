@@ -57,7 +57,7 @@ use ambre_bus::{
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::{FixedBytes, Generation, KeyId, Payload, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
-use ambre_protocol::messages::{Clock, Counter, Seq, Update};
+use ambre_protocol::messages::{AuthorKey, Ephemerals, Relay, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg, encode_client_msg};
 #[cfg(target_arch = "wasm32")]
@@ -316,7 +316,7 @@ enum SyncEvent {
         /// Highest delta `seq` folded into `snapshot_payload`, 0 when no snapshot
         /// was downloaded. The post-open `RequestMissing` starts after this seq,
         /// so the history already in the snapshot is not replayed.
-        covered_seq: Seq,
+        covered_seq: Seq<Relay>,
         /// The latest snapshot, when only its author confirmed it and that
         /// author is another user. `snapshot_payload` is then the reference,
         /// and this one is checked once the replay is done (`AUTHOR-022`).
@@ -627,7 +627,7 @@ enum SyncEvent {
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
         /// The last delta its author says it folds in.
-        covered_seq: Seq,
+        covered_seq: Seq<Relay>,
         blob: Option<Payload<pipeline::FetchedBlob>>,
     },
     /// Media download completed: the encrypted blob was fetched from S3 and
@@ -684,17 +684,17 @@ struct SyncDocumentState {
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: Id<Snapshot>,
-    local_clock: Clock,
+    local_clock: Seq<AuthorKey>,
     /// Monotonic counter for outbound ephemerals (anti-replay at the receiver).
-    ephemeral_counter: Counter,
+    ephemeral_counter: Seq<Ephemerals>,
     /// Highest server-assigned `seq` seen for this document. Used as
     /// `after_seq` when requesting the missing history.
-    last_seq: Seq,
+    last_seq: Seq<Relay>,
     /// The latest sequence numbers this client ingested, applied or held in
     /// quarantine. A reconnect replay can overlap a broadcast received during
     /// the same round trip, and the second copy is dropped here (`SYNC-087`).
     /// Bounded by [`APPLIED_WINDOW`].
-    ingested: BTreeSet<Seq>,
+    ingested: BTreeSet<Seq<Relay>>,
     /// Snapshots whose contents the Logic thread already holds. An inbound
     /// `Update` whose parent `snapshot_id` is here can be applied immediately;
     /// otherwise it is quarantined under that id.
@@ -704,7 +704,7 @@ struct SyncDocumentState {
     /// Bounded by [`QUARANTINE_LIMIT`] (oldest-by-`clock` dropped past the cap).
     /// Each keeps the number the relay gave it, which the Logic thread's
     /// snapshot check reads.
-    quarantine: HashMap<Id<Snapshot>, Vec<(Seq, Update)>>,
+    quarantine: HashMap<Id<Snapshot>, Vec<(Seq<Relay>, Update)>>,
     /// The missing history was asked for this gap: the quarantine crossed the
     /// soft threshold and has not dropped back under it since. One request per
     /// gap, never one per arrival (`SYNC-031`).
@@ -719,7 +719,7 @@ struct SyncDocumentState {
     /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
     /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
     /// value is silently dropped.
-    ephemeral_remote_counters: HashMap<FixedBytes<PublicKey>, Counter>,
+    ephemeral_remote_counters: HashMap<FixedBytes<PublicKey>, Seq<Ephemerals>>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
     /// ephemeral author's verifying key to their canonical `Id<User>`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
@@ -769,14 +769,14 @@ struct SyncDocumentState {
     /// The Logic thread evicted the document at this horizon. The session
     /// becomes a light subscription once every delta sent is acknowledged
     /// (`RESID-009`).
-    released: Option<Seq>,
+    released: Option<Seq<Relay>>,
 }
 
 /// A snapshot the Logic thread is checking.
 struct PendingCheck {
     /// The signing key its sealed blob verified under: who built it.
     author: FixedBytes<PublicKey>,
-    covered_seq: Seq,
+    covered_seq: Seq<Relay>,
     /// The opened snapshot, kept on open only: a match adopts it.
     payload: Option<ambre_core::Payload<ambre_core::SnapshotBytes>>,
 }
@@ -795,7 +795,7 @@ pub(crate) enum Existence {
 #[derive(Debug, Clone)]
 pub(crate) struct HeldSnapshot {
     pub snapshot_id: Id<Snapshot>,
-    pub covered_seq: Seq,
+    pub covered_seq: Seq<Relay>,
     pub blob: Payload<pipeline::FetchedBlob>,
 }
 
@@ -821,9 +821,9 @@ impl SyncDocumentState {
             pending_updates: Vec::new(),
             pending_uploads: Vec::new(),
             current_snapshot_id,
-            local_clock: Clock::new(0),
-            ephemeral_counter: Counter::new(0),
-            last_seq: Seq::new(0),
+            local_clock: Seq::<AuthorKey>::new(0),
+            ephemeral_counter: Seq::<Ephemerals>::new(0),
+            last_seq: Seq::<Relay>::new(0),
             ingested: BTreeSet::new(),
             known_snapshots: HashSet::from([current_snapshot_id]),
             quarantine: HashMap::new(),
@@ -847,7 +847,7 @@ impl SyncDocumentState {
     /// Records `seq` as ingested, and says whether this is its first arrival.
     /// The window keeps the latest [`APPLIED_WINDOW`] numbers; a reconnect
     /// overlap is far shorter than that.
-    fn first_arrival(&mut self, seq: Seq) -> bool {
+    fn first_arrival(&mut self, seq: Seq<Relay>) -> bool {
         if !self.ingested.insert(seq) {
             return false;
         }
@@ -910,7 +910,7 @@ impl SyncDocumentState {
     fn accept_ephemeral_counter(
         &mut self,
         author_pk: &FixedBytes<PublicKey>,
-        counter: Counter,
+        counter: Seq<Ephemerals>,
     ) -> bool {
         // A sender counts from 1, so the floor of an author not seen yet is
         // the counter before its first send.
@@ -918,7 +918,7 @@ impl SyncDocumentState {
             .ephemeral_remote_counters
             .get(author_pk)
             .copied()
-            .unwrap_or(Counter::new(0));
+            .unwrap_or(Seq::<Ephemerals>::new(0));
         if counter <= last {
             return false;
         }
@@ -1013,7 +1013,7 @@ impl SyncDocumentState {
     fn open_signed_update(
         &self,
         update: &ambre_protocol::Update,
-        seq: Seq,
+        seq: Seq<Relay>,
     ) -> Result<SignedDelta, pipeline::PipelineError> {
         let body = pipeline::split_update_body(self.open_update_named(update)?)?;
         let signer = &update.public_data.pub_key;
@@ -1940,13 +1940,13 @@ mod ephemeral_tests {
     fn monotonic_counter_accepted_replay_dropped() {
         let mut d = doc_state();
         let author = FixedBytes::from_array([1u8; 32]);
-        assert!(d.accept_ephemeral_counter(&author, Counter::new(1)));
-        assert!(d.accept_ephemeral_counter(&author, Counter::new(2)));
+        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(2)));
         // Replay / stale counters are dropped.
-        assert!(!d.accept_ephemeral_counter(&author, Counter::new(2)));
-        assert!(!d.accept_ephemeral_counter(&author, Counter::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(2)));
+        assert!(!d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
         // Forward progress resumes.
-        assert!(d.accept_ephemeral_counter(&author, Counter::new(3)));
+        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(3)));
     }
 
     #[test]
@@ -1957,7 +1957,7 @@ mod ephemeral_tests {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
             let author = FixedBytes::from_array(author);
-            assert!(d.accept_ephemeral_counter(&author, Counter::new(1)));
+            assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
     }
@@ -2011,7 +2011,9 @@ mod seal_tests {
     use super::*;
     use ambre_bus::SyncCommand;
     use ambre_core::KeyId;
-    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Counter, Nonce, Signature};
+    use ambre_protocol::messages::{
+        AuthorKey, Ciphertext, CommitmentTag, Ephemerals, Nonce, Seq, Signature,
+    };
     use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
     use ambre_protocol::ws::decode_client_msg;
     use ambre_protocol::{Ephemeral, Update};
@@ -2102,7 +2104,7 @@ mod seal_tests {
                 pub_key,
                 key_id,
                 snapshot_id: Id::<Snapshot>::from_bytes([3u8; 16]),
-                clock: Clock::new(1),
+                clock: Seq::<AuthorKey>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2114,7 +2116,7 @@ mod seal_tests {
                 document_id: id,
                 pub_key,
                 key_id,
-                counter: Counter::new(1),
+                counter: Seq::<Ephemerals>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

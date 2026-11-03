@@ -20,7 +20,7 @@ use crate::state::AppState;
 /// The body of a cursor move: the sequence number the caller has read up to.
 #[derive(serde::Deserialize)]
 pub struct ReadCursorRequest {
-    pub seq: ambre_core::Seq,
+    pub seq: ambre_core::Seq<ambre_core::Relay>,
 }
 
 /// One document of the activity answer.
@@ -37,10 +37,10 @@ pub struct ActivityJson {
     pub active: ambre_core::activity::Activity,
     /// The caller's own cursor. The client counts its new messages against
     /// it; the relay still states no count (`SRV-110`).
-    pub read: ambre_core::Seq,
+    pub read: ambre_core::Seq<ambre_core::Relay>,
     /// The document's last number. A client that holds nothing of the
     /// document resumes after it (`SRV-222`); it counts nothing with it.
-    pub last: ambre_core::Seq,
+    pub last: ambre_core::Seq<ambre_core::Relay>,
 }
 
 /// `PUT /api/documents/{id}/read-cursor`: move the caller's cursor on one
@@ -117,13 +117,14 @@ pub async fn mark_read(
     let wanted: Option<std::collections::HashSet<Id<Document>>> = body
         .and_then(|Json(req)| req.documents)
         .map(|ids| ids.into_iter().collect());
-    let cursors: Vec<(Id<Document>, ambre_core::Seq)> = last_numbers(&state, &auth.user_id)
-        .await?
-        .into_iter()
-        .filter(|(row, last)| *last > row.cursor)
-        .filter(|(row, _)| wanted.as_ref().is_none_or(|w| w.contains(&row.document_id)))
-        .map(|(row, last)| (row.document_id, last))
-        .collect();
+    let cursors: Vec<(Id<Document>, ambre_core::Seq<ambre_core::Relay>)> =
+        last_numbers(&state, &auth.user_id)
+            .await?
+            .into_iter()
+            .filter(|(row, last)| *last > row.cursor)
+            .filter(|(row, _)| wanted.as_ref().is_none_or(|w| w.contains(&row.document_id)))
+            .map(|(row, last)| (row.document_id, last))
+            .collect();
     db::set_read_cursors(&state.db, &auth.user_id, &cursors).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -134,7 +135,7 @@ pub async fn mark_read(
 async fn last_numbers(
     state: &AppState,
     user_id: &Id<User>,
-) -> Result<Vec<(db::ActivityRow, ambre_core::Seq)>, AppError> {
+) -> Result<Vec<(db::ActivityRow, ambre_core::Seq<ambre_core::Relay>)>, AppError> {
     let rows = db::channel_activity(&state.db, user_id).await?;
     let ids: Vec<Id<Document>> = rows
         .iter()
@@ -244,7 +245,7 @@ mod tests {
             who,
             PathId(document),
             Json(ReadCursorRequest {
-                seq: ambre_core::Seq::new(seq),
+                seq: ambre_core::Seq::<ambre_core::Relay>::new(seq),
             }),
         )
         .await
