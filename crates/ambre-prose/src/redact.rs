@@ -1,26 +1,10 @@
-//! The `Debug` form of document content: its length alone.
+//! The test oracle of the `Debug` form of document content.
 //!
 //! A type that holds text a user typed, pasted or imported prints the text
 //! by its length. So a log line or a panic message carries no content
 //! (`ambre-spec-zero-knowledge.md`). Each such type writes its `Debug` by
-//! hand and hands its text to [`Redacted`].
-
-use std::fmt;
-
-/// Text that a `Debug` impl prints by its length alone, in the workspace
-/// spelling `N chars` that [`ambre_core::RedactedChars`] owns.
-pub(crate) struct Redacted<'a>(pub(crate) &'a str);
-
-impl fmt::Debug for Redacted<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        ambre_core::RedactedChars::of(self.0).fmt(f)
-    }
-}
-
-/// An optional text, printed by its length alone when present.
-pub(crate) fn optional(text: Option<&String>) -> Option<Redacted<'_>> {
-    text.map(|text| Redacted(text))
-}
+//! hand and hands its text to [`ambre_core::Redacted`]. This module holds
+//! the check that each such `Debug` leaves the text out.
 
 #[cfg(test)]
 pub(crate) mod tests {
@@ -39,8 +23,9 @@ pub(crate) mod tests {
 
     #[test]
     fn redacted_text_prints_its_length_alone() {
-        assert_eq!(format!("{:?}", super::Redacted("secret")), "6 chars");
-        assert!(hides(&super::Redacted("secret"), "secret"));
+        let text = ambre_core::Redacted::new("secret");
+        assert_eq!(format!("{text:?}"), "6 chars");
+        assert!(hides(&text, "secret"));
     }
 
     #[test]

@@ -171,7 +171,7 @@ impl std::fmt::Debug for SlashMenu {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SlashMenu")
             .field("origin", &self.origin)
-            .field("query", &crate::redact::Redacted(&self.query))
+            .field("query", &ambre_core::Redacted::new(&self.query))
             .field("selected", &self.selected)
             .finish()
     }
@@ -203,7 +203,7 @@ impl std::fmt::Debug for SlashMenuState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SlashMenuState")
             .field("anchor", &self.anchor)
-            .field("query", &crate::redact::Redacted(&self.query))
+            .field("query", &ambre_core::Redacted::new(&self.query))
             .field("items", &self.items)
             .field("selected", &self.selected)
             .finish()

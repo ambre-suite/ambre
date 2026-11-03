@@ -282,7 +282,7 @@ pub(super) struct MarkedRun {
 impl std::fmt::Debug for MarkedRun {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MarkedRun")
-            .field("text", &crate::redact::Redacted(&self.text))
+            .field("text", &ambre_core::Redacted::new(&self.text))
             .field("mark_count", &self.marks.len())
             .finish()
     }

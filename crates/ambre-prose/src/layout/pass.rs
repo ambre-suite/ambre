@@ -163,7 +163,7 @@ impl std::fmt::Debug for NoteKey {
         f.debug_struct("NoteKey")
             .field("id", &self.id)
             .field("ordinal", &self.ordinal)
-            .field("text", &crate::redact::Redacted(&self.text))
+            .field("text", &ambre_core::Redacted::new(&self.text))
             .field("marks", &self.marks)
             .finish()
     }

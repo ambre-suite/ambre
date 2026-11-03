@@ -97,7 +97,7 @@ impl std::fmt::Debug for AnnotationIntent {
             Self::Reply { comment_id, text } => f
                 .debug_struct("Reply")
                 .field("comment_id", comment_id)
-                .field("text", &crate::redact::Redacted(text))
+                .field("text", &ambre_core::Redacted::new(text))
                 .finish(),
             Self::Resolve { comment_id } => f
                 .debug_struct("Resolve")

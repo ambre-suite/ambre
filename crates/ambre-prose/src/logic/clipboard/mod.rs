@@ -94,7 +94,7 @@ struct ClipRun {
 impl std::fmt::Debug for ClipRun {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClipRun")
-            .field("text", &crate::redact::Redacted(&self.text))
+            .field("text", &ambre_core::Redacted::new(&self.text))
             .field("marks", &self.marks)
             .finish()
     }
@@ -118,7 +118,7 @@ impl std::fmt::Debug for ClipValue {
             Self::Float(x) => f.debug_tuple("Float").field(x).finish(),
             Self::Text(text) => f
                 .debug_tuple("Text")
-                .field(&crate::redact::Redacted(text))
+                .field(&ambre_core::Redacted::new(text))
                 .finish(),
         }
     }

@@ -2054,8 +2054,6 @@ ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	local
 ambre-prose | src/probe.rs | crate::probe | <AnimationFrames as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-prose | src/probe.rs | crate::probe | FrameNumber.0 | field | u64	newtype-inner	how many animation frames began before a moment, held at the top
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	whether an event lays the document out again, when a moved caret can first be drawn
-ambre-prose | src/redact.rs | crate::redact | Redacted.0 | field | &'a str	newtype-inner	document content that Debug prints the length of alone
-ambre-prose | src/redact.rs | crate::redact | optional(text) | param | Option<&String>	free-text	an optional document text, wrapped for a Debug that prints its length alone
 ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	the scale a heading level is drawn at, local to the cascade
 ambre-prose | src/style.rs | crate::style | StoredMarkValue.0 | field | String	newtype-inner	a mark value as the document holds it, never checked; Debug prints its length alone
 ambre-prose | src/style.rs | crate::style | StoredMarkValue::as_str() | ret | &str	newtype-inner	a mark value as stored, for the parse that reads it
