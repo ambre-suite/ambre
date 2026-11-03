@@ -198,8 +198,9 @@ impl CellFormat {
     /// for a family that renders no decimals.
     pub fn default_decimals(&self) -> Option<Bounded<Decimals>> {
         match self {
-            // Two places lie inside the bounds, so the arm is never `None`.
-            CellFormat::Number | CellFormat::Currency | CellFormat::Scientific => Bounded::new(2),
+            CellFormat::Number | CellFormat::Currency | CellFormat::Scientific => {
+                Some(Bounded::of_u8::<2>())
+            }
             CellFormat::Percent => Some(Bounded::MIN),
             CellFormat::General
             | CellFormat::Fraction
