@@ -72,8 +72,8 @@ pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Load, Outbox, SendOutcome};
 pub use rest::{
-    DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, Request, RestCommand,
-    RestEvent, RowPlace, SealedRow, SecretBytes, SecretString, UserInfo, next_request,
+    Confidential, DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, Plaintext,
+    RecoveryWords, Request, RestCommand, RestEvent, RowPlace, SealedRow, UserInfo, next_request,
 };
 pub use sink::CommandSink;
 pub use token::{Token, TokenKind};

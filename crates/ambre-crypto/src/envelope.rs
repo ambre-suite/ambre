@@ -9,8 +9,8 @@
 //! compression version byte live in the Sync thread, not here.
 
 use ambre_core::{
-    Ciphertext, CommitmentTag, FixedBytes, MediaBytes, Nonce, Payload, PublicKey, SecretBytes,
-    Signature,
+    Ciphertext, CommitmentTag, Confidential, FixedBytes, MediaBytes, Nonce, Payload, Plaintext,
+    PublicKey, Signature,
 };
 use ed25519_dalek::SigningKey;
 
@@ -52,7 +52,7 @@ impl core::fmt::Debug for Sealed {
 /// [`CryptoError::EncryptionFailed`] from the AEAD. The commitment tag and the
 /// signature are infallible.
 pub fn seal(
-    plaintext: &SecretBytes,
+    plaintext: &Confidential<Plaintext>,
     aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -100,9 +100,9 @@ fn envelope_of(
 /// Verifies and decrypts a [`Sealed`] envelope in the spec order: signature,
 /// then commitment tag, then AEAD. Any failure yields a typed error; the caller
 /// (Sync) drops the message and raises a `SyncWarning`. The plaintext comes
-/// back as [`SecretBytes`]. A caller reads it in place through
-/// `SecretBytes::with_plaintext`, or moves it into a role that keeps it in the
-/// clear through `SecretBytes::into_plaintext` (`ARCH-047`).
+/// back as [`Confidential<Plaintext>`]. A caller reads it in place through
+/// `Confidential::<Plaintext>::with_plaintext`, or moves it into a role that keeps it in the
+/// clear through `Confidential::<Plaintext>::into_plaintext` (`ARCH-047`).
 ///
 /// # Errors
 ///
@@ -117,7 +117,7 @@ pub fn open(
     aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
     author_pub: &FixedBytes<PublicKey>,
-) -> Result<SecretBytes, CryptoError> {
+) -> Result<Confidential<Plaintext>, CryptoError> {
     signature::verify(
         author_pub,
         &sealed.nonce,

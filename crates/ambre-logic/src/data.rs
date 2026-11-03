@@ -87,13 +87,13 @@ impl LogicState {
     /// never leaves this thread -- it waits in `pending_seals` with the id that
     /// will bring the bytes home.
     ///
-    /// The passphrase travels as [`Passphrase`](ambre_core::Passphrase):
+    /// The passphrase travels as `Confidential<Passphrase>`:
     /// every hop that drops it wipes it, and it prints as nothing in a log
     /// line.
     fn export_ambre_file_sealed(
         &mut self,
         document_id: Id<Document>,
-        passphrase: ambre_core::Passphrase,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         self.settle_import(document_id);
         let Some(doc) = self.docs.get(&document_id) else {

@@ -5,7 +5,9 @@
 //! The associated data (`aad`) binds the ciphertext to the message's public
 //! metadata without encrypting it.
 
-use ambre_core::{Ciphertext, EntryDigest, FixedBytes, Nonce, SealedRowBytes, Secret, SecretBytes};
+use ambre_core::{
+    Ciphertext, Confidential, EntryDigest, FixedBytes, Nonce, Plaintext, SealedRowBytes, Secret,
+};
 use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
@@ -35,10 +37,10 @@ pub fn seal(
 
 /// Decrypts `ciphertext` under `key`, verifying the Poly1305 tag against `aad`.
 ///
-/// The plaintext comes back as [`SecretBytes`], so it leaves this crate typed
+/// The plaintext comes back as [`Confidential<Plaintext>`], so it leaves this crate typed
 /// as a secret. A caller reads it in place through
-/// `SecretBytes::with_plaintext`, or moves it into a role that keeps it in the
-/// clear through `SecretBytes::into_plaintext` (`ARCH-047`).
+/// `Confidential::<Plaintext>::with_plaintext`, or moves it into a role that keeps it in the
+/// clear through `Confidential::<Plaintext>::into_plaintext` (`ARCH-047`).
 ///
 /// # Errors
 ///
@@ -49,8 +51,9 @@ pub fn open(
     ciphertext: &ambre_core::Payload<Ciphertext>,
     aad: &ambre_core::Aad,
     key: &DocumentKey,
-) -> Result<SecretBytes, CryptoError> {
-    open_under(nonce, ciphertext.as_bytes(), aad, key.as_bytes()).map(SecretBytes::new)
+) -> Result<Confidential<Plaintext>, CryptoError> {
+    open_under(nonce, ciphertext.as_bytes(), aad, key.as_bytes())
+        .map(Confidential::<Plaintext>::new)
 }
 
 /// Seals one passphrase-sealed `.ambre` file under its own [`FileKey`].
@@ -64,7 +67,7 @@ pub fn open(
 /// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
 /// XChaCha20-Poly1305.
 pub fn seal_file(
-    plaintext: &SecretBytes,
+    plaintext: &Confidential<Plaintext>,
     aad: &ambre_core::Aad,
     key: &FileKey,
 ) -> Result<(FixedBytes<Nonce>, ambre_core::Payload<Ciphertext>), CryptoError> {
@@ -85,8 +88,9 @@ pub fn open_file(
     ciphertext: &ambre_core::Payload<Ciphertext>,
     aad: &ambre_core::Aad,
     key: &FileKey,
-) -> Result<SecretBytes, CryptoError> {
-    open_under(nonce, ciphertext.as_bytes(), aad, key.as_bytes()).map(SecretBytes::new)
+) -> Result<Confidential<Plaintext>, CryptoError> {
+    open_under(nonce, ciphertext.as_bytes(), aad, key.as_bytes())
+        .map(Confidential::<Plaintext>::new)
 }
 
 ambre_core::define_layout_version! {
@@ -109,7 +113,7 @@ ambre_core::define_layout_version! {
 /// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
 /// XChaCha20-Poly1305.
 pub fn seal_row(
-    plaintext: &SecretBytes,
+    plaintext: &Confidential<Plaintext>,
     context: &ambre_core::Aad,
     key: &StoreKey,
 ) -> Result<ambre_core::Payload<SealedRowBytes>, CryptoError> {
@@ -132,7 +136,7 @@ pub fn open_row(
     row: &ambre_core::Payload<SealedRowBytes>,
     context: &ambre_core::Aad,
     key: &StoreKey,
-) -> Result<SecretBytes, CryptoError> {
+) -> Result<Confidential<Plaintext>, CryptoError> {
     let Some((&first, rest)) = row.as_bytes().split_first() else {
         return Err(CryptoError::AeadFailed);
     };
@@ -144,7 +148,7 @@ pub fn open_row(
     };
     let nonce =
         FixedBytes::<Nonce>::from_array(nonce.try_into().map_err(|_| CryptoError::AeadFailed)?);
-    open_under(&nonce, ciphertext, context, key.as_bytes()).map(SecretBytes::new)
+    open_under(&nonce, ciphertext, context, key.as_bytes()).map(Confidential::<Plaintext>::new)
 }
 
 /// Seals one document key under another, as a catalogue holds the key of a

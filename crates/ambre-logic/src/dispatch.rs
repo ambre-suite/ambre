@@ -1105,7 +1105,8 @@ mod tests {
         let document_id = Id::<Document>::mint();
         let (mut state, ui, sync_rx) = harness();
         state.open_with_identity(document_id, doc_type);
-        let passphrase = ambre_core::Passphrase::new("a passphrase".to_owned());
+        let passphrase =
+            ambre_core::Confidential::<ambre_core::Passphrase>::new("a passphrase".to_owned());
         let command = match doc_type {
             DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFileSealed { passphrase }),
             DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFileSealed { passphrase }),
@@ -1984,10 +1985,10 @@ mod tests {
     /// fails the build here until it is listed.
     fn relayed_requests(doc: Id<Document>) -> Vec<RestCommand> {
         use ambre_bus::Role;
-        use ambre_bus::rest::{SecretBytes, SecretString};
+        use ambre_bus::rest::{Confidential, Plaintext, RecoveryWords};
         use ambre_core::id::Meeting;
-        let secret = || SecretBytes::new(b"pass".to_vec());
-        let typed = || ambre_core::Passphrase::new("pass".to_owned());
+        let secret = || Confidential::<Plaintext>::new(b"pass".to_vec());
+        let typed = || ambre_core::Confidential::<ambre_core::Passphrase>::new("pass".to_owned());
         let (user, meeting) = (Id::<User>::mint(), Id::<Meeting>::mint());
         let all = vec![
             RestCommand::Unlock {
@@ -2006,7 +2007,7 @@ mod tests {
                 new_passphrase: typed(),
             },
             RestCommand::RecoverAccount {
-                recovery_words: SecretString::new("words".to_owned()),
+                recovery_words: Confidential::<RecoveryWords>::new("words".to_owned()),
                 new_passphrase: typed(),
             },
             RestCommand::ListDocuments,

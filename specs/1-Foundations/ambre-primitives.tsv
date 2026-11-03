@@ -3126,8 +3126,6 @@ ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u
 ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	newtype-inner	Aad newtype, from a fixed domain tag
 ambre-core | src/member_count.rs | crate::member_count | MemberCountError.0 | field | i64	newtype-inner	the refused store count, kept for the message
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the bool the one constructor of Visibility reads into its variant
-ambre-core | src/secret.rs | crate::secret | <SecretString as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of SecretString wraps
-ambre-core | src/secret.rs | crate::secret | SecretString::new(text) | param | String	newtype-inner	secret newtype
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to Tally<Members> at once
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	foreign-api	the column bytes sqlx hands a decoder, read into a MasterKeySalt at once
 ambre-canvas | src/fonts.rs | crate::fonts | BASE_FONTS | const | [&str;6]	free-text	same-origin font paths the boot fetches
@@ -3285,13 +3283,18 @@ ambre-primitives | src/scan.rs | crate::scan | foreign_path() | ret | Result<syn
 ambre-primitives | src/scan.rs | crate::scan | foreign_path(full) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | generic_names() | ret | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | shadowed() | ret | Option<String>	free-text	error messages printed to the terminal
-ambre-core | src/secret.rs | crate::secret | <Passphrase as From<String>>::from(text) | param | String	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | <SecretBytes as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | Passphrase.0 | field | Arc<Secret<String>>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | Passphrase::is_empty() | ret | bool	generic	predicate
-ambre-core | src/secret.rs | crate::secret | Passphrase::matches() | ret | bool	generic	a constant-time predicate
-ambre-core | src/secret.rs | crate::secret | Passphrase::new(text) | param | String	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | Passphrase::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | <Confidential<K> as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of a text role of Confidential wraps
+ambre-core | src/secret.rs | crate::secret | <Confidential<K> as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	the bytes the constructor of a byte role of Confidential wraps
+ambre-core | src/secret.rs | crate::secret | <Passphrase as ConfidentialKind>::Inner | assoc | String	generic	the text a confidential value of this role holds in its shared Secret; the field is Arc<Secret<K::Inner>>, so the gate reads no representation slot
+ambre-core | src/secret.rs | crate::secret | <Passphrase as ConfidentialKind>::NAME | const | &'static str	free-text	the name a confidential value prints through Debug, for a log line
+ambre-core | src/secret.rs | crate::secret | <Plaintext as ConfidentialKind>::Inner | assoc | Vec<u8>	generic	the bytes a confidential value of this role holds in its shared Secret; the field is Arc<Secret<K::Inner>>, so the gate reads no representation slot
+ambre-core | src/secret.rs | crate::secret | <Plaintext as ConfidentialKind>::NAME | const | &'static str	free-text	the name a confidential value prints through Debug, for a log line
+ambre-core | src/secret.rs | crate::secret | <RecoveryWords as ConfidentialKind>::Inner | assoc | String	generic	the text a confidential value of this role holds in its shared Secret; the field is Arc<Secret<K::Inner>>, so the gate reads no representation slot
+ambre-core | src/secret.rs | crate::secret | <RecoveryWords as ConfidentialKind>::NAME | const | &'static str	free-text	the name a confidential value prints through Debug, for a log line
+ambre-core | src/secret.rs | crate::secret | Confidential<Passphrase>::is_empty() | ret | bool	generic	predicate
+ambre-core | src/secret.rs | crate::secret | Confidential<Passphrase>::matches() | ret | bool	generic	a constant-time predicate
+ambre-core | src/secret.rs | crate::secret | Confidential<Plaintext>::into_plaintext() | ret | Vec<u8>	newtype-inner	the opened bytes moved out with no copy, into a role that keeps them in the clear by design; the wrapper is left empty, and a shared wrapper hands out a copy that leaves the original to its other owner, who wipes it (ARCH-047)
+ambre-core | src/secret.rs | crate::secret | Confidential<Plaintext>::with_plaintext(read) | param | impl FnOnce(&[u8])->R	generic	lends the opened bytes with no copy to the code that reads them, while the wrapper keeps and wipes them (ARCH-047)
 ambre-core | src/secret.rs | crate::secret | Credential.secret | field | Arc<Secret<String>>	newtype-inner	the shared wrapper of the generic credential, a PhantomData marker apart
 ambre-core | src/secret.rs | crate::secret | Credential<K>::new(text) | param | String	newtype-inner	the bearer text the generic credential wraps
 ambre-core | src/secret.rs | crate::secret | Credential<K>::secret() | ret | &Secret<String>	newtype-inner	the shared wrapper, for the code the gate admits to read the text
@@ -3306,13 +3309,6 @@ ambre-core | src/secret.rs | crate::secret | <OidcCode as CredentialKind>::NAME 
 ambre-core | src/secret.rs | crate::secret | <OidcState as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-core | src/secret.rs | crate::secret | <PresignedUrl as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-core | src/secret.rs | crate::secret | <RefreshToken as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
-ambre-core | src/secret.rs | crate::secret | SecretBytes.0 | field | Arc<Secret<Vec<u8>>>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | SecretBytes::into_plaintext() | ret | Vec<u8>	newtype-inner	the opened bytes moved out with no copy, into a role that keeps them in the clear by design; the wrapper is left empty, and a shared wrapper hands out a copy that leaves the original to its other owner, who wipes it (ARCH-047)
-ambre-core | src/secret.rs | crate::secret | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | SecretBytes::secret() | ret | &Secret<Vec<u8>>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | SecretBytes::with_plaintext(read) | param | impl FnOnce(&[u8])->R	generic	lends the opened bytes with no copy to the code that reads them, while the wrapper keeps and wipes them (ARCH-047)
-ambre-core | src/secret.rs | crate::secret | SecretString.0 | field | Arc<Secret<String>>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | SecretString::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey.0 | field | Arc<Secret<[u8;32]>>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::from_secret(key) | param | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
@@ -3379,9 +3375,10 @@ ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(relative) | par
 ambre-primitives | src/secrets.rs | crate::secrets | checks(relative) | param | Option<&str>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | refusals(forms) | param | &[Option<&str>]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-server | src/jwt.rs | crate::jwt | signing_key(fill) | param | impl FnOnce(&mut[u8;32])->Result<(),E>	generic	writes the seed into the wrapper the key is built in
-ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret.0 | field | Arc<Secret<String>>	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret::new(secret) | param | String	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret::present_stored(store) | param | impl FnOnce(&str)->R	generic	lends the PKCE verifier text to the one Redis call that stores it (ARCH-049)
+ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | <Confidential<OidcSecret> as OidcSecretSinks>::present_stored(store) | param | impl FnOnce(&str)->R	generic	lends the PKCE verifier text to the one Redis call that stores it (ARCH-049)
+ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | <OidcSecret as ConfidentialKind>::Inner | assoc | String	generic	the text a confidential value of this role holds in its shared Secret; the field is Arc<Secret<K::Inner>>, so the gate reads no representation slot
+ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | <OidcSecret as ConfidentialKind>::NAME | const | &'static str	free-text	the name a confidential value prints through Debug, for a log line
+ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecretSinks::present_stored(store) | param | impl FnOnce(&str)->R	generic	lends the PKCE verifier text to the one Redis call that stores it (ARCH-049)
 ambre-server | src/secrets/seed.rs | crate::secrets::seed | SeedText.0 | field | Secret<String>	newtype-inner	the JWT_SIGNING_SEED text the newtype wraps
 ambre-server | src/secrets/seed.rs | crate::secrets::seed | SeedText::new(text) | param | String	newtype-inner	the JWT_SIGNING_SEED text the newtype wraps
 ambre-server | src/secrets/token.rs | crate::secrets::token | oidc_state_key(send) | param | impl FnOnce(&str)->R	generic	lends the Redis key of a sign-in state to the one Redis call that takes it (ARCH-049)

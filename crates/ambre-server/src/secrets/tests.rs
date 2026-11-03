@@ -1,6 +1,7 @@
 use super::oidc::authorization_code;
 use super::token::{oidc_state_key, refresh_key};
-use super::{OidcSecret, SeedText};
+use super::{OidcSecret, OidcSecretSinks, SeedText};
+use ambre_core::Confidential;
 
 #[test]
 fn a_store_key_keeps_the_pattern_it_had_before_the_wrapper() {
@@ -12,7 +13,7 @@ fn a_store_key_keeps_the_pattern_it_had_before_the_wrapper() {
 
 #[test]
 fn an_oidc_secret_prints_nothing_and_reaches_the_provider_whole() {
-    let secret = OidcSecret::new("v3rifier".to_owned());
+    let secret = Confidential::<OidcSecret>::new("v3rifier".to_owned());
     assert_eq!(format!("{secret:?}"), "OidcSecret(Secret([REDACTED]))");
     assert_eq!(secret.to_pkce_verifier().secret(), "v3rifier");
     assert_eq!(secret.to_client_secret().secret(), "v3rifier");

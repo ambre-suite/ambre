@@ -45,12 +45,11 @@ use ambre_core::id::{Document, Id, Meeting, User};
 // -----------------------------------------------------------------------------
 
 /// Secret bytes and secret text that cross the UI -> Logic -> Sync boundary.
-/// They carry a plaintext on its way to or from a seal, and the recovery
-/// phrase. Both
-/// live in `ambre-core` on [`ambre_core::Secret`], so a crate that cannot
-/// depend on the bus holds them too. A passphrase travels as
-/// [`ambre_core::Passphrase`].
-pub use ambre_core::{SecretBytes, SecretString};
+/// `Confidential<Plaintext>` carries a plaintext on its way to or from a
+/// seal. `Confidential<RecoveryWords>` carries the recovery words. The generic lives in `ambre-core` on
+/// [`ambre_core::Secret`], so a crate that cannot depend on the bus holds
+/// them too. A passphrase travels as `Confidential<Passphrase>`.
+pub use ambre_core::{Confidential, Plaintext, RecoveryWords};
 
 // -----------------------------------------------------------------------------
 // Request -- request/response correlation
@@ -199,16 +198,16 @@ pub enum RestCommand {
     // -- Session -----------------------------------------------------------------
     /// Bootstrap auth after OIDC callback. -> `SessionReady` / `AccountSetupRequired`.
     Unlock {
-        /// The account passphrase. Wiped on drop by [`ambre_core::Passphrase`]
+        /// The account passphrase. Wiped on drop by [`ambre_core::Confidential`]
         /// once the Sync thread finishes deriving the user key.
-        passphrase: ambre_core::Passphrase,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
     /// First-time account setup. -> `AccountCreated { recovery_words }`.
     /// `email`/`display_name` are the user-supplied identity; the server records
     /// them verbatim instead of a hardcoded placeholder (N3). `email` is the
     /// handle other members resolve when sharing a document.
     SetupAccount {
-        passphrase: ambre_core::Passphrase,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
         email: ambre_core::Email,
         display_name: ambre_core::DisplayName,
     },
@@ -219,13 +218,13 @@ pub enum RestCommand {
     DevLogin { username: ambre_core::DisplayName },
     /// Change the account passphrase. -> `PassphraseChanged`.
     ChangePassphrase {
-        current_passphrase: ambre_core::Passphrase,
-        new_passphrase: ambre_core::Passphrase,
+        current_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+        new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
     /// Account recovery via 24-word BIP39 phrase. -> `AccountRecovered`.
     RecoverAccount {
-        recovery_words: SecretString,
-        new_passphrase: ambre_core::Passphrase,
+        recovery_words: Confidential<RecoveryWords>,
+        new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
     /// Log out. The Logic thread clears its document registry on dispatch (hook),
     /// then the Sync thread zeroizes all keys. -> `LoggedOut`.
@@ -341,15 +340,15 @@ pub enum RestCommand {
     /// / `DocFileSealFailed`.
     SealDocFile {
         /// A whole plaintext container, header included.
-        plaintext: SecretBytes,
-        passphrase: ambre_core::Passphrase,
+        plaintext: Confidential<Plaintext>,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
     /// Open a sealed `.ambre` with `passphrase`. -> `DocFileOpened`
     /// / `DocFileOpenFailed`.
     OpenDocFile {
         /// A whole sealed container, header included.
         sealed: ambre_core::Payload<ambre_core::SealedContainer>,
-        passphrase: ambre_core::Passphrase,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     },
 
     // -- The local store (`ambre-spec-residency.md` section 3) -------------------
@@ -361,7 +360,7 @@ pub enum RestCommand {
     /// Seal one row of the local store. -> `LocalRowSealed` / `LocalStoreLocked`.
     SealLocalRow {
         place: RowPlace,
-        plaintext: SecretBytes,
+        plaintext: Confidential<Plaintext>,
     },
     /// Open rows the local store holds. -> `LocalRowsOpened` /
     /// `LocalStoreLocked`.
@@ -424,7 +423,7 @@ pub enum RestEvent {
     AccountSetupRequired,
     /// Display `recovery_words` **exactly once**; they cannot be retrieved later.
     AccountCreated {
-        recovery_words: SecretString,
+        recovery_words: Confidential<RecoveryWords>,
     },
     PassphraseChanged,
     AccountRecovered,
@@ -524,7 +523,7 @@ pub enum RestEvent {
     /// header as it would a file off the disk: the seal changes nothing about
     /// dispatch, version recovery or the schema gate.
     DocFileOpened {
-        plaintext: SecretBytes,
+        plaintext: Confidential<Plaintext>,
     },
     /// The file did not open. **Deliberately one variant for two causes:** the
     /// tag cannot tell a wrong passphrase from a modified file, so naming one
@@ -540,7 +539,7 @@ pub enum RestEvent {
     /// open. It was sealed under another key or at another place, modified, or
     /// held in the clear before the store was sealed (`RESID-027`).
     LocalRowsOpened {
-        rows: Vec<Option<SecretBytes>>,
+        rows: Vec<Option<Confidential<Plaintext>>>,
     },
     /// No session holds a key yet, so nothing was sealed or opened.
     LocalStoreLocked,

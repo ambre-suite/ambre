@@ -134,16 +134,18 @@ pub fn landing_view(
     );
     let on_passphrase = {
         let to_logic = to_logic.clone();
-        Callback::new(move |passphrase: ambre_core::Passphrase| {
-            let Some(sealed) = sealed_file.get_untracked() else {
-                return;
-            };
-            sealed_file.set(None);
-            let _ = to_logic.try_send(LogicCommand::Rest {
-                id: ambre_bus::next_request(),
-                cmd: RestCommand::OpenDocFile { sealed, passphrase },
-            });
-        })
+        Callback::new(
+            move |passphrase: ambre_core::Confidential<ambre_core::Passphrase>| {
+                let Some(sealed) = sealed_file.get_untracked() else {
+                    return;
+                };
+                sealed_file.set(None);
+                let _ = to_logic.try_send(LogicCommand::Rest {
+                    id: ambre_bus::next_request(),
+                    cmd: RestCommand::OpenDocFile { sealed, passphrase },
+                });
+            },
+        )
     };
 
     // The irreversible delete (E2EE: no server-side trash). A card only names

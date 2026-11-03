@@ -68,7 +68,7 @@ impl UserKey {
 /// [`MasterKeySalt`](ambre_core::MasterKeySalt) holds its fixed width, so
 /// neither failure is reachable from a well-built salt.
 pub fn derive_user_key(
-    passphrase: &ambre_core::Passphrase,
+    passphrase: &ambre_core::Confidential<ambre_core::Passphrase>,
     salt: &ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
 ) -> Result<UserKey, CryptoError> {
     argon2id(passphrase, salt.as_slice()).map(UserKey)
@@ -79,7 +79,7 @@ pub fn derive_user_key(
 /// of which names its own salt type. The output is secret, so it is wiped
 /// when the caller drops it.
 pub(crate) fn argon2id(
-    passphrase: &ambre_core::Passphrase,
+    passphrase: &ambre_core::Confidential<ambre_core::Passphrase>,
     salt: &[u8],
 ) -> Result<Secret<[u8; USER_KEY_LEN]>, CryptoError> {
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, Argon2Cost::V1.0);

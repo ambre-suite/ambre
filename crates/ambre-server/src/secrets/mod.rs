@@ -29,7 +29,7 @@ pub mod oidc;
 pub mod seed;
 pub mod token;
 
-pub use oidc::OidcSecret;
+pub use oidc::{OidcSecret, OidcSecretSinks};
 pub use seed::SeedText;
 
 #[cfg(test)]

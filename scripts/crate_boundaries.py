@@ -53,7 +53,7 @@ no Rust line of `ambre-sync` names browser storage, the browser database, the
 cache or a cookie.
 
 **No request carries a passphrase** (`ZK-012`). The worker holds the
-passphrase in `SecretBytes`, which serializes so that it can cross the client
+passphrase in `Confidential<Passphrase>`, which serializes so that it can cross the client
 bus. So no serialized struct of `ambre-sync` declares a secret-typed field or
 a field named for a passphrase or a password, and no JSON key or serde rename
 spells one.
@@ -233,7 +233,7 @@ SECRET_NAME = r"\w*(?:passphrase|password)\w*"
 SERIALIZE_DERIVE = re.compile(r"#\[derive\([^)]*\bSerialize\b")
 STRUCT_OPEN = re.compile(r"\bstruct\s+\w+[^;]*\{\s*$")
 SECRET_FIELD = re.compile(
-    rf"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:({SECRET_NAME})\s*:|\w+\s*:.*\b(Secret(?:Bytes|String))\b)",
+    rf"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:({SECRET_NAME})\s*:|\w+\s*:.*\b(Confidential)\b)",
     re.IGNORECASE,
 )
 SECRET_KEY = re.compile(rf"\"({SECRET_NAME})\"\s*:|rename\s*=\s*\"({SECRET_NAME})\"", re.IGNORECASE)

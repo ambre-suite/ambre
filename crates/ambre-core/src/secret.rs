@@ -23,10 +23,13 @@
 //! on `ambre-crypto`. Their serde form is written here by hand, for the same
 //! reason. Each serde form is a door to the value, and `ARCH-047` names it.
 //!
-//! Three of them carry what a person types or reads. Five carry a bearer
-//! credential: a session token, a presigned link, an OIDC code and state.
-//! The five are one generic [`Credential`] over a role marker. Its one serde
-//! form serves each role that admits it by an `impl WireCredential` line.
+//! Three of them carry what a person types or reads, or a plaintext on its
+//! way to a seal. They are one generic [`Confidential`] over a role marker,
+//! and its one serde form serves each role that admits it by an
+//! `impl WireConfidential` line. Five carry a bearer credential: a session
+//! token, a presigned link, an OIDC code and state. The five are one generic
+//! [`Credential`] over a role marker. Its one serde form serves each role
+//! that admits it by an `impl WireCredential` line.
 //!
 //! A type that holds a [`Secret`] derives `Debug`, because the wrapper's own
 //! form is redacted. It cannot derive `Clone`, `Serialize` or `PartialEq`:
@@ -159,71 +162,164 @@ impl<T: Zeroize + AsRef<[u8]>> ConstantTimeEq for Secret<T> {
     }
 }
 
-/// Secret UTF-8 text that crosses a thread. It carries the recovery phrase
-/// of a new account from the Sync worker to the screen that shows it once.
-#[derive(Clone, Debug, Default)]
-pub struct SecretString(Arc<Secret<String>>);
+/// The role of a [`Confidential`] value: what a person types or reads, or a
+/// plaintext on its way to or from a seal. A role is an empty `enum`.
+///
+/// The trait is open, so the relay names a role of its own,
+/// `Confidential<OidcSecret>`, which this crate cannot see. An open role
+/// grants no read: the value stays behind [`Secret::expose`], which the gate
+/// keeps to its three places (`ARCH-045`). The serde door is
+/// [`WireConfidential`], and that trait is sealed.
+pub trait ConfidentialKind: 'static {
+    /// The value the role holds: a `String` or a `Vec<u8>`.
+    type Inner: Zeroize;
+    /// The name the debug form prints.
+    const NAME: &'static str;
+}
 
-impl SecretString {
-    /// Wraps an owned string.
+mod wire_confidential {
+    /// Closes [`super::WireConfidential`] to the roles this module admits, so
+    /// no crate downstream opens a serde door of its own (`ARCH-047`).
+    pub trait Sealed {}
+    impl Sealed for super::RecoveryWords {}
+    impl Sealed for super::Plaintext {}
+    impl Sealed for super::Passphrase {}
+}
+
+/// The serde door of `ARCH-047`: a role whose value crosses the client bus
+/// as its bare text or bytes. Each role opts in by one `impl` line in this
+/// module, which a review reads. A role without it has no serde form.
+///
+/// A role declared downstream, as the relay's is, cannot open the door:
+///
+/// ```compile_fail,E0277
+/// use ambre_core::{ConfidentialKind, WireConfidential};
+/// enum Mine {}
+/// impl ConfidentialKind for Mine {
+///     type Inner = String;
+///     const NAME: &'static str = "Mine";
+/// }
+/// impl WireConfidential for Mine {}
+/// ```
+pub trait WireConfidential: ConfidentialKind + wire_confidential::Sealed {}
+
+/// One secret value of the role `K` that several owners share. The value
+/// sits in one shared [`Secret`], so a clone copies the pointer, never the
+/// value. The value is wiped when the last owner drops it. `Debug` prints
+/// `K::NAME` and no byte of the value.
+pub struct Confidential<K: ConfidentialKind> {
+    secret: Arc<Secret<K::Inner>>,
+    kind: PhantomData<fn() -> K>,
+}
+
+impl<K: ConfidentialKind> Confidential<K> {
+    /// Wraps an owned value.
     #[must_use]
-    pub fn new(text: String) -> Self {
-        Self(Arc::new(Secret::new(text)))
+    pub fn new(value: K::Inner) -> Self {
+        Self {
+            secret: Arc::new(Secret::new(value)),
+            kind: PhantomData,
+        }
     }
 
-    /// The wrapper, for the crypto code that reads the text.
+    /// The wrapper, for the code the gate admits to read the value.
     #[must_use]
-    pub fn secret(&self) -> &Secret<String> {
-        &self.0
+    pub fn secret(&self) -> &Secret<K::Inner> {
+        &self.secret
     }
 }
 
-impl From<String> for SecretString {
+impl<K: ConfidentialKind> Clone for Confidential<K> {
+    fn clone(&self) -> Self {
+        Self {
+            secret: Arc::clone(&self.secret),
+            kind: PhantomData,
+        }
+    }
+}
+
+impl<K: ConfidentialKind> Default for Confidential<K>
+where
+    K::Inner: Default,
+{
+    fn default() -> Self {
+        Self::new(K::Inner::default())
+    }
+}
+
+impl<K: ConfidentialKind> fmt::Debug for Confidential<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple(K::NAME).field(&self.secret).finish()
+    }
+}
+
+impl<K: ConfidentialKind<Inner = String>> From<String> for Confidential<K> {
     fn from(text: String) -> Self {
         Self::new(text)
     }
 }
 
-impl Serialize for SecretString {
+impl<K: ConfidentialKind<Inner = Vec<u8>>> From<Vec<u8>> for Confidential<K> {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self::new(bytes)
+    }
+}
+
+/// The one serde door of every confidential value that travels
+/// (`ARCH-047`). The form is the inner value's own: a string for the text, a
+/// sequence of bytes for the bytes.
+impl<K: WireConfidential> Serialize for Confidential<K>
+where
+    K::Inner: Serialize,
+{
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.expose().as_str().serialize(serializer)
+        self.secret.expose().serialize(serializer)
     }
 }
 
-impl<'de> Deserialize<'de> for SecretString {
+impl<'de, K: WireConfidential> Deserialize<'de> for Confidential<K>
+where
+    K::Inner: Deserialize<'de>,
+{
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(Self::new(String::deserialize(deserializer)?))
+        Ok(Self::new(K::Inner::deserialize(deserializer)?))
     }
 }
 
-/// Secret bytes that cross the interface, the Logic worker and the Sync
-/// worker: a plaintext on its way to or from a seal.
+/// The role of the recovery words of a new account. They cross from the
+/// Sync worker to the screen that shows them once.
+/// `Confidential<RecoveryWords>`.
+pub enum RecoveryWords {}
+
+impl ConfidentialKind for RecoveryWords {
+    type Inner = String;
+    const NAME: &'static str = "RecoveryWords";
+}
+
+impl WireConfidential for RecoveryWords {}
+
+/// The role of a plaintext on its way to or from a seal. It crosses the
+/// interface, the Logic worker and the Sync worker. `Confidential<Plaintext>`.
 ///
 /// A `Vec<u8>` would relay the same bytes, print them in a `Debug` line, and
 /// leave its copy on the heap after the hop. The bytes are wiped when the last
 /// copy drops, in a handler that only binds and drops it too.
-#[derive(Clone, Debug, Default)]
-pub struct SecretBytes(Arc<Secret<Vec<u8>>>);
+pub enum Plaintext {}
 
-impl SecretBytes {
-    /// Wraps owned bytes.
-    #[must_use]
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(Arc::new(Secret::new(bytes)))
-    }
+impl ConfidentialKind for Plaintext {
+    type Inner = Vec<u8>;
+    const NAME: &'static str = "Plaintext";
+}
 
-    /// The wrapper, for the crypto code that seals the bytes.
-    #[must_use]
-    pub fn secret(&self) -> &Secret<Vec<u8>> {
-        &self.0
-    }
+impl WireConfidential for Plaintext {}
 
+impl Confidential<Plaintext> {
     /// Lends the opened bytes to `read`, with no copy, for the code that
     /// reads them on the way to another form. The bytes stay under the
     /// wrapper, which wipes them when the last copy drops, on every path out
     /// of `read`. What `read` builds from them is its own.
     pub fn with_plaintext<R>(&self, read: impl FnOnce(&[u8]) -> R) -> R {
-        read(self.0.expose())
+        read(self.secret.expose())
     }
 
     /// Moves the opened bytes out, with no copy, into a role that keeps them
@@ -232,84 +328,59 @@ impl SecretBytes {
     /// its role, or it wipes them itself. The wrapper is left empty, so its
     /// own wipe finds nothing. A wrapper that another owner still shares
     /// hands out a copy instead, and that owner keeps and wipes the original.
+    ///
+    /// A text role has no such door:
+    ///
+    /// ```compile_fail,E0599
+    /// use ambre_core::{Confidential, Passphrase};
+    /// let typed = Confidential::<Passphrase>::new("pass".to_owned());
+    /// let _ = typed.into_plaintext();
+    /// ```
     #[must_use]
     pub fn into_plaintext(self) -> Vec<u8> {
-        match Arc::try_unwrap(self.0) {
+        match Arc::try_unwrap(self.secret) {
             Ok(mut alone) => std::mem::take(&mut *alone.0),
             Err(shared) => shared.expose().clone(),
         }
     }
 }
 
-impl From<Vec<u8>> for SecretBytes {
-    fn from(bytes: Vec<u8>) -> Self {
-        Self::new(bytes)
-    }
-}
-
-impl Serialize for SecretBytes {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.expose().as_slice().serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for SecretBytes {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(Self::new(Vec::<u8>::deserialize(deserializer)?))
-    }
-}
-
-/// The text a person types to derive a key: the account passphrase, or the
-/// passphrase of one sealed `.ambre` file.
+/// The role of the text a person types to derive a key: the account
+/// passphrase, or the passphrase of one sealed `.ambre` file.
+/// `Confidential<Passphrase>`.
 ///
 /// It travels from the prompt that reads it to the worker that derives a key
 /// from it, and no further. Along that path it is a type of its own, not a
 /// `String` or a `&[u8]` beside a salt of the same shape.
-#[derive(Clone, Debug, Default)]
-pub struct Passphrase(Arc<Secret<String>>);
+pub enum Passphrase {}
 
-impl Passphrase {
-    /// Wraps the typed text.
-    #[must_use]
-    pub fn new(text: String) -> Self {
-        Self(Arc::new(Secret::new(text)))
-    }
+impl ConfidentialKind for Passphrase {
+    type Inner = String;
+    const NAME: &'static str = "Passphrase";
+}
 
-    /// The wrapper, for the one derivation that reads the text.
-    #[must_use]
-    pub fn secret(&self) -> &Secret<String> {
-        &self.0
-    }
+impl WireConfidential for Passphrase {}
 
+impl Confidential<Passphrase> {
     /// Whether nothing was typed.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.0.expose().is_empty()
+        self.secret.expose().is_empty()
     }
 
     /// Whether `other` holds the same text, in constant time: the check a
     /// sealing prompt makes against its confirmation field.
+    ///
+    /// A passphrase and the recovery words never stand in for each other:
+    ///
+    /// ```compile_fail,E0308
+    /// use ambre_core::{Confidential, Passphrase, RecoveryWords};
+    /// let words = Confidential::<RecoveryWords>::new("words".to_owned());
+    /// let typed: Confidential<Passphrase> = words;
+    /// ```
     #[must_use]
     pub fn matches(&self, other: &Self) -> bool {
-        self.0.ct_eq(&other.0).into()
-    }
-}
-
-impl From<String> for Passphrase {
-    fn from(text: String) -> Self {
-        Self::new(text)
-    }
-}
-
-impl Serialize for Passphrase {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.expose().as_str().serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Passphrase {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(Self::new(String::deserialize(deserializer)?))
+        self.secret.ct_eq(&other.secret).into()
     }
 }
 
@@ -517,8 +588,9 @@ mod tests {
     use zeroize::{Zeroize, ZeroizeOnDrop};
 
     use super::{
-        AccessToken, Credential, OidcCode, OidcState, Passphrase, PresignedUrl, RefreshToken,
-        Secret, SecretBytes, SecretString, WireCredential,
+        AccessToken, Confidential, ConfidentialKind, Credential, OidcCode, OidcState, Passphrase,
+        Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret, WireConfidential,
+        WireCredential,
     };
 
     /// A value that counts the wipes it receives, so a test sees the drop
@@ -572,12 +644,12 @@ mod tests {
     fn a_secret_prints_neither_its_bytes_nor_its_length() {
         let secret = Secret::new("abandon ability".to_owned());
         assert_eq!(format!("{secret:?}"), "Secret([REDACTED])");
-        let words = SecretString::new("abandon ability".to_owned());
-        assert_eq!(format!("{words:?}"), "SecretString(Secret([REDACTED]))");
-        let typed = Passphrase::new("correct horse".to_owned());
+        let words = Confidential::<RecoveryWords>::new("abandon ability".to_owned());
+        assert_eq!(format!("{words:?}"), "RecoveryWords(Secret([REDACTED]))");
+        let typed = Confidential::<Passphrase>::new("correct horse".to_owned());
         assert_eq!(format!("{typed:?}"), "Passphrase(Secret([REDACTED]))");
-        let plain = SecretBytes::new(b"plain".to_vec());
-        assert_eq!(format!("{plain:?}"), "SecretBytes(Secret([REDACTED]))");
+        let plain = Confidential::<Plaintext>::new(b"plain".to_vec());
+        assert_eq!(format!("{plain:?}"), "Plaintext(Secret([REDACTED]))");
     }
 
     #[test]
@@ -626,10 +698,10 @@ mod tests {
         last[31] = 8;
         assert!(bool::from(a.ct_eq(&Key::new([7; 32]))));
         assert!(!bool::from(a.ct_eq(&Key::new(last))));
-        let typed = Passphrase::new("correct horse".to_owned());
-        assert!(typed.matches(&Passphrase::new("correct horse".to_owned())));
-        assert!(!typed.matches(&Passphrase::new("correct horsf".to_owned())));
-        assert!(!typed.matches(&Passphrase::new("correct".to_owned())));
+        let typed = Confidential::<Passphrase>::new("correct horse".to_owned());
+        assert!(typed.matches(&Confidential::<Passphrase>::new("correct horse".to_owned())));
+        assert!(!typed.matches(&Confidential::<Passphrase>::new("correct horsf".to_owned())));
+        assert!(!typed.matches(&Confidential::<Passphrase>::new("correct".to_owned())));
     }
 
     #[test]
@@ -664,8 +736,8 @@ mod tests {
         );
         assert_eq!(
             [
-                Probe::<Passphrase>::DISPLAY,
-                Probe::<Passphrase>::PARTIAL_EQ
+                Probe::<Confidential<Passphrase>>::DISPLAY,
+                Probe::<Confidential<Passphrase>>::PARTIAL_EQ
             ],
             [false; 2]
         );
@@ -673,28 +745,28 @@ mod tests {
 
     #[test]
     fn a_secret_newtype_travels_as_its_text_or_its_bytes() {
-        let words = SecretString::new("words".to_owned());
+        let words = Confidential::<RecoveryWords>::new("words".to_owned());
         let bytes = postcard::to_allocvec(&words).unwrap();
         assert_eq!(bytes, postcard::to_allocvec("words").unwrap());
-        let back: SecretString = postcard::from_bytes(&bytes).unwrap();
+        let back: Confidential<RecoveryWords> = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(back.secret().expose(), "words");
 
-        let typed = Passphrase::new("correct horse".to_owned());
+        let typed = Confidential::<Passphrase>::new("correct horse".to_owned());
         let wire = serde_json::to_string(&typed).unwrap();
         assert_eq!(wire, "\"correct horse\"");
-        let back: Passphrase = serde_json::from_str(&wire).unwrap();
+        let back: Confidential<Passphrase> = serde_json::from_str(&wire).unwrap();
         assert!(back.matches(&typed));
 
-        let plain = SecretBytes::new(b"plain".to_vec());
+        let plain = Confidential::<Plaintext>::new(b"plain".to_vec());
         let bytes = postcard::to_allocvec(&plain).unwrap();
         assert_eq!(bytes, postcard::to_allocvec(b"plain".as_slice()).unwrap());
-        let back: SecretBytes = postcard::from_bytes(&bytes).unwrap();
+        let back: Confidential<Plaintext> = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(back.into_plaintext(), b"plain");
     }
 
     #[test]
     fn opened_bytes_are_lent_with_no_copy() {
-        let plain = SecretBytes::new(b"plain".to_vec());
+        let plain = Confidential::<Plaintext>::new(b"plain".to_vec());
         let held = plain.secret().expose().as_ptr();
         let (lent, read) = plain.with_plaintext(|bytes| (bytes.as_ptr(), bytes.to_vec()));
         assert_eq!(lent, held);
@@ -703,7 +775,7 @@ mod tests {
 
     #[test]
     fn opened_bytes_move_out_with_no_copy() {
-        let plain = SecretBytes::new(b"plain".to_vec());
+        let plain = Confidential::<Plaintext>::new(b"plain".to_vec());
         let held = plain.secret().expose().as_ptr();
         let moved = plain.into_plaintext();
         assert_eq!(moved.as_ptr(), held);
@@ -712,7 +784,7 @@ mod tests {
 
     #[test]
     fn shared_opened_bytes_move_out_as_a_copy_and_stay_with_the_other_owner() {
-        let plain = SecretBytes::new(b"plain".to_vec());
+        let plain = Confidential::<Plaintext>::new(b"plain".to_vec());
         let other = plain.clone();
         let held = other.secret().expose().as_ptr();
         let copy = plain.into_plaintext();
@@ -720,6 +792,59 @@ mod tests {
         assert_eq!(copy, b"plain");
         assert_eq!(other.secret().expose().as_ptr(), held);
         assert_eq!(other.secret().expose(), b"plain");
+    }
+
+    /// A role of the tests: its value counts its wipes.
+    enum Counted {}
+
+    impl ConfidentialKind for Counted {
+        type Inner = Spy;
+        const NAME: &'static str = "Counted";
+    }
+
+    /// The wipe waits for the last owner of a confidential value, then runs
+    /// once: a clone shares the value and copies none of it.
+    #[test]
+    fn a_confidential_value_wipes_once_when_its_last_owner_drops() {
+        let wipes = Arc::new(AtomicU32::new(0));
+        let first = Confidential::<Counted>::new(Spy(Arc::clone(&wipes)));
+        let second = first.clone();
+        assert!(std::ptr::eq(first.secret(), second.secret()));
+        drop(first);
+        assert_eq!(wipes.load(Ordering::Relaxed), 0);
+        drop(second);
+        assert_eq!(wipes.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            format!("{:?}", Confidential::<Counted>::new(Spy::default())),
+            "Counted(Secret([REDACTED]))"
+        );
+    }
+
+    /// The form each confidential value had on the wire before the generic:
+    /// the bare text through `as_str`, or the bare bytes through `as_slice`.
+    fn travels_as<K: WireConfidential, T: serde::Serialize + ?Sized>(value: K::Inner, before: &T)
+    where
+        K::Inner: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
+        Confidential<K>: serde::Serialize + serde::de::DeserializeOwned,
+    {
+        let json = serde_json::to_string(before).unwrap();
+        let bytes = postcard::to_allocvec(before).unwrap();
+        let wrapped = Confidential::<K>::new(value);
+        assert_eq!(serde_json::to_string(&wrapped).unwrap(), json);
+        assert_eq!(postcard::to_allocvec(&wrapped).unwrap(), bytes);
+        let back: Confidential<K> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.secret().expose(), wrapped.secret().expose());
+        let back: Confidential<K> = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(back.secret().expose(), wrapped.secret().expose());
+    }
+
+    #[test]
+    fn a_confidential_value_travels_as_it_did_before_the_generic() {
+        travels_as::<RecoveryWords, str>("abandon ability".to_owned(), "abandon ability");
+        travels_as::<Passphrase, str>("correct horse".to_owned(), "correct horse");
+        travels_as::<Plaintext, [u8]>(b"plain".to_vec(), b"plain".as_slice());
+        let plain = Confidential::<Plaintext>::new(vec![1, 2]);
+        assert_eq!(serde_json::to_string(&plain).unwrap(), "[1,2]");
     }
 
     #[test]

@@ -5,7 +5,7 @@
 
 use std::sync::OnceLock;
 
-use ambre_core::{FileSalt, FixedBytes, Passphrase, Payload, SealedContainer};
+use ambre_core::{Confidential, FileSalt, FixedBytes, Passphrase, Payload, SealedContainer};
 use ambre_crypto::FileKey;
 use libfuzzer_sys::fuzz_target;
 
@@ -15,7 +15,7 @@ fn file_key() -> &'static FileKey {
     static KEY: OnceLock<FileKey> = OnceLock::new();
     KEY.get_or_init(|| {
         match FileKey::from_passphrase(
-            &Passphrase::new("passphrase".to_owned()),
+            &Confidential::<Passphrase>::new("passphrase".to_owned()),
             &FixedBytes::<FileSalt>::from_array([0x33; 16]),
         ) {
             Ok(key) => key,

@@ -197,8 +197,8 @@ impl Payload<SnapshotBytes> {
     /// The state as the plaintext a vault seals. The bytes move into the
     /// wrapper that wipes them, and no copy stays behind.
     #[must_use]
-    pub fn into_secret(self) -> crate::SecretBytes {
-        crate::SecretBytes::new(self.into_bytes())
+    pub fn into_secret(self) -> crate::Confidential<crate::Plaintext> {
+        crate::Confidential::new(self.into_bytes())
     }
 }
 

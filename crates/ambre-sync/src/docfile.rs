@@ -28,8 +28,8 @@ impl SyncState {
     pub(crate) fn handle_seal_doc_file(
         &self,
         id: Generation<Request>,
-        plaintext: SecretBytes,
-        passphrase: ambre_core::Passphrase,
+        plaintext: Confidential<Plaintext>,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         let Ok((key, salt)) = FileKey::for_new_file(&passphrase) else {
             tracing::warn!("Sync: SealDocFile: key derivation failed");
@@ -59,7 +59,7 @@ impl SyncState {
         &self,
         id: Generation<Request>,
         sealed: ambre_core::Payload<ambre_core::SealedContainer>,
-        passphrase: ambre_core::Passphrase,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         let Ok(envelope) = parse_sealed_header(&sealed) else {
             tracing::warn!("Sync: OpenDocFile: not a sealed .ambre file");

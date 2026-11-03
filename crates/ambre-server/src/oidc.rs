@@ -98,7 +98,7 @@ pub struct CallbackResponse {
     pub access_expires_in: TimeSpan<Sec>,
 }
 
-pub use crate::secrets::OidcSecret;
+pub use crate::secrets::{OidcSecret, OidcSecretSinks};
 use ambre_core::{Sec, TimeSpan};
 
 /// Transient OIDC authorization state stored in Redis (TTL 10 min).
@@ -107,7 +107,7 @@ use ambre_core::{Sec, TimeSpan};
 /// be presented again during token exchange to prevent authorization
 /// code interception.
 pub struct OidcAuthState {
-    pub pkce_verifier_secret: OidcSecret,
+    pub pkce_verifier_secret: ambre_core::Confidential<OidcSecret>,
     pub nonce: Nonce,
 }
 
@@ -119,7 +119,7 @@ pub struct OidcAuthState {
 pub struct OidcRegistration {
     pub issuer: IssuerUrl,
     pub client_id: ClientId,
-    pub client_secret: OidcSecret,
+    pub client_secret: ambre_core::Confidential<OidcSecret>,
     pub redirect_uri: RedirectUrl,
 }
 
@@ -127,7 +127,7 @@ impl OidcRegistration {
     /// The registration with the `google` provider.
     pub fn google(
         client_id: ClientId,
-        client_secret: OidcSecret,
+        client_secret: ambre_core::Confidential<OidcSecret>,
         redirect_uri: RedirectUrl,
     ) -> Result<Self, AppError> {
         Ok(Self {
@@ -222,7 +222,7 @@ pub async fn login_url(
     let verifier_secret = pkce_verifier.secret().clone();
 
     let oidc_state = OidcAuthState {
-        pkce_verifier_secret: OidcSecret::new(verifier_secret),
+        pkce_verifier_secret: ambre_core::Confidential::<OidcSecret>::new(verifier_secret),
         nonce,
     };
 
@@ -486,8 +486,8 @@ mod tests {
     }
 
     /// The client secret every test configures.
-    fn secret() -> OidcSecret {
-        OidcSecret::new("secret".to_owned())
+    fn secret() -> ambre_core::Confidential<OidcSecret> {
+        ambre_core::Confidential::<OidcSecret>::new("secret".to_owned())
     }
 
     /// The `google` client discovered at `stub`.
@@ -553,7 +553,7 @@ mod tests {
 
         let (login, kept) = login_url(provider).await.unwrap();
         let other_verifier = OidcAuthState {
-            pkce_verifier_secret: OidcSecret::new(
+            pkce_verifier_secret: ambre_core::Confidential::<OidcSecret>::new(
                 "a-verifier-the-sign-in-never-made-0123456789".into(),
             ),
             nonce: kept.nonce.clone(),

@@ -14,14 +14,16 @@ use std::rc::Rc;
 use ambre_core::{Payload, SealedRowBytes};
 
 use ambre_bus::conduit::{Sender, TrySendError};
-use ambre_bus::{LogicCommand, Request, RestCommand, RestEvent, RowPlace, SealedRow, SecretBytes};
+use ambre_bus::{
+    Confidential, LogicCommand, Plaintext, Request, RestCommand, RestEvent, RowPlace, SealedRow,
+};
 use ambre_core::Generation;
 
 /// What one sealed row comes back as: `None` when the store is locked.
 type Sealed = Box<dyn FnOnce(Option<Payload<SealedRowBytes>>)>;
 /// What rows read back open to, one slot each: `None` when the store is
 /// locked.
-type Opened = Box<dyn FnOnce(Option<Vec<Option<SecretBytes>>>)>;
+type Opened = Box<dyn FnOnce(Option<Vec<Option<Confidential<Plaintext>>>>)>;
 
 enum Pending {
     Seal(Sealed),
@@ -56,7 +58,7 @@ impl Vault {
     pub(crate) fn seal(
         &self,
         place: RowPlace,
-        plaintext: SecretBytes,
+        plaintext: Confidential<Plaintext>,
         done: impl FnOnce(Option<Payload<SealedRowBytes>>) + 'static,
     ) {
         let cmd = RestCommand::SealLocalRow { place, plaintext };
@@ -68,7 +70,7 @@ impl Vault {
     pub(crate) fn open(
         &self,
         rows: Vec<SealedRow>,
-        done: impl FnOnce(Option<Vec<Option<SecretBytes>>>) + 'static,
+        done: impl FnOnce(Option<Vec<Option<Confidential<Plaintext>>>>) + 'static,
     ) {
         if rows.is_empty() {
             done(Some(Vec::new()));
@@ -165,7 +167,7 @@ mod tests {
         let doc = Id::<Document>::mint();
         vault.seal(
             RowPlace::Document(doc),
-            SecretBytes::new(b"plain".to_vec()),
+            Confidential::<Plaintext>::new(b"plain".to_vec()),
             {
                 let got = Rc::clone(&got);
                 move |sealed| *got.borrow_mut() = Some(sealed)
@@ -207,7 +209,7 @@ mod tests {
         let opened = Rc::new(Cell::new(false));
         vault.seal(
             RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
-            SecretBytes::new(b"x".to_vec()),
+            Confidential::<Plaintext>::new(b"x".to_vec()),
             {
                 let sealed = Rc::clone(&sealed);
                 move |row| sealed.set(row.is_none())
@@ -251,7 +253,7 @@ mod tests {
             }
         });
         let (id, _) = request(&rx);
-        let opened = SecretBytes::new(b"the row".to_vec());
+        let opened = Confidential::<Plaintext>::new(b"the row".to_vec());
         let before = opened.with_plaintext(<[u8]>::as_ptr);
         let answer = RestEvent::LocalRowsOpened {
             rows: vec![Some(opened)],
@@ -269,7 +271,7 @@ mod tests {
         for key in ["a", "b"] {
             vault.seal(
                 RowPlace::Draft(ambre_bus::DraftKey::new(key.into())),
-                SecretBytes::new(Vec::new()),
+                Confidential::<Plaintext>::new(Vec::new()),
                 |_| {},
             );
         }

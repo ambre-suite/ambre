@@ -26,7 +26,7 @@ impl SyncState {
         &self,
         id: Generation<Request>,
         place: RowPlace,
-        plaintext: SecretBytes,
+        plaintext: Confidential<Plaintext>,
     ) {
         let Some(seed) = self.master_seed.as_ref() else {
             self.reply(id, RestEvent::LocalStoreLocked);
@@ -94,7 +94,7 @@ mod tests {
             Generation::nth(1),
             RestCommand::SealLocalRow {
                 place,
-                plaintext: SecretBytes::new(plain.to_vec()),
+                plaintext: Confidential::<Plaintext>::new(plain.to_vec()),
             },
         );
         match answer(rx) {
@@ -184,7 +184,7 @@ mod tests {
         };
         let opened: Vec<Option<Vec<u8>>> = rows
             .into_iter()
-            .map(|r| r.map(SecretBytes::into_plaintext))
+            .map(|r| r.map(Confidential::<Plaintext>::into_plaintext))
             .collect();
         assert_eq!(opened, [None, None, None, Some(b"a draft".to_vec())]);
     }
@@ -197,7 +197,7 @@ mod tests {
             Generation::nth(1),
             RestCommand::SealLocalRow {
                 place: RowPlace::Document(Id::<Document>::mint()),
-                plaintext: SecretBytes::new(b"x".to_vec()),
+                plaintext: Confidential::<Plaintext>::new(b"x".to_vec()),
             },
         );
         assert!(matches!(answer(&rx), RestEvent::LocalStoreLocked));
