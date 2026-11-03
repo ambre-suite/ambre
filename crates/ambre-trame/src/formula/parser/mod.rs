@@ -5,7 +5,7 @@
 
 use ambre_core::Tally;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while1};
@@ -512,7 +512,7 @@ fn expr(input: &str) -> nom::IResult<&str, Expr> {
 // -----------------------------------------------------------------------------
 
 /// The longest formula the parser reads, in characters: Excel's own limit.
-pub const MAX_FORMULA_CHARS: Count<ambre_core::Char> = Count::<ambre_core::Char>::new(8_192);
+pub const MAX_FORMULA_CHARS: Len<ambre_core::Char> = Len::<ambre_core::Char>::new(8_192);
 
 /// The deepest parenthesis or call nesting it reads: Excel's own limit.
 pub const MAX_FORMULA_NESTING: Tally<FormulaNesting> = Tally::<FormulaNesting>::new(64);
@@ -568,7 +568,7 @@ fn within_bounds(input: &str) -> Result<(), ParseError> {
             _ => {}
         }
     }
-    if Count::<ambre_core::Char>::from_len(chars) > MAX_FORMULA_CHARS {
+    if Len::<ambre_core::Char>::of(chars) > MAX_FORMULA_CHARS {
         return Err(ParseError::TooLong);
     }
     if Tally::<FormulaNesting>::of_len(deepest) > MAX_FORMULA_NESTING {

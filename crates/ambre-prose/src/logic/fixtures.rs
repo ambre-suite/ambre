@@ -11,7 +11,7 @@
 //! `ProseState::import_snapshot`.
 
 use ambre_core::Version;
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_bus::app::grid::{CellPos, Col, Row};
@@ -43,8 +43,8 @@ impl ProseState {
             .document_order()
             .iter()
             .filter_map(|id| self.body_of(id))
-            .fold(Count::<Char>::ZERO, |total, body| {
-                total + Count::<Char>::from_len(body.len_unicode())
+            .fold(Len::<Char>::ZERO, |total, body| {
+                total + Len::<Char>::of(body.len_unicode())
             });
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
@@ -482,8 +482,8 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(block_id(body)),
-            rows: Count::<Row>::new(2),
-            cols: Count::<Col>::new(2),
+            rows: Len::<Row>::new(2),
+            cols: Len::<Col>::new(2),
         },
     )?;
     let table = root_after(&state, body)?;
@@ -583,7 +583,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
 mod tests {
     use ambre_bus::app::prose::DocChar;
     use ambre_core::FixtureGen;
-    use ambre_core::index::{Count, Pos};
+    use ambre_core::index::{Len, Pos};
 
     use super::{ProseFixture, build_styled_document};
     use crate::events::ProseCommand;
@@ -605,7 +605,7 @@ mod tests {
             shape.body,
             ambre_core::ShapeBody::Prose {
                 blocks: ambre_core::Tally::<ambre_core::DocBlocks>::new(1),
-                characters: Count::<ambre_core::Char>::new(5)
+                characters: Len::<ambre_core::Char>::new(5)
             }
         );
     }

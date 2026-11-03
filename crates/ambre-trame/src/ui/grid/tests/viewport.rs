@@ -4,7 +4,7 @@
 use super::super::{COL_WIDTH, PADDING_COLS, PADDING_ROWS, ROW_HEIGHT};
 use super::*;
 use crate::TrameCommand;
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{Px, Surface};
 
 /// A cell at `(row, col)`, hidden by the filter when `filtered`.
@@ -64,7 +64,7 @@ fn a_scroll_requests_the_screen_and_a_bounded_padding() {
     let (row_start, row_end, col_start, col_end) = window(state.scroll_viewport_cmd());
     let pad = state.viewport_rows.max(PADDING_ROWS);
     // A screen holds one partial row past `viewport_rows`.
-    let rows_on_screen = (state.viewport_rows + Count::<Row>::new(1)).get();
+    let rows_on_screen = (state.viewport_rows + Len::<Row>::new(1)).get();
     assert_eq!(row_start, (state.top_row - pad).get());
     let pad = pad.get();
     assert!(
@@ -75,7 +75,7 @@ fn a_scroll_requests_the_screen_and_a_bounded_padding() {
         row_end >= (state.top_row + state.viewport_rows).get(),
         "the screen is covered"
     );
-    let cols_on_screen = (state.viewport_cols + Count::<Col>::new(1)).get();
+    let cols_on_screen = (state.viewport_cols + Len::<Col>::new(1)).get();
     assert_eq!(col_start, 0);
     assert!(col_end - col_start <= 2 * PADDING_COLS.get() + cols_on_screen);
 }

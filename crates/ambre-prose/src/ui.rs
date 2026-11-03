@@ -16,7 +16,7 @@
 //! text empties it. The input-method composition lands with the "Toolbar,
 //! slash menu and composition" Story (`ambre-roadmap.md` E5).
 
-use ambre_core::index::{Count, Delta, Pos, Span};
+use ambre_core::index::{Delta, Len, Pos, Span};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -104,7 +104,7 @@ ambre_core::define_flag! {
 #[derive(Clone, PartialEq, Eq)]
 enum Change {
     Insert(String),
-    Delete(Count<DocChar>),
+    Delete(Len<DocChar>),
 }
 
 impl std::fmt::Debug for Change {
@@ -168,7 +168,7 @@ impl DraftBuffer {
     ) {
         let (start, end) = (start.min(end), start.max(end));
         if end > start {
-            self.push(seq, *block_id, start, Change::Delete(end.count_from(start)));
+            self.push(seq, *block_id, start, Change::Delete(end.len_from(start)));
         }
     }
 
@@ -282,7 +282,7 @@ impl DraftBuffer {
             let start = char_to_byte(&text, edit.at.as_axis::<ambre_core::Char>());
             match &edit.change {
                 Change::Insert(inserted) => {
-                    let n = Count::<Byte>::from_len(inserted.len());
+                    let n = Len::<Byte>::of(inserted.len());
                     // A mark expands after its range: text typed at its end
                     // joins it, text typed at its start does not.
                     for mark in &mut marks {
@@ -297,7 +297,7 @@ impl DraftBuffer {
                 }
                 Change::Delete(len) => {
                     let end = char_to_byte(&text, (edit.at + *len).as_axis::<ambre_core::Char>());
-                    let gone = end.count_from(start);
+                    let gone = end.len_from(start);
                     let squeeze = |at: Pos<Byte>| {
                         if at <= start {
                             at
@@ -326,9 +326,9 @@ impl DraftBuffer {
         self.of(block)
             .map(|edit| match &edit.change {
                 Change::Insert(text) => {
-                    Delta::<DocChar>::from_count(ambre_core::char_len(text).as_axis::<DocChar>())
+                    Delta::<DocChar>::from_len(ambre_core::char_len(text).as_axis::<DocChar>())
                 }
-                Change::Delete(len) => Delta::<DocChar>::from_count(*len).reversed(),
+                Change::Delete(len) => Delta::<DocChar>::from_len(*len).reversed(),
             })
             .sum()
     }
@@ -1094,7 +1094,7 @@ mod tests {
             characters: ambre_core::Tally::<crate::events::Graphemes>::new(1),
             characters_with_spaces: ambre_core::Tally::<crate::events::Graphemes>::new(70),
             paragraphs: ambre_core::Tally::<crate::events::Paragraphs>::new(3),
-            pages: Count::<crate::events::Page>::new(1),
+            pages: Len::<crate::events::Page>::new(1),
         };
         assert_eq!(
             super::status_figures(&count).labels(),

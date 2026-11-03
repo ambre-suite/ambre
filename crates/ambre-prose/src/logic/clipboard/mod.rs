@@ -12,7 +12,7 @@ mod html_read;
 mod html_write;
 mod sink;
 
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
@@ -247,8 +247,8 @@ fn marked(block: &ClipBlock) -> Vec<MarkedRun> {
     block.runs.iter().map(ClipRun::marked).collect()
 }
 
-fn len_of(block: &ClipBlock) -> Count<DocChar> {
-    block.runs.iter().fold(Count::<DocChar>::ZERO, |sum, run| {
+fn len_of(block: &ClipBlock) -> Len<DocChar> {
+    block.runs.iter().fold(Len::<DocChar>::ZERO, |sum, run| {
         sum + ambre_core::char_len(&run.text).as_axis::<DocChar>()
     })
 }
@@ -380,7 +380,7 @@ impl ProseState {
             return Self::err_no_block(&at.0);
         };
         let pos = at.1;
-        let len = Count::<DocChar>::from_len(body.len_unicode()).as_end();
+        let len = Len::<DocChar>::of(body.len_unicode()).as_end();
         if pos > len {
             return Self::err_bad_range();
         }
@@ -407,7 +407,7 @@ impl ProseState {
         }
         let tail = marked_runs(&body, Span::<DocChar>::new(pos, len));
         if pos < len
-            && let Err(e) = body.delete(pos.to_usize(), len.count_from(pos).to_usize())
+            && let Err(e) = body.delete(pos.to_usize(), len.len_from(pos).to_usize())
         {
             return Self::err_write(e);
         }
@@ -619,7 +619,7 @@ mod tests {
         let body = state.body_of(&tree_id(first)).expect("the paragraph");
         let span = Span::<DocChar>::new(
             Pos::<DocChar>::ZERO,
-            Count::<DocChar>::from_len(body.len_unicode()).as_end(),
+            Len::<DocChar>::of(body.len_unicode()).as_end(),
         );
         marked_runs(&body, span)
             .into_iter()

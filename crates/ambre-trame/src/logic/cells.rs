@@ -8,7 +8,7 @@
 use crate::formula::ACTIVE_SHEET;
 use crate::formula::text::CellText;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use std::cell::OnceCell;
 
 use super::*;
@@ -208,8 +208,8 @@ impl TrameState {
     /// before the first push, so a refusal for want of one pushes no line.
     pub(super) fn materialize(&mut self, at: CellPos) -> Result<(Uid, Uid), Unmaterialized> {
         let (rows, cols) = (self.index.row_len(), self.index.col_len());
-        if at.row.count_from(rows.as_end()) >= MATERIALIZE_ROWS
-            || at.col.count_from(cols.as_end()) >= MATERIALIZE_COLS
+        if at.row.len_from(rows.as_end()) >= MATERIALIZE_ROWS
+            || at.col.len_from(cols.as_end()) >= MATERIALIZE_COLS
         {
             tracing::warn!(
                 "[Logic] materialize {at:?} exceeds cap past hwm \
@@ -228,13 +228,13 @@ impl TrameState {
                     break false;
                 };
                 row_uids.push(uid);
-                next_row += Count::<Row>::ONE;
+                next_row += Len::<Row>::ONE;
             } else if next_col <= at.col {
                 let Some(uid) = self.mint_uid() else {
                     break false;
                 };
                 col_uids.push(uid);
-                next_col += Count::<Col>::ONE;
+                next_col += Len::<Col>::ONE;
             } else {
                 break true;
             }

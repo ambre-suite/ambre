@@ -9,7 +9,7 @@
 
 use ambre_bus::app::find::Match;
 use ambre_core::StepDirection;
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 
 use crate::logic::command::{FindOptions, FindQuery, FindResults, ToileEvent, ToileOutcome};
 use crate::logic::model::NodeId;
@@ -100,7 +100,7 @@ fn next_focus(
         return first;
     };
     Pos::<Match>::from_usize(at)
-        .wrapped(Delta::step(direction), Count::from_len(hits.len()))
+        .wrapped(Delta::step(direction), Len::of(hits.len()))
         .and_then(|next| hits.get(next.to_usize()))
         .cloned()
 }

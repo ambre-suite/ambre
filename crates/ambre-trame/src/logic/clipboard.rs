@@ -9,7 +9,7 @@
 use super::*;
 use crate::formula::shift::shift_formula;
 use crate::formula::text::CellText;
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 
 impl TrameState {
     /// Paste `payload` with its top-left landing on `target`
@@ -88,14 +88,14 @@ impl TrameState {
         let origin = self.active;
         let normalized = text.replace('\r', "");
         let mut cells = Vec::new();
-        let mut rows = Count::<Row>::ZERO;
-        let mut cols = Count::<Col>::ZERO;
+        let mut rows = Len::<Row>::ZERO;
+        let mut cols = Len::<Col>::ZERO;
         for (dr, line) in normalized.trim_end_matches('\n').split('\n').enumerate() {
-            let dr = Count::<Row>::from_len(dr);
-            rows = rows.max(dr + Count::<Row>::ONE);
+            let dr = Len::<Row>::of(dr);
+            rows = rows.max(dr + Len::<Row>::ONE);
             for (dc, field) in line.split('\t').enumerate() {
-                let dc = Count::<Col>::from_len(dc);
-                cols = cols.max(dc + Count::<Col>::ONE);
+                let dc = Len::<Col>::of(dc);
+                cols = cols.max(dc + Len::<Col>::ONE);
                 if field.is_empty() {
                     continue;
                 }
@@ -148,8 +148,8 @@ impl TrameState {
             }
             let raw = raw.into_string();
             cells.push(ClipboardCell {
-                dr: pos.row.count_from(first.row),
-                dc: pos.col.count_from(first.col),
+                dr: pos.row.len_from(first.row),
+                dc: pos.col.len_from(first.col),
                 raw,
                 bold: Weight::from_bool(self.bold.contains(&pos)),
                 italic: Slant::from_bool(self.italic.contains(&pos)),

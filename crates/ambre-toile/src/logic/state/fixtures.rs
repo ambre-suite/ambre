@@ -19,7 +19,7 @@
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
 
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use ambre_core::{Px, Version};
 use std::collections::{BTreeMap, HashMap};
 
@@ -517,7 +517,7 @@ impl FixtureGen for ToileBenchFixture {
                 Px::<Board>::new(600.0),
                 Px::<Board>::new(24.0),
             ),
-            Self::Deck50 => build_deck(&mut state, Count::<ambre_bus::app::toile::Slide>::new(50)),
+            Self::Deck50 => build_deck(&mut state, Len::<ambre_bus::app::toile::Slide>::new(50)),
         }
         state
             .export_ambre_plaintext(seeded_document_id(seed))
@@ -608,7 +608,7 @@ fn copy_payload(state: &mut ToileState, ids: Vec<Id<Element>>) -> Option<Clipboa
 ///
 /// The frames declare their children and the deck declares its order. The
 /// export walks that order and that membership, never the spatial overlap.
-fn build_deck(state: &mut ToileState, slides: Count<ambre_bus::app::toile::Slide>) {
+fn build_deck(state: &mut ToileState, slides: Len<ambre_bus::app::toile::Slide>) {
     const PITCH: Px<Board> = Px::<Board>::new(1_400.0);
     let mut order = Vec::with_capacity(slides.to_usize());
     for slide in 0..slides.get() {

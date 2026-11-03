@@ -5,14 +5,14 @@
 //! composer says what its last key did, through the polite live region
 //! (`MURMURE-571` to `MURMURE-574`).
 
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Byte, Char};
 
 use crate::markers::DraftEdit;
 
 /// The longest text one announcement carries. A long draft is said by its
 /// start, as a Prose block is.
-const TEXT_LIMIT: Count<Char> = Count::<Char>::new(200);
+const TEXT_LIMIT: Len<Char> = Len::<Char>::new(200);
 
 /// What the last key of a frame asks the composer to say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(draft(" ").as_deref(), Some("blank"));
         let long = "a".repeat(TEXT_LIMIT.to_usize() + 5);
         assert_eq!(
-            draft(&long).map(|s| Count::<Char>::from_len(s.chars().count())),
+            draft(&long).map(|s| Len::<Char>::of(s.chars().count())),
             Some(TEXT_LIMIT)
         );
     }

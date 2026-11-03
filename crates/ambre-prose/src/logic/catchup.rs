@@ -186,7 +186,7 @@ impl ProseState {
                 let drawn = TextEdit {
                     block_id,
                     at: pos,
-                    delta: Delta::<DocChar>::from_count(n),
+                    delta: Delta::<DocChar>::from_len(n),
                 };
                 let Some(edit) = sync.rebase(drawn) else {
                     return Err(ProseOutcome::nothing());
@@ -209,7 +209,7 @@ impl ProseState {
                 let drawn = TextEdit {
                     block_id,
                     at: start,
-                    delta: Delta::<DocChar>::from_count(end.count_from(start)).reversed(),
+                    delta: Delta::<DocChar>::from_len(end.len_from(start)).reversed(),
                 };
                 // Everything it was to delete is gone already.
                 let Some(edit) = sync.rebase(drawn) else {
@@ -218,7 +218,7 @@ impl ProseState {
                 sync.predicting = Prediction::Text(vec![edit]);
                 ProseCommand::DeleteText {
                     block_id,
-                    range: Span::<DocChar>::from_count(edit.at, edit.delta.magnitude()),
+                    range: Span::<DocChar>::from_len(edit.at, edit.delta.magnitude()),
                 }
             }
             ProseCommand::SplitBlock { block_id, pos } => {

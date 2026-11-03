@@ -7,7 +7,7 @@
 //! It is pure and holds no CRDT, so the UI may call it (`UI-THREAD-051`).
 //! Both threads then compute the same text from the same three strings.
 
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Byte, Char};
 
 /// Edit steps past which a diff stops looking for the shortest script. A
@@ -46,7 +46,7 @@ enum Step {
 #[derive(PartialEq, Eq)]
 pub struct Edit {
     pub at: Pos<Char>,
-    pub delete: Count<Char>,
+    pub delete: Len<Char>,
     pub insert: String,
 }
 
@@ -91,7 +91,7 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
     // the middle is decoded and diffed. A close then costs little more than a
     // copy of the body, however long it is (`TOILE-UI-383`).
     let (head, tail) = common_ends(base, stored, typed);
-    fn middle(s: &str, head: Count<Byte>, tail: Count<Byte>) -> &str {
+    fn middle(s: &str, head: Len<Byte>, tail: Len<Byte>) -> &str {
         s.get(head.to_usize()..s.len() - tail.to_usize())
             .unwrap_or_default()
     }
@@ -104,7 +104,7 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
     let (head, tail) = (head.to_usize(), tail.to_usize());
     let shift = base.get(..head).unwrap_or_default().chars().count();
     for e in &mut merge.edits {
-        e.at += Count::<Char>::from_len(shift);
+        e.at += Len::<Char>::of(shift);
     }
     let mut text = String::with_capacity(head + merge.text.len() + tail);
     text.push_str(base.get(..head).unwrap_or_default());
@@ -118,7 +118,7 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
 
 /// The bytes the three texts share at their start and at their end. Both cut
 /// at a character boundary, and they never overlap in any of the three.
-fn common_ends(base: &str, stored: &str, typed: &str) -> (Count<Byte>, Count<Byte>) {
+fn common_ends(base: &str, stored: &str, typed: &str) -> (Len<Byte>, Len<Byte>) {
     let (a, b, c) = (base.as_bytes(), stored.as_bytes(), typed.as_bytes());
     let same = |((x, y), z): &((&u8, &u8), &u8)| x == y && y == z;
     let mut head = a.iter().zip(b).zip(c).take_while(same).count();
@@ -139,7 +139,7 @@ fn common_ends(base: &str, stored: &str, typed: &str) -> (Count<Byte>, Count<Byt
     while !base.is_char_boundary(base.len() - tail) {
         tail -= 1;
     }
-    (Count::<Byte>::from_len(head), Count::<Byte>::from_len(tail))
+    (Len::<Byte>::of(head), Len::<Byte>::of(tail))
 }
 
 /// [`merge_edits`] over texts that share no start and no end, positions
@@ -177,7 +177,7 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
                 out.push_str(&t);
                 let insert = Edit {
                     at: Pos::<Char>::from_usize(pos),
-                    delete: Count::<Char>::ZERO,
+                    delete: Len::<Char>::ZERO,
                     insert: t,
                 };
                 pos += insert.insert.chars().count();
@@ -191,7 +191,7 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
                 out.push_str(&t);
                 let replace = Edit {
                     at: Pos::<Char>::from_usize(pos),
-                    delete: Count::<Char>::from_len(run(&base, first.start, end).len()),
+                    delete: Len::<Char>::of(run(&base, first.start, end).len()),
                     insert: t,
                 };
                 pos += replace.insert.chars().count();
@@ -282,7 +282,7 @@ fn diff(base: &[char], side: &[char], tag: Side) -> Vec<Hunk> {
         (true, true) => Vec::new(),
         (true, false) | (false, true) => vec![whole()],
         (false, false) => match myers(a, b) {
-            Some(steps) => hunks(steps, Count::<Char>::from_len(head), tag),
+            Some(steps) => hunks(steps, Len::<Char>::of(head), tag),
             None => vec![whole()],
         },
     }
@@ -290,12 +290,12 @@ fn diff(base: &[char], side: &[char], tag: Side) -> Vec<Hunk> {
 
 /// Group a script into hunks, shifting each index by `head`. Adjacent steps
 /// share one hunk.
-fn hunks(steps: Vec<Step>, head: Count<Char>, tag: Side) -> Vec<Hunk> {
+fn hunks(steps: Vec<Step>, head: Len<Char>, tag: Side) -> Vec<Hunk> {
     let mut out: Vec<Hunk> = Vec::new();
     for step in steps {
         let (at, gone, ch) = match step {
-            Step::Delete(i) => (i + head, Count::<Char>::new(1), None),
-            Step::Insert(i, c) => (i + head, Count::<Char>::ZERO, Some(c)),
+            Step::Delete(i) => (i + head, Len::<Char>::new(1), None),
+            Step::Insert(i, c) => (i + head, Len::<Char>::ZERO, Some(c)),
         };
         match out.last_mut() {
             Some(h) if h.end == at => {
@@ -515,7 +515,7 @@ mod tests {
     fn an_edit_debug_form_prints_no_text() {
         let edit = Edit {
             at: Pos::<Char>::new(3),
-            delete: Count::<Char>::new(1),
+            delete: Len::<Char>::new(1),
             insert: "wire funds".to_owned(),
         };
         let form = format!("{edit:?}");

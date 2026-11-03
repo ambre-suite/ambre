@@ -12,7 +12,7 @@
 //! (`PROSE-FEAT-229`). Every peer holds both once the documents converge, so
 //! every peer keeps the same regions without exchanging anything more.
 
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{PrintLength, StoredAsI64};
 use ambre_core::{Pt, Rgb, StepDirection};
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID, TreeParentId};
@@ -70,8 +70,8 @@ impl Grid {
     }
 
     /// How many rows the grid holds.
-    pub(crate) fn row_count(&self) -> Count<Row> {
-        Count::<Row>::from_len(self.rows.len())
+    pub(crate) fn row_count(&self) -> Len<Row> {
+        Len::<Row>::of(self.rows.len())
     }
 
     /// The grid position of a cell, then the cell itself, in reading order.
@@ -236,7 +236,7 @@ impl ProseState {
     }
 
     /// Mint one row at the end of a table, holding `cols` cells.
-    fn mint_row(&self, table: &TreeID, cols: Count<Col>) -> Option<TreeID> {
+    fn mint_row(&self, table: &TreeID, cols: Len<Col>) -> Option<TreeID> {
         let row = doc::create_block(&self.doc, Some(*table), BlockType::TableRow)?;
         for _ in 0..cols.get() {
             self.mint_cell(&row)?;
@@ -292,8 +292,8 @@ impl ProseState {
         &mut self,
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
-        rows: Count<Row>,
-        cols: Count<Col>,
+        rows: Len<Row>,
+        cols: Len<Col>,
     ) -> ProseOutcome {
         if rows.is_zero() || cols.is_zero() {
             // A table of no column paints nothing and accepts no text
@@ -312,8 +312,8 @@ impl ProseState {
         &self,
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
-        rows: Count<Row>,
-        cols: Count<Col>,
+        rows: Len<Row>,
+        cols: Len<Col>,
     ) -> Result<TreeID, ProseOutcome> {
         let table = self.mint_placed(parent_id, after_id, BlockType::Table)?;
         let Some(attrs) = self.table_attrs(&table) else {
@@ -370,7 +370,7 @@ impl ProseState {
         {
             return Err(Self::err_no_block(&after));
         }
-        let cols = Count::<Col>::from_len(doc::col_widths(&tree, table).len());
+        let cols = Len::<Col>::of(doc::col_widths(&tree, table).len());
         let Some(row) = self.mint_row(table, cols) else {
             return Err(Self::err_write(doc::WriteError::Refused(
                 doc::RefusalCause::TreeRefusedRow,
@@ -538,7 +538,7 @@ impl ProseState {
             return Self::err_no_block(table);
         };
         let rect = CellRect::spanning(start, end);
-        let cols = Count::<Col>::from_len(doc::col_widths(&tree, table).len());
+        let cols = Len::<Col>::of(doc::col_widths(&tree, table).len());
         if rect.bottom_right.row >= grid.row_count().as_end()
             || rect.bottom_right.col >= cols.as_end()
         {
@@ -840,8 +840,8 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(root),
-            rows: Count::<Row>::new(rows),
-            cols: Count::<Col>::new(cols),
+            rows: Len::<Row>::new(rows),
+            cols: Len::<Col>::new(cols),
         });
         let table = the_table(&state);
         (state, table)
@@ -959,14 +959,14 @@ pub(crate) mod tests {
             let outcome = state.handle_command(ProseCommand::InsertTable {
                 parent_id: None,
                 after_id: None,
-                rows: Count::<Row>::new(rows),
-                cols: Count::<Col>::new(cols),
+                rows: Len::<Row>::new(rows),
+                cols: Len::<Col>::new(cols),
             });
             assert_eq!(
                 refusal(&outcome),
                 Some(ProseRefusal::BadTableValue(TableValue::Size {
-                    rows: Count::<Row>::new(rows),
-                    cols: Count::<Col>::new(cols),
+                    rows: Len::<Row>::new(rows),
+                    cols: Len::<Col>::new(cols),
                 }))
             );
             assert!(outcome.update.is_none());

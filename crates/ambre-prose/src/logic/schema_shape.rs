@@ -21,7 +21,7 @@
 
 use ambre_bus::app::prose::DocChar;
 use ambre_bus::app::prose::MarkKey;
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use std::collections::BTreeSet;
 
 use ambre_core::schema::{migration_peer, step_fingerprint};
@@ -534,8 +534,8 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::InsertTable {
         parent_id: None,
         after_id: Some(root),
-        rows: Count::<crate::events::grid::Row>::new(2),
-        cols: Count::<crate::events::grid::Col>::new(2),
+        rows: Len::<crate::events::grid::Row>::new(2),
+        cols: Len::<crate::events::grid::Col>::new(2),
     });
     let Some(table) = state
         .root_blocks()

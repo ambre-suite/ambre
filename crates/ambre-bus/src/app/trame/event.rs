@@ -8,7 +8,7 @@
 use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
 use crate::token::Token;
 use ambre_core::id::{FilterView, Id, Sheet, User};
-use ambre_core::index::{Axis, Count, Pos};
+use ambre_core::index::{Axis, Len, Pos};
 use ambre_core::{Doc, Px, Rgb, Tally};
 
 // -----------------------------------------------------------------------------
@@ -310,7 +310,7 @@ pub enum TrameEvent {
     /// grid column the filter targets, so the UI can draw the funnel badge on its
     /// header (`trame-shared-filter`).
     FilterApplied {
-        hidden_row_count: Count<Row>,
+        hidden_row_count: Len<Row>,
         col: Pos<Col>,
     },
 
@@ -353,7 +353,7 @@ pub enum TrameEvent {
     /// [`DataReset`](Self::DataReset) that prompts the viewport re-fetch; the
     /// chrome surfaces the count as a toast.
     ReplaceDone {
-        replaced: Count<crate::app::find::Match>,
+        replaced: Len<crate::app::find::Match>,
     },
 
     /// A local [`PasteRange`](super::TrameCommand::PasteRange) was refused
@@ -434,8 +434,8 @@ pub enum TrameEvent {
     /// `sheet_id` is the (possibly freshly created) target sheet.
     ImportComplete {
         sheet_id: Id<Sheet>,
-        rows: Count<Row>,
-        cols: Count<Col>,
+        rows: Len<Row>,
+        cols: Len<Col>,
     },
 
     /// An export ([`ExportCsv`](super::TrameCommand::ExportCsv)) produced

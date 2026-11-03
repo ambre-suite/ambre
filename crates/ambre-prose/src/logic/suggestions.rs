@@ -7,7 +7,7 @@
 
 use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Id, Suggestion};
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroMap, TreeID};
 
 use crate::doc;
@@ -342,7 +342,7 @@ impl ProseState {
         }
         let length_of = |block: &TreeID| -> Option<Pos<DocChar>> {
             let body = self.body_of(block)?;
-            Some(Count::<DocChar>::from_len(body.len_unicode()).as_end())
+            Some(Len::<DocChar>::of(body.len_unicode()).as_end())
         };
         if anchor.0 == focus.0 {
             let length = length_of(&anchor.0).ok_or_else(|| Self::err_no_block(&anchor.0))?;
@@ -437,7 +437,7 @@ impl ProseState {
                 start: burst.start.min(start),
                 end: match kind {
                     // Typed text pushes the end of the burst along with it.
-                    SuggestionKind::Insertion => burst.end + end.count_from(start),
+                    SuggestionKind::Insertion => burst.end + end.len_from(start),
                     SuggestionKind::Deletion => burst.end.max(end),
                 },
                 ..burst
@@ -463,8 +463,8 @@ impl ProseState {
         let removed = plan
             .iter()
             .filter(|(.., treatment)| *treatment == Treatment::Remove)
-            .fold(Count::<DocChar>::ZERO, |sum, (_, start, end, _)| {
-                sum + end.count_from(*start)
+            .fold(Len::<DocChar>::ZERO, |sum, (_, start, end, _)| {
+                sum + end.len_from(*start)
             });
         match id {
             Some(id) => {

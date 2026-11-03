@@ -5,7 +5,7 @@ use super::*;
 use crate::formula::text::CellText;
 use ambre_commands::SelectionMode;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Delta, Pos, Span};
+use ambre_core::index::{Delta, Len, Pos, Span};
 
 impl TrameUiState {
     /// Discrete zoom levels cycled by the status-bar zoom control.
@@ -23,8 +23,8 @@ impl TrameUiState {
             top_row: Pos::<Row>::ZERO,
             left_col: Pos::<Col>::ZERO,
             selection: Selection::single(CellPos::ORIGIN),
-            viewport_rows: Count::<Row>::ZERO,
-            viewport_cols: Count::<Col>::ZERO,
+            viewport_rows: Len::<Row>::ZERO,
+            viewport_cols: Len::<Col>::ZERO,
             canvas_width,
             canvas_height,
             zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
@@ -74,8 +74,8 @@ impl TrameUiState {
         // grid area, whether fully or partially visible. scroll_to_include and
         // cell_pixel_rect must agree on this count, or the active cell can
         // appear "in viewport" to the scroll logic but off-canvas to the renderer.
-        self.viewport_rows = Count::<Row>::new((grid_h / row_h).ceil() as u32);
-        self.viewport_cols = Count::<Col>::new((grid_w / col_w).ceil() as u32);
+        self.viewport_rows = Len::<Row>::new((grid_h / row_h).ceil() as u32);
+        self.viewport_cols = Len::<Col>::new((grid_w / col_w).ceil() as u32);
     }
 
     /// Set the grid zoom factor (clamped to the preset range), keeping the
@@ -212,12 +212,12 @@ impl TrameUiState {
         if let Some(block) = self.merge_master_at(at) {
             match dc.cmp(&Delta::<Col>::ZERO) {
                 Ordering::Greater => col = block.bottom_right.col.next(),
-                Ordering::Less => col = block.top_left.col - Count::<Col>::ONE,
+                Ordering::Less => col = block.top_left.col - Len::<Col>::ONE,
                 Ordering::Equal => {}
             }
             match dr.cmp(&Delta::<Row>::ZERO) {
                 Ordering::Greater => row = block.bottom_right.row.next(),
-                Ordering::Less => row = block.top_left.row - Count::<Row>::ONE,
+                Ordering::Less => row = block.top_left.row - Len::<Row>::ONE,
                 Ordering::Equal => {}
             }
         }
@@ -315,10 +315,10 @@ impl TrameUiState {
         if at.row < self.top_row {
             self.top_row = at.row;
             changed = true;
-        } else if self.visible_offset(at.row) >= Delta::<Row>::from_count(self.viewport_rows) {
+        } else if self.visible_offset(at.row) >= Delta::<Row>::from_len(self.viewport_rows) {
             // `row` sits past the last visible slot: pull the top down so `row`
             // lands on the bottom slot, counting in collapsed (visible) rows.
-            let back = self.viewport_rows.saturating_sub(Count::<Row>::ONE);
+            let back = self.viewport_rows.saturating_sub(Len::<Row>::ONE);
             self.top_row = self.nth_visible_row_back(at.row, back);
             changed = true;
         }
@@ -355,7 +355,7 @@ impl TrameUiState {
     /// How many columns from [`left_col`](Self::left_col) start inside the
     /// canvas, walking their real widths. A screen of narrow columns holds more
     /// than the uniform `viewport_cols` counts (`TRAME-UI-144`).
-    fn visible_col_span(&self) -> Count<Col> {
+    fn visible_col_span(&self) -> Len<Col> {
         let right = self.canvas_width;
         let mut x = self.header_w();
         let mut col = self.left_col;
@@ -363,13 +363,13 @@ impl TrameUiState {
             x += self.col_width_of(col);
             col = col.next();
         }
-        col.count_from(self.left_col)
+        col.len_from(self.left_col)
     }
 
     /// How many rows from [`top_row`](Self::top_row) start inside the grid area,
     /// walking their real heights (`TRAME-UI-144`). A row a filter hides counts,
     /// and takes no height.
-    fn visible_row_span(&self) -> Count<Row> {
+    fn visible_row_span(&self) -> Len<Row> {
         let bottom = self.grid_bottom();
         let mut y = self.header_h();
         let mut row = self.top_row;
@@ -379,7 +379,7 @@ impl TrameUiState {
             }
             row = row.next();
         }
-        row.count_from(self.top_row)
+        row.len_from(self.top_row)
     }
 
     /// Build a `ScrollViewport` command for the current visible area plus padding.
@@ -402,7 +402,7 @@ impl TrameUiState {
         // enough *visible* rows to fill the screen. A hidden row outside that
         // span takes no slot, so it stretches nothing (`TRAME-UI-004`).
         let reach = self.top_row + (self.viewport_rows + row_pad);
-        let hidden_in_window = Count::<Row>::from_len(
+        let hidden_in_window = Len::<Row>::of(
             self.hidden_rows
                 .iter()
                 .filter(|&&row| row >= self.top_row && row < reach)
@@ -463,7 +463,7 @@ impl TrameUiState {
         // a non-default entry is stored. A column/row reset to the default drops
         // out of the map, so it falls back to the uniform metric
         // (`trame-resize`).
-        for (col, w) in Span::<Col>::from_count(col_start, Count::<Col>::from_len(col_widths.len()))
+        for (col, w) in Span::<Col>::from_len(col_start, Len::<Col>::of(col_widths.len()))
             .into_iter()
             .zip(&col_widths)
         {
@@ -473,10 +473,9 @@ impl TrameUiState {
                 self.col_widths.remove(&col);
             }
         }
-        for (row, h) in
-            Span::<Row>::from_count(row_start, Count::<Row>::from_len(row_heights.len()))
-                .into_iter()
-                .zip(&row_heights)
+        for (row, h) in Span::<Row>::from_len(row_start, Len::<Row>::of(row_heights.len()))
+            .into_iter()
+            .zip(&row_heights)
         {
             if *h != ROW_HEIGHT {
                 self.row_heights.insert(row, *h);
@@ -548,10 +547,7 @@ impl TrameUiState {
             .iter()
             .filter(|&&r| r >= lo && r < hi)
             .count();
-        let slots = Delta::<Row>::from_count(
-            hi.count_from(lo)
-                .saturating_sub(Count::<Row>::from_len(hidden)),
-        );
+        let slots = Delta::<Row>::from_len(hi.len_from(lo).saturating_sub(Len::<Row>::of(hidden)));
         if row >= self.top_row {
             slots
         } else {
@@ -561,15 +557,15 @@ impl TrameUiState {
 
     /// The absolute grid row drawn at visible slot `slot` from the top of the
     /// viewport (skipping hidden rows). Saturates at the last grid row.
-    pub fn row_at_slot(&self, slot: Count<Row>) -> Pos<Row> {
+    pub fn row_at_slot(&self, slot: Len<Row>) -> Pos<Row> {
         let mut row = self.top_row;
-        let mut seen = Count::<Row>::ZERO;
+        let mut seen = Len::<Row>::ZERO;
         while row < TOTAL_ROWS.as_end() {
             if !self.is_row_hidden(row) {
                 if seen == slot {
                     return row;
                 }
-                seen += Count::<Row>::ONE;
+                seen += Len::<Row>::ONE;
             }
             row = row.next();
         }
@@ -600,15 +596,15 @@ impl TrameUiState {
     /// Walk back from `from` until `n` visible rows have been passed, returning
     /// the resulting row (saturating at 0). Used to place a row on the bottom
     /// viewport slot when scrolling it into view under an active filter.
-    fn nth_visible_row_back(&self, from: Pos<Row>, n: Count<Row>) -> Pos<Row> {
+    fn nth_visible_row_back(&self, from: Pos<Row>, n: Len<Row>) -> Pos<Row> {
         let mut r = from;
-        let mut counted = Count::<Row>::ZERO;
+        let mut counted = Len::<Row>::ZERO;
         while counted < n
             && let Some(prev) = r.prev()
         {
             r = prev;
             if !self.is_row_hidden(r) {
-                counted += Count::<Row>::ONE;
+                counted += Len::<Row>::ONE;
             }
         }
         r

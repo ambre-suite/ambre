@@ -110,7 +110,7 @@
   * **Validation.** A value with a rule has a fallible constructor, and no other way in.
     Deserialisation goes through that constructor.
   * **Arithmetic.** It is limited to the operations the domain allows. A position, a count and a
-    difference are three types: `Pos<Row> + Count<Row> -> Pos<Row>` and
+    difference are three types: `Pos<Row> + Len<Row> -> Pos<Row>` and
     `Pos<Row> - Pos<Row> -> Delta<Row>`, while `Pos<Row> + Pos<Row>` does not compile.
   * **Iteration.** `Range<Pos<Row>>` cannot iterate, because `core::iter::Step` is unstable
     (tracking issue rust-lang/rust#73121). So the index family ships `Span<A>`, which implements

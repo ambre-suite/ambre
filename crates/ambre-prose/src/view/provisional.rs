@@ -11,7 +11,7 @@
 //! The runs are kept with what they were shaped from. A frame reads them only
 //! while that still holds, and reads the layout in force otherwise.
 
-use ambre_core::index::{Count, IdxVec, Pos, Span};
+use ambre_core::index::{IdxVec, Len, Pos, Span};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -114,8 +114,8 @@ fn clip_marks(marks: &[MarkedSpan], bytes: Span<Byte>) -> Vec<MarkedSpan> {
         .iter()
         .filter(|mark| mark.end > bytes.start && mark.start < bytes.end)
         .map(|mark| MarkedSpan {
-            start: Pos::<Byte>::ZERO + mark.start.max(bytes.start).count_from(bytes.start),
-            end: Pos::<Byte>::ZERO + mark.end.min(bytes.end).count_from(bytes.start),
+            start: Pos::<Byte>::ZERO + mark.start.max(bytes.start).len_from(bytes.start),
+            end: Pos::<Byte>::ZERO + mark.end.min(bytes.end).len_from(bytes.start),
             ..*mark
         })
         .collect()
@@ -201,7 +201,7 @@ impl ProseUiState {
     /// row never shrinks before the answer.
     fn provisional_table(&self, table: &TableShape) -> (TableShape, Px<Doc>) {
         let mut shape = table.clone();
-        let rows = table.row_tops.len().saturating_sub(Count::<Row>::ONE);
+        let rows = table.row_tops.len().saturating_sub(Len::<Row>::ONE);
         let mut growth: IdxVec<Row, Px<Doc>> = vec![Px::<Doc>::ZERO; rows.to_usize()].into();
         for cell in &mut shape.cells {
             let mut shift = Px::<Doc>::ZERO;
@@ -277,7 +277,7 @@ impl ProseUiState {
             let mut marks = self.draft.marks_of(block, laid.text(), laid.marks());
             if let Some(split) = self.splitting.filter(|split| split.block == block) {
                 let cut = char_to_byte(&text, split.at.as_axis::<ambre_core::Char>());
-                let end = Count::<Byte>::from_len(text.len()).as_end();
+                let end = Len::<Byte>::of(text.len()).as_end();
                 let tail = text.get(cut.to_usize()..).unwrap_or("").to_owned();
                 let tail_marks = clip_marks(&marks, Span::<Byte>::new(cut, end));
                 text.truncate(cut.to_usize());
@@ -290,7 +290,7 @@ impl ProseUiState {
                     ),
                     None => {
                         let held = self.held_text();
-                        let n = Count::<Byte>::from_len(held.len());
+                        let n = Len::<Byte>::of(held.len());
                         let mut ghost_marks = tail_marks;
                         for mark in &mut ghost_marks {
                             mark.start += n;

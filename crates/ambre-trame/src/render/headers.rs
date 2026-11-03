@@ -5,7 +5,7 @@
 // the `use super::*` glob (the parent re-exports every renderer item).
 
 use super::*;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 // -----------------------------------------------------------------------------
 // draw_col_headers_on / draw_row_headers_on -- fixed header strips
@@ -212,7 +212,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // so the numbers read as discrete buttons (`trame-headers`). Walks the collapsed
     // (filtered) row space like the number loop, independent of `text_pass`.
     {
-        let mut slot = Count::<Row>::ZERO;
+        let mut slot = Len::<Row>::ZERO;
         let mut row_y = cells_top;
         while let Some(row) = layout.row_at_slot(slot) {
             if row_y >= h {
@@ -225,7 +225,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
                 ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
             row_y = edge;
-            slot += Count::<Row>::ONE;
+            slot += Len::<Row>::ONE;
         }
     }
 
@@ -242,7 +242,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // Walk the visible rows, accumulating their variable heights. `slot` only
     // tracks how many visible rows we have drawn (for `row_at_slot`); `row_y` is
     // the running pixel top.
-    let mut slot = Count::<Row>::ZERO;
+    let mut slot = Len::<Row>::ZERO;
     let mut row_y = cells_top;
     while let Some(row) = layout.row_at_slot(slot) {
         if row_y >= h {
@@ -270,7 +270,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             surface.pop_clip();
         }
         row_y += rh;
-        slot += Count::<Row>::ONE;
+        slot += Len::<Row>::ONE;
     }
     surface.pop_clip();
 }

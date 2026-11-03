@@ -92,7 +92,7 @@ pub struct PageColumn {
     pub page_height:     Px<Doc>,
     pub gutter:          Px<Doc>,
     /// Zero for a layout that has not arrived yet.
-    pub page_count:      Count<Page>,
+    pub page_count:      Len<Page>,
     pub total_height:    Px<Doc>,
 }
 

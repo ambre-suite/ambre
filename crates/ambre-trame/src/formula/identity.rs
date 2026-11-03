@@ -17,7 +17,7 @@
 //! qualifier. A sheet the host cannot index is left untouched.
 
 use ambre_bus::{Col, Row};
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use ambre_core::index::Pos;
 
 use crate::model::{Line, SheetIndex};
@@ -32,9 +32,9 @@ use super::types::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineEdit<L: Line> {
     /// `n` lines inserted before position `at`.
-    Insert { at: Pos<L>, n: Count<L> },
+    Insert { at: Pos<L>, n: Len<L> },
     /// The `n` lines from position `at` removed.
-    Delete { at: Pos<L>, n: Count<L> },
+    Delete { at: Pos<L>, n: Len<L> },
     /// The lines permuted, with none added or removed: a sort or a move.
     Reorder,
 }

@@ -15,7 +15,7 @@
 use ambre_bus::app::prose::{BlockType, Page};
 use ambre_core::Ordinal;
 use ambre_core::id::{Footnote, Id};
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Doc, Px, Tally};
 use loro::{LoroDoc, TreeID};
 use std::collections::{HashMap, HashSet};
@@ -413,7 +413,7 @@ impl Paginator {
         let Some(stop) = stopped else {
             return Placement {
                 blocks: placed,
-                page_count: Count::<Page>::through(cursor.page),
+                page_count: Len::<Page>::through(cursor.page),
             };
         };
         // From here the old layout is the answer, entry for entry

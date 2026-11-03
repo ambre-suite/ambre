@@ -385,8 +385,8 @@ pub enum ProseCommand {
 
     // -- Tables (`features/ambre-spec-prose-tables.md`) --
     /// A table of `rows` by `cols`, one empty paragraph per cell.
-    InsertTable      { parent_id: Option<BlockId>, after_id: Option<BlockId>, rows: Count<Row>,
-                       cols: Count<Col> },
+    InsertTable      { parent_id: Option<BlockId>, after_id: Option<BlockId>, rows: Len<Row>,
+                       cols: Len<Col> },
     InsertTableRow   { table_id: BlockId, after_row: Option<BlockId> },
     DeleteTableRow   { row_id: BlockId },
     /// `at_col` is the index the new column takes; `None` width takes the document default

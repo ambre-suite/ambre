@@ -188,7 +188,7 @@ impl ProseUiState {
 
     /// After a local insertion, advance the caret in the same block. Clears the column,
     /// because a horizontal edit invalidates it, and reveals the caret through the same rule.
-    fn advance_cursor(&mut self, n: Count<DocChar>);
+    fn advance_cursor(&mut self, n: Len<DocChar>);
 }
 ```
 

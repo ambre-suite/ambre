@@ -7,7 +7,7 @@
 
 use super::*;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 
 impl TrameState {
     // -------------------------------------------------------------------------
@@ -79,7 +79,7 @@ impl TrameState {
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
         let col_pos = self.index.col_pos(&col_uid).unwrap_or(col);
-        let cells: Vec<CellValue> = Span::<Row>::from_count(Pos::<Row>::ZERO, self.index.row_len())
+        let cells: Vec<CellValue> = Span::<Row>::from_len(Pos::<Row>::ZERO, self.index.row_len())
             .into_iter()
             // Skip rows already hidden by an active filter (distinct *visible*
             // values, matching Google Sheets).
@@ -227,27 +227,26 @@ impl TrameState {
     /// column, returning how many. Only the rows whose mark changes are written,
     /// so an edit that hides and shows nothing broadcasts nothing
     /// (`TRAME-FEAT-036`). Does not commit (the caller does).
-    pub(super) fn write_filter_hidden(&mut self, col_uid: Uid, kind: &FilterKind) -> Count<Row> {
+    pub(super) fn write_filter_hidden(&mut self, col_uid: Uid, kind: &FilterKind) -> Len<Row> {
         let hidden = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::FilterHidden, &self.active_sheet).as_str());
         let Some(col_pos) = self.index.col_pos(&col_uid) else {
             clear_loro_map(&hidden);
-            return Count::<Row>::ZERO; // column deleted since the filter was set
+            return Len::<Row>::ZERO; // column deleted since the filter was set
         };
-        let wanted: HashSet<String> =
-            Span::<Row>::from_count(Pos::<Row>::ZERO, self.index.row_len())
-                .into_iter()
-                .filter(|&pos| {
-                    let value = self
-                        .engine
-                        .evaluated_value(self.active_cell_id(CellPos::new(pos, col_pos)))
-                        .unwrap_or(CellValue::Empty);
-                    !filter_pass(kind, &value)
-                })
-                .filter_map(|pos| self.index.row_id(pos))
-                .map(|uid| uid.to_key_part())
-                .collect();
+        let wanted: HashSet<String> = Span::<Row>::from_len(Pos::<Row>::ZERO, self.index.row_len())
+            .into_iter()
+            .filter(|&pos| {
+                let value = self
+                    .engine
+                    .evaluated_value(self.active_cell_id(CellPos::new(pos, col_pos)))
+                    .unwrap_or(CellValue::Empty);
+                !filter_pass(kind, &value)
+            })
+            .filter_map(|pos| self.index.row_id(pos))
+            .map(|uid| uid.to_key_part())
+            .collect();
         let current: HashSet<String> = match hidden.get_value() {
             LoroValue::Map(entries) => entries.keys().cloned().collect(),
             _ => HashSet::new(),
@@ -258,7 +257,7 @@ impl TrameState {
         for new in wanted.difference(&current) {
             let _ = hidden.insert(new.as_str(), true);
         }
-        Count::<Row>::from_len(wanted.len())
+        Len::<Row>::of(wanted.len())
     }
 
     /// Persist the active filter definition into `filters_{sheet}` as one whole

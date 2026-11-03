@@ -4,7 +4,7 @@
 use super::super::types::RangeValue;
 use super::*;
 use crate::formula::test_index::function;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 #[test]
 fn sum_basic() {
@@ -150,8 +150,8 @@ fn txt(s: &str) -> CellValue {
 }
 fn range(rows: usize, cols: usize, vals: Vec<CellValue>) -> CellValue {
     CellValue::Range(RangeValue::new(
-        Count::<Row>::from_len(rows),
-        Count::<Col>::from_len(cols),
+        Len::<Row>::of(rows),
+        Len::<Col>::of(cols),
         vals,
     ))
 }

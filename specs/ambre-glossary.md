@@ -84,7 +84,7 @@
 | `TimeBase` | the marker of the clock and epoch an instant counts from | | `1-Foundations/ambre-spec-architecture.md` |
 | `StoredAsI64` | a whole count that a store keeps as a signed integer | | `1-Foundations/ambre-spec-architecture.md` |
 | tally | a running count of one kind of thing, that addresses nothing | | `1-Foundations/ambre-spec-architecture.md` |
-| count | a length in the index space of one axis | | `1-Foundations/ambre-spec-architecture.md` |
+| len | an extent in the index space of one axis, as `Len<A>` | | `1-Foundations/ambre-spec-architecture.md` |
 | `Instant<Authored>` | the author's wall clock in Unix milliseconds, shown and never trusted | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | page clock | the page's monotonic milliseconds, restarted on every load | | `1-Foundations/ambre-spec-frame.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |

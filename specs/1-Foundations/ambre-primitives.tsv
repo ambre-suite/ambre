@@ -3814,12 +3814,12 @@ ambre-core | src/validated.rs | crate::validated | Validated<V>::into_string() |
 ambre-core | src/validated.rs | crate::validated | Validated<V>::parse(text) | param | impl Into<String>	newtype-inner	Validated newtype, its text
 ambre-core | src/index.rs | crate::index | <IdxVec<A,T> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/index.rs | crate::index | <Span<A> as IntoIterator>::IntoIter | assoc | std::iter::Map<Range<u32>,fn(u32)->Pos<A>>	generic	the iterator the span chooses for IntoIterator: a range of the raw numbers mapped to positions, since Step is unstable
-ambre-core | src/index.rs | crate::index | Count.raw | field | u32	newtype-inner	the count's own number; the axis is a PhantomData
-ambre-core | src/index.rs | crate::index | Count<A>::from_len(len) | param | usize	newtype-inner	the count read from the usize length of a slice, held at the top
-ambre-core | src/index.rs | crate::index | Count<A>::get() | ret | u32	newtype-inner	the count's own number, for the call into a foreign API
-ambre-core | src/index.rs | crate::index | Count<A>::is_zero() | ret | bool	newtype-inner	a predicate on the count's own number
-ambre-core | src/index.rs | crate::index | Count<A>::new(value) | param | u32	newtype-inner	the count's own number
-ambre-core | src/index.rs | crate::index | Count<A>::to_usize() | ret | usize	newtype-inner	the count as the usize length a foreign API takes, held at the top
+ambre-core | src/index.rs | crate::index | Len.raw | field | u32	newtype-inner	the len's own number; the axis is a PhantomData
+ambre-core | src/index.rs | crate::index | Len<A>::get() | ret | u32	newtype-inner	the len's own number, for the call into a foreign API
+ambre-core | src/index.rs | crate::index | Len<A>::is_zero() | ret | bool	newtype-inner	a predicate on the len's own number
+ambre-core | src/index.rs | crate::index | Len<A>::new(value) | param | u32	newtype-inner	the len's own number
+ambre-core | src/index.rs | crate::index | Len<A>::of(len) | param | usize	newtype-inner	the len read from the usize length of a slice, held at the top
+ambre-core | src/index.rs | crate::index | Len<A>::to_usize() | ret | usize	newtype-inner	the len as the usize length a foreign API takes, held at the top
 ambre-core | src/index.rs | crate::index | Delta.raw | field | i64	newtype-inner	the difference's own number; the axis is a PhantomData
 ambre-core | src/index.rs | crate::index | Delta<A>::get() | ret | i64	newtype-inner	the difference's own number, for the call into a foreign API
 ambre-core | src/index.rs | crate::index | Delta<A>::is_negative() | ret | bool	newtype-inner	a predicate on the difference's own number

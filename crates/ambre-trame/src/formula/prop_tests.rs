@@ -26,7 +26,7 @@
 // ============================================================================
 
 use crate::formula::ACTIVE_SHEET;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use std::collections::HashMap;
 
 use proptest::prelude::*;
@@ -424,8 +424,8 @@ proptest! {
     fn sum_flattens_range_like_scalars(xs in proptest::collection::vec(-100_000i64..100_000, 0..24)) {
         let scalar = as_num(&call_builtin(&function("SUM"), &nums(&xs), fnctx()));
         let range = CellValue::Range(RangeValue::new(
-            Count::<Row>::ONE,
-            Count::<Col>::from_len(xs.len()),
+            Len::<Row>::ONE,
+            Len::<Col>::of(xs.len()),
             nums(&xs),
         ));
         let ranged = as_num(&call_builtin(&function("SUM"), &[range], fnctx()));

@@ -1,5 +1,5 @@
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Axis, Count, Numbered, Pos, Span};
+use ambre_core::index::{Axis, Len, Numbered, Pos, Span};
 use ambre_core::{Ordinal, OrdinalKind};
 use std::fmt;
 
@@ -392,14 +392,14 @@ pub fn nearly_equal(x: f64, y: f64) -> bool {
 /// need a flat stream iterate `values` directly.
 #[derive(Debug, Clone)]
 pub struct RangeValue {
-    pub rows: Count<Row>,
-    pub cols: Count<Col>,
+    pub rows: Len<Row>,
+    pub cols: Len<Col>,
     /// Row-major, `len == rows * cols`.
     pub values: Vec<CellValue>,
 }
 
 impl RangeValue {
-    pub fn new(rows: Count<Row>, cols: Count<Col>, values: Vec<CellValue>) -> Self {
+    pub fn new(rows: Len<Row>, cols: Len<Col>, values: Vec<CellValue>) -> Self {
         debug_assert_eq!(values.len(), rows.to_usize() * cols.to_usize());
         Self { rows, cols, values }
     }
@@ -407,20 +407,20 @@ impl RangeValue {
     /// The single `#REF!` a range collapses to when it cannot be read.
     pub fn broken_ref() -> Self {
         Self::new(
-            Count::<Row>::ONE,
-            Count::<Col>::ONE,
+            Len::<Row>::ONE,
+            Len::<Col>::ONE,
             vec![CellValue::Error(FormulaError::BrokenRef)],
         )
     }
 
     /// The rows of the block, counted from its own top row.
     pub fn row_offsets(&self) -> Span<Row> {
-        Span::<Row>::from_count(Pos::<Row>::ZERO, self.rows)
+        Span::<Row>::from_len(Pos::<Row>::ZERO, self.rows)
     }
 
     /// The columns of the block, counted from its own left column.
     pub fn col_offsets(&self) -> Span<Col> {
-        Span::<Col>::from_count(Pos::<Col>::ZERO, self.cols)
+        Span::<Col>::from_len(Pos::<Col>::ZERO, self.cols)
     }
 
     /// Value at `(row, col)` from the block's top-left cell, or `None` if out
@@ -684,7 +684,7 @@ pub enum Op {
     /// built-in function; the result is pushed back.
     CallFn {
         name: FunctionName,
-        n_args: Count<Arg>,
+        n_args: Len<Arg>,
     },
 }
 

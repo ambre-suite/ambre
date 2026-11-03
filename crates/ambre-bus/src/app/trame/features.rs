@@ -14,7 +14,7 @@
 use super::{CellNumber, CellRect, Col, SourceForm};
 use crate::app::trame::CellText;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use ambre_core::{Bounded, Bounds, Instant, Refusal, Rgb, SheetDateTime, Tally};
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
@@ -37,7 +37,7 @@ pub enum FillMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SortKey {
     /// Column to sort on, as an offset within the range (`0` = `col_start`).
-    pub col: Count<Col>,
+    pub col: Len<Col>,
     pub order: SortOrder,
 }
 
@@ -260,8 +260,8 @@ pub enum ValidationKind {
         max: Option<Instant<SheetDateTime>>,
     },
     TextLength {
-        min: Option<Count<ambre_core::Char>>,
-        max: Option<Count<ambre_core::Char>>,
+        min: Option<Len<ambre_core::Char>>,
+        max: Option<Len<ambre_core::Char>>,
     },
     Regex(String),
     /// Custom formula that must return `TRUE`, as the user typed it. The Logic

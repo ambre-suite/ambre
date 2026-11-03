@@ -72,7 +72,7 @@ pub struct WordCount {
     pub characters_with_spaces: Tally<Graphemes>,
     pub paragraphs:             Tally<Paragraphs>,
     /// From the layout taken last, not from the tally (`PROSE-FEAT-038`).
-    pub pages:                  Count<Page>,
+    pub pages:                  Len<Page>,
 }
 
 /// The four text tallies of the whole document. `pages` is left at zero: the engine stamps it

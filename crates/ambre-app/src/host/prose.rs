@@ -786,7 +786,7 @@ mod tests {
     use super::*;
     use ambre_bus::app::prose::{Graphemes, Page, Paragraphs, Words};
     use ambre_core::Tally;
-    use ambre_core::index::Count;
+    use ambre_core::index::Len;
     use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -944,7 +944,7 @@ mod tests {
             characters: Tally::<Graphemes>::new(60),
             characters_with_spaces: Tally::<Graphemes>::new(71),
             paragraphs: Tally::<Paragraphs>::new(1),
-            pages: Count::<Page>::new(2),
+            pages: Len::<Page>::new(2),
         };
         view.update();
         leptos::task::tick().await;

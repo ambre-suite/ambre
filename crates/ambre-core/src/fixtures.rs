@@ -15,7 +15,7 @@
 //! artifact.
 
 use crate::id::{Document, Id};
-use crate::index::Count;
+use crate::index::Len;
 use crate::{Cells, Char, DocType, Elements, Tally, Version};
 use serde::{Deserialize, Serialize};
 
@@ -340,7 +340,7 @@ pub enum ShapeBody {
     },
     Prose {
         blocks: Tally<DocBlocks>,
-        characters: Count<Char>,
+        characters: Len<Char>,
     },
 }
 

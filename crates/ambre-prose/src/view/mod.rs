@@ -21,7 +21,7 @@ pub mod slash;
 pub mod toolbar;
 pub mod walk;
 
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -38,7 +38,7 @@ use crate::ui::ProseUiState;
 
 /// The pages asked for beyond those a frame builds, on each side, so a
 /// scroll finds its next pages laid out (`PROSE-UI-211`).
-pub const WINDOW_SLACK: Count<Page> = Count::<Page>::new(4);
+pub const WINDOW_SLACK: Len<Page> = Len::<Page>::new(4);
 
 /// What an inline highlight marks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -539,7 +539,7 @@ pub(crate) mod tests {
             Arc::new(PageLayout {
                 page_width: Px::<Doc>::new(800.0),
                 page_height: Px::<Doc>::new(1000.0),
-                page_count: Count::<Page>::new(pages),
+                page_count: Len::<Page>::new(pages),
                 ..PageLayout::default()
             }),
             HashMap::new(),
@@ -562,10 +562,10 @@ pub(crate) mod tests {
         assert_eq!(ui.layout_version, ambre_core::Seq::nth(2));
         assert_eq!(
             ui.shaped.layout.page_count,
-            Count::<crate::events::Page>::new(7)
+            Len::<crate::events::Page>::new(7)
         );
         assert_eq!(ui.column, column::PageColumn::of(&ui.shaped.layout));
-        assert_eq!(ui.column.page_count, Count::<crate::events::Page>::new(7));
+        assert_eq!(ui.column.page_count, Len::<crate::events::Page>::new(7));
     }
 
     #[test]
@@ -577,7 +577,7 @@ pub(crate) mod tests {
         assert_eq!(ui.layout_version, ambre_core::Seq::nth(5));
         assert_eq!(
             ui.shaped.layout.page_count,
-            Count::<crate::events::Page>::new(9)
+            Len::<crate::events::Page>::new(9)
         );
     }
 
@@ -725,7 +725,7 @@ pub(crate) mod tests {
         let old = before.blocks[&edited].data().len();
         assert_eq!(
             after.blocks[&edited].data().len(),
-            old + Count::<RunChar>::new(1)
+            old + Len::<RunChar>::new(1)
         );
         for (id, run) in &before.blocks {
             if *id != edited {

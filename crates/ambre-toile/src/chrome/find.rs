@@ -18,7 +18,7 @@
 use ambre_bus::app::toile::{FindOptions, FindQuery, FindResults};
 use ambre_core::StepDirection;
 use ambre_core::id::{Element, Id};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use leptos::html;
 use leptos::prelude::*;
 
@@ -169,7 +169,7 @@ pub fn FindPanel(
                             {move || match result.get() {
                                 Some(fr) if !fr.hits.is_empty() => {
                                     let active = active_index(&fr.hits, fr.focus.as_ref())
-                                        .map_or(Count::ZERO, Pos::<Match>::number);
+                                        .map_or(Len::ZERO, Pos::<Match>::number);
                                     format!("{active}/{}", fr.hits.len())
                                 }
                                 Some(_) => "0/0".to_string(),

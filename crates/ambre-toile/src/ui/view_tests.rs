@@ -12,7 +12,7 @@ use ambre_commands::KeyChar;
 use ambre_core::Rgba;
 use ambre_core::Tally;
 use ambre_core::id::User;
-use ambre_core::index::Count;
+use ambre_core::index::Len;
 use ambre_core::{Board, Px, StoredBoard};
 use ambre_core::{Commands, StaticKey};
 use kurbo::Rect;
@@ -2630,7 +2630,7 @@ fn a_shared_board(peer: Id<User>) -> Rig {
         pins: vec![ambre_bus::app::toile::CommentPin {
             thread: Id::<Thread>::from_text("t".to_owned()),
             at: kurbo::Point::new(50.0, 50.0),
-            messages: Count::<ambre_bus::app::toile::ThreadMessage>::new(1),
+            messages: Len::<ambre_bus::app::toile::ThreadMessage>::new(1),
             resolved: ambre_core::ThreadState::Open,
         }],
         reactions,

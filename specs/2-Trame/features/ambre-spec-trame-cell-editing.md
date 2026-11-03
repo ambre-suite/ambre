@@ -209,7 +209,7 @@ pub enum ValidationKind {
     NumberRange { limits: NumberBounds, bounds: RangeBounds }, // two `CellNumber`s, `min` at most `max`
     NumberInteger,
     DateRange { min: Option<Instant<SheetDateTime>>, max: Option<Instant<SheetDateTime>> },
-    TextLength { min: Option<Count<Char>>, max: Option<Count<Char>> },
+    TextLength { min: Option<Len<Char>>, max: Option<Len<Char>> },
     Regex(String),
     Formula(CellText<SourceForm>),                       // must return TRUE
 }

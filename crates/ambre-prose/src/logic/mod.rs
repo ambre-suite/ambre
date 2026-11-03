@@ -72,7 +72,7 @@ mod schema_shape;
 mod schema_reading;
 
 use ambre_core::Tally;
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};
@@ -102,11 +102,11 @@ impl ambre_core::TallyKind for Faces {
 }
 
 /// The pages a layout carries before the view asks for any (`PROSE-125`).
-pub const WINDOW_PAGES: Count<Page> = Count::<Page>::new(8);
+pub const WINDOW_PAGES: Len<Page> = Len::<Page>::new(8);
 
 /// The pages carried on each side of a block the view reveals
 /// (`PROSE-UI-212`).
-pub const WINDOW_MARGIN: Count<Page> = Count::<Page>::new(4);
+pub const WINDOW_MARGIN: Len<Page> = Len::<Page>::new(4);
 
 ambre_core::define_flag! {
     /// Whether this session owes a newcomer its presence.
@@ -1650,7 +1650,7 @@ mod tests {
         });
         let before = state.doc.get_deep_value();
         let pages = state.paginate(&[]).page_count;
-        assert!(pages >= Count::<Page>::ONE);
+        assert!(pages >= Len::<Page>::ONE);
         // `PROSE-033`, `PROSE-065`, `PROSE-079`: laying out reads, and the
         // document holds no page number, no break and no height afterwards.
         assert_eq!(state.doc.get_deep_value(), before);

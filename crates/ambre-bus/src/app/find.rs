@@ -7,7 +7,7 @@
 //! from every other index a search event carries.
 
 use ambre_core::Redacted;
-use ambre_core::index::{Axis, Circular, Count, Numbered, Pos, Shown};
+use ambre_core::index::{Axis, Circular, Len, Numbered, Pos, Shown};
 
 /// A match of one search, counted from zero in the order the search
 /// reports its list.
@@ -20,10 +20,10 @@ impl Axis for Match {
 
 /// The match a counter shows a reader: its index plus one, the "k" of "k/n".
 impl Numbered for Match {
-    type Number = Count<Match>;
+    type Number = Len<Match>;
 
-    fn number_of(pos: Pos<Match>) -> Count<Match> {
-        Count::through(pos)
+    fn number_of(pos: Pos<Match>) -> Len<Match> {
+        Len::through(pos)
     }
 }
 
@@ -75,7 +75,7 @@ impl<O> FindQuery<O> {
 mod tests {
     use super::{FindQuery, FindText, Match};
     use ambre_core::StepDirection;
-    use ambre_core::index::{Count, Delta, Pos};
+    use ambre_core::index::{Delta, Len, Pos};
 
     #[test]
     fn an_empty_text_is_no_query() {
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn a_step_wraps_at_either_end_and_finds_nothing_in_an_empty_list() {
-        let three = Count::<Match>::new(3);
+        let three = Len::<Match>::new(3);
         let (first, last) = (Pos::<Match>::ZERO, Pos::<Match>::new(2));
         let (forward, back) = (
             Delta::step(StepDirection::Forward),
@@ -105,6 +105,6 @@ mod tests {
         assert_eq!(last.wrapped(forward, three), Some(first));
         assert_eq!(first.wrapped(back, three), Some(last));
         assert_eq!(first.wrapped(forward, three), Some(Pos::<Match>::new(1)));
-        assert_eq!(first.wrapped(forward, Count::ZERO), None);
+        assert_eq!(first.wrapped(forward, Len::ZERO), None);
     }
 }

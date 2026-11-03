@@ -17,7 +17,7 @@ use std::fmt;
 
 pub use ambre_core::FontFamily;
 use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
-use ambre_core::index::{Axis, Count, Numbered, Pos, Shown};
+use ambre_core::index::{Axis, Len, Numbered, Pos, Shown};
 use ambre_core::{
     Board, Bounded, DocType, FontSize, Px, Rgba, Rule, Slant, StoredBoard, Strikethrough, Tally,
     Underline, Validated,
@@ -272,7 +272,7 @@ impl Default for ElementStyle {
 /// title names a region of a board and is read in a one-line field, so nothing
 /// legible reaches this. The cut is what keeps an unbounded register out of a
 /// document every peer replicates.
-pub const FRAME_NAME_MAX: Count<ambre_core::Char> = Count::<ambre_core::Char>::new(120);
+pub const FRAME_NAME_MAX: Len<ambre_core::Char> = Len::<ambre_core::Char>::new(120);
 
 /// The default sticky-note card colour (RGBA): a warm pastel yellow, the Miro /
 /// Figma-whiteboard default. Used as the seeded fill for a `sticky` element and
@@ -1169,7 +1169,7 @@ pub struct FindResults {
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct TextDelta {
     pub at: Pos<ambre_core::Char>,
-    pub delete: Count<ambre_core::Char>,
+    pub delete: Len<ambre_core::Char>,
     pub insert: String,
 }
 
@@ -1189,10 +1189,10 @@ impl TextDelta {
     /// end.
     pub fn clamped(
         &self,
-        len: Count<ambre_core::Char>,
-    ) -> (Pos<ambre_core::Char>, Count<ambre_core::Char>) {
+        len: Len<ambre_core::Char>,
+    ) -> (Pos<ambre_core::Char>, Len<ambre_core::Char>) {
         let at = self.at.min(len.as_end());
-        (at, self.delete.min(len.as_end().count_from(at)))
+        (at, self.delete.min(len.as_end().len_from(at)))
     }
 }
 
@@ -1389,7 +1389,7 @@ pub struct CommentThread {
 pub struct CommentPin {
     pub thread: Id<Thread>,
     pub at: Point,
-    pub messages: Count<ThreadMessage>,
+    pub messages: Len<ThreadMessage>,
     pub resolved: ambre_core::ThreadState,
 }
 
@@ -1405,7 +1405,7 @@ pub struct CommentSummary {
     pub id: Id<Thread>,
     pub anchor: CommentAnchor,
     pub resolved: ambre_core::ThreadState,
-    pub messages: Count<ThreadMessage>,
+    pub messages: Len<ThreadMessage>,
     pub preview: String,
 }
 
@@ -1589,10 +1589,10 @@ impl Axis for Slide {
 /// The number a person reads for a slide: the first slide is 1. It is the
 /// count of slides up to and with this one, so it saturates with the axis.
 impl Numbered for Slide {
-    type Number = Count<Slide>;
+    type Number = Len<Slide>;
 
-    fn number_of(pos: Pos<Slide>) -> Count<Slide> {
-        Count::through(pos)
+    fn number_of(pos: Pos<Slide>) -> Len<Slide> {
+        Len::through(pos)
     }
 }
 
@@ -1690,12 +1690,12 @@ impl Broadcast {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SlidePosition {
     index: Pos<Slide>,
-    count: Count<Slide>,
+    count: Len<Slide>,
 }
 
 impl SlidePosition {
     /// Slide `index` of a deck of `count`, the index pulled back into the deck.
-    pub fn new(index: Pos<Slide>, count: Count<Slide>) -> Self {
+    pub fn new(index: Pos<Slide>, count: Len<Slide>) -> Self {
         Self {
             index: index.within(count),
             count,
@@ -1708,7 +1708,7 @@ impl SlidePosition {
     }
 
     /// How many slides the deck holds.
-    pub fn count(self) -> Count<Slide> {
+    pub fn count(self) -> Len<Slide> {
         self.count
     }
 }
@@ -3101,7 +3101,7 @@ mod tests {
             id: thread.clone(),
             anchor: CommentAnchor::Element(id.clone()),
             resolved: ambre_core::ThreadState::default(),
-            messages: Count::<ThreadMessage>::new(1),
+            messages: Len::<ThreadMessage>::new(1),
             preview: secret.clone(),
         };
         let frame = DeckFrame {

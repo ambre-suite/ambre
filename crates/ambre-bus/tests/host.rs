@@ -33,7 +33,7 @@ use ambre_core::id::Sheet;
 use ambre_core::id::{
     Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Board, Px, Seq};
 use ambre_core::{Ms, PageLoad, TimeSpan};
 
@@ -41,8 +41,8 @@ use ambre_core::{Ms, PageLoad, TimeSpan};
 
 fn cell(dr: u32, dc: u32, raw: &str) -> ClipboardCell {
     ClipboardCell {
-        dr: Count::<Row>::new(dr),
-        dc: Count::<Col>::new(dc),
+        dr: Len::<Row>::new(dr),
+        dc: Len::<Col>::new(dc),
         raw: raw.to_string(),
         ..Default::default()
     }
@@ -51,8 +51,8 @@ fn cell(dr: u32, dc: u32, raw: &str) -> ClipboardCell {
 #[test]
 fn to_tsv_full_grid() {
     let payload = ClipboardPayload {
-        rows: Count::<Row>::new(2),
-        cols: Count::<Col>::new(2),
+        rows: Len::<Row>::new(2),
+        cols: Len::<Col>::new(2),
         cells: vec![
             cell(0, 0, "a"),
             cell(0, 1, "b"),
@@ -69,8 +69,8 @@ fn to_tsv_gaps_render_as_empty_fields() {
     // Blank source cells are omitted from `cells`; they must appear as empty
     // fields, not collapse the row.
     let payload = ClipboardPayload {
-        rows: Count::<Row>::new(2),
-        cols: Count::<Col>::new(2),
+        rows: Len::<Row>::new(2),
+        cols: Len::<Col>::new(2),
         cells: vec![cell(0, 0, "a"), cell(1, 1, "d")],
         ..Default::default()
     };
@@ -80,8 +80,8 @@ fn to_tsv_gaps_render_as_empty_fields() {
 #[test]
 fn to_tsv_formula_cell_keeps_raw_text() {
     let payload = ClipboardPayload {
-        rows: Count::<Row>::new(1),
-        cols: Count::<Col>::new(1),
+        rows: Len::<Row>::new(1),
+        cols: Len::<Col>::new(1),
         cells: vec![cell(0, 0, "=SUM(A1:B1)")],
         ..Default::default()
     };
@@ -100,8 +100,8 @@ fn to_tsv_out_of_bounds_offsets_are_ignored() {
     // A cell whose offset exceeds the declared range must not panic or grow the
     // grid; `get_mut` returns `None` and the cell is dropped.
     let payload = ClipboardPayload {
-        rows: Count::<Row>::new(1),
-        cols: Count::<Col>::new(1),
+        rows: Len::<Row>::new(1),
+        cols: Len::<Col>::new(1),
         cells: vec![cell(0, 0, "a"), cell(5, 5, "stray")],
         ..Default::default()
     };

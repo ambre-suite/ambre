@@ -7,7 +7,7 @@
 //! writes to the document.
 
 use ambre_core::StoredAsI64;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Authored, Bounded, Bounds, Instant, LangTag, Month, Ms, Refusal, TimeSpan, Year};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
@@ -23,7 +23,7 @@ pub fn resolve(
     document: &LoroDoc,
     block: &TreeID,
     page: Pos<Page>,
-    page_count: Count<Page>,
+    page_count: Len<Page>,
 ) -> String {
     let text = doc::get_block_text(document, block);
     let mut out = String::new();
@@ -112,7 +112,7 @@ fn field_value(
     document: &LoroDoc,
     field: HeaderField,
     page: Pos<Page>,
-    count: Count<Page>,
+    count: Len<Page>,
 ) -> String {
     match field {
         HeaderField::PageNumber => page.number().to_string(),

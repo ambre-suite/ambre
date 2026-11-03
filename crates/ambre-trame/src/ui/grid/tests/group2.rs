@@ -3,7 +3,7 @@
 
 use super::*;
 use ambre_commands::SelectionMode;
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{Px, Surface};
 
 /// After a merge, the active cell may sit on the block's bottom-right
@@ -208,8 +208,8 @@ fn move_to_and_content_scans() {
     state
         .move_to(
             CellPos::new(
-                crate::LAST_ROW + Count::<Row>::new(10),
-                crate::LAST_COL + Count::<Col>::new(10),
+                crate::LAST_ROW + Len::<Row>::new(10),
+                crate::LAST_COL + Len::<Col>::new(10),
             ),
             SelectionMode::Move,
         )

@@ -196,7 +196,7 @@ pub struct FixtureShape {
 pub enum ShapeBody {
     Trame { cells: Tally<Cells>, sheets: Tally<Sheets>, formulas: Tally<Formulas> },
     Toile { elements: Tally<Elements>, frames: Tally<BoardFrames>, connectors: Tally<Connectors> },
-    Prose { blocks: Tally<DocBlocks>, characters: Count<Char> },
+    Prose { blocks: Tally<DocBlocks>, characters: Len<Char> },
 }
 ```
 

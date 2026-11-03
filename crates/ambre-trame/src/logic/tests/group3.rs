@@ -5,7 +5,7 @@
 use super::*;
 use ambre_bus::SheetTab;
 use ambre_core::id::Sheet;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 /// `UnmergeActive` over a selection spanning several merges splits every one of
 /// them, not just the merge under the active cell. Regression: only the last
@@ -892,7 +892,7 @@ fn sort_range_ascending_moves_whole_rows() {
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(1)),
         ),
-        sort_col: Count::<Col>::new(0),
+        sort_col: Len::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -927,7 +927,7 @@ fn sort_range_descending_keeps_header() {
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(0)),
         ),
-        sort_col: Count::<Col>::new(0),
+        sort_col: Len::<Col>::new(0),
         order: SortOrder::Descending,
         header: HeaderRow::Present,
     });

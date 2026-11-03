@@ -90,7 +90,7 @@ mod tests {
     use crate::events::{BlockInit, ProseCommand, block_id};
     use crate::logic::ProseState;
     use ambre_bus::app::prose::DocChar;
-    use ambre_core::index::{Count, Pos};
+    use ambre_core::index::{Len, Pos};
 
     /// A document of one paragraph per string, in order.
     fn document_of(paragraphs: &[&str]) -> ProseState {
@@ -168,8 +168,8 @@ mod tests {
         state.handle_command(ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(root),
-            rows: Count::<crate::events::grid::Row>::new(1),
-            cols: Count::<crate::events::grid::Col>::new(1),
+            rows: Len::<crate::events::grid::Row>::new(1),
+            cols: Len::<crate::events::grid::Col>::new(1),
         });
         let table = crate::logic::tables::tests::the_table(&state);
         let cell = crate::logic::tables::tests::cell_at(&state, table, 0, 0);

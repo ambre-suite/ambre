@@ -34,7 +34,7 @@
 
 use ambre_core::Px;
 use ambre_core::Rgba;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Board, Char, StoredBoard};
 use std::collections::BTreeSet;
 
@@ -586,7 +586,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         base: String::new(),
         delta: TextDelta {
             at: Pos::<Char>::ZERO,
-            delete: Count::<Char>::ZERO,
+            delete: Len::<Char>::ZERO,
             insert: "say this".to_owned(),
         },
     });

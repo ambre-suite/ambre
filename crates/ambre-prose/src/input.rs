@@ -194,7 +194,7 @@ impl Sent {
                 TextEdit {
                     block_id: *block_id,
                     at: *pos,
-                    delta: Delta::<DocChar>::from_count(
+                    delta: Delta::<DocChar>::from_len(
                         ambre_core::char_len(text).as_axis::<DocChar>(),
                     ),
                 },
@@ -206,7 +206,7 @@ impl Sent {
                     TextEdit {
                         block_id: *block_id,
                         at: start,
-                        delta: Delta::<DocChar>::from_count(end.count_from(start)).reversed(),
+                        delta: Delta::<DocChar>::from_len(end.len_from(start)).reversed(),
                     },
                     None,
                 )

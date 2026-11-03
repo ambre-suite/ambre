@@ -316,7 +316,7 @@ mod tests {
     use ambre_bus::app::toile::Viewport;
     use ambre_canvas::PointerButton;
     use ambre_canvas::theme::LIGHT;
-    use ambre_core::index::Count;
+    use ambre_core::index::Len;
     use ambre_core::{Board, Px};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
@@ -345,7 +345,7 @@ mod tests {
         CommentPin {
             thread: Id::<Thread>::from_text(id.to_owned()),
             at,
-            messages: Count::<ambre_bus::app::toile::ThreadMessage>::new(messages),
+            messages: Len::<ambre_bus::app::toile::ThreadMessage>::new(messages),
             resolved,
         }
     }

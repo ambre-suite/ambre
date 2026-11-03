@@ -7,7 +7,7 @@
 
 use ambre_bus::app::prose::{BlockType, FootnoteCall, KeepTogether, KeepWithNext, Page};
 use ambre_core::id::{Footnote, Id};
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Doc, Ordinal, Px};
 use std::sync::Arc;
 
@@ -18,7 +18,7 @@ use crate::layout::run::{ShapedRun, TableShape};
 
 /// The lines a break leaves behind, and the lines it carries over
 /// (`PROSE-072`, `PROSE-073`).
-const MIN_LINES_AT_BREAK: Count<BlockLine> = Count::<BlockLine>::new(2);
+const MIN_LINES_AT_BREAK: Len<BlockLine> = Len::<BlockLine>::new(2);
 
 /// The band drawn once above the notes of a page, rule and gap together.
 pub const NOTE_SEPARATOR: Px<Doc> = Px::<Doc>::new(8.0);
@@ -107,12 +107,12 @@ impl MeasuredBlock {
         }
         self.metrics
             .as_ref()
-            .is_some_and(|metrics| metrics.line_count > Count::<BlockLine>::ONE)
+            .is_some_and(|metrics| metrics.line_count > Len::<BlockLine>::ONE)
     }
 
     /// The height the first `lines` lines take, or the whole block when it has
     /// no line structure.
-    fn height_of_first(&self, lines: Count<BlockLine>) -> Px<Doc> {
+    fn height_of_first(&self, lines: Len<BlockLine>) -> Px<Doc> {
         match &self.metrics {
             Some(metrics) => metrics.height_of_first(lines),
             None => self.height,
@@ -120,18 +120,18 @@ impl MeasuredBlock {
     }
 
     /// How many whole lines fit in a height.
-    fn lines_fitting_in(&self, height: Px<Doc>) -> Count<BlockLine> {
+    fn lines_fitting_in(&self, height: Px<Doc>) -> Len<BlockLine> {
         match &self.metrics {
             Some(metrics) => metrics.lines_fitting_in(height),
-            None if height >= self.height => Count::<BlockLine>::ONE,
-            None => Count::<BlockLine>::ZERO,
+            None if height >= self.height => Len::<BlockLine>::ONE,
+            None => Len::<BlockLine>::ZERO,
         }
     }
 
-    fn line_count(&self) -> Count<BlockLine> {
+    fn line_count(&self) -> Len<BlockLine> {
         match &self.metrics {
             Some(metrics) => metrics.line_count,
-            None => Count::<BlockLine>::ONE,
+            None => Len::<BlockLine>::ONE,
         }
     }
 }
@@ -178,7 +178,7 @@ impl BlockLayout {
     /// The last page this block has a fragment on.
     #[must_use]
     pub fn last_page(&self) -> Pos<Page> {
-        self.page_start + Count::<Page>::from_len(self.continuation_heights.len())
+        self.page_start + Len::<Page>::of(self.continuation_heights.len())
     }
 
     /// Whether a fragment of this block shows on a page.
@@ -194,7 +194,7 @@ pub struct Placement {
     pub blocks: Vec<BlockLayout>,
     /// Always at least one: an empty document is one blank page
     /// (`PROSE-011`).
-    pub page_count: Count<Page>,
+    pub page_count: Len<Page>,
 }
 
 impl Placement {
@@ -301,7 +301,7 @@ pub fn place(blocks: &[MeasuredBlock], body_height: Px<Doc>) -> Placement {
     place_tail(blocks, Pos::<Block>::ZERO, &mut cursor, &mut placed);
     Placement {
         blocks: placed,
-        page_count: Count::<Page>::through(cursor.page),
+        page_count: Len::<Page>::through(cursor.page),
     }
 }
 
@@ -531,10 +531,10 @@ fn fragment(
     y: Px<Doc>,
     from: Pos<BlockLine>,
     notes: &mut Vec<FootnoteLayout>,
-) -> Count<BlockLine> {
+) -> Len<BlockLine> {
     let total = block.line_count();
     let room = cursor.body_height - cursor.foot_height - y;
-    let calls = |lines: Count<BlockLine>| {
+    let calls = |lines: Len<BlockLine>| {
         block
             .notes
             .iter()
@@ -559,9 +559,9 @@ fn lines_for(
     block: &MeasuredBlock,
     height: Px<Doc>,
     from: Pos<BlockLine>,
-    total: Count<BlockLine>,
-) -> Count<BlockLine> {
-    let remaining = total.saturating_sub(from.count_from(Pos::ZERO));
+    total: Len<BlockLine>,
+) -> Len<BlockLine> {
+    let remaining = total.saturating_sub(from.len_from(Pos::ZERO));
     let fitting = lines_fitting_from(block, height, from).min(remaining);
     if fitting >= remaining {
         return remaining;
@@ -575,7 +575,7 @@ fn lines_for(
     } else {
         fitting
     };
-    trimmed.clamp(Count::<BlockLine>::ONE, remaining)
+    trimmed.clamp(Len::<BlockLine>::ONE, remaining)
 }
 
 /// How many lines fit in a height, counting from line `from`.
@@ -583,17 +583,17 @@ fn lines_fitting_from(
     block: &MeasuredBlock,
     height: Px<Doc>,
     from: Pos<BlockLine>,
-) -> Count<BlockLine> {
-    let offset = block.height_of_first(from.count_from(Pos::ZERO));
+) -> Len<BlockLine> {
+    let offset = block.height_of_first(from.len_from(Pos::ZERO));
     block
         .lines_fitting_in(height + offset)
-        .saturating_sub(from.count_from(Pos::ZERO))
+        .saturating_sub(from.len_from(Pos::ZERO))
 }
 
 /// The height of the lines in `from..to`.
 fn height_between(block: &MeasuredBlock, from: Pos<BlockLine>, to: Pos<BlockLine>) -> Px<Doc> {
-    (block.height_of_first(to.count_from(Pos::ZERO))
-        - block.height_of_first(from.count_from(Pos::ZERO)))
+    (block.height_of_first(to.len_from(Pos::ZERO))
+        - block.height_of_first(from.len_from(Pos::ZERO)))
     .max(Px::<Doc>::ZERO)
 }
 
@@ -632,7 +632,7 @@ mod tests {
         line_tops.push(Px::<Doc>::new(lines as f32 * LINE));
         TextMetrics {
             text_height: Px::<Doc>::new(lines as f32 * LINE),
-            line_count: Count::<BlockLine>::new(lines),
+            line_count: Len::<BlockLine>::new(lines),
             line_tops,
         }
     }
@@ -689,7 +689,7 @@ mod tests {
     #[test]
     fn blocks_that_fit_share_one_page() {
         let placement = place(&[text(1, 3), text(2, 3), text(3, 3)], Px::<Doc>::new(BODY));
-        assert_eq!(placement.page_count, Count::<crate::events::Page>::new(1));
+        assert_eq!(placement.page_count, Len::<crate::events::Page>::new(1));
         assert!(
             placement
                 .blocks
@@ -709,7 +709,7 @@ mod tests {
             text(3, 2),
         ];
         let placement = place(&blocks, Px::<Doc>::new(BODY));
-        assert_eq!(placement.page_count, Count::<crate::events::Page>::new(2));
+        assert_eq!(placement.page_count, Len::<crate::events::Page>::new(2));
         assert_eq!(placement.blocks[1].height, Px::<Doc>::new(0.0));
         assert_eq!(
             placement.blocks[1].page_start,
@@ -730,7 +730,7 @@ mod tests {
             of_type(3, BlockType::PageBreak, 0.0),
         ];
         let placement = place(&blocks, Px::<Doc>::new(BODY));
-        assert_eq!(placement.page_count, Count::<crate::events::Page>::new(4));
+        assert_eq!(placement.page_count, Len::<crate::events::Page>::new(4));
     }
 
     #[test]
@@ -750,7 +750,7 @@ mod tests {
         let block = &placement.blocks[0];
         assert!(block.is_split());
         assert_eq!(block.page_start, Pos::<crate::events::Page>::new(0));
-        assert_eq!(placement.page_count, Count::<crate::events::Page>::new(3));
+        assert_eq!(placement.page_count, Len::<crate::events::Page>::new(3));
         assert_eq!(block.split_points.len(), block.continuation_heights.len());
         // Every continuation sits at the top of its page (`PROSE-018`), which
         // is what a fragment index of the page span says.
@@ -770,13 +770,13 @@ mod tests {
             if !block.is_split() {
                 continue;
             }
-            let first = block.split_points[0].count_from(Pos::ZERO);
+            let first = block.split_points[0].len_from(Pos::ZERO);
             assert!(
                 first >= MIN_LINES_AT_BREAK,
                 "only {} lines left behind",
                 first.get()
             );
-            let carried = Count::<BlockLine>::new(11).saturating_sub(first);
+            let carried = Len::<BlockLine>::new(11).saturating_sub(first);
             assert!(
                 carried >= MIN_LINES_AT_BREAK,
                 "only {} lines carried",
@@ -821,7 +821,7 @@ mod tests {
             placement.blocks[1].page_start,
             Pos::<crate::events::Page>::new(0)
         );
-        assert_eq!(placement.page_count, Count::<crate::events::Page>::new(1));
+        assert_eq!(placement.page_count, Len::<crate::events::Page>::new(1));
     }
 
     #[test]
@@ -893,7 +893,7 @@ mod tests {
     #[test]
     fn an_empty_document_is_one_page() {
         let placement = place(&[], Px::<Doc>::new(BODY));
-        assert_eq!(placement.page_count, Count::<crate::events::Page>::new(1));
+        assert_eq!(placement.page_count, Len::<crate::events::Page>::new(1));
         assert!(placement.blocks.is_empty());
     }
 
@@ -954,7 +954,7 @@ mod tests {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod properties {
-    use ambre_core::index::{Count, Pos};
+    use ambre_core::index::{Len, Pos};
     use ambre_core::{Doc, Px};
     use proptest::prelude::*;
 
@@ -1097,7 +1097,7 @@ mod properties {
             };
             place_tail(&blocks, Pos::<crate::layout::measure::Block>::from_usize(from), &mut cursor, &mut placed);
             prop_assert_eq!(placed, full.blocks);
-            prop_assert_eq!(Count::<Page>::through(cursor.page), full.page_count);
+            prop_assert_eq!(Len::<Page>::through(cursor.page), full.page_count);
         }
 
         /// A cut never leaves a single line on either side of it, unless the
@@ -1113,11 +1113,11 @@ mod properties {
             }
             let mut previous = Pos::<BlockLine>::ZERO;
             for point in &block.split_points {
-                prop_assert!(point.count_from(previous) >= MIN_LINES_AT_BREAK);
+                prop_assert!(point.len_from(previous) >= MIN_LINES_AT_BREAK);
                 previous = *point;
             }
             prop_assert!(
-                Count::<BlockLine>::new(lines).saturating_sub(previous.count_from(Pos::ZERO))
+                Len::<BlockLine>::new(lines).saturating_sub(previous.len_from(Pos::ZERO))
                     >= MIN_LINES_AT_BREAK
             );
         }

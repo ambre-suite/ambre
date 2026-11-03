@@ -13,7 +13,7 @@
 use crate::formula::text::CellText;
 use ambre_core::Rgb;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Doc, Px, Surface, View};
 use std::collections::{HashMap, HashSet};
 
@@ -49,9 +49,9 @@ pub use crate::{
 /// edge (resp. a row's bottom edge) resizes instead of selecting.
 pub const RESIZE_BAND: Px<Surface> = Px::<Surface>::new(4.0);
 
-const PADDING_ROWS: Count<Row> = Count::<Row>::new(20);
+const PADDING_ROWS: Len<Row> = Len::<Row>::new(20);
 
-const PADDING_COLS: Count<Col> = Count::<Col>::new(5);
+const PADDING_COLS: Len<Col> = Len::<Col>::new(5);
 
 /// A cached cell ready to render: text plus its pinned formatting runs.
 #[derive(Clone, Default)]
@@ -478,9 +478,9 @@ pub struct TrameUiState {
     pub selection: Selection,
 
     /// Number of full rows visible in the grid area (recomputed on resize).
-    pub viewport_rows: Count<Row>,
+    pub viewport_rows: Len<Row>,
     /// Number of full columns visible in the grid area.
-    pub viewport_cols: Count<Col>,
+    pub viewport_cols: Len<Col>,
 
     /// Canvas logical size in CSS pixels, set by ResizeObserver (`CANVAS-044`).
     pub canvas_width: Px<Surface>,

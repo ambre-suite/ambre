@@ -7,7 +7,7 @@
 use super::*;
 use ambre_core::id::{CondFormat, FilterView, Sheet};
 use ambre_core::id::{Id, User};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Redacted, Rule, Validated};
 
 // -----------------------------------------------------------------------------
@@ -142,7 +142,7 @@ pub struct SheetNameKey(Redacted<String>);
 
 impl SheetName {
     /// The most characters a sheet name holds.
-    pub const MAX_CHARS: Count<ambre_core::Char> = Count::<ambre_core::Char>::new(31);
+    pub const MAX_CHARS: Len<ambre_core::Char> = Len::<ambre_core::Char>::new(31);
 
     /// The characters a sheet name cannot hold. A `:` or a bracket would read
     /// as reference syntax, and the rest are Excel's.
@@ -776,7 +776,7 @@ pub enum TrameCommand {
         sheet_id: Id<Sheet>,
         rect: CellRect,
         /// Column to sort on, as an index within the range (`0` = its left column).
-        sort_col: Count<Col>,
+        sort_col: Len<Col>,
         order: SortOrder,
         /// A first range row that is a header is not sorted.
         header: HeaderRow,

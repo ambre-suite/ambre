@@ -5,7 +5,7 @@ use super::*;
 use crate::test_support::at;
 use ambre_canvas::{TextCache, Theme};
 use ambre_core::Rgb;
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{Doc, Px, Surface};
 use ambre_draw::FontContext;
 use ambre_draw::testing::{DrawOp, RecordingSurface};
@@ -42,8 +42,8 @@ fn layout() -> GridLayout<'static> {
         origin_row: Pos::<Row>::new(0),
         width: Px::<Surface>::new(800.0),
         height: Px::<Surface>::new(600.0),
-        total_cols: Count::<Col>::new(1000),
-        total_rows: Count::<Row>::new(100_000),
+        total_cols: Len::<Col>::new(1000),
+        total_rows: Len::<Row>::new(100_000),
         zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
     }
 }
@@ -132,10 +132,7 @@ fn cell_rect_collapses_over_hidden_rows() {
     let r = l.cell_rect(CellPos::new(Pos::<Row>::new(4), Pos::<Col>::new(0)));
     assert_eq!(r.y0, 24.0 + 2.0 * 20.0);
     // Slot 2 maps back to absolute row 4, not row 2.
-    assert_eq!(
-        l.row_at_slot(Count::<Row>::new(2)),
-        Some(Pos::<Row>::new(4))
-    );
+    assert_eq!(l.row_at_slot(Len::<Row>::new(2)), Some(Pos::<Row>::new(4)));
 }
 
 #[test]

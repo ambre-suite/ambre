@@ -209,7 +209,7 @@ pub(crate) fn read(content: &LoroText) -> Vec<StyleMark> {
                     *slot = Some(styles.len());
                     styles.push(StyleMark {
                         style,
-                        range: Span::<Char>::from_count(at, len),
+                        range: Span::<Char>::from_len(at, len),
                     });
                 }
             }

@@ -12,7 +12,7 @@
 //! [`LogicCommand::App`](crate::LogicCommand::App), whose address is a
 //! document (`BUS-027`).
 
-use ambre_core::index::{Count, IdxVec, Pos, Span};
+use ambre_core::index::{IdxVec, Len, Pos, Span};
 use ambre_core::{Byte, Char, Recounts, Rule, Tally, TallyKind, Validated};
 use serde::{Deserialize, Serialize};
 
@@ -651,7 +651,7 @@ impl MessageView {
         let mut bytes = IdxVec::<Char, _>::new();
         let mut at = Pos::<Char>::ZERO;
         let chars = self.text.chars().enumerate();
-        for (i, c) in chars.map(|(i, c)| (Count::<Char>::from_len(i).as_end(), c)) {
+        for (i, c) in chars.map(|(i, c)| (Len::<Char>::of(i).as_end(), c)) {
             if i < at {
                 bytes.push(Pos::<Byte>::from_usize(shown.len()));
                 continue;

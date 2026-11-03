@@ -130,7 +130,7 @@ impl TrameView {
                 #[cfg(target_arch = "wasm32")]
                 self.find_result.set(Some(crate::chrome::FindPosition::new(
                     active,
-                    Count::<ambre_bus::app::find::Match>::from_len(matches.len()),
+                    Len::<ambre_bus::app::find::Match>::of(matches.len()),
                 )));
                 self.state.find_matches = matches.clone();
                 self.needs_full = true;

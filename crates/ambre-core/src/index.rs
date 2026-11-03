@@ -1,4 +1,4 @@
-//! Index families: a position, a count, a difference and a span, one generic
+//! Index families: a position, a len, a difference and a span, one generic
 //! type each over an axis marker.
 //!
 //! A row number, a number of rows and the gap between two rows are three
@@ -8,7 +8,7 @@
 //! arithmetic the domain allows (`ai/ambre-rust-style.md`, the newtype rule).
 //!
 //! ```
-//! use ambre_core::index::{Axis, Count, Delta, Pos, Span};
+//! use ambre_core::index::{Axis, Delta, Len, Pos, Span};
 //!
 //! /// A line of a list.
 //! #[derive(PartialEq, Eq)]
@@ -18,7 +18,7 @@
 //! }
 //!
 //! let first = Pos::<Line>::new(2);
-//! let last = first + Count::new(3);
+//! let last = first + Len::new(3);
 //! assert_eq!(last - first, Delta::new(3));
 //! assert_eq!(Span::new(first, last).into_iter().count(), 3);
 //! ```
@@ -27,22 +27,22 @@
 //!
 //! | Expression | Result | On overflow |
 //! | :--- | :--- | :--- |
-//! | `Pos + Count` | `Pos` | saturates |
-//! | `Pos - Count` | `Pos` | saturates at zero |
+//! | `Pos + Len` | `Pos` | saturates |
+//! | `Pos - Len` | `Pos` | saturates at zero |
 //! | `Pos + Delta` | `Pos` | clamps to the axis |
 //! | `Pos - Pos` | `Delta` | exact, in the wider signed type |
-//! | `Delta::from_count(count)` | `Delta` | exact |
-//! | `pos.checked_sub(count)` | `Option<Pos>` | `None` |
-//! | `Count + Count` | `Count` | saturates |
+//! | `Delta::from_len(len)` | `Delta` | exact |
+//! | `pos.checked_sub(len)` | `Option<Pos>` | `None` |
+//! | `Len + Len` | `Len` | saturates |
 //! | `pos.checked_offset(delta)` | `Option<Pos>` | `None` |
 //! | `pos.saturating_offset(delta)` | `Pos` | clamps to the axis |
 //!
 //! `Pos + Pos` does not compile. No type derefs to its integer. None converts
 //! from it through `From`: `new` wraps it, and `get` unwraps it for the call
-//! into a foreign API. Each of `Pos`, `Count` and `Delta` serialises as its
+//! into a foreign API. Each of `Pos`, `Len` and `Delta` serialises as its
 //! bare integer, the shape `#[serde(transparent)]` writes.
 //!
-//! Every axis is 32 bits wide. A position or a count is a `u32`, and a
+//! Every axis is 32 bits wide. A position or a len is a `u32`, and a
 //! difference is an `i64`, which holds the gap between any two positions.
 //! Postcard writes a `u32` and a `usize` of one value as the same varint, and
 //! JSON writes the same digits. So an axis that held a `usize` before keeps
@@ -69,9 +69,9 @@
 //! | Trait | What the axis gets |
 //! | :--- | :--- |
 //! | [`Numbered`] | the number a reader sees for a position |
-//! | [`Shown`] | the `Display` of a count |
+//! | [`Shown`] | the `Display` of a len |
 //! | [`Circular`] | [`Pos::wrapped`], a move that wraps at either end |
-//! | [`CountsAs`] | the crossing of a count to an axis that counts the same thing |
+//! | [`MeasuresAs`] | the crossing of a len to an axis that counts the same thing |
 //! | [`MapsTo`] | the crossing of a position and a span as well |
 
 use std::cmp::Ordering;
@@ -90,13 +90,13 @@ use crate::mode::StepDirection;
 /// The marker is an uninhabited type: it names the axis and holds no value.
 /// The trait is open, because the axes live in the crates that index them.
 ///
-/// The marker derives `PartialEq` and `Eq`. A position, a count and a
+/// The marker derives `PartialEq` and `Eq`. A position, a len and a
 /// difference derive their equality, since only a derive makes it structural.
 /// A constant such as `Pos::<Row>::ZERO` then works as a match pattern. The
 /// derive bounds the marker, and this supertrait meets that bound.
 pub trait Axis: Eq + Sized + 'static {
     /// The name `Debug` prints before the kind of value: `RowCount(3)`,
-    /// `RowPos(3)`. A count prints as the hand-written type of its axis
+    /// `RowPos(3)`. A len prints as the hand-written count type of its axis
     /// printed; a position prints the kind `Pos` after the name.
     const NAME: &'static str;
 }
@@ -113,7 +113,7 @@ pub trait Numbered: Axis {
     fn number_of(pos: Pos<Self>) -> Self::Number;
 }
 
-/// An axis whose count a reader sees: [`Count`] of it implements `Display`
+/// An axis whose len a reader sees: [`Len`] of it implements `Display`
 /// as the bare number.
 pub trait Shown: Axis {}
 
@@ -124,22 +124,22 @@ pub trait Shown: Axis {}
 /// in here.
 pub trait Circular: Axis {}
 
-/// An axis whose counts are counts of axis `B`: the same number of things.
+/// An axis whose len is a len of axis `B`: the same number of things.
 ///
 /// The impl states the condition under which the two axes count the same
-/// thing. [`Count::as_axis`] then crosses from one axis to the other. A
+/// thing. [`Len::as_axis`] then crosses from one axis to the other. A
 /// position does not cross: the two axes may start at different places, as a
 /// window of pages starts at some page of the document. A crossing back is
 /// its own impl.
-pub trait CountsAs<B: Axis>: Axis {}
+pub trait MeasuresAs<B: Axis>: Axis {}
 
 /// An axis whose positions are the positions of axis `B`, one for one: both
 /// start at the same place and count the same thing.
 ///
 /// [`Pos::as_axis`] and [`Span::as_axis`] then cross from one axis to the
-/// other, and a count crosses through [`CountsAs`]. A crossing back is its
+/// other, and a len crosses through [`MeasuresAs`]. A crossing back is its
 /// own impl.
-pub trait MapsTo<B: Axis>: CountsAs<B> {}
+pub trait MapsTo<B: Axis>: MeasuresAs<B> {}
 
 /// A position on the axis `A`: a row, a page, a code-point offset.
 #[derive(PartialEq, Eq)]
@@ -148,9 +148,14 @@ pub struct Pos<A: Axis> {
     axis: PhantomData<fn() -> A>,
 }
 
-/// A number of positions on the axis `A`.
+/// A number of positions on the axis `A`: the extent of a run in its index
+/// space.
+///
+/// The name is `Len`, never `Length`: a length is geometric, as `Px<S>` and
+/// `PrintLength<U>` measure it. A len addresses positions; a count of things
+/// that addresses nothing is a `Tally<K>`.
 #[derive(PartialEq, Eq)]
-pub struct Count<A: Axis> {
+pub struct Len<A: Axis> {
     raw: u32,
     axis: PhantomData<fn() -> A>,
 }
@@ -214,7 +219,7 @@ impl<A: Axis> Pos<A> {
     }
 
     /// The position `count` before this one, `None` past the start.
-    pub const fn checked_sub(self, count: Count<A>) -> Option<Self> {
+    pub const fn checked_sub(self, count: Len<A>) -> Option<Self> {
         match self.raw.checked_sub(count.raw) {
             Some(value) => Some(Self::new(value)),
             None => None,
@@ -223,7 +228,7 @@ impl<A: Axis> Pos<A> {
 
     /// The position `count` before this one, clamped to [`Self::ZERO`].
     #[must_use]
-    pub const fn saturating_sub(self, count: Count<A>) -> Self {
+    pub const fn saturating_sub(self, count: Len<A>) -> Self {
         Self::new(self.raw.saturating_sub(count.raw))
     }
 
@@ -247,7 +252,7 @@ impl<A: Axis> Pos<A> {
     /// This position, or the last of an axis of `len` positions when it lies
     /// past it. [`Self::ZERO`] when `len` is zero.
     #[must_use]
-    pub const fn within(self, len: Count<A>) -> Self {
+    pub const fn within(self, len: Len<A>) -> Self {
         let last = match len.last() {
             Some(last) => last,
             None => Self::ZERO,
@@ -267,8 +272,8 @@ impl<A: Axis> Pos<A> {
 
     /// The number of positions from `start` up to this one, zero when
     /// `start` is not before it.
-    pub const fn count_from(self, start: Self) -> Count<A> {
-        Count::new(self.raw.saturating_sub(start.raw))
+    pub const fn len_from(self, start: Self) -> Len<A> {
+        Len::new(self.raw.saturating_sub(start.raw))
     }
 
     /// The span from this position up to and with `last`.
@@ -323,7 +328,7 @@ impl<A: Circular> Pos<A> {
     /// either end. Past the last comes the first, and before the first comes
     /// the last. A position past `len` wraps as if it stood at the last one.
     /// `None` when `len` is zero, since the axis then holds no position.
-    pub fn wrapped(self, by: Delta<A>, len: Count<A>) -> Option<Self> {
+    pub fn wrapped(self, by: Delta<A>, len: Len<A>) -> Option<Self> {
         if len.is_zero() {
             return None;
         }
@@ -340,13 +345,13 @@ impl<A: Numbered> Pos<A> {
     }
 }
 
-impl<A: Axis> Count<A> {
+impl<A: Axis> Len<A> {
     /// No position.
     pub const ZERO: Self = Self::new(0);
     /// One position.
     pub const ONE: Self = Self::new(1);
 
-    /// Wraps a count.
+    /// Wraps a len.
     pub const fn new(value: u32) -> Self {
         Self {
             raw: value,
@@ -354,42 +359,42 @@ impl<A: Axis> Count<A> {
         }
     }
 
-    /// The count, for the call into a foreign API.
+    /// The len, for the call into a foreign API.
     pub const fn get(self) -> u32 {
         self.raw
     }
 
-    /// Whether the count is zero.
+    /// Whether the len is zero.
     pub const fn is_zero(self) -> bool {
         self.raw == 0
     }
 
-    /// This count less `other`, clamped to zero.
+    /// This len less `other`, clamped to zero.
     #[must_use]
     pub const fn saturating_sub(self, other: Self) -> Self {
         Self::new(self.raw.saturating_sub(other.raw))
     }
 
-    /// The count of a slice of `len` items, saturating past the axis.
-    pub fn from_len(len: usize) -> Self {
+    /// The len of a slice of `len` items, saturating past the axis.
+    pub fn of(len: usize) -> Self {
         Self::new(u32::try_from(len).unwrap_or(u32::MAX))
     }
 
-    /// The count as a `usize`, saturating at `usize::MAX`: for the call into
+    /// The len as a `usize`, saturating at `usize::MAX`: for the call into
     /// a foreign API that takes a length.
     pub fn to_usize(self) -> usize {
         usize::try_from(self.raw).unwrap_or(usize::MAX)
     }
 
-    /// The position this count reaches from the start of the axis: the first
-    /// position past `count` items.
+    /// The position this len reaches from the start of the axis: the first
+    /// position past `len` items.
     pub const fn as_end(self) -> Pos<A> {
         Pos::new(self.raw)
     }
 
     /// The number of positions from the first up to and with `last`.
     pub const fn through(last: Pos<A>) -> Self {
-        last.next().count_from(Pos::ZERO)
+        last.next().len_from(Pos::ZERO)
     }
 
     /// The last of this many positions, `None` for none.
@@ -402,13 +407,13 @@ impl<A: Axis> Count<A> {
         Span::new(Pos::ZERO, self.as_end())
     }
 
-    /// The same count on the axis `B`, which counts what this axis counts
-    /// under the condition the [`CountsAs`] impl states.
-    pub const fn as_axis<B: Axis>(self) -> Count<B>
+    /// The same len on the axis `B`, which counts what this axis counts
+    /// under the condition the [`MeasuresAs`] impl states.
+    pub const fn as_axis<B: Axis>(self) -> Len<B>
     where
-        A: CountsAs<B>,
+        A: MeasuresAs<B>,
     {
-        Count::new(self.raw)
+        Len::new(self.raw)
     }
 }
 
@@ -443,9 +448,9 @@ impl<A: Axis> Delta<A> {
         }
     }
 
-    /// The forward move of `count` positions.
-    pub fn from_count(count: Count<A>) -> Self {
-        Self::new(i64::from(count.raw))
+    /// The forward move of `len` positions.
+    pub fn from_len(len: Len<A>) -> Self {
+        Self::new(i64::from(len.raw))
     }
 
     /// Whether the move goes back.
@@ -455,8 +460,8 @@ impl<A: Axis> Delta<A> {
 
     /// How many positions the move covers, either way, saturating past the
     /// axis.
-    pub fn magnitude(self) -> Count<A> {
-        Count::new(u32::try_from(self.raw.unsigned_abs()).unwrap_or(u32::MAX))
+    pub fn magnitude(self) -> Len<A> {
+        Len::new(u32::try_from(self.raw.unsigned_abs()).unwrap_or(u32::MAX))
     }
 }
 
@@ -466,14 +471,14 @@ impl<A: Axis> Span<A> {
         Self { start, end }
     }
 
-    /// The span of `count` positions from `start`.
-    pub const fn from_count(start: Pos<A>, count: Count<A>) -> Self {
-        Self::new(start, Pos::new(start.raw.saturating_add(count.raw)))
+    /// The span of `len` positions from `start`.
+    pub const fn from_len(start: Pos<A>, len: Len<A>) -> Self {
+        Self::new(start, Pos::new(start.raw.saturating_add(len.raw)))
     }
 
     /// The number of positions the span holds.
-    pub const fn len(self) -> Count<A> {
-        self.end.count_from(self.start)
+    pub const fn len(self) -> Len<A> {
+        self.end.len_from(self.start)
     }
 
     /// Whether the span holds no position.
@@ -543,30 +548,30 @@ impl<A: Axis> IntoIterator for Span<A> {
     }
 }
 
-impl<A: Axis> Add<Count<A>> for Pos<A> {
+impl<A: Axis> Add<Len<A>> for Pos<A> {
     type Output = Pos<A>;
 
-    fn add(self, count: Count<A>) -> Pos<A> {
+    fn add(self, count: Len<A>) -> Pos<A> {
         Pos::new(self.raw.saturating_add(count.raw))
     }
 }
 
-impl<A: Axis> AddAssign<Count<A>> for Pos<A> {
-    fn add_assign(&mut self, count: Count<A>) {
+impl<A: Axis> AddAssign<Len<A>> for Pos<A> {
+    fn add_assign(&mut self, count: Len<A>) {
         *self = *self + count;
     }
 }
 
-impl<A: Axis> Sub<Count<A>> for Pos<A> {
+impl<A: Axis> Sub<Len<A>> for Pos<A> {
     type Output = Pos<A>;
 
-    fn sub(self, count: Count<A>) -> Pos<A> {
+    fn sub(self, count: Len<A>) -> Pos<A> {
         self.saturating_sub(count)
     }
 }
 
-impl<A: Axis> SubAssign<Count<A>> for Pos<A> {
-    fn sub_assign(&mut self, count: Count<A>) {
+impl<A: Axis> SubAssign<Len<A>> for Pos<A> {
+    fn sub_assign(&mut self, count: Len<A>) {
         *self = *self - count;
     }
 }
@@ -593,16 +598,16 @@ impl<A: Axis> Sub for Pos<A> {
     }
 }
 
-impl<A: Axis> Add for Count<A> {
-    type Output = Count<A>;
+impl<A: Axis> Add for Len<A> {
+    type Output = Len<A>;
 
-    fn add(self, other: Count<A>) -> Count<A> {
-        Count::new(self.raw.saturating_add(other.raw))
+    fn add(self, other: Len<A>) -> Len<A> {
+        Len::new(self.raw.saturating_add(other.raw))
     }
 }
 
-impl<A: Axis> AddAssign for Count<A> {
-    fn add_assign(&mut self, other: Count<A>) {
+impl<A: Axis> AddAssign for Len<A> {
+    fn add_assign(&mut self, other: Len<A>) {
         *self = *self + other;
     }
 }
@@ -621,7 +626,7 @@ impl<A: Axis> Sum for Delta<A> {
     }
 }
 
-impl<A: Shown> fmt::Display for Count<A> {
+impl<A: Shown> fmt::Display for Len<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.raw.fmt(f)
     }
@@ -642,8 +647,8 @@ impl<A: Axis, T> IdxVec<A, T> {
     }
 
     /// The number of items.
-    pub fn len(&self) -> Count<A> {
-        Count::from_len(self.items.len())
+    pub fn len(&self) -> Len<A> {
+        Len::of(self.items.len())
     }
 
     /// Whether the collection holds no item.
@@ -842,53 +847,55 @@ impl<'de, A: Axis> Deserialize<'de> for Pos<A> {
     }
 }
 
-impl<A: Axis> Clone for Count<A> {
+impl<A: Axis> Clone for Len<A> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<A: Axis> Copy for Count<A> {}
+impl<A: Axis> Copy for Len<A> {}
 
-impl<A: Axis> Default for Count<A> {
+impl<A: Axis> Default for Len<A> {
     fn default() -> Self {
         Self::new(0)
     }
 }
 
-impl<A: Axis> PartialOrd for Count<A> {
+impl<A: Axis> PartialOrd for Len<A> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<A: Axis> Ord for Count<A> {
+impl<A: Axis> Ord for Len<A> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.raw.cmp(&other.raw)
     }
 }
 
-impl<A: Axis> Hash for Count<A> {
+impl<A: Axis> Hash for Len<A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.raw.hash(state);
     }
 }
 
-/// `NAME` and the kind, then the bare integer: `RowCount(3)`.
-impl<A: Axis> fmt::Debug for Count<A> {
+/// `NAME` and the kind, then the bare integer: `RowCount(3)`. The kind
+/// stays `Count`, the name the hand-written types printed: a redacted
+/// plaintext prints its len as `ByteCount(n)`, and tests read that output.
+impl<A: Axis> fmt::Debug for Len<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}Count({})", A::NAME, self.raw)
     }
 }
 
 /// The bare integer, so the wire keeps its bytes.
-impl<A: Axis> Serialize for Count<A> {
+impl<A: Axis> Serialize for Len<A> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.raw.serialize(serializer)
     }
 }
 
-impl<'de, A: Axis> Deserialize<'de> for Count<A> {
+impl<'de, A: Axis> Deserialize<'de> for Len<A> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         u32::deserialize(deserializer).map(Self::new)
     }
@@ -1011,7 +1018,7 @@ impl<A: Axis, T: fmt::Debug> fmt::Debug for IdxVec<A, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Axis, Circular, Count, CountsAs, Delta, IdxVec, MapsTo, Pos, Span};
+    use super::{Axis, Circular, Delta, IdxVec, Len, MapsTo, MeasuresAs, Pos, Span};
 
     /// A test line.
     #[derive(PartialEq, Eq)]
@@ -1029,7 +1036,7 @@ mod tests {
         const NAME: &'static str = "Mirror";
     }
 
-    impl CountsAs<Mirror> for Line {}
+    impl MeasuresAs<Mirror> for Line {}
 
     impl MapsTo<Mirror> for Line {}
 
@@ -1039,8 +1046,8 @@ mod tests {
         Pos::new(raw)
     }
 
-    fn count(raw: u32) -> Count<Line> {
-        Count::new(raw)
+    fn count(raw: u32) -> Len<Line> {
+        Len::new(raw)
     }
 
     fn delta(raw: i64) -> Delta<Line> {
@@ -1050,7 +1057,7 @@ mod tests {
     #[test]
     fn a_position_plus_a_count_is_a_position() {
         assert_eq!(line(2) + count(3), line(5));
-        assert_eq!(Pos::<Line>::MAX + Count::ONE, Pos::<Line>::MAX);
+        assert_eq!(Pos::<Line>::MAX + Len::ONE, Pos::<Line>::MAX);
     }
 
     #[test]
@@ -1076,7 +1083,7 @@ mod tests {
         assert_eq!(line(5) - count(3), line(2));
         assert_eq!(line(1) - count(3), Pos::<Line>::ZERO);
         assert_eq!(line(1).checked_sub(count(3)), None);
-        let back = Delta::from_count(count(2)).reversed();
+        let back = Delta::from_len(count(2)).reversed();
         assert_eq!(line(5) + back, line(3));
         assert_eq!(line(1) + back, Pos::<Line>::ZERO);
     }
@@ -1144,19 +1151,16 @@ mod tests {
             vec![line(u32::MAX - 1)]
         );
         assert!(!span.contains(Pos::<Line>::MAX));
-        assert_eq!(span.len(), Count::ONE);
-        assert_eq!(
-            Pos::<Line>::MAX.through(Pos::<Line>::MAX).len(),
-            Count::ZERO
-        );
+        assert_eq!(span.len(), Len::ONE);
+        assert_eq!(Pos::<Line>::MAX.through(Pos::<Line>::MAX).len(), Len::ZERO);
     }
 
     #[test]
     fn a_count_names_its_last_position_and_its_span() {
         assert_eq!(count(3).last(), Some(line(2)));
-        assert_eq!(Count::<Line>::ZERO.last(), None);
+        assert_eq!(Len::<Line>::ZERO.last(), None);
         assert_eq!(count(3).span(), Span::new(Pos::<Line>::ZERO, line(3)));
-        assert_eq!(Count::through(line(4)), count(5));
+        assert_eq!(Len::through(line(4)), count(5));
     }
 
     #[test]
@@ -1166,14 +1170,14 @@ mod tests {
         assert_eq!(Pos::<Line>::ZERO.wrapped(delta(-1), len), Some(line(2)));
         assert_eq!(line(1).wrapped(delta(8), len), Some(Pos::<Line>::ZERO));
         assert_eq!(line(9).wrapped(delta(1), len), Some(Pos::<Line>::ZERO));
-        assert_eq!(Pos::<Line>::ZERO.wrapped(delta(1), Count::ZERO), None);
+        assert_eq!(Pos::<Line>::ZERO.wrapped(delta(1), Len::ZERO), None);
     }
 
     #[test]
     fn a_position_within_a_length_stops_at_its_last() {
         assert_eq!(line(7).within(count(3)), line(2));
         assert_eq!(line(1).within(count(3)), line(1));
-        assert_eq!(line(1).within(Count::ZERO), Pos::<Line>::ZERO);
+        assert_eq!(line(1).within(Len::ZERO), Pos::<Line>::ZERO);
         assert_eq!(line(2).midpoint(line(7)), line(4));
         assert_eq!(line(7).midpoint(line(2)), line(7));
     }
@@ -1182,7 +1186,7 @@ mod tests {
     fn a_mapped_axis_keeps_the_position() {
         let mirrored: Pos<Mirror> = line(4).as_axis();
         assert_eq!(mirrored, Pos::new(4));
-        assert_eq!(count(2).as_axis::<Mirror>(), Count::new(2));
+        assert_eq!(count(2).as_axis::<Mirror>(), Len::new(2));
     }
 
     #[test]

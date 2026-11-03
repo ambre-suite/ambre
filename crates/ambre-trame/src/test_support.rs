@@ -16,7 +16,7 @@
 // through the same `CommandSink` seam the dispatcher emits.
 // ============================================================================
 
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -120,10 +120,7 @@ pub fn rect(r1: u32, c1: u32, r2: u32, c2: u32) -> crate::CellRect {
 
 /// A merge block `rows` tall and `cols` wide.
 pub fn span(rows: u32, cols: u32) -> crate::MergeSpan {
-    crate::MergeSpan::new(
-        Count::<crate::Row>::new(rows),
-        Count::<crate::Col>::new(cols),
-    )
+    crate::MergeSpan::new(Len::<crate::Row>::new(rows), Len::<crate::Col>::new(cols))
 }
 
 /// The `n`-th edit session token a view mints, counting from one.

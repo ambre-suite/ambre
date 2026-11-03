@@ -11,7 +11,7 @@
 // which version its containers are at today, and what each past layout has to
 // become.
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use std::borrow::Cow;
 
 use ambre_core::{Payload, SnapshotBytes, Version};
@@ -167,10 +167,10 @@ ambre_core::crdt_names! {
 /// used-range high-water mark. Bounds the pathological "lone value far down
 /// the grid" case that would otherwise create ~100k placeholder elements (see
 /// `trame-rows-and-columns`). The write path drops anything beyond it.
-pub(crate) const MATERIALIZE_ROWS: Count<Row> = Count::<Row>::new(10_000);
+pub(crate) const MATERIALIZE_ROWS: Len<Row> = Len::<Row>::new(10_000);
 
 /// The same cap on the columns: one limit holds on both axes.
-pub(crate) const MATERIALIZE_COLS: Count<Col> = Count::<Col>::new(10_000);
+pub(crate) const MATERIALIZE_COLS: Len<Col> = Len::<Col>::new(10_000);
 
 // A row count and a column count are two types, so the build compares the
 // two caps: a change to one alone fails to compile.

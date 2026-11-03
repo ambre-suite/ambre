@@ -24,7 +24,7 @@
 //! with, so a command needs no conversion on the write path. A caret moves by
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
-use ambre_core::index::{Axis, Count, CountsAs, Delta, MapsTo, Numbered, Pos, Shown, Span};
+use ambre_core::index::{Axis, Delta, Len, MapsTo, MeasuresAs, Numbered, Pos, Shown, Span};
 use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted};
 use std::any::Any;
 use std::fmt;
@@ -53,13 +53,13 @@ impl Axis for DocChar {
 
 /// A block's body counts code points, so an offset of it is a code-point
 /// offset of the block's text.
-impl CountsAs<ambre_core::Char> for DocChar {}
+impl MeasuresAs<ambre_core::Char> for DocChar {}
 
 /// A position crosses too: both axes start at the same place.
 impl MapsTo<ambre_core::Char> for DocChar {}
 
 /// The code points of a block's text are the code points its body counts.
-impl CountsAs<DocChar> for ambre_core::Char {}
+impl MeasuresAs<DocChar> for ambre_core::Char {}
 
 /// The number of a text change the view did not draw: a remote one, or a
 /// local one the Logic thread rewrote. The view hands back the last it
@@ -885,7 +885,7 @@ pub struct WordCount {
     pub characters_with_spaces: Tally<Graphemes>,
     pub paragraphs: Tally<Paragraphs>,
     /// From the layout, never from the tally (`PROSE-FEAT-038`).
-    pub pages: Count<Page>,
+    pub pages: Len<Page>,
 }
 
 /// What a format command does to one presence mark over a selection.
@@ -1534,8 +1534,8 @@ pub enum ProseCommand {
     InsertTable {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
-        rows: Count<Row>,
-        cols: Count<Col>,
+        rows: Len<Row>,
+        cols: Len<Col>,
     },
     /// A row of one cell per column. `None` puts it first.
     InsertTableRow {
@@ -2781,7 +2781,7 @@ impl ProseError {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TableValue {
     /// A table of no row or no column (`PROSE-FEAT-228`).
-    Size { rows: Count<Row>, cols: Count<Col> },
+    Size { rows: Len<Row>, cols: Len<Col> },
     /// A column width.
     Width(PrintLength<Pt>),
     /// A cell border's width.

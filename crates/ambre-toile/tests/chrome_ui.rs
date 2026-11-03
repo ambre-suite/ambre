@@ -38,7 +38,7 @@ use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
 use ambre_core::id::{Document, Frame, Id, Thread, User};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Authored, Char, Instant, Tally};
 use ambre_core::{Board, Scale, View};
 use ambre_core::{Commands, StaticKey};
@@ -582,7 +582,7 @@ fn mount_presenter_follow(
     });
     let slide = RwSignal::new(SlidePosition::new(
         Pos::<Slide>::from_usize(index),
-        Count::<Slide>::from_len(count),
+        Len::<Slide>::of(count),
     ));
     let notes = RwSignal::new(notes.to_owned());
     let broadcasting = RwSignal::new(if broadcasting {
@@ -682,7 +682,7 @@ fn presenter_notes_edit_fires_minimal_delta() {
             base: "abc".to_owned(),
             delta: TextDelta {
                 at: Pos::<Char>::new(3),
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: "d".to_owned(),
             },
         })
@@ -1104,7 +1104,7 @@ fn summary(id: &str, preview: &str) -> CommentSummary {
         id: Id::<Thread>::from_text(id.to_owned()),
         anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         resolved: ambre_core::ThreadState::Open,
-        messages: Count::<ambre_bus::app::toile::ThreadMessage>::new(1),
+        messages: Len::<ambre_bus::app::toile::ThreadMessage>::new(1),
         preview: preview.to_owned(),
     }
 }
@@ -1303,7 +1303,7 @@ fn a_note_edit_with_no_frame_on_screen_is_refused() {
             base: String::new(),
             delta: TextDelta {
                 at: Pos::<Char>::ZERO,
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: "hi".to_owned(),
             },
         })

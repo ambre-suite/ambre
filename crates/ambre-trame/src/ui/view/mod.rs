@@ -22,7 +22,7 @@ use ambre_canvas::{
 };
 use ambre_commands::ClipboardWrite;
 use ambre_core::id::{Document, Id};
-use ambre_core::index::{Count, Delta, Pos};
+use ambre_core::index::{Delta, Len, Pos};
 use ambre_draw::{Clock, DrawSurface, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::RwSignal;
@@ -89,26 +89,20 @@ fn fill_dest(src: CellRect, at: CellPos, block: MergeSpan) -> CellRect {
     let (first, last) = (src.top_left, src.bottom_right);
     let (bh, bw) = (block.rows.get().max(1), block.cols.get().max(1));
     // Extent the pointer reaches beyond the source on each axis.
-    let drow = at
-        .row
-        .count_from(last.row)
-        .max(first.row.count_from(at.row));
-    let dcol = at
-        .col
-        .count_from(last.col)
-        .max(first.col.count_from(at.col));
+    let drow = at.row.len_from(last.row).max(first.row.len_from(at.row));
+    let dcol = at.col.len_from(last.col).max(first.col.len_from(at.col));
     // Whole blocks of `size` lines covering `reach` lines.
     let snap = |reach: u32, size: u32| reach.div_ceil(size).saturating_mul(size);
     if drow.get() >= dcol.get() {
         // Vertical fill: extend rows toward the pointer, snapped to whole blocks.
         if at.row > last.row {
-            let grow = Count::<Row>::new(snap(at.row.count_from(last.row).get(), bh));
+            let grow = Len::<Row>::new(snap(at.row.len_from(last.row).get(), bh));
             CellRect {
                 bottom_right: CellPos::new(last.row + grow, last.col),
                 ..src
             }
         } else if at.row < first.row {
-            let grow = Count::<Row>::new(snap(first.row.count_from(at.row).get(), bh));
+            let grow = Len::<Row>::new(snap(first.row.len_from(at.row).get(), bh));
             CellRect {
                 top_left: CellPos::new(first.row - grow, first.col),
                 ..src
@@ -119,13 +113,13 @@ fn fill_dest(src: CellRect, at: CellPos, block: MergeSpan) -> CellRect {
     } else {
         // Horizontal fill: extend columns, snapped to whole blocks.
         if at.col > last.col {
-            let grow = Count::<Col>::new(snap(at.col.count_from(last.col).get(), bw));
+            let grow = Len::<Col>::new(snap(at.col.len_from(last.col).get(), bw));
             CellRect {
                 bottom_right: CellPos::new(last.row, last.col + grow),
                 ..src
             }
         } else if at.col < first.col {
-            let grow = Count::<Col>::new(snap(first.col.count_from(at.col).get(), bw));
+            let grow = Len::<Col>::new(snap(first.col.len_from(at.col).get(), bw));
             CellRect {
                 top_left: CellPos::new(first.row, first.col - grow),
                 ..src

@@ -7,11 +7,11 @@ use super::*;
 use crate::logic::schema::{SheetContainer, SheetRoot};
 use crate::{BorderEdit, BorderPreset, BorderStyle, CellFormat, StylePatch};
 use ambre_core::Rgb;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use loro::LoroValue;
 
 const COL_1: Pos<Col> = Pos::<Col>::new(1);
-const ROWS_1: Count<Row> = Count::<Row>::new(1);
+const ROWS_1: Len<Row> = Len::<Row>::new(1);
 
 /// Select the rectangle `(r1, c1)`-`(r2, c2)`, the active cell at its far corner.
 fn select(state: &mut TrameState, r1: u32, c1: u32, r2: u32, c2: u32) {
@@ -63,7 +63,7 @@ fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> 
             crate::CellPos::new(Pos::<Row>::new(rows.0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(rows.1), Pos::<Col>::new(1)),
         ),
-        sort_col: Count::<Col>::new(col),
+        sort_col: Len::<Col>::new(col),
         order: if ascending {
             SortOrder::Ascending
         } else {
@@ -492,7 +492,7 @@ fn a_sort_of_fewer_than_two_rows_changes_nothing() {
                 crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
                 crate::CellPos::new(Pos::<Row>::new(row_end), Pos::<Col>::new(0)),
             ),
-            sort_col: Count::<Col>::new(0),
+            sort_col: Len::<Col>::new(0),
             order: SortOrder::Ascending,
             header,
         });

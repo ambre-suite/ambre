@@ -119,10 +119,7 @@ pub(crate) fn fragment(
             run_top: Px::<Doc>::ZERO,
         });
     }
-    let k = page
-        .count_from(block.page_start)
-        .to_usize()
-        .checked_sub(1)?;
+    let k = page.len_from(block.page_start).to_usize().checked_sub(1)?;
     let height = *block.continuation_heights.get(k)?;
     let first_line = block.split_points.get(k)?.to_usize();
     Some(Fragment {

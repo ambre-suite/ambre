@@ -6,7 +6,7 @@
 //! derived caches (`bounds` / `layers`). The whiteboard has no computed values
 //! to compare, only state and derived structures.
 
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Board, Px, Rgba, StoredBoard};
 use ambre_core::{Char, Elements, StepDirection, Tally};
 use kurbo::{Point, Rect, Size, Vec2};
@@ -2693,7 +2693,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
         base: String::new(),
         delta: TextDelta {
             at: Pos::<Char>::ZERO,
-            delete: Count::<Char>::ZERO,
+            delete: Len::<Char>::ZERO,
             insert: "open on the budget".into(),
         },
     });
@@ -2725,7 +2725,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
             base: "open on the budget".into(),
             delta: TextDelta {
                 at: Pos::<Char>::ZERO,
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: "A: ".into(),
             },
         })
@@ -2737,7 +2737,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
             base: "open on the budget".into(),
             delta: TextDelta {
                 at: Pos::<Char>::new(18),
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: " (B)".into(),
             },
         })
@@ -3918,7 +3918,7 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
             base: String::new(),
             delta: TextDelta {
                 at: Pos::<Char>::ZERO,
-                delete: Count::<Char>::ZERO,
+                delete: Len::<Char>::ZERO,
                 insert: "open on the budget".into(),
             },
         })
@@ -4191,7 +4191,7 @@ fn follow_state_is_not_synced() {
 fn insert_notes(at: usize, s: &str) -> TextDelta {
     TextDelta {
         at: Pos::<Char>::from_usize(at),
-        delete: Count::<Char>::ZERO,
+        delete: Len::<Char>::ZERO,
         insert: s.to_owned(),
     }
 }
@@ -4329,7 +4329,7 @@ fn edit_notes_clamps_out_of_range_splice() {
         base: "abcZ".into(),
         delta: TextDelta {
             at: Pos::<Char>::ZERO,
-            delete: Count::<Char>::new(999),
+            delete: Len::<Char>::new(999),
             insert: String::new(),
         },
     });
@@ -5699,7 +5699,7 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
         message: Pos::<ThreadMessage>::new(1),
         delta: TextDelta {
             at: Pos::<Char>::new(3),
-            delete: Count::<Char>::ZERO,
+            delete: Len::<Char>::ZERO,
             insert: "o".to_owned(),
         },
     });

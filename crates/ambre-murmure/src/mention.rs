@@ -86,7 +86,7 @@ pub(crate) fn read(content: &LoroText, channel: Id<Channel>) -> Vec<Mention> {
         if let Some(target) = target {
             mentions.push(Mention {
                 target,
-                range: Span::<Char>::from_count(at, len),
+                range: Span::<Char>::from_len(at, len),
             });
         }
         at += len;

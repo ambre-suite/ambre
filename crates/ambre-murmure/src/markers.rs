@@ -8,7 +8,7 @@
 
 use ambre_bus::{StyleMark, TextStyle};
 use ambre_commands::{Key, KeyChar};
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Byte, Char, byte_to_char, char_len};
 use ambre_core::{Point, Px, View};
 
@@ -108,8 +108,8 @@ pub struct Unmarked {
 impl std::fmt::Debug for Unmarked {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Unmarked")
-            .field("between", &Count::<Byte>::from_len(self.between.len()))
-            .field("after", &Count::<Byte>::from_len(self.after.len()))
+            .field("between", &Len::<Byte>::of(self.between.len()))
+            .field("after", &Len::<Byte>::of(self.after.len()))
             .finish()
     }
 }
@@ -133,7 +133,7 @@ impl Closed {
     /// The chars of the text that stays, once the markers left.
     pub fn range(&self, text: &str) -> Span<Char> {
         let start = byte_to_char(text, self.span.start);
-        Span::<Char>::from_count(start, char_len(&text[self.inner.to_usize_range()]))
+        Span::<Char>::from_len(start, char_len(&text[self.inner.to_usize_range()]))
     }
 }
 
@@ -163,7 +163,7 @@ pub fn closed(text: &str, caret: Pos<Byte>, code: &[Span<Char>]) -> Option<Close
         .or_else(|| inline_code(line))
         .or_else(|| link(line))?;
     let shift = |span: Span<Byte>| {
-        let by = Count::<Byte>::from_len(line_start);
+        let by = Len::<Byte>::of(line_start);
         Span::<Byte>::new(span.start + by, span.end + by)
     };
     let closed = Closed {
@@ -338,8 +338,8 @@ pub struct DraftEdit<'a> {
 impl std::fmt::Debug for DraftEdit<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DraftEdit")
-            .field("before", &Count::<Byte>::from_len(self.before.len()))
-            .field("after", &Count::<Byte>::from_len(self.after.len()))
+            .field("before", &Len::<Byte>::of(self.before.len()))
+            .field("after", &Len::<Byte>::of(self.after.len()))
             .finish()
     }
 }

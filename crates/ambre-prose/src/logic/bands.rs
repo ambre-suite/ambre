@@ -238,7 +238,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::events::{BlockId, DateFieldFormat, Page, ProseCommand};
     use ambre_bus::app::prose::DocChar;
-    use ambre_core::index::{Count, Span};
+    use ambre_core::index::{Len, Span};
     use ambre_core::{Authored, Instant};
     use ambre_core::{Doc, Px};
 
@@ -653,14 +653,10 @@ pub(crate) mod tests {
             alice.document(),
             &header,
             Pos::<Page>::ZERO,
-            Count::<Page>::ONE,
+            Len::<Page>::ONE,
         );
-        let seen_by_bob = crate::band::resolve(
-            bob.document(),
-            &header,
-            Pos::<Page>::ZERO,
-            Count::<Page>::ONE,
-        );
+        let seen_by_bob =
+            crate::band::resolve(bob.document(), &header, Pos::<Page>::ZERO, Len::<Page>::ONE);
         assert_eq!(seen_by_alice, "2026-03-05");
         assert_eq!(seen_by_bob, seen_by_alice);
     }
@@ -683,7 +679,7 @@ pub(crate) mod tests {
             state.document(),
             &header,
             Pos::<Page>::ZERO,
-            Count::<Page>::ONE,
+            Len::<Page>::ONE,
         );
         assert_eq!(seeded, "2026-03-05");
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "en");
@@ -691,7 +687,7 @@ pub(crate) mod tests {
             state.document(),
             &header,
             Pos::<Page>::ZERO,
-            Count::<Page>::ONE,
+            Len::<Page>::ONE,
         );
         assert_eq!(english, "March 5, 2026");
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "fr");
@@ -699,7 +695,7 @@ pub(crate) mod tests {
             state.document(),
             &header,
             Pos::<Page>::ZERO,
-            Count::<Page>::ONE,
+            Len::<Page>::ONE,
         );
         assert_eq!(french, "5 mars 2026");
         // A peer's malformed tag is no language, not French nor English.
@@ -708,7 +704,7 @@ pub(crate) mod tests {
             state.document(),
             &header,
             Pos::<Page>::ZERO,
-            Count::<Page>::ONE,
+            Len::<Page>::ONE,
         );
         assert_eq!(unnamed, "2026-03-05");
     }
@@ -738,7 +734,7 @@ pub(crate) mod tests {
                     state.document(),
                     &header,
                     Pos::<crate::events::Page>::new(page),
-                    Count::<crate::events::Page>::new(3),
+                    Len::<crate::events::Page>::new(3),
                 )
             })
             .collect();
@@ -818,6 +814,6 @@ pub(crate) mod tests {
         let cap = layout.content_height * crate::layout::geometry::BAND_SHARE;
         assert!((layout.header_height - cap).abs() < Px::<Doc>::new(0.01));
         assert!(layout.body_height() >= layout.content_height * 0.5);
-        assert_eq!(layout.page_count, Count::<crate::events::Page>::new(1));
+        assert_eq!(layout.page_count, Len::<crate::events::Page>::new(1));
     }
 }

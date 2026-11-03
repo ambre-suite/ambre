@@ -7,7 +7,7 @@
 //! Nothing here writes to the document it reads (`PROSE-079`).
 
 use ambre_core::Ordinal;
-use ambre_core::index::{Count, IdxVec, Pos, Span};
+use ambre_core::index::{IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -46,7 +46,7 @@ pub struct PageLayout {
     /// Where the content box starts on the sheet.
     pub margin_left: Px<Doc>,
     pub margin_top: Px<Doc>,
-    pub page_count: Count<Page>,
+    pub page_count: Len<Page>,
     pub blocks: Vec<BlockLayout>,
     pub header_height: Px<Doc>,
     pub header_first_height: Px<Doc>,
@@ -734,7 +734,7 @@ fn table_metrics(
     let Some(grid) = Grid::read(tree, table) else {
         let empty = TextMetrics {
             text_height: Px::<Doc>::ZERO,
-            line_count: Count::<BlockLine>::ZERO,
+            line_count: Len::<BlockLine>::ZERO,
             line_tops: vec![Px::<Doc>::ZERO],
         };
         return (empty, TableShape::default());
@@ -742,7 +742,7 @@ fn table_metrics(
     let cols = grid.cells.iter().map(Vec::len).max().unwrap_or(0);
     let widths = column_widths(
         &doc::col_widths(tree, table),
-        Count::<Col>::from_len(cols),
+        Len::<Col>::of(cols),
         content_width,
     );
     let mut col_x = Vec::with_capacity(cols + 1);
@@ -800,14 +800,14 @@ fn table_metrics(
     // last row it spans.
     let mut row_heights: IdxVec<Row, Px<Doc>> = vec![Px::<Doc>::ZERO; grid.rows.len()].into();
     for (cell, height) in cells.iter().zip(&heights) {
-        if cell.rows.len() == Count::<Row>::ONE
+        if cell.rows.len() == Len::<Row>::ONE
             && let Some(slot) = row_heights.get_mut(cell.rows.start)
         {
             *slot = slot.max(*height);
         }
     }
     for (cell, height) in cells.iter().zip(&heights) {
-        if cell.rows.len() > Count::<Row>::ONE {
+        if cell.rows.len() > Len::<Row>::ONE {
             // A span the grid does not hold whole sums to nothing, as the
             // slice read gave before the rows were typed.
             let spanned: Px<Doc> = row_heights
@@ -844,10 +844,10 @@ fn table_metrics(
 /// gives every column an equal share.
 pub(crate) fn column_widths(
     stored: &[PrintLength<Pt>],
-    cols: Count<Col>,
+    cols: Len<Col>,
     content_width: Px<Doc>,
 ) -> Vec<Px<Doc>> {
-    let usable = Count::<Col>::from_len(stored.len()) == cols
+    let usable = Len::<Col>::of(stored.len()) == cols
         && stored
             .iter()
             .all(|width| width.is_finite() && *width > PrintLength::<Pt>::ZERO);
@@ -1078,7 +1078,7 @@ mod tests {
         // A document with no register at all is the case a reader that mints
         // one would be caught by (`PROSE-079`).
         assert_eq!(format!("{:?}", document.get_deep_value()), before);
-        assert_eq!(layout.page_count, Count::<crate::events::Page>::new(1));
+        assert_eq!(layout.page_count, Len::<crate::events::Page>::new(1));
         assert_eq!(
             layout
                 .blocks_on_page(Pos::<crate::events::Page>::new(0))
@@ -1101,7 +1101,7 @@ mod tests {
         }
         let mut measurer = crate::layout::measure::shipped_measurer();
         let layout = lay_out(&mut measurer, &document);
-        assert_eq!(layout.page_count, Count::<crate::events::Page>::new(2));
+        assert_eq!(layout.page_count, Len::<crate::events::Page>::new(2));
         let Some(last) = layout.blocks.last() else {
             return;
         };

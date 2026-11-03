@@ -26,7 +26,7 @@
 
 use ambre_core::Rgb;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use proptest::prelude::*;
 
 use ambre_bus::{
@@ -157,7 +157,7 @@ impl Op {
                     crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
                     crate::CellPos::new(Pos::<Row>::new(ROWS - 1), Pos::<Col>::new(COLS - 1)),
                 ),
-                sort_col: Count::<Col>::new(0),
+                sort_col: Len::<Col>::new(0),
                 order: if ascending {
                     SortOrder::Ascending
                 } else {
@@ -209,15 +209,15 @@ impl Op {
                 payload: ClipboardPayload {
                     src_row: Pos::<Row>::new(0),
                     src_col: Pos::<Col>::new(0),
-                    rows: Count::<Row>::new(texts.len() as u32),
-                    cols: Count::<Col>::new(1),
+                    rows: Len::<Row>::new(texts.len() as u32),
+                    cols: Len::<Col>::new(1),
                     cells: texts
                         .into_iter()
                         .enumerate()
                         .filter(|(_, raw)| !raw.is_empty())
                         .map(|(dr, raw)| ClipboardCell {
-                            dr: Count::<Row>::new(dr as u32),
-                            dc: Count::<Col>::new(0),
+                            dr: Len::<Row>::new(dr as u32),
+                            dc: Len::<Col>::new(0),
                             raw,
                             bold: ambre_bus::Weight::Regular,
                             italic: ambre_bus::Slant::Upright,

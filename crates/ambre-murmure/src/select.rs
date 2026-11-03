@@ -8,7 +8,7 @@
 
 use ambre_bus::{Authored, Deletion, Instant};
 use ambre_core::id::{Id, User};
-use ambre_core::index::{Count, IdxVec, Pos, Span};
+use ambre_core::index::{IdxVec, Len, Pos, Span};
 use ambre_core::{Byte, Point, Px, View};
 
 use crate::list::{ListRow, MessageList, RowKey, UNKNOWN_MEMBER, row_of};
@@ -71,7 +71,7 @@ impl TextSelection {
         &self,
         keys: &IdxVec<ListRow, RowKey>,
         row: RowKey,
-        len: Count<Byte>,
+        len: Len<Byte>,
     ) -> Option<Span<Byte>> {
         let ((first, from), (last, to)) = self.ordered(keys)?;
         let i = row_of(keys, row)?;
@@ -117,7 +117,7 @@ impl TextSelection {
             let text = message.shown(name_of).len();
             let Some(span) = keys
                 .get(i)
-                .and_then(|&key| self.range_in(&keys, key, Count::<Byte>::from_len(body.len())))
+                .and_then(|&key| self.range_in(&keys, key, Len::<Byte>::of(body.len())))
             else {
                 continue;
             };
@@ -183,15 +183,15 @@ mod tests {
         };
         for selection in [down, up] {
             assert_eq!(
-                selection.range_in(&keys, keys[Pos::<ListRow>::new(0)], Count::<Byte>::new(5)),
+                selection.range_in(&keys, keys[Pos::<ListRow>::new(0)], Len::<Byte>::new(5)),
                 Some(Span::<Byte>::from_usize_range(2..5))
             );
             assert_eq!(
-                selection.range_in(&keys, keys[Pos::<ListRow>::new(1)], Count::<Byte>::new(5)),
+                selection.range_in(&keys, keys[Pos::<ListRow>::new(1)], Len::<Byte>::new(5)),
                 Some(Span::<Byte>::from_usize_range(0..5))
             );
             assert_eq!(
-                selection.range_in(&keys, keys[Pos::<ListRow>::new(2)], Count::<Byte>::new(5)),
+                selection.range_in(&keys, keys[Pos::<ListRow>::new(2)], Len::<Byte>::new(5)),
                 Some(Span::<Byte>::from_usize_range(0..3))
             );
         }
@@ -200,12 +200,12 @@ mod tests {
             focus: spot(&list, 1, 2),
         };
         assert_eq!(
-            none.range_in(&keys, keys[Pos::<ListRow>::new(1)], Count::<Byte>::new(5)),
+            none.range_in(&keys, keys[Pos::<ListRow>::new(1)], Len::<Byte>::new(5)),
             None,
             "a collapsed one"
         );
         assert_eq!(
-            none.range_in(&keys, keys[Pos::<ListRow>::new(0)], Count::<Byte>::new(5)),
+            none.range_in(&keys, keys[Pos::<ListRow>::new(0)], Len::<Byte>::new(5)),
             None
         );
     }

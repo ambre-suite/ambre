@@ -7,7 +7,7 @@
 
 use ambre_commands::SelectionMode;
 use ambre_core::StepDirection;
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 use ambre_core::{Doc, Point, Px, View};
 use ambre_draw::kinetic::EdgeSpeed;
 
@@ -76,7 +76,7 @@ impl ProseUiState {
     /// The first and the last text block of the document, the last with its
     /// length in the layout in force. They hold whether or not the layout in
     /// force carries them (`PROSE-UI-167`).
-    pub(crate) fn text_ends(&self) -> Option<(BlockId, BlockId, Count<RunChar>)> {
+    pub(crate) fn text_ends(&self) -> Option<(BlockId, BlockId, Len<RunChar>)> {
         let ends = self.shaped.ends()?;
         let last = block_id(ends.last);
         let len = self.run_of(last).map_or(ends.last_len, ParleyRunData::len);
@@ -103,15 +103,15 @@ impl ProseUiState {
     }
 
     /// How many code points a block holds, the draft typed into it counted.
-    pub(crate) fn block_len(&self, block: BlockId) -> Count<DocChar> {
+    pub(crate) fn block_len(&self, block: BlockId) -> Len<DocChar> {
         if let Some(run) = self.provisional_run(block) {
             return run.data().len().as_axis::<DocChar>();
         }
         let laid = self
             .run_of(block)
-            .map_or(Count::<RunChar>::ZERO, ParleyRunData::len);
+            .map_or(Len::<RunChar>::ZERO, ParleyRunData::len);
         let end = laid.as_end().as_axis::<DocChar>() + self.draft.delta(block);
-        end.count_from(Pos::<DocChar>::ZERO)
+        end.len_from(Pos::<DocChar>::ZERO)
     }
 
     /// A document offset, as the run [`Self::run_of`] gives counts it. A laid
@@ -277,7 +277,7 @@ impl ProseUiState {
             (Some(next), StepDirection::Backward) => (
                 next,
                 self.run_of(next)
-                    .map_or(Count::<RunChar>::ZERO, ParleyRunData::len)
+                    .map_or(Len::<RunChar>::ZERO, ParleyRunData::len)
                     .as_end(),
                 Affinity::Downstream,
             ),
@@ -364,7 +364,7 @@ impl ProseUiState {
 
     /// After a local insertion, advance the caret past it and reveal it. The
     /// column is dropped: an edit ends a run of vertical moves.
-    pub(crate) fn advance_cursor(&mut self, n: Count<DocChar>) {
+    pub(crate) fn advance_cursor(&mut self, n: Len<DocChar>) {
         let Some(cursor) = &mut self.cursor else {
             return;
         };

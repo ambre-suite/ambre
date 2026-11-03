@@ -18,7 +18,7 @@
 use ambre_bus::app::prose::{DocChar, FootnoteCall, HeadingLevel};
 use ambre_core::Ordinal;
 use ambre_core::id::{Footnote, Id};
-use ambre_core::index::{Axis, Count, Pos};
+use ambre_core::index::{Axis, Len, Pos};
 use loro::{LoroValue, TreeID};
 use std::collections::HashMap;
 
@@ -69,8 +69,8 @@ pub(super) enum ImportOp {
     },
     Table {
         parent: Parent,
-        rows: Count<Row>,
-        cols: Count<Col>,
+        rows: Len<Row>,
+        cols: Len<Col>,
     },
 }
 
@@ -177,8 +177,8 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
             let table = Pos::<Op>::from_usize(ops.len());
             ops.push(ImportOp::Table {
                 parent,
-                rows: Count::<Row>::from_len(rows.len()),
-                cols: Count::<Col>::from_len(cols),
+                rows: Len::<Row>::of(rows.len()),
+                cols: Len::<Col>::of(cols),
             });
             for (row, cells) in rows.iter().enumerate() {
                 for (col, cell) in cells.cells.iter().enumerate() {

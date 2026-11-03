@@ -5,12 +5,12 @@
 use super::*;
 use ambre_bus::app::trame::CellNumber;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Count, Pos};
+use ambre_core::index::{Len, Pos};
 
 const COL_0: Pos<Col> = Pos::<Col>::new(0);
 const COL_2: Pos<Col> = Pos::<Col>::new(2);
-const ROWS_1: Count<Row> = Count::<Row>::new(1);
-const ROWS_2: Count<Row> = Count::<Row>::new(2);
+const ROWS_1: Len<Row> = Len::<Row>::new(1);
+const ROWS_2: Len<Row> = Len::<Row>::new(2);
 const ROW_0: Pos<Row> = Pos::<Row>::new(0);
 const ROW_2: Pos<Row> = Pos::<Row>::new(2);
 
@@ -42,7 +42,7 @@ fn sort_range_formulas_follow_data() {
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
         ),
-        sort_col: Count::<Col>::new(0),
+        sort_col: Len::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -91,7 +91,7 @@ fn sort_range_sum_block_is_stable_under_internal_sort() {
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(0)),
         ),
-        sort_col: Count::<Col>::new(0),
+        sort_col: Len::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -122,7 +122,7 @@ fn sort_range_noops() {
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
-        sort_col: Count::<Col>::new(0),
+        sort_col: Len::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -135,7 +135,7 @@ fn sort_range_noops() {
             crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
-        sort_col: Count::<Col>::new(0),
+        sort_col: Len::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -268,7 +268,7 @@ fn sort_range_query_spans_the_used_width_of_a_row_band() {
     // A key on the third column the dialog offered orders the rows by it.
     state.handle_command(TrameCommand::SortSelectionMulti {
         sort_keys: vec![ambre_bus::SortKey {
-            col: Count::<Col>::new(2),
+            col: Len::<Col>::new(2),
             order: SortOrder::Ascending,
         }],
         header: HeaderRow::Absent,
@@ -352,11 +352,11 @@ fn sort_range_multi_lexicographic_with_per_key_direction() {
         ),
         sort_keys: vec![
             SortKey {
-                col: Count::<Col>::new(0),
+                col: Len::<Col>::new(0),
                 order: SortOrder::Ascending,
             },
             SortKey {
-                col: Count::<Col>::new(1),
+                col: Len::<Col>::new(1),
                 order: SortOrder::Descending,
             },
         ],
@@ -405,11 +405,11 @@ fn sort_selection_multi_resolves_against_tracked_selection() {
     let evts = state.handle_command(TrameCommand::SortSelectionMulti {
         sort_keys: vec![
             SortKey {
-                col: Count::<Col>::new(0),
+                col: Len::<Col>::new(0),
                 order: SortOrder::Ascending,
             },
             SortKey {
-                col: Count::<Col>::new(1),
+                col: Len::<Col>::new(1),
                 order: SortOrder::Ascending,
             },
         ],
@@ -453,11 +453,11 @@ fn sort_range_multi_pins_header_row() {
         ),
         sort_keys: vec![
             SortKey {
-                col: Count::<Col>::new(0),
+                col: Len::<Col>::new(0),
                 order: SortOrder::Ascending,
             },
             SortKey {
-                col: Count::<Col>::new(1),
+                col: Len::<Col>::new(1),
                 order: SortOrder::Ascending,
             },
         ],
@@ -505,7 +505,7 @@ fn sort_range_multi_no_keys_is_noop() {
             crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(0)),
         ),
         sort_keys: vec![SortKey {
-            col: Count::<Col>::new(5),
+            col: Len::<Col>::new(5),
             order: SortOrder::Ascending,
         }],
         header: HeaderRow::Absent,
@@ -540,11 +540,11 @@ fn sort_range_multi_already_sorted_emits_no_delta() {
         ),
         sort_keys: vec![
             SortKey {
-                col: Count::<Col>::new(0),
+                col: Len::<Col>::new(0),
                 order: SortOrder::Ascending,
             },
             SortKey {
-                col: Count::<Col>::new(1),
+                col: Len::<Col>::new(1),
                 order: SortOrder::Ascending,
             },
         ],

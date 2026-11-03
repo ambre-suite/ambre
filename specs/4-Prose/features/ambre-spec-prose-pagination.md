@@ -136,7 +136,7 @@ pub struct PageLayout {
     pub content_height:    Px<Doc>,
     pub margin_left:       Px<Doc>,
     pub margin_top:        Px<Doc>,
-    pub page_count:        Count<Page>,
+    pub page_count:        Len<Page>,
     pub blocks:            Vec<BlockLayout>,
     pub header_height:     Px<Doc>,
     pub header_first_height: Px<Doc>,

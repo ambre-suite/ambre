@@ -8,7 +8,7 @@
 //! peer's own colour (`PROSE-UI-014`). A paint reads the layout in force and
 //! writes nothing to the document (`PROSE-UI-120`).
 
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Byte, Tally};
 use ambre_core::{Px, Surface};
 use ambre_draw::{Affine, DocumentWalk, DrawSurface, Point, Rect};
@@ -122,7 +122,7 @@ type RunSpot = (BlockId, Pos<RunChar>);
 fn covered(
     ui: &ProseUiState,
     block: BlockId,
-    len: Count<RunChar>,
+    len: Len<RunChar>,
     ends: (RunSpot, RunSpot),
 ) -> Option<Span<RunChar>> {
     let ((first, from), (last, to)) = ends;
@@ -216,7 +216,7 @@ impl ProseUiState {
         // Typed after a marked span, the text lands in it (`PROSE-UI-208`).
         let marks = [crate::layout::measure::MarkedSpan {
             start: Pos::<Byte>::ZERO,
-            end: Count::<Byte>::from_len(text.len()).as_end(),
+            end: Len::<Byte>::of(text.len()).as_end(),
             ..run.map(|run| run.marks_before(at)).unwrap_or_default()
         }];
         // A shape is kept only in the style and the marks it was made in: the
@@ -761,7 +761,7 @@ mod tests {
     use crate::events::HeadingLevel;
     use crate::layout::run::RunChar;
     use ambre_bus::app::prose::DocChar;
-    use ambre_core::index::{Count, Pos, Span};
+    use ambre_core::index::{Len, Pos, Span};
     use ambre_core::{PrintLength, Pt};
 
     use ambre_core::Byte;
@@ -1806,7 +1806,7 @@ mod tests {
         );
         shape(&mut ui);
         assert_eq!(provisional(&ui, minted), "xyword");
-        assert_eq!(ui.block_len(minted), Count::<DocChar>::new(6));
+        assert_eq!(ui.block_len(minted), Len::<DocChar>::new(6));
     }
 
     /// `PROSE-UI-214`: a press in the paragraph a split opens lands in the

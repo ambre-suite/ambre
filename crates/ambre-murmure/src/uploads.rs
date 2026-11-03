@@ -6,7 +6,7 @@
 //! (`MURMURE-132`). A failed upload adds nothing, and the page tells the user
 //! (`MURMURE-133`). A draft never sends while one of its files still uploads.
 
-use ambre_core::index::{Axis, Count, Pos};
+use ambre_core::index::{Axis, Len, Pos};
 use std::collections::HashMap;
 
 use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType, Request};
@@ -39,7 +39,7 @@ pub struct PickedFile {
 impl std::fmt::Debug for PickedFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PickedFile")
-            .field("name", &Count::<Byte>::from_len(self.name.len()))
+            .field("name", &Len::<Byte>::of(self.name.len()))
             .field("media_type", &self.media_type)
             .field("data", &self.data)
             .finish()
@@ -117,7 +117,7 @@ impl std::fmt::Debug for Pending {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pending")
             .field("of", &self.of)
-            .field("name", &Count::<Byte>::from_len(self.name.len()))
+            .field("name", &Len::<Byte>::of(self.name.len()))
             .field("media_type", &self.media_type)
             .field("size", &self.size)
             .finish()
@@ -143,7 +143,7 @@ impl std::fmt::Debug for Uploaded {
             Self::Failed { of, name } => f
                 .debug_struct("Failed")
                 .field("of", of)
-                .field("name", &Count::<Byte>::from_len(name.len()))
+                .field("name", &Len::<Byte>::of(name.len()))
                 .finish(),
         }
     }

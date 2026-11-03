@@ -10,7 +10,7 @@ use ambre_bus::app::find::Match;
 use ambre_bus::app::prose::{DocChar, FindRefusal};
 use ambre_core::StepDirection;
 use ambre_core::index::Delta;
-use ambre_core::index::{Count, Pos, Span};
+use ambre_core::index::{Len, Pos, Span};
 use loro::TreeID;
 
 use crate::doc;
@@ -123,7 +123,7 @@ impl ProseState {
         let Some(session) = self.find.as_mut() else {
             return Self::err_no_search();
         };
-        let count = Count::<Match>::from_len(session.matches.len());
+        let count = Len::<Match>::of(session.matches.len());
         session.current = session
             .current
             .and_then(|at| at.wrapped(Delta::step(direction), count));
@@ -224,7 +224,7 @@ impl ProseState {
             return Vec::new();
         };
         let matches = self.find_all(&query);
-        let count = Count::<Match>::from_len(matches.len());
+        let count = Len::<Match>::of(matches.len());
         let current = match keep {
             Some(at) if at < count.as_end() => Some(at),
             _ if !count.is_zero() => Some(Pos::<Match>::ZERO),
@@ -397,8 +397,8 @@ mod tests {
         state.handle_command(ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(root),
-            rows: Count::<crate::events::grid::Row>::new(1),
-            cols: Count::<crate::events::grid::Col>::new(1),
+            rows: Len::<crate::events::grid::Row>::new(1),
+            cols: Len::<crate::events::grid::Col>::new(1),
         });
         let cell_text = state
             .document_order()

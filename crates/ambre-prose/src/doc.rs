@@ -1749,7 +1749,7 @@ pub(crate) fn anchors<V: Clone>(
                     _ => None,
                 });
             if let Some(value) = value {
-                for at in Span::<DocChar>::from_count(offset, length) {
+                for at in Span::<DocChar>::from_len(offset, length) {
                     out.push(Anchor {
                         block: id,
                         offset: at,
