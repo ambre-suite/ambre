@@ -708,12 +708,12 @@ pub(crate) fn weekday(args: &[CellValue]) -> CellValue {
 }
 
 /// Number of days in the month of `date`.
-pub(crate) fn days_in_month(date: DateParts) -> DayCount {
+pub(crate) fn days_in_month(date: DateParts) -> TimeSpan<Day> {
     let first = DateParts {
         day: DayOfMonth::new(1),
         ..date
     };
-    first.next_month_start().serial().days_since(first.serial())
+    first.next_month_start().serial() - first.serial()
 }
 
 /// The last day of the month of `date`.
@@ -744,7 +744,10 @@ pub(crate) fn edate(args: &[CellValue]) -> CellValue {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
-    let shifted = shift_month(DaySerial::new(serial).parts(), MonthCount::new(months));
+    let shifted = shift_month(
+        DateParts::of_day(Instant::<SheetDay>::new(serial)),
+        MonthCount::new(months),
+    );
     let day = shifted.day.min(last_day(shifted));
     CellValue::Number(DateParts { day, ..shifted }.serial().get() as f64)
 }
@@ -761,7 +764,10 @@ pub(crate) fn eomonth(args: &[CellValue]) -> CellValue {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
-    let shifted = shift_month(DaySerial::new(serial).parts(), MonthCount::new(months));
+    let shifted = shift_month(
+        DateParts::of_day(Instant::<SheetDay>::new(serial)),
+        MonthCount::new(months),
+    );
     let day = last_day(shifted);
     CellValue::Number(DateParts { day, ..shifted }.serial().get() as f64)
 }
