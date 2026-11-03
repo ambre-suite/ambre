@@ -7,7 +7,7 @@
 // has no wire message of its own (`SRV-102`).
 // ============================================================================
 
-use crate::messages::{Clock, Seq, Signature};
+use crate::messages::{DeltaAuthor, Relay, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::id::{Document, Id, Snapshot};
@@ -38,7 +38,7 @@ pub enum WsClientMsg {
     /// Request missing updates for a specific document after a known seq.
     RequestMissing {
         document_id: Id<Document>,
-        after_seq: Seq,
+        after_seq: Seq<Relay>,
     },
 
     /// The access token, as the first frame of the socket. The socket address
@@ -126,7 +126,7 @@ pub enum WsServerMsg {
     Subscribed { document_id: Id<Document> },
 
     /// Encrypted CRDT delta with server-assigned seq.
-    Update { seq: Seq, update: Update },
+    Update { seq: Seq<Relay>, update: Update },
 
     /// Encrypted ephemeral.
     Ephemeral(Ephemeral),
@@ -164,7 +164,7 @@ pub enum WsServerMsg {
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
         /// The highest delta its author says it folds in.
-        covered_seq: Seq,
+        covered_seq: Seq<Relay>,
     },
 
     /// The document key was rotated: every REMAINING member must re-fetch its
@@ -206,7 +206,7 @@ pub enum WsServerMsg {
     KeyRefused {
         document_id: Id<Document>,
         key_id: FixedBytes<KeyId>,
-        clock: Clock,
+        clock: Seq<DeltaAuthor>,
     },
 
     /// A delta refused for its clock: another session of the same author took
@@ -215,8 +215,8 @@ pub enum WsServerMsg {
     /// again from the `expected` clock on (`SYNC-147`).
     ClockRefused {
         document_id: Id<Document>,
-        clock: Clock,
-        expected: Clock,
+        clock: Seq<DeltaAuthor>,
+        expected: Seq<DeltaAuthor>,
         signature: FixedBytes<Signature>,
     },
     /// The members of this document changed: someone joined, left, or took
@@ -232,7 +232,7 @@ pub enum WsServerMsg {
     /// asks again from there (`SYNC-153`).
     ReplayStopped {
         document_id: Id<Document>,
-        after_seq: Seq,
+        after_seq: Seq<Relay>,
     },
 
     /// A delta refused before it took a sequence number, for its size, its

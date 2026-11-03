@@ -17,6 +17,7 @@ use super::ImportError;
 pub enum ImportDepth {}
 
 impl ambre_core::TallyKind for ImportDepth {
+    type Repr = u32;
     const NAME: &'static str = "ImportDepth";
 }
 

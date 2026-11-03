@@ -19,13 +19,13 @@
 //! [`LogicCommand::Rest`]: crate::LogicCommand::Rest
 //! [`LogicEvent::Rest`]: crate::LogicEvent::Rest
 
-use ambre_core::{FixedBytes, Generation, SessionNonce};
+use ambre_core::{FixedBytes, SessionNonce};
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space};
 
 use crate::{
-    ActivitySummary, DirectMember, DocType, Request, RestCommand, SealedChannelKey, Seq,
+    ActivitySummary, DirectMember, DocType, Relay, Request, RestCommand, SealedChannelKey, Seq,
     SnapshotPurpose, SnapshotVerdict,
 };
 
@@ -36,7 +36,7 @@ pub enum SyncCommand {
     /// A [`RestCommand`] service operation forwarded from the Logic thread. The
     /// Sync thread answers with [`crate::LogicEvent::Rest`] echoing `id`.
     Rest {
-        id: Generation<Request>,
+        id: Seq<Request>,
         cmd: RestCommand,
     },
 
@@ -64,7 +64,7 @@ pub enum SyncCommand {
     ReleaseDocument {
         document_id: Id<Document>,
         /// The highest relay number the evicted copy holds.
-        applied_seq: Seq,
+        applied_seq: Seq<Relay>,
     },
 
     /// Raw CRDT delta produced by `LoroDoc::export_updates()`.
@@ -93,7 +93,7 @@ pub enum SyncCommand {
         payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         /// The last delta `seq` the Logic thread holds with no gap below it.
         /// The snapshot claims to fold in every delta up to it (`SRV-083`).
-        covered_seq: Seq,
+        covered_seq: Seq<Relay>,
     },
 
     /// The Logic thread's verdict on a [`LogicEvent::PendingSnapshot`]
@@ -218,7 +218,7 @@ pub enum SyncCommand {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         lease: Id<Lease>,
-        horizon: Seq,
+        horizon: Seq<Relay>,
         payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
     },
     /// Ask the relay for the lease that folds the amendments of the final
@@ -238,8 +238,8 @@ pub enum SyncCommand {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         lease: Id<Lease>,
-        horizon: Seq,
-        amendments_seq: Seq,
+        horizon: Seq<Relay>,
+        amendments_seq: Seq<Relay>,
         payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
     },
     /// Count a segment of a closed channel as a light subscription, from its
@@ -255,7 +255,7 @@ pub enum SyncCommand {
     WatchThread {
         thread: Id<Document>,
         meta: Id<Meta>,
-        after: Seq,
+        after: Seq<Relay>,
     },
     /// Count a channel this session never opened, as light subscriptions
     /// (the Murmure notifications spec). Each of `documents` counts after
@@ -266,8 +266,8 @@ pub enum SyncCommand {
     WatchChannel {
         channel_id: Id<Channel>,
         meta: Id<Meta>,
-        meta_last: Option<Seq>,
-        documents: Vec<(Id<Document>, Option<Seq>)>,
+        meta_last: Option<Seq<Relay>>,
+        documents: Vec<(Id<Document>, Option<Seq<Relay>>)>,
     },
     /// Join a public channel alone. The Sync worker unseals `key` with the
     /// space key, wraps it for this user alone, and asks for the member row.
@@ -341,7 +341,7 @@ pub enum SyncCommand {
     /// as well as forward: marking a message unread (the Murmure unread
     /// spec). Only the listed segments move.
     MoveReadCursors {
-        cursors: Vec<(Id<Segment>, Seq)>,
+        cursors: Vec<(Id<Segment>, Seq<Relay>)>,
     },
     /// Move the cursor of one thread to the last sequence number this worker
     /// delivered on it (the Murmure threads spec). A reply sequenced and not

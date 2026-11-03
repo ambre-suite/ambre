@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{FoldAnswer, Seq};
+use ambre_bus::{FoldAnswer, Relay, Seq};
 
 use crate::updates::{SnapshotUpload, upload_snapshot};
 
@@ -43,7 +43,7 @@ pub(crate) async fn take_fold_lease(
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FoldReach {
     pub lease: Id<Lease>,
-    pub amendments_seq: Seq,
+    pub amendments_seq: Seq<Relay>,
 }
 
 /// Upload the fold snapshot of `segment`, then commit it under the lease of
@@ -94,7 +94,7 @@ impl SyncState {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         reach: FoldReach,
-        horizon: Seq,
+        horizon: Seq<Relay>,
         payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) {
         let document_id = segment.document_id();
@@ -156,7 +156,7 @@ mod tests {
     }
 
     /// A sealed snapshot of `document_id` covering the deltas up to `horizon`.
-    fn upload(document_id: Id<Document>, horizon: Seq) -> SnapshotUpload {
+    fn upload(document_id: Id<Document>, horizon: Seq<Relay>) -> SnapshotUpload {
         let key = DocumentKey::generate();
         let sk = MasterSeed::generate().derive_signing_key();
         let public_data = SnapshotPublicData {
@@ -212,9 +212,9 @@ mod tests {
             granted,
             Ok(FoldAnswer::Granted {
                 lease,
-                horizon: ambre_bus::Seq::new(41),
+                horizon: ambre_bus::Seq::<ambre_bus::Relay>::new(41),
                 amendments,
-                amendments_seq: ambre_bus::Seq::new(7),
+                amendments_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(7),
                 expires_in: TimeSpan::<Ms>::new(30_000)
             })
         );
@@ -251,10 +251,13 @@ mod tests {
             Ok((204, serde_json::Value::Null)),
         ]);
         let auth = session("access-1", "refresh-1");
-        let upload = upload(segment.document_id(), ambre_bus::Seq::new(41));
+        let upload = upload(
+            segment.document_id(),
+            ambre_bus::Seq::<ambre_bus::Relay>::new(41),
+        );
         let reach = FoldReach {
             lease,
-            amendments_seq: ambre_bus::Seq::new(7),
+            amendments_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(7),
         };
         let committed =
             commit_fold(&transport, &auth, &root(), channel, segment, reach, upload).await;

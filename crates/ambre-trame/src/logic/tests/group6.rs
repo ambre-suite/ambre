@@ -253,7 +253,7 @@ fn a_search_reads_past_the_requested_window() {
         });
     }
     state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(1),
+        version: ambre_core::Seq::nth(1),
         row_start: Pos::<Row>::new(0),
         row_end: Pos::<Row>::new(30),
         col_start: Pos::<Col>::new(0),

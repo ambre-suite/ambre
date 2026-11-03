@@ -166,6 +166,7 @@ impl std::fmt::Debug for CondFormatKind {
 pub enum Ranks {}
 
 impl ambre_core::TallyKind for Ranks {
+    type Repr = u32;
     const NAME: &'static str = "RankCount";
 }
 

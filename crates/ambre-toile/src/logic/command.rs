@@ -23,7 +23,7 @@ pub use ambre_bus::app::toile::{
     ToileEvent, Viewport, ZOrder, ZTarget,
 };
 pub use ambre_bus::rest::Request;
-use ambre_core::Generation;
+use ambre_core::Seq;
 
 // -----------------------------------------------------------------------------
 // Outcome -- engine-local, like `TrameOutcome`.
@@ -39,11 +39,11 @@ use ambre_core::Generation;
 #[derive(Debug)]
 pub enum ToileRequest {
     UploadMedia {
-        id: Generation<Request>,
+        id: Seq<Request>,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
     DownloadMedia {
-        id: Generation<Request>,
+        id: Seq<Request>,
         content_hash: ambre_core::ContentHash,
     },
 }

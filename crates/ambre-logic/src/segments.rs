@@ -129,10 +129,10 @@ impl LogicState {
         let Some(closing) = channel.finalizing_id() else {
             return;
         };
-        let covered = self
-            .channel_ledgers
-            .get(&closing.document_id())
-            .map_or(Seq::ZERO, snapshot_check::SeqLedger::contiguous_end);
+        let covered = self.channel_ledgers.get(&closing.document_id()).map_or(
+            Seq::<Relay>::ZERO,
+            snapshot_check::SeqLedger::contiguous_end,
+        );
         match channel.final_snapshot(now, covered) {
             Ok(Some(snapshot)) => self.send_to_sync(SyncCommand::FinalizeSegment {
                 channel_id,

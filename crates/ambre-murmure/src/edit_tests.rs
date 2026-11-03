@@ -6,9 +6,9 @@ use ambre_bus::Char;
 use ambre_bus::{
     ActivityKind, Authored, Instant, Mention, MentionTarget, MessageDraft, MessageView, Reaction,
 };
-use ambre_core::Seq;
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::index::Span;
+use ambre_core::{Relay, Seq};
 
 use crate::schema::{self, Root};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
@@ -43,7 +43,7 @@ impl Member {
         self.state
             .apply_signed(
                 sent.segment.document_id(),
-                Seq::new(seq),
+                Seq::<Relay>::new(seq),
                 &sent.delta,
                 from.signer(),
             )

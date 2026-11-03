@@ -10,7 +10,7 @@ use ambre_bus::{
     ActivityKind, Authored, Instant, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
-use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::{LoroDoc, LoroMap, VersionVector};
 
 use crate::channel::read_messages;
@@ -141,7 +141,7 @@ fn bob_holding(
     assert_eq!(bob.amendments_to_open(), [amendments]);
     bob.apply_signed(
         amendments,
-        Seq::new(1),
+        Seq::<Relay>::new(1),
         first,
         signer(alice, amendments, author),
     )
@@ -312,7 +312,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
     let by_alice = signer(&alice, amendments, author);
     for (seq, payload) in [(1, &first), (2, &edited.delta)] {
         let events = bob
-            .apply_signed(amendments, Seq::new(seq), payload, by_alice)
+            .apply_signed(amendments, Seq::<Relay>::new(seq), payload, by_alice)
             .expect("waits");
         assert!(events.is_empty());
     }
@@ -322,7 +322,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
 
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
     let events = bob
-        .apply_signed(amendments, Seq::new(3), &deleted.delta, by_alice)
+        .apply_signed(amendments, Seq::<Relay>::new(3), &deleted.delta, by_alice)
         .expect("applies");
     assert_eq!(events.len(), 1);
     assert_eq!(
@@ -359,7 +359,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
     let forged = json_since(doc, &before);
     let by_bob = signer(&bob, amendments, bob_user);
     assert_eq!(
-        alice.apply_signed(amendments, Seq::new(2), &forged, by_bob),
+        alice.apply_signed(amendments, Seq::<Relay>::new(2), &forged, by_bob),
         Err(MurmureError::Refused(Refusal::ForeignMessage))
     );
 
@@ -371,7 +371,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
     let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, alice_user);
     bob.apply_signed(
         amendments,
-        Seq::new(2),
+        Seq::<Relay>::new(2),
         &edited.delta,
         signer(&alice, amendments, alice_user),
     )
@@ -391,7 +391,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
     assert_eq!(
         alice.apply_signed(
             amendments,
-            Seq::new(3),
+            Seq::<Relay>::new(3),
             &forged,
             signer(&bob, amendments, bob_user)
         ),
@@ -425,7 +425,7 @@ fn an_amendment_outside_its_segment_is_refused() {
     assert_eq!(
         alice.apply_signed(
             amendments,
-            Seq::new(2),
+            Seq::<Relay>::new(2),
             &forged,
             signer(&bob, amendments, author)
         ),
@@ -452,7 +452,7 @@ fn an_amendment_outside_its_segment_is_refused() {
     carol
         .apply_signed(
             amendments,
-            Seq::new(1),
+            Seq::<Relay>::new(1),
             &first,
             signer(&alice, amendments, author),
         )
@@ -548,7 +548,7 @@ fn another_member_finds_the_thread_of_a_locked_root() {
     let replier = Id::<User>::mint();
     bob.apply_signed(
         amendments,
-        Seq::new(2),
+        Seq::<Relay>::new(2),
         &recorded.delta,
         signer(&alice, amendments, replier),
     )
@@ -573,7 +573,7 @@ fn a_thread_record_outside_the_rule_is_refused() {
     let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
     bob.apply_signed(
         amendments,
-        Seq::new(2),
+        Seq::<Relay>::new(2),
         &recorded.delta,
         signer(&alice, amendments, author),
     )
@@ -623,7 +623,7 @@ fn a_thread_record_outside_the_rule_is_refused() {
         assert_eq!(
             alice.apply_signed(
                 amendments,
-                Seq::new(seq),
+                Seq::<Relay>::new(seq),
                 &forged,
                 signer(&bob, amendments, user)
             ),

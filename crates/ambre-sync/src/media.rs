@@ -77,7 +77,7 @@ impl SyncState {
     /// (`SYNC-145`).
     pub(crate) fn handle_upload_media(
         &mut self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     ) {
@@ -181,7 +181,7 @@ impl SyncState {
     /// 4. Emits [`SyncEvent::MediaDownloaded`] with the plaintext data.
     pub(crate) fn handle_download_media(
         &self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     ) {
@@ -228,7 +228,7 @@ impl SyncState {
     /// it could read (`SRV-139`).
     pub(crate) fn handle_erase_media(
         &self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     ) {
@@ -311,12 +311,7 @@ impl MediaHttp for GlooHttp {
 }
 
 /// Reports a failed media leg to the caller that asked for it.
-fn report(
-    logic_tx: &LogicSink,
-    id: Generation<Request>,
-    request: ApiRequest,
-    error: impl http::Reported,
-) {
+fn report(logic_tx: &LogicSink, id: Seq<Request>, request: ApiRequest, error: impl http::Reported) {
     let _ = logic_tx.send(LogicEvent::ApiError {
         id: Some(id),
         request,
@@ -328,7 +323,7 @@ fn report(
 /// One upload a caller asked for: the plaintext, where it goes, and the keys
 /// that seal it.
 pub(crate) struct Upload {
-    id: Generation<Request>,
+    id: Seq<Request>,
     document_id: Id<Document>,
     data: ambre_core::Payload<ambre_core::MediaBytes>,
     address: FixedBytes<MediaAddress>,
@@ -377,7 +372,7 @@ async fn upload_media(
 async fn download_media(
     http: &impl MediaHttp,
     base: &crate::http::Url<http::Route>,
-    id: Generation<Request>,
+    id: Seq<Request>,
     content_hash: ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
@@ -404,7 +399,7 @@ async fn download_media(
 async fn erase_media(
     http: &impl MediaHttp,
     base: &crate::http::Url<http::Route>,
-    id: Generation<Request>,
+    id: Seq<Request>,
     document_id: Id<Document>,
     content_hash: ambre_core::ContentHash,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
@@ -722,7 +717,7 @@ mod tests {
     fn answers(
         logic: &ambre_bus::conduit::Receiver<LogicEvent>,
         events: &ambre_bus::conduit::Receiver<SyncEvent>,
-    ) -> (Vec<(Option<Generation<Request>>, String)>, Vec<SyncEvent>) {
+    ) -> (Vec<(Option<Seq<Request>>, String)>, Vec<SyncEvent>) {
         let errors = logic
             .try_iter()
             .filter_map(|event| match event {

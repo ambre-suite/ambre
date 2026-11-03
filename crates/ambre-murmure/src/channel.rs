@@ -17,7 +17,7 @@ use ambre_bus::{
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
 use ambre_core::{
-    DeltaBytes, LoroPayload, LoroPayloadRef, Payload, PeerEntryBytes, Seq, SnapshotBytes,
+    DeltaBytes, LoroPayload, LoroPayloadRef, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes,
 };
 use loro::{
     Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, UpdateOptions, ValueOrContainer,
@@ -736,10 +736,10 @@ impl ChannelState {
 
     /// The highest number the relay delivered for `document_id`, `Seq::ZERO`
     /// for none.
-    pub fn delivered(&self, document_id: Id<Document>) -> Seq {
+    pub fn delivered(&self, document_id: Id<Document>) -> Seq<Relay> {
         self.sequences
             .get(&document_id)
-            .map_or(Seq::ZERO, Sequence::delivered)
+            .map_or(Seq::<Relay>::ZERO, Sequence::delivered)
     }
 
     /// The messages of `segment` past the cursor `read`, written by someone
@@ -755,7 +755,7 @@ impl ChannelState {
     pub fn unread(
         &self,
         segment: Id<Segment>,
-        read: Seq,
+        read: Seq<Relay>,
         me: Id<User>,
     ) -> Result<ambre_core::Tally<Unread>, MurmureError> {
         self.count_in(segment.document_id(), read, me, |_| true)
@@ -771,7 +771,7 @@ impl ChannelState {
     pub fn mentions(
         &self,
         segment: Id<Segment>,
-        read: Seq,
+        read: Seq<Relay>,
         me: Id<User>,
     ) -> Result<ambre_core::Tally<Mentions>, MurmureError> {
         self.mentions_in(segment.document_id(), read, me)
@@ -786,7 +786,7 @@ impl ChannelState {
     pub fn thread_mentions(
         &self,
         thread: Id<Document>,
-        read: Seq,
+        read: Seq<Relay>,
         me: Id<User>,
     ) -> Result<ambre_core::Tally<Mentions>, MurmureError> {
         if !self.is_thread(thread) {
@@ -800,7 +800,7 @@ impl ChannelState {
     fn mentions_in(
         &self,
         document_id: Id<Document>,
-        read: Seq,
+        read: Seq<Relay>,
         me: Id<User>,
     ) -> Result<ambre_core::Tally<Mentions>, MurmureError> {
         let channel = self.channel_id;
@@ -816,7 +816,7 @@ impl ChannelState {
     fn count_in(
         &self,
         document_id: Id<Document>,
-        read: Seq,
+        read: Seq<Relay>,
         me: Id<User>,
         counts: impl Fn(&Fields<MessageKey>) -> bool,
     ) -> Result<Tally<Messages>, MurmureError> {
@@ -836,7 +836,7 @@ impl ChannelState {
     /// A message not numbered yet reads as unread, as it counts.
     pub fn first_unread(
         &self,
-        read_of: impl Fn(Id<Segment>) -> Seq,
+        read_of: impl Fn(Id<Segment>) -> Seq<Relay>,
         me: Id<User>,
     ) -> Option<Id<Message>> {
         let held = self.held_segments();
@@ -859,7 +859,7 @@ impl ChannelState {
     fn each_unread(
         &self,
         document_id: Id<Document>,
-        read: Seq,
+        read: Seq<Relay>,
         me: Id<User>,
         mut each: impl FnMut(Id<Message>, &Fields<MessageKey>),
     ) -> Result<(), MurmureError> {
@@ -1571,7 +1571,7 @@ impl ChannelState {
     pub fn apply_signed(
         &mut self,
         document_id: Id<Document>,
-        seq: Seq,
+        seq: Seq<Relay>,
         payload: &Payload<DeltaBytes>,
         signer: Signer,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {

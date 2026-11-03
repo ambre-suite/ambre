@@ -54,8 +54,14 @@ async fn refuse_delta(
 /// could not be read. Returns that run and the unreadable seq, if any, so the
 /// page never carries a hole the caller cannot see (`SRV-041`).
 pub(crate) fn contiguous_prefix(
-    mut fetched: Vec<(ambre_core::Seq, Option<ambre_protocol::SeqUpdate>)>,
-) -> (Vec<ambre_protocol::SeqUpdate>, Option<ambre_core::Seq>) {
+    mut fetched: Vec<(
+        ambre_core::Seq<ambre_core::Relay>,
+        Option<ambre_protocol::SeqUpdate>,
+    )>,
+) -> (
+    Vec<ambre_protocol::SeqUpdate>,
+    Option<ambre_core::Seq<ambre_core::Relay>>,
+) {
     fetched.sort_by_key(|(seq, _)| *seq);
     let mut prefix = Vec::with_capacity(fetched.len());
     for (seq, update) in fetched {
@@ -554,7 +560,7 @@ async fn store_index_row(
     state: &Arc<AppState>,
     doc_id: Id<Document>,
     update: &ambre_protocol::Update,
-    seq: ambre_core::Seq,
+    seq: ambre_core::Seq<ambre_core::Relay>,
     s3_key: &ambre_core::ObjectKey,
     wire: &StoredPayload,
 ) -> Result<bool, AppError> {
@@ -663,7 +669,7 @@ pub(crate) async fn handle_request_missing(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
     document_id: Id<Document>,
-    after_seq: ambre_protocol::messages::Seq,
+    after_seq: ambre_protocol::messages::Seq<ambre_protocol::messages::Relay>,
     outbound_tx: &mpsc::Sender<StoredPayload>,
 ) {
     if !conn.doc_subscriptions.contains(&document_id) {
@@ -900,8 +906,8 @@ mod postcard_tests {
     use ambre_core::id::{Document, Id, Snapshot};
     use ambre_core::{FixedBytes, PublicKey, RefusalCode};
     use ambre_protocol::messages::{
-        Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce, Seq, SeqUpdate, Signature,
-        Update,
+        Ciphertext, CommitmentTag, DeltaAuthor, Ephemeral, Ephemerals, Nonce, Relay, Seq,
+        SeqUpdate, Signature, Update,
     };
     use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
     use ambre_protocol::ws::{
@@ -918,7 +924,7 @@ mod postcard_tests {
                 pub_key: FixedBytes::<PublicKey>::from_array([6u8; 32]),
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([7u8; 16]),
-                clock: Clock::new(42),
+                clock: Seq::<DeltaAuthor>::new(42),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([8u8; 32]),
             signature: FixedBytes::<Signature>::from_array([9u8; 64]),
@@ -933,7 +939,7 @@ mod postcard_tests {
                 document_id: Id::<Document>::from_bytes([13u8; 16]),
                 pub_key: FixedBytes::<PublicKey>::from_array([14u8; 32]),
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-                counter: Counter::new(15),
+                counter: Seq::<Ephemerals>::new(15),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([16u8; 32]),
             signature: FixedBytes::<Signature>::from_array([17u8; 64]),
@@ -980,7 +986,7 @@ mod postcard_tests {
     fn roundtrip_client_request_missing() {
         let msg = WsClientMsg::RequestMissing {
             document_id: Id::<Document>::from_bytes([1u8; 16]),
-            after_seq: Seq::new(5),
+            after_seq: Seq::<Relay>::new(5),
         };
         let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsClientMsg::RequestMissing { .. }));
@@ -998,7 +1004,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_server_update() {
         let msg = WsServerMsg::Update {
-            seq: Seq::new(100),
+            seq: Seq::<Relay>::new(100),
             update: make_update(),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
@@ -1017,7 +1023,7 @@ mod postcard_tests {
         let msg = WsServerMsg::MissingUpdates {
             document_id: Id::<Document>::from_bytes([3u8; 16]),
             updates: vec![SeqUpdate {
-                seq: Seq::new(1),
+                seq: Seq::<Relay>::new(1),
                 update: make_update(),
             }],
         };
@@ -1039,7 +1045,7 @@ mod postcard_tests {
         let msg = WsServerMsg::SnapshotAvailable {
             document_id: Id::<Document>::from_bytes([5u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([6u8; 16]),
-            covered_seq: Seq::new(9),
+            covered_seq: Seq::<Relay>::new(9),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::SnapshotAvailable { .. }));
@@ -1113,7 +1119,7 @@ mod ephemeral_binding_tests {
     use ambre_core::PublicKey;
     use ambre_core::{Sec, TimeSpan};
     use ambre_protocol::messages::{
-        Ciphertext, CommitmentTag, Counter, Ephemeral, Nonce, Signature,
+        Ciphertext, CommitmentTag, Ephemeral, Ephemerals, Nonce, Seq, Signature,
     };
     use ambre_protocol::public_data::EphemeralPublicData;
     use rustis::commands::{GenericCommands, HashCommands};
@@ -1177,7 +1183,7 @@ mod ephemeral_binding_tests {
                 document_id: doc_id,
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-                counter: Counter::new(1),
+                counter: Seq::<Ephemerals>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -1197,7 +1203,7 @@ mod ephemeral_binding_tests {
             document_id: doc_id,
             pub_key: *pub_key,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-            counter: Counter::new(1),
+            counter: Seq::<Ephemerals>::new(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([6u8; 32]);
@@ -1440,7 +1446,9 @@ mod delta_size_cap_tests {
     use super::*;
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
-    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::messages::{
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
+    };
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
 
@@ -1507,7 +1515,7 @@ mod delta_size_cap_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Clock::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -1686,7 +1694,7 @@ mod delta_size_cap_tests {
             &state,
             &mut conn,
             doc_id,
-            ambre_protocol::messages::Seq::new(0),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::Relay>::new(0),
             &tx,
         )
         .await;
@@ -1716,7 +1724,9 @@ mod access_tests {
     use crate::test_helpers::{create_test_document, create_test_user};
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
-    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::messages::{
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
+    };
     use ambre_protocol::public_data::UpdatePublicData;
     use ambre_protocol::ws::{WsServerMsg, decode_server_msg};
     use rustis::commands::{GenericCommands, HashCommands, ListCommands};
@@ -1773,7 +1783,7 @@ mod access_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Clock::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -1838,7 +1848,7 @@ mod access_tests {
             &state,
             &mut conn,
             doc_id,
-            ambre_protocol::messages::Seq::new(0),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::Relay>::new(0),
             &tx,
         )
         .await;
@@ -1924,7 +1934,7 @@ mod access_tests {
             &state,
             &mut kept,
             doc_id,
-            ambre_protocol::messages::Seq::new(0),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::Relay>::new(0),
             &tx,
         )
         .await;
@@ -1950,7 +1960,7 @@ mod access_tests {
             &state,
             &mut removed,
             doc_id,
-            ambre_protocol::messages::Seq::new(0),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::Relay>::new(0),
             &tx,
         )
         .await;
@@ -1999,7 +2009,7 @@ mod access_tests {
             db::get_updates_after(
                 &pool,
                 &doc_id,
-                ambre_core::Seq::new(0),
+                ambre_core::Seq::<ambre_core::Relay>::new(0),
                 ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>()
             )
             .await
@@ -2015,7 +2025,9 @@ mod ed25519_tests {
     use super::*;
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
-    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::messages::{
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
+    };
     use ambre_protocol::public_data::UpdatePublicData;
     use ed25519_dalek::{Signer, SigningKey};
 
@@ -2035,7 +2047,7 @@ mod ed25519_tests {
             pub_key: pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([1u8; 16]),
-            clock: Clock::new(1),
+            clock: Seq::<DeltaAuthor>::new(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([3u8; 24]);
         let ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![4, 5, 6]);
@@ -2131,7 +2143,7 @@ mod ed25519_tests {
                 pub_key: pubkey,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Clock::new(0),
+                clock: Seq::<DeltaAuthor>::new(0),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2155,7 +2167,7 @@ mod ed25519_tests {
             pub_key: pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-            clock: Clock::new(0),
+            clock: Seq::<DeltaAuthor>::new(0),
         };
         let nonce = FixedBytes::<Nonce>::from_array([0u8; 24]);
         let ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![1, 2, 3]);
@@ -2187,13 +2199,13 @@ mod ed25519_tests {
         doc_id: Id<Document>,
         ciphertext: Vec<u8>,
     ) -> ambre_protocol::Ephemeral {
-        use ambre_protocol::messages::Counter;
+        use ambre_protocol::messages::{Ephemerals, Seq};
         use ambre_protocol::public_data::EphemeralPublicData;
         let public_data = EphemeralPublicData {
             document_id: doc_id,
             pub_key: *pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-            counter: Counter::new(1),
+            counter: Seq::<Ephemerals>::new(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([2u8; 24]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([3u8; 32]);
@@ -2244,7 +2256,9 @@ mod ed25519_tests {
                 document_id: Id::<Document>::from_bytes([0u8; 16]),
                 pub_key: pubkey,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-                counter: ambre_protocol::messages::Counter::new(1),
+                counter: ambre_protocol::messages::Seq::<ambre_protocol::messages::Ephemerals>::new(
+                    1,
+                ),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2258,9 +2272,11 @@ mod refusal_tests {
     use super::*;
 
     fn seq_update(seq: u64) -> ambre_protocol::SeqUpdate {
-        use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Seq, Signature};
+        use ambre_protocol::messages::{
+            Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Relay, Seq, Signature,
+        };
         ambre_protocol::SeqUpdate {
-            seq: Seq::new(seq),
+            seq: Seq::<Relay>::new(seq),
             update: ambre_protocol::Update {
                 ciphertext: ambre_core::Payload::<Ciphertext>::new(vec![seq as u8]),
                 nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
@@ -2269,7 +2285,7 @@ mod refusal_tests {
                     pub_key: ambre_core::FixedBytes::<PublicKey>::from_array([1u8; 32]),
                     key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                     snapshot_id: Id::<ambre_core::id::Snapshot>::from_bytes([0u8; 16]),
-                    clock: Clock::new(seq),
+                    clock: Seq::<DeltaAuthor>::new(seq),
                 },
                 commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
                 signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2279,21 +2295,27 @@ mod refusal_tests {
 
     #[test]
     fn a_replay_page_stops_at_the_first_unreadable_delta() {
-        use ambre_core::Seq;
+        use ambre_core::{Relay, Seq};
         let fetched = vec![
-            (Seq::new(4), Some(seq_update(4))),
-            (Seq::new(2), Some(seq_update(2))),
-            (Seq::new(3), None),
-            (Seq::new(1), Some(seq_update(1))),
+            (Seq::<Relay>::new(4), Some(seq_update(4))),
+            (Seq::<Relay>::new(2), Some(seq_update(2))),
+            (Seq::<Relay>::new(3), None),
+            (Seq::<Relay>::new(1), Some(seq_update(1))),
         ];
         let (page, unreadable) = contiguous_prefix(fetched);
         let seqs: Vec<u64> = page.iter().map(|u| u.seq.get()).collect();
         assert_eq!(seqs, [1, 2], "seq 4 is held back behind the hole at 3");
-        assert_eq!(unreadable, Some(Seq::new(3)));
+        assert_eq!(unreadable, Some(Seq::<Relay>::new(3)));
 
         let (page, unreadable) = contiguous_prefix(vec![
-            (ambre_core::Seq::new(2), Some(seq_update(2))),
-            (ambre_core::Seq::new(1), Some(seq_update(1))),
+            (
+                ambre_core::Seq::<ambre_core::Relay>::new(2),
+                Some(seq_update(2)),
+            ),
+            (
+                ambre_core::Seq::<ambre_core::Relay>::new(1),
+                Some(seq_update(1)),
+            ),
         ]);
         assert_eq!(page.len(), 2);
         assert_eq!(unreadable, None);
@@ -2305,8 +2327,9 @@ mod refusal_tests {
         let refusal = update_refusal(
             &update,
             &AppError::ClockMismatch {
-                expected: ambre_protocol::messages::Clock::new(5),
-                got: ambre_protocol::messages::Clock::new(9),
+                expected:
+                    ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(5),
+                got: ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(9),
             },
         );
         let WsServerMsg::ClockRefused {
@@ -2469,7 +2492,9 @@ mod hot_tail_tests {
     };
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
-    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::messages::{
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
+    };
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
 
@@ -2512,7 +2537,7 @@ mod hot_tail_tests {
             pub_key: FixedBytes::<PublicKey>::from_array(key.verifying_key().to_bytes()),
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-            clock: Clock::new(clock),
+            clock: Seq::<DeltaAuthor>::new(clock),
         };
         let ciphertext = vec![u8::try_from(clock % 256).unwrap(); len];
         let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
@@ -2543,7 +2568,7 @@ mod hot_tail_tests {
             state,
             conn,
             doc_id,
-            ambre_protocol::messages::Seq::new(0),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::Relay>::new(0),
             &tx,
         )
         .await;
@@ -2571,7 +2596,7 @@ mod hot_tail_tests {
         let rows = db::get_updates_after(
             &state.db,
             &doc_id,
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
         )
         .await
@@ -2591,7 +2616,7 @@ mod hot_tail_tests {
         let rows = db::get_updates_after(
             &state.db,
             &doc_id,
-            ambre_core::Seq::new(1),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
             ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
         )
         .await
@@ -2632,7 +2657,7 @@ mod hot_tail_tests {
             db::get_updates_after(
                 &state.db,
                 &doc_id,
-                ambre_core::Seq::new(0),
+                ambre_core::Seq::<ambre_core::Relay>::new(0),
                 ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
             )
             .await
@@ -2709,8 +2734,8 @@ mod hot_tail_tests {
         let batch = crate::hot_tail::batch_key(
             &state.config.s3_env_prefix,
             &doc_id,
-            ambre_core::Seq::new(1),
-            ambre_core::Seq::new(4),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            ambre_core::Seq::<ambre_core::Relay>::new(4),
         );
         assert_eq!(replay(&state, &mut conn, doc_id).await, before);
         assert_eq!(
@@ -2730,7 +2755,9 @@ mod channel_gate_tests {
     use crate::test_helpers::test_app_state;
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
-    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::messages::{
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
+    };
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
 
@@ -2812,7 +2839,7 @@ mod channel_gate_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Clock::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

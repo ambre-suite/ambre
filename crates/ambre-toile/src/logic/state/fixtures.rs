@@ -529,6 +529,7 @@ impl FixtureGen for ToileBenchFixture {
 pub enum Tiles {}
 
 impl ambre_core::TallyKind for Tiles {
+    type Repr = u32;
     const NAME: &'static str = "TileCount";
 }
 

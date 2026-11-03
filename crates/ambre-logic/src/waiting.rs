@@ -12,14 +12,14 @@
 
 use std::collections::BTreeMap;
 
-use ambre_core::Seq;
+use ambre_core::{Relay, Seq};
 use loro::{ID, LoroDoc};
 
 /// The relay's number of each imported delta still missing a dependency, and
 /// the dependencies it misses.
 #[derive(Debug, Default)]
 pub(crate) struct Waiting {
-    deps: BTreeMap<Seq, Vec<ID>>,
+    deps: BTreeMap<Seq<Relay>, Vec<ID>>,
     /// Set once the document was reported, so the user is told once per open.
     reported: bool,
 }
@@ -29,11 +29,11 @@ impl Waiting {
     /// A seq of 0 is no relay's number and is ignored.
     pub(crate) fn note(
         &mut self,
-        seq: Seq,
+        seq: Seq<Relay>,
         payload: &ambre_core::Payload<ambre_core::DeltaBytes>,
         doc: &LoroDoc,
     ) {
-        if seq == Seq::ZERO {
+        if seq == Seq::<Relay>::ZERO {
             return;
         }
         let missing = missing(payload, doc);
@@ -54,7 +54,7 @@ impl Waiting {
 
     /// `true` the first time a delta at or below `held_through` still waits.
     /// Every delta below it is held, so what it waits on never arrives.
-    pub(crate) fn stalled(&mut self, held_through: Seq) -> bool {
+    pub(crate) fn stalled(&mut self, held_through: Seq<Relay>) -> bool {
         if self.reported || self.deps.range(..=held_through).next().is_none() {
             return false;
         }
@@ -111,14 +111,18 @@ mod tests {
         let reader = scaffold(ambre_core::PeerId::new(8));
         reader.import(&delta).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq::new(1), &delta.clone().into(), &reader);
+        waiting.note(
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            &delta.clone().into(),
+            &reader,
+        );
         waiting.settle(&reader);
         assert!(
-            waiting.stalled(ambre_core::Seq::new(1)),
+            waiting.stalled(ambre_core::Seq::<ambre_core::Relay>::new(1)),
             "the scaffold of peer 7 never arrives"
         );
         assert!(
-            !waiting.stalled(ambre_core::Seq::new(1)),
+            !waiting.stalled(ambre_core::Seq::<ambre_core::Relay>::new(1)),
             "the document is reported once"
         );
     }
@@ -133,8 +137,12 @@ mod tests {
         let reader = scaffold(ambre_core::PeerId::new(7));
         reader.import(&delta).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq::new(1), &delta.clone().into(), &reader);
-        assert!(!waiting.stalled(ambre_core::Seq::new(1)));
+        waiting.note(
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            &delta.clone().into(),
+            &reader,
+        );
+        assert!(!waiting.stalled(ambre_core::Seq::<ambre_core::Relay>::new(1)));
     }
 
     #[test]
@@ -145,15 +153,19 @@ mod tests {
         let reader = scaffold(ambre_core::PeerId::new(7));
         reader.import(&second).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq::new(2), &second.clone().into(), &reader);
+        waiting.note(
+            ambre_core::Seq::<ambre_core::Relay>::new(2),
+            &second.clone().into(),
+            &reader,
+        );
         assert!(
-            !waiting.stalled(ambre_core::Seq::new(0)),
+            !waiting.stalled(ambre_core::Seq::<ambre_core::Relay>::new(0)),
             "seq 1 is not held yet"
         );
         reader.import(&first).expect("import");
         waiting.settle(&reader);
         assert!(
-            !waiting.stalled(ambre_core::Seq::new(2)),
+            !waiting.stalled(ambre_core::Seq::<ambre_core::Relay>::new(2)),
             "seq 1 carried what seq 2 waited on"
         );
     }

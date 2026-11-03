@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use ambre_bus::{DraftKey, Mention, MentionTarget, MessageDraft, StyleMark, TextStyle};
 use ambre_core::id::{Channel, Id, Message, User};
-use ambre_core::{Char, Generation, GenerationKind};
+use ambre_core::{Char, Seq, SeqKind};
 use serde::{Deserialize, Serialize};
 
 use crate::composer::DraftOf;
@@ -81,7 +81,7 @@ pub type DraftSink = Rc<dyn Fn(DraftWrite)>;
 /// when it moves.
 pub enum ShelfVersion {}
 
-impl GenerationKind for ShelfVersion {
+impl SeqKind for ShelfVersion {
     type IssueRight = ();
     const NAME: &'static str = "ShelfVersion";
 }
@@ -91,6 +91,7 @@ impl GenerationKind for ShelfVersion {
 pub enum ShelfLosses {}
 
 impl ambre_core::TallyKind for ShelfLosses {
+    type Repr = u32;
     const NAME: &'static str = "LossCount";
 }
 
@@ -111,7 +112,7 @@ struct Shelf {
     losses: Vec<Loss>,
     /// Counts the loads and the losses, which a view repaints for. A draft
     /// put moves it not: the region that typed it already shows it.
-    version: Generation<ShelfVersion>,
+    version: Seq<ShelfVersion>,
     sink: Option<DraftSink>,
 }
 
@@ -216,7 +217,7 @@ impl DraftShelf {
     }
 
     /// Moves at each load and each loss.
-    pub fn version(&self) -> Generation<ShelfVersion> {
+    pub fn version(&self) -> Seq<ShelfVersion> {
         self.0.borrow().version
     }
 

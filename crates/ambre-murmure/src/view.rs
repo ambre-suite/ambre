@@ -26,7 +26,7 @@ use ambre_canvas::{
 };
 use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyBinding, Modifiers};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
-use ambre_core::{Css, Generation, GenerationKind, Px, Size, Vector, View};
+use ambre_core::{Css, Px, Seq, SeqKind, Size, Vector, View};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
 use ambre_draw::{Consumed, DrawSurface, FontContext, Point, Rect};
@@ -197,7 +197,7 @@ enum Rest {
 /// when it moves.
 enum ListsRevision {}
 
-impl GenerationKind for ListsRevision {
+impl SeqKind for ListsRevision {
     type IssueRight = ();
     const NAME: &'static str = "ListsRevision";
 }
@@ -206,7 +206,7 @@ impl GenerationKind for ListsRevision {
 #[derive(Default)]
 struct Lists {
     conversations: Conversations,
-    revision: Generation<ListsRevision>,
+    revision: Seq<ListsRevision>,
 }
 
 /// The list a region shows: a channel, or the thread under one of its
@@ -266,7 +266,7 @@ pub struct MurmureView {
     marks: ReadMarks,
     unread_line: UnreadLine,
     /// The pane and the revision of the lists this region last painted.
-    painted: (MurmurePane, Generation<ListsRevision>),
+    painted: (MurmurePane, Seq<ListsRevision>),
     /// What the last paint did.
     last: Option<Painted>,
     theme_ctl: ThemeControl,
@@ -316,7 +316,7 @@ pub struct MurmureView {
     parked: Rc<RefCell<Option<Composer>>>,
     /// The files a click asked for, by the request that fetches each. Both
     /// regions share it, and the content canvas reads the answers.
-    fetching: Rc<RefCell<HashMap<Generation<Request>, Attachment>>>,
+    fetching: Rc<RefCell<HashMap<Seq<Request>, Attachment>>>,
     /// The pictures the previews show. Both regions share it, and the
     /// content canvas takes the answers.
     pictures: Rc<RefCell<Pictures>>,
@@ -330,7 +330,7 @@ pub struct MurmureView {
     /// The format bar this region last handed the page.
     barred: Option<MarkBar>,
     /// The version of the shelf the last plan read.
-    shelf_seen: Generation<crate::drafts::ShelfVersion>,
+    shelf_seen: Seq<crate::drafts::ShelfVersion>,
     /// Whether the content changed since the last paint.
     dirty: Repaint,
 }
@@ -406,7 +406,7 @@ impl MurmureView {
             region: Region::Channel,
             marks: ReadMarks::default(),
             unread_line: UnreadLine::default(),
-            painted: (MurmurePane::default(), Generation::ZERO),
+            painted: (MurmurePane::default(), Seq::ZERO),
             last: None,
             theme_ctl,
             theme,
@@ -432,7 +432,7 @@ impl MurmureView {
             ticked: None,
             listed: None,
             barred: None,
-            shelf_seen: Generation::ZERO,
+            shelf_seen: Seq::ZERO,
             dirty: Repaint::Due,
         }
     }
@@ -3785,7 +3785,7 @@ mod tests {
     const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     /// Drop `name` on the canvas, paint, and return the upload it asked.
-    fn drop_file(page: &mut Page, channel: Id<Channel>, name: &str) -> Generation<Request> {
+    fn drop_file(page: &mut Page, channel: Id<Channel>, name: &str) -> Seq<Request> {
         page.dropped.borrow_mut().push(PickedFile {
             name: name.to_owned(),
             media_type: MediaType::new(String::new()),

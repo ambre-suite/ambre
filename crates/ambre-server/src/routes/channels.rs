@@ -101,7 +101,7 @@ pub struct MemberChannelJson {
     pub peers: Vec<ambre_core::DisplayName>,
     /// The last number the relay gave in the channel's `meta`, zero for a
     /// `meta` that holds nothing (`SRV-223`).
-    pub meta_last: ambre_core::Seq,
+    pub meta_last: ambre_core::Seq<ambre_core::Relay>,
 }
 
 /// The channels of the caller.
@@ -408,7 +408,7 @@ pub struct GrantedLeaseJson {
     #[serde(with = "ambre_core::serde_id::text")]
     pub lease_id: Id<Lease>,
     /// The last delta number the final snapshot covers.
-    pub horizon: ambre_core::Seq,
+    pub horizon: ambre_core::Seq<ambre_core::Relay>,
     /// Milliseconds before the lease expires.
     pub expires_in: TimeSpan<Ms>,
 }
@@ -529,12 +529,12 @@ pub struct GrantedFoldJson {
     #[serde(with = "ambre_core::serde_id::text")]
     pub lease_id: Id<Lease>,
     /// The last delta number of the segment, which the fold snapshot covers.
-    pub horizon: ambre_core::Seq,
+    pub horizon: ambre_core::Seq<ambre_core::Relay>,
     /// The amendments document to fold.
     #[serde(with = "ambre_core::serde_id::text")]
     pub amendments: Id<Document>,
     /// The last delta number of the amendments the fold holds.
-    pub amendments_seq: ambre_core::Seq,
+    pub amendments_seq: ambre_core::Seq<ambre_core::Relay>,
     /// Milliseconds before the lease expires.
     pub expires_in: TimeSpan<Ms>,
 }
@@ -547,7 +547,7 @@ pub struct FoldSegmentRequest {
     pub lease_id: Id<Lease>,
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
-    pub amendments_seq: ambre_core::Seq,
+    pub amendments_seq: ambre_core::Seq<ambre_core::Relay>,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/fold-lease`: take the lease
@@ -2160,8 +2160,12 @@ mod tests {
         let documents = |c: &Channel| [c.meta.document_id(), c.segment.document_id()];
         for document in documents(&gone).into_iter().chain(documents(&kept)) {
             stub.put(
-                crate::s3::format_s3_delta_key(env, &document, ambre_core::Seq::new(1))
-                    .into_inner(),
+                crate::s3::format_s3_delta_key(
+                    env,
+                    &document,
+                    ambre_core::Seq::<ambre_core::Relay>::new(1),
+                )
+                .into_inner(),
             );
         }
 
@@ -2186,7 +2190,10 @@ mod tests {
         left.sort();
         let mut expected: Vec<String> = documents(&kept)
             .iter()
-            .map(|d| crate::s3::format_s3_delta_key(env, d, ambre_core::Seq::new(1)).into_inner())
+            .map(|d| {
+                crate::s3::format_s3_delta_key(env, d, ambre_core::Seq::<ambre_core::Relay>::new(1))
+                    .into_inner()
+            })
             .collect();
         expected.sort();
         assert_eq!(left, expected);
@@ -2875,9 +2882,21 @@ mod tests {
                 .into_iter()
                 .map(|c| (c.channel_id, c.meta_last))
                 .collect();
-        assert_eq!(lasts[&direct], ambre_core::Seq::new(6), "the live counter");
-        assert_eq!(lasts[&public.id], ambre_core::Seq::new(4), "the register");
-        assert_eq!(lasts[&private.id], ambre_core::Seq::new(0), "nothing held");
+        assert_eq!(
+            lasts[&direct],
+            ambre_core::Seq::<ambre_core::Relay>::new(6),
+            "the live counter"
+        );
+        assert_eq!(
+            lasts[&public.id],
+            ambre_core::Seq::<ambre_core::Relay>::new(4),
+            "the register"
+        );
+        assert_eq!(
+            lasts[&private.id],
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
+            "nothing held"
+        );
     }
 
     /// The next message on `stream`, decoded, or `None` after `millis`.
@@ -3760,8 +3779,10 @@ mod tests {
             &document,
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &snapshot,
-            ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
-            ambre_core::Seq::new(seq.unsigned_abs()),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+                seq.unsigned_abs(),
+            ),
+            ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
             &ambre_core::ObjectKey::from("k"),
         )
         .await
@@ -3787,7 +3808,7 @@ mod tests {
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &clocks,
             &ambre_core::ObjectKey::from("s"),
-            ambre_core::Seq::try_from(covered).expect("a relay number"),
+            ambre_core::Seq::<ambre_core::Relay>::try_from(covered).expect("a relay number"),
         )
         .await
         .expect("snapshot")
@@ -3863,7 +3884,7 @@ mod tests {
             .expect("age");
         let granted = lease(&state, alice, &channel).await.expect("lease");
         let held = granted.lease.expect("the grace period has passed");
-        assert_eq!(held.horizon, ambre_core::Seq::new(4));
+        assert_eq!(held.horizon, ambre_core::Seq::<ambre_core::Relay>::new(4));
         assert_eq!(
             held.expires_in,
             TimeSpan::<Ms>::from_duration(FINALIZE_LEASE)
@@ -3922,7 +3943,7 @@ mod tests {
 
         let granted = lease(&state, bob, &channel).await.expect("lease");
         let held = granted.lease.expect("a rotation lock waits out no grace");
-        assert_eq!(held.horizon, ambre_core::Seq::new(3));
+        assert_eq!(held.horizon, ambre_core::Seq::<ambre_core::Relay>::new(3));
         forget_store(&state, &channel).await;
     }
 
@@ -4137,7 +4158,7 @@ mod tests {
 
         let again = lease(&state, bob, &channel).await.expect("lease");
         let again = again.lease.expect("no grace period this time");
-        assert_eq!(again.horizon, ambre_core::Seq::new(2));
+        assert_eq!(again.horizon, ambre_core::Seq::<ambre_core::Relay>::new(2));
         let resealed = snapshot(&state, segment, 2).await;
         assert_eq!(
             finalize(&state, bob, &channel, again.lease_id, resealed).await,
@@ -4254,7 +4275,7 @@ mod tests {
                 Json(FoldSegmentRequest {
                     lease_id,
                     snapshot_id,
-                    amendments_seq: ambre_core::Seq::new(amendments_seq),
+                    amendments_seq: ambre_core::Seq::<ambre_core::Relay>::new(amendments_seq),
                 }),
             )
             .await,
@@ -4383,7 +4404,11 @@ mod tests {
         let held = held.lease.expect("granted");
         assert_eq!(
             (held.horizon, held.amendments, held.amendments_seq),
-            (ambre_core::Seq::new(2), amendments, ambre_core::Seq::new(3))
+            (
+                ambre_core::Seq::<ambre_core::Relay>::new(2),
+                amendments,
+                ambre_core::Seq::<ambre_core::Relay>::new(3)
+            )
         );
         let second = fold_lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one writer at a time");
@@ -4450,7 +4475,10 @@ mod tests {
         assert_eq!(folded(&state, amendments).await.0, None);
         let again = fold_lease(&state, bob, &channel).await.expect("lease");
         let again = again.lease.expect("owed at once");
-        assert_eq!(again.amendments_seq, ambre_core::Seq::new(4));
+        assert_eq!(
+            again.amendments_seq,
+            ambre_core::Seq::<ambre_core::Relay>::new(4)
+        );
         forget_store(&state, &channel).await;
         set_seq(&state, amendments, 0).await;
     }
@@ -4508,7 +4536,10 @@ mod tests {
         .expect("age");
         let held = fold_lease(&state, bob, &channel).await.expect("lease");
         let held = held.lease.expect("granted");
-        assert_eq!(held.amendments_seq, ambre_core::Seq::new(4));
+        assert_eq!(
+            held.amendments_seq,
+            ambre_core::Seq::<ambre_core::Relay>::new(4)
+        );
         let second = snapshot(&state, segment, 2).await;
         assert_eq!(
             fold(&state, bob, &channel, held.lease_id, second, 4).await,

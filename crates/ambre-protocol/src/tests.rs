@@ -1,7 +1,7 @@
 //! Unit tests for the wire protocol types.
 
 use super::*;
-use crate::messages::{Ciphertext, Clock, Counter, Seq};
+use crate::messages::{Ciphertext, DeltaAuthor, Ephemerals, Relay, Seq};
 use ambre_core::id::{self, Document, Id, User};
 use ambre_core::{FixedBytes, Payload};
 
@@ -15,7 +15,7 @@ fn update_roundtrip() {
             pub_key: FixedBytes::from_array([5u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Clock::new(42),
+            clock: Seq::<DeltaAuthor>::new(42),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -52,8 +52,14 @@ fn snapshot_roundtrip() {
             snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: Some(FixedBytes::from_array([13u8; 32])),
             parent_snapshot_update_clocks: vec![
-                (FixedBytes::from_array([15u8; 32]), Clock::new(16)),
-                (FixedBytes::from_array([17u8; 32]), Clock::new(18)),
+                (
+                    FixedBytes::from_array([15u8; 32]),
+                    Seq::<DeltaAuthor>::new(16),
+                ),
+                (
+                    FixedBytes::from_array([17u8; 32]),
+                    Seq::<DeltaAuthor>::new(18),
+                ),
             ],
         },
         commitment_tag: FixedBytes::from_array([19u8; 32]),
@@ -95,7 +101,7 @@ fn ephemeral_roundtrip() {
             document_id: Id::<Document>::mint(),
             pub_key: FixedBytes::from_array([25u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
-            counter: Counter::new(26),
+            counter: Seq::<Ephemerals>::new(26),
         },
         commitment_tag: FixedBytes::from_array([27u8; 32]),
         signature: FixedBytes::from_array([28u8; 64]),
@@ -126,7 +132,7 @@ fn ws_messages_roundtrip() {
             pub_key: FixedBytes::from_array([3u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Clock::new(4),
+            clock: Seq::<DeltaAuthor>::new(4),
         },
         commitment_tag: FixedBytes::from_array([5u8; 32]),
         signature: FixedBytes::from_array([6u8; 64]),
@@ -143,7 +149,7 @@ fn ws_messages_roundtrip() {
     }
 
     let server_msg = WsServerMsg::Update {
-        seq: Seq::new(100),
+        seq: Seq::<Relay>::new(100),
         update,
     };
     let bytes = postcard::to_allocvec(&server_msg).unwrap();
@@ -153,7 +159,7 @@ fn ws_messages_roundtrip() {
             seq,
             update: decoded_update,
         } => {
-            assert_eq!(seq, Seq::new(100));
+            assert_eq!(seq, Seq::<Relay>::new(100));
             assert_eq!(
                 decoded_update.ciphertext,
                 Payload::<Ciphertext>::new(vec![1])
@@ -258,7 +264,7 @@ fn sample_update(fill: u8) -> Update {
             pub_key: FixedBytes::from_array([fill + 2; 32]),
             key_id: FixedBytes::from_array([fill + 3; 16]),
             snapshot_id: Id::<id::Snapshot>::from_bytes([fill + 4; 16]),
-            clock: Clock::new(u64::from(fill) + 5),
+            clock: Seq::<DeltaAuthor>::new(u64::from(fill) + 5),
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
         signature: FixedBytes::from_array([fill + 7; 64]),
@@ -273,7 +279,7 @@ fn sample_ephemeral(fill: u8) -> Ephemeral {
             document_id: Id::<Document>::from_bytes([fill + 2; 16]),
             pub_key: FixedBytes::from_array([fill + 3; 32]),
             key_id: FixedBytes::from_array([fill + 4; 16]),
-            counter: Counter::new(u64::from(fill) + 5),
+            counter: Seq::<Ephemerals>::new(u64::from(fill) + 5),
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
         signature: FixedBytes::from_array([fill + 7; 64]),
@@ -291,7 +297,7 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
         C::Ephemeral(sample_ephemeral(20)),
         C::RequestMissing {
             document_id: doc,
-            after_seq: Seq::new(3),
+            after_seq: Seq::<Relay>::new(3),
         },
         C::Authenticate {
             token: crate::ws::Credential::new("t".into()),
@@ -310,7 +316,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
     vec![
         S::Subscribed { document_id: doc },
         S::Update {
-            seq: Seq::new(4),
+            seq: Seq::<Relay>::new(4),
             update: sample_update(50),
         },
         S::Ephemeral(sample_ephemeral(60)),
@@ -321,7 +327,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::MissingUpdates {
             document_id: doc,
             updates: vec![SeqUpdate {
-                seq: Seq::new(6),
+                seq: Seq::<Relay>::new(6),
                 update: sample_update(70),
             }],
         },
@@ -329,7 +335,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::SnapshotAvailable {
             document_id: doc,
             snapshot_id: Id::<id::Snapshot>::from_bytes([7; 16]),
-            covered_seq: Seq::new(12),
+            covered_seq: Seq::<Relay>::new(12),
         },
         S::KeyRotationRequired { document_id: doc },
         S::DocumentRevoked { document_id: doc },
@@ -344,18 +350,18 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::KeyRefused {
             document_id: doc,
             key_id: FixedBytes::from_array([10; 16]),
-            clock: Clock::new(11),
+            clock: Seq::<DeltaAuthor>::new(11),
         },
         S::ClockRefused {
             document_id: doc,
-            clock: Clock::new(12),
-            expected: Clock::new(13),
+            clock: Seq::<DeltaAuthor>::new(12),
+            expected: Seq::<DeltaAuthor>::new(13),
             signature: FixedBytes::from_array([14; 64]),
         },
         S::MembersChanged { document_id: doc },
         S::ReplayStopped {
             document_id: doc,
-            after_seq: Seq::new(15),
+            after_seq: Seq::<Relay>::new(15),
         },
         S::DeltaRefused {
             document_id: doc,
@@ -458,7 +464,7 @@ fn the_relay_reads_only_the_listed_fields() {
             pub_key: pk,
             key_id: kid,
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Clock::new(1),
+            clock: Seq::<DeltaAuthor>::new(1),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -484,7 +490,7 @@ fn the_relay_reads_only_the_listed_fields() {
             document_id: doc,
             pub_key: pk,
             key_id: kid,
-            counter: Counter::new(1),
+            counter: Seq::<Ephemerals>::new(1),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -536,7 +542,7 @@ fn the_relay_reads_only_the_listed_fields() {
     } = public_data;
     assert_eq!(
         (document_id, pub_key, key_id, counter),
-        (doc, pk, kid, Counter::new(1))
+        (doc, pk, kid, Seq::<Ephemerals>::new(1))
     );
 }
 

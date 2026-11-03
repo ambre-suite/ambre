@@ -148,6 +148,7 @@ pub struct PageWalk<'t> {
 pub enum Highlights {}
 
 impl ambre_core::TallyKind for Highlights {
+    type Repr = u32;
     const NAME: &'static str = "HighlightCount";
 }
 

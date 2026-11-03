@@ -55,9 +55,9 @@ use ambre_bus::{
     SnapshotPurpose, SnapshotVerdict, SyncCommand, UserInfo,
 };
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
-use ambre_core::{FixedBytes, Generation, KeyId, Payload, PublicKey, SessionNonce};
+use ambre_core::{FixedBytes, KeyId, Payload, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
-use ambre_protocol::messages::{Clock, Counter, Seq, Update};
+use ambre_protocol::messages::{DeltaAuthor, Ephemerals, Relay, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg, encode_client_msg};
 #[cfg(target_arch = "wasm32")]
@@ -244,14 +244,14 @@ enum SyncEvent {
     /// makes the timer stale.
     ReplayRetry {
         document_id: Id<Document>,
-        ticket: ambre_core::Generation<generation::ReplayTicket>,
+        ticket: ambre_core::Seq<generation::ReplayTicket>,
     },
     /// Fired by the timer armed when the relay failed to sequence a delta:
     /// send it again with every later one (`SYNC-159`). A later failure or
     /// refusal makes the timer stale.
     ResendRetry {
         document_id: Id<Document>,
-        ticket: ambre_core::Generation<generation::ResendTicket>,
+        ticket: ambre_core::Seq<generation::ResendTicket>,
     },
     /// The WebSocket `onopen` fired: the socket is now OPEN, so (re)subscriptions
     /// can be sent (they would be dropped if sent while still CONNECTING).
@@ -264,7 +264,7 @@ enum SyncEvent {
     },
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
-        id: Option<Generation<Request>>,
+        id: Option<Seq<Request>>,
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
@@ -276,7 +276,7 @@ enum SyncEvent {
     /// A provider return was exchanged: the session's tokens, and whether the
     /// account holds its keys. No key is held yet, so no socket opens.
     ProviderSignedIn {
-        id: Generation<Request>,
+        id: Seq<Request>,
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
@@ -284,7 +284,7 @@ enum SyncEvent {
         tokens: http::TokenPair,
     },
     AccountCreated {
-        id: Generation<Request>,
+        id: Seq<Request>,
         recovery_words: ambre_bus::Confidential<ambre_bus::RecoveryWords>,
         master_seed: MasterSeed,
         signing_key: SigningKey,
@@ -292,20 +292,20 @@ enum SyncEvent {
         tokens: http::TokenPair,
     },
     DocumentList {
-        id: Generation<Request>,
+        id: Seq<Request>,
         documents: Vec<DocumentSummary>,
     },
     DocumentCreated {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         doc_type: DocType,
     },
     DocumentDeleted {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
     },
     DocumentRenamed {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
     },
     OpenDocumentReady {
@@ -316,7 +316,7 @@ enum SyncEvent {
         /// Highest delta `seq` folded into `snapshot_payload`, 0 when no snapshot
         /// was downloaded. The post-open `RequestMissing` starts after this seq,
         /// so the history already in the snapshot is not replayed.
-        covered_seq: Seq,
+        covered_seq: Seq<Relay>,
         /// The latest snapshot, when only its author confirmed it and that
         /// author is another user. `snapshot_payload` is then the reference,
         /// and this one is checked once the replay is done (`AUTHOR-022`).
@@ -460,7 +460,7 @@ enum SyncEvent {
     /// (`SyncCommand::ListMemberChannels`).
     MemberChannelsListed {
         /// The listing this answers, as `member_channels_asked` counted it.
-        asked: ambre_core::Generation<generation::Listing>,
+        asked: ambre_core::Seq<generation::Listing>,
         result: Result<channels::MemberListing, http::HttpError>,
     },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
@@ -489,7 +489,7 @@ enum SyncEvent {
         failure: http::Failed,
     },
     HttpError {
-        id: Generation<Request>,
+        id: Seq<Request>,
         failure: ApiFailure,
         message: String,
     },
@@ -497,7 +497,7 @@ enum SyncEvent {
     /// their exchange key fetched, with a formatted fingerprint. No key wrapped
     /// yet -- the Main thread decides trust before phase 2 wraps.
     InviteeKeyReady {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
@@ -508,7 +508,7 @@ enum SyncEvent {
     /// The key a user the client named is served with, and its fingerprint.
     /// Nothing is wrapped: the Main thread compares it with the pin first.
     MemberKeyReady {
-        id: Generation<Request>,
+        id: Seq<Request>,
         user_id: Id<User>,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
@@ -516,7 +516,7 @@ enum SyncEvent {
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
     /// server accepted the share request.
     InviteSent {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
@@ -524,7 +524,7 @@ enum SyncEvent {
     /// Key rotation initiated by this client is finished: the server has the new
     /// `doc_key_enc` entries and the new key must be swapped locally.
     RevocationComplete {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         new_doc_key: DocumentKey,
         /// The link the revoke left, from `new_doc_key` back to the key it
@@ -535,9 +535,9 @@ enum SyncEvent {
     /// plaintext names/emails).
     DocumentMembersReady {
         /// The request to answer, `None` for a refresh of the directory alone.
-        id: Option<Generation<Request>>,
+        id: Option<Seq<Request>>,
         /// Which listing of this document answered (`SYNC-037`).
-        asked: ambre_core::Generation<generation::Listing>,
+        asked: ambre_core::Seq<generation::Listing>,
         document_id: Id<Document>,
         /// What the walked log says a channel listed in this space must heed.
         word: membership_log::SpaceWord,
@@ -552,12 +552,12 @@ enum SyncEvent {
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
-        id: Generation<Request>,
+        id: Seq<Request>,
         users: Vec<UserInfo>,
     },
     /// A document member's role was updated server-side.
     MemberRoleUpdatedEvent {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
         role: Role,
@@ -574,7 +574,7 @@ enum SyncEvent {
     /// This user's departure landed: the relay removed their own share
     /// (`SYNC-127`). The document closes locally.
     DocumentLeft {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
     },
     /// The document owes a rotation: a member left and nobody re-keyed since
@@ -603,13 +603,13 @@ enum SyncEvent {
     /// Media upload completed: the encrypted blob was PUT to S3 and the server
     /// confirmed the insertion in the `media` table.
     MediaUploaded {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
     /// The relay holds no upload of this user's for the blob any more.
     MediaErased {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
@@ -627,13 +627,13 @@ enum SyncEvent {
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
         /// The last delta its author says it folds in.
-        covered_seq: Seq,
+        covered_seq: Seq<Relay>,
         blob: Option<Payload<pipeline::FetchedBlob>>,
     },
     /// Media download completed: the encrypted blob was fetched from S3 and
     /// decrypted. `data` is the raw plaintext bytes ready for display.
     MediaDownloaded {
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
@@ -643,7 +643,7 @@ enum SyncEvent {
 impl SyncEvent {
     /// The failure of the service-plane request `id`, from a relay's answer
     /// or from this device.
-    fn http_error(id: Generation<Request>, error: impl http::Reported) -> Self {
+    fn http_error(id: Seq<Request>, error: impl http::Reported) -> Self {
         Self::HttpError {
             id,
             failure: error.failure(),
@@ -677,24 +677,21 @@ struct SyncDocumentState {
     /// Uploads asked for while the document is local-only. The relay signs no
     /// link for a document it does not hold, so each one waits for the lazy
     /// creation (`SYNC-145`).
-    pending_uploads: Vec<(
-        Generation<Request>,
-        ambre_core::Payload<ambre_core::MediaBytes>,
-    )>,
+    pending_uploads: Vec<(Seq<Request>, ambre_core::Payload<ambre_core::MediaBytes>)>,
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: Id<Snapshot>,
-    local_clock: Clock,
+    local_clock: Seq<DeltaAuthor>,
     /// Monotonic counter for outbound ephemerals (anti-replay at the receiver).
-    ephemeral_counter: Counter,
+    ephemeral_counter: Seq<Ephemerals>,
     /// Highest server-assigned `seq` seen for this document. Used as
     /// `after_seq` when requesting the missing history.
-    last_seq: Seq,
+    last_seq: Seq<Relay>,
     /// The latest sequence numbers this client ingested, applied or held in
     /// quarantine. A reconnect replay can overlap a broadcast received during
     /// the same round trip, and the second copy is dropped here (`SYNC-087`).
     /// Bounded by [`APPLIED_WINDOW`].
-    ingested: BTreeSet<Seq>,
+    ingested: BTreeSet<Seq<Relay>>,
     /// Snapshots whose contents the Logic thread already holds. An inbound
     /// `Update` whose parent `snapshot_id` is here can be applied immediately;
     /// otherwise it is quarantined under that id.
@@ -704,7 +701,7 @@ struct SyncDocumentState {
     /// Bounded by [`QUARANTINE_LIMIT`] (oldest-by-`clock` dropped past the cap).
     /// Each keeps the number the relay gave it, which the Logic thread's
     /// snapshot check reads.
-    quarantine: HashMap<Id<Snapshot>, Vec<(Seq, Update)>>,
+    quarantine: HashMap<Id<Snapshot>, Vec<(Seq<Relay>, Update)>>,
     /// The missing history was asked for this gap: the quarantine crossed the
     /// soft threshold and has not dropped back under it since. One request per
     /// gap, never one per arrival (`SYNC-031`).
@@ -719,7 +716,7 @@ struct SyncDocumentState {
     /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
     /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
     /// value is silently dropped.
-    ephemeral_remote_counters: HashMap<FixedBytes<PublicKey>, Counter>,
+    ephemeral_remote_counters: HashMap<FixedBytes<PublicKey>, Seq<Ephemerals>>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
     /// ephemeral author's verifying key to their canonical `Id<User>`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
@@ -735,7 +732,7 @@ struct SyncDocumentState {
     /// to the older one changes nothing. It cannot bring back the key of a
     /// member the newer one dropped (`SYNC-037`, `SYNC-094`).
     directory_asked: ambre_core::Issuer<generation::Listing>,
-    directory_held: ambre_core::Generation<generation::Listing>,
+    directory_held: ambre_core::Seq<generation::Listing>,
     /// When the document is a space: what a channel it lists must heed, from
     /// the latest walk of its log (the Murmure spaces spec).
     word: membership_log::SpaceWord,
@@ -769,14 +766,14 @@ struct SyncDocumentState {
     /// The Logic thread evicted the document at this horizon. The session
     /// becomes a light subscription once every delta sent is acknowledged
     /// (`RESID-009`).
-    released: Option<Seq>,
+    released: Option<Seq<Relay>>,
 }
 
 /// A snapshot the Logic thread is checking.
 struct PendingCheck {
     /// The signing key its sealed blob verified under: who built it.
     author: FixedBytes<PublicKey>,
-    covered_seq: Seq,
+    covered_seq: Seq<Relay>,
     /// The opened snapshot, kept on open only: a match adopts it.
     payload: Option<ambre_core::Payload<ambre_core::SnapshotBytes>>,
 }
@@ -795,7 +792,7 @@ pub(crate) enum Existence {
 #[derive(Debug, Clone)]
 pub(crate) struct HeldSnapshot {
     pub snapshot_id: Id<Snapshot>,
-    pub covered_seq: Seq,
+    pub covered_seq: Seq<Relay>,
     pub blob: Payload<pipeline::FetchedBlob>,
 }
 
@@ -821,9 +818,9 @@ impl SyncDocumentState {
             pending_updates: Vec::new(),
             pending_uploads: Vec::new(),
             current_snapshot_id,
-            local_clock: Clock::new(0),
-            ephemeral_counter: Counter::new(0),
-            last_seq: Seq::new(0),
+            local_clock: Seq::<DeltaAuthor>::new(0),
+            ephemeral_counter: Seq::<Ephemerals>::new(0),
+            last_seq: Seq::<Relay>::new(0),
             ingested: BTreeSet::new(),
             known_snapshots: HashSet::from([current_snapshot_id]),
             quarantine: HashMap::new(),
@@ -833,7 +830,7 @@ impl SyncDocumentState {
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
             directory_asked: ambre_core::Issuer::default(),
-            directory_held: ambre_core::Generation::ZERO,
+            directory_held: ambre_core::Seq::ZERO,
             word: membership_log::SpaceWord::default(),
             role: Role::Owner,
             awaiting_initial_hydration: false,
@@ -847,7 +844,7 @@ impl SyncDocumentState {
     /// Records `seq` as ingested, and says whether this is its first arrival.
     /// The window keeps the latest [`APPLIED_WINDOW`] numbers; a reconnect
     /// overlap is far shorter than that.
-    fn first_arrival(&mut self, seq: Seq) -> bool {
+    fn first_arrival(&mut self, seq: Seq<Relay>) -> bool {
         if !self.ingested.insert(seq) {
             return false;
         }
@@ -910,7 +907,7 @@ impl SyncDocumentState {
     fn accept_ephemeral_counter(
         &mut self,
         author_pk: &FixedBytes<PublicKey>,
-        counter: Counter,
+        counter: Seq<Ephemerals>,
     ) -> bool {
         // A sender counts from 1, so the floor of an author not seen yet is
         // the counter before its first send.
@@ -918,7 +915,7 @@ impl SyncDocumentState {
             .ephemeral_remote_counters
             .get(author_pk)
             .copied()
-            .unwrap_or(Counter::new(0));
+            .unwrap_or(Seq::<Ephemerals>::new(0));
         if counter <= last {
             return false;
         }
@@ -1013,7 +1010,7 @@ impl SyncDocumentState {
     fn open_signed_update(
         &self,
         update: &ambre_protocol::Update,
-        seq: Seq,
+        seq: Seq<Relay>,
     ) -> Result<SignedDelta, pipeline::PipelineError> {
         let body = pipeline::split_update_body(self.open_update_named(update)?)?;
         let signer = &update.public_data.pub_key;
@@ -1576,14 +1573,14 @@ impl SyncState {
         }
     }
 
-    /// Reply to a service request, echoing its [`Generation<Request>`].
-    fn reply(&self, id: Generation<Request>, evt: RestEvent) {
+    /// Reply to a service request, echoing its [`Seq<Request>`].
+    fn reply(&self, id: Seq<Request>, evt: RestEvent) {
         self.send_to_logic(LogicEvent::Rest { id: Some(id), evt });
     }
 
     /// Dispatch a relayed [`RestCommand`]. Most arms are placeholders today; the
     /// ones that already produce data answer via [`reply`](Self::reply).
-    fn handle_rest(&mut self, id: Generation<Request>, cmd: RestCommand) {
+    fn handle_rest(&mut self, id: Seq<Request>, cmd: RestCommand) {
         match cmd {
             // -- Session -------------------------------------------------------
             RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
@@ -1940,13 +1937,13 @@ mod ephemeral_tests {
     fn monotonic_counter_accepted_replay_dropped() {
         let mut d = doc_state();
         let author = FixedBytes::from_array([1u8; 32]);
-        assert!(d.accept_ephemeral_counter(&author, Counter::new(1)));
-        assert!(d.accept_ephemeral_counter(&author, Counter::new(2)));
+        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(2)));
         // Replay / stale counters are dropped.
-        assert!(!d.accept_ephemeral_counter(&author, Counter::new(2)));
-        assert!(!d.accept_ephemeral_counter(&author, Counter::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(2)));
+        assert!(!d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
         // Forward progress resumes.
-        assert!(d.accept_ephemeral_counter(&author, Counter::new(3)));
+        assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(3)));
     }
 
     #[test]
@@ -1957,7 +1954,7 @@ mod ephemeral_tests {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
             let author = FixedBytes::from_array(author);
-            assert!(d.accept_ephemeral_counter(&author, Counter::new(1)));
+            assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
     }
@@ -2011,7 +2008,9 @@ mod seal_tests {
     use super::*;
     use ambre_bus::SyncCommand;
     use ambre_core::KeyId;
-    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Counter, Nonce, Signature};
+    use ambre_protocol::messages::{
+        Ciphertext, CommitmentTag, DeltaAuthor, Ephemerals, Nonce, Seq, Signature,
+    };
     use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
     use ambre_protocol::ws::decode_client_msg;
     use ambre_protocol::{Ephemeral, Update};
@@ -2102,7 +2101,7 @@ mod seal_tests {
                 pub_key,
                 key_id,
                 snapshot_id: Id::<Snapshot>::from_bytes([3u8; 16]),
-                clock: Clock::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2114,7 +2113,7 @@ mod seal_tests {
                 document_id: id,
                 pub_key,
                 key_id,
-                counter: Counter::new(1),
+                counter: Seq::<Ephemerals>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

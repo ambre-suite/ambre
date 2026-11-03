@@ -53,7 +53,7 @@ pub const RECOUNT_DELAY: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(500.0);
 /// so tell it still reads what it was shaped from.
 pub enum DraftRevision {}
 
-impl ambre_core::GenerationKind for DraftRevision {
+impl ambre_core::SeqKind for DraftRevision {
     type IssueRight = ();
     const NAME: &'static str = "DraftRevision";
 }
@@ -74,14 +74,14 @@ pub struct DraftBuffer {
     edits: Vec<DraftEdit>,
     /// Moves on every change, so a paragraph shaped from the draft can tell
     /// it still reads what it was shaped from.
-    generation: ambre_core::Generation<DraftRevision>,
+    generation: ambre_core::Seq<DraftRevision>,
 }
 
 /// One command sent inside a block, and whether the Logic thread took it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DraftEdit {
     /// The number the Logic thread acknowledges this command by.
-    seq: ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+    seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
     block: BlockId,
     at: Pos<DocChar>,
     change: Change,
@@ -131,7 +131,7 @@ impl DraftBuffer {
         &self,
     ) -> impl Iterator<
         Item = (
-            ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+            ambre_core::Seq<ambre_bus::app::prose::TextAck>,
             Confirmation,
         ),
     > + '_ {
@@ -140,7 +140,7 @@ impl DraftBuffer {
 
     /// A number that moves whenever what the draft shows does.
     #[must_use]
-    pub fn generation(&self) -> ambre_core::Generation<DraftRevision> {
+    pub fn generation(&self) -> ambre_core::Seq<DraftRevision> {
         self.generation
     }
 
@@ -149,7 +149,7 @@ impl DraftBuffer {
     /// its own (`PROSE-UI-138`).
     pub fn push_str(
         &mut self,
-        seq: ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+        seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
         text: &str,
         block_id: &BlockId,
         pos: Pos<DocChar>,
@@ -161,7 +161,7 @@ impl DraftBuffer {
     /// `seq`. The text typed before it stays drawn (`PROSE-UI-206`).
     pub fn push_delete(
         &mut self,
-        seq: ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+        seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
         block_id: &BlockId,
         start: Pos<DocChar>,
         end: Pos<DocChar>,
@@ -174,7 +174,7 @@ impl DraftBuffer {
 
     fn push(
         &mut self,
-        seq: ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+        seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
         block: BlockId,
         at: Pos<DocChar>,
         change: Change,
@@ -195,7 +195,7 @@ impl DraftBuffer {
 
     /// The command acknowledged as `seq` was taken as drawn
     /// (`PROSE-UI-005`). The entries confirm in the order they were sent.
-    pub fn confirm(&mut self, seq: ambre_core::Generation<ambre_bus::app::prose::TextAck>) {
+    pub fn confirm(&mut self, seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>) {
         if let Some(edit) = self.edits.iter_mut().find(|edit| edit.seq == seq) {
             edit.confirmed = Confirmation::Confirmed;
         }
@@ -424,7 +424,7 @@ pub struct ProseUiState {
     // Handed over by the Logic thread.
     /// The version of the last layout this view adopted. An older one is
     /// dropped (`features/ambre-spec-prose-page-rendering.md`).
-    pub layout_version: ambre_core::Generation<LayoutVersion>,
+    pub layout_version: ambre_core::Seq<LayoutVersion>,
     /// The whole live peer set, replaced on each event (`PRESENCE-009`).
     pub remote_cursors: Vec<RemoteCursor>,
     /// The five figures as last answered, for the shared status bar slot.
@@ -540,7 +540,7 @@ pub struct ProseUiState {
     /// The selection and the layout version the last read was asked for.
     pub(crate) marks_asked: Option<(
         (crate::view::caret::Spot, crate::view::caret::Spot),
-        ambre_core::Generation<LayoutVersion>,
+        ambre_core::Seq<LayoutVersion>,
     )>,
     /// The slash menu, while it is open.
     pub(crate) slash: Option<crate::view::slash::SlashMenu>,
@@ -552,13 +552,13 @@ pub struct ProseUiState {
     /// When the text was last seen changing, while a recount is owed.
     quiet_since: Option<Instant<PageLoad>>,
     /// The number of the last change this view did not draw and applied.
-    pub(crate) seen: ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
+    pub(crate) seen: ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
     /// The number last handed back in a [`ProseCommand::Sync`].
-    pub(crate) sent_seen: ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
+    pub(crate) sent_seen: ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
     /// The text commands sent and not yet taken, in the text this view shows.
     pub(crate) inflight: VecDeque<TextEdit>,
     /// How many text commands the Logic thread said it took.
-    pub(crate) popped: ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+    pub(crate) popped: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
     /// The syncs sent and not yet answered, oldest first. One sent after a
     /// structural command holds the input until it is answered.
     pub(crate) syncs: VecDeque<SyncHold>,
@@ -846,7 +846,7 @@ impl ProseUiState {
     /// draft, whose text the change takes back.
     fn take_acked(
         &mut self,
-        acked: ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+        acked: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
         origin: ChangeOrigin,
     ) {
         let mut ends_draft = false;
@@ -1041,7 +1041,7 @@ mod tests {
         ui.composing = "composed".into();
         let block = state.root_blocks()[0];
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "drafted",
             &block,
             Pos::<ambre_bus::app::prose::DocChar>::ZERO,
@@ -1170,7 +1170,7 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "hel",
             &block,
             Pos::<DocChar>::ZERO,
@@ -1202,7 +1202,7 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "hel",
             &block,
             Pos::<DocChar>::ZERO,
@@ -1222,8 +1222,8 @@ mod tests {
         state.inflight.push_back(typed);
         state.apply_event(&ProseEvent::TextChanged {
             origin: crate::events::ChangeOrigin::Local,
-            seq: ambre_core::Generation::ZERO,
-            acked: ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            seq: ambre_core::Seq::ZERO,
+            acked: ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             edits: vec![typed],
             removed: Vec::new(),
         });
@@ -1238,7 +1238,7 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "hel",
             &block,
             Pos::<DocChar>::ZERO,
@@ -1267,19 +1267,19 @@ mod tests {
         let other = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(1));
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "he",
             &block,
             Pos::<DocChar>::ZERO,
         );
         draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(2),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(2),
             "llo",
             &block,
             Pos::<DocChar>::new(2),
         );
         draft.push_delete(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(3),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(3),
             &block,
             Pos::<DocChar>::new(1),
             Pos::<DocChar>::new(3),

@@ -11,7 +11,7 @@ use ambre_bus::{
 };
 use ambre_core::id::{Channel, Document, Id, Meta, Segment, User};
 use ambre_core::schema::SchemaError;
-use ambre_core::{DeltaBytes, Payload, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Payload, Relay, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
 use crate::channel::push_segment_entry;
@@ -644,7 +644,7 @@ fn a_sent_delta_brings_a_peer_to_the_same_messages() {
     let events = bob
         .apply_signed(
             sent.segment.document_id(),
-            Seq::new(1),
+            Seq::<Relay>::new(1),
             &sent.delta,
             signer(&alice, sent.segment, author),
         )
@@ -671,7 +671,7 @@ fn a_remote_delta_names_the_message_it_brought_once() {
     assert_eq!(alice.take_arrived(), None, "an own send");
     bob.apply_signed(
         sent.segment.document_id(),
-        Seq::new(1),
+        Seq::<Relay>::new(1),
         &sent.delta,
         signer(&alice, sent.segment, author),
     )
@@ -720,8 +720,13 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
     let author = Id::<User>::mint();
     let sent = alice.send(&draft("base"), author, NOW).expect("send");
     let by = signer(&alice, sent.segment, author);
-    bob.apply_signed(sent.segment.document_id(), Seq::new(1), &sent.delta, by)
-        .expect("apply");
+    bob.apply_signed(
+        sent.segment.document_id(),
+        Seq::<Relay>::new(1),
+        &sent.delta,
+        by,
+    )
+    .expect("apply");
 
     let segment = alice.active_id();
     let known = |state: &ChannelState| {
@@ -896,8 +901,13 @@ fn a_notice_names_the_member_who_joins_for_every_member() {
     );
     // The authorship check admits it: every key belongs to the inviter.
     let by = signer(&alice, sent.segment, author);
-    bob.apply_signed(sent.segment.document_id(), Seq::new(1), &sent.delta, by)
-        .expect("apply");
+    bob.apply_signed(
+        sent.segment.document_id(),
+        Seq::<Relay>::new(1),
+        &sent.delta,
+        by,
+    )
+    .expect("apply");
     let read = bob.messages(bob.active_id()).expect("held");
     assert_eq!(read.len(), 1);
     assert_eq!((read[0].author, read[0].notice), (author, notice));

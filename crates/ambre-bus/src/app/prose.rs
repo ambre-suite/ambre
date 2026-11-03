@@ -64,16 +64,16 @@ impl CountsAs<DocChar> for ambre_core::Char {}
 /// The number of a text change the view did not draw: a remote one, or a
 /// local one the Logic thread rewrote. The view hands back the last it
 /// applied in [`ProseCommand::Sync`].
-/// It crosses the bus, so the family is a [`Wire`](ambre_core::generation::Wire)
+/// It crosses the bus, so the family is a [`Wire`](ambre_core::seq::Wire)
 /// one: its serde form is the bare number.
 pub enum TextChangeSeq {}
 
-impl ambre_core::GenerationKind for TextChangeSeq {
+impl ambre_core::SeqKind for TextChangeSeq {
     type IssueRight = ();
     const NAME: &'static str = "TextChangeSeq";
 }
 
-impl ambre_core::generation::Wire for TextChangeSeq {}
+impl ambre_core::seq::Wire for TextChangeSeq {}
 
 /// How many text commands of the view the Logic thread has taken: the number
 /// a draft entry waits on. Apart from [`TextChangeSeq`], which counts the
@@ -81,12 +81,12 @@ impl ambre_core::generation::Wire for TextChangeSeq {}
 /// family is open, and it crosses the bus as a bare `u64`.
 pub enum TextAck {}
 
-impl ambre_core::GenerationKind for TextAck {
+impl ambre_core::SeqKind for TextAck {
     type IssueRight = ();
     const NAME: &'static str = "TextAck";
 }
 
-impl ambre_core::generation::Wire for TextAck {}
+impl ambre_core::seq::Wire for TextAck {}
 
 // =============================================================================
 // Pages (`features/ambre-spec-prose-viewport.md`)
@@ -851,6 +851,7 @@ pub struct CellBorder {
 pub enum Words {}
 
 impl ambre_core::TallyKind for Words {
+    type Repr = u32;
     const NAME: &'static str = "WordTotal";
 }
 
@@ -858,6 +859,7 @@ impl ambre_core::TallyKind for Words {
 pub enum Graphemes {}
 
 impl ambre_core::TallyKind for Graphemes {
+    type Repr = u32;
     const NAME: &'static str = "GraphemeCount";
 }
 
@@ -865,6 +867,7 @@ impl ambre_core::TallyKind for Graphemes {
 pub enum Paragraphs {}
 
 impl ambre_core::TallyKind for Paragraphs {
+    type Repr = u32;
     const NAME: &'static str = "ParagraphCount";
 }
 
@@ -1414,7 +1417,7 @@ pub enum ProseCommand {
     /// last one it applied carried. The Logic thread answers with
     /// [`ProseEvent::Synced`] once everything sent before has landed.
     Sync {
-        seen: ambre_core::Generation<TextChangeSeq>,
+        seen: ambre_core::Seq<TextChangeSeq>,
     },
 
     // -- Text editing (`features/ambre-spec-prose-text-editing.md`) --
@@ -2118,6 +2121,7 @@ impl ConversionReport {
 pub enum ConversionLosses {}
 
 impl ambre_core::TallyKind for ConversionLosses {
+    type Repr = u32;
     const NAME: &'static str = "WarningCount";
 }
 
@@ -2490,10 +2494,10 @@ pub enum ProseEvent {
         /// The count of changes the view did not draw, this one included when
         /// `origin` is [`ChangeOrigin::Remote`]. The view hands it back in
         /// [`ProseCommand::Sync`].
-        seq: ambre_core::Generation<TextChangeSeq>,
+        seq: ambre_core::Seq<TextChangeSeq>,
         /// How many insertions and deletions of text the Logic thread has
         /// taken from the view so far.
-        acked: ambre_core::Generation<TextAck>,
+        acked: ambre_core::Seq<TextAck>,
         /// One run after another, each in the text the previous one left.
         edits: Vec<TextEdit>,
         /// The blocks the change deleted.
@@ -2505,9 +2509,7 @@ pub enum ProseEvent {
     BlockSplit { source: BlockId, new_block: BlockId },
     /// Every command sent before the [`ProseCommand::Sync`] it answers has
     /// landed, and `acked` counts the text commands among them.
-    Synced {
-        acked: ambre_core::Generation<TextAck>,
-    },
+    Synced { acked: ambre_core::Seq<TextAck> },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
     /// A picture finished decrypting, and the blocks that show it are stale

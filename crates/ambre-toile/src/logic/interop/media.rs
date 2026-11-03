@@ -50,6 +50,7 @@ struct Entry {
 pub enum CachedBlobs {}
 
 impl ambre_core::TallyKind for CachedBlobs {
+    type Repr = u32;
     const NAME: &'static str = "CachedBlobCount";
 }
 

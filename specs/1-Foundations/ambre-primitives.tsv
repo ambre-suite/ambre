@@ -171,7 +171,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.r
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
-ambre-bus | src/app/prose.rs | crate::app::prose | <TextChangeSeq as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-bus | src/app/prose.rs | crate::app::prose | <TextChangeSeq as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -348,7 +348,7 @@ ambre-bus | src/lib.rs | crate | ClipboardBlob::mark_html(html) | param | &str	g
 ambre-bus | src/lib.rs | crate | CopyOutcome::Text.0 | field | String	free-text	clipboard text/html halves
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_CLOSE | const | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_OPEN | const | &str	generic	HTML comment marker over &str
-ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/logic.rs | crate::logic | AppCommand::is_mutating() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | is_lossy_class() | ret | bool	generic	predicate
@@ -361,7 +361,7 @@ ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
-ambre-bus | src/rest.rs | crate::rest | <Request as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-bus | src/rest.rs | crate::rest | <Request as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/token.rs | crate::token | <Token<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-bus | src/app/toile.rs | crate::app::toile | <ElementCreation as crate::token::TokenKind>::NAME | const | &'static str	free-text	the family name a token prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <Reactions as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
@@ -653,7 +653,7 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::info(message) | param | imp
 ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
-ambre-chrome | src/toast.rs | crate::toast | <ToastId as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-chrome | src/toast.rs | crate::toast | <ToastId as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.0 | field | u8	newtype-inner	the private bit set of the three named members, built only from the named constants
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
@@ -957,13 +957,12 @@ ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | 
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
-ambre-core | src/residency.rs | crate::residency | <ViewTick as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-core | src/generation.rs | crate::generation | <Generation<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-core | src/generation.rs | crate::generation | Generation.raw | field | u64	newtype-inner	the generation's own number; the marker is a PhantomData
-ambre-core | src/generation.rs | crate::generation | Generation<K>::at(raw) | param | u64	newtype-inner	the generation's own number; the marker is a PhantomData
-ambre-core | src/generation.rs | crate::generation | Generation<K>::from_stored(raw) | param | u64	newtype-inner	the number a store row keeps, read back for a wire family alone
-ambre-core | src/generation.rs | crate::generation | Generation<K>::nth(n) | param | u64	newtype-inner	the count a test names, behind the testing feature (ARCH-055)
-ambre-core | src/generation.rs | crate::generation | Generation<K>::stored() | ret | u64	newtype-inner	the number a store row keeps, for a wire family alone
+ambre-core | src/residency.rs | crate::residency | <ViewTick as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-core | src/seq.rs | crate::seq | <Seq<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/seq.rs | crate::seq | Seq.raw | field | u64	newtype-inner	the sequence number's own number; the marker is a PhantomData
+ambre-core | src/seq.rs | crate::seq | Seq<K>::at(raw) | param | u64	newtype-inner	the sequence number's own number; the marker is a PhantomData
+ambre-core | src/seq.rs | crate::seq | Seq<K>::new(raw) | param | u64	newtype-inner	the number a wire, a store row or a peer wrote, read back for a wire family alone
+ambre-core | src/seq.rs | crate::seq | Seq<K>::nth(n) | param | u64	newtype-inner	the count a test names, behind the testing feature (ARCH-055)
 ambre-core | src/role.rs | crate::role | <Role as FromStr>::from_str(s) | param | &str	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | <Role as TryFrom<String>>::try_from(word) | param | String	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | <Role as std::convert::TryFrom<u8>>::try_from(value) | param | u8	newtype-inner	the discriminant byte the enum's own fallible constructor reads
@@ -993,16 +992,6 @@ ambre-core | src/search.rs | crate::search | SearchQuery::as_str() | ret | &str	
 ambre-core | src/search.rs | crate::search | SearchQuery::new(text) | param | String	newtype-inner	the query text the fallible constructor of SearchQuery checks
 ambre-core | src/search.rs | crate::search | UserSearch::as_str() | ret | &str	newtype-inner	the trimmed search text of UserSearch
 ambre-core | src/search.rs | crate::search | UserSearch::new(text) | param | &str	newtype-inner	the query text the fallible constructor of UserSearch trims and checks
-ambre-core | src/seq.rs | crate::seq | <Seq as TryFrom<i64>>::try_from(value) | param | i64	newtype-inner	the i64 the fallible constructor of Seq validates
-ambre-core | src/seq.rs | crate::seq | DeltaCount.0 | field | u64	newtype-inner	DeltaCount newtype
-ambre-core | src/seq.rs | crate::seq | DeltaCount::from_i64(stored) | param | i64	newtype-inner	DeltaCount storage conversion
-ambre-core | src/seq.rs | crate::seq | DeltaCount::to_i64_saturating() | ret | i64	newtype-inner	DeltaCount storage conversion
-ambre-core | src/seq.rs | crate::seq | Seq.0 | field | u64	newtype-inner	Seq/Version newtype accessor
-ambre-core | src/seq.rs | crate::seq | Seq::to_i64_saturating() | ret | i64	newtype-inner	Seq/Version newtype accessor
-ambre-core | src/seq.rs | crate::seq | DeltaCount::get() | ret | u64	newtype-inner	the DeltaCount newtype unwrapped, for a caller outside its module
-ambre-core | src/seq.rs | crate::seq | DeltaCount::new(value) | param | u64	newtype-inner	the constructor of the DeltaCount newtype
-ambre-core | src/seq.rs | crate::seq | Seq::get() | ret | u64	newtype-inner	the Seq newtype unwrapped, for a caller outside its module
-ambre-core | src/seq.rs | crate::seq | Seq::new(value) | param | u64	newtype-inner	the constructor of the Seq newtype
 ambre-core | src/serde_enums.rs | crate::serde_enums | read_word(parse) | param | impl FnOnce(&str)->Option<T>	generic	generic serde helper
 ambre-core | src/serde_enums.rs | crate::serde_enums | read_word(words) | param | &'static[&'static str]	generic	generic serde helper
 ambre-core | src/serde_enums.rs | crate::serde_enums::channel_document_kind | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
@@ -1220,7 +1209,7 @@ ambre-logic | src/replay.rs | crate::replay | LogicState::replaying() | ret | bo
 ambre-logic | src/replay.rs | crate::replay | REPLAY_SLICE_BYTES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::reopen_evicted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/seal_queue.rs | crate::seal_queue | <SealTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-logic | src/seal_queue.rs | crate::seal_queue | <SealTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-logic | src/segments.rs | crate::segments | LogicState::amendments_link_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_close_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -1361,9 +1350,9 @@ ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param 
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
-ambre-murmure | src/drafts.rs | crate::drafts | <ShelfVersion as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-murmure | src/pictures.rs | crate::pictures | <PaintNumber as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-murmure | src/view.rs | crate::view | <ListsRevision as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/drafts.rs | crate::drafts | <ShelfVersion as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/pictures.rs | crate::pictures | <PaintNumber as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/view.rs | crate::view | <ListsRevision as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::from_bytes(bytes) | param | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
@@ -2045,7 +2034,6 @@ ambre-prose | src/numbering.rs | crate::numbering | <ListItem as ambre_core::Ord
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	local	the length of the constant array of heading levels, which sizes the private counters
 ambre-prose | src/probe.rs | crate::probe | <AnimationFrames as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-prose | src/probe.rs | crate::probe | FrameNumber.0 | field | u64	newtype-inner	how many animation frames began before a moment, held at the top
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	whether an event lays the document out again, when a moved caret can first be drawn
 ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	the scale a heading level is drawn at, local to the cascade
 ambre-prose | src/style.rs | crate::style | StoredMarkValue.0 | field | String	newtype-inner	a mark value as the document holds it, never checked; Debug prints its length alone
@@ -2077,8 +2065,8 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect::contains() | ret | bool	generic	whether a point falls inside a rectangle on screen
 ambre-prose | src/view/cache.rs | crate::view::cache | <Builds as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-prose | src/view/cache.rs | crate::view::cache | <CachedRuns as ambre_core::TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-prose | src/view/cache.rs | crate::view::cache | <PaintTick as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-prose | src/ui.rs | crate::ui | <DraftRevision as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/view/cache.rs | crate::view::cache | <PaintTick as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/ui.rs | crate::ui | <DraftRevision as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::holds() | ret | bool	generic	whether a key holds drawing state for this very run
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::is_empty() | ret | bool	generic	whether no run holds drawing state
 ambre-prose | src/view/cache.rs | crate::view::cache | <LineItem as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -2117,14 +2105,6 @@ ambre-protocol | src/membership.rs | crate::membership | LogPosition::after(leng
 ambre-protocol | src/membership.rs | crate::membership | LogPosition::get() | ret | u64	newtype-inner	LogPosition field or accessor
 ambre-protocol | src/membership.rs | crate::membership | LogPosition::is_first() | ret | bool	newtype-inner	LogPosition predicate
 ambre-protocol | src/membership.rs | crate::membership | LogPosition::new(raw) | param | u64	newtype-inner	the raw place the wire and the relay rows carry
-ambre-protocol | src/messages.rs | crate::messages | <Clock as TryFrom<i64>>::try_from(value) | param | i64	newtype-inner	the i64 the fallible constructor of Clock validates
-ambre-protocol | src/messages.rs | crate::messages | Clock.0 | field | u64	newtype-inner	protocol newtype accessor
-ambre-protocol | src/messages.rs | crate::messages | Clock::to_i64_saturating() | ret | i64	newtype-inner	protocol newtype accessor
-ambre-protocol | src/messages.rs | crate::messages | Counter.0 | field | u64	newtype-inner	protocol newtype accessor
-ambre-protocol | src/messages.rs | crate::messages | Clock::get() | ret | u64	newtype-inner	the Clock newtype unwrapped, for a caller outside its module
-ambre-protocol | src/messages.rs | crate::messages | Clock::new(value) | param | u64	newtype-inner	the constructor of the Clock newtype
-ambre-protocol | src/messages.rs | crate::messages | Counter::get() | ret | u64	newtype-inner	the Counter newtype unwrapped, for a caller outside its module
-ambre-protocol | src/messages.rs | crate::messages | Counter::new(value) | param | u64	newtype-inner	the constructor of the Counter newtype
 ambre-protocol | src/snapshot_report.rs | crate::snapshot_report | REPORT_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::UnsupportedVersion.0 | field | u8	generic	raw unparsed wire version byte, may lie outside Version's range
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::is_from_newer_peer() | ret | bool	generic	raw unparsed wire version byte, may lie outside Version's range
@@ -2386,7 +2366,6 @@ ambre-sync | src/rekey.rs | crate::rekey | Rekey::hold() | ret | bool	generic	ye
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::holds_refused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::owes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::pay_now() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::position() | ret | Option<(usize,Clock)>	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::record_sent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::settled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | UNCONFIRMED_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -3052,7 +3031,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple.0 
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::new(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-prose | src/layout/run.rs | crate::layout::run | <LayoutVersion as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/layout/run.rs | crate::layout::run | <LayoutVersion as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/layout/run.rs | crate::layout::run | <CellBlock as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/layout/run.rs | crate::layout::run | <Flow as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/layout/run.rs | crate::layout::run | <LocalByte as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -3391,9 +3370,9 @@ ambre-sync | src/http.rs | crate::http | Url<K>::at(text) | param | String	newty
 ambre-sync | src/http.rs | crate::http | Url<RelayHost>::is_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Url<RelayHost>::new(host) | param | String	newtype-inner	Url newtype, the address text a fetch or a socket reads
 ambre-sync | src/http.rs | crate::http | Url<Route>::query(value) | param | &str	free-text	the text a query parameter carries, a user's search among them, percent-encoded whole before it joins the address
-ambre-sync | src/generation.rs | crate::generation | <Listing as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-sync | src/generation.rs | crate::generation | <ReplayTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-sync | src/generation.rs | crate::generation | <ResendTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <Listing as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <ReplayTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <ResendTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-primitives | src/depinfo.rs | crate::depinfo | dependencies() | ret | Result<Vec<PathBuf>,String>	free-text	error messages printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | package() | ret | String	generic	the package name cargo prints in a package id, put in an error message
 ambre-primitives | src/depinfo.rs | crate::depinfo | parses_as_items() | ret | bool	generic	a predicate or a file read of the scanner
@@ -3577,14 +3556,6 @@ ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed::get() | ret | u64	
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed::new(seed) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/tally.rs | crate::tally | <Elements as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-core | src/tally.rs | crate::tally | <Tally<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-core | src/tally.rs | crate::tally | CellCount.0 | field | u64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/tally.rs | crate::tally | CellCount::as_f64() | ret | f64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/tally.rs | crate::tally | CellCount::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/tally.rs | crate::tally | CellCount::is_zero() | ret | bool	newtype-inner	a predicate on the newtype's own inside
-ambre-core | src/tally.rs | crate::tally | CellCount::new(n) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/tally.rs | crate::tally | Tally.raw | field | u32	newtype-inner	Tally newtype, the count it holds
-ambre-core | src/tally.rs | crate::tally | Tally<K>::get() | ret | u32	newtype-inner	Tally newtype accessor
-ambre-core | src/tally.rs | crate::tally | Tally<K>::new(n) | param | u32	newtype-inner	Tally newtype accessor
 ambre-core | src/tally.rs | crate::tally | Tally<K>::of_len(len) | param | usize	newtype-inner	Tally newtype, from the length of the collection it counts
 ambre-core | src/color.rs | crate::color | Alpha.0 | field | u8	newtype-inner	the inside of the alpha channel of a packed colour, as a renderer takes it
 ambre-core | src/color.rs | crate::color | Alpha::get() | ret | u8	newtype-inner	the one way out of an alpha, to a renderer that takes the channel byte
@@ -3948,7 +3919,7 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <TextAck as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-bus | src/app/prose.rs | crate::app::prose | <TextAck as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <HttpsAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/toile.rs | crate::app::toile | <HttpsAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/id.rs | crate::id | <CondFormat as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
@@ -3974,7 +3945,6 @@ ambre-core | src/static_key.rs | crate::static_key | <Icons as KeyKind>::NAME | 
 ambre-core | src/static_key.rs | crate::static_key | StaticKey.text | field | &'static str	newtype-inner	StaticKey newtype, the key text a const table names
 ambre-core | src/static_key.rs | crate::static_key | StaticKey<K>::as_str() | ret | &'static str	newtype-inner	StaticKey newtype, the key text a const table names
 ambre-core | src/static_key.rs | crate::static_key | StaticKey<K>::new(value) | param | &'static str	newtype-inner	StaticKey newtype, the key text a const table names
-ambre-core | src/tally.rs | crate::tally | Tally<K>::is_zero() | ret | bool	generic	predicate result
 ambre-logic | src/persistence.rs | crate::persistence | <IdbShape as VersionKind>::NAME | const | &'static str	free-text	the name a version prints through Debug, for a log line
 ambre-logic | src/persistence.rs | crate::persistence | <IdbShape as VersionKind>::Repr | assoc | u32	newtype-inner	the number a version of this space holds: IndexedDB reads a u32
 ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
@@ -4031,3 +4001,79 @@ ambre-server | src/s3.rs | crate::s3 | StoreText.text | field | String	newtype-i
 ambre-server | src/s3.rs | crate::s3 | StoreText<K>::as_str() | ret | &str	newtype-inner	the text, as the object store's client takes it
 ambre-server | src/s3.rs | crate::s3 | StoreText<K>::new(text) | param | String	newtype-inner	the text StoreText wraps, read from the environment; no kind carries a rule
 ambre-server | src/state.rs | crate::state | limit_from_env(value) | param | u64	generic	the 64-bit value an environment variable parses to, refused past 32 bits
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Mentions as TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Replies as TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Segments as TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/prose.rs | crate::app::prose | <ConversionLosses as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/prose.rs | crate::app::prose | <Graphemes as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/prose.rs | crate::app::prose | <Paragraphs as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/prose.rs | crate::app::prose | <Words as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/toile.rs | crate::app::toile | <Reactions as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/toile.rs | crate::app::toile | <Votes as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Ranks as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-canvas | src/view.rs | crate::view | <CellsDrawn as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-canvas | src/view.rs | crate::view | <GlyphMisses as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/activity.rs | crate::activity | <ContentUpdates as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/activity.rs | crate::activity | <EditUpdates as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/activity.rs | crate::activity | <MentionUpdates as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/activity.rs | crate::activity | <OtherUpdates as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/activity.rs | crate::activity | <ReactionUpdates as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/fixtures.rs | crate::fixtures | <BoardFrames as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/fixtures.rs | crate::fixtures | <Connectors as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/fixtures.rs | crate::fixtures | <DocBlocks as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/fixtures.rs | crate::fixtures | <Formulas as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/fixtures.rs | crate::fixtures | <Peers as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/fixtures.rs | crate::fixtures | <Sheets as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/member_count.rs | crate::member_count | <Members as TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/seq.rs | crate::seq | <Deltas as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
+ambre-core | src/seq.rs | crate::seq | <Deltas as TallyKind>::Repr | assoc | u64	newtype-inner	the number a tally of this kind holds, the inside of Tally, u64 wide on the wire
+ambre-core | src/seq.rs | crate::seq | <Relay as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
+ambre-core | src/seq.rs | crate::seq | <Seq<K> as TryFrom<i64>>::try_from(value) | param | i64	newtype-inner	the i64 column the fallible constructor of Seq validates, refusing a negative
+ambre-core | src/seq.rs | crate::seq | Seq<K>::get() | ret | u64	newtype-inner	the Seq newtype unwrapped, for a caller outside its module
+ambre-core | src/seq.rs | crate::seq | Seq<K>::to_i64_saturating() | ret | i64	newtype-inner	the number as the signed 64-bit store column holds it
+ambre-core | src/span.rs | crate::span | <Failures as crate::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/tally.rs | crate::tally | <Cells as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
+ambre-core | src/tally.rs | crate::tally | <Cells as TallyKind>::Repr | assoc | u64	newtype-inner	the number a tally of this kind holds, the inside of Tally, u64 wide on the wire
+ambre-core | src/tally.rs | crate::tally | <Elements as TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-core | src/tally.rs | crate::tally | <Tally<K,u64> as StoredAsI64>::from_stored_count(count) | param | u64	newtype-inner	the count a 64-bit tally holds, read back by the shared store conversion
+ambre-core | src/tally.rs | crate::tally | <Tally<K,u64> as StoredAsI64>::stored_count() | ret | u64	newtype-inner	the count a 64-bit tally holds, for the shared store conversion
+ambre-core | src/tally.rs | crate::tally | <u32 as TallyRepr>::saturating_from_u64(n) | param | u64	generic	a whole number the sealed repr trait narrows to its width, held at the top
+ambre-core | src/tally.rs | crate::tally | <u32 as TallyRepr>::saturating_from_usize(len) | param | usize	generic	a whole number the sealed repr trait narrows to its width, held at the top
+ambre-core | src/tally.rs | crate::tally | <u64 as TallyRepr>::saturating_from_u64(n) | param | u64	generic	a whole number the sealed repr trait narrows to its width, held at the top
+ambre-core | src/tally.rs | crate::tally | <u64 as TallyRepr>::saturating_from_usize(len) | param | usize	generic	a whole number the sealed repr trait narrows to its width, held at the top
+ambre-core | src/tally.rs | crate::tally | Tally<K,u32>::is_zero() | ret | bool	generic	predicate result
+ambre-core | src/tally.rs | crate::tally | Tally<K,u64>::as_f64() | ret | f64	newtype-inner	the count read as the divisor of an average, the newtype's own inside
+ambre-core | src/tally.rs | crate::tally | Tally<K,u64>::is_zero() | ret | bool	generic	predicate result
+ambre-core | src/tally.rs | crate::tally | Tally<K>::saturating_from_u64(n) | param | u64	newtype-inner	the gap between two series numbers a tally is built from, held at the top
+ambre-core | src/tally.rs | crate::tally | TallyRepr::saturating_from_u64(n) | param | u64	generic	a whole number the sealed repr trait narrows to its width, held at the top
+ambre-core | src/tally.rs | crate::tally | TallyRepr::saturating_from_usize(len) | param | usize	generic	a whole number the sealed repr trait narrows to its width, held at the top
+ambre-draw | src/testing.rs | crate::testing | <Glyphs as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-draw | src/testing.rs | crate::testing | <Ops as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-logic | src/lib.rs | crate::logged | <LoggedDeltas as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-prose | src/layout/measure.rs | crate::layout::measure | <ShapedRuns as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-prose | src/layout/reflow.rs | crate::layout::reflow | <Passes as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-prose | src/logic/mod.rs | crate::logic | <Faces as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-prose | src/numbering.rs | crate::numbering | <ListDepth as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-prose | src/probe.rs | crate::probe | <AnimationFrame as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
+ambre-prose | src/probe.rs | crate::probe | <AnimationFrames as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-prose | src/view/cache.rs | crate::view::cache | <Builds as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-prose | src/view/cache.rs | crate::view::cache | <CachedRuns as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-prose | src/view/walk.rs | crate::view::walk | <Highlights as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-protocol | src/messages.rs | crate::messages | <DeltaAuthor as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
+ambre-protocol | src/messages.rs | crate::messages | <Ephemerals as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
+ambre-server | src/db/content.rs | crate::db::content | <Snapshots as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | <Requests as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-server | src/s3.rs | crate::s3 | <DrainedEntries as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-sync | src/rekey.rs | crate::rekey | Rekey::position() | ret | Option<(usize,Seq<DeltaAuthor>)>	math	count, size, limit, index or jitter local to an algorithm
+ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | <ImportDepth as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | <CachedBlobs as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <Tiles as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-toile | src/logic/state/import.rs | crate::logic::state::import | <ImportUnits as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-toile | src/logic/state/import.rs | crate::logic::state::import | <MediaEntries as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-toile | src/logic/state/import.rs | crate::logic::state::import | <PendingImports as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-toile | src/logic/state/mod.rs | crate::logic::state | <BoardWalks as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <FormulaNesting as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <Operators as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire

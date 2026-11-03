@@ -71,13 +71,13 @@ pub mod fixtures;
 
 use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
-    AppCommand, AppEvent, DocType, LogicCommand, LogicEvent, Request, RestCommand, RestEvent, Role,
-    Seq, SignedDelta, SnapshotPurpose, SnapshotVerdict, SyncCommand, UiEvent,
+    AppCommand, AppEvent, DocType, LogicCommand, LogicEvent, Relay, Request, RestCommand,
+    RestEvent, Role, Seq, SignedDelta, SnapshotPurpose, SnapshotVerdict, SyncCommand, UiEvent,
 };
 
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::schema::SchemaError;
-use ambre_core::{FixedBytes, Generation, SessionNonce};
+use ambre_core::{FixedBytes, SessionNonce};
 
 use ambre_murmure::Order;
 use ambre_prose::ProseState;
@@ -531,7 +531,7 @@ struct LiveDoc {
     /// The document reopens from the local store after leaving memory, at
     /// this horizon. Sync is asked to open it once the read lands
     /// (`RESID-010`).
-    restoring: Option<Seq>,
+    restoring: Option<Seq<Relay>>,
     /// The deltas of a replay not yet imported, one slice a pass
     /// (`SYNC-131`).
     replay: replay::ReplayQueue,
@@ -669,6 +669,7 @@ mod logged {
     pub enum LoggedDeltas {}
 
     impl ambre_core::TallyKind for LoggedDeltas {
+        type Repr = u32;
         const NAME: &'static str = "LoggedDeltas";
     }
 }
@@ -840,16 +841,16 @@ struct LogicState {
     /// Leaves of a space held while its owner role passes on (the Murmure
     /// spaces spec). Each is keyed by the role change this thread asked for,
     /// and holds the leave the view asked for.
-    handing_off: HashMap<Generation<Request>, (Generation<Request>, Id<Document>)>,
+    handing_off: HashMap<Seq<Request>, (Seq<Request>, Id<Document>)>,
     /// The erases of a deleted message's files the relay has not answered,
     /// each with the document its file is stored under and its address.
-    erasing: HashMap<Generation<Request>, (Id<Document>, ambre_core::ContentHash)>,
+    erasing: HashMap<Seq<Request>, (Id<Document>, ambre_core::ContentHash)>,
     /// The erases that did not reach the relay, asked again on the next
     /// connection (`ambre-spec-murmure-attachments.md`).
     erase_owed: Vec<(Id<Document>, ambre_core::ContentHash)>,
     /// The images fetched for a preview the relay has not answered, each
     /// with the channel whose view asked.
-    picturing: HashMap<Generation<Request>, (Id<Channel>, ambre_bus::ContentHash)>,
+    picturing: HashMap<Seq<Request>, (Id<Channel>, ambre_bus::ContentHash)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<Id<Channel>, ambre_murmure::ChannelState>,
@@ -874,12 +875,12 @@ struct LogicState {
     /// peer's cursor (`TOILE-UI-076`).
     my_display_name: Option<ambre_core::DisplayName>,
     /// P3 responses this Logic thread issued on behalf of a document
-    /// (`toile-media`). A `Generation<Request>` present here routes its answering
+    /// (`toile-media`). A `Seq<Request>` present here routes its answering
     /// `RestEvent` (or correlated `ApiError`) back into the owning engine,
     /// instead of forwarding it to the UI. UI-issued requests are absent from
     /// this map and forward verbatim, exactly as before. An entry is inserted
     /// when a `ToileRequest` is lowered and removed when its response arrives.
-    rest_routes: HashMap<Generation<Request>, Id<Document>>,
+    rest_routes: HashMap<Seq<Request>, Id<Document>>,
     /// Sealed `.ambre` exports awaiting the Sync worker's answer
     /// (`DOCFILE-014`): the document whose file the worker holds, and the name
     /// the download will carry. A separate map from
@@ -889,7 +890,7 @@ struct LogicState {
     ///
     /// Cleared with the document that owns it, so a seal outlived by its
     /// document answers nothing rather than downloading into a closed tab.
-    pending_seals: HashMap<Generation<Request>, PendingSeal>,
+    pending_seals: HashMap<Seq<Request>, PendingSeal>,
     /// Every font face the Main thread has fetched and shipped over
     /// (`LogicCommand::LoadFonts`). Kept as bytes, so a document opened later
     /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot
@@ -913,7 +914,7 @@ struct LogicState {
     /// The documents that left memory when their view closed, each with the
     /// horizon its local copy holds. Sync keeps a light subscription for each
     /// (`RESID-004`), and a reopen resumes after the horizon (`RESID-010`).
-    evicted: HashMap<Id<Document>, Seq>,
+    evicted: HashMap<Id<Document>, Seq<Relay>>,
     /// The documents whose unsent change the browser refuses to store. While
     /// any is, no local edit is taken (`RESID-018`).
     store_full: HashSet<Id<Document>>,
@@ -1237,7 +1238,7 @@ fn remote_delta(
         .and_then(|meta| meta.partial_end_vv.keys().next().copied())
         .unwrap_or_default();
     ambre_bus::SignedDelta {
-        seq: ambre_core::Seq::new(seq),
+        seq: ambre_core::Seq::<ambre_core::Relay>::new(seq),
         payload,
         nonce: FixedBytes::from_array([0; 16]),
         peer: ambre_core::PeerId::new(peer),
@@ -1672,7 +1673,7 @@ mod pass_tests {
         let mut reopened = board();
         reopened.state.apply_remote(
             reopened.document_id,
-            Order::Snapshot(Seq::ZERO),
+            Order::Snapshot(Seq::<Relay>::ZERO),
             ambre_core::LoroPayloadRef::Snapshot(&snapshot),
         );
         assert_eq!(
@@ -1709,7 +1710,7 @@ mod pass_tests {
             .expect("the peer's delta");
         state.apply_remote(
             document_id,
-            Order::Update(Seq::new(1)),
+            Order::Update(Seq::<Relay>::new(1)),
             ambre_core::LoroPayloadRef::Delta(&delta),
         );
         assert!(!state.has_pending_work(), "the import landed first");
@@ -1813,7 +1814,7 @@ mod authorship_tests {
         peer: ambre_core::PeerId,
     ) -> SignedDelta {
         SignedDelta {
-            seq: ambre_core::Seq::new(0),
+            seq: ambre_core::Seq::<ambre_core::Relay>::new(0),
             payload,
             nonce: FixedBytes::from_array([0; 16]),
             peer,
@@ -2045,7 +2046,7 @@ mod authorship_tests {
     /// Alice's delta, numbered `seq` by the relay, reaches the rig.
     fn receive(rig: &mut Rig, payload: ambre_core::Payload<ambre_core::DeltaBytes>, seq: u64) {
         let mut delta = signed(payload, ALICE);
-        delta.seq = ambre_core::Seq::new(seq);
+        delta.seq = ambre_core::Seq::<ambre_core::Relay>::new(seq);
         rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id: rig.document_id,
             delta,
@@ -2057,7 +2058,7 @@ mod authorship_tests {
         rig.state.handle_logic_event(LogicEvent::PendingSnapshot {
             document_id: rig.document_id,
             snapshot_id: Id::<Snapshot>::genesis(rig.document_id),
-            covered_seq: ambre_core::Seq::new(covered),
+            covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(covered),
             payload: payload.into(),
             purpose: SnapshotPurpose::Confirm,
         });
@@ -2188,7 +2189,7 @@ mod authorship_tests {
         rig.state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: rig.document_id,
             payload: (snapshot_of(std::slice::from_ref(&hers))).into(),
-            covered_seq: ambre_core::Seq::new(5),
+            covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(5),
         });
         assert_eq!(
             verdict(&mut rig, snapshot_of(&[hers]), 3),
@@ -2210,7 +2211,7 @@ mod authorship_tests {
             SyncCommand::SendSnapshot { covered_seq, .. } => Some(covered_seq),
             _ => None,
         });
-        assert_eq!(covered, Some(ambre_core::Seq::new(1)));
+        assert_eq!(covered, Some(ambre_core::Seq::<ambre_core::Relay>::new(1)));
     }
 
     /// One open document still waiting for its session identity, with the

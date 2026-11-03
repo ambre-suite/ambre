@@ -150,7 +150,7 @@ mod tests {
     /// public read path into the grid).
     fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
         let outcome = state.handle_command(TrameCommand::ScrollViewport {
-            version: ambre_core::Generation::nth(1),
+            version: ambre_core::Seq::nth(1),
             row_start: Pos::<Row>::new(row),
             row_end: Pos::<Row>::new(row),
             col_start: Pos::<Col>::new(col),

@@ -12,7 +12,7 @@ use ambre_core::index::{Axis, Pos};
 use std::collections::HashMap;
 
 use ambre_core::id::{Footnote, Id};
-use ambre_core::{Doc, Generation, GenerationKind, Px};
+use ambre_core::{Doc, Px, Seq, SeqKind};
 use loro::TreeID;
 
 use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
@@ -21,6 +21,7 @@ use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
 pub enum CachedRuns {}
 
 impl ambre_core::TallyKind for CachedRuns {
+    type Repr = u32;
     const NAME: &'static str = "CachedRunCount";
 }
 
@@ -28,6 +29,7 @@ impl ambre_core::TallyKind for CachedRuns {
 pub enum Builds {}
 
 impl ambre_core::TallyKind for Builds {
+    type Repr = u32;
     const NAME: &'static str = "BuildCount";
 }
 
@@ -47,7 +49,7 @@ pub const RUN_CACHE_RUNS: Tally<CachedRuns> = Tally::<CachedRuns>::new(500);
 /// order of two ticks means something.
 enum PaintTick {}
 
-impl GenerationKind for PaintTick {
+impl SeqKind for PaintTick {
     type IssueRight = ();
     const NAME: &'static str = "PaintTick";
 }
@@ -110,7 +112,7 @@ static NO_GLYPHS: RunDrawState = RunDrawState {
 struct Entry {
     run: ShapedRun,
     draw: RunDrawState,
-    used: Generation<PaintTick>,
+    used: Seq<PaintTick>,
 }
 
 /// The drawing state of the runs painted lately, bounded (`PROSE-UI-019`).
@@ -121,7 +123,7 @@ struct Entry {
 pub struct RunCache {
     entries: HashMap<RunKey, Entry>,
     capacity: Tally<CachedRuns>,
-    tick: Generation<PaintTick>,
+    tick: Seq<PaintTick>,
     built: Tally<Builds>,
 }
 
@@ -138,7 +140,7 @@ impl RunCache {
         Self {
             entries: HashMap::new(),
             capacity: capacity.max(Tally::<CachedRuns>::new(1)),
-            tick: Generation::ZERO,
+            tick: Seq::ZERO,
             built: Tally::<Builds>::ZERO,
         }
     }

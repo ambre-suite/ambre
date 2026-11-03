@@ -223,6 +223,7 @@ impl ActivitySummary {
 pub enum ContentUpdates {}
 
 impl crate::TallyKind for ContentUpdates {
+    type Repr = u32;
     const NAME: &'static str = "ContentUpdates";
 }
 
@@ -230,6 +231,7 @@ impl crate::TallyKind for ContentUpdates {
 pub enum ReactionUpdates {}
 
 impl crate::TallyKind for ReactionUpdates {
+    type Repr = u32;
     const NAME: &'static str = "ReactionUpdates";
 }
 
@@ -237,6 +239,7 @@ impl crate::TallyKind for ReactionUpdates {
 pub enum EditUpdates {}
 
 impl crate::TallyKind for EditUpdates {
+    type Repr = u32;
     const NAME: &'static str = "EditUpdates";
 }
 
@@ -244,6 +247,7 @@ impl crate::TallyKind for EditUpdates {
 pub enum OtherUpdates {}
 
 impl crate::TallyKind for OtherUpdates {
+    type Repr = u32;
     const NAME: &'static str = "OtherUpdates";
 }
 
@@ -251,6 +255,7 @@ impl crate::TallyKind for OtherUpdates {
 pub enum MentionUpdates {}
 
 impl crate::TallyKind for MentionUpdates {
+    type Repr = u32;
     const NAME: &'static str = "MentionUpdates";
 }
 

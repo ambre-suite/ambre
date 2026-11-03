@@ -12,11 +12,11 @@ pub struct ActivityRow {
     /// A segment or a thread: the client counts a thread's mentions alone.
     pub kind: ambre_core::ChannelDocumentKind,
     /// The caller's cursor on the document, 0 when it never wrote one.
-    pub cursor: ambre_core::Seq,
+    pub cursor: ambre_core::Seq<ambre_core::Relay>,
     /// The highest sequence number the register holds for the document: its
     /// flushed deltas and the horizon of its snapshots. The ephemeral store
     /// may hold a higher one not yet flushed.
-    pub durable_last: ambre_core::Seq,
+    pub durable_last: ambre_core::Seq<ambre_core::Relay>,
 }
 
 /// Move the caller's cursor on a document to `seq`, forward or back.
@@ -26,7 +26,7 @@ pub async fn set_read_cursor(
     pool: &PgPool,
     user_id: &Id<User>,
     document_id: &Id<Document>,
-    seq: ambre_core::Seq,
+    seq: ambre_core::Seq<ambre_core::Relay>,
 ) -> Result<(), AppError> {
     set_read_cursors(pool, user_id, &[(*document_id, seq)]).await
 }
@@ -36,7 +36,7 @@ pub async fn set_read_cursor(
 pub async fn set_read_cursors(
     pool: &PgPool,
     user_id: &Id<User>,
-    cursors: &[(Id<Document>, ambre_core::Seq)],
+    cursors: &[(Id<Document>, ambre_core::Seq<ambre_core::Relay>)],
 ) -> Result<(), AppError> {
     let (documents, seqs): (Vec<uuid::Uuid>, Vec<i64>) = cursors
         .iter()

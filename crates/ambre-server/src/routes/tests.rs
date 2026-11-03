@@ -599,7 +599,7 @@ mod handler_tests {
                 redis,
                 &doc,
                 &aa,
-                ambre_protocol::messages::Clock::new(4)
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(4)
             )
             .await
         ));
@@ -608,7 +608,7 @@ mod handler_tests {
             crate::redis_ops::append_pending_delta(
                 redis,
                 &doc,
-                ambre_core::Seq::new(8),
+                ambre_core::Seq::<ambre_core::Relay>::new(8),
                 &ambre_core::ObjectKey::from("k"),
                 &frame
             )
@@ -618,7 +618,7 @@ mod handler_tests {
             crate::redis_ops::push_dead_letter(
                 redis,
                 &doc,
-                ambre_core::Seq::new(8),
+                ambre_core::Seq::<ambre_core::Relay>::new(8),
                 &ambre_core::ObjectKey::from("k"),
                 &frame
             )
@@ -639,8 +639,11 @@ mod handler_tests {
         crate::redis_ops::seed_clock_state(
             redis,
             &doc,
-            ambre_core::Seq::new(9),
-            &[(aa, ambre_protocol::messages::Clock::new(9))],
+            ambre_core::Seq::<ambre_core::Relay>::new(9),
+            &[(
+                aa,
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(9),
+            )],
         )
         .await
         .unwrap();
@@ -1464,8 +1467,8 @@ mod handler_tests {
                 &doc,
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1u8; 32]),
                 &snapshot,
-                ambre_protocol::messages::Clock::new(seq),
-                ambre_core::Seq::new(seq),
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(seq),
+                ambre_core::Seq::<ambre_core::Relay>::new(seq),
                 &ambre_core::ObjectKey::from("k"),
             )
             .await
@@ -3364,8 +3367,10 @@ mod handler_tests {
                 &document,
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
                 &Id::<Snapshot>::mint(),
-                ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
-                ambre_core::Seq::new(seq.unsigned_abs()),
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+                    seq.unsigned_abs(),
+                ),
+                ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
                 &ambre_core::ObjectKey::new(format!("k{seq}")),
             )
             .await
@@ -3403,7 +3408,7 @@ mod handler_tests {
         let deltas = crate::db::get_updates_after(
             &state.db,
             &document,
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
         )
         .await;

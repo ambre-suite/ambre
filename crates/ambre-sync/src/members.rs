@@ -16,7 +16,7 @@ impl SyncState {
     /// transport so it is unit-tested natively.
     pub(crate) fn handle_fetch_invitee_key(
         &self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         invitee_email: ambre_core::Email,
     ) {
@@ -52,7 +52,7 @@ impl SyncState {
 
     /// Fetch the exchange key of `user_id`, wrapping nothing. Delegates to
     /// [`sharing::fetch_member_key_task`], as the invitee's fetch does.
-    pub(crate) fn handle_fetch_member_key(&self, id: Generation<Request>, user_id: Id<User>) {
+    pub(crate) fn handle_fetch_member_key(&self, id: Seq<Request>, user_id: Id<User>) {
         let logic_tx = self.logic_tx.clone();
         let Some(tx) = self.event_tx.clone() else {
             let _ = logic_tx.send(LogicEvent::ApiError {
@@ -79,7 +79,7 @@ impl SyncState {
 
     pub(crate) fn handle_invite_to_document(
         &self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         invitee_email: Option<ambre_core::Email>,
         invitee: Id<User>,
@@ -163,7 +163,7 @@ impl SyncState {
     ///    into the [`SyncDocumentState::old_keys`] LRU cache.
     pub(crate) fn handle_revoke_from_document(
         &self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
     ) {
@@ -233,7 +233,7 @@ impl SyncState {
 
     /// Leaves a document: DELETEs this user's own share and nothing else
     /// (`SYNC-127`, `SYNC-130`). [`SyncEvent::DocumentLeft`] closes it locally.
-    pub(crate) fn handle_leave_document(&self, id: Generation<Request>, document_id: Id<Document>) {
+    pub(crate) fn handle_leave_document(&self, id: Seq<Request>, document_id: Id<Document>) {
         let (Some(tx), Some(author), Some(exchange_key)) = (
             self.event_tx.clone(),
             self.author(),
@@ -270,7 +270,7 @@ impl SyncState {
     /// request id it refreshes the member directory alone, and replies nothing.
     pub(crate) fn handle_list_document_members(
         &mut self,
-        id: Option<Generation<Request>>,
+        id: Option<Seq<Request>>,
         document_id: Id<Document>,
     ) {
         // Number the listing, so an answer older than the directory held
@@ -278,9 +278,7 @@ impl SyncState {
         let asked = self
             .documents
             .get_mut(&document_id)
-            .map_or(ambre_core::Generation::ZERO, |doc| {
-                doc.directory_asked.issue()
-            });
+            .map_or(ambre_core::Seq::ZERO, |doc| doc.directory_asked.issue());
         let event_tx = self.event_tx.clone();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -316,7 +314,7 @@ impl SyncState {
     /// [`RestEvent::MemberRoleUpdated`] on success.
     pub(crate) fn handle_update_document_member_role(
         &self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
         role: Role,
@@ -366,11 +364,7 @@ impl SyncState {
     /// response into [`UserInfo`] values, and replies with
     /// [`RestEvent::UserSearchResults`]. The query is percent-encoded whole
     /// before it is placed in the URL (`SYNC-179`).
-    pub(crate) fn handle_search_users(
-        &self,
-        id: Generation<Request>,
-        query: ambre_core::UserSearch,
-    ) {
+    pub(crate) fn handle_search_users(&self, id: Seq<Request>, query: ambre_core::UserSearch) {
         let event_tx = self.event_tx.clone();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;

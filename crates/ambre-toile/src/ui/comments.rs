@@ -352,7 +352,7 @@ mod tests {
 
     fn viewport(pins: Vec<CommentPin>) -> DisplayViewport {
         DisplayViewport {
-            version: ambre_core::Generation::ZERO,
+            version: ambre_core::Seq::ZERO,
             grid_unit: Px::<Board>::new(20.0),
             viewport: Viewport::default(),
             nodes: Vec::new(),

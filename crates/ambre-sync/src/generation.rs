@@ -5,13 +5,13 @@
 //! kind of timer counts on its own axis, so each family is its own marker. A
 //! replay ticket compared to a resend ticket does not compile.
 
-use ambre_core::GenerationKind;
+use ambre_core::SeqKind;
 
 /// The ticket of a replay timer, armed when the relay stopped a replay
 /// (`SYNC-153`).
 pub(crate) enum ReplayTicket {}
 
-impl GenerationKind for ReplayTicket {
+impl SeqKind for ReplayTicket {
     type IssueRight = ();
     const NAME: &'static str = "ReplayTicket";
 }
@@ -20,7 +20,7 @@ impl GenerationKind for ReplayTicket {
 /// delta (`SYNC-159`).
 pub(crate) enum ResendTicket {}
 
-impl GenerationKind for ResendTicket {
+impl SeqKind for ResendTicket {
     type IssueRight = ();
     const NAME: &'static str = "ResendTicket";
 }
@@ -29,7 +29,7 @@ impl GenerationKind for ResendTicket {
 /// the answer to the latest one counts (`SYNC-037`).
 pub(crate) enum Listing {}
 
-impl GenerationKind for Listing {
+impl SeqKind for Listing {
     type IssueRight = ();
     const NAME: &'static str = "Listing";
 }

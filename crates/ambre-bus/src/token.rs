@@ -3,7 +3,7 @@
 //!
 //! A token is never zero. "No token" is therefore an `Option`, and never a
 //! reserved value a fresh token could collide with. That is the difference
-//! from an `ambre_core::Generation`, whose zero stands before the first one.
+//! from an `ambre_core::Seq`, whose zero stands before the first one.
 
 use std::fmt;
 use std::hash::{Hash, Hasher};

@@ -103,7 +103,7 @@ web-sys             = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
-# `Generation::nth` for a test that names a count. Test builds alone, held by
+# `Seq::nth` for a test that names a count. Test builds alone, held by
 # `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
 ambre-core = { path = "../ambre-core", features = ["testing"] }
 # Host tests craft a tiny PNG to drive a real Toile media import through the

@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 
 use ambre_bus::{Confidential, Plaintext};
 use ambre_core::id::{Document, Id};
-use ambre_core::{Generation, GenerationKind, Issuer, Payload, SealedRowBytes};
+use ambre_core::{Issuer, Payload, SealedRowBytes, Seq, SeqKind};
 
 use crate::{PersistWrite, SealedWrite};
 
@@ -27,7 +27,7 @@ pub enum SealTicket {}
 #[derive(Clone, Copy)]
 pub struct SealRight(());
 
-impl GenerationKind for SealTicket {
+impl SeqKind for SealTicket {
     type IssueRight = SealRight;
     const NAME: &'static str = "SealTicket";
 }
@@ -60,7 +60,7 @@ struct Entry {
 #[derive(Debug)]
 enum Slot {
     Waiting {
-        ticket: Generation<SealTicket>,
+        ticket: Seq<SealTicket>,
         row: RowKind,
     },
     Ready(SealedWrite),
@@ -82,7 +82,7 @@ impl SealQueue {
         &mut self,
         document_id: Id<Document>,
         write: PersistWrite,
-    ) -> Option<(Generation<SealTicket>, Confidential<Plaintext>)> {
+    ) -> Option<(Seq<SealTicket>, Confidential<Plaintext>)> {
         let (slot, plaintext) = match write {
             PersistWrite::Snapshot(bytes) => {
                 let ticket = self.ticket();
@@ -117,17 +117,13 @@ impl SealQueue {
         plaintext.map(|(ticket, bytes)| (ticket, Confidential::<Plaintext>::new(bytes)))
     }
 
-    fn ticket(&mut self) -> Generation<SealTicket> {
+    fn ticket(&mut self) -> Seq<SealTicket> {
         self.tickets.issue()
     }
 
     /// The seal of `ticket` came back. `None` is a seal that did not happen,
     /// and its write is dropped: the store never holds a row in the clear.
-    pub fn sealed(
-        &mut self,
-        ticket: Generation<SealTicket>,
-        sealed: Option<Payload<SealedRowBytes>>,
-    ) {
+    pub fn sealed(&mut self, ticket: Seq<SealTicket>, sealed: Option<Payload<SealedRowBytes>>) {
         let Some(at) = self.entries.iter().position(
             |entry| matches!(entry.slot, Slot::Waiting { ticket: waits, .. } if waits == ticket),
         ) else {
@@ -184,7 +180,7 @@ mod tests {
     fn each_seal_takes_its_own_ticket() {
         let mut queue = SealQueue::default();
         let tickets = [queue.ticket(), queue.ticket(), queue.ticket()];
-        assert!(Generation::ZERO < tickets[0]);
+        assert!(Seq::ZERO < tickets[0]);
         assert!(tickets.windows(2).all(|pair| pair[0] < pair[1]));
     }
 

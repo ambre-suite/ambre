@@ -10,7 +10,7 @@
 //! when the answer reaches the view. No clock crosses a thread.
 
 use ambre_bus::app::prose::ProseEvent;
-use ambre_core::Tally;
+use ambre_core::{Seq, Tally};
 
 use crate::ui::DraftBuffer;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
@@ -116,16 +116,16 @@ pub struct KeyProbe {
     /// Draft entries awaiting their confirmation, with their input time and
     /// the frame count at that input.
     unconfirmed: Vec<(
-        ambre_core::Generation<ambre_bus::app::prose::TextAck>,
+        ambre_core::Seq<ambre_bus::app::prose::TextAck>,
         Instant<PageLoad>,
-        FrameNumber,
+        Seq<AnimationFrame>,
     )>,
     /// The animation frames begun so far.
-    frame: FrameNumber,
+    frame: Seq<AnimationFrame>,
     /// The frame counts of the confirmations since the last take.
     counts: Vec<Tally<AnimationFrames>>,
     /// The highest acknowledgement number seen in the draft.
-    seen: Option<ambre_core::Generation<ambre_bus::app::prose::TextAck>>,
+    seen: Option<ambre_core::Seq<ambre_bus::app::prose::TextAck>>,
     undrawn: Vec<Undrawn>,
 }
 
@@ -154,7 +154,7 @@ impl KeyProbe {
     ) -> Vec<Measure> {
         // Acknowledgement numbers only grow, so an entry above the last one
         // seen is one this input added.
-        let fresh: Vec<ambre_core::Generation<ambre_bus::app::prose::TextAck>> = draft
+        let fresh: Vec<ambre_core::Seq<ambre_bus::app::prose::TextAck>> = draft
             .entries()
             .map(|(seq, _)| seq)
             .filter(|&seq| self.seen.is_none_or(|seen| seq > seen))
@@ -186,7 +186,7 @@ impl KeyProbe {
         draft: &DraftBuffer,
         answer: Answer,
     ) -> Vec<Measure> {
-        let pending: Vec<ambre_core::Generation<ambre_bus::app::prose::TextAck>> = draft
+        let pending: Vec<ambre_core::Seq<ambre_bus::app::prose::TextAck>> = draft
             .entries()
             .filter(|&(_, confirmed)| confirmed == crate::ui::Confirmation::Pending)
             .map(|(seq, _)| seq)
@@ -237,26 +237,24 @@ impl KeyProbe {
 pub enum AnimationFrames {}
 
 impl ambre_core::TallyKind for AnimationFrames {
+    type Repr = u32;
     const NAME: &'static str = "FrameCount";
 }
 
-/// How many animation frames began before a moment, counted by the probe.
-/// It only grows, and holds at the top rather than wrap.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-struct FrameNumber(u64);
+/// The probe that numbers the animation frames as they begin. A
+/// `Seq<AnimationFrame>` is how many began before a moment: it only grows,
+/// and holds at the top rather than wrap.
+enum AnimationFrame {}
 
-impl FrameNumber {
-    /// The number once one more frame began.
-    fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+impl ambre_core::SeqKind for AnimationFrame {
+    type IssueRight = ();
+    const NAME: &'static str = "FrameNumber";
+}
 
-    /// The frames begun from `earlier` to this number, zero when `earlier`
-    /// is not before it, held at the top of a tally.
-    fn since(self, earlier: Self) -> Tally<AnimationFrames> {
-        let frames = self.0.saturating_sub(earlier.0);
-        Tally::<AnimationFrames>::new(u32::try_from(frames).unwrap_or(u32::MAX))
-    }
+/// The gap between two frame numbers counts the frames a confirmation
+/// waited for, held at the top of the 32-bit tally.
+impl ambre_core::CountsSince for AnimationFrame {
+    type Tally = AnimationFrames;
 }
 
 /// The median and the 95th percentile of a set of samples, in the unit the
@@ -313,7 +311,7 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(7),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(7),
             "a",
             &block(),
             Pos::<DocChar>::ZERO,
@@ -338,7 +336,7 @@ mod tests {
                 .is_empty(),
             "not yet confirmed"
         );
-        draft.confirm(ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(7));
+        draft.confirm(ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(7));
         let confirm = probe.answered(Instant::<PageLoad>::new(20.0), &draft, Answer::Other);
         assert_eq!(confirm.len(), 1);
         assert_eq!(confirm[0].name, ProbeName::Confirm);
@@ -379,7 +377,7 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "a",
             &block(),
             Pos::<DocChar>::ZERO,
@@ -390,7 +388,7 @@ mod tests {
             &draft,
             Dispatch::Sent,
         );
-        draft.confirm(ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1));
+        draft.confirm(ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1));
         assert_eq!(
             probe
                 .answered(Instant::<PageLoad>::new(0.5), &draft, Answer::Other)
@@ -398,7 +396,7 @@ mod tests {
             1
         );
         draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(2),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(2),
             "b",
             &block(),
             Pos::<DocChar>::new(1),
@@ -416,7 +414,7 @@ mod tests {
             0,
             "a confirmed entry is not new"
         );
-        draft.confirm(ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(2));
+        draft.confirm(ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(2));
         draft.laid();
         assert_eq!(
             probe
@@ -433,7 +431,7 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "a",
             &block(),
             Pos::<DocChar>::ZERO,
@@ -445,7 +443,7 @@ mod tests {
             Dispatch::Sent,
         );
         draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(2),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(2),
             "b",
             &block(),
             Pos::<DocChar>::new(1),
@@ -456,8 +454,8 @@ mod tests {
             &draft,
             Dispatch::Sent,
         );
-        draft.confirm(ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1));
-        draft.confirm(ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(2));
+        draft.confirm(ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1));
+        draft.confirm(ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(2));
         draft.laid();
         let confirm = probe.answered(Instant::<PageLoad>::new(9.0), &draft, Answer::Layout);
         assert_eq!(confirm.len(), 2);
@@ -489,7 +487,7 @@ mod tests {
         let mut draft = DraftBuffer::default();
         probe.frame();
         draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "a",
             &block(),
             Pos::<DocChar>::ZERO,
@@ -507,7 +505,7 @@ mod tests {
             "the echo frame has no answer"
         );
         probe.frame();
-        draft.confirm(ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1));
+        draft.confirm(ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1));
         probe.answered(Instant::<PageLoad>::new(33.0), &draft, Answer::Other);
         assert_eq!(probe.take_counts(), [Tally::<AnimationFrames>::new(2)]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
@@ -518,17 +516,17 @@ mod tests {
     #[test]
     fn a_frame_begun_at_the_top_of_the_count_holds_there() {
         let mut probe = KeyProbe {
-            frame: FrameNumber(u64::MAX),
+            frame: Seq::<AnimationFrame>::nth(u64::MAX),
             ..KeyProbe::default()
         };
         probe.frame();
-        assert_eq!(probe.frame, FrameNumber(u64::MAX));
+        assert_eq!(probe.frame, Seq::<AnimationFrame>::nth(u64::MAX));
         assert_eq!(
-            FrameNumber(1).since(FrameNumber(3)),
+            Seq::<AnimationFrame>::nth(1).since(Seq::<AnimationFrame>::nth(3)),
             Tally::<AnimationFrames>::ZERO
         );
         assert_eq!(
-            FrameNumber(u64::MAX).since(FrameNumber(0)),
+            Seq::<AnimationFrame>::nth(u64::MAX).since(Seq::<AnimationFrame>::ZERO),
             Tally::<AnimationFrames>::new(u32::MAX)
         );
     }

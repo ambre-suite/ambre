@@ -6,10 +6,11 @@ use std::collections::{BTreeMap, HashMap};
 use ambre_core::ByteSize;
 use ambre_core::id::{Document, Id};
 
-use crate::db::{DeltaCount, InlineCap};
+use crate::db::{Deltas, InlineCap};
 use crate::error::AppError;
 use crate::payload::StoredPayload;
 use crate::state::AppState;
+use ambre_core::Tally;
 use ambre_core::{Sec, TimeSpan};
 
 /// A delta whose sealed envelope is under this size lives in its index row
@@ -19,7 +20,7 @@ pub const INLINE_DELTA_MAX_SIZE: ByteSize = ByteSize::new(64 * 1024);
 /// The most a document holds inline (`ambre-spec-budgets.md`, the inline
 /// deltas per document row; `SRV-150`).
 pub const INLINE_CAP: InlineCap = InlineCap {
-    deltas: DeltaCount::new(256),
+    deltas: Tally::<Deltas>::new(256),
     bytes: ByteSize::new(256 * 1024),
 };
 
@@ -33,23 +34,23 @@ const IDLE_PASS_LIMIT: ambre_core::Bounded<crate::db::QueryLimit> =
 
 /// Whether a tail of `deltas` rows and `bytes` bytes should move now. The move
 /// starts at three quarters of the cap, so a write rarely meets a full tail.
-pub fn past_watermark(deltas: DeltaCount, bytes: ByteSize) -> bool {
+pub fn past_watermark(deltas: Tally<Deltas>, bytes: ByteSize) -> bool {
     let mark = INLINE_CAP.three_quarters();
     deltas >= mark.deltas || bytes >= mark.bytes
 }
 
 /// How many of the newest frames of `tail` stay inline after a move. It is at
 /// most a quarter of the cap, in deltas and in bytes alike.
-fn kept_after_move(tail: &[(ambre_core::Seq, StoredPayload)]) -> usize {
+fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)]) -> usize {
     let quarter = INLINE_CAP.quarter();
-    let mut kept = DeltaCount::new(0);
+    let mut kept = Tally::<Deltas>::new(0);
     let mut bytes = ByteSize::new(0);
     for (_, wire) in tail.iter().rev() {
         let next = bytes.saturating_add(ByteSize::of_len(wire.len()));
-        if kept.plus_one() > quarter.deltas || next > quarter.bytes {
+        if kept.incremented() > quarter.deltas || next > quarter.bytes {
             break;
         }
-        kept = kept.plus_one();
+        kept = kept.incremented();
         bytes = next;
     }
     usize::try_from(kept.get()).unwrap_or(usize::MAX)
@@ -60,8 +61,8 @@ fn kept_after_move(tail: &[(ambre_core::Seq, StoredPayload)]) -> usize {
 pub fn batch_key(
     env_prefix: &crate::s3::StoreText<crate::s3::EnvPrefix>,
     document_id: &Id<Document>,
-    first: ambre_core::Seq,
-    last: ambre_core::Seq,
+    first: ambre_core::Seq<ambre_core::Relay>,
+    last: ambre_core::Seq<ambre_core::Relay>,
 ) -> ambre_core::ObjectKey {
     ambre_core::ObjectKey::new(format!(
         "{env_prefix}/documents/{document_id}/batches/{:010}-{:010}",
@@ -72,14 +73,16 @@ pub fn batch_key(
 
 /// Encodes a batch: each delta's number and its sealed envelope, unchanged
 /// (`SRV-153`).
-fn encode_batch(frames: &[(ambre_core::Seq, StoredPayload)]) -> Result<StoredPayload, AppError> {
+fn encode_batch(
+    frames: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)],
+) -> Result<StoredPayload, AppError> {
     StoredPayload::batch(frames).map_err(|e| AppError::Internal(format!("batch encode: {e}")))
 }
 
 /// Decodes a batch into its frames by number.
 fn decode_batch(
     batch: &StoredPayload,
-) -> Result<BTreeMap<ambre_core::Seq, StoredPayload>, AppError> {
+) -> Result<BTreeMap<ambre_core::Seq<ambre_core::Relay>, StoredPayload>, AppError> {
     batch
         .unbatch()
         .map_err(|e| AppError::Internal(format!("batch decode: {e}")))
@@ -121,7 +124,7 @@ pub async fn move_to_batch(
         .send()
         .await
         .map_err(|e| AppError::S3(format!("batch put {key}: {e}")))?;
-    let seqs: Vec<ambre_core::Seq> = moved.iter().map(|(seq, _)| *seq).collect();
+    let seqs: Vec<ambre_core::Seq<ambre_core::Relay>> = moved.iter().map(|(seq, _)| *seq).collect();
     crate::db::point_rows_at_batch(&mut tx, document_id, &seqs, &key).await?;
     tx.commit().await?;
     Ok(seqs.len())
@@ -178,7 +181,8 @@ pub async fn trim(state: &AppState) -> Result<u64, AppError> {
 /// The batch objects one replay has fetched, each fetched once (`SRV-155`).
 #[derive(Default)]
 pub struct BatchCache {
-    held: HashMap<ambre_core::ObjectKey, BTreeMap<ambre_core::Seq, StoredPayload>>,
+    held:
+        HashMap<ambre_core::ObjectKey, BTreeMap<ambre_core::Seq<ambre_core::Relay>, StoredPayload>>,
 }
 
 impl BatchCache {
@@ -214,14 +218,14 @@ impl BatchCache {
     pub fn frame(
         &self,
         key: &ambre_core::ObjectKey,
-        seq: ambre_core::Seq,
+        seq: ambre_core::Seq<ambre_core::Relay>,
     ) -> Option<StoredPayload> {
         self.held.get(key)?.get(&seq).cloned()
     }
 
     /// Forgets every batch whose last delta is at or below `seq`: a replay goes
     /// forward, so it never needs one again.
-    pub fn forget_through(&mut self, seq: ambre_core::Seq) {
+    pub fn forget_through(&mut self, seq: ambre_core::Seq<ambre_core::Relay>) {
         self.held
             .retain(|_, frames| frames.last_key_value().is_some_and(|(last, _)| *last > seq));
     }
@@ -231,11 +235,11 @@ impl BatchCache {
 mod tests {
     use super::*;
 
-    fn tail(n: usize, size: usize) -> Vec<(ambre_core::Seq, StoredPayload)> {
+    fn tail(n: usize, size: usize) -> Vec<(ambre_core::Seq<ambre_core::Relay>, StoredPayload)> {
         (1..=n)
             .map(|s| {
                 (
-                    ambre_core::Seq::new(u64::try_from(s).unwrap()),
+                    ambre_core::Seq::<ambre_core::Relay>::new(u64::try_from(s).unwrap()),
                     StoredPayload::new(vec![0u8; size]),
                 )
             })
@@ -245,14 +249,14 @@ mod tests {
     /// `SRV-151`: the move starts at three quarters of the count or the bytes.
     #[test]
     fn a_move_starts_at_three_quarters_of_either_bound() {
-        assert!(!past_watermark(DeltaCount::new(191), ByteSize::new(0)));
-        assert!(past_watermark(DeltaCount::new(192), ByteSize::new(0)));
+        assert!(!past_watermark(Tally::<Deltas>::new(191), ByteSize::new(0)));
+        assert!(past_watermark(Tally::<Deltas>::new(192), ByteSize::new(0)));
         assert!(!past_watermark(
-            DeltaCount::new(1),
+            Tally::<Deltas>::new(1),
             ByteSize::new(192 * 1024 - 1)
         ));
         assert!(past_watermark(
-            DeltaCount::new(1),
+            Tally::<Deltas>::new(1),
             ByteSize::new(192 * 1024)
         ));
     }
@@ -269,9 +273,14 @@ mod tests {
     #[test]
     fn a_batch_keeps_each_number_and_frame() {
         let frames = vec![(3, vec![1, 2]), (7, vec![]), (9, vec![5; 300])];
-        let sealed: Vec<(ambre_core::Seq, StoredPayload)> = frames
+        let sealed: Vec<(ambre_core::Seq<ambre_core::Relay>, StoredPayload)> = frames
             .iter()
-            .map(|(s, f)| (ambre_core::Seq::new(*s), StoredPayload::new(f.clone())))
+            .map(|(s, f)| {
+                (
+                    ambre_core::Seq::<ambre_core::Relay>::new(*s),
+                    StoredPayload::new(f.clone()),
+                )
+            })
             .collect();
         let back = decode_batch(&encode_batch(&sealed).unwrap()).unwrap();
         let back: Vec<(u64, Vec<u8>)> = back
@@ -291,6 +300,7 @@ mod db_tests {
     use crate::test_helpers::{
         S3Stub, create_test_document, create_test_user, offline_s3, test_app_state, with_s3,
     };
+    use ambre_core::StoredAsI64;
     use ambre_core::id::Snapshot;
     use std::sync::Arc;
 
@@ -318,8 +328,10 @@ mod db_tests {
             doc,
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
             &snap,
-            ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
-            ambre_core::Seq::new(seq.unsigned_abs()),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+                seq.unsigned_abs(),
+            ),
+            ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
             &wire,
             cap,
         )
@@ -337,7 +349,7 @@ mod db_tests {
         crate::db::get_updates_after(
             &state.db,
             doc,
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             ambre_core::Bounded::<crate::db::QueryLimit>::of::<1000>(),
         )
         .await
@@ -364,7 +376,7 @@ mod db_tests {
         for seq in 1..=cap {
             let got = inline(&state, &doc, seq, &frame(seq), INLINE_CAP).await;
             assert!(
-                matches!(got, InlineInsert::Stored { deltas, .. } if deltas == DeltaCount::from_i64(seq))
+                matches!(got, InlineInsert::Stored { deltas, .. } if deltas == Tally::<Deltas>::from_i64(seq))
             );
         }
         let full = inline(&state, &doc, cap + 1, &frame(cap + 1), INLINE_CAP).await;
@@ -377,7 +389,7 @@ mod db_tests {
         let owner = create_test_user(&state.db, "bytes@ambre.app").await;
         let other = create_test_document(&state.db, owner, "prose").await;
         let small = InlineCap {
-            deltas: DeltaCount::new(100),
+            deltas: Tally::<Deltas>::new(100),
             bytes: ByteSize::new(10),
         };
         assert!(matches!(
@@ -406,8 +418,8 @@ mod db_tests {
         let key = batch_key(
             &state.config.s3_env_prefix,
             &doc,
-            ambre_core::Seq::new(1),
-            ambre_core::Seq::new(136),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            ambre_core::Seq::<ambre_core::Relay>::new(136),
         );
         let rows = homes(&state, &doc).await;
         assert!(
@@ -483,14 +495,14 @@ mod db_tests {
         let older = batch_key(
             &state.config.s3_env_prefix,
             &doc,
-            ambre_core::Seq::new(1),
-            ambre_core::Seq::new(5),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            ambre_core::Seq::<ambre_core::Relay>::new(5),
         );
         let newer = batch_key(
             &state.config.s3_env_prefix,
             &doc,
-            ambre_core::Seq::new(6),
-            ambre_core::Seq::new(10),
+            ambre_core::Seq::<ambre_core::Relay>::new(6),
+            ambre_core::Seq::<ambre_core::Relay>::new(10),
         );
         assert_eq!(
             stub.keys(),
@@ -504,7 +516,7 @@ mod db_tests {
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
             &clocks,
             &ambre_core::ObjectKey::from("snap"),
-            ambre_core::Seq::new(7),
+            ambre_core::Seq::<ambre_core::Relay>::new(7),
         )
         .await
         .unwrap();

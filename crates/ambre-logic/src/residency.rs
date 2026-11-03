@@ -92,7 +92,7 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         doc_type: DocType,
-        horizon: Seq,
+        horizon: Seq<Relay>,
         restored: HeldRestore,
         sessions: Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>,
     ) {
@@ -197,8 +197,10 @@ mod tests {
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
         if let Some(doc) = state.docs.get_mut(&document_id) {
-            doc.ledger
-                .reset(ambre_core::Seq::new(4), doc.state.crdt().oplog_vv());
+            doc.ledger.reset(
+                ambre_core::Seq::<ambre_core::Relay>::new(4),
+                doc.state.crdt().oplog_vv(),
+            );
         }
         drain(&sync);
         drain(&persist);
@@ -290,7 +292,10 @@ mod tests {
             [SyncCommand::OpenDocument { .. }]
         ));
         let doc = state.docs.get(&document_id).expect("reopened");
-        assert_eq!(doc.ledger.contiguous_end(), ambre_core::Seq::new(4));
+        assert_eq!(
+            doc.ledger.contiguous_end(),
+            ambre_core::Seq::<ambre_core::Relay>::new(4)
+        );
         assert!(drain(&ui).iter().any(|event| matches!(
             event,
             UiEvent::Activity { counters, .. } if *counters == ActivityCounters::default()

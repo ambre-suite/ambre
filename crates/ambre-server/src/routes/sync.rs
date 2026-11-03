@@ -20,7 +20,7 @@ pub struct SnapshotResponse {
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into this snapshot, so the client can gate its
     /// post-open `RequestMissing` and skip the already-replayed history.
-    pub covered_seq: ambre_core::Seq,
+    pub covered_seq: ambre_core::Seq<ambre_core::Relay>,
     /// Who vouched for it: `confirmed` or `self` (`SRV-128`).
     pub status: db::SnapshotStatus,
     /// The author's signing key, hex, which a self-confirmed snapshot is checked
@@ -36,7 +36,7 @@ pub struct SnapshotResponse {
 pub struct ReferenceSnapshot {
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
-    pub covered_seq: ambre_core::Seq,
+    pub covered_seq: ambre_core::Seq<ambre_core::Relay>,
 }
 
 pub async fn get_snapshot_metadata(
@@ -216,7 +216,7 @@ pub struct CreateSnapshotRequest {
     /// Highest delta `seq` the snapshot author had applied at upload time.
     /// Defaults to 0 for older clients (full replay preserved).
     #[serde(default)]
-    pub covered_seq: ambre_core::Seq,
+    pub covered_seq: ambre_core::Seq<ambre_core::Relay>,
 }
 #[derive(serde::Serialize)]
 pub struct CreateSnapshotResponse {
@@ -263,7 +263,7 @@ pub async fn create_snapshot(
     // A cold counter reads 0 and bounds nothing.
     let last = crate::redis_ops::current_seq(&state.redis, &doc_id).await?;
     let covered = req.covered_seq;
-    if last > ambre_core::Seq::new(0) && covered > last {
+    if last > ambre_core::Seq::<ambre_core::Relay>::new(0) && covered > last {
         return Err(AppError::BadRequest(
             "covered_seq past the last delta".into(),
         ));
@@ -389,15 +389,15 @@ pub async fn snapshot_download_url(
 /// Query parameters for delta retrieval (reconnect catch-up).
 #[derive(serde::Deserialize)]
 pub struct DeltasQuery {
-    pub after_seq: Option<ambre_core::Seq>,
+    pub after_seq: Option<ambre_core::Seq<ambre_core::Relay>>,
     #[serde(default, deserialize_with = "db::clamped_limit")]
     pub limit: Option<ambre_core::Bounded<db::QueryLimit>>,
 }
 /// One delta entry in the response list.
 #[derive(serde::Serialize)]
 pub struct DeltaEntry {
-    pub seq: ambre_core::Seq,
-    pub clock: ambre_protocol::messages::Clock,
+    pub seq: ambre_core::Seq<ambre_core::Relay>,
+    pub clock: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
     pub author_pubkey: FixedBytes<PublicKey>,
     /// The object of its own, for a delta over the inline size. A delta in the
     /// hot tail or in a batch has none, and is read over the socket replay.
@@ -418,7 +418,9 @@ pub async fn get_deltas(
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    let after = params.after_seq.unwrap_or(ambre_core::Seq::ZERO);
+    let after = params
+        .after_seq
+        .unwrap_or(ambre_core::Seq::<ambre_core::Relay>::ZERO);
     // The page size arrives clamped (M16): an unbounded `limit` would force a
     // full-table scan of `updates` and a large response allocation.
     let limit = params.limit.unwrap_or_default();

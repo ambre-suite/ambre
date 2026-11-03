@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_core::ByteSize;
-use ambre_core::Generation;
+use ambre_core::Seq;
 use ambre_core::id::{Document, Id};
 use ambre_core::residency::{Delivery, Held, Mutability, Residency, ViewTick};
 
@@ -66,7 +66,7 @@ pub enum Refusal {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Meta {
     cost: Cost,
-    viewed: Generation<ViewTick>,
+    viewed: Seq<ViewTick>,
     immutable: Mutability,
     unsent: Delivery,
 }
@@ -82,7 +82,7 @@ impl Meta {
         let fields = [
             self.cost.snapshot.get(),
             self.cost.deltas.get(),
-            self.viewed.stored(),
+            self.viewed.get(),
         ];
         for (chunk, field) in row.chunks_exact_mut(8).zip(fields) {
             chunk.copy_from_slice(&field.to_le_bytes());
@@ -121,7 +121,7 @@ impl Meta {
                 snapshot: ByteSize::new(snapshot),
                 deltas: ByteSize::new(deltas),
             },
-            viewed: Generation::from_stored(viewed),
+            viewed: Seq::new(viewed),
             immutable: if flags & 1 == 0 {
                 Mutability::Mutable
             } else {

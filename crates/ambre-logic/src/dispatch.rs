@@ -760,7 +760,7 @@ mod tests {
     use ambre_bus::{Authored, Instant};
     use ambre_bus::{Col, Row};
     use ambre_bus::{Request, RestCommand, RestEvent, TrameCommand};
-    use ambre_core::Generation;
+    use ambre_core::Seq;
     use ambre_core::index::Pos;
     use std::io::Cursor;
 
@@ -955,7 +955,7 @@ mod tests {
         }
         assert_eq!(
             view.layout_version,
-            ambre_core::Generation::nth(2),
+            ambre_core::Seq::nth(2),
             "the later layout is the one in force"
         );
         assert_eq!(view.shaped.layout.page_count.get(), 1);
@@ -1082,7 +1082,7 @@ mod tests {
                 col_start: Pos::<Col>::new(0),
                 row_end: Pos::<Row>::new(16),
                 col_end: Pos::<Col>::new(8),
-                version: ambre_core::Generation::nth(1),
+                version: ambre_core::Seq::nth(1),
             }),
         });
         let kept = std::iter::from_fn(|| ui.try_recv().ok()).any(|evt| match evt {
@@ -1101,7 +1101,7 @@ mod tests {
 
     /// Open a document and ask for a sealed `.ambre`, returning the state, the
     /// UI queue, and the service request the seal produced.
-    fn sealing(doc_type: DocType) -> (LogicState, Receiver<UiEvent>, Generation<Request>, Vec<u8>) {
+    fn sealing(doc_type: DocType) -> (LogicState, Receiver<UiEvent>, Seq<Request>, Vec<u8>) {
         let document_id = Id::<Document>::mint();
         let (mut state, ui, sync_rx) = harness();
         state.open_with_identity(document_id, doc_type);
@@ -1255,7 +1255,7 @@ mod tests {
 
     fn scroll(version: u64) -> AppCommand {
         AppCommand::Trame(TrameCommand::ScrollViewport {
-            version: ambre_core::Generation::nth(version),
+            version: ambre_core::Seq::nth(version),
             row_start: Pos::<Row>::new(0),
             row_end: Pos::<Row>::new(4),
             col_start: Pos::<Col>::new(0),
@@ -1805,9 +1805,9 @@ mod tests {
         bytes
     }
 
-    /// Import a solid PNG into `doc_id` and return the single `Generation<Request>` the
+    /// Import a solid PNG into `doc_id` and return the single `Seq<Request>` the
     /// lowered `UploadMedia` was correlated with.
-    fn import_one_image(state: &mut LogicState, doc_id: Id<Document>) -> Generation<Request> {
+    fn import_one_image(state: &mut LogicState, doc_id: Id<Document>) -> Seq<Request> {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::ImportImage {

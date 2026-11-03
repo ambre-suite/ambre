@@ -71,13 +71,17 @@ fn decode_member_count(count: i64) -> Result<ambre_core::Tally<ambre_core::Membe
 
 /// A stored sequence number column, as a [`Seq`](ambre_core::Seq). A
 /// negative value is a decode error: the relay numbers from zero up.
-fn decode_seq(value: i64) -> Result<ambre_core::Seq, sqlx::Error> {
-    ambre_core::Seq::try_from(value).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+fn decode_seq(value: i64) -> Result<ambre_core::Seq<ambre_core::Relay>, sqlx::Error> {
+    ambre_core::Seq::<ambre_core::Relay>::try_from(value)
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
 /// A stored clock. A negative one is a decode error, as for [`decode_seq`].
-fn decode_clock(value: i64) -> Result<ambre_protocol::messages::Clock, sqlx::Error> {
-    ambre_protocol::messages::Clock::try_from(value).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+fn decode_clock(
+    value: i64,
+) -> Result<ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>, sqlx::Error> {
+    ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::try_from(value)
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
 /// A stored public key. Any length but 32 bytes is a decode error: the relay
@@ -185,11 +189,13 @@ pub(crate) struct PgOptId(Option<uuid::Uuid>);
 #[sqlx(transparent)]
 pub(crate) struct PgOptSeq(Option<i64>);
 
-impl TryFrom<PgOptSeq> for Option<ambre_core::Seq> {
+impl TryFrom<PgOptSeq> for Option<ambre_core::Seq<ambre_core::Relay>> {
     type Error = std::num::TryFromIntError;
 
     fn try_from(PgOptSeq(stored): PgOptSeq) -> Result<Self, Self::Error> {
-        stored.map(ambre_core::Seq::try_from).transpose()
+        stored
+            .map(ambre_core::Seq::<ambre_core::Relay>::try_from)
+            .transpose()
     }
 }
 
@@ -318,7 +324,7 @@ mod tests {
             &FixedBytes::<ambre_core::PublicKey>::from_array(author),
             &clocks,
             &ambre_core::ObjectKey::from("s3/key/snap"),
-            ambre_core::Seq::new(1500),
+            ambre_core::Seq::<ambre_core::Relay>::new(1500),
         )
         .await
         .expect("create snapshot");
@@ -338,14 +344,20 @@ mod tests {
             .expect("snapshot exists");
         assert_eq!(latest.id, sid);
         assert_eq!(latest.s3_key, ambre_core::ObjectKey::from("s3/key/snap"));
-        assert_eq!(latest.covered_seq, ambre_core::Seq::new(1500));
+        assert_eq!(
+            latest.covered_seq,
+            ambre_core::Seq::<ambre_core::Relay>::new(1500)
+        );
 
         // get_snapshot (the download-url path) carries it too.
         let by_id = get_snapshot(&pool, &document_id, &sid)
             .await
             .expect("query by id")
             .expect("snapshot exists");
-        assert_eq!(by_id.covered_seq, ambre_core::Seq::new(1500));
+        assert_eq!(
+            by_id.covered_seq,
+            ambre_core::Seq::<ambre_core::Relay>::new(1500)
+        );
 
         // IDOR regression guard: resolving the same snapshot id under a foreign
         // document must return None (never leak another document's blob).
@@ -389,8 +401,10 @@ mod tests {
                 &document_id,
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
-                ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
-                ambre_core::Seq::new(seq.unsigned_abs()),
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+                    seq.unsigned_abs(),
+                ),
+                ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
                 &ambre_core::ObjectKey::new(format!("k{seq}")),
             )
             .await
@@ -404,7 +418,7 @@ mod tests {
             &FixedBytes::<ambre_core::PublicKey>::from_array(author),
             &serde_json::json!({}),
             &ambre_core::ObjectKey::from("s3/snap"),
-            ambre_core::Seq::new(6),
+            ambre_core::Seq::<ambre_core::Relay>::new(6),
         )
         .await
         .expect("create snapshot");
@@ -426,7 +440,7 @@ mod tests {
         let remaining = get_updates_after(
             &pool,
             &document_id,
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>(),
         )
         .await
@@ -469,8 +483,10 @@ mod tests {
                 &document_id,
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
-                ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
-                ambre_core::Seq::new(seq.unsigned_abs()),
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+                    seq.unsigned_abs(),
+                ),
+                ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
                 &ambre_core::ObjectKey::new(format!("k{seq}")),
             )
             .await
@@ -484,7 +500,7 @@ mod tests {
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &serde_json::json!({}),
                 &ambre_core::ObjectKey::new(format!("s3/snap-{covered}")),
-                ambre_core::Seq::try_from(covered).expect("a relay number"),
+                ambre_core::Seq::<ambre_core::Relay>::try_from(covered).expect("a relay number"),
             )
             .await
             .expect("create snapshot");
@@ -507,7 +523,7 @@ mod tests {
         let remaining = get_updates_after(
             &pool,
             &document_id,
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>(),
         )
         .await

@@ -5,7 +5,7 @@ impl SyncState {
 
     pub(crate) fn handle_unlock(
         &mut self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         tracing::info!("Sync: Unlock");
@@ -156,7 +156,7 @@ impl SyncState {
     /// `id` is `None` for the silent re-login, which no request asked for.
     pub(crate) fn handle_dev_login(
         &mut self,
-        id: Option<Generation<Request>>,
+        id: Option<Seq<Request>>,
         username: ambre_core::DisplayName,
     ) {
         tracing::info!("Sync: DevLogin (username={username})");
@@ -234,7 +234,7 @@ impl SyncState {
     /// no session exists yet.
     pub(crate) fn handle_provider_sign_in(
         &mut self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         provider: ambre_core::OidcProvider,
     ) {
         tracing::info!("Sync: ProviderSignIn ({provider})");
@@ -269,7 +269,7 @@ impl SyncState {
     /// [`handle_sync_event`]: Self::handle_sync_event
     pub(crate) fn handle_provider_return(
         &mut self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         provider: ambre_core::OidcProvider,
         code: ambre_core::Credential<ambre_core::OidcCode>,
         state: ambre_core::Credential<ambre_core::OidcState>,
@@ -334,7 +334,7 @@ impl SyncState {
 
     pub(crate) fn handle_setup_account(
         &mut self,
-        id: Generation<Request>,
+        id: Seq<Request>,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
         email: ambre_core::Email,
         display_name: ambre_core::DisplayName,
@@ -481,7 +481,7 @@ impl SyncState {
     /// then the relay revokes its refresh token (`SYNC-177`), and only then
     /// does `LoggedOut` answer. A failed revocation still signs out: the keys
     /// are gone already, and the token expires on its own.
-    pub(crate) fn handle_sign_out(&mut self, id: Generation<Request>) {
+    pub(crate) fn handle_sign_out(&mut self, id: Seq<Request>) {
         let held = self.tokens.borrow_mut().take();
         self.handle_logout();
         let (Some(tokens), Some(_)) = (held, self.event_tx.as_ref()) else {

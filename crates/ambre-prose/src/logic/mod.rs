@@ -97,6 +97,7 @@ use crate::schema;
 pub enum Faces {}
 
 impl ambre_core::TallyKind for Faces {
+    type Repr = u32;
     const NAME: &'static str = "FaceCount";
 }
 
@@ -197,7 +198,7 @@ pub struct ProseState {
     /// The version stamped on the last layout handed over. It only grows, even
     /// across a snapshot import that rebuilds the paginator: the view drops a
     /// layout older than the one it holds (`PROSE-UI-016`).
-    handed_version: ambre_core::Generation<LayoutVersion>,
+    handed_version: ambre_core::Seq<LayoutVersion>,
     /// The layouts handed over that the view may still hold. This thread
     /// frees each one once the view has let go of it, so the view never
     /// pays for freeing a whole layout (`PROSE-UI-205`).
@@ -336,7 +337,7 @@ impl ProseState {
             faces: Vec::new(),
             handed: None,
             window: WINDOW_PAGES.span(),
-            handed_version: ambre_core::Generation::ZERO,
+            handed_version: ambre_core::Seq::ZERO,
             in_view: Vec::new(),
             ids,
             word_count: crate::events::WordCount::default(),

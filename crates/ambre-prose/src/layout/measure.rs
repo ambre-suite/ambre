@@ -280,6 +280,7 @@ pub(crate) fn shipped_measurer() -> Measurer {
 pub enum ShapedRuns {}
 
 impl ambre_core::TallyKind for ShapedRuns {
+    type Repr = u32;
     const NAME: &'static str = "ShapedCount";
 }
 

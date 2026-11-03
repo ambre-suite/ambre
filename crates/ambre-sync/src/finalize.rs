@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{LeaseAnswer, Seq};
+use ambre_bus::{LeaseAnswer, Relay, Seq};
 
 use crate::updates::{SnapshotUpload, upload_snapshot};
 
@@ -91,7 +91,7 @@ impl SyncState {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         lease: Id<Lease>,
-        horizon: Seq,
+        horizon: Seq<Relay>,
         payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) {
         let document_id = segment.document_id();
@@ -194,7 +194,7 @@ mod tests {
     }
 
     /// A sealed snapshot of `document_id` covering the deltas up to `horizon`.
-    fn upload(document_id: Id<Document>, horizon: Seq) -> SnapshotUpload {
+    fn upload(document_id: Id<Document>, horizon: Seq<Relay>) -> SnapshotUpload {
         let key = DocumentKey::generate();
         let sk = MasterSeed::generate().derive_signing_key();
         let public_data = SnapshotPublicData {
@@ -244,7 +244,7 @@ mod tests {
             granted,
             Ok(LeaseAnswer::Granted {
                 lease,
-                horizon: ambre_bus::Seq::new(41),
+                horizon: ambre_bus::Seq::<ambre_bus::Relay>::new(41),
                 expires_in: TimeSpan::<Ms>::new(30_000)
             })
         );
@@ -289,7 +289,7 @@ mod tests {
             channel,
             segment,
             lease,
-            upload(document, ambre_bus::Seq::new(41)),
+            upload(document, ambre_bus::Seq::<ambre_bus::Relay>::new(41)),
         )
         .await;
         assert_eq!(committed, Ok(()));

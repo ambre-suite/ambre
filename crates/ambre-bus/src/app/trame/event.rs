@@ -9,7 +9,7 @@ use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
 use crate::token::Token;
 use ambre_core::id::{FilterView, Id, Sheet, User};
 use ambre_core::index::{Axis, Count, Pos};
-use ambre_core::{Doc, Px, Rgb};
+use ambre_core::{Doc, Px, Rgb, Tally};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- events (Logic -> UI)
@@ -82,7 +82,7 @@ impl std::fmt::Display for CellNumber {
 /// aggregate is ever an empty one's zero.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericStats {
-    count: CellCount,
+    count: Tally<Cells>,
     /// The total `of_all` was handed. Its caller passes the exact total of
     /// the numbers, `None` when it is past the largest finite number.
     sum: Option<CellNumber>,
@@ -105,7 +105,7 @@ impl NumericStats {
             .iter()
             .fold((first, first), |(min, max), &n| (min.min(n), max.max(n)));
         Some(Self {
-            count: CellCount::new(u64::try_from(numbers.len()).unwrap_or(u64::MAX)),
+            count: Tally::<Cells>::of_len(numbers.len()),
             sum,
             min,
             max,
@@ -114,7 +114,7 @@ impl NumericStats {
 
     /// How many numbers were totalled, never zero.
     #[must_use]
-    pub const fn count(&self) -> CellCount {
+    pub const fn count(&self) -> Tally<Cells> {
         self.count
     }
 
@@ -154,7 +154,7 @@ pub enum TrameEvent {
     /// [`TrameCommand::ScrollViewport`](super::TrameCommand::ScrollViewport)
     /// so stale responses can be dropped.
     ViewportData {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
         row_start: Pos<Row>,
         col_start: Pos<Col>,
         cells: Vec<DisplayCell>,
@@ -327,7 +327,7 @@ pub enum TrameEvent {
     /// cells, and is `None` when it holds none: the UI then shows no numeric
     /// aggregate.
     SelectionStats {
-        count: CellCount,
+        count: Tally<Cells>,
         numbers: Option<NumericStats>,
     },
 
@@ -390,7 +390,7 @@ pub enum TrameEvent {
     /// The accompanying [`DataReset`](Self::DataReset) prompts a viewport
     /// re-fetch with the new style overrides applied.
     CondFormatsUpdated {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
     },
 
     /// A local edit was rejected by a [`ValidationOnInvalid::Reject`] rule
@@ -399,7 +399,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Reject`]: super::ValidationOnInvalid::Reject
     ValidationError {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         message: String,
@@ -411,7 +411,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Warn`]: super::ValidationOnInvalid::Warn
     ValidationWarning {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         message: String,
@@ -421,7 +421,7 @@ pub enum TrameEvent {
     /// edit (`trame-cell-editing`, Post-MVP). No CRDT delta was
     /// produced; the chrome surfaces `description`.
     ProtectionDenied {
-        version: ambre_core::Generation<crate::ViewportVersion>,
+        version: ambre_core::Seq<crate::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         description: String,
@@ -627,7 +627,7 @@ impl CondFormatPriority {
     }
 }
 
-pub use ambre_core::CellCount;
+pub use ambre_core::Cells;
 
 /// A place in the sheet tab strip, 0-based from the left. It orders the
 /// tabs and names no sheet.

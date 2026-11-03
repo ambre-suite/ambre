@@ -5,7 +5,8 @@
 //!   marker of [`id`], such as `Id<Document>` or `Id<Element>`
 //! - [`DocType`]: enum of document types (Prose, Trame, Toile, Murmure)
 //! - [`PublicKey`], [`ExchangePublicKey`]: `[u8; 32]` wrappers for Ed25519 and X25519
-//! - [`Seq`]: the relay's sequence number of a document
+//! - [`Seq`]: a number one issuer hands out going up, such as the relay's
+//!   `Seq<Relay>`
 //! - [`Version`]: version byte for serialization
 //! - [`schema`]: the persisted schema version and its migration walk
 //! - [`authorship`]: the session nonce and the peer registry entry
@@ -57,7 +58,6 @@ pub mod fixtures;
 pub mod flag;
 /// Font attributes every application shares: [`FontSize`].
 pub mod font;
-pub mod generation;
 pub mod id;
 /// Index families: a position, a count, a difference, a span and a list, one
 /// generic type each over an axis marker.
@@ -144,7 +144,6 @@ pub use font::{
     FontFamily, FontSize, FontWeight, InvalidFontSize, Slant, Strikethrough, Underline, Weight,
     WordBreak,
 };
-pub use generation::{Generation, GenerationKind, Issuer, SharedIssuer};
 pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::LangTag;
@@ -185,7 +184,9 @@ pub use secret::{
     Passphrase, Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret, WireConfidential,
     WireCredential,
 };
-pub use seq::{DeltaCount, Seq};
+pub use seq::{
+    Before, CountsSince, Deltas, Issuer, Relay, Seq, SeqColumn, SeqKind, SharedIssuer, Wire,
+};
 pub use space::{
     Board, CanvasCss, Css, Device, Doc, Image, ScalesTo, Space, StoredBoard, Surface, Texel, View,
 };
@@ -199,7 +200,7 @@ pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
 };
-pub use tally::{CellCount, Elements, Recounts, Tally, TallyKind};
+pub use tally::{Cells, Divisor, Elements, Recounts, Tally, TallyColumn, TallyKind, TallyRepr};
 pub use text_offset::{
     Byte, Char, RedactedChars, Utf16, byte_span_to_chars, byte_to_char, char_len,
     char_span_to_bytes, char_to_byte, char_to_utf16, utf16_to_char,

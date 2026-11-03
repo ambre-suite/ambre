@@ -3,7 +3,9 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
-use ambre_core::{ApiFailure, FixedRole, HttpStatus, Payload, RefusalCode, Seq, UnreadableCause};
+use ambre_core::{
+    ApiFailure, FixedRole, HttpStatus, Payload, RefusalCode, Relay, Seq, UnreadableCause,
+};
 use serde::{Deserialize, Serialize};
 
 /// The two session tokens, each wiped on drop and redacted in `Debug`
@@ -1337,7 +1339,7 @@ pub(crate) struct MemberChannelEntry {
     /// The last number the relay gave in the meta (`SRV-223`), none from a
     /// relay that lists none.
     #[serde(default)]
-    pub meta_last: Option<ambre_core::Seq>,
+    pub meta_last: Option<ambre_core::Seq<ambre_core::Relay>>,
 }
 
 impl MemberChannelEntry {
@@ -1377,17 +1379,17 @@ pub(crate) struct ActivityEntry {
     /// The caller's own cursor. A relay that predates it answers none, which
     /// reads as nothing read.
     #[serde(default)]
-    pub read: ambre_core::Seq,
+    pub read: ambre_core::Seq<ambre_core::Relay>,
     /// The document's last number. A relay that predates it answers none,
     /// and a watch then starts from the head.
     #[serde(default)]
-    pub last: Option<ambre_core::Seq>,
+    pub last: Option<ambre_core::Seq<ambre_core::Relay>>,
 }
 
 /// `PUT /api/documents/{id}/read-cursor`.
 #[derive(Serialize)]
 pub(crate) struct ReadCursorRequest {
-    pub seq: ambre_core::Seq,
+    pub seq: ambre_core::Seq<ambre_core::Relay>,
 }
 
 /// `POST /api/read-cursors/mark-read`: the documents to move to their last
@@ -1540,7 +1542,7 @@ pub(crate) struct GrantedLeaseResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub lease_id: Id<Lease>,
     /// The last delta the final snapshot covers.
-    pub horizon: Seq,
+    pub horizon: Seq<Relay>,
     /// Milliseconds before the lease expires.
     pub expires_in: TimeSpan<Ms>,
 }
@@ -1570,12 +1572,12 @@ pub(crate) struct GrantedFoldResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub lease_id: Id<Lease>,
     /// The last delta of the segment the fold snapshot covers.
-    pub horizon: Seq,
+    pub horizon: Seq<Relay>,
     /// The amendments document to fold.
     #[serde(with = "ambre_core::serde_id::text")]
     pub amendments: Id<Document>,
     /// The last delta of the amendments the fold holds at least.
-    pub amendments_seq: Seq,
+    pub amendments_seq: Seq<Relay>,
     /// Milliseconds before the lease expires.
     pub expires_in: TimeSpan<Ms>,
 }
@@ -1589,7 +1591,7 @@ pub(crate) struct FoldSegmentRequest {
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
     /// The last delta of the amendments the fold holds.
-    pub amendments_seq: Seq,
+    pub amendments_seq: Seq<Relay>,
 }
 
 /// `POST /api/documents/{id}/snapshots/{snapshot}/confirm`: the amendments
@@ -1718,7 +1720,7 @@ pub(crate) struct SnapshotMetadataResponse {
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into the snapshot: the open path gates its
     /// `RequestMissing` on this to skip the already-replayed history.
-    pub covered_seq: Seq,
+    pub covered_seq: Seq<Relay>,
     /// `confirmed`, or `self` when only its author vouched for it (`SRV-128`).
     pub status: ambre_core::SnapshotStatus,
     /// The author's signing key, hex. A `self` snapshot of this very user opens
@@ -1735,7 +1737,7 @@ pub(crate) struct SnapshotMetadataResponse {
 pub(crate) struct ReferenceSnapshot {
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
-    pub covered_seq: Seq,
+    pub covered_seq: Seq<Relay>,
 }
 
 /// Body of `POST /api/documents/{id}/snapshots/{snapshot_id}/report`: the
@@ -1763,7 +1765,7 @@ pub(crate) struct CreateSnapshotRequest {
     pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` this client had applied when it took the snapshot.
-    pub covered_seq: Seq,
+    pub covered_seq: Seq<Relay>,
 }
 
 #[derive(Deserialize)]

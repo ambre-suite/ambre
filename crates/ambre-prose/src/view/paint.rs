@@ -1365,7 +1365,7 @@ mod tests {
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "abc",
             &id,
             Pos::<DocChar>::new(14),
@@ -1396,7 +1396,7 @@ mod tests {
         let id = first_block(&ui);
         assert!(drawn_glyphs(&paint(&mut ui), 14));
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "abc",
             &id,
             Pos::<DocChar>::new(4),
@@ -1420,7 +1420,7 @@ mod tests {
         let header = state.bands().header.expect("the header block");
         let mut ui = view_of(&mut state);
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "Head",
             &header,
             Pos::<DocChar>::ZERO,
@@ -1445,7 +1445,7 @@ mod tests {
         let row = laid.row_tops.as_slice()[1] - laid.row_tops.as_slice()[0];
 
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "Cell",
             &block,
             Pos::<DocChar>::ZERO,
@@ -1458,7 +1458,7 @@ mod tests {
         let long = "word ".repeat(60);
         ui.draft.clear();
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             &long,
             &block,
             Pos::<DocChar>::ZERO,
@@ -1507,7 +1507,7 @@ mod tests {
         let id = first_block(&ui);
         let after = x_of(&ui, id, 4);
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "abc",
             &id,
             Pos::<DocChar>::new(4),
@@ -1522,7 +1522,7 @@ mod tests {
     fn draft_width(ui: &mut ProseUiState, block: BlockId, text: &str) -> f64 {
         ui.draft.clear();
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             text,
             &block,
             Pos::<DocChar>::ZERO,
@@ -1580,7 +1580,7 @@ mod tests {
         let bold_at = |ui: &mut ProseUiState, at: u32| {
             ui.draft.clear();
             ui.draft.push_str(
-                ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+                ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
                 "abc",
                 &id,
                 Pos::<DocChar>::new(at),
@@ -1668,7 +1668,7 @@ mod tests {
         };
         let word = lines(&mut ui);
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "abc",
             &id,
             Pos::<DocChar>::new(4),
@@ -1695,7 +1695,7 @@ mod tests {
         let id = block;
         let typed = " more".repeat(40);
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             &typed,
             &id,
             Pos::<DocChar>::new(14),
@@ -1738,7 +1738,7 @@ mod tests {
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         ui.draft.push_delete(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             &id,
             Pos::<DocChar>::ZERO,
             Pos::<DocChar>::new(5),
@@ -1799,7 +1799,7 @@ mod tests {
         });
         ui.queued.clear();
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "xy",
             &minted,
             Pos::<DocChar>::ZERO,
@@ -1830,7 +1830,7 @@ mod tests {
             new_block: minted,
         });
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "xy",
             &minted,
             Pos::<DocChar>::ZERO,
@@ -1862,7 +1862,7 @@ mod tests {
         );
         // A keystroke replayed before the next frame shapes again.
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(2),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(2),
             "z",
             &minted,
             Pos::<DocChar>::new(2),
@@ -1939,7 +1939,7 @@ mod tests {
         );
 
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             &"word ".repeat(60),
             &left,
             Pos::<DocChar>::ZERO,
@@ -1969,7 +1969,7 @@ mod tests {
         let cell = block_id(first_block_of(&state, cell));
         let mut ui = view_of(&mut state);
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
             "xy",
             &cell,
             Pos::<DocChar>::ZERO,
@@ -1982,7 +1982,7 @@ mod tests {
         );
         // A keystroke replayed before the next frame, after the point.
         ui.draft.push_str(
-            ambre_core::Generation::<ambre_bus::app::prose::TextAck>::nth(2),
+            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(2),
             "z",
             &cell,
             Pos::<DocChar>::new(2),

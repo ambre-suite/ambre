@@ -15,7 +15,7 @@ const ROW_4: Pos<Row> = Pos::<Row>::new(4);
 /// `(row, col, raw)`.
 fn cells(state: &mut TrameState) -> Vec<(u32, u32, String)> {
     let out = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(9),
+        version: ambre_core::Seq::nth(9),
         row_start: Pos::<Row>::new(0),
         row_end: Pos::<Row>::new(7),
         col_start: Pos::<Col>::new(0),

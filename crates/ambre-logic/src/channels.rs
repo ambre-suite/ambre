@@ -12,7 +12,8 @@ use ambre_bus::{
     HeldReply, HeldSend, MessageAt, MurmureCommand, MurmureEvent,
 };
 use ambre_bus::{
-    MemberInfo, Mention, MentionTarget, Mentions, OpenFailure, Seq, SignedDelta, Unread, Unreadable,
+    MemberInfo, Mention, MentionTarget, Mentions, OpenFailure, Relay, Seq, SignedDelta, Unread,
+    Unreadable,
 };
 use ambre_core::Name;
 use ambre_murmure::{
@@ -24,7 +25,7 @@ use ambre_murmure::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ReadCursor {
     /// The relay number of the last update read.
-    pub(crate) read: Seq,
+    pub(crate) read: Seq<Relay>,
     /// Whether the document holds an update past `read`: the relay's yes or
     /// no, the one thing known of a segment this client does not hold.
     pub(crate) active: ambre_bus::Activity,
@@ -48,9 +49,9 @@ pub(crate) struct ClosedChannel {
     counted: HashMap<Id<Document>, Counts>,
     /// The horizon of each document's copy in the local store, until a
     /// reopen asks for it.
-    copies: HashMap<Id<Document>, Seq>,
+    copies: HashMap<Id<Document>, Seq<Relay>>,
     /// The copies a reopen is reading back, each with its horizon.
-    reading: HashMap<Id<Document>, Seq>,
+    reading: HashMap<Id<Document>, Seq<Relay>>,
 }
 
 /// Every document of an open channel that may carry a read cursor: those it
@@ -220,7 +221,7 @@ pub(crate) enum HeldCommand {
     Space(Id<Space>, ambre_bus::SpaceCommand),
     /// An invite into a direct message, held until its notice can be
     /// written (the Murmure channels spec).
-    Invite(Generation<Request>, ambre_bus::RestCommand),
+    Invite(Seq<Request>, ambre_bus::RestCommand),
 }
 
 /// The counts of an open channel, `None` when a part of them is unknown
@@ -245,7 +246,9 @@ fn counts_of(
     // A held thread counts its mentions alone, from its cursor or from its
     // start (the Murmure threads spec).
     for thread in channel.held_threads() {
-        let read = cursors.get(&thread).map_or(Seq::ZERO, |cursor| cursor.read);
+        let read = cursors
+            .get(&thread)
+            .map_or(Seq::<Relay>::ZERO, |cursor| cursor.read);
         count = count.with_mentions(channel.thread_mentions(thread, read, me).ok()?);
     }
     let unknown_final = channel
@@ -299,7 +302,7 @@ impl LogicState {
         let read_of = |segment: Id<Segment>| {
             self.read_cursors
                 .get(&segment.document_id())
-                .map_or(Seq::ZERO, |cursor| cursor.read)
+                .map_or(Seq::<Relay>::ZERO, |cursor| cursor.read)
         };
         let message = channel.first_unread(read_of, me);
         let event = MurmureEvent::FirstUnread { message };
@@ -486,7 +489,7 @@ impl LogicState {
             let horizon = self
                 .channel_ledgers
                 .remove(&document_id)
-                .map_or(Seq::ZERO, |ledger| ledger.contiguous_end());
+                .map_or(Seq::<Relay>::ZERO, |ledger| ledger.contiguous_end());
             self.forget_murmure_session(document_id);
             // The copy carries the relay's numbers it knows, so a reopen
             // counts from it. One that fails to export is fetched whole.
@@ -499,7 +502,7 @@ impl LogicState {
                 }
                 Err(error) => {
                     tracing::warn!("Logic: no local copy of {document_id}: {error}");
-                    Seq::ZERO
+                    Seq::<Relay>::ZERO
                 }
             };
             self.send_to_sync(SyncCommand::ReleaseDocument {
@@ -560,7 +563,10 @@ impl LogicState {
         else {
             return;
         };
-        let horizon = closed.reading.remove(&document_id).unwrap_or(Seq::ZERO);
+        let horizon = closed
+            .reading
+            .remove(&document_id)
+            .unwrap_or(Seq::<Relay>::ZERO);
         // An opening that ended meanwhile closed the subscription already.
         let Some(opening) = self
             .opening
@@ -985,16 +991,16 @@ impl LogicState {
     pub(crate) fn channel_snapshot(
         &self,
         document_id: Id<Document>,
-    ) -> Option<(ambre_core::Payload<ambre_core::SnapshotBytes>, Seq)> {
+    ) -> Option<(ambre_core::Payload<ambre_core::SnapshotBytes>, Seq<Relay>)> {
         let channel = self.channels.values().find(|c| c.holds(document_id))?;
         let payload = channel
             .snapshot(document_id)
             .map_err(|e| tracing::warn!("Logic: snapshot of {document_id} failed: {e}"))
             .ok()?;
-        let covered = self
-            .channel_ledgers
-            .get(&document_id)
-            .map_or(Seq::ZERO, snapshot_check::SeqLedger::contiguous_end);
+        let covered = self.channel_ledgers.get(&document_id).map_or(
+            Seq::<Relay>::ZERO,
+            snapshot_check::SeqLedger::contiguous_end,
+        );
         Some((payload, covered))
     }
 
@@ -1005,7 +1011,7 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
-        covered: Seq,
+        covered: Seq<Relay>,
         payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
         purpose: ambre_bus::SnapshotPurpose,
     ) {
@@ -1013,8 +1019,11 @@ impl LogicState {
             return;
         };
         let ledger = self.channel_ledgers.get(&document_id);
-        let floor = ledger.map_or(Seq::ZERO, snapshot_check::SeqLedger::floor);
-        let end = ledger.map_or(Seq::ZERO, snapshot_check::SeqLedger::contiguous_end);
+        let floor = ledger.map_or(Seq::<Relay>::ZERO, snapshot_check::SeqLedger::floor);
+        let end = ledger.map_or(
+            Seq::<Relay>::ZERO,
+            snapshot_check::SeqLedger::contiguous_end,
+        );
         let confirm = purpose == ambre_bus::SnapshotPurpose::Confirm;
         let verdict = if covered < floor || (confirm && end < covered) {
             SnapshotVerdict::Unchecked
@@ -1045,7 +1054,7 @@ impl LogicState {
     pub(crate) fn record_channel_seq(
         &mut self,
         document_id: Id<Document>,
-        seq: Seq,
+        seq: Seq<Relay>,
         payload: Option<&ambre_core::Payload<ambre_core::DeltaBytes>>,
     ) {
         if self.holds_murmure(document_id) {
@@ -1058,7 +1067,7 @@ impl LogicState {
 
     /// Note a snapshot the relay served for a channel or a space document.
     /// A reopen resumes after the deltas it covers (`RESID-010`).
-    pub(crate) fn note_murmure_snapshot(&mut self, document_id: Id<Document>, covered: Seq) {
+    pub(crate) fn note_murmure_snapshot(&mut self, document_id: Id<Document>, covered: Seq<Relay>) {
         if self.holds_murmure(document_id) {
             self.channel_ledgers
                 .entry(document_id)
@@ -1421,7 +1430,7 @@ impl LogicState {
                         self.read_cursors
                             .entry(segment.document_id())
                             .or_insert(ReadCursor {
-                                read: Seq::ZERO,
+                                read: Seq::<Relay>::ZERO,
                                 active: ambre_bus::Activity::Quiet,
                             });
                     cursor.active = ambre_bus::Activity::Quiet;
@@ -1837,7 +1846,7 @@ impl LogicState {
             channel
                 .segments_after(segment)
                 .into_iter()
-                .map(|later| (later, Seq::ZERO)),
+                .map(|later| (later, Seq::<Relay>::ZERO)),
         );
         for &(moved, read) in &cursors {
             self.read_cursors.insert(
@@ -2345,7 +2354,7 @@ mod tests {
         bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id,
             delta: ambre_bus::SignedDelta {
-                seq: ambre_core::Seq::new(1),
+                seq: ambre_core::Seq::<ambre_core::Relay>::new(1),
                 payload,
                 nonce: FixedBytes::from_array([0; 16]),
                 peer,
@@ -2424,7 +2433,7 @@ mod tests {
             deltas.push((
                 document_id,
                 ambre_bus::SignedDelta {
-                    seq: ambre_core::Seq::new(seq),
+                    seq: ambre_core::Seq::<ambre_core::Relay>::new(seq),
                     payload,
                     nonce: FixedBytes::from_array([0; 16]),
                     peer,
@@ -2506,7 +2515,7 @@ mod tests {
         state.read_cursors.insert(
             active.document_id(),
             ReadCursor {
-                read: Seq::new(0),
+                read: Seq::<Relay>::new(0),
                 active: ambre_bus::Activity::Quiet,
             },
         );
@@ -2708,7 +2717,7 @@ mod tests {
                 })
                 .collect();
         assert_eq!(copies.len(), 2, "each document reaches the store");
-        let horizons: HashMap<Id<Document>, Seq> = drain(&sync)
+        let horizons: HashMap<Id<Document>, Seq<Relay>> = drain(&sync)
             .into_iter()
             .filter_map(|command| match command {
                 SyncCommand::ReleaseDocument {
@@ -2721,8 +2730,8 @@ mod tests {
         assert_eq!(
             horizons,
             HashMap::from([
-                (meta, ambre_core::Seq::new(1)),
-                (active, ambre_core::Seq::new(1))
+                (meta, ambre_core::Seq::<ambre_core::Relay>::new(1)),
+                (active, ambre_core::Seq::<ambre_core::Relay>::new(1))
             ]),
             "each light subscription keeps its horizon"
         );
@@ -2834,7 +2843,7 @@ mod tests {
     fn serve(state: &mut LogicState, stored: &ChannelState, document_id: Id<Document>) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id,
-            covered_seq: ambre_core::Seq::new(1),
+            covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(1),
             payload: (stored.snapshot(document_id).expect("snapshot")),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -3110,7 +3119,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
             kind: ChannelDocumentKind::Segment,
             active,
-            read: Seq::ZERO,
+            read: Seq::<Relay>::ZERO,
             last: None,
         };
 
@@ -3300,7 +3309,7 @@ mod tests {
                     document_id: self.active.document_id(),
                     kind: ChannelDocumentKind::Segment,
                     active: ambre_bus::Activity::Active,
-                    read: Seq::new(read),
+                    read: Seq::<Relay>::new(read),
                     last: None,
                 }],
             });
@@ -3356,7 +3365,7 @@ mod tests {
         }
 
         /// The cursors Bob asked the relay to move since the last call.
-        fn moved(&self) -> Vec<Vec<(Id<Segment>, Seq)>> {
+        fn moved(&self) -> Vec<Vec<(Id<Segment>, Seq<Relay>)>> {
             drain(&self.bob_sync)
                 .into_iter()
                 .filter_map(|c| match c {
@@ -3382,8 +3391,8 @@ mod tests {
                 .map(|id| channel.position(m.active, *id))
                 .collect::<Vec<_>>(),
             [
-                Some(Position::Exact(Seq::new(5))),
-                Some(Position::Exact(Seq::new(6)))
+                Some(Position::Exact(Seq::<Relay>::new(5))),
+                Some(Position::Exact(Seq::<Relay>::new(6)))
             ]
         );
     }
@@ -3436,11 +3445,11 @@ mod tests {
         let ids = m.message_ids();
 
         m.mark_unread(ids[1]);
-        assert_eq!(m.moved(), [vec![(m.active, Seq::new(5))]]);
+        assert_eq!(m.moved(), [vec![(m.active, Seq::<Relay>::new(5))]]);
         assert_eq!(m.counts(), [Some(1)]);
 
         m.mark_unread(ids[0]);
-        assert_eq!(m.moved(), [vec![(m.active, Seq::new(4))]]);
+        assert_eq!(m.moved(), [vec![(m.active, Seq::<Relay>::new(4))]]);
         assert_eq!(m.counts(), [Some(2)]);
     }
 
@@ -3475,7 +3484,7 @@ mod tests {
         // Refused, and still delivered: the count reads past it.
         assert_eq!(
             m.bob.channels[&m.channel_id].delivered(document_id),
-            Seq::new(1)
+            Seq::<Relay>::new(1)
         );
         assert!(
             !drain(&m.bob_ui)
@@ -3534,7 +3543,7 @@ mod tests {
         let mut m = members();
         m.answer(0);
         m.mark_unread(Id::<Message>::mint());
-        assert_eq!(m.moved(), Vec::<Vec<(Id<Segment>, Seq)>>::new());
+        assert_eq!(m.moved(), Vec::<Vec<(Id<Segment>, Seq<Relay>)>>::new());
     }
 
     /// Marking a message unread moves no cursor of another channel.
@@ -3548,7 +3557,7 @@ mod tests {
 
         m.mark_unread(ids[0]);
         let moved = m.moved();
-        assert_eq!(moved, [vec![(m.active, Seq::new(4))]]);
+        assert_eq!(moved, [vec![(m.active, Seq::<Relay>::new(4))]]);
         assert!(
             moved
                 .iter()
@@ -3796,9 +3805,7 @@ mod tests {
     }
 
     /// The erase a delete asks for, as `(request, document, file)`.
-    fn erases(
-        sent: &[SyncCommand],
-    ) -> Vec<(Generation<Request>, Id<Document>, ambre_core::ContentHash)> {
+    fn erases(sent: &[SyncCommand]) -> Vec<(Seq<Request>, Id<Document>, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3823,7 +3830,7 @@ mod tests {
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
-        let (up, down) = (Generation::nth(41), Generation::nth(42));
+        let (up, down) = (Seq::nth(41), Seq::nth(42));
         drain(&sync);
 
         for asked in [
@@ -3956,7 +3963,7 @@ mod tests {
     /// The image of a preview, as `(request, document, file)`.
     fn downloads(
         sent: &[SyncCommand],
-    ) -> Vec<(Generation<Request>, Id<Document>, ambre_core::ContentHash)> {
+    ) -> Vec<(Seq<Request>, Id<Document>, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -4593,7 +4600,9 @@ mod tests {
     }
 
     /// The finalize commands Logic sent: a lease request names no horizon.
-    fn finalizes(sync: &Receiver<SyncCommand>) -> Vec<(Id<Segment>, Option<ambre_core::Seq>)> {
+    fn finalizes(
+        sync: &Receiver<SyncCommand>,
+    ) -> Vec<(Id<Segment>, Option<ambre_core::Seq<ambre_core::Relay>>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -4646,7 +4655,7 @@ mod tests {
             segment: closing,
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_core::Seq::new(1),
+                horizon: ambre_core::Seq::<ambre_core::Relay>::new(1),
                 expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
@@ -4656,13 +4665,20 @@ mod tests {
             MurmureCommand::Tick { now: at(7_000) },
         );
         assert!(finalizes(&sync).is_empty(), "the horizon is not in");
-        state.record_channel_seq(closing.document_id(), ambre_core::Seq::new(1), None);
+        state.record_channel_seq(
+            closing.document_id(),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            None,
+        );
         command(
             &mut state,
             channel_id,
             MurmureCommand::Tick { now: at(8_000) },
         );
-        assert_eq!(finalizes(&sync), [(closing, Some(ambre_core::Seq::new(1)))]);
+        assert_eq!(
+            finalizes(&sync),
+            [(closing, Some(ambre_core::Seq::<ambre_core::Relay>::new(1)))]
+        );
 
         state.handle_logic_event(LogicEvent::SegmentFinalized {
             channel_id,
@@ -4691,12 +4707,15 @@ mod tests {
             segment,
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_core::Seq::new(1),
+                horizon: ambre_core::Seq::<ambre_core::Relay>::new(1),
                 expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
         command(state, channel_id, MurmureCommand::Tick { now });
-        assert_eq!(finalizes(sync), [(segment, Some(ambre_core::Seq::new(1)))]);
+        assert_eq!(
+            finalizes(sync),
+            [(segment, Some(ambre_core::Seq::<ambre_core::Relay>::new(1)))]
+        );
         state.handle_logic_event(LogicEvent::SegmentFinalized {
             channel_id,
             segment,
@@ -4712,7 +4731,11 @@ mod tests {
         sync: &Receiver<SyncCommand>,
     ) -> (Id<Channel>, Id<Segment>, Id<Segment>) {
         let (channel_id, closed) = closed_channel(state, sync);
-        state.record_channel_seq(closed.document_id(), ambre_core::Seq::new(1), None);
+        state.record_channel_seq(
+            closed.document_id(),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            None,
+        );
         finalize_at_one(state, sync, channel_id, closed, NOW);
         let channel = &state.channels[&channel_id];
         let (meta, active) = (channel.meta_id(), channel.active_id());
@@ -4907,7 +4930,7 @@ mod tests {
         drain(&ui);
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: segment.document_id(),
-            covered_seq: ambre_core::Seq::new(1),
+            covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(1),
             payload: (vec![0xff; 8]).into(),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -4925,7 +4948,11 @@ mod tests {
     fn a_dropped_final_snapshot_is_shown_and_sealed_again() {
         let (mut state, ui, sync) = harness();
         let (channel_id, closing) = closed_channel(&mut state, &sync);
-        state.record_channel_seq(closing.document_id(), ambre_core::Seq::new(1), None);
+        state.record_channel_seq(
+            closing.document_id(),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            None,
+        );
         finalize_at_one(&mut state, &sync, channel_id, closing, NOW);
         drain(&sync);
         drain(&ui);
@@ -5242,7 +5269,9 @@ mod tests {
     // --- The fold of the amendments of a final segment ---
 
     /// The fold commands Logic sent: a lease request names no reach.
-    fn folds(sync: &Receiver<SyncCommand>) -> Vec<(Id<Segment>, Option<ambre_core::Seq>)> {
+    fn folds(
+        sync: &Receiver<SyncCommand>,
+    ) -> Vec<(Id<Segment>, Option<ambre_core::Seq<ambre_core::Relay>>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -5265,7 +5294,11 @@ mod tests {
         sync: &Receiver<SyncCommand>,
     ) -> (Id<Channel>, Id<Segment>, Id<Message>, Id<Document>) {
         let (channel_id, closing) = closed_channel(state, sync);
-        state.record_channel_seq(closing.document_id(), ambre_core::Seq::new(1), None);
+        state.record_channel_seq(
+            closing.document_id(),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            None,
+        );
         finalize_at_one(state, sync, channel_id, closing, NOW);
         drain(sync);
         let message = state.channels[&channel_id].messages(closing).expect("held")[0].id;
@@ -5318,9 +5351,9 @@ mod tests {
             segment,
             answer: FoldAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_core::Seq::new(1),
+                horizon: ambre_core::Seq::<ambre_core::Relay>::new(1),
                 amendments,
-                amendments_seq: ambre_core::Seq::new(0),
+                amendments_seq: ambre_core::Seq::<ambre_core::Relay>::new(0),
                 expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
@@ -5331,7 +5364,7 @@ mod tests {
         );
         assert_eq!(
             folds(&sync),
-            [(segment, Some(ambre_core::Seq::new(0)))],
+            [(segment, Some(ambre_core::Seq::<ambre_core::Relay>::new(0)))],
             "the fold leaves"
         );
         state.handle_logic_event(LogicEvent::SegmentFolded {
@@ -5479,7 +5512,7 @@ mod tests {
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
         document_id: Id<Document>,
-        covered: Seq,
+        covered: Seq<Relay>,
         payload: Vec<u8>,
     ) -> SnapshotVerdict {
         state.handle_logic_event(LogicEvent::PendingSnapshot {
@@ -5523,13 +5556,17 @@ mod tests {
             channel_verdict(&mut state, &sync, document_id, covered, b"loro?".to_vec()),
             SnapshotVerdict::Mismatch
         );
-        state.record_channel_seq(document_id, ambre_core::Seq::new(2), None);
+        state.record_channel_seq(
+            document_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(2),
+            None,
+        );
         assert_eq!(
             channel_verdict(
                 &mut state,
                 &sync,
                 document_id,
-                ambre_core::Seq::new(2),
+                ambre_core::Seq::<ambre_core::Relay>::new(2),
                 payload.into_bytes()
             ),
             SnapshotVerdict::Unchecked,
@@ -6134,7 +6171,11 @@ mod tests {
             .expect("adopt");
         channel.thread_linked(closed, root, thread).expect("link");
         let probe = channel.snapshot(thread).expect("thread");
-        state.record_channel_seq(closed.document_id(), ambre_core::Seq::new(1), None);
+        state.record_channel_seq(
+            closed.document_id(),
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            None,
+        );
         finalize_at_one(&mut state, &sync, channel_id, closed, NOW);
         let channel = &state.channels[&channel_id];
         let (meta, active) = (channel.meta_id(), channel.active_id());
@@ -6154,7 +6195,7 @@ mod tests {
              payload: &ambre_core::Payload<ambre_core::SnapshotBytes>| {
                 state.handle_logic_event(LogicEvent::RemoteSnapshot {
                     document_id,
-                    covered_seq: ambre_core::Seq::new(1),
+                    covered_seq: ambre_core::Seq::<ambre_core::Relay>::new(1),
                     payload: payload.clone(),
                 });
                 state.handle_logic_event(LogicEvent::DocumentReady {
@@ -6248,7 +6289,7 @@ mod tests {
         assert_eq!(
             m.bob.read_cursors.get(&thread),
             Some(&ReadCursor {
-                read: Seq::new(1),
+                read: Seq::<Relay>::new(1),
                 active: ambre_bus::Activity::Quiet,
             })
         );
@@ -6322,7 +6363,7 @@ mod tests {
         m.bob.read_cursors.insert(
             document_id,
             ReadCursor {
-                read: Seq::new(2),
+                read: Seq::<Relay>::new(2),
                 active: ambre_bus::Activity::Quiet,
             },
         );
@@ -6365,7 +6406,11 @@ mod tests {
     // --- A thread not open ---
 
     /// The relay's activity answer, naming `documents` of `channel_id`.
-    fn answer(state: &mut LogicState, channel_id: Id<Channel>, documents: &[(Id<Document>, Seq)]) {
+    fn answer(
+        state: &mut LogicState,
+        channel_id: Id<Channel>,
+        documents: &[(Id<Document>, Seq<Relay>)],
+    ) {
         state.handle_logic_event(LogicEvent::ChannelActivity {
             documents: documents
                 .iter()
@@ -6381,7 +6426,7 @@ mod tests {
         });
     }
 
-    fn watched(sync: &Receiver<SyncCommand>) -> Vec<(Id<Document>, Id<Meta>, Seq)> {
+    fn watched(sync: &Receiver<SyncCommand>) -> Vec<(Id<Document>, Id<Meta>, Seq<Relay>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -6419,8 +6464,8 @@ mod tests {
             matches!(asked.as_slice(), [SyncCommand::FetchActivity]),
             "expected one activity request, got {asked:?}"
         );
-        answer(&mut state, channel_id, &[(thread, Seq::new(3))]);
-        assert_eq!(watched(&sync), [(thread, meta, Seq::new(3))]);
+        answer(&mut state, channel_id, &[(thread, Seq::<Relay>::new(3))]);
+        assert_eq!(watched(&sync), [(thread, meta, Seq::<Relay>::new(3))]);
         state.handle_logic_event(LogicEvent::ThreadActivity {
             document_id: thread,
         });
@@ -6428,11 +6473,11 @@ mod tests {
 
         // A thread the channel already places is watched at once.
         let placed = Id::<Document>::mint();
-        answer(&mut state, channel_id, &[(placed, Seq::new(0))]);
+        answer(&mut state, channel_id, &[(placed, Seq::<Relay>::new(0))]);
         state.handle_logic_event(LogicEvent::ThreadActivity {
             document_id: placed,
         });
-        assert_eq!(watched(&sync), [(placed, meta, Seq::new(0))]);
+        assert_eq!(watched(&sync), [(placed, meta, Seq::<Relay>::new(0))]);
     }
 
     /// A thread the open channel holds hears its deltas on its own topic.
@@ -6445,7 +6490,7 @@ mod tests {
         let (channel_id, active) = open_channel(&mut state);
         let unopened = Id::<Channel>::mint();
         let thread = Id::<Document>::mint();
-        answer(&mut state, unopened, &[(thread, Seq::new(0))]);
+        answer(&mut state, unopened, &[(thread, Seq::<Relay>::new(0))]);
         drain(&sync);
         for document_id in [active.document_id(), thread] {
             state.handle_logic_event(LogicEvent::ThreadActivity { document_id });
@@ -6464,14 +6509,14 @@ mod tests {
         state.read_cursors.insert(
             active.document_id(),
             ReadCursor {
-                read: Seq::new(0),
+                read: Seq::<Relay>::new(0),
                 active: ambre_bus::Activity::Quiet,
             },
         );
         let mut threads = Vec::new();
         for channel_id in [closed, open] {
             let thread = Id::<Document>::mint();
-            answer(&mut state, channel_id, &[(thread, Seq::new(0))]);
+            answer(&mut state, channel_id, &[(thread, Seq::<Relay>::new(0))]);
             state.handle_logic_event(LogicEvent::ThreadActivity {
                 document_id: thread,
             });
@@ -6522,7 +6567,7 @@ mod tests {
         let (channel_id, _) = open_channel(&mut state);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
         let thread = Id::<Document>::mint();
-        answer(&mut state, channel_id, &[(thread, Seq::new(0))]);
+        answer(&mut state, channel_id, &[(thread, Seq::<Relay>::new(0))]);
         state.handle_logic_event(LogicEvent::ThreadActivity {
             document_id: thread,
         });

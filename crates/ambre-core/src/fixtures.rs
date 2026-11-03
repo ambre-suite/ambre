@@ -16,7 +16,7 @@
 
 use crate::id::{Document, Id};
 use crate::index::Count;
-use crate::{CellCount, Char, DocType, Elements, Tally, Version};
+use crate::{Cells, Char, DocType, Elements, Tally, Version};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -95,6 +95,7 @@ impl crate::version::OpenRange for Generator {}
 pub enum Peers {}
 
 impl crate::TallyKind for Peers {
+    type Repr = u32;
     const NAME: &'static str = "PeerCount";
 }
 
@@ -102,6 +103,7 @@ impl crate::TallyKind for Peers {
 pub enum Sheets {}
 
 impl crate::TallyKind for Sheets {
+    type Repr = u32;
     const NAME: &'static str = "SheetCount";
 }
 
@@ -109,6 +111,7 @@ impl crate::TallyKind for Sheets {
 pub enum Formulas {}
 
 impl crate::TallyKind for Formulas {
+    type Repr = u32;
     const NAME: &'static str = "FormulaCount";
 }
 
@@ -116,6 +119,7 @@ impl crate::TallyKind for Formulas {
 pub enum BoardFrames {}
 
 impl crate::TallyKind for BoardFrames {
+    type Repr = u32;
     const NAME: &'static str = "BoardFrameCount";
 }
 
@@ -123,6 +127,7 @@ impl crate::TallyKind for BoardFrames {
 pub enum Connectors {}
 
 impl crate::TallyKind for Connectors {
+    type Repr = u32;
     const NAME: &'static str = "ConnectorCount";
 }
 
@@ -130,6 +135,7 @@ impl crate::TallyKind for Connectors {
 pub enum DocBlocks {}
 
 impl crate::TallyKind for DocBlocks {
+    type Repr = u32;
     const NAME: &'static str = "DocBlockCount";
 }
 
@@ -323,7 +329,7 @@ pub struct FixtureShape {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
     Trame {
-        cells: CellCount,
+        cells: Tally<Cells>,
         sheets: Tally<Sheets>,
         formulas: Tally<Formulas>,
     },
@@ -355,7 +361,7 @@ mod tests {
             shape: FixtureShape {
                 peers: Tally::<Peers>::new(2),
                 body: ShapeBody::Trame {
-                    cells: CellCount::new(12),
+                    cells: Tally::<Cells>::new(12),
                     sheets: Tally::<Sheets>::new(2),
                     formulas: Tally::<Formulas>::new(4),
                 },

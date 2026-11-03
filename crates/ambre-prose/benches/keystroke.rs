@@ -65,7 +65,7 @@ fn document() -> (ProseState, ambre_bus::app::prose::BlockId, u32) {
             _ => None,
         })
         .max()
-        .unwrap_or(ambre_core::Generation::ZERO);
+        .unwrap_or(ambre_core::Seq::ZERO);
     state.handle_view_command(ProseCommand::Sync { seen });
     let _ = state.layout_event();
     let Some(&last) = state.root_blocks().last() else {

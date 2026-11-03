@@ -8,22 +8,23 @@ use tokio::sync::mpsc;
 use crate::state::AppState;
 use crate::{db, redis_ops};
 use ambre_core::id::{Document, Id};
-use ambre_core::{Sec, TimeSpan};
+use ambre_core::{Sec, Tally, TimeSpan};
 
 /// The deltas past a document's served snapshot at which the relay asks for a
 /// new one (`ambre-spec-budgets.md section 6`, the snapshot threshold row).
-pub const SNAPSHOT_THRESHOLD: db::DeltaCount = db::DeltaCount::new(500);
+pub const SNAPSHOT_THRESHOLD: Tally<db::Deltas> = Tally::<db::Deltas>::new(500);
 
 /// The threshold of a Murmure segment, whose cold open replays its deltas one
 /// by one (`ambre-spec-budgets.md section 6`, the active segment row). A
 /// crossing is seen at most `CHECK_EVERY - 1` deltas late, so the ask leaves
 /// before the 250th delta past the snapshot (the Murmure segments spec).
-pub const SEGMENT_SNAPSHOT_THRESHOLD: db::DeltaCount = db::DeltaCount::new(250 - CHECK_EVERY.get());
+pub const SEGMENT_SNAPSHOT_THRESHOLD: Tally<db::Deltas> =
+    Tally::<db::Deltas>::new(250 - CHECK_EVERY.get());
 
 /// How often, in deltas, the write path compares a document to the threshold.
 /// The numbers of a document are consecutive, so one write in this many reads
 /// the horizon, and no crossing goes unseen.
-const CHECK_EVERY: db::DeltaCount = db::DeltaCount::new(32);
+const CHECK_EVERY: Tally<db::Deltas> = Tally::<db::Deltas>::new(32);
 
 /// How long one request stands before the relay may ask again. A client that
 /// never answers is asked again on the next crossing past it.
@@ -31,21 +32,21 @@ const ASK_TTL: TimeSpan<Sec> = TimeSpan::<Sec>::new(300);
 
 /// Whether the history past `horizon` at delta `seq` reaches `threshold`.
 pub fn past_threshold(
-    seq: ambre_core::Seq,
-    horizon: ambre_core::Seq,
-    threshold: db::DeltaCount,
+    seq: ambre_core::Seq<ambre_core::Relay>,
+    horizon: ambre_core::Seq<ambre_core::Relay>,
+    threshold: Tally<db::Deltas>,
 ) -> bool {
     seq.since(horizon) >= threshold
 }
 
 /// Whether delta `seq` is one the write path compares to the threshold: one
 /// in every `CHECK_EVERY`.
-fn is_checked(seq: ambre_core::Seq) -> bool {
+fn is_checked(seq: ambre_core::Seq<ambre_core::Relay>) -> bool {
     seq.get().is_multiple_of(CHECK_EVERY.get())
 }
 
 /// The threshold of a document: a Murmure segment's own, or the default.
-async fn threshold_of(state: &AppState, document_id: &Id<Document>) -> db::DeltaCount {
+async fn threshold_of(state: &AppState, document_id: &Id<Document>) -> Tally<db::Deltas> {
     match db::channel_document_kind(&state.db, document_id).await {
         Ok(Some(ambre_core::ChannelDocumentKind::Segment)) => SEGMENT_SNAPSHOT_THRESHOLD,
         Ok(_) => SNAPSHOT_THRESHOLD,
@@ -61,7 +62,7 @@ async fn threshold_of(state: &AppState, document_id: &Id<Document>) -> db::Delta
 pub async fn should_ask(
     state: &AppState,
     document_id: &Id<Document>,
-    seq: ambre_core::Seq,
+    seq: ambre_core::Seq<ambre_core::Relay>,
 ) -> bool {
     if !is_checked(seq) {
         return false;
@@ -90,7 +91,7 @@ pub async fn should_ask(
 pub fn ask_when_due(
     state: &Arc<AppState>,
     document_id: Id<Document>,
-    seq: ambre_core::Seq,
+    seq: ambre_core::Seq<ambre_core::Relay>,
     writer: &mpsc::Sender<crate::payload::StoredPayload>,
 ) {
     if !is_checked(seq) {
@@ -119,29 +120,29 @@ mod tests {
         let threshold = SNAPSHOT_THRESHOLD;
         let at = threshold.get();
         assert!(!past_threshold(
-            ambre_core::Seq::new(at - 1),
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(at - 1),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             threshold
         ));
         assert!(past_threshold(
-            ambre_core::Seq::new(at),
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(at),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             threshold
         ));
         assert!(!past_threshold(
-            ambre_core::Seq::new(at + 10),
-            ambre_core::Seq::new(20),
+            ambre_core::Seq::<ambre_core::Relay>::new(at + 10),
+            ambre_core::Seq::<ambre_core::Relay>::new(20),
             threshold
         ));
         assert!(past_threshold(
-            ambre_core::Seq::new(at + 20),
-            ambre_core::Seq::new(20),
+            ambre_core::Seq::<ambre_core::Relay>::new(at + 20),
+            ambre_core::Seq::<ambre_core::Relay>::new(20),
             threshold
         ));
         // A horizon past the counter, as after a cold counter, asks nothing.
         assert!(!past_threshold(
-            ambre_core::Seq::new(10),
-            ambre_core::Seq::new(900),
+            ambre_core::Seq::<ambre_core::Relay>::new(10),
+            ambre_core::Seq::<ambre_core::Relay>::new(900),
             threshold
         ));
     }
@@ -152,11 +153,11 @@ mod tests {
     fn a_segment_is_asked_before_its_250th_delta() {
         for horizon in 0..CHECK_EVERY.get() {
             let seen = (horizon + 1..)
-                .filter(|&seq| is_checked(ambre_core::Seq::new(seq)))
+                .filter(|&seq| is_checked(ambre_core::Seq::<ambre_core::Relay>::new(seq)))
                 .find(|&seq| {
                     past_threshold(
-                        ambre_core::Seq::new(seq),
-                        ambre_core::Seq::new(horizon),
+                        ambre_core::Seq::<ambre_core::Relay>::new(seq),
+                        ambre_core::Seq::<ambre_core::Relay>::new(horizon),
                         SEGMENT_SNAPSHOT_THRESHOLD,
                     )
                 })
@@ -193,8 +194,10 @@ mod db_tests {
             doc,
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(*author),
             &tag,
-            ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
-            ambre_core::Seq::new(seq.unsigned_abs()),
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+                seq.unsigned_abs(),
+            ),
+            ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
             &ambre_core::ObjectKey::new(format!("k{seq}")),
         )
         .await
@@ -211,7 +214,8 @@ mod db_tests {
         let json = serde_json::json!({});
         let key = format!("s3/{covered}");
         let key = ambre_core::ObjectKey::new(key);
-        let covered = ambre_core::Seq::try_from(covered).expect("a relay number");
+        let covered =
+            ambre_core::Seq::<ambre_core::Relay>::try_from(covered).expect("a relay number");
         db::create_snapshot(
             &state.db,
             doc,
@@ -229,7 +233,7 @@ mod db_tests {
         db::get_updates_after(
             &state.db,
             doc,
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             ambre_core::Bounded::<crate::db::QueryLimit>::of::<1000>(),
         )
         .await
@@ -383,16 +387,30 @@ mod db_tests {
         let (state, doc) = setup(pool).await;
         let every = CHECK_EVERY.get();
         let below = every * (SNAPSHOT_THRESHOLD.get() / every);
-        assert!(!should_ask(&state, &doc, ambre_core::Seq::new(below)).await);
+        assert!(
+            !should_ask(
+                &state,
+                &doc,
+                ambre_core::Seq::<ambre_core::Relay>::new(below)
+            )
+            .await
+        );
         let due = below + every;
-        assert!(should_ask(&state, &doc, ambre_core::Seq::new(due)).await);
-        assert!(!should_ask(&state, &doc, ambre_core::Seq::new(due + every)).await);
+        assert!(should_ask(&state, &doc, ambre_core::Seq::<ambre_core::Relay>::new(due)).await);
+        assert!(
+            !should_ask(
+                &state,
+                &doc,
+                ambre_core::Seq::<ambre_core::Relay>::new(due + every)
+            )
+            .await
+        );
         // Only a served snapshot moves the horizon.
         let covered = i64::try_from(due).unwrap();
         let sid = snapshot(&state, &doc, &ALICE, covered).await;
         assert_eq!(
             db::served_horizon(&state.db, &doc).await.unwrap(),
-            ambre_core::Seq::new(0)
+            ambre_core::Seq::<ambre_core::Relay>::new(0)
         );
         db::confirm_snapshot(
             &state.db,
@@ -404,7 +422,7 @@ mod db_tests {
         .unwrap();
         assert_eq!(
             db::served_horizon(&state.db, &doc).await.unwrap(),
-            ambre_core::Seq::new(due)
+            ambre_core::Seq::<ambre_core::Relay>::new(due)
         );
     }
 }

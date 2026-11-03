@@ -10,7 +10,7 @@
 
 use ambre_bus::{Authored, Deletion, Instant, MessageDraft, MessageView, MurmureEvent, ThreadHead};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
-use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq};
 use loro::{
     Container, LoroDoc, LoroList, LoroMap, LoroText, LoroValue, UpdateOptions, ValueOrContainer,
 };
@@ -327,7 +327,7 @@ impl ChannelState {
     pub(super) fn apply_amendment(
         &mut self,
         document_id: Id<Document>,
-        seq: Seq,
+        seq: Seq<Relay>,
         payload: &Payload<DeltaBytes>,
         signer: Signer,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {

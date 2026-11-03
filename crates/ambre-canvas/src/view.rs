@@ -55,6 +55,7 @@ pub struct PerfSnapshot {
 pub enum CellsDrawn {}
 
 impl ambre_core::TallyKind for CellsDrawn {
+    type Repr = u32;
     const NAME: &'static str = "CellsDrawn";
 }
 
@@ -62,6 +63,7 @@ impl ambre_core::TallyKind for CellsDrawn {
 pub enum GlyphMisses {}
 
 impl ambre_core::TallyKind for GlyphMisses {
+    type Repr = u32;
     const NAME: &'static str = "GlyphMisses";
 }
 

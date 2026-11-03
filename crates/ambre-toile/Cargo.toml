@@ -95,7 +95,7 @@ wasm-bindgen-futures = { workspace = true }
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
-# `Generation::nth` for a test that names a count. Test builds alone, held by
+# `Seq::nth` for a test that names a count. Test builds alone, held by
 # `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
 ambre-core = { path = "../ambre-core", features = ["testing"] }
 

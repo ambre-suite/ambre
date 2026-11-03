@@ -57,7 +57,7 @@ futures-util = { workspace = true }
 # Native-only: a current-thread executor to drive the sharing orchestration
 # tasks (`invite_task` etc.) against a fake transport in unit tests.
 [dev-dependencies]
-# `Generation::nth` for a test that names a count. Test builds alone, held by
+# `Seq::nth` for a test that names a count. Test builds alone, held by
 # `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
 ambre-core = { path = "../ambre-core", features = ["testing"] }
 tokio = { version = "1", features = ["macros", "rt"] }

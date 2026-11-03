@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent};
 use ambre_core::authorship::PeerEntry;
 use ambre_core::id::{Channel, Document, Id, User};
-use ambre_core::{DeltaBytes, FixedBytes, Payload, PeerEntryBytes, Seq};
+use ambre_core::{DeltaBytes, FixedBytes, Payload, PeerEntryBytes, Relay, Seq};
 use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -198,13 +198,13 @@ fn a_binary_delta_on_a_segment_is_refused() {
     assert_eq!(
         refusal(
             bob.state
-                .apply_signed(segment, Seq::new(1), &binary, alice.signer())
+                .apply_signed(segment, Seq::<Relay>::new(1), &binary, alice.signer())
         ),
         Some(Refusal::Binary)
     );
     assert_eq!(bob.everything(), was);
     // A refused delta still counts as delivered.
-    assert_eq!(bob.state.delivered(segment), Seq::new(1));
+    assert_eq!(bob.state.delivered(segment), Seq::<Relay>::new(1));
 }
 
 // --- MURMURE-228 ---
@@ -223,11 +223,12 @@ fn a_json_update_of_another_version_is_refused_and_asks_an_update() {
     let newer = Payload::<DeltaBytes>::new(serde_json::to_vec(&update).expect("bytes"));
     let was = bob.everything();
     let segment = bob.segment();
-    let refused = refusal(
-        bob.state
-            .apply_signed(segment, Seq::new(1), &newer, alice.signer()),
-    )
-    .expect("refused");
+    let refused =
+        refusal(
+            bob.state
+                .apply_signed(segment, Seq::<Relay>::new(1), &newer, alice.signer()),
+        )
+        .expect("refused");
     assert_eq!(
         refused,
         Refusal::Version(Version::<JsonUpdate>::new(JSON_SCHEMA_VERSION.get() + 1))
@@ -257,10 +258,12 @@ fn a_message_carries_the_author_who_signed_it_and_no_other() {
         .expect("send");
     let was = bob.everything();
     assert_eq!(
-        refusal(
-            bob.state
-                .apply_signed(segment, Seq::new(1), &forged.delta, alice.signer())
-        ),
+        refusal(bob.state.apply_signed(
+            segment,
+            Seq::<Relay>::new(1),
+            &forged.delta,
+            alice.signer()
+        )),
         Some(Refusal::ForeignAuthor)
     );
     assert_eq!(bob.everything(), was);
@@ -279,7 +282,7 @@ fn a_message_carries_the_author_who_signed_it_and_no_other() {
     assert_eq!(
         refusal(
             bob.state
-                .apply_signed(segment, Seq::new(2), &anonymous, alice.signer())
+                .apply_signed(segment, Seq::<Relay>::new(2), &anonymous, alice.signer())
         ),
         Some(Refusal::ForeignAuthor)
     );
@@ -292,7 +295,7 @@ fn a_message_carries_the_author_who_signed_it_and_no_other() {
     assert_eq!(
         refusal(
             bob.state
-                .apply_signed(segment, Seq::new(3), &own.delta, unnamed)
+                .apply_signed(segment, Seq::<Relay>::new(3), &own.delta, unnamed)
         ),
         Some(Refusal::Unattributed)
     );
@@ -304,14 +307,14 @@ fn a_message_carries_the_author_who_signed_it_and_no_other() {
     assert_eq!(
         refusal(
             bob.state
-                .apply_signed(segment, Seq::new(4), &own.delta, elsewhere)
+                .apply_signed(segment, Seq::<Relay>::new(4), &own.delta, elsewhere)
         ),
         Some(Refusal::NotSigners)
     );
     assert_eq!(bob.everything(), was);
 
     bob.state
-        .apply_signed(segment, Seq::new(5), &own.delta, alice.signer())
+        .apply_signed(segment, Seq::<Relay>::new(5), &own.delta, alice.signer())
         .expect("accepted");
     let messages = bob.state.messages(bob.state.active_id()).expect("messages");
     assert_eq!(messages.len(), 1);
@@ -330,7 +333,7 @@ fn an_edit_of_another_authors_message_is_refused_and_changes_nothing() {
         .expect("send");
     let segment = bob.segment();
     bob.state
-        .apply_signed(segment, Seq::new(1), &sent.delta, alice.signer())
+        .apply_signed(segment, Seq::<Relay>::new(1), &sent.delta, alice.signer())
         .expect("accepted");
 
     let before = bob.doc().oplog_vv();
@@ -347,7 +350,7 @@ fn an_edit_of_another_authors_message_is_refused_and_changes_nothing() {
         refusal(
             alice
                 .state
-                .apply_signed(segment, Seq::new(2), &edit, bob.signer())
+                .apply_signed(segment, Seq::<Relay>::new(2), &edit, bob.signer())
         ),
         Some(Refusal::ForeignMessage)
     );
@@ -370,7 +373,7 @@ fn a_delete_of_another_authors_message_is_refused() {
         .expect("send");
     let segment = bob.segment();
     bob.state
-        .apply_signed(segment, Seq::new(1), &sent.delta, alice.signer())
+        .apply_signed(segment, Seq::<Relay>::new(1), &sent.delta, alice.signer())
         .expect("accepted");
     let was = alice.everything();
 
@@ -384,7 +387,7 @@ fn a_delete_of_another_authors_message_is_refused() {
         refusal(
             alice
                 .state
-                .apply_signed(segment, Seq::new(2), &marked, bob.signer())
+                .apply_signed(segment, Seq::<Relay>::new(2), &marked, bob.signer())
         ),
         Some(Refusal::ForeignMessage)
     );
@@ -400,7 +403,7 @@ fn a_delete_of_another_authors_message_is_refused() {
         refusal(
             alice
                 .state
-                .apply_signed(segment, Seq::new(3), &removed, bob.signer())
+                .apply_signed(segment, Seq::<Relay>::new(3), &removed, bob.signer())
         ),
         Some(Refusal::Removed)
     );
@@ -431,7 +434,7 @@ fn a_later_session_of_the_author_edits_its_own_message() {
     let edit = alice.json_since(&before);
     carol
         .state
-        .apply_signed(segment, Seq::new(2), &edit, alice.signer())
+        .apply_signed(segment, Seq::<Relay>::new(2), &edit, alice.signer())
         .expect("accepted");
     // What the check read is what landed: every operation of the session,
     // and the messages the author holds.
@@ -490,7 +493,7 @@ fn a_registry_entry_its_signer_may_not_write_is_refused() {
         assert_eq!(
             refusal(
                 dave.state
-                    .apply_signed(segment, Seq::new(seq), delta, bob.signer())
+                    .apply_signed(segment, Seq::<Relay>::new(seq), delta, bob.signer())
             ),
             Some(Refusal::ForeignEntry)
         );
@@ -533,7 +536,7 @@ fn two_peers_accept_and_refuse_the_same_deltas() {
                 refusal(
                     member
                         .state
-                        .apply_signed(segment, Seq::new(seq), delta, *by),
+                        .apply_signed(segment, Seq::<Relay>::new(seq), delta, *by),
                 )
             })
             .collect()
@@ -590,16 +593,16 @@ fn a_delta_refused_while_the_channel_opens_is_left_out() {
     ));
     assert_eq!(opening.receive(segment, (&snapshot).into()), Receipt::Kept);
     opening
-        .receive_signed(segment, Seq::new(1), &good.delta, alice.signer())
+        .receive_signed(segment, Seq::<Relay>::new(1), &good.delta, alice.signer())
         .expect("kept until ready");
     opening
-        .receive_signed(segment, Seq::new(2), &forged.delta, alice.signer())
+        .receive_signed(segment, Seq::<Relay>::new(2), &forged.delta, alice.signer())
         .expect("kept until ready");
     // Bytes that read as no update are refused on arrival.
     assert!(matches!(
         opening.receive_signed(
             segment,
-            Seq::new(3),
+            Seq::<Relay>::new(3),
             &Payload::<DeltaBytes>::new(b"loro".to_vec()),
             alice.signer()
         ),
@@ -615,7 +618,7 @@ fn a_delta_refused_while_the_channel_opens_is_left_out() {
         .map(|m| m.text)
         .collect();
     assert_eq!(texts, ["kept"]);
-    assert_eq!(opened.delivered(segment), Seq::new(3));
+    assert_eq!(opened.delivered(segment), Seq::<Relay>::new(3));
 }
 
 #[test]
@@ -638,13 +641,13 @@ fn a_meta_delta_under_another_peer_is_refused() {
     assert_eq!(
         refusal(
             bob.state
-                .apply_signed(meta, Seq::new(1), &named.delta, elsewhere)
+                .apply_signed(meta, Seq::<Relay>::new(1), &named.delta, elsewhere)
         ),
         Some(Refusal::NotSigners)
     );
     assert_eq!(bob.state.name(), None);
     bob.state
-        .apply_signed(meta, Seq::new(2), &named.delta, by)
+        .apply_signed(meta, Seq::<Relay>::new(2), &named.delta, by)
         .expect("accepted");
     assert_eq!(
         bob.state.name().as_ref().map(ambre_core::Name::as_str),

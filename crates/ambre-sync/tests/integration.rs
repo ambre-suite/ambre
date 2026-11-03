@@ -12,13 +12,13 @@
 )]
 
 use ambre_bus::{DocType, LogicEvent, Request, RestCommand, RestEvent, SyncCommand, next_request};
-use ambre_core::Generation;
+use ambre_core::Seq;
 use ambre_core::id::{Document, Id};
 use ambre_sync::mock::MockWsTransport;
 
 fn drain_rest(
     rx: &ambre_bus::conduit::Receiver<LogicEvent>,
-    expected_id: Generation<Request>,
+    expected_id: Seq<Request>,
 ) -> RestEvent {
     let events: Vec<LogicEvent> = rx.try_iter().collect();
     for evt in events {
@@ -50,7 +50,7 @@ fn setup(
     (state, logic_rx, mock)
 }
 
-fn send_rest(state: &mut ambre_sync::SyncState, id: Generation<Request>, cmd: RestCommand) {
+fn send_rest(state: &mut ambre_sync::SyncState, id: Seq<Request>, cmd: RestCommand) {
     state.handle_command(SyncCommand::Rest { id, cmd });
 }
 

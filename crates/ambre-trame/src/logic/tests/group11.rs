@@ -74,7 +74,7 @@ fn container(state: &TrameState, name: SheetContainer) -> LoroValue {
 /// The widths and heights of the first `n` columns and rows.
 fn metrics(state: &mut TrameState, n: u32) -> (Vec<f32>, Vec<f32>) {
     let out = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_core::Generation::nth(3),
+        version: ambre_core::Seq::nth(3),
         row_start: Pos::<Row>::new(0),
         row_end: Pos::<Row>::new(n - 1),
         col_start: Pos::<Col>::new(0),
@@ -376,13 +376,13 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
     }
     let sheet_id = state.active_sheet.clone();
     state.handle_command(TrameCommand::ResizeRow {
-        version: ambre_core::Generation::nth(1),
+        version: ambre_core::Seq::nth(1),
         sheet_id: sheet_id.clone(),
         row: Pos::<Row>::new(1),
         height: ambre_core::Px::<ambre_core::Doc>::new(40.0),
     });
     state.handle_command(TrameCommand::ResizeCol {
-        version: ambre_core::Generation::nth(1),
+        version: ambre_core::Seq::nth(1),
         sheet_id: sheet_id.clone(),
         col: Pos::<Col>::new(2),
         width: ambre_core::Px::<ambre_core::Doc>::new(150.0),
@@ -435,7 +435,7 @@ fn a_column_is_never_narrower_than_its_minimum() {
     let sheet_id = state.active_sheet.clone();
     for (col, width) in [(0, 3.0), (1, 0.0), (2, -40.0)] {
         state.handle_command(TrameCommand::ResizeCol {
-            version: ambre_core::Generation::nth(1),
+            version: ambre_core::Seq::nth(1),
             sheet_id: sheet_id.clone(),
             col: Pos::<Col>::new(col),
             width: ambre_core::Px::<ambre_core::Doc>::new(width),
@@ -453,13 +453,13 @@ fn a_peer_size_out_of_range_reads_clamped_or_default() {
     let sheet_id = peer.active_sheet.clone();
     for line in 0..6 {
         peer.handle_command(TrameCommand::ResizeCol {
-            version: ambre_core::Generation::nth(1),
+            version: ambre_core::Seq::nth(1),
             sheet_id: sheet_id.clone(),
             col: Pos::<Col>::new(line),
             width: ambre_core::Px::<ambre_core::Doc>::new(100.0),
         });
         peer.handle_command(TrameCommand::ResizeRow {
-            version: ambre_core::Generation::nth(1),
+            version: ambre_core::Seq::nth(1),
             sheet_id: sheet_id.clone(),
             row: Pos::<Row>::new(line),
             height: ambre_core::Px::<ambre_core::Doc>::new(30.0),

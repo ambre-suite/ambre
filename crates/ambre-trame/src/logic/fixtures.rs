@@ -27,7 +27,7 @@ use ambre_core::index::Pos;
 use std::collections::BTreeMap;
 
 use ambre_core::{
-    CellCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Formulas, Generator,
+    Cells, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Formulas, Generator,
     ShapeBody, Sheets, Tally, Version, fixture_peer_count, seeded_document_id,
 };
 
@@ -44,7 +44,7 @@ impl TrameState {
     /// engine's bytecode cache. The cache is a derived, local structure, and the
     /// manifest describes the document.
     pub fn fixture_shape(&self) -> FixtureShape {
-        let mut cells = CellCount::ZERO;
+        let mut cells = Tally::<Cells>::ZERO;
         let mut formulas = Tally::<Formulas>::ZERO;
         let sheet_ids = self.fixture_sheet_ids();
         for sheet in &sheet_ids {

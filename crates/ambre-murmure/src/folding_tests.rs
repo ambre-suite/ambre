@@ -11,7 +11,7 @@ use ambre_bus::{
     StyleMark, TextStyle,
 };
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Segment, User};
-use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -102,11 +102,11 @@ fn amended() -> Amended {
     alice.lease_granted(
         segment,
         Id::<Lease>::mint(),
-        ambre_core::Seq::new(0),
+        ambre_core::Seq::<ambre_core::Relay>::new(0),
         TimeSpan::<Ms>::new(LEASE_MS),
     );
     let sealed = alice
-        .final_snapshot(NOW, ambre_core::Seq::new(0))
+        .final_snapshot(NOW, ambre_core::Seq::<ambre_core::Relay>::new(0))
         .expect("export")
         .expect("in");
     alice.mark_final(segment).expect("mark");
@@ -161,7 +161,7 @@ fn amended() -> Amended {
     for (seq, delta) in (1..).zip(amended.deltas.clone()) {
         amended
             .alice
-            .apply_signed(amendments, Seq::new(seq), &delta, alice_signer)
+            .apply_signed(amendments, Seq::<Relay>::new(seq), &delta, alice_signer)
             .expect("echo");
     }
     amended
@@ -192,7 +192,7 @@ impl Amended {
         assert_eq!(bob.amendments_to_open(), [self.amendments]);
         let signer = self.signer();
         for (seq, delta) in (1..).zip(&self.deltas).take(received) {
-            bob.apply_signed(self.amendments, Seq::new(seq), delta, signer)
+            bob.apply_signed(self.amendments, Seq::<Relay>::new(seq), delta, signer)
                 .expect("waits");
         }
         bob.older_ready(self.amendments).expect("admitted");
@@ -207,9 +207,9 @@ impl Amended {
             self.segment,
             FoldAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_core::Seq::new(0),
+                horizon: ambre_core::Seq::<ambre_core::Relay>::new(0),
                 amendments: self.amendments,
-                amendments_seq: ambre_core::Seq::new(3),
+                amendments_seq: ambre_core::Seq::<ambre_core::Relay>::new(3),
                 expires_in: TimeSpan::<Ms>::new(LEASE_MS),
             },
         );
@@ -315,9 +315,9 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         segment,
         FoldAnswer::Granted {
             lease,
-            horizon: ambre_core::Seq::new(0),
+            horizon: ambre_core::Seq::<ambre_core::Relay>::new(0),
             amendments,
-            amendments_seq: ambre_core::Seq::new(4),
+            amendments_seq: ambre_core::Seq::<ambre_core::Relay>::new(4),
             expires_in: TimeSpan::<Ms>::new(LEASE_MS),
         },
     );
@@ -329,9 +329,9 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         segment,
         FoldAnswer::Granted {
             lease,
-            horizon: ambre_core::Seq::new(0),
+            horizon: ambre_core::Seq::<ambre_core::Relay>::new(0),
             amendments,
-            amendments_seq: ambre_core::Seq::new(3),
+            amendments_seq: ambre_core::Seq::<ambre_core::Relay>::new(3),
             expires_in: TimeSpan::<Ms>::new(LEASE_MS),
         },
     );
@@ -343,9 +343,12 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
     assert_eq!((fold.segment, fold.lease), (segment, lease));
     assert_eq!(
         (fold.horizon, fold.amendments),
-        (ambre_core::Seq::new(0), amendments)
+        (ambre_core::Seq::<ambre_core::Relay>::new(0), amendments)
     );
-    assert_eq!(fold.amendments_seq, ambre_core::Seq::new(3));
+    assert_eq!(
+        fold.amendments_seq,
+        ambre_core::Seq::<ambre_core::Relay>::new(3)
+    );
     assert!(holds(fold.payload.as_bytes(), "uno"));
     assert!(
         !holds(fold.payload.as_bytes(), "two"),
@@ -402,9 +405,9 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
         segment,
         FoldAnswer::Granted {
             lease: Id::<Lease>::mint(),
-            horizon: ambre_core::Seq::new(0),
+            horizon: ambre_core::Seq::<ambre_core::Relay>::new(0),
             amendments: Id::<Document>::mint(),
-            amendments_seq: ambre_core::Seq::new(1),
+            amendments_seq: ambre_core::Seq::<ambre_core::Relay>::new(1),
             expires_in: TimeSpan::<Ms>::new(LEASE_MS),
         },
     );
@@ -419,9 +422,9 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
         segment,
         FoldAnswer::Granted {
             lease: Id::<Lease>::mint(),
-            horizon: ambre_core::Seq::new(0),
+            horizon: ambre_core::Seq::<ambre_core::Relay>::new(0),
             amendments,
-            amendments_seq: ambre_core::Seq::new(9),
+            amendments_seq: ambre_core::Seq::<ambre_core::Relay>::new(9),
             expires_in: TimeSpan::<Ms>::new(LEASE_MS),
         },
     );
@@ -447,8 +450,12 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
     let document_id = segment.document_id();
     let before = bob.messages(segment).expect("held");
     assert_eq!(
-        bob.check_snapshot(document_id, ambre_core::Seq::new(0), &fold.payload)
-            .expect("check"),
+        bob.check_snapshot(
+            document_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
+            &fold.payload
+        )
+        .expect("check"),
         SnapshotVerdict::Match { extras: Vec::new() }
     );
     assert_eq!(bob.messages(segment).expect("held"), before, "only read");
@@ -473,15 +480,23 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
             .expect("export"),
     );
     assert_eq!(
-        bob.check_snapshot(document_id, ambre_core::Seq::new(0), &forged)
-            .expect("check"),
+        bob.check_snapshot(
+            document_id,
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
+            &forged
+        )
+        .expect("check"),
         SnapshotVerdict::Mismatch
     );
 
     let short = amended.bob(2);
     assert_eq!(
         short
-            .check_snapshot(document_id, ambre_core::Seq::new(0), &fold.payload)
+            .check_snapshot(
+                document_id,
+                ambre_core::Seq::<ambre_core::Relay>::new(0),
+                &fold.payload
+            )
             .expect("check"),
         SnapshotVerdict::Unchecked,
         "he misses an amendment the fold holds"
@@ -502,12 +517,17 @@ fn a_change_past_the_fold_leaves_it_unchecked() {
         .edit(segment, amended.ids[2], &draft("tres"), amended.author)
         .expect("edit")
         .expect("a change");
-    bob.apply_signed(amendments, Seq::new(4), &later.delta, amended.signer())
-        .expect("applies");
+    bob.apply_signed(
+        amendments,
+        Seq::<Relay>::new(4),
+        &later.delta,
+        amended.signer(),
+    )
+    .expect("applies");
     assert_eq!(
         bob.check_snapshot(
             segment.document_id(),
-            ambre_core::Seq::new(0),
+            ambre_core::Seq::<ambre_core::Relay>::new(0),
             &fold.payload
         )
         .expect("check"),

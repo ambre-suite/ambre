@@ -169,7 +169,7 @@ pub struct MemberChannelRow {
     pub peers: Vec<ambre_core::DisplayName>,
     /// The highest sequence number the register holds for `meta`. The
     /// ephemeral store may hold a higher one not yet flushed.
-    pub meta_durable_last: ambre_core::Seq,
+    pub meta_durable_last: ambre_core::Seq<ambre_core::Relay>,
 }
 
 /// Every channel whose `meta` holds a row of `user`, by identifier
@@ -430,7 +430,7 @@ pub async fn retired_unlocked_segments(
 pub async fn record_lock(
     pool: &PgPool,
     segment: &Id<Document>,
-    horizon: ambre_core::Seq,
+    horizon: ambre_core::Seq<ambre_core::Relay>,
 ) -> Result<(), AppError> {
     sqlx::query(
         "UPDATE channel_documents SET horizon = $2 WHERE document_id = $1 AND horizon IS NULL",
@@ -576,7 +576,7 @@ pub enum FinalizeLease {
     /// to `horizon`, and commits it before `expires_in` runs out.
     Granted {
         lease_id: Id<Lease>,
-        horizon: ambre_core::Seq,
+        horizon: ambre_core::Seq<ambre_core::Relay>,
         expires_in: std::time::Duration,
     },
     /// No lease now: ask again after `retry_in`.
@@ -598,7 +598,7 @@ pub async fn take_finalize_lease(
     channel_id: &Id<Channel>,
     segment: Id<Segment>,
     terms: LeaseTerms,
-    lock: impl AsyncFnOnce() -> Result<Option<ambre_core::Seq>, AppError>,
+    lock: impl AsyncFnOnce() -> Result<Option<ambre_core::Seq<ambre_core::Relay>>, AppError>,
 ) -> Result<FinalizeLease, AppError> {
     let document = id_to_uuid(segment.document_id());
     let mut tx = pool.begin().await?;
@@ -679,7 +679,7 @@ struct LeaseRow {
     #[sqlx(try_from = "PgOptState")]
     state: Option<ambre_core::SegmentState>,
     #[sqlx(try_from = "PgOptSeq")]
-    horizon: Option<ambre_core::Seq>,
+    horizon: Option<ambre_core::Seq<ambre_core::Relay>>,
     #[sqlx(try_from = "PgOptId")]
     final_snapshot: Option<Id<Snapshot>>,
     #[sqlx(try_from = "PgTimeLeft", rename = "grace_left_ms")]
@@ -709,7 +709,7 @@ struct CommitRow {
     held: Option<Id<Lease>>,
     live: LeaseClock,
     #[sqlx(try_from = "PgOptSeq")]
-    horizon: Option<ambre_core::Seq>,
+    horizon: Option<ambre_core::Seq<ambre_core::Relay>>,
     #[sqlx(try_from = "PgOptId")]
     final_snapshot: Option<Id<Snapshot>>,
 }
@@ -720,7 +720,7 @@ async fn covered_seq_of(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     snapshot: Id<Snapshot>,
     document: Id<Document>,
-) -> Result<Option<ambre_core::Seq>, AppError> {
+) -> Result<Option<ambre_core::Seq<ambre_core::Relay>>, AppError> {
     let covered: Option<i64> =
         sqlx::query_scalar("SELECT covered_seq FROM snapshots WHERE id = $1 AND document_id = $2")
             .bind(id_to_uuid(snapshot))
@@ -826,9 +826,9 @@ pub enum FoldLease {
     /// `amendments_seq` into the snapshot of the segment at `horizon`.
     Granted {
         lease_id: Id<Lease>,
-        horizon: ambre_core::Seq,
+        horizon: ambre_core::Seq<ambre_core::Relay>,
         amendments: Id<Document>,
-        amendments_seq: ambre_core::Seq,
+        amendments_seq: ambre_core::Seq<ambre_core::Relay>,
         expires_in: std::time::Duration,
     },
     /// No lease now: ask again after `retry_in`.
@@ -842,7 +842,7 @@ struct FoldRow {
     #[sqlx(try_from = "PgOptState")]
     state: Option<ambre_core::SegmentState>,
     #[sqlx(try_from = "PgOptSeq")]
-    horizon: Option<ambre_core::Seq>,
+    horizon: Option<ambre_core::Seq<ambre_core::Relay>>,
     #[sqlx(try_from = "PgOptId")]
     final_snapshot: Option<Id<Snapshot>>,
     #[sqlx(try_from = "PgTimeLeft", rename = "lease_left_ms")]
@@ -850,11 +850,11 @@ struct FoldRow {
     #[sqlx(try_from = "PgOptId")]
     amendments: Option<Id<Document>>,
     #[sqlx(try_from = "PgOptSeq")]
-    folded_seq: Option<ambre_core::Seq>,
+    folded_seq: Option<ambre_core::Seq<ambre_core::Relay>>,
     #[sqlx(try_from = "PgTimeLeft", rename = "delay_left_ms")]
     delay_left: Option<std::time::Duration>,
     #[sqlx(try_from = "PgOptSeq")]
-    stored_seq: Option<ambre_core::Seq>,
+    stored_seq: Option<ambre_core::Seq<ambre_core::Relay>>,
 }
 
 /// Take the fold lease of the final segment `segment` of a channel
@@ -871,7 +871,7 @@ pub async fn take_fold_lease(
     channel_id: &Id<Channel>,
     segment: Id<Segment>,
     terms: FoldTerms,
-    relayed: impl AsyncFnOnce(Id<Document>) -> Result<ambre_core::Seq, AppError>,
+    relayed: impl AsyncFnOnce(Id<Document>) -> Result<ambre_core::Seq<ambre_core::Relay>, AppError>,
 ) -> Result<FoldLease, AppError> {
     let document = id_to_uuid(segment.document_id());
     let conflict = |detail: &str| AppError::Conflict {
@@ -952,7 +952,7 @@ struct FoldCommitRow {
     held: Option<Id<Lease>>,
     live: LeaseClock,
     #[sqlx(try_from = "PgOptSeq")]
-    horizon: Option<ambre_core::Seq>,
+    horizon: Option<ambre_core::Seq<ambre_core::Relay>>,
     #[sqlx(try_from = "PgOptId")]
     final_snapshot: Option<Id<Snapshot>>,
     #[sqlx(try_from = "PgOptId")]
@@ -960,7 +960,7 @@ struct FoldCommitRow {
     #[sqlx(try_from = "PgOptId")]
     folded_by: Option<Id<Snapshot>>,
     #[sqlx(try_from = "PgOptSeq")]
-    folded_seq: Option<ambre_core::Seq>,
+    folded_seq: Option<ambre_core::Seq<ambre_core::Relay>>,
 }
 
 /// Record the fold of the amendments of `segment` up to their delta
@@ -978,7 +978,7 @@ pub async fn commit_fold(
     segment: Id<Segment>,
     lease_id: Id<Lease>,
     snapshot_id: Id<Snapshot>,
-    amendments_seq: ambre_core::Seq,
+    amendments_seq: ambre_core::Seq<ambre_core::Relay>,
 ) -> Result<(), AppError> {
     let document = id_to_uuid(segment.document_id());
     let conflict = |detail: &str| AppError::Conflict {
@@ -1050,7 +1050,7 @@ pub async fn commit_fold(
 #[derive(Debug, PartialEq, Eq)]
 pub struct SettledFold {
     pub amendments: Id<Document>,
-    pub folded_seq: ambre_core::Seq,
+    pub folded_seq: ambre_core::Seq<ambre_core::Relay>,
     pub dropped_keys: Vec<ambre_core::ObjectKey>,
 }
 
@@ -1095,7 +1095,9 @@ pub async fn settle_fold(
     tx.commit().await?;
     Ok(Some(SettledFold {
         amendments: uuid_row_to_id(amendments),
-        folded_seq: ambre_core::Seq::new(folded_seq.unwrap_or(0).unsigned_abs()),
+        folded_seq: ambre_core::Seq::<ambre_core::Relay>::new(
+            folded_seq.unwrap_or(0).unsigned_abs(),
+        ),
         dropped_keys: dropped_keys
             .into_iter()
             .map(ambre_core::ObjectKey::new)

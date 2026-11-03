@@ -30,6 +30,7 @@ use ambre_core::{Image, Instant, PageLoad, Px, Size, Surface, Tally};
 pub enum Glyphs {}
 
 impl ambre_core::TallyKind for Glyphs {
+    type Repr = u32;
     const NAME: &'static str = "GlyphCount";
 }
 
@@ -37,6 +38,7 @@ impl ambre_core::TallyKind for Glyphs {
 pub enum Ops {}
 
 impl ambre_core::TallyKind for Ops {
+    type Repr = u32;
     const NAME: &'static str = "OpCount";
 }
 

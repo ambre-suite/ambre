@@ -17,7 +17,7 @@ use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::{
     Confidential, LogicCommand, Plaintext, Request, RestCommand, RestEvent, RowPlace, SealedRow,
 };
-use ambre_core::Generation;
+use ambre_core::Seq;
 
 /// What one sealed row comes back as: `None` when the store is locked.
 type Sealed = Box<dyn FnOnce(Option<Payload<SealedRowBytes>>)>;
@@ -38,7 +38,7 @@ pub(crate) struct Vault {
 
 struct Inner {
     to_logic: Sender<LogicCommand>,
-    waiting: HashMap<Generation<Request>, Pending>,
+    waiting: HashMap<Seq<Request>, Pending>,
     /// Requests the channel to Logic did not take, in order.
     outbox: VecDeque<LogicCommand>,
 }
@@ -99,11 +99,7 @@ impl Vault {
     /// row then reaches `done` with one owner, so it moves out of its wrapper
     /// with no copy. An event that is not the vault's comes back for the rest
     /// of the relay.
-    pub(crate) fn answer(
-        &self,
-        id: Option<Generation<Request>>,
-        evt: RestEvent,
-    ) -> Option<RestEvent> {
+    pub(crate) fn answer(&self, id: Option<Seq<Request>>, evt: RestEvent) -> Option<RestEvent> {
         let pending = id.and_then(|id| self.inner.borrow_mut().waiting.remove(&id));
         let Some(pending) = pending else {
             return Some(evt);
@@ -149,7 +145,7 @@ mod tests {
     use super::*;
 
     /// The one request on `rx`, as Logic would relay it to Sync.
-    fn request(rx: &Receiver<LogicCommand>) -> (Generation<Request>, RestCommand) {
+    fn request(rx: &Receiver<LogicCommand>) -> (Seq<Request>, RestCommand) {
         match rx.try_recv() {
             Ok(LogicCommand::Rest { id, cmd }) => (id, cmd),
             other => panic!("expected a service request, got {other:?}"),
@@ -182,7 +178,7 @@ mod tests {
 
         assert!(
             vault
-                .answer(Some(Generation::nth(u64::MAX)), RestEvent::LocalStoreLocked)
+                .answer(Some(Seq::nth(u64::MAX)), RestEvent::LocalStoreLocked)
                 .is_some()
         );
         let sealed = RestEvent::LocalRowSealed {

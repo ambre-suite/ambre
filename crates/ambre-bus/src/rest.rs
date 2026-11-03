@@ -55,7 +55,7 @@ pub use ambre_core::{Confidential, Plaintext, RecoveryWords};
 // Request -- request/response correlation
 // -----------------------------------------------------------------------------
 
-/// The family of service requests: a `Generation<Request>` ties a
+/// The family of service requests: a `Seq<Request>` ties a
 /// [`RestCommand`] to the [`RestEvent`] that answers it.
 ///
 /// Issued in the Main instance by [`next_request`] and echoed unchanged by
@@ -67,12 +67,12 @@ pub use ambre_core::{Confidential, Plaintext, RecoveryWords};
 /// re-login, carries no request at all: its id is `None`.
 pub enum Request {}
 
-impl ambre_core::GenerationKind for Request {
+impl ambre_core::SeqKind for Request {
     type IssueRight = ();
     const NAME: &'static str = "RequestId";
 }
 
-impl ambre_core::generation::Wire for Request {}
+impl ambre_core::seq::Wire for Request {}
 
 /// The one issuer of the Main instance, shared by the UI and Logic threads
 /// over its heap. The Sync worker has its own memory and so its own static,
@@ -81,7 +81,7 @@ static REQUESTS: ambre_core::SharedIssuer<Request> = ambre_core::SharedIssuer::n
 
 /// A request id unique to the Main instance.
 #[must_use = "a request id issued and dropped wastes a number"]
-pub fn next_request() -> ambre_core::Generation<Request> {
+pub fn next_request() -> ambre_core::Seq<Request> {
     REQUESTS.issue()
 }
 
