@@ -916,7 +916,7 @@ ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(tex
 ambre-core | src/media.rs | crate::media | ByteSize.0 | field | u64	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | ByteSize::as_len() | ret | usize	newtype-inner	ByteSize constructor or accessor
 ambre-core | src/media.rs | crate::media | ByteSize::from_i64(stored) | param | i64	newtype-inner	ByteSize storage conversion
-ambre-core | src/media.rs | crate::media | ByteSize::of_len(len) | param | usize	newtype-inner	ByteSize constructor or accessor
+ambre-core | src/media.rs | crate::media | ByteSize::of(len) | param | usize	newtype-inner	ByteSize constructor or accessor
 ambre-core | src/media.rs | crate::media | ByteSize::to_i64_saturating() | ret | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | ContentHash.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | ContentHash::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
@@ -1793,7 +1793,7 @@ ambre-prose | src/commands.rs | crate::commands | underline_title() | ret | Stri
 ambre-prose | src/commands.rs | crate::commands | undo_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
 ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/comment.rs | crate::comment | <ReplySlot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-prose | src/count.rs | crate::count | tally(text) | param | &str	free-text	one block's text, added to the running word and character counts
+ambre-prose | src/count.rs | crate::count | add_block(text) | param | &str	free-text	one block's text, added to the running word and character counts
 ambre-prose | src/doc.rs | crate::doc | anchors(parse) | param | impl Fn(&str)->Option<V>	generic	the parse of an anchor mark's stored value into the id or record its root names; a value it refuses names nothing
 ambre-prose | src/doc.rs | crate::doc | BODY_SEPARATOR | const | char	generic	the separator of a body root name, which BodyKey::of writes and parse_body_key reads back
 ambre-prose | src/doc.rs | crate::doc | BODY_TAG | const | &str	generic	the tag a body root name starts with, which BodyKey::of writes and parse_body_key reads back
@@ -3734,8 +3734,8 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | Ret::of(owner) | param | Opti
 ambre-primitives | src/unwrap.rs | crate::unwrap | SHARED_ACCESSORS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | STD_RETURNS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | STD_TYPES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
-ambre-primitives | src/unwrap.rs | crate::unwrap | SiteTally.0 | field | usize	newtype-inner	the inside of SiteTally, or its constructor
-ambre-primitives | src/unwrap.rs | crate::unwrap | SiteTally::new(n) | param | usize	newtype-inner	the inside of SiteTally, or its constructor
+ambre-primitives | src/unwrap.rs | crate::unwrap | SiteCount.0 | field | usize	newtype-inner	the inside of SiteCount, or its constructor
+ambre-primitives | src/unwrap.rs | crate::unwrap | SiteCount::new(n) | param | usize	newtype-inner	the inside of SiteCount, or its constructor
 ambre-primitives | src/unwrap.rs | crate::unwrap | Unwrap.accessor | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Unwrap.newtype | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | body_methods(accessors) | param | &mut BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name

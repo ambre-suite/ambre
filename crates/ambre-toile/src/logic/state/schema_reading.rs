@@ -329,15 +329,15 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         Root::Comments => comment_reading(reader, stored),
         Root::Reactions => {
             let (target, _user) = stored.key(0)?.split_once('/')?;
-            let tally = reader.reaction_tally(&Id::<Element>::from_text(target.to_owned()));
-            let emoji: Vec<(&str, u32)> = tally
+            let counts = reader.reaction_counts(&Id::<Element>::from_text(target.to_owned()));
+            let emoji: Vec<(&str, u32)> = counts
                 .emoji
                 .iter()
                 .map(|(emoji, count)| (emoji.as_str(), count.get()))
                 .collect();
             Some(format!(
-                "tallies {emoji:?}, {} votes summing {}",
-                tally.vote_count, tally.vote_total
+                "counts {emoji:?}, {} votes summing {}",
+                counts.vote_count, counts.vote_total
             ))
         }
         Root::Media if MediaKey::parse(stored.key(1)?) == Some(MediaKey::Thumb) => {

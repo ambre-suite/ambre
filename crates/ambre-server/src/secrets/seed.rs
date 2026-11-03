@@ -33,7 +33,7 @@ impl SeedText {
                 hex::FromHexError::InvalidStringLength
                     if text.bytes().all(|b| b.is_ascii_hexdigit()) =>
                 {
-                    JwtSeedRefusal::Length(ambre_core::ByteSize::of_len(text.len() / 2))
+                    JwtSeedRefusal::Length(ambre_core::ByteSize::of(text.len() / 2))
                 }
                 _ => JwtSeedRefusal::NotHex,
             })

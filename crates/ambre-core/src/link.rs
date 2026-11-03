@@ -29,7 +29,7 @@ impl LinkUrl {
     /// it to.
     #[must_use]
     pub fn size(&self) -> crate::ByteSize {
-        crate::ByteSize::of_len(self.0.as_str().len())
+        crate::ByteSize::of(self.0.as_str().len())
     }
 }
 

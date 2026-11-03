@@ -1321,7 +1321,7 @@ use ambre_core::{Authored, Instant, PageLoad};
 /// `emoji` is sorted for a stable render order; `vote_total` / `vote_count`
 /// aggregate the `Vote` entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ReactionTally {
+pub struct ReactionCounts {
     pub emoji: Vec<(crate::app::murmure::Emoji, Count<Reactions>)>,
     pub vote_total: VoteTotal,
     pub vote_count: Count<Votes>,
@@ -2894,7 +2894,7 @@ pub struct DisplayViewport {
     /// The reaction badge pass paints one chip row per entry. A `BTreeMap` (not
     /// `HashMap`) so iteration order is deterministic -- the derived viewport
     /// must equal a full rebuild byte-for-byte (convergence tests).
-    pub reactions: BTreeMap<Id<Element>, ReactionTally>,
+    pub reactions: BTreeMap<Id<Element>, ReactionCounts>,
     /// The comment pins to paint (`toile-comments`, `TOILE-026`): one entry per
     /// thread whose anchor resolves inside this camera. Message bodies never
     /// ride here: the reader fetches a thread when it opens one (`TOILE-205`). A

@@ -18,7 +18,7 @@
 // `RecordingSurface` with no GPU.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ReactionTally, VoteTotal, Votes};
+use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ReactionCounts, VoteTotal, Votes};
 use ambre_canvas::{Palette, TextCache};
 use ambre_core::Count;
 use ambre_draw::{
@@ -61,18 +61,18 @@ pub fn paint_reactions<S: DrawSurface>(
         let DisplayNode::Element(e) = node else {
             continue;
         };
-        let Some(tally) = vp.reactions.get(&e.id) else {
+        let Some(counts) = vp.reactions.get(&e.id) else {
             continue;
         };
         let rect = rect_to_screen(e.bounds, &w2s);
-        paint_chip_row(surface, tally, rect, font_cx, text_cache, palette);
+        paint_chip_row(surface, counts, rect, font_cx, text_cache, palette);
     }
 }
 
 /// Lay out one element's chips left-to-right below its bottom-left corner.
 fn paint_chip_row<S: DrawSurface>(
     surface: &mut S,
-    tally: &ReactionTally,
+    counts: &ReactionCounts,
     rect: Rect,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
@@ -82,7 +82,7 @@ fn paint_chip_row<S: DrawSurface>(
     let y = rect.y1 + f64::from(ROW_MARGIN.get());
 
     // Emoji chips first, in the count's stable sorted order.
-    for (emoji, count) in &tally.emoji {
+    for (emoji, count) in &counts.emoji {
         let label = format!("{} {count}", emoji.as_str());
         let edge = paint_chip(
             surface,
@@ -97,8 +97,8 @@ fn paint_chip_row<S: DrawSurface>(
 
     // A single trailing vote badge when any vote exists: signed weight sum
     // and voter count, for example "+3 (5)".
-    if tally.vote_count > Count::<Votes>::ZERO {
-        let label = vote_label(tally.vote_total, tally.vote_count);
+    if counts.vote_count > Count::<Votes>::ZERO {
+        let label = vote_label(counts.vote_total, counts.vote_count);
         paint_chip(
             surface,
             &label,
@@ -211,7 +211,7 @@ mod tests {
 
     fn vp_with(
         nodes: Vec<DisplayNode>,
-        reactions: BTreeMap<Id<Element>, ReactionTally>,
+        reactions: BTreeMap<Id<Element>, ReactionCounts>,
     ) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Seq::ZERO,
@@ -242,8 +242,8 @@ mod tests {
             .collect()
     }
 
-    fn tally(emoji: &[(&str, u32)], vote_total: i64, vote_count: u32) -> ReactionTally {
-        ReactionTally {
+    fn counts(emoji: &[(&str, u32)], vote_total: i64, vote_count: u32) -> ReactionCounts {
+        ReactionCounts {
             emoji: emoji
                 .iter()
                 .map(|(e, n)| (ambre_bus::Emoji::from(*e), Count::<Reactions>::new(*n)))
@@ -257,12 +257,12 @@ mod tests {
     /// one paints a chip. Exactly one pill is painted, and it sits under the
     /// counted element.
     #[test]
-    fn chip_row_paints_only_tallied_elements() {
+    fn chip_row_paints_only_counted_elements() {
         let a = Rect::new(0.0, 0.0, 40.0, 40.0);
         let mut reactions = BTreeMap::new();
         reactions.insert(
             Id::<Element>::from_text("a".into()),
-            tally(&[("x", 2)], 0, 0),
+            counts(&[("x", 2)], 0, 0),
         );
         let vp = vp_with(
             vec![elem("a", a), elem("b", Rect::new(80.0, 0.0, 120.0, 40.0))],
@@ -272,10 +272,10 @@ mod tests {
 
         let pills = pills(&vp, &cam);
         let a_on_screen = rect_to_screen(a, &cam.world_to_screen());
-        assert_eq!(pills.len(), 1, "one chip, for the tallied element");
+        assert_eq!(pills.len(), 1, "one chip, for the counted element");
         assert!(
             (pills[0].x0 - a_on_screen.x0).abs() < 1.0 && pills[0].y0 > a_on_screen.y1,
-            "the chip sits under the tallied element: {pills:?}"
+            "the chip sits under the counted element: {pills:?}"
         );
     }
 
@@ -286,7 +286,7 @@ mod tests {
         let mut reactions = BTreeMap::new();
         reactions.insert(
             Id::<Element>::from_text("a".into()),
-            tally(&[("x", 2)], 1, 1),
+            counts(&[("x", 2)], 1, 1),
         );
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
         let near = ViewportTransform::new(ambre_draw::Size::new(800.0, 800.0));
@@ -315,7 +315,7 @@ mod tests {
         let mut reactions = BTreeMap::new();
         reactions.insert(
             Id::<Element>::from_text("a".into()),
-            tally(&[("x", 1), ("y", 2)], -2, 3),
+            counts(&[("x", 1), ("y", 2)], -2, 3),
         );
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
         let pills = pills(

@@ -406,7 +406,7 @@ pub async fn insert_inline_update(
     Ok(InlineInsert::Stored {
         deltas: Count::<Deltas>::from_i64(deltas).incremented(),
         bytes: ambre_core::ByteSize::from_i64(bytes)
-            .saturating_add(ambre_core::ByteSize::of_len(wire.len())),
+            .saturating_add(ambre_core::ByteSize::of(wire.len())),
     })
 }
 

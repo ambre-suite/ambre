@@ -90,4 +90,4 @@ presentation_config/autoplay = false => read by no reader of this build
 presentation_config/loop = false => read by no reader of this build
 presentation_config/transition_ms = 300 => slides change over 300 ms
 presentation_order/* = "0000000000000001_00000003" => slide 1
-reactions/* = 00022b3102 => tallies [("+1", 1)], 0 votes summing 0
+reactions/* = 00022b3102 => counts [("+1", 1)], 0 votes summing 0

@@ -46,7 +46,7 @@ fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)])
     let mut kept = Count::<Deltas>::new(0);
     let mut bytes = ByteSize::new(0);
     for (_, wire) in tail.iter().rev() {
-        let next = bytes.saturating_add(ByteSize::of_len(wire.len()));
+        let next = bytes.saturating_add(ByteSize::of(wire.len()));
         if kept.incremented() > quarter.deltas || next > quarter.bytes {
             break;
         }

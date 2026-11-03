@@ -38,7 +38,7 @@ pub fn compute_word_count(document: &LoroDoc) -> WordCount {
     for id in flow {
         let has_body = doc::block_type_of(&tree, &id).is_some_and(|t| t.has_body());
         if has_body {
-            tally(&doc::get_block_text(document, &id).to_string(), &mut count);
+            add_block(&doc::get_block_text(document, &id).to_string(), &mut count);
         }
     }
     count
@@ -57,7 +57,7 @@ fn collect(tree: &LoroTree, parent: Option<TreeID>, out: &mut Vec<TreeID>) {
 /// The break between two paragraphs is whitespace the tree does not store. It
 /// counts once with the spaces, between two blocks that each hold a visible
 /// character, and never without them (`PROSE-FEAT-120`).
-fn tally(text: &str, count: &mut WordCount) {
+fn add_block(text: &str, count: &mut WordCount) {
     let mut clusters = 0_usize;
     let mut visible = 0_usize;
     for cluster in text.graphemes(true) {
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_document_counts_zero_for_the_four_tallies() {
+    fn an_empty_document_counts_zero_for_the_four_counts() {
         let state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         assert_eq!(compute_word_count(state.document()), WordCount::default());
     }

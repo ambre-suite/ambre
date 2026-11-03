@@ -313,7 +313,7 @@ fn decompress(version: CompressionVersion, body: &[u8]) -> Result<Vec<u8>, Pipel
 fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     // MIN_DECOMPRESS_CEILING < ABSOLUTE_DECOMPRESS_CAP by construction, so clamp
     // never panics.
-    let ceiling = ByteSize::of_len(body.len().saturating_mul(MAX_DECOMPRESS_RATIO))
+    let ceiling = ByteSize::of(body.len().saturating_mul(MAX_DECOMPRESS_RATIO))
         .clamp(MIN_DECOMPRESS_CEILING, ABSOLUTE_DECOMPRESS_CAP);
 
     let mut decoder =
@@ -334,7 +334,7 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
         .read_to_end(&mut out)
     {
         Err(_) => PipelineError::Decompress,
-        Ok(read) if ByteSize::of_len(read) > ceiling => PipelineError::DecompressTooLarge,
+        Ok(read) if ByteSize::of(read) > ceiling => PipelineError::DecompressTooLarge,
         Ok(_) => return Ok(out),
     };
     ambre_core::Secret::wipe(out);

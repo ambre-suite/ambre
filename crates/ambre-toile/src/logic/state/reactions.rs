@@ -23,7 +23,7 @@
 //!
 //! Keyed by `Id<User>`, never `PeerID`: a reaction is a per-user decision that must
 //! survive reload and multi-device use. The count (count per emoji, vote totals)
-//! is **derived on read** ([`reaction_tally`](ToileState::reaction_tally)), never
+//! is **derived on read** ([`reaction_counts`](ToileState::reaction_counts)), never
 //! stored, so it can never drift from the entry set. A reaction on a
 //! concurrently-deleted target is skipped at derivation, never destroyed
 //! (data-never-destroyed).
@@ -34,7 +34,7 @@ use std::collections::{BTreeMap, HashSet};
 use loro::LoroValue;
 
 use crate::ToileError;
-use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
+use crate::logic::command::{Reaction, ReactionCounts, ReactionKind, ToileEvent, ToileOutcome};
 use ambre_bus::app::toile::Reactions;
 use ambre_core::id::{Element, Id};
 
@@ -52,12 +52,12 @@ fn encode<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, ToileError> {
 
 /// Fold one decoded reaction into a per-target accumulator: emoji counts (a
 /// `BTreeMap` for stable, sorted rendering order) and the running vote total /
-/// count. Shared by the single-target [`ToileState::reaction_tally`] and the
-/// whole-viewport [`ToileState::reaction_tallies`] so both derive identically.
+/// count. Shared by the single-target [`ToileState::reaction_counts`] and the
+/// whole-viewport [`ToileState::reaction_counts_by_target`] so both derive identically.
 fn accumulate(
     kind: ReactionKind,
     emoji: &mut BTreeMap<ambre_bus::Emoji, Count<Reactions>>,
-    tally: &mut ReactionTally,
+    counts: &mut ReactionCounts,
 ) {
     match kind {
         ReactionKind::Emoji(e) => {
@@ -65,8 +65,8 @@ fn accumulate(
             *count = count.incremented();
         }
         ReactionKind::Vote(w) => {
-            tally.vote_total = tally.vote_total.plus(w);
-            tally.vote_count = tally.vote_count.incremented();
+            counts.vote_total = counts.vote_total.plus(w);
+            counts.vote_count = counts.vote_count.incremented();
         }
     }
 }
@@ -128,14 +128,14 @@ impl ToileState {
     /// per-user entries. A deleted target (no element map) yields an empty count:
     /// its orphan entries are skipped at derivation, never rendered, never
     /// destroyed. Scans the shared `reactions` map for the target's prefix.
-    pub fn reaction_tally(&self, target: &Id<Element>) -> ReactionTally {
+    pub fn reaction_counts(&self, target: &Id<Element>) -> ReactionCounts {
         // Skip a deleted / never-created target ("reactions on a deleted
         // target"): its entries may still exist but are not rendered.
         if self.element_map(target).is_none() {
-            return ReactionTally::default();
+            return ReactionCounts::default();
         }
         let mut emoji: BTreeMap<ambre_bus::Emoji, Count<Reactions>> = BTreeMap::new();
-        let mut tally = ReactionTally::default();
+        let mut counts = ReactionCounts::default();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {
             for (k, value) in entries.iter() {
@@ -148,11 +148,11 @@ impl ToileState {
                 let Ok(Reaction { kind, .. }) = postcard::from_bytes::<Reaction>(bytes) else {
                     continue;
                 };
-                accumulate(kind, &mut emoji, &mut tally);
+                accumulate(kind, &mut emoji, &mut counts);
             }
         }
-        tally.emoji = emoji.into_iter().collect();
-        tally
+        counts.emoji = emoji.into_iter().collect();
+        counts
     }
 
     /// Derive the reaction counts of every `visible`, still-existing target in
@@ -162,13 +162,13 @@ impl ToileState {
     /// is O(reactions), not O(elements x reactions). The whole map is walked
     /// once, each entry routed to its target by splitting the composite key on
     /// the first `/`.
-    pub(super) fn reaction_tallies(
+    pub(super) fn reaction_counts_by_target(
         &self,
         visible: &HashSet<Id<Element>>,
-    ) -> BTreeMap<Id<Element>, ReactionTally> {
+    ) -> BTreeMap<Id<Element>, ReactionCounts> {
         let mut emoji: BTreeMap<Id<Element>, BTreeMap<ambre_bus::Emoji, Count<Reactions>>> =
             BTreeMap::new();
-        let mut tallies: BTreeMap<Id<Element>, ReactionTally> = BTreeMap::new();
+        let mut by_target: BTreeMap<Id<Element>, ReactionCounts> = BTreeMap::new();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {
             for (k, value) in entries.iter() {
@@ -187,17 +187,17 @@ impl ToileState {
                 accumulate(
                     kind,
                     emoji.entry(target.clone()).or_default(),
-                    tallies.entry(target).or_default(),
+                    by_target.entry(target).or_default(),
                 );
             }
         }
         // Flush the per-target sorted emoji maps into their count vectors.
         for (target, e) in emoji {
-            if let Some(tally) = tallies.get_mut(&target) {
-                tally.emoji = e.into_iter().collect();
+            if let Some(counts) = by_target.get_mut(&target) {
+                counts.emoji = e.into_iter().collect();
             }
         }
-        tallies
+        by_target
     }
 
     /// The local user's own reaction on `target`, if any. UI toggle / test

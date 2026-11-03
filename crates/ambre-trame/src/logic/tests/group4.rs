@@ -781,7 +781,7 @@ fn selection_stats_covers_the_whole_band() {
     match &evts.display[0] {
         TrameEvent::SelectionStats { count, numbers } => {
             let numbers = numbers.expect("two numbers are selected");
-            assert_eq!(count.get(), 2, "the off-screen row is tallied");
+            assert_eq!(count.get(), 2, "the off-screen row is counted");
             assert_eq!(numbers.count().get(), 2);
             assert_eq!(numbers.sum().map(CellNumber::get), Some(30.0));
         }
@@ -821,7 +821,7 @@ fn selection_stats_totals_a_disjoint_selection() {
     match &evts.display[0] {
         TrameEvent::SelectionStats { count, numbers } => {
             let numbers = numbers.expect("two numbers are selected");
-            assert_eq!(count.get(), 2, "both rectangles are tallied");
+            assert_eq!(count.get(), 2, "both rectangles are counted");
             assert_eq!(numbers.count().get(), 2);
             assert_eq!(numbers.sum().map(CellNumber::get), Some(30.0));
         }

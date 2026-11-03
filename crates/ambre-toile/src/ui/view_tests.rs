@@ -2615,7 +2615,7 @@ fn a_shared_board(peer: Id<User>) -> Rig {
     let mut reactions = std::collections::BTreeMap::new();
     reactions.insert(
         eid("a"),
-        ambre_bus::app::toile::ReactionTally {
+        ambre_bus::app::toile::ReactionCounts {
             emoji: vec![(
                 ambre_bus::Emoji::from("+1"),
                 ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(2),

@@ -217,7 +217,7 @@ impl ByteSize {
 
     /// The size of a buffer `len` bytes long, saturating at `u64::MAX`.
     #[must_use]
-    pub fn of_len(len: usize) -> Self {
+    pub fn of(len: usize) -> Self {
         Self(u64::try_from(len).unwrap_or(u64::MAX))
     }
 

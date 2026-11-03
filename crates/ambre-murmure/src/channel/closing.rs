@@ -116,7 +116,7 @@ impl ChannelState {
         let Ok(snapshot) = self.active.doc.export(ExportMode::Snapshot) else {
             return false;
         };
-        let bytes = ByteSize::of_len(snapshot.len());
+        let bytes = ByteSize::of(snapshot.len());
         if bytes >= self.segment_snapshot_size {
             return true;
         }

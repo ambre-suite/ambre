@@ -532,7 +532,7 @@ mod tests {
     }
 
     #[test]
-    fn the_tallies_shown_are_those_of_the_text_once_settled() {
+    fn the_counts_shown_are_those_of_the_text_once_settled() {
         let mut state = fresh();
         let mut view = ProseUiState::default();
         let block = state.root_blocks()[0];
@@ -599,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn a_new_layout_leaves_the_four_tallies_alone() {
+    fn a_new_layout_leaves_the_four_counts_alone() {
         let mut state = fresh();
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {

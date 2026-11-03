@@ -78,7 +78,7 @@ ambre-primitives | src/scan.rs | crate::scan | AliasCount | usize	the gate depen
 ambre-primitives | src/scan.rs | crate::scan | ArgPosition | usize	the gate depends on no workspace crate: the position of an argument in a call, from zero
 ambre-primitives | src/scan.rs | crate::scan | Hops | usize	the gate depends on no workspace crate: the steps one lookup has led through, held to a bound
 ambre-primitives | src/scan.rs | crate::scan | SiteKey | String	the gate depends on no workspace crate: one site as one line of six fields
-ambre-primitives | src/unwrap.rs | crate::unwrap | SiteTally | usize	the gate depends on no workspace crate: a number of sites the report counts
+ambre-primitives | src/unwrap.rs | crate::unwrap | SiteCount | usize	the gate depends on no workspace crate: a number of sites the report counts
 ambre-prose | src/doc.rs | crate::doc | BodyKey | String	a container name, a tag and a tree id joined by a colon, built from the tree id alone
 ambre-prose | src/doc.rs | crate::doc | StoredLevel | u8	a heading level as the document holds it, raw on purpose: an import may store one outside one to six
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Indent | String	the leading spaces of a nested Markdown block, private to the writer

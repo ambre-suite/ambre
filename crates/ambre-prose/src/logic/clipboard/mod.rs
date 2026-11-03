@@ -180,7 +180,7 @@ fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
 /// that runs.
 fn safe_link(href: &str) -> bool {
     let lower = href.get(..8).unwrap_or(href).to_ascii_lowercase();
-    crate::link::within_href_max(ambre_core::ByteSize::of_len(href.len()))
+    crate::link::within_href_max(ambre_core::ByteSize::of(href.len()))
         && ["http://", "https://", "mailto:"]
             .iter()
             .any(|scheme| lower.starts_with(scheme))
@@ -190,7 +190,7 @@ fn safe_link(href: &str) -> bool {
 /// a control character or one that closes a style declaration.
 fn safe_family(name: &str) -> bool {
     !name.is_empty()
-        && ambre_core::ByteSize::of_len(name.len()) <= FAMILY_MAX
+        && ambre_core::ByteSize::of(name.len()) <= FAMILY_MAX
         && name
             .chars()
             .all(|c| !c.is_control() && !matches!(c, '<' | '>' | ';' | '"'))

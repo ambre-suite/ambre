@@ -346,7 +346,7 @@ pub struct DisplayViewport {
     pub nodes:     Vec<DisplayNode>,
     /// Derived on read, never stored
     /// (`features/ambre-spec-toile-reactions.md`).
-    pub reactions: BTreeMap<Id<Element>, ReactionTally>,
+    pub reactions: BTreeMap<Id<Element>, ReactionCounts>,
     /// Where each pin sits, its message count and its resolved state, and no
     /// body (`features/ambre-spec-toile-comments.md`).
     pub pins:      Vec<CommentPin>,

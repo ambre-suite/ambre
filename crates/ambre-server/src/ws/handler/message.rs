@@ -567,7 +567,7 @@ async fn store_index_row(
     let author = &update.public_data.pub_key;
     let snapshot_id = &update.public_data.snapshot_id;
     let clock = update.public_data.clock;
-    if ambre_core::ByteSize::of_len(wire.len()) < crate::hot_tail::INLINE_DELTA_MAX_SIZE {
+    if ambre_core::ByteSize::of(wire.len()) < crate::hot_tail::INLINE_DELTA_MAX_SIZE {
         let inline = db::insert_inline_update(
             &state.db,
             &doc_id,

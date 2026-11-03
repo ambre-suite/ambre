@@ -22,12 +22,12 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-018` | `INV` | The document MUST hold none of the five figures. | this spec section 2; this spec section 4 | `ambre_prose::logic::derived::tests::the_document_holds_none_of_the_five_figures`; `ambre_prose::count::tests::counting_writes_nothing_to_the_document` | none | verified |
-| `PROSE-FEAT-119` | `OBS` | The four text counts shown MUST be those of the document's text, once they have settled. | this spec section 2 | `ambre_prose::logic::derived::tests::the_tallies_shown_are_those_of_the_text_once_settled` | none | verified |
+| `PROSE-FEAT-119` | `OBS` | The four text counts shown MUST be those of the document's text, once they have settled. | this spec section 2 | `ambre_prose::logic::derived::tests::the_counts_shown_are_those_of_the_text_once_settled` | none | verified |
 | `PROSE-FEAT-038` | `OBS` | The page count shown MUST be the number of pages of the layout that is applied. | this spec section 2 | `ambre_prose::logic::derived::tests::the_page_count_is_the_one_of_the_layout_taken` | none | verified |
 | `PROSE-FEAT-039` | `INV` | The character count MUST be taken over grapheme clusters, never over bytes or code points. | this spec section 2; `PROSE-FEAT-006` | `ambre_prose::count::tests::a_character_is_a_grapheme_cluster_and_not_a_code_point` | none | verified |
 | `PROSE-FEAT-120` | `INV` | The character count MUST exclude every whitespace cluster, including the break between two paragraphs. | this spec section 2 | `ambre_prose::count::tests::whitespace_and_the_break_between_paragraphs_count_only_with_the_spaces` | none | verified |
 | `PROSE-FEAT-121` | `OBS` | A second character count, taken over the same clusters and including the whitespace, MUST be shown beside it. | this spec section 2; this spec section 4 | `ambre_prose::count::tests::whitespace_and_the_break_between_paragraphs_count_only_with_the_spaces` | none | verified |
-| `PROSE-FEAT-122` | `OBS` | An empty document MUST answer zero for the four text counts. | this spec section 2 | `ambre_prose::count::tests::an_empty_document_counts_zero_for_the_four_tallies`; `::an_empty_paragraph_between_two_is_neither_a_paragraph_nor_a_break` | none | verified |
+| `PROSE-FEAT-122` | `OBS` | An empty document MUST answer zero for the four text counts. | this spec section 2 | `ambre_prose::count::tests::an_empty_document_counts_zero_for_the_four_counts`; `::an_empty_paragraph_between_two_is_neither_a_paragraph_nor_a_break` | none | verified |
 | `PROSE-FEAT-312` | `OBS` | Each of the five figures MUST carry its label, in the order the status bar shows them. | this spec section 3; `ambre-spec-chrome.md` | `ambre_prose::ui::tests::the_status_bar_reads_the_five_figures` | none | verified |
 | `PROSE-FEAT-040` | `OBS` | The five figures MUST reach the reader through the status bar slot every application shares. | this spec section 3; `ambre-spec-chrome.md` | `ambre_app::host::prose::tests::the_page_count_reaches_the_shared_status_slot` -- a count the page state holds reaches the mounted shared slot as its five figures after one frame of the page view | none | verified |
 | `PROSE-FEAT-123` | `INV` | Prose MUST NOT carry a status bar of its own. | this spec section 3; `ambre-spec-chrome.md` | crate-graph -- `ambre-prose` names neither `leptos` nor a DOM binding, so it cannot build a bar | none | verified |
@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-126` | `POST` | The page count MUST become that layout's once that layout is taken. | this spec section 2 | `ambre_prose::logic::derived::tests::the_page_count_is_the_one_of_the_layout_taken` | none | verified |
-| `PROSE-FEAT-127` | `FRAME` | A new layout MUST NOT change any of the four text counts. | this spec section 2; derived | `ambre_prose::logic::derived::tests::a_new_layout_leaves_the_four_tallies_alone` | none | verified |
+| `PROSE-FEAT-127` | `FRAME` | A new layout MUST NOT change any of the four text counts. | this spec section 2; derived | `ambre_prose::logic::derived::tests::a_new_layout_leaves_the_four_counts_alone` | none | verified |
 
 * **Budget.** the word count, a row of `ambre-spec-budgets.md section 1`. It is what the
   delay below exists to keep off the keystroke path.

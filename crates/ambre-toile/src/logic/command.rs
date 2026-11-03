@@ -18,7 +18,7 @@ pub use ambre_bus::app::toile::{
     DeckFrame, DeckView, DisplayConnector, DisplayElement, DisplayGeom, DisplayNode,
     DisplayViewport, ElementCreation, End, FindOptions, FindQuery, FindResults, ImportSlot,
     InitContent, MediaRef, PlaybackState, PresencePayload, PresenceUpdate, PresentFocus,
-    PresentMode, Reaction, ReactionKind, ReactionTally, SelectionStats, Slide, SlideChange,
+    PresentMode, Reaction, ReactionCounts, ReactionKind, SelectionStats, Slide, SlideChange,
     SlidePosition, Sources, StatsRequestKind, TextDelta, ThreadMessage, ToileCommand, ToileError,
     ToileEvent, Viewport, ZOrder, ZTarget,
 };

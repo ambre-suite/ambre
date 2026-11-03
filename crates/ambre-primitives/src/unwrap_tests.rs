@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use syn::visit::Visit;
 
 use super::{
-    CatalogVisit, Finding, HEADER, Outcome, Raw, Report, Row, SiteTally, Strictness, judge,
+    CatalogVisit, Finding, HEADER, Outcome, Raw, Report, Row, SiteCount, Strictness, judge,
     parse_allowlist, report,
 };
 use crate::allowlist::LineNo;
@@ -75,7 +75,7 @@ fn an_unwrap_handed_to_a_workspace_fn_is_refused() {
         refusals(&report),
         ["demo | src/lib.rs:9 | Name::as_str -> store"]
     );
-    assert_eq!(report.sites, SiteTally::new(1));
+    assert_eq!(report.sites, SiteCount::new(1));
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn an_unwrap_handed_to_a_foreign_call_passes() {
     let report = run(&lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
     assert!(report.ambiguous.is_empty());
-    assert_eq!(report.foreign, SiteTally::new(2));
+    assert_eq!(report.foreign, SiteCount::new(2));
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn the_own_impl_and_the_defining_module_of_a_newtype_unwrap_it_freely() {
     }\n";
     let report = run(lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
-    assert_eq!(report.sites, SiteTally::new(0));
+    assert_eq!(report.sites, SiteCount::new(0));
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn test_code_is_not_read() {
     );
     let report = run(&lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
-    assert_eq!(report.sites, SiteTally::new(0));
+    assert_eq!(report.sites, SiteCount::new(0));
 }
 
 #[test]
@@ -239,7 +239,7 @@ fn a_receiver_of_another_type_is_no_unwrap() {
     let lib = format!("{NAME}pub fn save(text: &String) {{ store(text.as_str()); }}\n");
     let report = run(&lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
-    assert_eq!(report.sites, SiteTally::new(0));
+    assert_eq!(report.sites, SiteCount::new(0));
 }
 
 #[test]
@@ -252,7 +252,7 @@ fn a_std_accessor_on_an_unknown_receiver_is_ambiguous() {
     );
     let report = run(&lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
-    assert_eq!(report.ambiguous_receivers(), SiteTally::new(1));
+    assert_eq!(report.ambiguous_receivers(), SiteCount::new(1));
 }
 
 #[test]
@@ -300,7 +300,7 @@ fn a_public_tuple_field_is_an_unwrap_and_a_private_one_is_not() {
     pub fn save(key: &key::Key) { store(&key.0); }\n";
     let report = run(lib);
     assert_eq!(refusals(&report), ["demo | src/lib.rs:9 | Key::0 -> store"]);
-    assert_eq!(report.sites, SiteTally::new(1));
+    assert_eq!(report.sites, SiteCount::new(1));
 }
 
 #[test]
@@ -381,7 +381,7 @@ fn a_conversion_impl_unwraps_the_newtype_it_converts() {
     );
     let report = run(&lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
-    assert_eq!(report.sites, SiteTally::new(0));
+    assert_eq!(report.sites, SiteCount::new(0));
 }
 
 #[test]
@@ -437,7 +437,7 @@ fn an_accessor_many_newtypes_share_is_ambiguous_on_an_untyped_receiver() {
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
     let ambiguous: Vec<String> = report.ambiguous.iter().map(ToString::to_string).collect();
     assert_eq!(ambiguous, ["demo | src/lib.rs:8 | *::to_usize -> keep"]);
-    assert_eq!(report.ambiguous_receivers(), SiteTally::new(1));
+    assert_eq!(report.ambiguous_receivers(), SiteCount::new(1));
 }
 
 #[test]
@@ -505,7 +505,7 @@ fn the_allowlist_names_each_defect_of_its_lines() {
         rows.get("k"),
         Some(&Row {
             line: LineNo(3),
-            count: SiteTally::new(2)
+            count: SiteCount::new(2)
         })
     );
 }
@@ -534,7 +534,7 @@ fn report_mode_passes_on_refusals_and_strict_mode_fails() {
     let empty = allowlist(&[]);
     let lenient = judge(&report, Some(&empty), Strictness::Report).unwrap();
     assert_eq!(lenient.outcome, Outcome::Pass);
-    assert_eq!(lenient.unlisted, SiteTally::new(1));
+    assert_eq!(lenient.unlisted, SiteCount::new(1));
     assert_eq!(
         lenient.problems,
         [format!(
@@ -565,17 +565,17 @@ fn strict_mode_holds_each_line_to_its_count() {
     let short = allowlist(&[&format!("{key}\t1\tthe reason")]);
     let over = judge(&report, Some(&short), Strictness::Strict).unwrap();
     assert_eq!(over.outcome, Outcome::Fail);
-    assert_eq!(over.over, SiteTally::new(1));
+    assert_eq!(over.over, SiteCount::new(1));
 
     let long = allowlist(&[&format!("{key}\t3\tthe reason")]);
     let stale = judge(&report, Some(&long), Strictness::Strict).unwrap();
     assert_eq!(stale.outcome, Outcome::Fail);
-    assert_eq!(stale.stale, SiteTally::new(1));
+    assert_eq!(stale.stale, SiteCount::new(1));
 
     let gone = allowlist(&[&format!("{key}\t2\tthe reason"), "no such key\t1\tgone"]);
     let judged = judge(&report, Some(&gone), Strictness::Strict).unwrap();
     assert_eq!(judged.outcome, Outcome::Fail);
-    assert_eq!(judged.stale, SiteTally::new(1));
+    assert_eq!(judged.stale, SiteCount::new(1));
     assert_eq!(
         judged.problems,
         ["line 4 allows 1 sites, the report finds 0\n  no such key"]
@@ -640,7 +640,7 @@ fn a_const_types_its_receiver() {
         ["demo | src/lib.rs:19 | Name::as_str -> store"]
     );
     assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
-    assert_eq!(report.foreign, SiteTally::new(1));
+    assert_eq!(report.foreign, SiteCount::new(1));
 }
 
 #[test]
@@ -661,7 +661,7 @@ fn a_std_constructor_a_macro_an_array_and_a_tuple_field_type_their_receiver() {
     let report = run(&lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
     assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
-    assert_eq!(report.foreign, SiteTally::new(4));
+    assert_eq!(report.foreign, SiteCount::new(4));
 }
 
 #[test]
@@ -771,7 +771,7 @@ fn an_impl_into_foreign_parameter_is_a_boundary() {
     let report = run(&lib);
     assert_eq!(shapes(&report.refusals), ["Name::as_str -> .label"]);
     assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
-    assert_eq!(report.foreign, SiteTally::new(1));
+    assert_eq!(report.foreign, SiteCount::new(1));
 }
 
 #[test]
@@ -799,7 +799,7 @@ fn a_method_of_a_crate_out_of_reach_is_foreign() {
     let apart = run_crates(&[("demo", "", &lib), ("tool", "", tool)]);
     assert!(apart.refusals.is_empty(), "{:?}", refusals(&apart));
     assert!(apart.ambiguous.is_empty(), "{:?}", ambiguous(&apart));
-    assert_eq!(apart.foreign, SiteTally::new(1));
+    assert_eq!(apart.foreign, SiteCount::new(1));
     let manifest = "[dependencies]\ntool = { path = \"../tool\" }\n";
     let reached = run_crates(&[("demo", manifest, &lib), ("tool", "", tool)]);
     assert_eq!(shapes(&reached.ambiguous), ["Name::as_str -> .bind"]);
@@ -836,7 +836,7 @@ fn option_as_ref_and_refcell_borrow_on_an_untyped_receiver_are_no_unwrap() {
     let report = run(lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
     assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
-    assert_eq!(report.sites, SiteTally::new(0));
+    assert_eq!(report.sites, SiteCount::new(0));
 }
 
 #[test]
@@ -889,7 +889,7 @@ fn an_impl_into_std_or_workspace_parameter_is_no_boundary() {
         shapes(&report.refusals),
         ["Name::as_str -> .publish", "Name::as_str -> .local"]
     );
-    assert_eq!(report.foreign, SiteTally::new(1));
+    assert_eq!(report.foreign, SiteCount::new(1));
 }
 
 #[test]

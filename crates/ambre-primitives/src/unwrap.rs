@@ -399,9 +399,9 @@ impl fmt::Display for Finding {
 
 /// A number of sites the report counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SiteTally(usize);
+pub struct SiteCount(usize);
 
-impl SiteTally {
+impl SiteCount {
     /// A count of `n` sites.
     pub const fn new(n: usize) -> Self {
         Self(n)
@@ -413,7 +413,7 @@ impl SiteTally {
     }
 }
 
-impl fmt::Display for SiteTally {
+impl fmt::Display for SiteCount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -425,28 +425,28 @@ pub struct Report {
     pub refusals: Vec<Finding>,
     pub ambiguous: Vec<Finding>,
     /// The unwraps handed to a foreign call.
-    pub foreign: SiteTally,
+    pub foreign: SiteCount,
     /// Every unwrap the report attributes to a newtype, handed or not.
-    pub sites: SiteTally,
+    pub sites: SiteCount,
     /// The newtypes the report knows, by name.
-    pub newtypes: SiteTally,
+    pub newtypes: SiteCount,
     /// Each file the report could not read again.
     pub errors: Vec<String>,
 }
 
 impl Report {
     /// The ambiguous sites whose receiver the report cannot type.
-    pub fn ambiguous_receivers(&self) -> SiteTally {
+    pub fn ambiguous_receivers(&self) -> SiteCount {
         self.ambiguous_by(Why::Receiver)
     }
 
     /// The ambiguous sites whose callee name std or a dependency shares.
-    pub fn ambiguous_callees(&self) -> SiteTally {
+    pub fn ambiguous_callees(&self) -> SiteCount {
         self.ambiguous_by(Why::Callee)
     }
 
-    fn ambiguous_by(&self, why: Why) -> SiteTally {
-        SiteTally(
+    fn ambiguous_by(&self, why: Why) -> SiteCount {
+        SiteCount(
             self.ambiguous
                 .iter()
                 .filter(|finding| finding.why == why)
@@ -2499,7 +2499,7 @@ pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
     catalog.foreign_names = foreign;
     catalog.reexports = reexports;
     catalog.reach = reach(tree, &files);
-    report.newtypes = SiteTally::new(catalog.newtypes.len());
+    report.newtypes = SiteCount::new(catalog.newtypes.len());
     for (source, file) in &files {
         let mut found = BTreeMap::new();
         imports(&file.items, &mut found);
@@ -2530,7 +2530,7 @@ pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
 pub struct Row {
     pub line: LineNo,
     /// The sites the line allows under its key.
-    pub count: SiteTally,
+    pub count: SiteCount,
 }
 
 /// The allowlist: each key, with its line and its count.
@@ -2559,7 +2559,7 @@ pub fn parse_allowlist(text: &str) -> Result<BTreeMap<String, Row>, Vec<String>>
             continue;
         };
         let count = match count.parse::<usize>() {
-            Ok(count) if count > 0 => SiteTally::new(count),
+            Ok(count) if count > 0 => SiteCount::new(count),
             _ => {
                 errors.push(format!(
                     "line {number}: the count is a whole number above 0"
@@ -2609,11 +2609,11 @@ pub enum Outcome {
 pub struct Judgement {
     pub outcome: Outcome,
     /// The refusal keys no line names.
-    pub unlisted: SiteTally,
+    pub unlisted: SiteCount,
     /// The lines whose key has more sites than the count allows.
-    pub over: SiteTally,
+    pub over: SiteCount,
     /// The lines whose key has fewer sites than the count, none included.
-    pub stale: SiteTally,
+    pub stale: SiteCount,
     /// One message per key no line names, and per line over or stale.
     pub problems: Vec<String>,
 }
@@ -2630,16 +2630,16 @@ pub fn judge(
         return Err(vec!["cannot read it".to_owned()]);
     };
     let rows = parse_allowlist(text)?;
-    let mut sites: BTreeMap<String, SiteTally> = BTreeMap::new();
+    let mut sites: BTreeMap<String, SiteCount> = BTreeMap::new();
     for refusal in &report.refusals {
-        let tally = sites.entry(refusal.key()).or_default();
-        *tally = tally.incremented();
+        let count = sites.entry(refusal.key()).or_default();
+        *count = count.incremented();
     }
     let mut judgement = Judgement {
         outcome: Outcome::Pass,
-        unlisted: SiteTally::default(),
-        over: SiteTally::default(),
-        stale: SiteTally::default(),
+        unlisted: SiteCount::default(),
+        over: SiteCount::default(),
+        stale: SiteCount::default(),
         problems: Vec::new(),
     };
     for (key, found) in &sites {
@@ -2672,9 +2672,9 @@ pub fn judge(
         }
     }
     let clean = report.errors.is_empty()
-        && judgement.unlisted == SiteTally::default()
-        && judgement.over == SiteTally::default()
-        && judgement.stale == SiteTally::default();
+        && judgement.unlisted == SiteCount::default()
+        && judgement.over == SiteCount::default()
+        && judgement.stale == SiteCount::default();
     if strictness == Strictness::Strict && !clean {
         judgement.outcome = Outcome::Fail;
     }

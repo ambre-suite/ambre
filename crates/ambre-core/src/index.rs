@@ -218,18 +218,18 @@ impl<A: Axis> Pos<A> {
         }
     }
 
-    /// The position `count` before this one, `None` past the start.
-    pub const fn checked_sub(self, count: Len<A>) -> Option<Self> {
-        match self.raw.checked_sub(count.raw) {
+    /// The position `len` before this one, `None` past the start.
+    pub const fn checked_sub(self, len: Len<A>) -> Option<Self> {
+        match self.raw.checked_sub(len.raw) {
             Some(value) => Some(Self::new(value)),
             None => None,
         }
     }
 
-    /// The position `count` before this one, clamped to [`Self::ZERO`].
+    /// The position `len` before this one, clamped to [`Self::ZERO`].
     #[must_use]
-    pub const fn saturating_sub(self, count: Len<A>) -> Self {
-        Self::new(self.raw.saturating_sub(count.raw))
+    pub const fn saturating_sub(self, len: Len<A>) -> Self {
+        Self::new(self.raw.saturating_sub(len.raw))
     }
 
     /// The position `delta` away, `None` off either end of the axis.
@@ -551,28 +551,28 @@ impl<A: Axis> IntoIterator for Span<A> {
 impl<A: Axis> Add<Len<A>> for Pos<A> {
     type Output = Pos<A>;
 
-    fn add(self, count: Len<A>) -> Pos<A> {
-        Pos::new(self.raw.saturating_add(count.raw))
+    fn add(self, len: Len<A>) -> Pos<A> {
+        Pos::new(self.raw.saturating_add(len.raw))
     }
 }
 
 impl<A: Axis> AddAssign<Len<A>> for Pos<A> {
-    fn add_assign(&mut self, count: Len<A>) {
-        *self = *self + count;
+    fn add_assign(&mut self, len: Len<A>) {
+        *self = *self + len;
     }
 }
 
 impl<A: Axis> Sub<Len<A>> for Pos<A> {
     type Output = Pos<A>;
 
-    fn sub(self, count: Len<A>) -> Pos<A> {
-        self.saturating_sub(count)
+    fn sub(self, len: Len<A>) -> Pos<A> {
+        self.saturating_sub(len)
     }
 }
 
 impl<A: Axis> SubAssign<Len<A>> for Pos<A> {
-    fn sub_assign(&mut self, count: Len<A>) {
-        *self = *self - count;
+    fn sub_assign(&mut self, len: Len<A>) {
+        *self = *self - len;
     }
 }
 
@@ -1046,7 +1046,7 @@ mod tests {
         Pos::new(raw)
     }
 
-    fn count(raw: u32) -> Len<Line> {
+    fn len(raw: u32) -> Len<Line> {
         Len::new(raw)
     }
 
@@ -1055,8 +1055,8 @@ mod tests {
     }
 
     #[test]
-    fn a_position_plus_a_count_is_a_position() {
-        assert_eq!(line(2) + count(3), line(5));
+    fn a_position_plus_a_len_is_a_position() {
+        assert_eq!(line(2) + len(3), line(5));
         assert_eq!(Pos::<Line>::MAX + Len::ONE, Pos::<Line>::MAX);
     }
 
@@ -1079,11 +1079,11 @@ mod tests {
     }
 
     #[test]
-    fn a_count_moves_a_position_back_and_a_delta_moves_it_either_way() {
-        assert_eq!(line(5) - count(3), line(2));
-        assert_eq!(line(1) - count(3), Pos::<Line>::ZERO);
-        assert_eq!(line(1).checked_sub(count(3)), None);
-        let back = Delta::from_len(count(2)).reversed();
+    fn a_len_moves_a_position_back_and_a_delta_moves_it_either_way() {
+        assert_eq!(line(5) - len(3), line(2));
+        assert_eq!(line(1) - len(3), Pos::<Line>::ZERO);
+        assert_eq!(line(1).checked_sub(len(3)), None);
+        let back = Delta::from_len(len(2)).reversed();
         assert_eq!(line(5) + back, line(3));
         assert_eq!(line(1) + back, Pos::<Line>::ZERO);
     }
@@ -1093,7 +1093,7 @@ mod tests {
         let span = line(1).through(line(3));
         let lines: Vec<Pos<Line>> = span.into_iter().collect();
         assert_eq!(lines, vec![line(1), line(2), line(3)]);
-        assert_eq!(span.len(), count(3));
+        assert_eq!(span.len(), len(3));
         assert!(span.contains(line(3)) && !span.contains(line(4)));
         assert!(Span::new(line(4), line(2)).is_empty());
     }
@@ -1116,7 +1116,7 @@ mod tests {
         assert_eq!(items.insert(line(1), 'b'), Ok(()));
         assert_eq!(items.get(line(1)), Some(&'b'));
         assert_eq!(items.remove(line(9)), None);
-        assert_eq!(items.len(), count(2));
+        assert_eq!(items.len(), len(2));
     }
 
     #[test]
@@ -1136,8 +1136,8 @@ mod tests {
 
     #[test]
     fn a_delta_covers_its_magnitude_either_way() {
-        assert_eq!(delta(-3).magnitude(), count(3));
-        assert_eq!(delta(i64::MIN).magnitude(), count(u32::MAX));
+        assert_eq!(delta(-3).magnitude(), len(3));
+        assert_eq!(delta(i64::MIN).magnitude(), len(u32::MAX));
         assert!(delta(-1).is_negative() && !Delta::<Line>::ZERO.is_negative());
         let sum: Delta<Line> = [delta(4), delta(-6)].into_iter().sum();
         assert_eq!(sum, delta(-2));
@@ -1156,16 +1156,16 @@ mod tests {
     }
 
     #[test]
-    fn a_count_names_its_last_position_and_its_span() {
-        assert_eq!(count(3).last(), Some(line(2)));
+    fn a_len_names_its_last_position_and_its_span() {
+        assert_eq!(len(3).last(), Some(line(2)));
         assert_eq!(Len::<Line>::ZERO.last(), None);
-        assert_eq!(count(3).span(), Span::new(Pos::<Line>::ZERO, line(3)));
-        assert_eq!(Len::through(line(4)), count(5));
+        assert_eq!(len(3).span(), Span::new(Pos::<Line>::ZERO, line(3)));
+        assert_eq!(Len::through(line(4)), len(5));
     }
 
     #[test]
     fn a_wrapped_position_comes_round_at_either_end() {
-        let len = count(3);
+        let len = len(3);
         assert_eq!(line(2).wrapped(delta(1), len), Some(Pos::<Line>::ZERO));
         assert_eq!(Pos::<Line>::ZERO.wrapped(delta(-1), len), Some(line(2)));
         assert_eq!(line(1).wrapped(delta(8), len), Some(Pos::<Line>::ZERO));
@@ -1175,8 +1175,8 @@ mod tests {
 
     #[test]
     fn a_position_within_a_length_stops_at_its_last() {
-        assert_eq!(line(7).within(count(3)), line(2));
-        assert_eq!(line(1).within(count(3)), line(1));
+        assert_eq!(line(7).within(len(3)), line(2));
+        assert_eq!(line(1).within(len(3)), line(1));
         assert_eq!(line(1).within(Len::ZERO), Pos::<Line>::ZERO);
         assert_eq!(line(2).midpoint(line(7)), line(4));
         assert_eq!(line(7).midpoint(line(2)), line(7));
@@ -1186,12 +1186,12 @@ mod tests {
     fn a_mapped_axis_keeps_the_position() {
         let mirrored: Pos<Mirror> = line(4).as_axis();
         assert_eq!(mirrored, Pos::new(4));
-        assert_eq!(count(2).as_axis::<Mirror>(), Len::new(2));
+        assert_eq!(len(2).as_axis::<Mirror>(), Len::new(2));
     }
 
     #[test]
     fn debug_prints_the_axis_name_and_the_kind() {
-        assert_eq!(format!("{:?}", count(12)), "LineCount(12)");
+        assert_eq!(format!("{:?}", len(12)), "LineCount(12)");
         assert_eq!(format!("{:?}", line(3)), "LinePos(3)");
         assert_eq!(
             format!("{:?}", Span::new(line(1), line(2))),

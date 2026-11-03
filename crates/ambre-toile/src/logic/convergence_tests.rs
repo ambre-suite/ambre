@@ -795,7 +795,7 @@ fn stats_of(st: &mut ToileState, ids: Vec<Id<Element>>) -> (u32, Option<Rect>) {
 /// `TOILE-117`: a selection whose every id the board has dropped counts
 /// zero down the per-id branch, and a zero count carries no rectangle.
 #[test]
-fn a_selection_the_board_dropped_tallies_zero_with_no_rect() {
+fn a_selection_the_board_dropped_counts_zero_with_no_rect() {
     let mut st = ToileState::new();
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let b = create_rect(&mut st, Point::new(50.0, 0.0), Size::new(10.0, 10.0));
@@ -811,7 +811,7 @@ fn a_selection_the_board_dropped_tallies_zero_with_no_rect() {
 /// `TOILE-118`: an id the board no longer holds does not stop the walk.
 /// The count counts the live ids around it and spans them alone.
 #[test]
-fn a_stale_id_does_not_stop_the_tally() {
+fn a_stale_id_does_not_stop_the_count() {
     let mut st = ToileState::new();
     let gone = create_rect(&mut st, Point::new(-900.0, -900.0), Size::new(10.0, 10.0));
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
@@ -4587,7 +4587,7 @@ fn state_with_user(user: Id<User>) -> (ToileState, Id<Element>) {
 }
 
 #[test]
-fn react_add_change_remove_updates_tally() {
+fn react_add_change_remove_updates_counts() {
     let (mut st, t) = state_with_user(Id::<User>::mint());
 
     // Add an emoji reaction.
@@ -4595,15 +4595,15 @@ fn react_add_change_remove_updates_tally() {
         target: t.clone(),
         reaction: Some(emoji("thumbsup")),
     });
-    let tally = st.reaction_tally(&t);
+    let counts = st.reaction_counts(&t);
     assert_eq!(
-        tally.emoji,
+        counts.emoji,
         vec![(
             ambre_bus::Emoji::from("thumbsup"),
             ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1)
         )]
     );
-    assert_eq!(tally.vote_count.get(), 0);
+    assert_eq!(counts.vote_count.get(), 0);
 
     // Change the same user's reaction: one entry per user, so it replaces (LWW on
     // the own key), never accumulates.
@@ -4611,12 +4611,12 @@ fn react_add_change_remove_updates_tally() {
         target: t.clone(),
         reaction: Some(vote(1)),
     });
-    let tally = st.reaction_tally(&t);
+    let counts = st.reaction_counts(&t);
     assert!(
-        tally.emoji.is_empty(),
+        counts.emoji.is_empty(),
         "the emoji entry was replaced, not kept"
     );
-    assert_eq!((tally.vote_total.get(), tally.vote_count.get()), (1, 1));
+    assert_eq!((counts.vote_total.get(), counts.vote_count.get()), (1, 1));
     assert_eq!(st.my_reaction(&t), Some(vote(1)));
 
     // Remove the user's own entry.
@@ -4624,12 +4624,12 @@ fn react_add_change_remove_updates_tally() {
         target: t.clone(),
         reaction: None,
     });
-    assert_eq!(st.reaction_tally(&t), Default::default());
+    assert_eq!(st.reaction_counts(&t), Default::default());
     assert_eq!(st.my_reaction(&t), None);
 }
 
 #[test]
-fn derive_viewport_carries_tally_and_skips_deleted_target() {
+fn derive_viewport_carries_counts_and_skips_deleted_target() {
     let (mut st, t) = state_with_user(Id::<User>::mint());
     st.handle_command(ToileCommand::React {
         target: t.clone(),
@@ -4638,12 +4638,12 @@ fn derive_viewport_carries_tally_and_skips_deleted_target() {
 
     // The derived viewport attaches the per-target count, keyed by target.
     let dv = st.debug_viewport();
-    let tally = dv
+    let counts = dv
         .reactions
         .get(&t)
-        .expect("tally present for reacted target");
+        .expect("counts present for reacted target");
     assert_eq!(
-        tally.emoji,
+        counts.emoji,
         vec![(
             ambre_bus::Emoji::from("thumbsup"),
             ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1)
@@ -4914,7 +4914,7 @@ fn react_broadcasts_delta_and_is_undoable() {
     // One React is one undo item: undo drops the reaction.
     st.handle_command(ToileCommand::Undo);
     assert_eq!(
-        st.reaction_tally(&t),
+        st.reaction_counts(&t),
         Default::default(),
         "undo reverts the reaction"
     );
@@ -4939,17 +4939,17 @@ fn react_before_session_ready_is_a_noop() {
         reaction: Some(emoji("thumbsup")),
     });
     assert!(out.update.is_none(), "no identity means nothing is written");
-    assert_eq!(st.reaction_tally(&t), Default::default());
+    assert_eq!(st.reaction_counts(&t), Default::default());
 }
 
 #[test]
-fn tally_skips_a_deleted_target() {
+fn counting_skips_a_deleted_target() {
     let (mut st, t) = state_with_user(Id::<User>::mint());
     st.handle_command(ToileCommand::React {
         target: t.clone(),
         reaction: Some(emoji("thumbsup")),
     });
-    assert_eq!(st.reaction_tally(&t).emoji.len(), 1);
+    assert_eq!(st.reaction_counts(&t).emoji.len(), 1);
 
     // Deleting the target skips its reaction sub-map at derivation: the
     // orphan bytes are never destroyed, only not rendered.
@@ -4957,7 +4957,7 @@ fn tally_skips_a_deleted_target() {
         ids: vec![t.clone()],
     });
     assert_eq!(
-        st.reaction_tally(&t),
+        st.reaction_counts(&t),
         Default::default(),
         "a deleted target's reactions are skipped at derivation"
     );
@@ -4995,8 +4995,8 @@ fn concurrent_reactions_distinct_users_converge() {
     b.apply_remote(&da);
     a.apply_remote(&db);
 
-    let ta = a.reaction_tally(&t);
-    assert_eq!(ta, b.reaction_tally(&t), "concurrent reactions diverged");
+    let ta = a.reaction_counts(&t);
+    assert_eq!(ta, b.reaction_counts(&t), "concurrent reactions diverged");
     assert_eq!(
         ta.emoji,
         vec![(
@@ -5039,11 +5039,11 @@ fn same_user_two_devices_is_one_entry() {
     b.apply_remote(&da);
     a.apply_remote(&db);
 
-    let ta = a.reaction_tally(&t);
+    let ta = a.reaction_counts(&t);
     assert_eq!(
         ta,
-        b.reaction_tally(&t),
-        "same-user two-device tally diverged"
+        b.reaction_counts(&t),
+        "same-user two-device counts diverged"
     );
     assert_eq!(
         ta.vote_count.get(),
@@ -5098,7 +5098,7 @@ fn a_reacted_target_out_of_view_is_left_out_of_the_frame() {
         "the target out of view costs nothing"
     );
     assert_eq!(
-        st.reaction_tally(&far).emoji,
+        st.reaction_counts(&far).emoji,
         vec![(
             ambre_bus::Emoji::from("heart"),
             ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1)
@@ -5124,16 +5124,20 @@ fn the_chips_of_a_target_keep_one_order() {
         ),
     ];
 
-    assert_eq!(one.reaction_tally(&t).emoji, expected);
-    assert_eq!(one.reaction_tally(&t), one.reaction_tally(&t), "two reads");
+    assert_eq!(one.reaction_counts(&t).emoji, expected);
     assert_eq!(
-        other.reaction_tally(&u).emoji,
+        one.reaction_counts(&t),
+        one.reaction_counts(&t),
+        "two reads"
+    );
+    assert_eq!(
+        other.reaction_counts(&u).emoji,
         expected,
         "another arrival order"
     );
     let frame = one.debug_viewport();
     assert_eq!(
-        frame.reactions.get(&t).map(|tally| tally.emoji.clone()),
+        frame.reactions.get(&t).map(|counts| counts.emoji.clone()),
         Some(expected),
         "the frame reads the same order"
     );
@@ -5144,22 +5148,22 @@ fn the_chips_of_a_target_keep_one_order() {
 #[test]
 fn votes_fold_into_one_signed_total_and_one_count() {
     let (st, t) = reacted_by(&[vote(3), vote(-1), vote(-1), emoji("heart")]);
-    let tally = st.reaction_tally(&t);
-    assert_eq!((tally.vote_total.get(), tally.vote_count.get()), (1, 3));
+    let counts = st.reaction_counts(&t);
+    assert_eq!((counts.vote_total.get(), counts.vote_count.get()), (1, 3));
     assert_eq!(
-        tally.emoji,
+        counts.emoji,
         vec![(
             ambre_bus::Emoji::from("heart"),
             ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1)
         )],
         "a vote is no chip"
     );
-    assert_eq!(st.debug_viewport().reactions.get(&t), Some(&tally));
+    assert_eq!(st.debug_viewport().reactions.get(&t), Some(&counts));
 
     let (st, t) = reacted_by(&[vote(1), vote(-1)]);
-    let tally = st.reaction_tally(&t);
+    let counts = st.reaction_counts(&t);
     assert_eq!(
-        (tally.vote_total.get(), tally.vote_count.get()),
+        (counts.vote_total.get(), counts.vote_count.get()),
         (0, 2),
         "a zero total still counts its voters"
     );
@@ -6812,8 +6816,8 @@ proptest! {
         // per-user reactions converge and no vote is double-counted.
         for id in &la {
             prop_assert_eq!(
-                a.reaction_tally(id), b.reaction_tally(id),
-                "reaction tally diverged for {:?}", id
+                a.reaction_counts(id), b.reaction_counts(id),
+                "reaction counts diverged for {:?}", id
             );
         }
 

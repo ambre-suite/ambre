@@ -60,7 +60,7 @@ impl<K: PayloadKind> Payload<K> {
     /// How many bytes it holds.
     #[must_use]
     pub fn len(&self) -> crate::ByteSize {
-        crate::ByteSize::of_len(self.bytes.len())
+        crate::ByteSize::of(self.bytes.len())
     }
 
     /// Whether there are no bytes.
