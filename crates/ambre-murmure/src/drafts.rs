@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use ambre_bus::{DraftKey, Mention, MentionTarget, MessageDraft, StyleMark, TextStyle};
 use ambre_core::id::{Channel, Id, Message, User};
-use ambre_core::{Char, Seq, SeqKind};
+use ambre_core::{Char, Opaque, OpaqueKind, OpaqueLength, SealedAtRest, Seq, SeqKind};
 use serde::{Deserialize, Serialize};
 
 use crate::composer::DraftOf;
@@ -28,7 +28,10 @@ use crate::schema::Mark;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DraftWrite {
     /// Keep `row` under `key`, in place of the row there.
-    Put { key: DraftKey, row: DraftRow },
+    Put {
+        key: DraftKey,
+        row: Opaque<DraftRows>,
+    },
     /// Delete the row under `key`.
     Delete { key: DraftKey },
     /// Delete every row whose key falls in `lower..=upper`: a channel's
@@ -38,40 +41,18 @@ pub enum DraftWrite {
     DeleteAll,
 }
 
-/// A draft as a row of the store keeps it: the JSON text the shelf encodes.
-/// The store seals its bytes, and hands them back to be read. It holds what
-/// the user typed, so `Debug` prints the length alone.
-#[derive(Clone, PartialEq, Eq)]
-pub struct DraftRow(String);
+/// The kind of a draft as a row of the store keeps it: the JSON text the
+/// shelf encodes, `Opaque<DraftRows>`. The store seals its bytes, and hands
+/// them back to be read. It holds what the user typed, so `Debug` prints the
+/// length alone, and it has no serde form: it leaves the page sealed.
+pub enum DraftRows {}
 
-impl std::fmt::Debug for DraftRow {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "DraftRow({} bytes)", self.0.len())
-    }
+impl OpaqueKind for DraftRows {
+    const NAME: &'static str = "DraftRow";
+    const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 }
 
-impl DraftRow {
-    /// The bytes the store seals.
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.0.into_bytes()
-    }
-
-    /// The row as the plaintext the store seals, wiped as it drops. The
-    /// bytes move, so no copy of the draft is left behind.
-    #[must_use]
-    pub fn into_plaintext(self) -> ambre_core::Confidential<ambre_core::Plaintext> {
-        ambre_core::Confidential::<ambre_core::Plaintext>::new(self.0.into_bytes())
-    }
-
-    /// The row an opened seal holds, `None` for bytes that are not text.
-    /// Refused bytes are a plaintext too, so they are wiped as they drop.
-    pub fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
-        String::from_utf8(bytes)
-            .map_err(|refused| ambre_core::Secret::wipe(refused.into_bytes()))
-            .ok()
-            .map(Self)
-    }
-}
+impl SealedAtRest for DraftRows {}
 
 /// Where the shelf's writes go: the local store on the page, nowhere in a
 /// test.
@@ -153,7 +134,7 @@ impl DraftShelf {
 
     /// Take the rows the store keeps for `user`, read back after a reload.
     /// A draft typed before they landed keeps its text, and is saved now.
-    pub fn load(&self, user: Id<User>, rows: Vec<(DraftKey, DraftRow)>) {
+    pub fn load(&self, user: Id<User>, rows: Vec<(DraftKey, Opaque<DraftRows>)>) {
         let mut shelf = self.0.borrow_mut();
         shelf.user = Some(user);
         shelf.version = shelf.version.next();
@@ -317,7 +298,7 @@ mod mark_name {
 }
 
 /// The row that keeps `draft`.
-fn encode(draft: &MessageDraft) -> DraftRow {
+fn encode(draft: &MessageDraft) -> Opaque<DraftRows> {
     let mentions = draft
         .mentions
         .iter()
@@ -356,13 +337,13 @@ fn encode(draft: &MessageDraft) -> DraftRow {
         mentions,
         styles,
     };
-    DraftRow(serde_json::to_string(&row).unwrap_or_default())
+    Opaque::<DraftRows>::new(serde_json::to_string(&row).unwrap_or_default())
 }
 
 /// The draft `row` keeps, `None` for a row that does not parse. A style of a
 /// name this build does not know is dropped, and the text stays.
-fn decode(row: &DraftRow) -> Option<MessageDraft> {
-    let row: Row = serde_json::from_str(&row.0).ok()?;
+fn decode(row: &Opaque<DraftRows>) -> Option<MessageDraft> {
+    let row: Row = serde_json::from_str(row.as_str()).ok()?;
     let mentions = row
         .mentions
         .into_iter()
@@ -458,7 +439,7 @@ mod tests {
             .collect(),
         };
         assert_eq!(decode(&encode(&full)), Some(full));
-        assert_eq!(decode(&DraftRow("not a row".to_owned())), None);
+        assert_eq!(decode(&Opaque::<DraftRows>::new("not a row")), None);
     }
 
     /// The bytes of an opened row are its text, and bytes that are no text
@@ -466,8 +447,11 @@ mod tests {
     #[test]
     fn an_opened_row_is_its_text_and_other_bytes_are_none() {
         let row = encode(&draft("hi"));
-        assert_eq!(DraftRow::from_bytes(row.clone().into_bytes()), Some(row));
-        assert_eq!(DraftRow::from_bytes(vec![0xff, 0xfe]), None);
+        assert_eq!(
+            Opaque::<DraftRows>::from_bytes(row.as_str().as_bytes().to_vec()),
+            Some(row)
+        );
+        assert_eq!(Opaque::<DraftRows>::from_bytes(vec![0xff, 0xfe]), None);
     }
 
     /// A row's `Debug` form holds no byte of what the user typed, so a log
@@ -475,7 +459,7 @@ mod tests {
     #[test]
     fn a_row_prints_its_length_and_none_of_its_text() {
         let row = encode(&draft("a secret plan"));
-        let len = row.clone().into_bytes().len();
+        let len = row.as_str().len();
         let printed = format!("{row:?}");
         assert_eq!(printed, format!("DraftRow({len} bytes)"));
         assert!(!printed.contains("secret"));

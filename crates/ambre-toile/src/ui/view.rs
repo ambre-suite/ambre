@@ -13,7 +13,8 @@
 // the Logic thread (`toile-board-rendering`).
 // ============================================================================
 
-use ambre_commands::{ClipboardWrite, Key, KeyChar, Modifiers};
+use ambre_commands::{ClipboardWrite, Key, KeyChar, ModifierKeys};
+use ambre_core::Flags;
 use ambre_core::{Commands, StaticKey};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -1339,8 +1340,8 @@ impl ToileView {
 
     // -- Input handling --------------------------------------------------------
 
-    fn handle_wheel(&mut self, delta: WheelDelta, mods: Modifiers) -> Consumed {
-        let ctrl_key = mods.primary();
+    fn handle_wheel(&mut self, delta: WheelDelta, mods: Flags<ModifierKeys>) -> Consumed {
+        let ctrl_key = mods.contains(ModifierKeys::PRIMARY);
         // A line or page delta moves the board by the pixels it is worth, as
         // in every other view (`KINETIC-015`).
         let line = Vector::new(WHEEL_LINE, WHEEL_LINE);
@@ -1686,7 +1687,7 @@ impl ToileView {
         self.handle_input(&InputEvent::PointerDown {
             at,
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         })
     }
 
@@ -1726,12 +1727,12 @@ impl ToileView {
                     let _ = self.handle_input(&InputEvent::PointerDown {
                         at,
                         button: PointerButton::Primary,
-                        mods: Modifiers::NONE,
+                        mods: ModifierKeys::NONE,
                     });
                     let _ = self.handle_input(&InputEvent::PointerUp {
                         at,
                         button: PointerButton::Primary,
-                        mods: Modifiers::NONE,
+                        mods: ModifierKeys::NONE,
                     });
                 }
                 Consumed::Yes
@@ -1739,7 +1740,7 @@ impl ToileView {
             Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
                 at,
                 button: PointerButton::Primary,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             }),
             None => Consumed::No,
         }
@@ -1757,7 +1758,7 @@ impl ToileView {
             Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
                 at: view_point(self.last_pointer),
                 button: PointerButton::Primary,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             }),
             None => Consumed::No,
         }
@@ -1781,7 +1782,7 @@ impl ToileView {
     /// Follow the link under a primary press, if any (`toile-links`). The badge
     /// always follows. The element follows only when it asks to: a modifier, or
     /// presentation mode, where editing is off.
-    fn follow_link_under(&mut self, screen: Point, mods: Modifiers) -> bool {
+    fn follow_link_under(&mut self, screen: Point, mods: Flags<ModifierKeys>) -> bool {
         let world = self.cam.screen_to_world() * screen;
         let target = self.badge_at(screen).or_else(|| {
             link::wants_follow(mods, self.present)
@@ -1839,7 +1840,7 @@ impl ToileView {
         &mut self,
         screen: Point,
         button: PointerButton,
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
     ) -> Consumed {
         self.last_pointer = screen;
         // A press in the canvas returns keyboard focus to the transparent text
@@ -3018,9 +3019,9 @@ impl ToileView {
     /// Ctrl+C/X/V are intentionally NOT decoded here -- they ride the native
     /// clipboard events (Phase A). Answers `Consumed::Yes` for a key it takes
     /// (host `preventDefault`).
-    fn handle_key(&mut self, key: Key, mods: Modifiers) -> Consumed {
-        let cmd = mods.primary();
-        let shift = mods.shift();
+    fn handle_key(&mut self, key: Key, mods: Flags<ModifierKeys>) -> Consumed {
+        let cmd = mods.contains(ModifierKeys::PRIMARY);
+        let shift = mods.contains(ModifierKeys::SHIFT);
         // Command chords first, so a bare-key fallthrough never shadows them.
         if cmd {
             match key {
@@ -3567,9 +3568,9 @@ impl ToileView {
     /// Editing key map. Answers `Consumed::Yes` for a key it takes (host
     /// `preventDefault`). A character key is left, so the browser still emits
     /// the `input` event that lands as `InputEvent::Text` (the insertion).
-    fn edit_key(&mut self, key: Key, mods: Modifiers) -> Consumed {
-        let cmd = mods.primary();
-        let shift = mods.shift();
+    fn edit_key(&mut self, key: Key, mods: Flags<ModifierKeys>) -> Consumed {
+        let cmd = mods.contains(ModifierKeys::PRIMARY);
+        let shift = mods.contains(ModifierKeys::SHIFT);
         // Ctrl/Alt+Arrow jumps by word; Ctrl+A selects all inside the editor.
         if cmd {
             match key {
@@ -3582,7 +3583,7 @@ impl ToileView {
                 _ => return Consumed::No,
             }
         }
-        let word = ambre_canvas::Stride::word_if(mods.alt()); // Alt+Arrow = word motion (Ctrl is reserved for chords).
+        let word = ambre_canvas::Stride::word_if(mods.contains(ModifierKeys::ALT)); // Alt+Arrow = word motion (Ctrl is reserved for chords).
         match key {
             Key::Escape => self.request_close_editor(),
             Key::Enter => self.push_intent(EditIntent::Newline),

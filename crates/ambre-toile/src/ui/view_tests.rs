@@ -100,7 +100,7 @@ impl Rig {
         });
     }
 
-    fn key(&mut self, key: Key, mods: Modifiers) -> bool {
+    fn key(&mut self, key: Key, mods: Flags<ModifierKeys>) -> bool {
         self.view
             .handle_input(&InputEvent::Key { key, mods })
             .is_yes()
@@ -120,7 +120,7 @@ impl Rig {
         self.input(InputEvent::PointerDown {
             at: pointer(x, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
     }
 
@@ -128,7 +128,7 @@ impl Rig {
         self.input(InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
     }
 
@@ -282,7 +282,7 @@ fn an_untouched_editor_closes_without_a_write() {
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
     assert!(rig.view.editor.is_some(), "the editor opened");
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     assert!(rig.view.editor.is_none(), "the editor closed");
     assert!(rig.sent().is_empty(), "and wrote nothing");
@@ -302,7 +302,7 @@ fn the_pipe_is_typed_text_only_while_an_editor_is_open() {
     rig.view
         .plan_repaint(Instant::<PageLoad>::new(16.0), ambre_canvas::HudTick::Idle);
     assert!(rig.view.pipe_typing(), "an open editor takes the keys");
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     rig.view
         .plan_repaint(Instant::<PageLoad>::new(32.0), ambre_canvas::HudTick::Idle);
@@ -322,7 +322,7 @@ fn a_double_click_keeps_the_body_and_a_close_writes_it_once() {
     rig.input(InputEvent::Text {
         text: "?".to_owned(),
     });
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     assert!(rig.view.editor.is_none());
     // The caret sat at the end: the keystrokes extend the body, and the two
@@ -557,9 +557,9 @@ fn a_board_change_refetches_the_selection_data_and_a_camera_move_does_not() {
 fn the_undo_chords_reach_the_logic_thread() {
     let mut rig = Rig::new();
     rig.sent();
-    assert!(rig.key(Key::Char(KeyChar::Z), Modifiers::PRIMARY));
-    assert!(rig.key(Key::Char(KeyChar::Z), Modifiers::PRIMARY_SHIFT));
-    assert!(rig.key(Key::Char(KeyChar::Y), Modifiers::PRIMARY));
+    assert!(rig.key(Key::Char(KeyChar::Z), ModifierKeys::PRIMARY));
+    assert!(rig.key(Key::Char(KeyChar::Z), ModifierKeys::PRIMARY_SHIFT));
+    assert!(rig.key(Key::Char(KeyChar::Y), ModifierKeys::PRIMARY));
     assert!(matches!(
         rig.sent().as_slice(),
         [ToileCommand::Undo, ToileCommand::Redo, ToileCommand::Redo]
@@ -571,7 +571,7 @@ fn escape_leaves_the_scope_and_clears_the_selection_in_one_press() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
     rig.view.group_scope = Some(eid("g"));
-    assert!(rig.key(Key::Escape, Modifiers::NONE));
+    assert!(rig.key(Key::Escape, ModifierKeys::NONE));
     assert!(rig.view.selection.is_empty());
     assert_eq!(rig.view.group_scope, None);
 }
@@ -583,7 +583,7 @@ fn the_ungroup_chord_sends_one_command_over_the_selection() {
     let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
     rig.marquee((-20.0, -20.0), (600.0, 300.0));
     rig.sent();
-    assert!(rig.key(Key::Char(KeyChar::G), Modifiers::PRIMARY_SHIFT));
+    assert!(rig.key(Key::Char(KeyChar::G), ModifierKeys::PRIMARY_SHIFT));
     assert!(matches!(
         rig.sent().as_slice(),
         [ToileCommand::UngroupElements { groups }] if groups == &[eid("a"), eid("b")]
@@ -720,7 +720,7 @@ fn a_cut_whose_copy_went_nowhere_deletes_nothing() {
 #[test]
 fn a_copy_names_the_whole_selection_and_sends_nothing_else() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    assert!(rig.key(Key::Char(KeyChar::A), Modifiers::PRIMARY));
+    assert!(rig.key(Key::Char(KeyChar::A), ModifierKeys::PRIMARY));
     rig.answer(ToileEvent::BoardIds(vec![eid("a"), eid("far")]));
     rig.sent();
     assert_eq!(
@@ -744,7 +744,7 @@ fn each_select_all_asks_for_the_board_as_it_is_now() {
     assert!(rig.view.selection.is_empty(), "an unasked answer selected");
 
     for board in [vec![eid("a")], vec![eid("a"), eid("new")]] {
-        assert!(rig.key(Key::Char(KeyChar::A), Modifiers::PRIMARY));
+        assert!(rig.key(Key::Char(KeyChar::A), ModifierKeys::PRIMARY));
         assert!(
             rig.sent()
                 .iter()
@@ -761,12 +761,12 @@ fn each_select_all_asks_for_the_board_as_it_is_now() {
 #[test]
 fn a_selection_change_before_the_select_all_answer_wins() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    assert!(rig.key(Key::Char(KeyChar::A), Modifiers::PRIMARY));
-    assert!(rig.key(Key::Escape, Modifiers::NONE));
+    assert!(rig.key(Key::Char(KeyChar::A), ModifierKeys::PRIMARY));
+    assert!(rig.key(Key::Escape, ModifierKeys::NONE));
     rig.answer(ToileEvent::BoardIds(vec![eid("a")]));
     assert!(rig.view.selection.is_empty(), "the answer undid the Escape");
 
-    assert!(rig.key(Key::Char(KeyChar::A), Modifiers::PRIMARY));
+    assert!(rig.key(Key::Char(KeyChar::A), ModifierKeys::PRIMARY));
     rig.click(A.x1 + 400.0, A.y1 + 400.0);
     rig.answer(ToileEvent::BoardIds(vec![eid("a")]));
     assert!(rig.view.selection.is_empty(), "the answer undid the click");
@@ -819,7 +819,7 @@ fn a_paste_into_an_open_editor_inserts_the_text() {
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
     rig.view.paste_clipboard(clip(B), PasteSource::Foreign);
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     assert!(matches!(
         rig.sent().as_slice(),
@@ -849,7 +849,7 @@ fn a_printable_key_in_an_editor_is_not_consumed() {
         Key::Space,
         Key::Char(KeyChar::new('1')),
     ] {
-        assert!(!rig.key(key, Modifiers::NONE), "{key:?} was consumed");
+        assert!(!rig.key(key, ModifierKeys::NONE), "{key:?} was consumed");
     }
 }
 
@@ -877,7 +877,7 @@ fn the_pipe_follows_the_caret_inside_the_element() {
     rig.paint();
     let later = rig.view.caret_drawn.expect("the editor drew a caret");
     assert!(later.x0 > first.x0, "the caret moved right: {later:?}");
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     assert_eq!(rig.view.caret_drawn, None, "the editor closed");
 }
@@ -945,7 +945,7 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
 #[test]
 fn the_board_editor_drives_the_shared_core() {
     use ambre_canvas::TextEditor;
-    let key = |key: Key, mods: Modifiers| InputEvent::Key { key, mods };
+    let key = |key: Key, mods: Flags<ModifierKeys>| InputEvent::Key { key, mods };
     let text = |s: &str| InputEvent::Text { text: s.to_owned() };
     let left = |select: ambre_canvas::Extend, word: ambre_canvas::Stride| EditIntent::Left {
         select,
@@ -958,42 +958,45 @@ fn the_board_editor_drives_the_shared_core() {
     let corpus: Vec<(InputEvent, EditIntent)> = vec![
         (text(" ab cd"), EditIntent::Insert(" ab cd".to_owned())),
         (
-            key(Key::ArrowLeft, Modifiers::NONE),
+            key(Key::ArrowLeft, ModifierKeys::NONE),
             left(ambre_canvas::Extend::Move, ambre_canvas::Stride::Char),
         ),
         (
-            key(Key::ArrowLeft, Modifiers::SHIFT),
+            key(Key::ArrowLeft, ModifierKeys::SHIFT),
             left(ambre_canvas::Extend::Select, ambre_canvas::Stride::Char),
         ),
-        (key(Key::Backspace, Modifiers::NONE), EditIntent::Backspace),
         (
-            key(Key::ArrowLeft, Modifiers::ALT),
+            key(Key::Backspace, ModifierKeys::NONE),
+            EditIntent::Backspace,
+        ),
+        (
+            key(Key::ArrowLeft, ModifierKeys::ALT),
             left(ambre_canvas::Extend::Move, ambre_canvas::Stride::Word),
         ),
         (
-            key(Key::ArrowRight, Modifiers::ALT_SHIFT),
+            key(Key::ArrowRight, ModifierKeys::ALT_SHIFT),
             right(ambre_canvas::Extend::Select, ambre_canvas::Stride::Word),
         ),
         (text("X"), EditIntent::Insert("X".to_owned())),
         (
-            key(Key::Home, Modifiers::NONE),
+            key(Key::Home, ModifierKeys::NONE),
             EditIntent::LineStart {
                 select: ambre_canvas::Extend::Move,
             },
         ),
-        (key(Key::Delete, Modifiers::NONE), EditIntent::Delete),
+        (key(Key::Delete, ModifierKeys::NONE), EditIntent::Delete),
         (
-            key(Key::End, Modifiers::SHIFT),
+            key(Key::End, ModifierKeys::SHIFT),
             EditIntent::LineEnd {
                 select: ambre_canvas::Extend::Select,
             },
         ),
         (
-            key(Key::ArrowRight, Modifiers::NONE),
+            key(Key::ArrowRight, ModifierKeys::NONE),
             right(ambre_canvas::Extend::Move, ambre_canvas::Stride::Char),
         ),
         (
-            key(Key::Home, Modifiers::SHIFT),
+            key(Key::Home, ModifierKeys::SHIFT),
             EditIntent::LineStart {
                 select: ambre_canvas::Extend::Select,
             },
@@ -1001,7 +1004,7 @@ fn the_board_editor_drives_the_shared_core() {
         (
             InputEvent::Key {
                 key: Key::Char(KeyChar::A),
-                mods: Modifiers::PRIMARY,
+                mods: ModifierKeys::PRIMARY,
             },
             EditIntent::SelectAll,
         ),
@@ -1011,7 +1014,7 @@ fn the_board_editor_drives_the_shared_core() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
-    rig.key(Key::End, Modifiers::NONE);
+    rig.key(Key::End, ModifierKeys::NONE);
     rig.paint();
     let style = rig.view.editor.as_ref().expect("open").style().clone();
     let mut core = TextEditor::new("hi", style);
@@ -1120,7 +1123,7 @@ fn two_camera_moves_in_one_frame_send_one_viewport_request() {
                 ambre_canvas::WheelAmount::new(0.0),
                 ambre_canvas::WheelAmount::new(dy),
             )),
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
     }
     let last = rig.view.cam.to_bus_viewport();
@@ -1148,7 +1151,7 @@ fn a_fatal_event_latches_the_page_and_silences_the_view() {
     rig.view.update();
     assert!(rig.view.fatal, "the view is inert");
     assert!(ambre_canvas::fatal_message().is_some(), "the page is told");
-    rig.key(Key::Char(KeyChar::Z), Modifiers::PRIMARY);
+    rig.key(Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
     assert!(rig.sent().is_empty(), "an inert view sends nothing");
 }
 
@@ -1262,7 +1265,7 @@ fn leaving_the_caption_editor_sends_the_caption() {
     let mut rig = with_arrow(&[]);
     rig.double_click(200.0, 300.0);
     rig.type_text("!");
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     assert!(rig.view.editor.is_none());
     assert!(matches!(
@@ -1278,7 +1281,7 @@ fn leaving_the_caption_editor_sends_the_caption() {
 fn an_untouched_caption_editor_sends_nothing() {
     let mut rig = with_arrow(&[]);
     rig.double_click(200.0, 300.0);
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     assert!(rig.view.editor.is_none());
     assert!(
@@ -1522,7 +1525,7 @@ fn an_element_without_a_body_opens_no_editor() {
     assert_eq!(rig.view.selection, [eid("s")]);
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
-    rig.key(Key::Char(KeyChar::X), Modifiers::NONE);
+    rig.key(Key::Char(KeyChar::X), ModifierKeys::NONE);
     assert!(rig.view.editor.is_none());
 }
 
@@ -1535,12 +1538,12 @@ fn a_typed_character_opens_the_editor_and_replaces_the_body() {
     rig.click(50.0, 50.0);
     rig.sent();
     assert!(
-        !rig.key(Key::Char(KeyChar::X), Modifiers::NONE),
+        !rig.key(Key::Char(KeyChar::X), ModifierKeys::NONE),
         "the key reaches the text pipe"
     );
     assert_eq!(editing(&rig), Some(eid("a")));
     rig.type_text("x");
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     assert!(matches!(
         writes(rig.sent()).as_slice(),
@@ -1554,7 +1557,10 @@ fn a_typed_character_opens_the_editor_and_replaces_the_body() {
 fn the_space_bar_opens_no_editor() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
-    assert!(rig.key(Key::Space, Modifiers::NONE), "space is the board's");
+    assert!(
+        rig.key(Key::Space, ModifierKeys::NONE),
+        "space is the board's"
+    );
     assert!(rig.view.editor.is_none());
 }
 
@@ -1568,15 +1574,15 @@ fn a_key_over_anything_but_one_note_opens_no_editor() {
         DisplayNode::Element(sticky("b", B)),
         DisplayNode::Element(shape("s", Rect::new(0.0, 200.0, 100.0, 260.0))),
     ]);
-    rig.key(Key::Char(KeyChar::X), Modifiers::NONE);
+    rig.key(Key::Char(KeyChar::X), ModifierKeys::NONE);
     assert!(rig.view.editor.is_none(), "nothing selected");
     rig.marquee((-20.0, -20.0), (600.0, 150.0));
     assert_eq!(rig.view.selection, [eid("a"), eid("b")]);
-    rig.key(Key::Char(KeyChar::X), Modifiers::NONE);
+    rig.key(Key::Char(KeyChar::X), ModifierKeys::NONE);
     assert!(rig.view.editor.is_none(), "two notes");
     rig.click(50.0, 230.0);
     assert_eq!(rig.view.selection, [eid("s")]);
-    rig.key(Key::Char(KeyChar::X), Modifiers::NONE);
+    rig.key(Key::Char(KeyChar::X), ModifierKeys::NONE);
     assert!(rig.view.editor.is_none(), "a shape");
 }
 
@@ -1594,7 +1600,7 @@ fn a_close_writes_the_body_once_and_keeps_the_element_selected() {
         rig.type_text(ch);
         rig.paint();
     }
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     rig.frame();
     assert!(rig.view.editor.is_none());
@@ -1715,7 +1721,7 @@ fn a_find_step_recentres_without_a_zoom_or_a_selection() {
     assert_eq!(rig.view.selection, [eid("a")], "a match is not selected");
 }
 
-fn wheel(rig: &mut Rig, (dx, dy): (f64, f64), delta_mode: u32, mods: Modifiers) {
+fn wheel(rig: &mut Rig, (dx, dy): (f64, f64), delta_mode: u32, mods: Flags<ModifierKeys>) {
     rig.input(InputEvent::Wheel {
         delta: ambre_canvas::WheelDelta::new(
             ambre_canvas::WheelVector::new(
@@ -1746,7 +1752,7 @@ fn a_pan_keeps_the_zoom_and_the_selection_and_asks_where_it_landed() {
     rig.view.update();
     rig.sent();
     let (zoom, centre) = (rig.view.cam.zoom, rig.view.cam.center);
-    wheel(&mut rig, (30.0, 40.0), 0, Modifiers::NONE);
+    wheel(&mut rig, (30.0, 40.0), 0, ModifierKeys::NONE);
     assert_ne!(rig.view.cam.center, centre, "the board moved");
     assert_eq!(rig.view.cam.zoom, zoom);
     assert_eq!(rig.view.selection, [eid("a")]);
@@ -1764,7 +1770,7 @@ fn the_trackpad_mode_pans_both_axes_against_the_delta() {
     let mut rig = Rig::new();
     rig.view.pointer_mode = PointerMode::Trackpad;
     let before = rig.screen(0.0, 0.0);
-    wheel(&mut rig, (12.0, 18.0), 0, Modifiers::NONE);
+    wheel(&mut rig, (12.0, 18.0), 0, ModifierKeys::NONE);
     let after = rig.screen(0.0, 0.0);
     assert_eq!(rig.view.cam.zoom.get(), 1.0);
     assert!(
@@ -1779,16 +1785,16 @@ fn the_trackpad_mode_pans_both_axes_against_the_delta() {
 #[test]
 fn an_ambiguous_wheel_keeps_the_latched_guess() {
     let mut rig = Rig::new();
-    wheel(&mut rig, (0.0, 120.0), 0, Modifiers::NONE);
+    wheel(&mut rig, (0.0, 120.0), 0, ModifierKeys::NONE);
     assert!(rig.view.detected_mouse, "a notch is a mouse");
     let zoom = rig.view.cam.zoom;
-    wheel(&mut rig, (0.0, 2.0), 0, Modifiers::NONE);
+    wheel(&mut rig, (0.0, 2.0), 0, ModifierKeys::NONE);
     assert!(rig.view.detected_mouse);
     assert_ne!(rig.view.cam.zoom, zoom, "the mouse guess still zooms");
-    wheel(&mut rig, (3.0, 2.0), 0, Modifiers::NONE);
+    wheel(&mut rig, (3.0, 2.0), 0, ModifierKeys::NONE);
     assert!(!rig.view.detected_mouse, "a side delta is a trackpad");
     let zoom = rig.view.cam.zoom;
-    wheel(&mut rig, (0.0, 2.0), 0, Modifiers::NONE);
+    wheel(&mut rig, (0.0, 2.0), 0, ModifierKeys::NONE);
     assert!(!rig.view.detected_mouse);
     assert_eq!(rig.view.cam.zoom, zoom, "the trackpad guess still pans");
 }
@@ -1801,9 +1807,9 @@ fn ctrl_and_the_pinch_zoom_in_every_mode() {
         let mut rig = Rig::new();
         rig.view.pointer_mode = mode;
         // A trackpad glide first, so the auto guess is not the mouse.
-        wheel(&mut rig, (3.0, 2.0), 0, Modifiers::NONE);
+        wheel(&mut rig, (3.0, 2.0), 0, ModifierKeys::NONE);
         let zoom = rig.view.cam.zoom;
-        wheel(&mut rig, (0.0, -30.0), 0, Modifiers::PRIMARY);
+        wheel(&mut rig, (0.0, -30.0), 0, ModifierKeys::PRIMARY);
         assert!(rig.view.cam.zoom > zoom, "a pinch out zooms in");
     }
 }
@@ -1815,14 +1821,14 @@ fn ctrl_and_the_pinch_zoom_in_every_mode() {
 fn a_picked_mode_ignores_a_contrary_wheel() {
     let mut rig = Rig::new();
     rig.view.pointer_mode = PointerMode::Trackpad;
-    wheel(&mut rig, (0.0, 3.0), 1, Modifiers::NONE);
+    wheel(&mut rig, (0.0, 3.0), 1, ModifierKeys::NONE);
     assert_eq!(rig.view.cam.zoom.get(), 1.0, "a line wheel pans");
     assert!(!rig.view.detected_mouse, "the latch is untouched");
 
     let mut rig = Rig::new();
     rig.view.pointer_mode = PointerMode::Mouse;
     rig.view.detected_mouse = false;
-    wheel(&mut rig, (4.0, 6.0), 0, Modifiers::NONE);
+    wheel(&mut rig, (4.0, 6.0), 0, ModifierKeys::NONE);
     assert_ne!(rig.view.cam.zoom.get(), 1.0, "a glide zooms");
     assert!(!rig.view.detected_mouse, "the latch is untouched");
 }
@@ -2030,7 +2036,7 @@ fn an_editor_or_a_gesture_keeps_the_overlay_repainting() {
     for _ in 0..3 {
         assert!(plan(&mut rig).1, "the editor keeps the overlay live");
     }
-    rig.key(Key::Escape, Modifiers::NONE);
+    rig.key(Key::Escape, ModifierKeys::NONE);
     rig.paint();
     plan(&mut rig);
 
@@ -2102,12 +2108,12 @@ fn ctrl_click(rig: &mut Rig, x: f64, y: f64) {
     rig.input(InputEvent::PointerDown {
         at: pointer(x, y),
         button: PointerButton::Primary,
-        mods: Modifiers::PRIMARY,
+        mods: ModifierKeys::PRIMARY,
     });
     rig.input(InputEvent::PointerUp {
         at: pointer(x, y),
         button: PointerButton::Primary,
-        mods: Modifiers::PRIMARY,
+        mods: ModifierKeys::PRIMARY,
     });
 }
 
@@ -2212,7 +2218,7 @@ fn an_undo_after_a_jump_reverts_the_edit_and_not_the_jump() {
     rig.frame();
     rig.sent();
     let jumped = rig.view.cam;
-    assert!(rig.key(Key::Char(KeyChar::Z), Modifiers::PRIMARY));
+    assert!(rig.key(Key::Char(KeyChar::Z), ModifierKeys::PRIMARY));
     assert!(matches!(rig.sent().as_slice(), [ToileCommand::Undo]));
     assert_eq!(rig.view.cam, jumped, "the camera stays on the frame");
 }
@@ -2223,12 +2229,12 @@ fn right_click(rig: &mut Rig, x: f64, y: f64) {
     rig.input(InputEvent::PointerDown {
         at: pointer(x, y),
         button: PointerButton::Secondary,
-        mods: Modifiers::NONE,
+        mods: ModifierKeys::NONE,
     });
     rig.input(InputEvent::PointerUp {
         at: pointer(x, y),
         button: PointerButton::Secondary,
-        mods: Modifiers::NONE,
+        mods: ModifierKeys::NONE,
     });
 }
 
@@ -2419,7 +2425,7 @@ fn a_space_drag_pans_in_any_tool_and_starts_no_gesture() {
         let mut rig = Rig::with_stickies(&[("a", A)]);
         rig.view.set_tool(tool);
         let cam = rig.view.cam;
-        assert!(rig.key(Key::Space, Modifiers::NONE));
+        assert!(rig.key(Key::Space, ModifierKeys::NONE));
         drag(&mut rig, (50.0, 50.0), (150.0, 90.0));
         assert_ne!(rig.view.cam, cam, "{tool:?}: the drag did not pan");
         assert!(rig.view.selection.is_empty(), "{tool:?}: the drag selected");
@@ -2902,16 +2908,16 @@ fn a_presentation_takes_no_edit() {
     rig.click(350.0, 50.0);
     assert!(rig.view.selection.is_empty(), "a click selects nothing");
     rig.view.selection = vec![eid("a")];
-    rig.key(Key::Delete, Modifiers::NONE);
-    rig.key(Key::Char(KeyChar::Z), Modifiers::PRIMARY);
-    rig.key(Key::Char(KeyChar::D), Modifiers::PRIMARY);
+    rig.key(Key::Delete, ModifierKeys::NONE);
+    rig.key(Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
+    rig.key(Key::Char(KeyChar::D), ModifierKeys::PRIMARY);
     rig.double_click(50.0, 50.0);
     assert!(rig.view.editor.is_none(), "no editor opens");
     assert!(rig.sent().is_empty(), "a presentation sent an edit");
     assert_eq!(rig.view.selection, [eid("a")], "the delete was refused");
 
     rig.answer(ToileEvent::PresentModeChanged(PresentMode::Editing));
-    rig.key(Key::Delete, Modifiers::NONE);
+    rig.key(Key::Delete, ModifierKeys::NONE);
     assert!(matches!(
         rig.sent().as_slice(),
         [ToileCommand::DeleteElements { .. }]
@@ -3024,7 +3030,7 @@ fn a_busy_board_takes_no_input() {
         rig.input(InputEvent::PointerDown {
             at: pointer(at.0, at.1),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE
+            mods: ModifierKeys::NONE
         }),
         "the refusal consumes the event"
     );
@@ -3075,11 +3081,11 @@ fn a_line_wheel_pans_and_zooms_as_its_pixels_do() {
     for (mode, name) in [(PointerMode::Trackpad, "pan"), (PointerMode::Mouse, "zoom")] {
         let mut by_line = Rig::new();
         by_line.view.pointer_mode = mode;
-        wheel(&mut by_line, (0.0, 1.0), 1, Modifiers::NONE);
+        wheel(&mut by_line, (0.0, 1.0), 1, ModifierKeys::NONE);
         let mut by_px = Rig::new();
         by_px.view.pointer_mode = mode;
         let line = f64::from(ambre_canvas::WHEEL_LINE.get());
-        wheel(&mut by_px, (0.0, line), 0, Modifiers::NONE);
+        wheel(&mut by_px, (0.0, line), 0, ModifierKeys::NONE);
         assert_eq!(by_line.view.cam.zoom, by_px.view.cam.zoom, "{name}");
         assert_eq!(by_line.screen(0.0, 0.0), by_px.screen(0.0, 0.0), "{name}");
     }

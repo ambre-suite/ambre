@@ -31,7 +31,6 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey | u32	
 ambre-canvas | src/tokens.rs | crate::tokens | ScaleName | String	a snake_case token name, checked as the token source is read
 ambre-canvas | src/tokens.rs | crate::tokens | TokenPx | u32	a whole CSS pixel length as the token source writes it, written out as a Px<View>
 ambre-chrome | src/composed.rs | crate::composed | ComposedName | String	a name composed for display alone: it converts to no String, so it is never stored (CHROME-080)
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers | u8	a set of three modifier bits, built in const command tables, with set operations
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor | Vec<u8>	an anchor bounded to MAX_ANCHOR_LEN bytes where it is built, while serde reads any length
 ambre-core | src/authorship.rs | crate::authorship | IdCounter | u32	an id part: next ends at u32::MAX and never wraps or holds, so two mints never share a value
 ambre-core | src/authorship.rs | crate::authorship | OpCounter | i32	the counter half of a Loro ID, an i32 Loro defines
@@ -66,12 +65,10 @@ ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millise
 ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller chooses, read for equality alone and never a hash of the pixels
 ambre-draw | src/peer.rs | crate::peer | Hue | u16	a whole hue in degrees below 360, private to the peer colour
 ambre-draw | src/testing.rs | crate::testing | StackDepth | u32	the open pushes of a test double: popped answers None below zero, the renderer bug the double catches
-ambre-draw | src/text.rs | crate::text | ScriptSet | u8	a set of lazy scripts held as bits, with set operations
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports, a length only once WheelDelta::to_px reads it
 ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash | String	four to forty lowercase hex digits, checked where it is built
 ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash | String	the error of a refused commit id: it echoes the refused text
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to
-ambre-murmure | src/drafts.rs | crate::drafts | DraftRow | String	the JSON text of a draft row, what the user typed: Debug prints its length alone
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo | usize	the gate depends on no workspace crate: a 1-based line number of the allowlist, for its messages
 ambre-primitives | src/scan.rs | crate::scan | AliasCount | usize	the gate depends on no workspace crate: the aliases one type has opened, held to a bound
@@ -83,11 +80,8 @@ ambre-prose | src/doc.rs | crate::doc | BodyKey | String	a container name, a tag
 ambre-prose | src/doc.rs | crate::doc | StoredLevel | u8	a heading level as the document holds it, raw on purpose: an import may store one outside one to six
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Indent | String	the leading spaces of a nested Markdown block, private to the writer
 ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSequence | u64	the 62 bits of a pinned id, a sequence that ends rather than wraps, private to the fixture ids
-ambre-prose | src/style.rs | crate::style | StoredMarkValue | String	a mark value as the document holds it, never checked: Debug prints its length alone
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark | String	the hex of a cross-reference record, with no Debug since it spells a label of the document
 ambre-protocol | src/membership.rs | crate::membership | LogPosition | u64	the place of an entry in a membership log, a u64 signed with the entry, so the digest fixes its width
-ambre-protocol | src/signaling.rs | crate::signaling | IceCandidate | String	a browser ICE candidate the relay forwards unread: Debug prints its length alone
-ambre-protocol | src/signaling.rs | crate::signaling | SessionDescription | String	a browser session description the relay forwards unread: Debug prints its length alone
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript | Vec<u8>	the bytes one signature covers, built in its own crate alone, while Payload has a public constructor
 ambre-protocol | src/ws.rs | crate::ws | CloseCode | u16	a WebSocket close code, 1000 to 4999 as RFC 6455 defines it
 ambre-server | src/db/mod.rs | crate::db | PgKey | Vec<u8>	a stored public key as sqlx reads it, decoded through try_from

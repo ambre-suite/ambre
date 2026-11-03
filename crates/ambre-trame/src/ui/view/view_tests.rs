@@ -4,7 +4,8 @@
 //! reads a clock the test moves.
 
 use ambre_canvas::PointerButton;
-use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers};
+use ambre_commands::{FunctionKey, Key, KeyChar, ModifierKeys};
+use ambre_core::Flags;
 use ambre_core::index::{Delta, Len, Pos};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -99,7 +100,7 @@ impl Rig {
         self.view
             .handle_input(&InputEvent::Key {
                 key,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             })
             .is_yes()
     }
@@ -497,12 +498,12 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
     let _ = rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(point.0, point.1),
         button: PointerButton::Primary,
-        mods: Modifiers::NONE,
+        mods: ModifierKeys::NONE,
     });
     let _ = rig.view.handle_input(&InputEvent::PointerUp {
         at: pointer(point.0, point.1),
         button: PointerButton::Primary,
-        mods: Modifiers::NONE,
+        mods: ModifierKeys::NONE,
     });
     rig.type_text("X");
     rig.frame();
@@ -513,7 +514,7 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
 
 impl Rig {
     /// Press `key` with the given modifiers.
-    fn chord(&mut self, key: Key, mods: Modifiers) -> bool {
+    fn chord(&mut self, key: Key, mods: Flags<ModifierKeys>) -> bool {
         self.view
             .handle_input(&InputEvent::Key { key, mods })
             .is_yes()
@@ -734,7 +735,7 @@ fn alt_enter_is_the_newline() {
     let mut rig = Rig::new();
     rig.frame();
     rig.type_text("a");
-    rig.chord(Key::Enter, Modifiers::ALT);
+    rig.chord(Key::Enter, ModifierKeys::ALT);
     rig.type_text("b");
     rig.frame();
     assert!(rig.view.editor.is_some(), "Alt+Enter committed");
@@ -765,8 +766,8 @@ fn an_open_session_writes_nothing_and_holds_the_grid() {
     ] {
         rig.key(key);
     }
-    rig.chord(Key::ArrowLeft, Modifiers::SHIFT);
-    rig.chord(Key::Char(KeyChar::A), Modifiers::PRIMARY);
+    rig.chord(Key::ArrowLeft, ModifierKeys::SHIFT);
+    rig.chord(Key::Char(KeyChar::A), ModifierKeys::PRIMARY);
     rig.frame();
     let sent = rig.sent();
     assert!(!writes(&sent), "the open session wrote: {sent:?}");
@@ -880,7 +881,7 @@ fn a_filled_formula_reaches_each_selected_cell_as_typed() {
     ));
     rig.sent();
     rig.type_text("=A1+1");
-    rig.chord(Key::Enter, Modifiers::PRIMARY);
+    rig.chord(Key::Enter, ModifierKeys::PRIMARY);
     rig.frame();
     let sent = rig.sent();
     let Some(cells) = sent.iter().find_map(|c| match c {
@@ -903,12 +904,12 @@ impl Rig {
         let _ = self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(x, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
         let _ = self.view.handle_input(&InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
     }
 
@@ -1012,7 +1013,7 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
             let _ = rig.view.handle_input(&InputEvent::PointerDown {
                 at: start,
                 button: PointerButton::Primary,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             });
             let far = 10_000.0 * zoom as f32;
             let to = ambre_core::Point::new(
@@ -1032,7 +1033,7 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
             let _ = rig.view.handle_input(&InputEvent::PointerUp {
                 at: to,
                 button: PointerButton::Primary,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             });
         }
         let sent: Vec<ambre_core::Px<ambre_core::Doc>> = rig
@@ -1073,7 +1074,7 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
         let _ = rig.view.handle_input(&InputEvent::PointerDown {
             at: pointer(edge, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
         // 200 base pixels, drawn at this zoom.
         let target = rig.view.state.col_x(Pos::<Col>::new(1)).get() + 200.0 * zoom;
@@ -1083,7 +1084,7 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
         let _ = rig.view.handle_input(&InputEvent::PointerUp {
             at: pointer(target, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
         let sent = rig.sent();
         let widths: Vec<ambre_core::Px<ambre_core::Doc>> = sent
@@ -1201,7 +1202,7 @@ fn a_merged_fill_previews_whole_blocks() {
     let _ = rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(handle.x, handle.y),
         button: PointerButton::Primary,
-        mods: Modifiers::NONE,
+        mods: ModifierKeys::NONE,
     });
     let mid = |rig: &Rig, row: u32| {
         let centre = rig
@@ -1229,7 +1230,7 @@ fn a_merged_fill_previews_whole_blocks() {
 
 impl Rig {
     /// One wheel sample, as the host forwards it.
-    fn wheel(&mut self, dy: f64, delta_mode: u32, mods: Modifiers) -> bool {
+    fn wheel(&mut self, dy: f64, delta_mode: u32, mods: Flags<ModifierKeys>) -> bool {
         self.view
             .handle_input(&InputEvent::Wheel {
                 delta: ambre_canvas::WheelDelta::new(
@@ -1255,16 +1256,16 @@ impl Rig {
 fn a_wheel_delta_lands_once_and_keeps_its_remainder() {
     let mut rig = Rig::new();
     rig.frame();
-    assert!(rig.wheel(3.0, 1, Modifiers::NONE));
+    assert!(rig.wheel(3.0, 1, ModifierKeys::NONE));
     assert_eq!(rig.top(), 3, "three lines are three rows");
     let row = f64::from(ROW_HEIGHT.get());
     let page = (rig.view.state.canvas_height.get() / row) as u32;
-    assert!(rig.wheel(1.0, 2, Modifiers::NONE));
+    assert!(rig.wheel(1.0, 2, ModifierKeys::NONE));
     assert_eq!(rig.top(), 3 + page, "a page is a screen of rows");
     let at = rig.top();
-    assert!(rig.wheel(row * 1.5, 0, Modifiers::NONE));
+    assert!(rig.wheel(row * 1.5, 0, ModifierKeys::NONE));
     assert_eq!(rig.top(), at + 1, "a row and a half moves one row");
-    assert!(rig.wheel(row * 0.5, 0, Modifiers::NONE));
+    assert!(rig.wheel(row * 0.5, 0, ModifierKeys::NONE));
     assert_eq!(rig.top(), at + 2, "the half row was kept");
 }
 
@@ -1275,7 +1276,7 @@ fn a_wheel_notch_starts_no_coast() {
     let mut rig = Rig::new();
     rig.frame();
     rig.clock.set(1_000.0);
-    assert!(rig.wheel(3.0, 1, Modifiers::NONE));
+    assert!(rig.wheel(3.0, 1, ModifierKeys::NONE));
     let landed = rig.top();
     for step in 1..=30 {
         rig.clock.set(1_000.0 + f64::from(step) * 16.0);
@@ -1292,7 +1293,7 @@ fn a_ctrl_wheel_scrolls_nothing() {
     rig.frame();
     rig.sent();
     assert!(
-        !rig.wheel(5.0, 1, Modifiers::PRIMARY),
+        !rig.wheel(5.0, 1, ModifierKeys::PRIMARY),
         "the browser keeps the gesture"
     );
     rig.frame();
@@ -1321,7 +1322,7 @@ fn a_selection_held_below_the_cells_scrolls_and_follows() {
     let _ = rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(px, py),
         button: PointerButton::Primary,
-        mods: Modifiers::NONE,
+        mods: ModifierKeys::NONE,
     });
     let below = rig.view.state.canvas_height.get() + 40.0;
     let _ = rig.view.handle_input(&InputEvent::PointerMove {
@@ -1354,12 +1355,12 @@ impl Rig {
         let _ = self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(x, y),
             button: PointerButton::Secondary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
         let _ = self.view.handle_input(&InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Secondary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
     }
 
@@ -1368,12 +1369,12 @@ impl Rig {
         let _ = self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(x, y),
             button: PointerButton::Primary,
-            mods: Modifiers::SHIFT,
+            mods: ModifierKeys::SHIFT,
         });
         let _ = self.view.handle_input(&InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
     }
 
@@ -1607,7 +1608,7 @@ impl Rig {
         let _ = self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(edge, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
         let target = self.view.state.col_x(Pos::<Col>::new(1)).get() + width;
         let _ = self.view.handle_input(&InputEvent::PointerMove {
@@ -1616,7 +1617,7 @@ impl Rig {
         let _ = self.view.handle_input(&InputEvent::PointerUp {
             at: pointer(target, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
     }
 }
@@ -1697,7 +1698,7 @@ fn a_refused_fill_leaves_the_selection() {
     let _ = rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(handle.x, handle.y),
         button: PointerButton::Primary,
-        mods: Modifiers::NONE,
+        mods: ModifierKeys::NONE,
     });
     let (x, y) = rig.cell_mid(3, 0);
     let _ = rig
@@ -1708,7 +1709,7 @@ fn a_refused_fill_leaves_the_selection() {
     let _ = rig.view.handle_input(&InputEvent::PointerUp {
         at: pointer(x, y),
         button: PointerButton::Primary,
-        mods: Modifiers::NONE,
+        mods: ModifierKeys::NONE,
     });
     assert_eq!(rig.view.state.selection.selected_cells(), [at(0, 0)]);
 }
@@ -1806,7 +1807,7 @@ fn a_dropped_scroll_request_is_offered_again() {
     rig.to_logic.try_iter().for_each(drop);
     let cmd = rig.view.set_active_cmd();
     assert!(rig.view.send_command_lossless(cmd).is_ok());
-    assert!(rig.wheel(5.0, 1, Modifiers::NONE));
+    assert!(rig.wheel(5.0, 1, ModifierKeys::NONE));
     rig.frame();
     assert_eq!(scrolls(&mut rig), 0, "the full queue took the request");
     rig.frame();

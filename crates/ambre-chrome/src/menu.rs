@@ -4,7 +4,8 @@
 // value, false included. And one key map drives every menu in the suite, so
 // no menu is operable by mouse alone.
 
-use ambre_commands::{Key, Modifiers};
+use ambre_commands::{Key, ModifierKeys};
+use ambre_core::Flags;
 use wasm_bindgen::JsCast;
 
 ambre_core::define_flag! {
@@ -95,7 +96,7 @@ pub enum MenuKey {
 /// The arrows and Tab move and wrap, Home and End jump to an end, and a letter
 /// jumps to the next item it starts. Enter and Space choose, and Escape
 /// dismisses (`CHROME-026`).
-pub fn menu_key(key: Key, mods: Modifiers, at: usize, initials: &[char]) -> MenuKey {
+pub fn menu_key(key: Key, mods: Flags<ModifierKeys>, at: usize, initials: &[char]) -> MenuKey {
     let len = initials.len();
     if len == 0 {
         return if key == Key::Escape {
@@ -112,7 +113,11 @@ pub fn menu_key(key: Key, mods: Modifiers, at: usize, initials: &[char]) -> Menu
         Key::ArrowUp => MenuKey::Focus(prev),
         // A menu is a transient popup: Tab cycles inside it rather than
         // letting focus escape to the page behind.
-        Key::Tab => MenuKey::Focus(if mods.shift() { prev } else { next }),
+        Key::Tab => MenuKey::Focus(if mods.contains(ModifierKeys::SHIFT) {
+            prev
+        } else {
+            next
+        }),
         Key::Home => MenuKey::Focus(0),
         Key::End => MenuKey::Focus(len - 1),
         Key::Escape => MenuKey::Dismiss,
@@ -261,23 +266,23 @@ mod tests {
     #[test]
     fn the_arrows_and_tab_move_and_wrap() {
         assert_eq!(
-            menu_key(Key::ArrowDown, Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::ArrowDown, ModifierKeys::NONE, 0, &ITEMS),
             MenuKey::Focus(1)
         );
         assert_eq!(
-            menu_key(Key::ArrowDown, Modifiers::NONE, 3, &ITEMS),
+            menu_key(Key::ArrowDown, ModifierKeys::NONE, 3, &ITEMS),
             MenuKey::Focus(0)
         );
         assert_eq!(
-            menu_key(Key::ArrowUp, Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::ArrowUp, ModifierKeys::NONE, 0, &ITEMS),
             MenuKey::Focus(3)
         );
         assert_eq!(
-            menu_key(Key::Tab, Modifiers::NONE, 1, &ITEMS),
+            menu_key(Key::Tab, ModifierKeys::NONE, 1, &ITEMS),
             MenuKey::Focus(2)
         );
         assert_eq!(
-            menu_key(Key::Tab, Modifiers::SHIFT, 0, &ITEMS),
+            menu_key(Key::Tab, ModifierKeys::SHIFT, 0, &ITEMS),
             MenuKey::Focus(3)
         );
     }
@@ -293,11 +298,11 @@ mod tests {
     #[test]
     fn home_and_end_jump_to_an_end() {
         assert_eq!(
-            menu_key(Key::Home, Modifiers::NONE, 2, &ITEMS),
+            menu_key(Key::Home, ModifierKeys::NONE, 2, &ITEMS),
             MenuKey::Focus(0)
         );
         assert_eq!(
-            menu_key(Key::End, Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::End, ModifierKeys::NONE, 0, &ITEMS),
             MenuKey::Focus(3)
         );
     }
@@ -306,19 +311,19 @@ mod tests {
     #[test]
     fn a_letter_jumps_to_the_next_item_it_starts() {
         assert_eq!(
-            menu_key(Key::Char(KeyChar::C), Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::Char(KeyChar::C), ModifierKeys::NONE, 0, &ITEMS),
             MenuKey::Focus(2)
         );
         assert_eq!(
-            menu_key(Key::Char(KeyChar::new('C')), Modifiers::NONE, 2, &ITEMS),
+            menu_key(Key::Char(KeyChar::new('C')), ModifierKeys::NONE, 2, &ITEMS),
             MenuKey::Focus(0)
         );
         assert_eq!(
-            menu_key(Key::Char(KeyChar::D), Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::Char(KeyChar::D), ModifierKeys::NONE, 0, &ITEMS),
             MenuKey::Focus(3)
         );
         assert_eq!(
-            menu_key(Key::Char(KeyChar::Z), Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::Char(KeyChar::Z), ModifierKeys::NONE, 0, &ITEMS),
             MenuKey::Pass
         );
     }
@@ -327,19 +332,19 @@ mod tests {
     #[test]
     fn enter_and_space_choose_and_escape_dismisses() {
         assert_eq!(
-            menu_key(Key::Enter, Modifiers::NONE, 1, &ITEMS),
+            menu_key(Key::Enter, ModifierKeys::NONE, 1, &ITEMS),
             MenuKey::Choose(1)
         );
         assert_eq!(
-            menu_key(Key::Space, Modifiers::NONE, 2, &ITEMS),
+            menu_key(Key::Space, ModifierKeys::NONE, 2, &ITEMS),
             MenuKey::Choose(2)
         );
         assert_eq!(
-            menu_key(Key::Escape, Modifiers::NONE, 1, &ITEMS),
+            menu_key(Key::Escape, ModifierKeys::NONE, 1, &ITEMS),
             MenuKey::Dismiss
         );
         assert_eq!(
-            menu_key(Key::F(FunctionKey::F1), Modifiers::NONE, 1, &ITEMS),
+            menu_key(Key::F(FunctionKey::F1), ModifierKeys::NONE, 1, &ITEMS),
             MenuKey::Pass
         );
     }
@@ -348,11 +353,11 @@ mod tests {
     #[test]
     fn an_empty_menu_can_only_be_dismissed() {
         assert_eq!(
-            menu_key(Key::Escape, Modifiers::NONE, 0, &[]),
+            menu_key(Key::Escape, ModifierKeys::NONE, 0, &[]),
             MenuKey::Dismiss
         );
         assert_eq!(
-            menu_key(Key::ArrowDown, Modifiers::NONE, 0, &[]),
+            menu_key(Key::ArrowDown, ModifierKeys::NONE, 0, &[]),
             MenuKey::Pass
         );
     }

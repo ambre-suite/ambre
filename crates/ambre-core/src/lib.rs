@@ -57,6 +57,8 @@ pub mod fixed_bytes;
 pub mod fixtures;
 /// Two-variant enums for a `bool` that crosses a store, a wire or a public struct.
 pub mod flag;
+/// A small set of named bits, one generic type over a marker: [`Flags`].
+pub mod flags;
 /// Font attributes every application shares: [`FontSize`].
 pub mod font;
 pub mod id;
@@ -74,6 +76,8 @@ pub mod member_count;
 pub mod mode;
 pub mod name;
 pub mod object_key;
+/// Text a log never prints, one generic type over a kind marker: [`Opaque`].
+pub mod opaque;
 pub mod ordinal;
 pub mod payload;
 pub mod provider;
@@ -141,6 +145,7 @@ pub use fixtures::{
     FixtureName, FixtureSeed, FixtureShape, Formulas, Generator, Peers, ShapeBody, Sheets,
     fixture_peer_count, seeded_document_id,
 };
+pub use flags::{Flags, FlagsKind, FlagsRepr};
 pub use font::{
     FontFamily, FontSize, FontWeight, InvalidFontSize, Slant, Strikethrough, Underline, Weight,
     WordBreak,
@@ -163,6 +168,7 @@ pub use name::{
     NameLength, NameTooLong, name_fits,
 };
 pub use object_key::ObjectKey;
+pub use opaque::{Opaque, OpaqueKind, OpaqueLength, SealedAtRest, WireOpaque};
 pub use ordinal::{Ordinal, OrdinalKind};
 pub use payload::{
     Becomes, ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,

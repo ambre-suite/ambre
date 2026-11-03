@@ -17,7 +17,8 @@
 // toggle state optimistically.
 // ============================================================================
 
-use ambre_commands::{Key, KeyBinding, KeyState, Modifiers};
+use ambre_commands::{Key, KeyBinding, KeyState, ModifierFold, ModifierKeys};
+use ambre_core::Flags;
 use ambre_core::{Commands, StaticKey};
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -112,8 +113,8 @@ pub fn keybinding_from_event(ev: &web_sys::KeyboardEvent) -> Option<KeyBinding> 
 
 /// The modifier set of a DOM keyboard event, the control and the command keys
 /// folded into the primary accelerator (`UI-THREAD-028`).
-pub(crate) fn modifiers_of(ev: &web_sys::KeyboardEvent) -> Modifiers {
-    Modifiers::NONE
+pub(crate) fn modifiers_of(ev: &web_sys::KeyboardEvent) -> Flags<ModifierKeys> {
+    ModifierKeys::NONE
         .ctrl_if(KeyState::from_bool(ev.ctrl_key()))
         .alt_if(KeyState::from_bool(ev.alt_key()))
         .shift_if(KeyState::from_bool(ev.shift_key()))

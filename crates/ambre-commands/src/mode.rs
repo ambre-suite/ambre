@@ -7,7 +7,8 @@
 // these, so they sit in the leaf that both already depend on.
 // ============================================================================
 
-use crate::Modifiers;
+use crate::ModifierKeys;
+use ambre_core::Flags;
 
 /// What a clipboard write does to the selection it copies.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
@@ -36,8 +37,8 @@ pub enum SelectionMode {
 impl SelectionMode {
     /// The mode a chord picks: Shift extends the selection.
     #[must_use]
-    pub const fn from_mods(mods: Modifiers) -> Self {
-        if mods.shift() {
+    pub const fn from_mods(mods: Flags<ModifierKeys>) -> Self {
+        if mods.contains(ModifierKeys::SHIFT) {
             Self::Extend
         } else {
             Self::Move

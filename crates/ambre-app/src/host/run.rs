@@ -8,6 +8,7 @@
 
 use super::*;
 use ambre_bus::{Instant, PageLoad};
+use ambre_chrome::commands::ModifierFold;
 
 /// Run the UI thread: build the application view and drive it through a
 /// [`FrameHost`] on the requestAnimationFrame loop. DOM input and resize events
@@ -247,7 +248,7 @@ where
                         at,
                         button: ambre_canvas::PointerButton::from_dom(event.button()),
                         // Cmd (macOS) folds into primary, so disjoint-select works there.
-                        mods: ambre_chrome::commands::Modifiers::NONE
+                        mods: ambre_chrome::commands::ModifierKeys::NONE
                             .ctrl_if(ambre_chrome::commands::KeyState::from_bool(
                                 event.ctrl_key(),
                             ))
@@ -269,7 +270,7 @@ where
                         } else {
                             ambre_canvas::PointerButton::from_dom(event.button())
                         },
-                        mods: ambre_chrome::commands::Modifiers::NONE
+                        mods: ambre_chrome::commands::ModifierKeys::NONE
                             .ctrl_if(ambre_chrome::commands::KeyState::from_bool(
                                 event.ctrl_key(),
                             ))
@@ -385,7 +386,7 @@ where
                         ),
                         ambre_canvas::WheelDeltaMode::from_dom(event.delta_mode()),
                     ),
-                    mods: ambre_chrome::commands::Modifiers::NONE.ctrl_if(
+                    mods: ambre_chrome::commands::ModifierKeys::NONE.ctrl_if(
                         ambre_chrome::commands::KeyState::from_bool(event.ctrl_key()),
                     ),
                 };

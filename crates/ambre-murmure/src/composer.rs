@@ -35,7 +35,8 @@ use ambre_bus::{
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
-use ambre_commands::{Key, KeyBinding, KeyChar, Modifiers};
+use ambre_commands::{Key, KeyBinding, KeyChar, ModifierKeys};
+use ambre_core::Flags;
 use ambre_core::id::{Channel, Id, Message, User};
 use ambre_core::{
     Byte, Char, HistoryStep, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
@@ -74,7 +75,7 @@ pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
 
 /// The chord that turns the box, named after its words at the desktop width
 /// (`MURMURE-544`). The box draws it as the binding spells itself.
-pub const ALSO_CHORD: KeyBinding = KeyBinding::new(Modifiers::ALT, Key::Enter);
+pub const ALSO_CHORD: KeyBinding = KeyBinding::new(ModifierKeys::ALT, Key::Enter);
 
 /// The height of the row of that box, under the field.
 pub(crate) const ALSO_HEIGHT: Px<View> = Px::<View>::new(FONT_UI.get() + SPACE_8.get());
@@ -891,17 +892,21 @@ impl Composer {
     /// An open `@` list takes its own keys first (`MURMURE-554`). Answers
     /// whether the composer took the key. `Ctrl` here is the primary
     /// accelerator, the command key on macOS (`UI-THREAD-028`).
-    pub fn key(&mut self, of: DraftOf, key: Key, mods: Modifiers) -> Consumed {
+    pub fn key(&mut self, of: DraftOf, key: Key, mods: Flags<ModifierKeys>) -> Consumed {
         if self.composing == Composing::Preview {
             return Consumed::No;
         }
-        if mods == Modifiers::NONE && self.list_key(of, key).is_yes() {
+        if mods == ModifierKeys::NONE && self.list_key(of, key).is_yes() {
             return Consumed::Yes;
         }
-        let (primary, alt, shift) = (mods.primary(), mods.alt(), mods.shift());
+        let (primary, alt, shift) = (
+            mods.contains(ModifierKeys::PRIMARY),
+            mods.contains(ModifierKeys::ALT),
+            mods.contains(ModifierKeys::SHIFT),
+        );
         // A chord puts its style on the selection once the keys before it
         // landed (`MURMURE-431`).
-        if mods == Modifiers::PRIMARY
+        if mods == ModifierKeys::PRIMARY
             && let Some(style) = markers::chord_style(key)
         {
             self.toggle(of, style);

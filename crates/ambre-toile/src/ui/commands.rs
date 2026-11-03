@@ -23,7 +23,7 @@
 // redoes on both.
 // ============================================================================
 
-use ambre_commands::{Command, Key, KeyBinding, KeyChar, Locale, Modifiers, shared};
+use ambre_commands::{Command, Key, KeyBinding, KeyChar, Locale, ModifierKeys, shared};
 use ambre_core::{Categories, Commands, Icons, StaticKey};
 
 use crate::ui::find::FIND;
@@ -80,11 +80,11 @@ const FILE: StaticKey<Categories> = StaticKey::<Categories>::new("file");
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 
 /// The Delete accelerator: the bare `Del` key, matching the view's shortcut.
-const DEL: KeyBinding = KeyBinding::new(Modifiers::NONE, Key::Delete);
+const DEL: KeyBinding = KeyBinding::new(ModifierKeys::NONE, Key::Delete);
 
 /// A bare letter, the de-facto whiteboard tool chord (`toile-tools`).
 const fn letter(c: KeyChar) -> KeyBinding {
-    KeyBinding::new(Modifiers::NONE, Key::Char(c))
+    KeyBinding::new(ModifierKeys::NONE, Key::Char(c))
 }
 
 /// Open the command palette. A UI-only intent the launcher intercepts, and the

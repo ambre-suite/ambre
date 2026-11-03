@@ -14,7 +14,8 @@
 // target, and app crates can unit-test their view logic without a browser.
 // ============================================================================
 
-use ambre_commands::{Key, Modifiers};
+use ambre_commands::{Key, ModifierKeys};
+use ambre_core::Flags;
 use ambre_core::{Count, FracMs, Point, Px, TimeSpan, View};
 use ambre_draw::{Color, Rect};
 
@@ -126,7 +127,7 @@ pub enum InputEvent {
     /// (`UI-THREAD-028`), and drops a key the set does not model.
     Key {
         key: Key,
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
     },
     /// A key released. A view that arms a mode on a held key disarms it here.
     /// A flag raised by a press and lowered by nothing outlives the gesture
@@ -142,7 +143,7 @@ pub enum InputEvent {
     PointerDown {
         at: Point<Px<View>>,
         button: PointerButton,
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
     },
     PointerMove {
         at: Point<Px<View>>,
@@ -153,7 +154,7 @@ pub enum InputEvent {
         /// Modifier state at *release* time (Cmd folded into `primary`).
         /// Autofill reads Ctrl here, not at grab time, so toggling it mid-drag
         /// counts.
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
     },
     /// Native double-click (respects the platform's double-click speed). Used to
     /// enter cell edit mode.
@@ -167,7 +168,7 @@ pub enum InputEvent {
     /// it does for a trackpad pinch.
     Wheel {
         delta: WheelDelta,
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
     },
 
     /// Committed text from the transparent `<textarea>` pipe: latin typing,

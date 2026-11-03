@@ -8,6 +8,7 @@
 //! registry.
 
 use ambre_bus::app::prose::{DocChar, MarkKey};
+use ambre_core::Opaque;
 use ambre_core::index::{Len, Pos, Span};
 
 use loro::TreeID;
@@ -19,7 +20,7 @@ use crate::events::{
     ActiveMarks, BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, TriState, tree_id,
 };
 use crate::mark::{self, MarkRoot};
-use crate::style::{BlockContext, MarkSet, ResolvedStyle, StoredMarkValue, resolve};
+use crate::style::{BlockContext, MarkSet, ResolvedStyle, StoredMarkValues, resolve};
 
 use super::ProseState;
 
@@ -351,7 +352,7 @@ impl MarkFold {
         }
         let this = marks
             .get(MarkRoot::Link.as_str())
-            .map(StoredMarkValue::to_link);
+            .map(|value| ambre_core::LinkUrl::new(value.as_str().to_owned()));
         self.link = match self.link.take() {
             None => Some(this),
             Some(held) if held == this => Some(held),
@@ -407,8 +408,8 @@ fn marks_of_run(fields: &LoroValue) -> MarkSet {
         .iter()
         .map(|(key, value)| {
             let stored = match value {
-                LoroValue::String(text) => StoredMarkValue::new(text.to_string()),
-                _ => StoredMarkValue::default(),
+                LoroValue::String(text) => Opaque::<StoredMarkValues>::new(text.to_string()),
+                _ => Opaque::<StoredMarkValues>::default(),
             };
             (MarkKey::new(key.clone()), stored)
         })

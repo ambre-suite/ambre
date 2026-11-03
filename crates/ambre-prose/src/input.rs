@@ -8,7 +8,8 @@
 
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocChar;
-use ambre_commands::{ClipboardWrite, Key, KeyChar, Modifiers, SelectionMode};
+use ambre_commands::{ClipboardWrite, Key, KeyChar, ModifierKeys, SelectionMode};
+use ambre_core::Flags;
 use ambre_core::StepDirection;
 use ambre_core::index::{Delta, Pos, Span};
 use ambre_core::{Point, Px, View};
@@ -57,8 +58,8 @@ impl ProseKey {
     /// The key a pressed key stands for under the chord's modifiers.
     /// `None` for a key the view leaves to the host.
     #[must_use]
-    pub fn from_key(key: Key, mods: Modifiers) -> Option<Self> {
-        let ctrl = mods.primary();
+    pub fn from_key(key: Key, mods: Flags<ModifierKeys>) -> Option<Self> {
+        let ctrl = mods.contains(ModifierKeys::PRIMARY);
         Some(match key {
             Key::ArrowLeft => Self::Left,
             Key::ArrowRight => Self::Right,
@@ -89,7 +90,7 @@ impl ProseKey {
 pub enum ProseInput {
     Key {
         key: ProseKey,
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
     },
     /// Committed text: typing, dictation, a plain paste.
     Text(String),
@@ -97,7 +98,7 @@ pub enum ProseInput {
         at: Point<Px<View>>,
         /// The modifiers held. A press with the primary one on a link follows
         /// the link (`PROSE-UI-071`); one with Shift extends the selection.
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
         now: Instant<PageLoad>,
     },
     Drag {
@@ -430,7 +431,7 @@ impl ProseUiState {
             }
             ProseInput::Press { at, mods, now } => {
                 let target = mods
-                    .primary()
+                    .contains(ModifierKeys::PRIMARY)
                     .then(|| self.link_at(*at).map(|link| link.url.clone()))
                     .flatten();
                 match target {
@@ -615,12 +616,14 @@ impl ProseUiState {
     fn menu_key(
         &mut self,
         key: ProseKey,
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Option<Consumed> {
         let menu = self.slash.as_mut()?;
         match key {
-            ProseKey::Up | ProseKey::Down if !mods.shift() && !mods.primary() => {
+            ProseKey::Up | ProseKey::Down
+                if !mods.contains(ModifierKeys::SHIFT) && !mods.contains(ModifierKeys::PRIMARY) =>
+            {
                 self.step_menu(if key == ProseKey::Down {
                     StepDirection::Forward
                 } else {
@@ -638,7 +641,9 @@ impl ProseUiState {
             }
             // The Backspace over the slash closes the menu; one over the
             // query narrows it less. Both delete like any Backspace.
-            ProseKey::Backspace if !mods.primary() && menu.query.pop().is_some() => {
+            ProseKey::Backspace
+                if !mods.contains(ModifierKeys::PRIMARY) && menu.query.pop().is_some() =>
+            {
                 menu.selected = Pos::<crate::view::slash::SlashChoice>::ZERO;
                 None
             }
@@ -741,15 +746,15 @@ impl ProseUiState {
     fn key(
         &mut self,
         key: ProseKey,
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Consumed {
-        let ctrl = mods.primary();
+        let ctrl = mods.contains(ModifierKeys::PRIMARY);
         // A history step needs no caret: the engine places it after
         // (`UNDO-010`, `UNDO-011`). The key is the view's whether or not the
         // command was taken, so the pipe never runs its own undo.
         if matches!(key, ProseKey::Undo | ProseKey::Redo) {
-            let redo = key == ProseKey::Redo || mods.shift();
+            let redo = key == ProseKey::Redo || mods.contains(ModifierKeys::SHIFT);
             send(if redo {
                 ProseCommand::Redo
             } else {
