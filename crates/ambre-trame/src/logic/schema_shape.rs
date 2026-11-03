@@ -217,7 +217,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
             font: Some(ambre_core::FontFamily::Other("f".to_owned())),
             size: Some(ambre_core::FontSize::from_whole_points(7)),
             format: CellFormat::Time,
-            decimals: crate::Decimals::new(8),
+            decimals: ambre_core::Bounded::new(8),
             borders: Borders {
                 top: Some(CellBorder {
                     style: BorderStyle::Double,

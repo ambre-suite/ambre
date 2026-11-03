@@ -30,6 +30,8 @@ atomic-waker = { workspace = true }
 # `Seq::nth` for a test that names a count. Test builds alone, held by
 # `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
 ambre-core = { path = "../ambre-core", features = ["testing"] }
+# A test proves a bounded count keeps its bare JSON number.
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

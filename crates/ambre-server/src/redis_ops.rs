@@ -8,7 +8,7 @@ use rustis::commands::{
 use rustis::resp::RefBulkString;
 
 use crate::oidc::{OidcAuthState, OidcSecret};
-use crate::payload::Payload;
+use crate::payload::StoredPayload;
 use crate::redis_keys::{
     Clocks, DeadLetter, DocKey, DocumentStateKeys, FlushDirtySet, FlushLock, Gone, Locked,
     PendingKey, Presence, RotationOwed, SeqCounter, Sessions, SnapshotAsked,
@@ -252,14 +252,14 @@ pub async fn append_pending_delta(
     document_id: &Id<Document>,
     seq: ambre_core::Seq<ambre_core::Relay>,
     s3_key: &ambre_core::ObjectKey,
-    update_wire: &Payload,
+    update_wire: &StoredPayload,
 ) -> Result<(), AppError> {
     let key = PendingKey::of(document_id);
     // Store the FULL sealed Update wire (ciphertext + nonce + public_data +
     // commitment + signature), not just the ciphertext. A reconnecting or
     // cross-device client replays these verbatim, and needs every field to
     // decrypt and verify. The flusher persists the same bytes to S3.
-    let entry = Payload::pending_entry(seq, s3_key, update_wire);
+    let entry = StoredPayload::pending_entry(seq, s3_key, update_wire);
     // One script: the tombstone check, the RPUSH, then the dirty mark. The
     // flusher iterates only documents marked dirty (SMEMBERS), instead of
     // SCANning the whole keyspace every cycle. The RPUSH-then-SADD order is
@@ -316,7 +316,7 @@ async fn guarded_rpush(
     redis: &Client,
     list_key: &DocKey<DeadLetter>,
     gone_key: &DocKey<Gone>,
-    entry: &Payload,
+    entry: &StoredPayload,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
 if redis.call('EXISTS', KEYS[2]) == 1 then
@@ -340,7 +340,7 @@ return redis.call('RPUSH', KEYS[1], ARGV[1])
 pub async fn push_poison_entry(
     redis: &Client,
     document_id: &Id<Document>,
-    entry: &Payload,
+    entry: &StoredPayload,
 ) -> Result<(), AppError> {
     guarded_rpush(
         redis,
@@ -355,14 +355,14 @@ pub async fn push_poison_entry(
 pub async fn pending_entries(
     redis: &Client,
     pending_key: &PendingKey,
-) -> Result<Vec<Payload>, AppError> {
+) -> Result<Vec<StoredPayload>, AppError> {
     let entries: Vec<String> = redis
         .lrange(pending_key.as_str(), 0, -1)
         .await
         .map_err(|e| AppError::Redis(format!("pending lrange failed: {e}")))?;
     Ok(entries
         .into_iter()
-        .map(|entry| Payload::new(entry.into_bytes()))
+        .map(|entry| StoredPayload::new(entry.into_bytes()))
         .collect())
 }
 
@@ -425,13 +425,13 @@ pub async fn push_dead_letter(
     document_id: &Id<Document>,
     seq: ambre_core::Seq<ambre_core::Relay>,
     s3_key: &ambre_core::ObjectKey,
-    update_wire: &Payload,
+    update_wire: &StoredPayload,
 ) -> Result<(), AppError> {
     guarded_rpush(
         redis,
         &DocKey::<DeadLetter>::of(document_id),
         &DocKey::<Gone>::of(document_id),
-        &Payload::pending_entry(seq, s3_key, update_wire),
+        &StoredPayload::pending_entry(seq, s3_key, update_wire),
     )
     .await
 }
@@ -451,7 +451,8 @@ pub async fn push_dead_letter(
 pub async fn get_pending_deltas_map(
     redis: &Client,
     document_id: &Id<Document>,
-) -> Result<std::collections::HashMap<ambre_core::Seq<ambre_core::Relay>, Payload>, AppError> {
+) -> Result<std::collections::HashMap<ambre_core::Seq<ambre_core::Relay>, StoredPayload>, AppError>
+{
     let entries = pending_entries(redis, &PendingKey::of(document_id)).await?;
     let mut map = std::collections::HashMap::with_capacity(entries.len());
     for entry in &entries {
@@ -677,7 +678,7 @@ pub async fn refresh_consume(
 pub async fn doc_broadcast(
     redis: &Client,
     document_id: &Id<Document>,
-    payload: &Payload,
+    payload: &StoredPayload,
 ) -> Result<(), AppError> {
     let channel = crate::ws::Topic::document(document_id);
     // The payload is binary (encrypted ciphertext). rustis serializes a raw
@@ -698,7 +699,7 @@ pub async fn doc_broadcast(
 pub async fn user_broadcast(
     redis: &Client,
     user_id: &Id<User>,
-    payload: &Payload,
+    payload: &StoredPayload,
 ) -> Result<(), AppError> {
     let channel = crate::ws::Topic::user(user_id);
     redis
@@ -713,10 +714,11 @@ pub async fn user_broadcast(
 /// names. Best-effort, like every broadcast: the member rows stay the source of
 /// truth, and a client reads them again at its next open.
 pub async fn members_changed(redis: &Client, document_id: &Id<Document>) {
-    let msg =
-        crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::MembersChanged {
+    let msg = crate::payload::StoredPayload::server_msg(
+        &ambre_protocol::ws::WsServerMsg::MembersChanged {
             document_id: *document_id,
-        });
+        },
+    );
     let _ = doc_broadcast(redis, document_id, &msg).await;
 }
 
@@ -729,7 +731,7 @@ pub async fn thread_activity(
     channel_id: &Id<Channel>,
     thread: &Id<Document>,
 ) -> Result<(), AppError> {
-    let msg = Payload::server_msg(&ambre_protocol::ws::WsServerMsg::ThreadActivity {
+    let msg = StoredPayload::server_msg(&ambre_protocol::ws::WsServerMsg::ThreadActivity {
         document_id: *thread,
     });
     let topic = crate::ws::Topic::channel(channel_id);
@@ -1801,7 +1803,7 @@ mod redis_integration_tests {
             &doc,
             ambre_core::Seq::<ambre_core::Relay>::new(1),
             &ambre_core::ObjectKey::from("s3-x"),
-            &Payload::new(vec![1, 2, 3]),
+            &StoredPayload::new(vec![1, 2, 3]),
         )
         .await
         .unwrap();
@@ -1850,7 +1852,7 @@ mod redis_integration_tests {
             &doc,
             ambre_core::Seq::<ambre_core::Relay>::new(7),
             &ambre_core::ObjectKey::from("s3-a"),
-            &Payload::new(vec![1, 2, 3]),
+            &StoredPayload::new(vec![1, 2, 3]),
         )
         .await
         .unwrap();
@@ -1859,7 +1861,7 @@ mod redis_integration_tests {
             &doc,
             ambre_core::Seq::<ambre_core::Relay>::new(8),
             &ambre_core::ObjectKey::from("s3-b"),
-            &Payload::new(vec![4, 5]),
+            &StoredPayload::new(vec![4, 5]),
         )
         .await
         .unwrap();
@@ -1868,12 +1870,12 @@ mod redis_integration_tests {
         assert_eq!(map.len(), 2);
         assert_eq!(
             map.get(&ambre_core::Seq::<ambre_core::Relay>::new(7))
-                .map(Payload::expose_bytes),
+                .map(StoredPayload::expose_bytes),
             Some(&[1u8, 2, 3][..])
         );
         assert_eq!(
             map.get(&ambre_core::Seq::<ambre_core::Relay>::new(8))
-                .map(Payload::expose_bytes),
+                .map(StoredPayload::expose_bytes),
             Some(&[4u8, 5][..])
         );
 

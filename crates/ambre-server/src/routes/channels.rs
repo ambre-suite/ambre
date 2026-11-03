@@ -67,11 +67,12 @@ pub struct SpaceChannelsJson {
 /// channel has no wire message of its own (`SRV-102`), so this is how a
 /// member learns of one (`SRV-192`). Best-effort: the listing is the truth.
 pub(crate) async fn share_notice(state: &AppState, user: &Id<User>, meta: Id<Document>) {
-    let msg =
-        crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::DocumentShared {
+    let msg = crate::payload::StoredPayload::server_msg(
+        &ambre_protocol::ws::WsServerMsg::DocumentShared {
             document_id: meta,
             doc_type: ambre_core::DocType::Murmure,
-        });
+        },
+    );
     let _ = crate::redis_ops::user_broadcast(&state.redis, user, &msg).await;
 }
 

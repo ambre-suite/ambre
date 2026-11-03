@@ -12,7 +12,8 @@
 // result shows the mistake.
 
 use crate::formula::text::LiteralText;
-use ambre_bus::{DateParts, DateSerial};
+use ambre_bus::DateParts;
+use ambre_core::{Instant, SheetDateTime};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
 const MONTHS: [&str; 12] = [
@@ -45,18 +46,18 @@ const DAYS: [&str; 7] = [
 /// A day serial as an ISO calendar date, `2026-09-29` (`TRAME-107`). The ISO
 /// order is the one no locale misreads; the document has no locale yet
 /// (`TRAME-110`).
-pub(crate) fn format_date(serial: DateSerial) -> String {
+pub(crate) fn format_date(serial: Instant<SheetDateTime>) -> String {
     let DateParts {
         year: y,
         month: m,
         day: d,
-    } = serial.day().parts();
+    } = DateParts::of_day(serial.day());
     let (y, m, d) = (y.get(), m.get(), d.get());
     format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// The time of day a serial carries in its fraction, `14:05:09` (`TRAME-107`).
-pub(crate) fn format_time(serial: DateSerial) -> String {
+pub(crate) fn format_time(serial: Instant<SheetDateTime>) -> String {
     let TimeOfDay {
         hours: h,
         minutes: m,
@@ -76,7 +77,7 @@ struct TimeOfDay {
 
 /// Hours, minutes and seconds of the fraction of `serial`, rounded to the
 /// second. A fraction that rounds up to midnight reads `00:00:00`.
-fn hms(serial: DateSerial) -> TimeOfDay {
+fn hms(serial: Instant<SheetDateTime>) -> TimeOfDay {
     let seconds = (serial.time_of_day() * 86_400.0).round() as u32 % 86_400;
     TimeOfDay {
         hours: seconds / 3600,
@@ -159,7 +160,7 @@ pub(crate) fn format_custom(value: f64, pattern: &str) -> String {
     };
     let tokens = lex(section);
     if tokens.iter().any(|t| matches!(t, Token::Date(..))) {
-        render_date(&tokens, DateSerial::new(value))
+        render_date(&tokens, Instant::<SheetDateTime>::new(value))
     } else {
         render_number(&tokens, value)
     }
@@ -411,12 +412,12 @@ fn place_fraction(tokens: &[Token], digits: &str) -> String {
 }
 
 /// Render a date or time section.
-fn render_date(tokens: &[Token], serial: DateSerial) -> String {
+fn render_date(tokens: &[Token], serial: Instant<SheetDateTime>) -> String {
     let DateParts {
         year: y,
         month: mo,
         day: d,
-    } = serial.day().parts();
+    } = DateParts::of_day(serial.day());
     let (y, mo, d) = (y.get(), mo.get(), d.get());
     let TimeOfDay {
         hours: h,
@@ -513,11 +514,20 @@ mod tests {
     #[test]
     fn date_and_time_render_the_calendar() {
         // 46294 is 2026-09-29; .5 is noon.
-        assert_eq!(format_date(DateSerial::new(46294.0)), "2026-09-29");
-        assert_eq!(format_date(DateSerial::new(46294.75)), "2026-09-29");
-        assert_eq!(format_time(DateSerial::new(46294.5)), "12:00:00");
         assert_eq!(
-            format_time(DateSerial::new(0.25 + 5.0 / 86_400.0)),
+            format_date(Instant::<SheetDateTime>::new(46294.0)),
+            "2026-09-29"
+        );
+        assert_eq!(
+            format_date(Instant::<SheetDateTime>::new(46294.75)),
+            "2026-09-29"
+        );
+        assert_eq!(
+            format_time(Instant::<SheetDateTime>::new(46294.5)),
+            "12:00:00"
+        );
+        assert_eq!(
+            format_time(Instant::<SheetDateTime>::new(0.25 + 5.0 / 86_400.0)),
             "06:00:05"
         );
     }

@@ -523,7 +523,7 @@ impl<'a> FrameTitle<'a> {
 impl std::fmt::Debug for FrameTitle<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let len = match self {
-            Self::Named(title) => Some(crate::logic::TextLen(title)),
+            Self::Named(title) => Some(ambre_core::Redacted::new(title)),
             Self::Untitled => None,
         };
         f.debug_tuple("FrameTitle").field(&len).finish()
@@ -750,7 +750,7 @@ mod tests {
     fn a_frame_title_debug_form_prints_no_title() {
         let form = format!("{:?}", frame_title_label("Q3 layoffs"));
         assert!(!form.contains("layoffs"), "{form}");
-        assert!(form.contains("<10 chars>"), "{form}");
+        assert!(form.contains("FrameTitle(Some(10 chars))"), "{form}");
         assert_eq!(format!("{:?}", FrameTitle::Untitled), "FrameTitle(None)");
     }
 

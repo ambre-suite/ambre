@@ -13,6 +13,8 @@
 //! | [`Sec`] | `u64` | a token's life, a retention window |
 //! | [`Ns`] | `u64` | a benchmark mean |
 //! | [`FracMs`] | `f64` | a frame's cost, a blink period |
+//! | [`Day`] | `i64` | the days between two spreadsheet dates |
+//! | [`FracDay`] | `f64` | a spreadsheet date with its time of day |
 //!
 //! | Time base | Unit | Example |
 //! | :--- | :--- | :--- |
@@ -20,9 +22,18 @@
 //! | [`UnixMs`] | [`Ms`] | the window of the relay's rate limiter |
 //! | [`UnixSec`] | [`Sec`] | a token's `exp`, a delete's second sweep |
 //! | [`PageLoad`] | [`FracMs`] | a frame callback, read on the page's monotonic clock |
+//! | [`SheetDay`] | [`Day`] | a whole spreadsheet date, its days from 1899-12-30 |
+//! | [`SheetDateTime`] | [`FracDay`] | a spreadsheet date with its time of day in the fraction |
 //!
 //! Both traits are sealed: each marker is an enum with no variant, and the
-//! list in this module is the whole set.
+//! list in this module is the whole set. The two spreadsheet bases live here
+//! for that reason: the seal keeps every unit in this module, though only
+//! the Trame calendar reads them.
+//!
+//! A unit a clock reads divides one second, so it converts to and from a
+//! [`Duration`]: it implements [`ClockUnit`]. A day is no such unit. A
+//! spreadsheet counts its days apart from any clock, so [`Day`] and
+//! [`FracDay`] stay off that trait and never meet a [`Duration`].
 
 use crate::Tally;
 use std::cmp::Ordering;
@@ -50,18 +61,27 @@ mod sealed {
     pub trait Sealed {}
 
     impl Sealed for u64 {}
+    impl Sealed for i64 {}
     impl Sealed for f64 {}
     impl Sealed for super::Ms {}
     impl Sealed for super::Sec {}
     impl Sealed for super::Ns {}
     impl Sealed for super::FracMs {}
+    impl Sealed for super::Day {}
+    impl Sealed for super::FracDay {}
     impl Sealed for super::Authored {}
     impl Sealed for super::UnixMs {}
     impl Sealed for super::UnixSec {}
     impl Sealed for super::PageLoad {}
+    impl Sealed for super::SheetDay {}
+    impl Sealed for super::SheetDateTime {}
 }
 
-/// The number a unit counts its ticks in: a whole `u64` or an `f64`.
+/// The number a unit counts its ticks in: a whole `u64`, a signed `i64` or
+/// an `f64`.
+///
+/// The trait holds what every number shares. A whole `u64` saturates at
+/// zero where a method of its own says so; a signed `i64` keeps its sign.
 pub trait Tick:
     sealed::Sealed
     + Copy
@@ -76,17 +96,30 @@ pub trait Tick:
 {
     /// The count of zero ticks.
     const ZERO: Self;
+}
 
+/// A number a clock unit counts in, so a [`Duration`] converts into it.
+pub trait ClockTick: Tick {
     /// The ticks of the unit `U` that `duration` covers. A whole count
     /// rounds down and saturates at `u64::MAX`. The bound keeps a unit to
     /// the number it holds, so `u64` never counts a float unit.
-    fn of_duration<U: TimeUnit<Repr = Self>>(duration: Duration) -> Self;
+    fn of_duration<U: ClockUnit<Repr = Self>>(duration: Duration) -> Self;
 }
 
 impl Tick for u64 {
     const ZERO: Self = 0;
+}
 
-    fn of_duration<U: TimeUnit<Repr = Self>>(duration: Duration) -> Self {
+impl Tick for i64 {
+    const ZERO: Self = 0;
+}
+
+impl Tick for f64 {
+    const ZERO: Self = 0.0;
+}
+
+impl ClockTick for u64 {
+    fn of_duration<U: ClockUnit<Repr = Self>>(duration: Duration) -> Self {
         let ticks = duration
             .as_nanos()
             .saturating_mul(u128::from(U::PER_SECOND))
@@ -95,10 +128,8 @@ impl Tick for u64 {
     }
 }
 
-impl Tick for f64 {
-    const ZERO: Self = 0.0;
-
-    fn of_duration<U: TimeUnit<Repr = Self>>(duration: Duration) -> Self {
+impl ClockTick for f64 {
+    fn of_duration<U: ClockUnit<Repr = Self>>(duration: Duration) -> Self {
         duration.as_secs_f64() * U::PER_SECOND as Self
     }
 }
@@ -106,18 +137,21 @@ impl Tick for f64 {
 /// The marker of one unit of time.
 ///
 /// The unit fixes the number a span holds, so a unit never holds two kinds
-/// of number. Each unit divides one second into a whole count of ticks
-/// that also divides a billion, so a whole span converts to a
-/// [`Duration`] exactly.
+/// of number.
 pub trait TimeUnit: sealed::Sealed + 'static {
     /// The number one tick of the unit counts in.
     type Repr: Tick;
 
-    /// The ticks of the unit in one second.
-    const PER_SECOND: u64;
-
     /// The name `Debug` prints, as the hand-written type printed its own.
     const NAME: &'static str;
+}
+
+/// A unit a clock reads. It divides one second into a whole count of ticks
+/// that also divides a billion, so a whole span converts to a [`Duration`]
+/// exactly.
+pub trait ClockUnit: TimeUnit<Repr: ClockTick> {
+    /// The ticks of the unit in one second.
+    const PER_SECOND: u64;
 }
 
 /// The marker of one time base: the clock an instant was read on, and the
@@ -148,26 +182,70 @@ pub enum FracMs {}
 
 impl TimeUnit for Ms {
     type Repr = u64;
-    const PER_SECOND: u64 = 1_000;
     const NAME: &'static str = "Millis";
+}
+
+impl ClockUnit for Ms {
+    const PER_SECOND: u64 = 1_000;
 }
 
 impl TimeUnit for Sec {
     type Repr = u64;
-    const PER_SECOND: u64 = 1;
     const NAME: &'static str = "Seconds";
+}
+
+impl ClockUnit for Sec {
+    const PER_SECOND: u64 = 1;
 }
 
 impl TimeUnit for Ns {
     type Repr = u64;
-    const PER_SECOND: u64 = 1_000_000_000;
     const NAME: &'static str = "Nanos";
 }
 
+impl ClockUnit for Ns {
+    const PER_SECOND: u64 = 1_000_000_000;
+}
+
+/// Whole days of a spreadsheet calendar. A count of them is signed: the days
+/// from a later date back to an earlier one are negative.
+///
+/// A day is no clock unit, so no [`Duration`] converts into it:
+///
+/// ```compile_fail,E0599
+/// use ambre_core::{Day, TimeSpan};
+/// let _ = TimeSpan::<Day>::from_duration(std::time::Duration::from_secs(86_400));
+/// ```
+///
+/// And a spreadsheet date never meets an instant of a clock:
+///
+/// ```compile_fail,E0308
+/// use ambre_core::{Instant, SheetDay, UnixSec};
+/// let _ = Instant::<SheetDay>::new(3) - Instant::<UnixSec>::new(3);
+/// ```
+pub enum Day {}
+
+/// Days of a spreadsheet calendar in an `f64`, the time of day in the
+/// fraction.
+pub enum FracDay {}
+
 impl TimeUnit for FracMs {
     type Repr = f64;
-    const PER_SECOND: u64 = 1_000;
     const NAME: &'static str = "PageMillis";
+}
+
+impl ClockUnit for FracMs {
+    const PER_SECOND: u64 = 1_000;
+}
+
+impl TimeUnit for Day {
+    type Repr = i64;
+    const NAME: &'static str = "DayCount";
+}
+
+impl TimeUnit for FracDay {
+    type Repr = f64;
+    const NAME: &'static str = "FracDays";
 }
 
 /// A wall clock in Unix milliseconds, as an author's clock reads it. A
@@ -195,6 +273,14 @@ pub enum UnixSec {}
 /// an instant of it.
 pub enum PageLoad {}
 
+/// Whole days from the spreadsheet epoch, 1899-12-30, as a formula reads a
+/// date. Every count of days is a date, before the epoch too.
+pub enum SheetDay {}
+
+/// Days from the spreadsheet epoch with the time of day in the fraction, as
+/// a cell's number reads as a date and a time.
+pub enum SheetDateTime {}
+
 impl TimeBase for Authored {
     type Unit = Ms;
     const NAME: &'static str = "Timestamp";
@@ -213,6 +299,16 @@ impl TimeBase for UnixSec {
 impl TimeBase for PageLoad {
     type Unit = FracMs;
     const NAME: &'static str = "PageTime";
+}
+
+impl TimeBase for SheetDay {
+    type Unit = Day;
+    const NAME: &'static str = "DaySerial";
+}
+
+impl TimeBase for SheetDateTime {
+    type Unit = FracDay;
+    const NAME: &'static str = "DateSerial";
 }
 
 /// A span of time, counted in the unit `U` names.
@@ -245,20 +341,22 @@ impl<U: TimeUnit> TimeSpan<U> {
     pub const fn get(self) -> U::Repr {
         self.ticks
     }
+}
 
+impl<U: ClockUnit> TimeSpan<U> {
     /// The span `duration` covers. A whole unit rounds down and saturates
     /// at `u64::MAX`; a float unit keeps the fraction.
     #[must_use]
     pub fn from_duration(duration: Duration) -> Self {
-        Self::new(<U::Repr as Tick>::of_duration::<U>(duration))
+        Self::new(<U::Repr as ClockTick>::of_duration::<U>(duration))
     }
 }
 
-impl<U: TimeUnit<Repr = u64>> TimeSpan<U> {
+impl<U: ClockUnit<Repr = u64>> TimeSpan<U> {
     /// The span in the unit `V`, rounded down to a whole tick of `V` and
     /// saturating at `u64::MAX` ticks.
     #[must_use]
-    pub const fn to_floor<V: TimeUnit<Repr = u64>>(self) -> TimeSpan<V> {
+    pub const fn to_floor<V: ClockUnit<Repr = u64>>(self) -> TimeSpan<V> {
         let wide = (self.ticks as u128) * (V::PER_SECOND as u128) / (U::PER_SECOND as u128);
         TimeSpan::new(if wide > u64::MAX as u128 {
             u64::MAX
@@ -594,6 +692,42 @@ impl Instant<PageLoad> {
     }
 }
 
+impl Instant<SheetDay> {
+    /// The Unix epoch, 1970-01-01, as a spreadsheet date.
+    pub const UNIX_EPOCH: Self = Self::new(25_569);
+}
+
+/// The days from `earlier` to this date, negative when `earlier` is later,
+/// saturating at either end of `i64`.
+impl Sub for Instant<SheetDay> {
+    type Output = TimeSpan<Day>;
+
+    fn sub(self, earlier: Self) -> TimeSpan<Day> {
+        TimeSpan::new(self.get().saturating_sub(earlier.get()))
+    }
+}
+
+impl Instant<SheetDateTime> {
+    /// The instant `unix_days` days after the Unix epoch.
+    #[must_use]
+    pub fn from_unix_days(unix_days: f64) -> Self {
+        Self::new(unix_days + Instant::<SheetDay>::UNIX_EPOCH.get() as f64)
+    }
+
+    /// The day it falls on, its time of day dropped. A serial past either
+    /// end of `i64` saturates there, and a NaN reads as the epoch.
+    #[must_use]
+    pub fn day(self) -> Instant<SheetDay> {
+        Instant::new(self.get().floor() as i64)
+    }
+
+    /// The time of day, as a fraction of a day from 0 up to 1.
+    #[must_use]
+    pub fn time_of_day(self) -> f64 {
+        self.get() - self.get().floor()
+    }
+}
+
 /// The span from `earlier` to this instant, negative when `earlier` is
 /// later.
 impl Sub for Instant<PageLoad> {
@@ -815,8 +949,8 @@ pub mod stored_as_i64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        Authored, Failures, FracMs, Instant, LamportStamp, Ms, Ns, PageLoad, Sec, StoredAsI64,
-        TimeSpan, UnixMs, UnixSec,
+        Authored, Day, Failures, FracMs, Instant, LamportStamp, Ms, Ns, PageLoad, Sec,
+        SheetDateTime, SheetDay, StoredAsI64, TimeSpan, UnixMs, UnixSec,
     };
     use crate::Tally;
     use std::time::Duration;
@@ -971,6 +1105,72 @@ mod tests {
         assert_eq!(at(100).since(at(40)), secs(60));
         assert_eq!(at(40).since(at(100)), secs(0));
         assert_eq!(at(u64::MAX).to_i64_saturating(), i64::MAX);
+    }
+
+    /// A spreadsheet date measures signed days back to another, where a
+    /// relay instant stops at zero.
+    #[test]
+    fn a_sheet_day_measures_signed_days_and_saturates_at_either_end() {
+        let day = Instant::<SheetDay>::new;
+        assert_eq!(day(46_294) - day(46_265), TimeSpan::<Day>::new(29));
+        assert_eq!(day(46_265) - day(46_294), TimeSpan::<Day>::new(-29));
+        assert_eq!(day(i64::MIN) - day(1), TimeSpan::<Day>::new(i64::MIN));
+        assert_eq!(day(i64::MAX) - day(-1), TimeSpan::<Day>::new(i64::MAX));
+        assert!(day(-1) < Instant::EPOCH);
+        assert_eq!(Instant::<SheetDay>::UNIX_EPOCH, day(25_569));
+    }
+
+    #[test]
+    fn a_sheet_date_time_falls_on_its_day_and_keeps_its_time() {
+        let at = Instant::<SheetDateTime>::new(46_294.75);
+        assert_eq!(at.day(), Instant::<SheetDay>::new(46_294));
+        assert!((at.time_of_day() - 0.75).abs() < f64::EPSILON);
+        let before = Instant::<SheetDateTime>::new(-0.25);
+        assert_eq!(before.day(), Instant::<SheetDay>::new(-1));
+        assert!((before.time_of_day() - 0.75).abs() < f64::EPSILON);
+        assert_eq!(
+            Instant::<SheetDateTime>::from_unix_days(1.5),
+            Instant::new(25_570.5)
+        );
+        assert_eq!(
+            Instant::<SheetDateTime>::new(f64::NAN).day(),
+            Instant::EPOCH
+        );
+    }
+
+    /// The three spreadsheet types write the bare `i64` or `f64` the
+    /// hand-written newtypes held, and print their former names.
+    #[test]
+    fn a_sheet_date_writes_its_bare_number_and_prints_its_former_name() {
+        let day = Instant::<SheetDay>::new(-7);
+        let count = TimeSpan::<Day>::new(-29);
+        let at = Instant::<SheetDateTime>::new(46_294.75);
+        assert_eq!(
+            postcard::to_allocvec(&day).unwrap(),
+            postcard::to_allocvec(&-7_i64).unwrap()
+        );
+        assert_eq!(
+            postcard::to_allocvec(&count).unwrap(),
+            postcard::to_allocvec(&-29_i64).unwrap()
+        );
+        assert_eq!(
+            postcard::to_allocvec(&at).unwrap(),
+            postcard::to_allocvec(&46_294.75_f64).unwrap()
+        );
+        assert_eq!(serde_json::to_string(&day).unwrap(), "-7");
+        assert_eq!(serde_json::to_string(&at).unwrap(), "46294.75");
+        let bytes = postcard::to_allocvec(&count).unwrap();
+        assert_eq!(
+            postcard::from_bytes::<TimeSpan<Day>>(&bytes).unwrap(),
+            count
+        );
+        assert_eq!(
+            serde_json::from_str::<Instant<SheetDateTime>>("46294.75").unwrap(),
+            at
+        );
+        assert_eq!(format!("{day:?}"), "DaySerial(-7)");
+        assert_eq!(format!("{count:?}"), "DayCount(-29)");
+        assert_eq!(format!("{at:?}"), "DateSerial(46294.75)");
     }
 
     #[test]

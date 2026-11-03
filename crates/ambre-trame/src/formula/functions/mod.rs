@@ -9,7 +9,8 @@ use ambre_bus::{Col, Row};
 use ambre_core::index::Pos;
 
 use super::types::{CellValue, FormulaError, FunctionName, finite_number, nearly_equal};
-use ambre_bus::{DateParts, DateSerial, DayCount, DayOfMonth, DaySerial, MonthCount, Year};
+use ambre_bus::{DateParts, DayOfMonth, MonthCount, Year};
+use ambre_core::{Day, Instant, SheetDateTime, SheetDay, TimeSpan};
 
 // -----------------------------------------------------------------------------
 // Dispatch
@@ -34,7 +35,7 @@ use builtins_c::*;
 /// cell being evaluated, consumed by the no-argument `ROW()`/`COLUMN()`.
 #[derive(Clone, Copy)]
 pub struct FnCtx {
-    pub now_serial: DateSerial,
+    pub now_serial: Instant<SheetDateTime>,
     /// The row of the evaluating cell, `None` when it is unknown.
     pub cell_row: Option<Pos<Row>>,
     /// The column of the evaluating cell, `None` when it is unknown.
@@ -44,7 +45,7 @@ pub struct FnCtx {
 impl FnCtx {
     /// Context with only the clock set (helper for tests / non-positional calls).
     #[cfg(test)]
-    fn at_clock(now_serial: DateSerial) -> Self {
+    fn at_clock(now_serial: Instant<SheetDateTime>) -> Self {
         Self {
             now_serial,
             cell_row: None,

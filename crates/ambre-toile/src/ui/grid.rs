@@ -46,7 +46,7 @@ impl GridUnit {
 
     /// The unit as a board length.
     #[must_use]
-    pub fn length(self) -> Px<Board> {
+    pub fn get(self) -> Px<Board> {
         self.0
     }
 }
@@ -68,7 +68,7 @@ pub fn grid_step(
 ) -> Px<Board> {
     // The band, in the f64 of the board's screen geometry.
     let (min, max) = (MIN_SPACING.surface_length(), MAX_SPACING.surface_length());
-    let base = base.length();
+    let base = base.get();
     let mut step = base;
     // Zoomed out: coarsen until the spacing is legible.
     while step.zoomed_on_surface(zoom) < min {
@@ -250,7 +250,7 @@ mod tests {
         for refused in [0.0, -0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert_eq!(GridUnit::new(Px::<Board>::new(refused)), None, "{refused}");
         }
-        let tiny = GridUnit::new(Px::<Board>::new(f64::MIN_POSITIVE)).map(GridUnit::length);
+        let tiny = GridUnit::new(Px::<Board>::new(f64::MIN_POSITIVE)).map(GridUnit::get);
         assert_eq!(tiny, Some(Px::<Board>::new(f64::MIN_POSITIVE)));
         let zoom = ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(1.0);
         let step = grid_step(

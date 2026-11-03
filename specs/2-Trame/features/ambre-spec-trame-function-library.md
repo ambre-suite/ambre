@@ -102,7 +102,7 @@ status values are normative in `ambre-spec-template.md`.
 ```rust
 #[derive(Clone, Copy)]
 pub struct FnCtx {
-    pub now_serial: DateSerial,  // the recomputation clock, one instant per pass
+    pub now_serial: Instant<SheetDateTime>,  // the recomputation clock, one instant per pass
     pub cell_row: Option<Pos<Row>>,   // the position of the cell being computed; None when unknown
     pub cell_col: Option<Pos<Col>>,
 }
@@ -151,7 +151,7 @@ conditional aggregates; `builtins_a.rs`, `builtins_b.rs` and `builtins_c.rs` hol
 | An approximate lookup over keys out of order | reads `#N/A`, never a neighbouring row (`TRAME-197`). Blank keys are skipped |
 | A total of decimals | summed exactly, then rounded once, so its order cannot change it (`TRAME-199`) |
 | A total past the largest number | reads `#NUM!`, as does any result that is not a finite number (`TRAME-244`). Terms near the largest number that cancel leave the rest, in any order. The terms are then summed at a scale of 2^-64, so a rest below about 4.1e-289 loses bits, the same in any order |
-| How a date is held | a date serial (`DateSerial`) on the 1899-12-30 epoch: integer part the day, fraction the time of day |
+| How a date is held | a date serial (`Instant<SheetDateTime>`) on the 1899-12-30 epoch: integer part the day, fraction the time of day |
 | How a calendar day is named | its date parts (`DateParts`): a proleptic-Gregorian year, month and day, counted to and from its serial. The day may run past its month |
 | Where `TODAY` and `NOW` read | the recomputation clock, never the system clock (`TRAME-053`) |
 

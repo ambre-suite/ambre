@@ -8,7 +8,8 @@
 //! (`MURMURE-157`).
 
 use ambre_bus::{
-    Authored, CatalogPosition, CatalogueEntry, CategoryView, Instant, SealedChannelKey, Topic,
+    Authored, CatalogPosition, CatalogueEntry, CategoryView, ChannelTopic, Instant,
+    SealedChannelKey,
 };
 use ambre_core::id::{Category, Channel, Document, Id, Space};
 use ambre_core::{DeltaBytes, LoroPayloadRef, Name, Payload, PeerEntryBytes, SnapshotBytes};
@@ -23,7 +24,7 @@ use crate::session::Session;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listing<'a> {
     /// Absent when the channel has none.
-    pub topic: Option<&'a Topic>,
+    pub topic: Option<&'a ChannelTopic>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
@@ -357,7 +358,7 @@ impl SpaceState {
             found.push(CatalogueEntry {
                 channel_id,
                 name: schema::name(&entry, EntryKey::Name).unwrap_or_default(),
-                topic: schema::string(&entry, EntryKey::Topic).and_then(Topic::new),
+                topic: schema::string(&entry, EntryKey::Topic).and_then(ChannelTopic::new),
                 category: schema::string(&entry, EntryKey::Category)
                     .and_then(|s| Id::<Category>::parse_str(&s).ok()),
                 position: position_of(&entry, EntryKey::Position),

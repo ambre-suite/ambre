@@ -878,19 +878,20 @@ impl std::fmt::Debug for SealedChannelKey {
     }
 }
 
-/// The topic of a channel: a line of text under its name.
+/// The topic of a channel: a line of text under its name. The name keeps it
+/// apart from the relay topic, a publish-subscribe address.
 ///
 /// Never empty: a channel with no topic holds no topic at all, so the
 /// catalogue stores an absent key rather than an empty string. A member typed
 /// it, so `Debug` prints its length alone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Topic(Validated<TopicRule>);
+pub struct ChannelTopic(Validated<ChannelTopicRule>);
 
-/// The rule of a [`Topic`]: never empty.
-pub enum TopicRule {}
+/// The rule of a [`ChannelTopic`]: never empty.
+pub enum ChannelTopicRule {}
 
-impl Rule for TopicRule {
+impl Rule for ChannelTopicRule {
     type Error = &'static str;
 
     fn admit(text: String) -> Result<String, Self::Error> {
@@ -902,7 +903,7 @@ impl Rule for TopicRule {
     }
 }
 
-impl Topic {
+impl ChannelTopic {
     /// The topic `text` states, or `None` for an empty text.
     pub fn new(text: impl Into<String>) -> Option<Self> {
         Validated::parse(text).ok().map(Self)
@@ -914,7 +915,7 @@ impl Topic {
     }
 }
 
-impl TryFrom<String> for Topic {
+impl TryFrom<String> for ChannelTopic {
     type Error = &'static str;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
@@ -922,8 +923,8 @@ impl TryFrom<String> for Topic {
     }
 }
 
-impl From<Topic> for String {
-    fn from(topic: Topic) -> Self {
+impl From<ChannelTopic> for String {
+    fn from(topic: ChannelTopic) -> Self {
         topic.0.into_string()
     }
 }
@@ -980,7 +981,7 @@ pub struct CategoryView {
 pub struct CatalogueEntry {
     pub channel_id: Id<Channel>,
     pub name: ambre_core::Name,
-    pub topic: Option<Topic>,
+    pub topic: Option<ChannelTopic>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
@@ -993,7 +994,7 @@ pub struct PublicChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
     pub channel_id: Id<Channel>,
     pub name: ambre_core::Name,
-    pub topic: Option<Topic>,
+    pub topic: Option<ChannelTopic>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
@@ -1152,7 +1153,7 @@ pub enum SpaceEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::{MurmureCommand, SealedChannelKey, Topic};
+    use super::{ChannelTopic, MurmureCommand, SealedChannelKey};
     use ambre_core::id::{Id, Message, Segment, User};
     use ambre_core::{Ciphertext, FixedBytes, KeyId, Nonce, Payload};
 
@@ -1194,14 +1195,14 @@ mod tests {
     /// wire, so the catalogue never stores an empty string.
     #[test]
     fn a_topic_is_never_empty() {
-        assert_eq!(Topic::new(""), None);
-        let figures = Topic::new("the weekly figures").expect("a topic");
+        assert_eq!(ChannelTopic::new(""), None);
+        let figures = ChannelTopic::new("the weekly figures").expect("a topic");
         assert_eq!(figures.as_str(), "the weekly figures");
 
         let bytes = postcard::to_allocvec(&figures).expect("encode");
-        assert_eq!(postcard::from_bytes::<Topic>(&bytes), Ok(figures));
+        assert_eq!(postcard::from_bytes::<ChannelTopic>(&bytes), Ok(figures));
         let empty = postcard::to_allocvec("").expect("encode");
-        assert!(postcard::from_bytes::<Topic>(&empty).is_err());
+        assert!(postcard::from_bytes::<ChannelTopic>(&empty).is_err());
     }
 
     /// A topic, a draft, a file's name and a message body print their length
@@ -1214,8 +1215,8 @@ mod tests {
         };
         use ambre_core::{Authored, Instant};
         let secret = "Q3 layoffs";
-        let topic = Topic::new(secret).expect("a topic");
-        assert_eq!(format!("{topic:?}"), "Topic(10 chars)");
+        let topic = ChannelTopic::new(secret).expect("a topic");
+        assert_eq!(format!("{topic:?}"), "ChannelTopic(10 chars)");
         let draft = MessageDraft {
             text: secret.to_owned(),
             mentions: Vec::new(),

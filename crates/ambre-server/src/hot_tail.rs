@@ -8,7 +8,7 @@ use ambre_core::id::{Document, Id};
 
 use crate::db::{Deltas, InlineCap};
 use crate::error::AppError;
-use crate::payload::Payload;
+use crate::payload::StoredPayload;
 use crate::state::AppState;
 use ambre_core::Tally;
 use ambre_core::{Sec, TimeSpan};
@@ -41,7 +41,7 @@ pub fn past_watermark(deltas: Tally<Deltas>, bytes: ByteSize) -> bool {
 
 /// How many of the newest frames of `tail` stay inline after a move. It is at
 /// most a quarter of the cap, in deltas and in bytes alike.
-fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, Payload)]) -> usize {
+fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)]) -> usize {
     let quarter = INLINE_CAP.quarter();
     let mut kept = Tally::<Deltas>::new(0);
     let mut bytes = ByteSize::new(0);
@@ -74,15 +74,15 @@ pub fn batch_key(
 /// Encodes a batch: each delta's number and its sealed envelope, unchanged
 /// (`SRV-153`).
 fn encode_batch(
-    frames: &[(ambre_core::Seq<ambre_core::Relay>, Payload)],
-) -> Result<Payload, AppError> {
-    Payload::batch(frames).map_err(|e| AppError::Internal(format!("batch encode: {e}")))
+    frames: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)],
+) -> Result<StoredPayload, AppError> {
+    StoredPayload::batch(frames).map_err(|e| AppError::Internal(format!("batch encode: {e}")))
 }
 
 /// Decodes a batch into its frames by number.
 fn decode_batch(
-    batch: &Payload,
-) -> Result<BTreeMap<ambre_core::Seq<ambre_core::Relay>, Payload>, AppError> {
+    batch: &StoredPayload,
+) -> Result<BTreeMap<ambre_core::Seq<ambre_core::Relay>, StoredPayload>, AppError> {
     batch
         .unbatch()
         .map_err(|e| AppError::Internal(format!("batch decode: {e}")))
@@ -181,7 +181,8 @@ pub async fn trim(state: &AppState) -> Result<u64, AppError> {
 /// The batch objects one replay has fetched, each fetched once (`SRV-155`).
 #[derive(Default)]
 pub struct BatchCache {
-    held: HashMap<ambre_core::ObjectKey, BTreeMap<ambre_core::Seq<ambre_core::Relay>, Payload>>,
+    held:
+        HashMap<ambre_core::ObjectKey, BTreeMap<ambre_core::Seq<ambre_core::Relay>, StoredPayload>>,
 }
 
 impl BatchCache {
@@ -218,7 +219,7 @@ impl BatchCache {
         &self,
         key: &ambre_core::ObjectKey,
         seq: ambre_core::Seq<ambre_core::Relay>,
-    ) -> Option<Payload> {
+    ) -> Option<StoredPayload> {
         self.held.get(key)?.get(&seq).cloned()
     }
 
@@ -234,12 +235,12 @@ impl BatchCache {
 mod tests {
     use super::*;
 
-    fn tail(n: usize, size: usize) -> Vec<(ambre_core::Seq<ambre_core::Relay>, Payload)> {
+    fn tail(n: usize, size: usize) -> Vec<(ambre_core::Seq<ambre_core::Relay>, StoredPayload)> {
         (1..=n)
             .map(|s| {
                 (
                     ambre_core::Seq::<ambre_core::Relay>::new(u64::try_from(s).unwrap()),
-                    Payload::new(vec![0u8; size]),
+                    StoredPayload::new(vec![0u8; size]),
                 )
             })
             .collect()
@@ -272,12 +273,12 @@ mod tests {
     #[test]
     fn a_batch_keeps_each_number_and_frame() {
         let frames = vec![(3, vec![1, 2]), (7, vec![]), (9, vec![5; 300])];
-        let sealed: Vec<(ambre_core::Seq<ambre_core::Relay>, Payload)> = frames
+        let sealed: Vec<(ambre_core::Seq<ambre_core::Relay>, StoredPayload)> = frames
             .iter()
             .map(|(s, f)| {
                 (
                     ambre_core::Seq::<ambre_core::Relay>::new(*s),
-                    Payload::new(f.clone()),
+                    StoredPayload::new(f.clone()),
                 )
             })
             .collect();
@@ -321,7 +322,7 @@ mod db_tests {
         cap: InlineCap,
     ) -> InlineInsert {
         let snap = Id::<Snapshot>::mint();
-        let wire = Payload::new(wire.to_vec());
+        let wire = StoredPayload::new(wire.to_vec());
         crate::db::insert_inline_update(
             &state.db,
             doc,
@@ -428,7 +429,7 @@ mod db_tests {
         );
         assert!(rows.iter().skip(136).all(|(_, w, b)| *w && b.is_none()));
         let held: BTreeMap<i64, Vec<u8>> =
-            decode_batch(&Payload::new(stub.object(key.as_str()).unwrap()))
+            decode_batch(&StoredPayload::new(stub.object(key.as_str()).unwrap()))
                 .unwrap()
                 .into_iter()
                 .map(|(s, f)| (s.to_i64_saturating(), f.expose_bytes().to_vec()))

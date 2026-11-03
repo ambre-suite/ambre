@@ -11,11 +11,11 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{CellNumber, CellRect, Col, DateSerial, SourceForm};
+use super::{CellNumber, CellRect, Col, SourceForm};
 use crate::app::trame::CellText;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Count;
-use ambre_core::{Bounded, Bounds, Refusal, Rgb, Tally};
+use ambre_core::{Bounded, Bounds, Instant, Refusal, Rgb, SheetDateTime, Tally};
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -256,8 +256,8 @@ pub enum ValidationKind {
     /// Dates between two bounds, each as a serial; the view parses the
     /// ISO text once, at input.
     DateRange {
-        min: Option<DateSerial>,
-        max: Option<DateSerial>,
+        min: Option<Instant<SheetDateTime>>,
+        max: Option<Instant<SheetDateTime>>,
     },
     TextLength {
         min: Option<Count<ambre_core::Char>>,

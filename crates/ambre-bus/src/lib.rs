@@ -43,13 +43,13 @@ pub use activity::{Activity, ActivityAnchor, ActivityKind, ActivitySummary, Ment
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
     Attachment, Authored, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
-    ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, Confirmation,
-    ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers,
-    DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel, MemberView, Mention,
-    MentionTarget, Mentions, MessageAt, MessageDraft, MessageView, Messages, MurmureCommand,
-    MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft, PublicChannelDraft,
-    Reaction, Replies, ReplyEcho, Revision, SealedChannelKey, SearchMatch, Segments, SpaceCommand,
-    SpaceEvent, StyleMark, TextStyle, ThreadHead, Topic, Unread, Unreadable,
+    ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, ChannelTopic,
+    Confirmation, ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent,
+    DirectPeers, DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel,
+    MemberView, Mention, MentionTarget, Mentions, MessageAt, MessageDraft, MessageView, Messages,
+    MurmureCommand, MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft,
+    PublicChannelDraft, Reaction, Replies, ReplyEcho, Revision, SealedChannelKey, SearchMatch,
+    Segments, SpaceCommand, SpaceEvent, StyleMark, TextStyle, ThreadHead, Unread, Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{
@@ -61,12 +61,12 @@ pub use event::{
 pub use app::trame::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
     CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, CondFormatKind,
-    CondFormatPriority, CondStyle, CsvDelimiter, DateParts, DateSerial, DayCount, DayOfMonth,
-    DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell, EditSession, FillMode, FilterKind,
-    FilterOp, HAlign, HeaderRow, Merge, MergeSpan, Month, MonthCount, Percent, Row, RowFilter,
-    SelectionKind, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, Slant, SortKey, SortOrder,
-    Strikethrough, StylePatch, TabStrip, TrameCommand, TrameEvent, Underline, VAlign,
-    ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
+    CondFormatPriority, CondStyle, CsvDelimiter, DateParts, DayOfMonth, Decimals, DecimalsStep,
+    DefinedName, DisplayCell, EditSession, FillMode, FilterKind, FilterOp, HAlign, HeaderRow,
+    Merge, MergeSpan, Month, MonthCount, Percent, Row, RowFilter, SelectionKind, SheetName,
+    SheetNameKey, SheetNameRefusal, SheetTab, Slant, SortKey, SortOrder, Strikethrough, StylePatch,
+    TabStrip, TrameCommand, TrameEvent, Underline, VAlign, ValidationKind, ValidationOnInvalid,
+    Weight, WordBreak, Year,
 };
 pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};

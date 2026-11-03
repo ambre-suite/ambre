@@ -172,8 +172,8 @@ where
 /// The `const` door of a quantity outside this crate, which cannot call
 /// [`Bounded::at`]. A bound check in a `const` block compares a concrete
 /// integer only. Rust refuses two inherent impls that differ by an
-/// associated type alone (rust-lang/rust#20400). So one representation
-/// carries the door: `u32`.
+/// associated type alone (rust-lang/rust#20400). So each representation
+/// that carries a door names it apart: `of` for `u32`, `of_u8` for `u8`.
 impl<K: Bounds<Repr = u32>> Bounded<K> {
     /// The value `N`, checked while the crate compiles: a constant outside
     /// the bounds fails the build. A `const` item names a value through it.
@@ -197,6 +197,54 @@ impl<K: Bounds<Repr = u32>> Bounded<K> {
     /// outside the bounds is a compile error.
     #[must_use]
     pub const fn of<const N: u32>() -> Self {
+        const {
+            assert!(K::MIN <= N && N <= K::MAX, "a constant outside its bounds");
+        }
+        Self::at(N)
+    }
+}
+
+/// The `const` door of a quantity over a `u8`, as [`Bounded::of`] is for a
+/// `u32`.
+impl<K: Bounds<Repr = u8>> Bounded<K> {
+    /// The value `N`, checked while the crate compiles: a constant outside
+    /// the bounds fails the build.
+    ///
+    /// ```compile_fail
+    /// use ambre_core::{Bounded, Bounds, Refusal};
+    /// enum Digits {}
+    /// impl Bounds for Digits {
+    ///     type Repr = u8;
+    ///     const MIN: u8 = 0;
+    ///     const MAX: u8 = 15;
+    ///     const NAME: &'static str = "Digits";
+    ///     const REFUSAL: Refusal = Refusal::new("", "");
+    /// }
+    /// const TOO_MANY: Bounded<Digits> = Bounded::<Digits>::of_u8::<16>();
+    /// ```
+    ///
+    /// The same constant inside the bounds compiles:
+    ///
+    /// ```
+    /// use ambre_core::{Bounded, Bounds, Refusal};
+    /// enum Digits {}
+    /// impl Bounds for Digits {
+    ///     type Repr = u8;
+    ///     const MIN: u8 = 0;
+    ///     const MAX: u8 = 15;
+    ///     const NAME: &'static str = "Digits";
+    ///     const REFUSAL: Refusal = Refusal::new("", "");
+    /// }
+    /// const TWO: Bounded<Digits> = Bounded::<Digits>::of_u8::<2>();
+    /// assert_eq!(TWO.get(), 2);
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Never at run time: the check runs in a `const` block, so a value
+    /// outside the bounds is a compile error.
+    #[must_use]
+    pub const fn of_u8<const N: u8>() -> Self {
         const {
             assert!(K::MIN <= N && N <= K::MAX, "a constant outside its bounds");
         }

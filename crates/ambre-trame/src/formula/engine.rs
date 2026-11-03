@@ -20,7 +20,7 @@ use super::dag::DependencyGraph;
 use super::text::StoredForm;
 use super::types::{CellId, CellValue, FormulaCtx};
 use super::vm::EvalContext;
-use ambre_bus::DateSerial;
+use ambre_core::{Instant, SheetDateTime};
 
 /// Central orchestrator for the Trame formula engine.
 pub struct FormulaEngine {
@@ -166,11 +166,11 @@ impl FormulaEngine {
 ///
 /// Private to the engine: a recomputation reads it once and hands it to every
 /// call, so no function can read the clock for itself (`TRAME-194`).
-fn now_serial() -> DateSerial {
+fn now_serial() -> Instant<SheetDateTime> {
     #[cfg(target_arch = "wasm32")]
     {
         // js_sys::Date::now() returns milliseconds since the Unix epoch.
-        DateSerial::from_unix_days(js_sys::Date::now() / 86_400_000.0)
+        Instant::<SheetDateTime>::from_unix_days(js_sys::Date::now() / 86_400_000.0)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -179,7 +179,7 @@ fn now_serial() -> DateSerial {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
-        DateSerial::from_unix_days(secs / 86_400.0)
+        Instant::<SheetDateTime>::from_unix_days(secs / 86_400.0)
     }
 }
 

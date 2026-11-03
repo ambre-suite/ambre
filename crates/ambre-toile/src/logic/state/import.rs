@@ -99,11 +99,11 @@ pub(super) struct ImportSlice(Tally<ImportUnits>);
 impl ImportSlice {
     /// The units applied once one more slice runs after `done` of them.
     fn end_after(self, done: Tally<ImportUnits>) -> Tally<ImportUnits> {
-        done.plus(self.units())
+        done.plus(self.get())
     }
 
     /// The units one slice applies.
-    pub(super) const fn units(self) -> Tally<ImportUnits> {
+    pub(super) const fn get(self) -> Tally<ImportUnits> {
         self.0
     }
 }
@@ -1207,7 +1207,7 @@ mod tests {
     const LARGE: usize = SLICE * 3 + 7;
 
     /// [`IMPORT_SLICE`](super::IMPORT_SLICE) as a loop bound.
-    const SLICE: usize = super::IMPORT_SLICE.units().get() as usize;
+    const SLICE: usize = super::IMPORT_SLICE.get().get() as usize;
 
     fn large_import() -> ToileCommand {
         let mut svg = String::from(r#"<svg xmlns="http://www.w3.org/2000/svg">"#);
@@ -1232,7 +1232,7 @@ mod tests {
         assert!(!has_report(&first), "the import is not over");
         assert_eq!(
             st.element_count(),
-            Tally::<Elements>::new(super::IMPORT_SLICE.units().get())
+            Tally::<Elements>::new(super::IMPORT_SLICE.get().get())
         );
         assert!(st.has_pending_work());
         let mut resumes = 0;
@@ -1264,7 +1264,7 @@ mod tests {
         assert!(out.update.is_none());
         assert_eq!(
             st.element_count(),
-            Tally::<Elements>::new(super::IMPORT_SLICE.units().get())
+            Tally::<Elements>::new(super::IMPORT_SLICE.get().get())
         );
         assert!(st.has_pending_work());
     }

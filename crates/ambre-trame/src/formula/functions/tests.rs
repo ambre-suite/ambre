@@ -574,7 +574,7 @@ fn lookup_reference_functions() {
         call_builtin(
             &function("ROWS"),
             std::slice::from_ref(&r),
-            FnCtx::at_clock(DateSerial::new(0.0))
+            FnCtx::at_clock(Instant::<SheetDateTime>::new(0.0))
         )
         .to_display(),
         "3"
@@ -583,14 +583,14 @@ fn lookup_reference_functions() {
         call_builtin(
             &function("COLUMNS"),
             &[r],
-            FnCtx::at_clock(DateSerial::new(0.0))
+            FnCtx::at_clock(Instant::<SheetDateTime>::new(0.0))
         )
         .to_display(),
         "4"
     );
     // ROW()/COLUMN() with the evaluating cell at B7.
     let ctx = FnCtx {
-        now_serial: DateSerial::new(0.0),
+        now_serial: Instant::<SheetDateTime>::new(0.0),
         cell_row: Some(Pos::<Row>::new(6)),
         cell_col: Some(Pos::<Col>::new(1)),
     };
@@ -810,7 +810,7 @@ fn total_propagates_an_error_it_cannot_read() {
             call_builtin(
                 &function(name),
                 &[with_ref()],
-                FnCtx::at_clock(DateSerial::new(0.0))
+                FnCtx::at_clock(Instant::<SheetDateTime>::new(0.0))
             )
             .to_display(),
             "#REF!",
@@ -822,7 +822,7 @@ fn total_propagates_an_error_it_cannot_read() {
         call_builtin(
             &function("COUNT"),
             &[with_ref()],
-            FnCtx::at_clock(DateSerial::new(0.0))
+            FnCtx::at_clock(Instant::<SheetDateTime>::new(0.0))
         )
         .to_display(),
         "2"
@@ -896,7 +896,7 @@ fn power_without_a_real_root_is_a_num_error() {
         call_builtin(
             &function("POWER"),
             &[num(-1.0), num(0.5)],
-            FnCtx::at_clock(DateSerial::new(0.0))
+            FnCtx::at_clock(Instant::<SheetDateTime>::new(0.0))
         )
         .to_display(),
         "#NUM!"
@@ -905,7 +905,7 @@ fn power_without_a_real_root_is_a_num_error() {
         call_builtin(
             &function("POWER"),
             &[num(-8.0), num(3.0)],
-            FnCtx::at_clock(DateSerial::new(0.0))
+            FnCtx::at_clock(Instant::<SheetDateTime>::new(0.0))
         )
         .to_display(),
         "-512"
@@ -952,7 +952,7 @@ fn a_result_that_is_not_finite_answers_num() {
             call_builtin(
                 &function(name),
                 &args,
-                FnCtx::at_clock(DateSerial::new(0.0))
+                FnCtx::at_clock(Instant::<SheetDateTime>::new(0.0))
             )
             .to_display(),
             "#NUM!",

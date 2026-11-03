@@ -2,7 +2,7 @@
 //! (`trame-shared-filter`, `trame-cell-styles`): filter kinds, alignment, number
 //! formats, borders, and the resolved [`CellStyle`] / sparse [`StylePatch`].
 
-use ambre_core::{FontFamily, FontSize, Rgb};
+use ambre_core::{Bounded, Bounds, FontFamily, FontSize, Refusal, Rgb};
 pub use ambre_core::{Slant, Strikethrough, Underline, Weight, WordBreak};
 use serde::{Deserialize, Serialize};
 
@@ -149,81 +149,17 @@ impl std::fmt::Debug for CellFormat {
     }
 }
 
-/// A count of decimal places a number format renders, from zero to
-/// [`Decimals::MAX`]. An `f64` holds no more significant digits than that.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "u8", into = "u8")]
-pub struct Decimals(u8);
+/// A count of decimal places a number format renders, from zero to fifteen.
+/// An `f64` holds no more significant digits than that. A count travels as one
+/// bare byte, and a decoded count past fifteen is refused.
+pub enum Decimals {}
 
-impl Decimals {
-    /// No decimal places: a whole number.
-    pub const ZERO: Self = Self(0);
-    /// Two decimal places, the default of the numeric families.
-    pub const TWO: Self = Self(2);
-    /// The most decimal places a cell may carry.
-    pub const MAX: Self = Self(15);
-
-    /// The count `places`, or `None` past [`Self::MAX`].
-    pub const fn new(places: u8) -> Option<Self> {
-        if places <= Self::MAX.0 {
-            Some(Self(places))
-        } else {
-            None
-        }
-    }
-
-    /// The number of places.
-    pub const fn get(self) -> u8 {
-        self.0
-    }
-
-    /// The number of places as a format precision.
-    pub const fn precision(self) -> usize {
-        self.0 as usize
-    }
-
-    /// The count moved by `step`, held between zero and [`Self::MAX`].
-    #[must_use]
-    pub fn stepped(self, step: DecimalsStep) -> Self {
-        Self(self.0.saturating_add_signed(step.0).min(Self::MAX.0))
-    }
-}
-
-impl std::fmt::Display for Decimals {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-/// The error of a decoded decimal count past [`Decimals::MAX`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("a cell carries at most 15 decimal places, not {0}")]
-pub struct InvalidDecimals(u8);
-
-impl InvalidDecimals {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u8) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> u8 {
-        self.0
-    }
-}
-
-impl TryFrom<u8> for Decimals {
-    type Error = InvalidDecimals;
-
-    fn try_from(places: u8) -> Result<Self, Self::Error> {
-        Self::new(places).ok_or(InvalidDecimals(places))
-    }
-}
-
-impl From<Decimals> for u8 {
-    fn from(decimals: Decimals) -> Self {
-        decimals.0
-    }
+impl Bounds for Decimals {
+    type Repr = u8;
+    const MIN: u8 = 0;
+    const MAX: u8 = 15;
+    const NAME: &'static str = "Decimals";
+    const REFUSAL: Refusal = Refusal::new("a cell carries at most 15 decimal places, not ", "");
 }
 
 /// A signed number of decimal places to add to a count: what one press of
@@ -241,6 +177,12 @@ impl DecimalsStep {
     pub const fn new(places: i8) -> Self {
         Self(places)
     }
+
+    /// The count `count` moved by this step, held between zero and fifteen.
+    #[must_use]
+    pub fn apply_to(self, count: Bounded<Decimals>) -> Bounded<Decimals> {
+        Bounded::new(count.get().saturating_add_signed(self.0)).unwrap_or(Bounded::MAX)
+    }
 }
 
 impl CellFormat {
@@ -254,12 +196,12 @@ impl CellFormat {
 
     /// The decimal count the family renders when a cell carries none, or `None`
     /// for a family that renders no decimals.
-    pub fn default_decimals(&self) -> Option<Decimals> {
+    pub fn default_decimals(&self) -> Option<Bounded<Decimals>> {
         match self {
             CellFormat::Number | CellFormat::Currency | CellFormat::Scientific => {
-                Some(Decimals::TWO)
+                Some(Bounded::of_u8::<2>())
             }
-            CellFormat::Percent => Some(Decimals::ZERO),
+            CellFormat::Percent => Some(Bounded::MIN),
             CellFormat::General
             | CellFormat::Fraction
             | CellFormat::Date
@@ -362,7 +304,7 @@ pub struct CellStyle {
     pub size: Option<FontSize>,
     pub format: CellFormat,
     /// Decimal places for the active number format. `None` = the format default.
-    pub decimals: Option<Decimals>,
+    pub decimals: Option<Bounded<Decimals>>,
     /// Per-edge border (style + colour each), resolved per cell by the Logic
     /// thread from the selection-level [`StylePatch::border`] edit.
     pub borders: Borders,
@@ -415,7 +357,7 @@ pub struct StylePatch {
     pub font: Option<Option<FontFamily>>,
     pub size: Option<Option<FontSize>>,
     pub format: Option<CellFormat>,
-    pub decimals: Option<Option<Decimals>>,
+    pub decimals: Option<Option<Bounded<Decimals>>>,
     /// Add this many places to the count each cell already carries, or its
     /// family's default when it carries none (`TRAME-105`). Applied after
     /// `format` and `decimals`, per cell, so a mixed selection steps each count

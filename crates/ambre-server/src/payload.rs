@@ -5,12 +5,13 @@
 //! to a client, a batch of deltas, a pending entry. The relay stores and
 //! forwards them, and never logs one (`ZK-006`, `SRV-001`).
 //!
-//! [`Payload`] has no `Debug` and no `Display`, so a log line or a span that
-//! names one does not compile, whatever the binding is called. Its bytes are
-//! read here and in the stores that write them. `scripts/crate_boundaries.py`
-//! refuses a log line in any file that reads them. The socket, a broadcast, an
-//! object, a row and a list each hand their bytes over as a `Payload` here. So
-//! no raw byte of a payload is bound in a file that logs.
+//! [`StoredPayload`] has no `Debug` and no `Display`, so a log line or a span
+//! that names one does not compile, whatever the binding is called. Its bytes
+//! are read here and in the stores that write them.
+//! `scripts/crate_boundaries.py` refuses a log line in any file that reads
+//! them. The socket, a broadcast, an object, a row and a list each hand their
+//! bytes over as a `StoredPayload` here. So no raw byte of a payload is bound
+//! in a file that logs.
 
 use std::collections::BTreeMap;
 
@@ -21,13 +22,16 @@ use futures_util::{Stream, StreamExt};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-/// The bytes of a payload. No `Debug`, no `Display`, no `Serialize`: the only
-/// readings outside this file are its length and [`Payload::expose_bytes`].
+/// The bytes of a payload, as the relay stores and forwards them. The name
+/// keeps it apart from [`ambre_core::Payload`], the typed wire value: the
+/// orphan rule bars a `sqlx::Type` impl on that type here. No `Debug`, no
+/// `Display`, no `Serialize`: the only readings outside this file are its
+/// length and [`StoredPayload::expose_bytes`].
 #[derive(Clone, sqlx::Type)]
 #[sqlx(transparent)]
-pub struct Payload(Vec<u8>);
+pub struct StoredPayload(Vec<u8>);
 
-impl Payload {
+impl StoredPayload {
     /// Takes `bytes` as a payload.
     pub fn new(bytes: Vec<u8>) -> Self {
         Self(bytes)
@@ -43,7 +47,7 @@ impl Payload {
         postcard::to_allocvec(value).map(Self)
     }
 
-    /// The value [`Payload::seal`] stored.
+    /// The value [`StoredPayload::seal`] stored.
     pub fn open<T: DeserializeOwned>(&self) -> Result<T, postcard::Error> {
         postcard::from_bytes(&self.0)
     }
@@ -91,7 +95,7 @@ impl Payload {
     /// (`SRV-153`). The number is written as the `i64` the stored batches
     /// already hold: a varint spells a signed and an unsigned integer apart.
     pub fn batch(
-        frames: &[(ambre_core::Seq<ambre_core::Relay>, Payload)],
+        frames: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)],
     ) -> Result<Self, postcard::Error> {
         let frames: Vec<(i64, &[u8])> = frames
             .iter()
@@ -104,7 +108,7 @@ impl Payload {
     /// writes, refuses the batch.
     pub fn unbatch(
         &self,
-    ) -> Result<BTreeMap<ambre_core::Seq<ambre_core::Relay>, Payload>, postcard::Error> {
+    ) -> Result<BTreeMap<ambre_core::Seq<ambre_core::Relay>, StoredPayload>, postcard::Error> {
         let frames: Vec<(i64, Vec<u8>)> = postcard::from_bytes(&self.0)?;
         frames
             .into_iter()
@@ -121,7 +125,7 @@ impl Payload {
     pub fn pending_entry(
         seq: ambre_core::Seq<ambre_core::Relay>,
         s3_key: &ambre_core::ObjectKey,
-        wire: &Payload,
+        wire: &StoredPayload,
     ) -> Self {
         use base64::Engine;
         let entry = serde_json::json!({
@@ -139,7 +143,7 @@ impl Payload {
     ) -> Option<(
         ambre_core::Seq<ambre_core::Relay>,
         ambre_core::ObjectKey,
-        Payload,
+        StoredPayload,
     )> {
         use base64::Engine;
         let entry: serde_json::Value = serde_json::from_slice(&self.0).ok()?;
@@ -170,7 +174,7 @@ impl Payload {
 }
 
 /// A frame the protocol encoded moves into a payload with no copy.
-impl From<ambre_core::Payload<WireFrame>> for Payload {
+impl From<ambre_core::Payload<WireFrame>> for StoredPayload {
     fn from(frame: ambre_core::Payload<WireFrame>) -> Self {
         Self(frame.into_bytes())
     }
@@ -178,13 +182,13 @@ impl From<ambre_core::Payload<WireFrame>> for Payload {
 
 /// The socket's next binary frame. `None` once the socket closes or fails;
 /// a frame of another kind is skipped.
-pub async fn next_frame<S>(stream: &mut S) -> Option<Payload>
+pub async fn next_frame<S>(stream: &mut S) -> Option<StoredPayload>
 where
     S: Stream<Item = Result<Message, axum::Error>> + Unpin,
 {
     loop {
         match stream.next().await? {
-            Ok(Message::Binary(data)) => return Some(Payload(data.to_vec())),
+            Ok(Message::Binary(data)) => return Some(StoredPayload(data.to_vec())),
             Ok(Message::Close(_)) | Err(_) => return None,
             Ok(_) => continue,
         }
@@ -192,7 +196,7 @@ where
 }
 
 /// The socket's first binary frame, read before the socket is split.
-pub async fn first_frame(socket: &mut WebSocket) -> Option<Payload> {
+pub async fn first_frame(socket: &mut WebSocket) -> Option<StoredPayload> {
     next_frame(socket).await
 }
 
@@ -207,14 +211,14 @@ mod tests {
         let frames = vec![
             (
                 ambre_core::Seq::<ambre_core::Relay>::new(3),
-                Payload::new(vec![1, 2]),
+                StoredPayload::new(vec![1, 2]),
             ),
             (
                 ambre_core::Seq::<ambre_core::Relay>::new(4),
-                Payload::new(vec![]),
+                StoredPayload::new(vec![]),
             ),
         ];
-        let batch = Payload::batch(&frames).unwrap();
+        let batch = StoredPayload::batch(&frames).unwrap();
         let stored: Vec<(i64, Vec<u8>)> = vec![(3, vec![1, 2]), (4, vec![])];
         assert_eq!(
             batch.expose_bytes(),
@@ -233,17 +237,17 @@ mod tests {
     #[test]
     fn a_batch_with_a_negative_number_is_refused() {
         let stored: Vec<(i64, Vec<u8>)> = vec![(-1, vec![1])];
-        let batch = Payload::new(postcard::to_allocvec(&stored).unwrap());
+        let batch = StoredPayload::new(postcard::to_allocvec(&stored).unwrap());
         assert!(batch.unbatch().is_err());
     }
 
     /// A pending entry reads back its number, its key and its frame.
     #[test]
     fn a_pending_entry_reads_back() {
-        let entry = Payload::pending_entry(
+        let entry = StoredPayload::pending_entry(
             ambre_core::Seq::<ambre_core::Relay>::new(7),
             &ambre_core::ObjectKey::from("d/7"),
-            &Payload::new(vec![9, 8]),
+            &StoredPayload::new(vec![9, 8]),
         );
         let (seq, key, frame) = entry.read_pending().unwrap();
         assert_eq!(
@@ -255,9 +259,13 @@ mod tests {
             )
         );
         assert_eq!(
-            Payload::new(b"{\"seq\":4}".to_vec()).pending_seq(),
+            StoredPayload::new(b"{\"seq\":4}".to_vec()).pending_seq(),
             Some(ambre_core::Seq::<ambre_core::Relay>::new(4))
         );
-        assert!(Payload::new(b"not json".to_vec()).read_pending().is_none());
+        assert!(
+            StoredPayload::new(b"not json".to_vec())
+                .read_pending()
+                .is_none()
+        );
     }
 }

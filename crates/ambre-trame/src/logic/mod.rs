@@ -15,7 +15,7 @@
 
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
-use ambre_core::{Doc, Px};
+use ambre_core::{Bounded, Doc, Px};
 use std::collections::{HashMap, HashSet};
 
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};

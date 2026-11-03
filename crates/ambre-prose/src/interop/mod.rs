@@ -108,7 +108,7 @@ pub struct IrMeta {
 impl std::fmt::Debug for IrMeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IrMeta")
-            .field("title", &crate::redact::optional(self.title.as_ref()))
+            .field("title", &self.title.as_ref().map(ambre_core::Redacted::new))
             .field("paged", &self.paged)
             .field("bands", &self.bands)
             .finish()
@@ -155,7 +155,7 @@ pub enum IrBlock {
 
 impl std::fmt::Debug for IrBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use crate::redact::Redacted;
+        use ambre_core::Redacted;
         match self {
             Self::Paragraph { styled, runs } => f
                 .debug_struct("Paragraph")
@@ -184,12 +184,15 @@ impl std::fmt::Debug for IrBlock {
                 .finish(),
             Self::CodeBlock { lang, text } => f
                 .debug_struct("CodeBlock")
-                .field("lang", &lang.as_ref().map(|lang| Redacted(lang.as_str())))
-                .field("text", &Redacted(text))
+                .field(
+                    "lang",
+                    &lang.as_ref().map(|lang| Redacted::new(lang.as_str())),
+                )
+                .field("text", &Redacted::new(text))
                 .finish(),
             Self::Image { alt } => f
                 .debug_struct("Image")
-                .field("alt", &Redacted(alt))
+                .field("alt", &Redacted::new(alt))
                 .finish(),
             Self::PageBreak => f.write_str("PageBreak"),
             Self::HRule => f.write_str("HRule"),
@@ -269,7 +272,7 @@ impl IrRun {
 impl std::fmt::Debug for IrRun {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IrRun")
-            .field("text", &crate::redact::Redacted(&self.text))
+            .field("text", &ambre_core::Redacted::new(&self.text))
             .field("bold", &self.bold)
             .field("italic", &self.italic)
             .field("underline", &self.underline)

@@ -245,14 +245,14 @@ pub struct ExportElement {
 /// thumbnail prints its own length.
 impl std::fmt::Debug for ExportElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use crate::logic::{PathLen, TextLen};
+        use crate::logic::PathLen;
         f.debug_struct("ExportElement")
             .field("kind", &self.kind)
             .field("rect", &self.rect)
             .field("rotation", &self.rotation)
             .field("style", &self.style)
             .field("path", &self.path.as_ref().map(PathLen))
-            .field("text", &self.text.as_deref().map(TextLen))
+            .field("text", &self.text.as_deref().map(ambre_core::Redacted::new))
             .field("media_hash", &self.media_hash)
             .field("image_png", &self.image_png)
             .finish()
