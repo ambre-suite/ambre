@@ -12,7 +12,9 @@ use ambre_bus::{
     Authored, Emoji, HeldReply, HeldSend, Instant, LogicCommand, Mention, MessageAt,
     MurmureCommand, StyleMark,
 };
-use ambre_commands::{Command, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale, Modifiers};
+use ambre_commands::{
+    Command, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale, ModifierKeys,
+};
 use ambre_core::Byte;
 use ambre_core::id::{Channel, Document, Id, Message, User};
 use ambre_core::index::Len;
@@ -125,14 +127,14 @@ pub const COMMANDS: &[Command] = &[
         id: NEXT_ACTIVITY,
         title: next_activity_title,
         icon: None,
-        keybindings: &[KeyBinding::new(Modifiers::ALT_SHIFT, Key::ArrowDown)],
+        keybindings: &[KeyBinding::new(ModifierKeys::ALT_SHIFT, Key::ArrowDown)],
         category: NAVIGATE,
     },
     Command {
         id: PREVIOUS_ACTIVITY,
         title: previous_activity_title,
         icon: None,
-        keybindings: &[KeyBinding::new(Modifiers::ALT_SHIFT, Key::ArrowUp)],
+        keybindings: &[KeyBinding::new(ModifierKeys::ALT_SHIFT, Key::ArrowUp)],
         category: NAVIGATE,
     },
     Command {
@@ -141,7 +143,10 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         // Not Shift+Escape: Chrome opens its task manager on it, and the
         // page never sees the key.
-        keybindings: &[KeyBinding::new(Modifiers::ALT_SHIFT, Key::Char(KeyChar::A))],
+        keybindings: &[KeyBinding::new(
+            ModifierKeys::ALT_SHIFT,
+            Key::Char(KeyChar::A),
+        )],
         category: UNREAD,
     },
     Command {
@@ -632,12 +637,12 @@ pub const REGION_KEYS: &[RegionKey] = &[
         KeyPlace::List,
     ),
     region_key(
-        KeyBinding::new(Modifiers::NONE, Key::Escape),
+        KeyBinding::new(ModifierKeys::NONE, Key::Escape),
         "Mark the channel read",
         KeyPlace::List,
     ),
     region_key(
-        KeyBinding::new(Modifiers::NONE, Key::Escape),
+        KeyBinding::new(ModifierKeys::NONE, Key::Escape),
         "Close the thread",
         KeyPlace::ThreadList,
     ),
@@ -647,7 +652,7 @@ pub const REGION_KEYS: &[RegionKey] = &[
         KeyPlace::List,
     ),
     region_key(
-        KeyBinding::new(Modifiers::NONE, Key::Enter),
+        KeyBinding::new(ModifierKeys::NONE, Key::Enter),
         "Send",
         KeyPlace::Composer,
     ),
@@ -657,12 +662,12 @@ pub const REGION_KEYS: &[RegionKey] = &[
         KeyPlace::Composer,
     ),
     region_key(
-        KeyBinding::new(Modifiers::NONE, Key::ArrowUp),
+        KeyBinding::new(ModifierKeys::NONE, Key::ArrowUp),
         "Edit your last message, from an empty composer",
         KeyPlace::Composer,
     ),
     region_key(
-        KeyBinding::new(Modifiers::NONE, Key::Escape),
+        KeyBinding::new(ModifierKeys::NONE, Key::Escape),
         "Cancel the edit",
         KeyPlace::Composer,
     ),
@@ -670,7 +675,7 @@ pub const REGION_KEYS: &[RegionKey] = &[
     // browser services.
     region_key(EMOJI_KEY, "Insert an emoji", KeyPlace::Composer),
     region_key(
-        KeyBinding::new(Modifiers::ALT, Key::Enter),
+        KeyBinding::new(ModifierKeys::ALT, Key::Enter),
         "Also send the reply to the channel",
         KeyPlace::ThreadComposer,
     ),
@@ -1082,7 +1087,7 @@ mod tests {
         assert!(anywhere.iter().all(|row| row.place == KeyPlace::Anywhere));
         assert!(region.iter().all(|row| row.place != KeyPlace::Anywhere));
         let also = KeyRow {
-            keys: KeyBinding::new(Modifiers::ALT, Key::Enter),
+            keys: KeyBinding::new(ModifierKeys::ALT, Key::Enter),
             action: "Also send the reply to the channel".to_owned(),
             place: KeyPlace::ThreadComposer,
         };
@@ -1116,7 +1121,7 @@ mod tests {
             KeyBinding::primary_shift(KeyChar::W),
             KeyBinding::primary_shift(KeyChar::T),
             KeyBinding::primary_shift(KeyChar::N),
-            KeyBinding::new(Modifiers::PRIMARY, Key::Tab),
+            KeyBinding::new(ModifierKeys::PRIMARY, Key::Tab),
         ];
         let serviced: Vec<KeyBinding> = [
             shared::CUT_CHORDS,

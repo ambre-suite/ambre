@@ -15,8 +15,8 @@ use ambre_bus::app::prose::{
     BlockType, DocChar, FootnoteCall, KeepTogether, KeepWithNext, Page, ParagraphStyle,
 };
 use ambre_core::id::{Footnote, Id};
-use ambre_core::{Doc, PrintLength, Pt, Px};
-use ambre_draw::ScriptSet;
+use ambre_core::{Doc, Flags, PrintLength, Pt, Px};
+use ambre_draw::LazyScripts;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
@@ -63,7 +63,7 @@ pub struct PageLayout {
     /// glyphs, so a peer with the same shipped faces measures the same
     /// heights. A non-empty set means some text shaped into tofu, so a page
     /// number taken from here is not one to store (`PROSE-112`).
-    pub missing_scripts: ScriptSet,
+    pub missing_scripts: Flags<LazyScripts>,
     /// The bands as the document held them when this layout was taken.
     pub bands: doc::Bands,
 }
@@ -422,7 +422,7 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
         first_dirty_page: Some(Pos::<Page>::ZERO),
         // The caller knows what its measurer was missing; this one assembles
         // geometry and placement alone.
-        missing_scripts: ScriptSet::new(),
+        missing_scripts: Flags::<LazyScripts>::EMPTY,
         bands: doc::Bands::default(),
     }
 }

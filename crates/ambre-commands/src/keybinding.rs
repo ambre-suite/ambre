@@ -8,113 +8,101 @@
 // builds and tests on the host.
 // ============================================================================
 
-/// Modifier set of a chord: a set of three named members, `PRIMARY`, `ALT`
-/// and `SHIFT`, joined with [`Modifiers::with`]. It is `Copy + Hash` and
-/// built in `const` command tables, and no constructor takes a bool by
-/// position.
+use ambre_core::{Flags, FlagsKind};
+
+/// The modifier keys of a chord, the marker of the set `Flags<ModifierKeys>`:
+/// three named members, `PRIMARY`, `ALT` and `SHIFT`, joined with
+/// [`Flags::with`]. The set is `Copy + Hash` and built in `const` command
+/// tables, and no constructor takes a bool by position.
 ///
 /// One accelerator modifier, `PRIMARY`, carries both the control key and the
 /// command key. The two fold into it where a browser event becomes a chord
 /// (`ambre-chrome`). That is the only place they are still apart. A table
 /// therefore cannot name one machine's accelerator, so one table serves every
 /// platform (`ambre-spec-commands.md`, `UI-THREAD-028`).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub struct Modifiers(u8);
+#[derive(PartialEq, Eq)]
+pub enum ModifierKeys {}
 
-impl Modifiers {
+impl FlagsKind for ModifierKeys {
+    type Repr = u8;
+    const NAME: &'static str = "Modifiers";
+}
+
+impl ModifierKeys {
     /// No modifier held.
-    pub const NONE: Self = Self(0);
+    pub const NONE: Flags<Self> = Flags::EMPTY;
     /// The primary accelerator: Ctrl on Windows and Linux, Cmd on macOS.
-    pub const PRIMARY: Self = Self(1);
-    pub const ALT: Self = Self(1 << 1);
-    pub const SHIFT: Self = Self(1 << 2);
-    pub const PRIMARY_SHIFT: Self = Self::PRIMARY.with(Self::SHIFT);
-    pub const PRIMARY_ALT: Self = Self::PRIMARY.with(Self::ALT);
-    pub const ALT_SHIFT: Self = Self::ALT.with(Self::SHIFT);
+    pub const PRIMARY: Flags<Self> = Flags::new(1);
+    pub const ALT: Flags<Self> = Flags::new(1 << 1);
+    pub const SHIFT: Flags<Self> = Flags::new(1 << 2);
+    pub const PRIMARY_SHIFT: Flags<Self> = Self::PRIMARY.with(Self::SHIFT);
+    pub const PRIMARY_ALT: Flags<Self> = Self::PRIMARY.with(Self::ALT);
+    pub const ALT_SHIFT: Flags<Self> = Self::ALT.with(Self::SHIFT);
+}
 
-    /// The union of two sets.
-    #[must_use]
-    pub const fn with(self, other: Self) -> Self {
-        Self(self.0 | other.0)
-    }
-
-    /// The set with each member of `other` removed.
-    #[must_use]
-    pub const fn without(self, other: Self) -> Self {
-        Self(self.0 & !other.0)
-    }
-
-    /// Whether every member of `other` is held.
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-
-    /// Whether the primary accelerator is held.
-    #[must_use]
-    pub const fn primary(self) -> bool {
-        self.contains(Self::PRIMARY)
-    }
-
-    /// Whether Alt is held.
-    #[must_use]
-    pub const fn alt(self) -> bool {
-        self.contains(Self::ALT)
-    }
-
-    /// Whether Shift is held.
-    #[must_use]
-    pub const fn shift(self) -> bool {
-        self.contains(Self::SHIFT)
-    }
-
-    /// The set with `member` added when `key` is held, unchanged otherwise.
-    const fn with_if(self, member: Self, key: KeyState) -> Self {
-        match key {
-            KeyState::Held => self.with(member),
-            KeyState::Released => self,
-        }
-    }
-
+/// The fold of a browser event's modifier keys into a chord's set. Each
+/// method adds its member when the event reports the key held, so a builder
+/// names every state and reads no bare `true` (`ARCH-040`).
+pub trait ModifierFold: Sized {
     /// The set with the primary accelerator added when `key` is held.
     #[must_use]
-    pub const fn primary_if(self, key: KeyState) -> Self {
-        self.with_if(Self::PRIMARY, key)
-    }
+    fn primary_if(self, key: KeyState) -> Self;
 
     /// The set with Alt added when `key` is held.
     #[must_use]
-    pub const fn alt_if(self, key: KeyState) -> Self {
-        self.with_if(Self::ALT, key)
-    }
+    fn alt_if(self, key: KeyState) -> Self;
 
     /// The set with Shift added when `key` is held.
     #[must_use]
-    pub const fn shift_if(self, key: KeyState) -> Self {
-        self.with_if(Self::SHIFT, key)
-    }
+    fn shift_if(self, key: KeyState) -> Self;
 
     /// The set with the primary accelerator added when a browser event
-    /// reports the control key held. With [`Modifiers::meta_if`], it folds a
-    /// browser event's modifier bits into a chord's set. The control key and
-    /// the command key both answer the primary accelerator, so a table
+    /// reports the control key held. With [`ModifierFold::meta_if`], it folds
+    /// a browser event's modifier bits into a chord's set. The control key
+    /// and the command key both answer the primary accelerator, so a table
     /// declares one chord and both machines resolve it (`UI-THREAD-028`).
     #[must_use]
-    pub const fn ctrl_if(self, key: KeyState) -> Self {
+    fn ctrl_if(self, key: KeyState) -> Self {
         self.primary_if(key)
     }
 
     /// The set with the primary accelerator added when a browser event
-    /// reports the command key held, the fold of [`Modifiers::ctrl_if`].
+    /// reports the command key held, the fold of [`ModifierFold::ctrl_if`].
     #[must_use]
-    pub const fn meta_if(self, key: KeyState) -> Self {
+    fn meta_if(self, key: KeyState) -> Self {
         self.primary_if(key)
+    }
+}
+
+/// The set with `member` added when `key` is held, unchanged otherwise.
+const fn with_if(
+    set: Flags<ModifierKeys>,
+    member: Flags<ModifierKeys>,
+    key: KeyState,
+) -> Flags<ModifierKeys> {
+    match key {
+        KeyState::Held => set.with(member),
+        KeyState::Released => set,
+    }
+}
+
+impl ModifierFold for Flags<ModifierKeys> {
+    fn primary_if(self, key: KeyState) -> Self {
+        with_if(self, ModifierKeys::PRIMARY, key)
+    }
+
+    fn alt_if(self, key: KeyState) -> Self {
+        with_if(self, ModifierKeys::ALT, key)
+    }
+
+    fn shift_if(self, key: KeyState) -> Self {
+        with_if(self, ModifierKeys::SHIFT, key)
     }
 }
 
 ambre_core::define_flag! {
     /// Whether one modifier key is down, as a browser event reports it. A
-    /// caller names the state, so a builder of [`Modifiers`] never reads a
+    /// caller names the state, so a builder of a modifier set never reads a
     /// bare `true` (`ARCH-040`).
     pub enum KeyState {
         /// The key is up.
@@ -126,7 +114,7 @@ ambre_core::define_flag! {
 
 /// The printable character of a [`Key::Char`]. An ASCII letter is lowercased
 /// at construction, so 'B' and 'b' chord identically. The shift state, if
-/// any, lives in [`Modifiers`].
+/// any, lives in the chord's [`ModifierKeys`].
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct KeyChar(char);
 
@@ -236,7 +224,7 @@ impl core::fmt::Display for FunctionKey {
 }
 
 /// Logical key of a chord. Letters are normalized to a lowercase `Char` so a
-/// chord is shift-state independent except through `Modifiers::SHIFT`.
+/// chord is shift-state independent except through `ModifierKeys::SHIFT`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Key {
     /// A printable character, lowercased for ASCII letters at construction.
@@ -306,19 +294,19 @@ impl Key {
 /// A fully-specified keyboard chord, for example Ctrl+Shift+B.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct KeyBinding {
-    pub mods: Modifiers,
+    pub mods: Flags<ModifierKeys>,
     pub key: Key,
 }
 
 impl KeyBinding {
-    pub const fn new(mods: Modifiers, key: Key) -> Self {
+    pub const fn new(mods: Flags<ModifierKeys>, key: Key) -> Self {
         Self { mods, key }
     }
 
     /// `Primary + <key>` convenience for the common accelerator shape.
     pub const fn primary(key: KeyChar) -> Self {
         Self {
-            mods: Modifiers::PRIMARY,
+            mods: ModifierKeys::PRIMARY,
             key: Key::Char(key),
         }
     }
@@ -326,7 +314,7 @@ impl KeyBinding {
     /// `Primary + Shift + <key>` convenience.
     pub const fn primary_shift(key: KeyChar) -> Self {
         Self {
-            mods: Modifiers::PRIMARY_SHIFT,
+            mods: ModifierKeys::PRIMARY_SHIFT,
             key: Key::Char(key),
         }
     }
@@ -334,7 +322,7 @@ impl KeyBinding {
     /// `Shift + <key>` convenience, for the legacy clipboard chords.
     pub const fn shift(key: Key) -> Self {
         Self {
-            mods: Modifiers::SHIFT,
+            mods: ModifierKeys::SHIFT,
             key,
         }
     }
@@ -350,13 +338,13 @@ impl KeyBinding {
 impl core::fmt::Display for KeyBinding {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let m = self.mods;
-        if m.primary() {
+        if m.contains(ModifierKeys::PRIMARY) {
             f.write_str("Ctrl+")?;
         }
-        if m.alt() {
+        if m.contains(ModifierKeys::ALT) {
             f.write_str("Alt+")?;
         }
-        if m.shift() {
+        if m.contains(ModifierKeys::SHIFT) {
             f.write_str("Shift+")?;
         }
         match self.key {
@@ -411,44 +399,52 @@ mod tests {
     fn the_control_key_and_the_command_key_fold_into_one_chord() {
         // The same chord on a Windows machine and on a Mac: the table declares
         // it once and both events resolve it (`UI-THREAD-028`).
-        let control = Modifiers::NONE
+        let control = ModifierKeys::NONE
             .ctrl_if(KeyState::Held)
             .meta_if(KeyState::Released);
-        let command = Modifiers::NONE
+        let command = ModifierKeys::NONE
             .ctrl_if(KeyState::Released)
             .meta_if(KeyState::Held);
         assert_eq!(control, command);
-        assert_eq!(control, Modifiers::PRIMARY);
+        assert_eq!(control, ModifierKeys::PRIMARY);
         // Alt and Shift stay themselves, and a bare key stays bare.
         assert_eq!(
-            Modifiers::NONE
+            ModifierKeys::NONE
                 .ctrl_if(KeyState::Held)
                 .shift_if(KeyState::Held),
-            Modifiers::PRIMARY_SHIFT
+            ModifierKeys::PRIMARY_SHIFT
         );
         assert_eq!(
-            Modifiers::NONE
+            ModifierKeys::NONE
                 .ctrl_if(KeyState::Released)
                 .alt_if(KeyState::Released)
                 .shift_if(KeyState::Released)
                 .meta_if(KeyState::Released),
-            Modifiers::NONE
+            ModifierKeys::NONE
         );
     }
 
     /// A set holds each member it was built with, and no other.
     #[test]
     fn a_modifier_set_holds_its_named_members() {
-        let mods = Modifiers::PRIMARY.with(Modifiers::SHIFT);
-        assert!(mods.primary() && mods.shift() && !mods.alt());
-        assert!(mods.contains(Modifiers::PRIMARY_SHIFT));
-        assert!(!mods.contains(Modifiers::PRIMARY_ALT));
-        assert_eq!(Modifiers::ALT_SHIFT, Modifiers::SHIFT.with(Modifiers::ALT));
-        assert_eq!(
-            Modifiers::PRIMARY_ALT.without(Modifiers::ALT),
-            Modifiers::PRIMARY
+        let mods = ModifierKeys::PRIMARY.with(ModifierKeys::SHIFT);
+        assert!(
+            mods.contains(ModifierKeys::PRIMARY)
+                && mods.contains(ModifierKeys::SHIFT)
+                && !mods.contains(ModifierKeys::ALT)
         );
-        assert_eq!(Modifiers::default(), Modifiers::NONE);
+        assert_eq!(format!("{mods:?}"), "Modifiers(5)");
+        assert!(mods.contains(ModifierKeys::PRIMARY_SHIFT));
+        assert!(!mods.contains(ModifierKeys::PRIMARY_ALT));
+        assert_eq!(
+            ModifierKeys::ALT_SHIFT,
+            ModifierKeys::SHIFT.with(ModifierKeys::ALT)
+        );
+        assert_eq!(
+            ModifierKeys::PRIMARY_ALT.without(ModifierKeys::ALT),
+            ModifierKeys::PRIMARY
+        );
+        assert_eq!(Flags::<ModifierKeys>::default(), ModifierKeys::NONE);
     }
 
     #[test]
@@ -460,11 +456,11 @@ mod tests {
         assert_eq!(KeyBinding::primary(KeyChar::S).to_string(), "Ctrl+S");
         assert_eq!(KeyBinding::shift(Key::Insert).to_string(), "Shift+Insert");
         assert_eq!(
-            KeyBinding::new(Modifiers::NONE, Key::Escape).to_string(),
+            KeyBinding::new(ModifierKeys::NONE, Key::Escape).to_string(),
             "Esc"
         );
         assert_eq!(
-            KeyBinding::new(Modifiers::NONE, Key::F(FunctionKey::F5)).to_string(),
+            KeyBinding::new(ModifierKeys::NONE, Key::F(FunctionKey::F5)).to_string(),
             "F5"
         );
     }

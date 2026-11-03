@@ -654,11 +654,6 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | imp
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | <ToastId as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.0 | field | u8	newtype-inner	the private bit set of the three named members, built only from the named constants
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret | bool	generic	whether the set holds a named member, a predicate answer
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::primary() | ret | bool	generic	whether the set holds a named member, a predicate answer
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::shift() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	generic	the codec of an enum that carries data: the DOM KeyboardEvent.key name, which the caller reads and this parses into a Key
 ambre-commands | src/lib.rs | crate | Command.title | field | fn(&Locale)->String	free-text	text, label or user content
 ambre-commands | src/lib.rs | crate | Keymap::is_empty() | ret | bool	generic	state flag/predicate
@@ -1097,13 +1092,11 @@ ambre-draw | src/lib.rs | crate | ImageKey::get() | ret | u64	newtype-inner	the 
 ambre-draw | src/lib.rs | crate | ImageKey::new(value) | param | u64	newtype-inner	the constructor of the ImageKey newtype
 ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
 ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	free-text	the same-origin font path the face fetch reads, a property of the script and no spelling of it, as BASE_FONTS holds the base ones
-ambre-draw | src/text.rs | crate::text | LazyFont::bit() | ret | u8	newtype-inner	ScriptSet bit
 ambre-draw | src/text.rs | crate::text | LazyFont::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
 ambre-draw | src/text.rs | crate::text | LazyFont::for_char(c) | param | char	generic	generic parser/reader/formatter over text
-ambre-draw | src/text.rs | crate::text | ScriptSet.0 | field | u8	newtype-inner	ScriptSet inner
-ambre-draw | src/text.rs | crate::text | ScriptSet::contains() | ret | bool	generic	predicate or handled-flag result
-ambre-draw | src/text.rs | crate::text | ScriptSet::is_empty() | ret | bool	generic	predicate or handled-flag result
-ambre-draw | src/text.rs | crate::text | ScriptSet::of_text(text) | param | &str	generic	generic parser/reader/formatter over text
+ambre-draw | src/text.rs | crate::text | <LazyScripts as FlagsKind>::NAME | const | &'static str	free-text	the name a set of lazy scripts prints through Debug, for a log line
+ambre-draw | src/text.rs | crate::text | <LazyScripts as FlagsKind>::Repr | assoc | u8	newtype-inner	the integer a set of lazy scripts holds its bits in, the inside of Flags
+ambre-draw | src/text.rs | crate::text | LazyScripts::of_text(text) | param | &str	generic	generic parser/reader/formatter over text
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::is_step() | ret | bool	generic	predicate result
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::from_dom(mode) | param | u32	newtype-inner	the DOM deltaMode code, which the enum's own constructor reads into its variant
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::is_step() | ret | bool	generic	predicate result
@@ -1349,12 +1342,9 @@ ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	generic	
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	generic	enum<->stored string codec at the CRDT boundary: the raw string the Loro thread field stores, parsed into the enum here
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | <ShelfVersion as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-murmure | src/pictures.rs | crate::pictures | <PaintNumber as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-murmure | src/view.rs | crate::view | <ListsRevision as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::from_bytes(bytes) | param | Vec<u8>	newtype-inner	DraftRow newtype
-ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
 ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	the char that parts the user, the channel and the thread root in the spelling of a DraftKey
 ambre-murmure | src/emoji.rs | crate::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
@@ -2036,9 +2026,7 @@ ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	local
 ambre-prose | src/probe.rs | crate::probe | <AnimationFrames as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	whether an event lays the document out again, when a moved caret can first be drawn
 ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	the scale a heading level is drawn at, local to the cascade
-ambre-prose | src/style.rs | crate::style | StoredMarkValue.0 | field | String	newtype-inner	a mark value as the document holds it, never checked; Debug prints its length alone
-ambre-prose | src/style.rs | crate::style | StoredMarkValue::as_str() | ret | &str	newtype-inner	a mark value as stored, for the parse that reads it
-ambre-prose | src/style.rs | crate::style | StoredMarkValue::new(text) | param | impl Into<String>	newtype-inner	a mark value as the document holds it, never checked
+ambre-prose | src/style.rs | crate::style | <StoredMarkValues as OpaqueKind>::NAME | const | &'static str	free-text	the name a stored mark value prints through Debug, for a log line
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	the text a table of contents is measured on, one line per entry
 ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	free-text	the text a draft entry inserts, as the user typed it; Debug prints its length alone
@@ -3468,12 +3456,6 @@ ambre-primitives | src/depinfo.rs | crate::depinfo | substituted() | ret | Strin
 ambre-primitives | src/depinfo.rs | crate::depinfo | substituted(dotted) | param | &str	generic	the dotted TOML key a refusal names, printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | substituted(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | ends_on_metavariable() | ret | bool	generic	a predicate or a file read of the scanner
-ambre-protocol | src/signaling.rs | crate::signaling | IceCandidate.0 | field | String	newtype-inner	the ICE candidate text the browser wrote, forwarded whole
-ambre-protocol | src/signaling.rs | crate::signaling | IceCandidate::as_str() | ret | &str	newtype-inner	the ICE candidate text the browser wrote, forwarded whole
-ambre-protocol | src/signaling.rs | crate::signaling | IceCandidate::new(text) | param | String	newtype-inner	the ICE candidate text the browser wrote, forwarded whole
-ambre-protocol | src/signaling.rs | crate::signaling | SessionDescription.0 | field | String	newtype-inner	the SDP text the browser wrote, forwarded whole
-ambre-protocol | src/signaling.rs | crate::signaling | SessionDescription::as_str() | ret | &str	newtype-inner	the SDP text the browser wrote, forwarded whole
-ambre-protocol | src/signaling.rs | crate::signaling | SessionDescription::new(text) | param | String	newtype-inner	the SDP text the browser wrote, forwarded whole
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript.0 | field | Vec<u8>	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::as_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::new(bytes) | param | Vec<u8>	newtype-inner	the bytes one signature covers
@@ -3599,6 +3581,8 @@ ambre-commands | src/keybinding.rs | crate::keybinding | FunctionKey::from_dom_n
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar.0 | field | char	newtype-inner	the inside of the character of a key, lowercased for an ASCII letter
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::get() | ret | char	newtype-inner	the one way out of the character of a key, to a label or a menu initial
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::new(c) | param | char	newtype-inner	the constructor of the character of a key; it lowercases an ASCII letter
+ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::NAME | const | &'static str	free-text	the name a modifier set prints through Debug, for a log line
+ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::Repr | assoc | u8	newtype-inner	the integer a modifier set holds its three bits in, the inside of Flags
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason.0 | field | String	newtype-inner	the inside of a skip reason: the line the user reads
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::as_str() | ret | &str	newtype-inner	the one way out of a skip reason, to a toast or a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::new(reason) | param | impl Into<String>	newtype-inner	the constructor of a skip reason, from the line an importer writes
@@ -4075,10 +4059,20 @@ ambre-core | src/count.rs | crate::count | Count<K,u64>::is_zero() | ret | bool	
 ambre-core | src/count.rs | crate::count | Count<K>::saturating_from_u64(n) | param | u64	newtype-inner	the gap between two series numbers a count is built from, held at the top
 ambre-core | src/count.rs | crate::count | CountRepr::saturating_from_u64(n) | param | u64	generic	a whole number the sealed repr trait narrows to its width, held at the top
 ambre-core | src/count.rs | crate::count | CountRepr::saturating_from_usize(len) | param | usize	generic	a whole number the sealed repr trait narrows to its width, held at the top
+ambre-core | src/flags.rs | crate::flags | Flags<K>::contains() | ret | bool	generic	predicate result
+ambre-core | src/flags.rs | crate::flags | Flags<K>::get() | ret | u8	newtype-inner	Flags newtype, the bits of the set
+ambre-core | src/flags.rs | crate::flags | Flags<K>::is_empty() | ret | bool	generic	predicate result
+ambre-core | src/flags.rs | crate::flags | Flags<K>::new(bits) | param | u8	newtype-inner	Flags newtype, the bits a member constant of the marker's crate names
+ambre-core | src/opaque.rs | crate::opaque | <Opaque<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/opaque.rs | crate::opaque | Opaque.text | field | String	newtype-inner	Opaque newtype, a text the code carries and reads none of
+ambre-core | src/opaque.rs | crate::opaque | Opaque<K>::as_str() | ret | &str	newtype-inner	Opaque newtype, its text lent to the one site that reads it
+ambre-core | src/opaque.rs | crate::opaque | Opaque<K>::from_bytes(bytes) | param | Vec<u8>	newtype-inner	Opaque newtype, the bytes an opened seal holds, refused unless UTF-8
+ambre-core | src/opaque.rs | crate::opaque | Opaque<K>::new(text) | param | impl Into<String>	newtype-inner	Opaque newtype, a text the code carries and reads none of
 ambre-draw | src/testing.rs | crate::testing | <Glyphs as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-draw | src/testing.rs | crate::testing | <Ops as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-logic | src/lib.rs | crate::logged | <LoggedDeltas as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-murmure | src/drafts.rs | crate::drafts | <DraftRows as OpaqueKind>::NAME | const | &'static str	free-text	the name a draft row prints through Debug, for a log line
 ambre-prose | src/layout/measure.rs | crate::layout::measure | <ShapedRuns as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | <Passes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/logic/mod.rs | crate::logic | <Faces as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
@@ -4090,6 +4084,8 @@ ambre-prose | src/view/cache.rs | crate::view::cache | <CachedRuns as ambre_core
 ambre-prose | src/view/walk.rs | crate::view::walk | <Highlights as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-protocol | src/messages.rs | crate::messages | <DeltaAuthor as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
 ambre-protocol | src/messages.rs | crate::messages | <Ephemerals as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
+ambre-protocol | src/signaling.rs | crate::signaling | <IceCandidates as OpaqueKind>::NAME | const | &'static str	free-text	the name an ICE candidate prints through Debug, for a log line
+ambre-protocol | src/signaling.rs | crate::signaling | <SessionDescriptions as OpaqueKind>::NAME | const | &'static str	free-text	the name a session description prints through Debug, for a log line
 ambre-server | src/db/content.rs | crate::db::content | <Snapshots as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | <Requests as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-server | src/s3.rs | crate::s3 | <DrainedEntries as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire

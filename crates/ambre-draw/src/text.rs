@@ -9,12 +9,12 @@
 //
 // So the faces are pinned instead. Ambre ships its own, none is taken from the
 // device, and a family label is resolved by the label alone. What remains is
-// script coverage, which a peer gains as it fetches. `ScriptSet` names what a
-// measurement was missing, so a consumer tells a settled layout from one
-// still waiting for a face.
+// script coverage, which a peer gains as it fetches. A set of `LazyScripts`
+// names what a measurement was missing, so a consumer tells a settled layout
+// from one still waiting for a face.
 // ============================================================================
 
-use ambre_core::FontFamily;
+use ambre_core::{Flags, FlagsKind, FontFamily};
 
 /// One of the families the application ships (`PROSE-108`, `CANVAS-017`).
 ///
@@ -80,7 +80,7 @@ pub enum LazyFont {
 }
 
 impl LazyFont {
-    /// Every lazy script, in the order [`ScriptSet`] reports them.
+    /// Every lazy script, in the order [`LazyScripts::iter`] reports them.
     pub const ALL: [LazyFont; 4] = [
         LazyFont::Cjk,
         LazyFont::Arabic,
@@ -158,78 +158,49 @@ impl LazyFont {
         }
     }
 
-    /// The bit this script holds in a [`ScriptSet`].
-    const fn bit(self) -> u8 {
-        match self {
+    /// The set that holds this script alone: its bit in a set of
+    /// [`LazyScripts`].
+    #[must_use]
+    pub const fn as_set(self) -> Flags<LazyScripts> {
+        Flags::new(match self {
             LazyFont::Cjk => 1,
             LazyFont::Arabic => 2,
             LazyFont::Devanagari => 4,
             LazyFont::Emoji => 8,
-        }
+        })
     }
 }
 
-/// A set of lazy scripts, held as bits so two peers compare one value.
+/// The lazy scripts, the marker of the set `Flags<LazyScripts>`: held as
+/// bits so two peers compare one value. Each member is a
+/// [`LazyFont::as_set`].
 ///
 /// Pagination carries one of these to name the scripts a document used and no
 /// face covered (`PROSE-110`). Empty means the measurement had every face it
 /// asked for, which is the only state a stored page number may rest on
 /// (`PROSE-112`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ScriptSet(u8);
+#[derive(PartialEq, Eq)]
+pub enum LazyScripts {}
 
-impl ScriptSet {
-    /// The empty set: nothing was missing.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self(0)
-    }
+impl FlagsKind for LazyScripts {
+    type Repr = u8;
+    const NAME: &'static str = "ScriptSet";
+}
 
-    /// Add a script to the set.
-    pub fn insert(&mut self, script: LazyFont) {
-        self.0 |= script.bit();
-    }
-
-    /// Whether the set holds this script.
-    #[must_use]
-    pub const fn contains(self, script: LazyFont) -> bool {
-        self.0 & script.bit() != 0
-    }
-
-    /// Whether the set is empty.
-    #[must_use]
-    pub const fn is_empty(self) -> bool {
-        self.0 == 0
-    }
-
-    /// The scripts in the set, in the order of [`LazyFont::ALL`].
-    pub fn iter(self) -> impl Iterator<Item = LazyFont> {
+impl LazyScripts {
+    /// The scripts in `set`, in the order of [`LazyFont::ALL`].
+    pub fn iter(set: Flags<Self>) -> impl Iterator<Item = LazyFont> {
         LazyFont::ALL
             .into_iter()
-            .filter(move |script| self.contains(*script))
+            .filter(move |script| set.contains(script.as_set()))
     }
 
     /// Every lazy script a string asks for.
     #[must_use]
-    pub fn of_text(text: &str) -> Self {
-        let mut set = Self::new();
-        for c in text.chars() {
-            if let Some(script) = LazyFont::for_char(c) {
-                set.insert(script);
-            }
-        }
-        set
-    }
-
-    /// The scripts in `self` that `other` does not hold.
-    #[must_use]
-    pub const fn difference(self, other: Self) -> Self {
-        Self(self.0 & !other.0)
-    }
-
-    /// Fold another set into this one.
-    pub fn extend(&mut self, other: Self) {
-        self.0 |= other.0;
+    pub fn of_text(text: &str) -> Flags<Self> {
+        text.chars()
+            .filter_map(LazyFont::for_char)
+            .fold(Flags::EMPTY, |set, script| set.with(script.as_set()))
     }
 }
 
@@ -256,7 +227,9 @@ pub fn sealed_font_context() -> parley::FontContext {
 mod tests {
     use ambre_core::FontFamily;
 
-    use super::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_context};
+    use ambre_core::Flags;
+
+    use super::{BundledFamily, LazyFont, LazyScripts, resolve_family, sealed_font_context};
 
     fn resolve_label(label: &str) -> BundledFamily {
         resolve_family(&FontFamily::from_label(label))
@@ -288,36 +261,36 @@ mod tests {
 
     #[test]
     fn latin_and_punctuation_ask_for_no_face() {
-        let set = ScriptSet::of_text("Hello, world -- 123 (ok)? Grec: alpha.");
+        let set = LazyScripts::of_text("Hello, world -- 123 (ok)? Grec: alpha.");
         assert!(set.is_empty());
     }
 
     #[test]
     fn a_script_outside_the_base_faces_is_named() {
-        let set = ScriptSet::of_text("hello");
+        let set = LazyScripts::of_text("hello");
         assert!(set.is_empty());
-        let cjk = ScriptSet::of_text("\u{4e00}");
-        assert!(cjk.contains(LazyFont::Cjk));
-        assert!(!cjk.contains(LazyFont::Arabic));
+        let cjk = LazyScripts::of_text("\u{4e00}");
+        assert!(cjk.contains(LazyFont::Cjk.as_set()));
+        assert!(!cjk.contains(LazyFont::Arabic.as_set()));
     }
 
     #[test]
     fn a_set_reports_its_scripts_in_one_order() {
-        let mut set = ScriptSet::new();
-        set.insert(LazyFont::Emoji);
-        set.insert(LazyFont::Cjk);
-        let seen: Vec<LazyFont> = set.iter().collect();
+        let mut set = Flags::<LazyScripts>::EMPTY;
+        set.insert(LazyFont::Emoji.as_set());
+        set.insert(LazyFont::Cjk.as_set());
+        let seen: Vec<LazyFont> = LazyScripts::iter(set).collect();
         assert_eq!(seen, vec![LazyFont::Cjk, LazyFont::Emoji]);
+        assert_eq!(format!("{set:?}"), "ScriptSet(9)");
     }
 
     #[test]
     fn a_difference_drops_what_the_other_holds() {
-        let asked = ScriptSet::of_text("\u{4e00}\u{0627}");
-        let mut held = ScriptSet::new();
-        held.insert(LazyFont::Cjk);
-        let missing = asked.difference(held);
-        assert!(missing.contains(LazyFont::Arabic));
-        assert!(!missing.contains(LazyFont::Cjk));
+        let asked = LazyScripts::of_text("\u{4e00}\u{0627}");
+        let held = LazyFont::Cjk.as_set();
+        let missing = asked.without(held);
+        assert!(missing.contains(LazyFont::Arabic.as_set()));
+        assert!(!missing.contains(LazyFont::Cjk.as_set()));
     }
 
     /// A sealed context holds nothing the machine happens to carry

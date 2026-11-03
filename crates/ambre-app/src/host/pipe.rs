@@ -7,6 +7,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_chrome::commands::ModifierFold;
 
 /// What the pipe's listeners ask of the host. `FrameHost` is the one
 /// production implementation. Nothing here names an application: every call
@@ -106,7 +107,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 };
                 let consumed = host_c.borrow_mut().handle_input(&InputEvent::Key {
                     key,
-                    mods: ambre_chrome::commands::Modifiers::NONE
+                    mods: ambre_chrome::commands::ModifierKeys::NONE
                         .ctrl_if(ambre_chrome::commands::KeyState::from_bool(
                             event.ctrl_key(),
                         ))

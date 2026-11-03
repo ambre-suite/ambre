@@ -12,14 +12,14 @@ use ambre_canvas::TextInput;
 use ambre_core::id::{Id, User};
 use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
-use ambre_murmure::drafts::{DraftRow, DraftShelf, DraftWrite, user_range};
+use ambre_murmure::drafts::{DraftRows, DraftShelf, DraftWrite, user_range};
 use ambre_murmure::uploads::{download_name, opens_as};
 use ambre_murmure::view::PageReads;
 use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
 
 use crate::vault::Vault;
-use ambre_core::{Ms, TimeSpan};
+use ambre_core::{Ms, Opaque, TimeSpan};
 
 /// What the page tells a Murmure region, read from the shell's relay. `warn`
 /// puts a warning in front of the user.
@@ -259,7 +259,8 @@ impl DraftKeeper {
                 let opened = opened.unwrap_or_default();
                 let mut drafts = Vec::new();
                 for (key, row) in keys.into_iter().zip(opened) {
-                    match row.and_then(|row| DraftRow::from_bytes(row.into_plaintext())) {
+                    match row.and_then(|row| Opaque::<DraftRows>::from_bytes(row.into_plaintext()))
+                    {
                         Some(row) => drafts.push((key, row)),
                         None => store.delete_draft(&key),
                     }

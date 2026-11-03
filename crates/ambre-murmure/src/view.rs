@@ -24,7 +24,7 @@ use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
     TextInput, Theme, ThemeControl,
 };
-use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyBinding, Modifiers};
+use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyBinding, ModifierKeys};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{Css, Px, Seq, SeqKind, Size, Vector, View};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
@@ -1746,9 +1746,9 @@ impl MurmureView {
             }
             InputEvent::Key {
                 key,
-                mods: mods @ (Modifiers::NONE | Modifiers::SHIFT),
+                mods: mods @ (ModifierKeys::NONE | ModifierKeys::SHIFT),
             } => {
-                let shift = mods.shift();
+                let shift = mods.contains(ModifierKeys::SHIFT);
                 match key {
                     Key::ContextMenu => (self.reads.act_on)(self.target_of_focus()),
                     Key::F(FunctionKey::F10) if shift => {
@@ -1768,7 +1768,7 @@ impl MurmureView {
             }
             InputEvent::Wheel {
                 delta,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             } => {
                 let line = ambre_canvas::WHEEL_LINE;
                 let page = self.list_height().on_page(Px::<Css>::ZERO);
@@ -1839,7 +1839,7 @@ impl MurmureView {
                 // or reply in a thread (`MURMURE-178`, `MURMURE-527`). With
                 // none, it moves the caret as ever.
                 if pressed == Some(Key::ArrowUp)
-                    && mods == Modifiers::NONE
+                    && mods == ModifierKeys::NONE
                     && self.composer.blank(channel)
                     && let Some(edit) = self.last_own_edit(channel)
                 {
@@ -1856,8 +1856,8 @@ impl MurmureView {
                 // The box is drawn, so its turn by Alt+Enter is said
                 // (`MURMURE-535`).
                 if pressed == Some(Key::Enter)
-                    && mods.alt()
-                    && !mods.shift()
+                    && mods.contains(ModifierKeys::ALT)
+                    && !mods.contains(ModifierKeys::SHIFT)
                     && matches!(channel, DraftOf::Thread(..))
                 {
                     let checked = self.composer.also_in_channel(channel);
@@ -1905,6 +1905,8 @@ impl MurmureView {
 #[cfg(test)]
 mod tests {
     use ambre_bus::{Byte, ByteSize, Char};
+    use ambre_commands::ModifierFold;
+    use ambre_core::Flags;
     use ambre_core::index::Span;
     use std::cell::Cell;
 
@@ -2370,7 +2372,7 @@ mod tests {
         let press = InputEvent::PointerDown {
             at: pointer(x, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         assert!(
             !view.handle_input(&press).is_yes(),
@@ -2384,7 +2386,7 @@ mod tests {
         let release = InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         let _ = view.handle_input(&release);
         assert!(!view.drags_text());
@@ -2590,13 +2592,13 @@ mod tests {
         key(
             &mut page,
             Key::ArrowLeft,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         assert!(key(
             &mut page,
             Key::Char(KeyChar::new(';')),
-            Modifiers::PRIMARY,
+            ModifierKeys::PRIMARY,
             Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(*page.asked_emoji.borrow(), [Region::Channel]);
@@ -2640,7 +2642,7 @@ mod tests {
                 ),
                 ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
             ),
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         page.view.handle_input(&ev).is_yes()
     }
@@ -2808,7 +2810,7 @@ mod tests {
     }
 
     /// A key pressed at `now`, with `mods` held.
-    fn key(page: &mut Page, key: Key, mods: Modifiers, now: Instant<PageLoad>) -> bool {
+    fn key(page: &mut Page, key: Key, mods: Flags<ModifierKeys>, now: Instant<PageLoad>) -> bool {
         page.clock.set(now);
         let ev = InputEvent::Key { key, mods };
         page.view.handle_input(&ev).is_yes()
@@ -2826,7 +2828,7 @@ mod tests {
         assert!(key(
             &mut paged,
             Key::PageUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(10.0)
         ));
         assert!(wheel(&mut wheeled, -1.0, 2, Instant::<PageLoad>::new(10.0)));
@@ -2847,7 +2849,7 @@ mod tests {
         assert!(key(
             &mut paged,
             Key::PageDown,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(20.0)
         ));
         frame_at(&mut paged.view, Instant::<PageLoad>::new(20.0));
@@ -2856,7 +2858,7 @@ mod tests {
             !key(
                 &mut paged,
                 Key::PageUp,
-                Modifiers::PRIMARY,
+                ModifierKeys::PRIMARY,
                 Instant::<PageLoad>::new(30.0)
             ),
             "the browser's chord"
@@ -2864,7 +2866,7 @@ mod tests {
         assert!(!key(
             &mut paged,
             Key::Char(KeyChar::A),
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(30.0)
         ));
     }
@@ -2882,7 +2884,7 @@ mod tests {
             key(
                 page,
                 Key::PageUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(10.0),
             );
             frame(&mut page.view);
@@ -2893,7 +2895,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::End,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(20.0)
         ));
         frame(&mut page.view);
@@ -2906,7 +2908,7 @@ mod tests {
         let click = InputEvent::PointerUp {
             at: pointer(at.x, at.y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         assert!(
             page.view.handle_input(&click).is_yes(),
@@ -2942,7 +2944,7 @@ mod tests {
             key(
                 &mut page,
                 Key::PageUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(now),
             );
             frame_at(&mut page.view, Instant::<PageLoad>::new(now));
@@ -2951,7 +2953,7 @@ mod tests {
         key(
             &mut page,
             Key::PageDown,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(40.0),
         );
         frame_at(&mut page.view, Instant::<PageLoad>::new(40.0));
@@ -2964,7 +2966,7 @@ mod tests {
         key(
             &mut page,
             Key::End,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(50.0),
         );
         assert_eq!(reads(&page).0, 0, "nothing is read before it paints");
@@ -2990,7 +2992,7 @@ mod tests {
             key(
                 &mut page,
                 Key::ArrowUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(10.0)
             ),
             "the key is taken"
@@ -3007,20 +3009,20 @@ mod tests {
         key(
             &mut page,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(20.0),
         );
         assert_eq!(page.view.focused(), row(&rows, 398));
         key(
             &mut page,
             Key::ArrowDown,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(30.0),
         );
         key(
             &mut page,
             Key::ArrowDown,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(40.0),
         );
         assert_eq!(
@@ -3033,7 +3035,7 @@ mod tests {
             key(
                 &mut page,
                 Key::ArrowUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(50.0 + f64::from(step)),
             );
             frame(&mut page.view);
@@ -3059,7 +3061,7 @@ mod tests {
             key(
                 &mut page,
                 Key::PageUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(now),
             );
             frame_at(&mut page.view, Instant::<PageLoad>::new(now));
@@ -3078,7 +3080,7 @@ mod tests {
             key(
                 &mut page,
                 arrow,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(30.0 + step as f64),
             );
             frame(&mut page.view);
@@ -3099,7 +3101,7 @@ mod tests {
         key(
             &mut page,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(10.0),
         );
         frame(&mut page.view);
@@ -3114,7 +3116,7 @@ mod tests {
         key(
             &mut page,
             Key::PageUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(20.0),
         );
         frame_at(&mut page.view, Instant::<PageLoad>::new(20.0));
@@ -3137,14 +3139,14 @@ mod tests {
         key(
             &mut page,
             Key::PageUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(10.0),
         );
         frame_at(&mut page.view, Instant::<PageLoad>::new(10.0));
         key(
             &mut page,
             Key::PageUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(20.0),
         );
         frame_at(&mut page.view, Instant::<PageLoad>::new(20.0));
@@ -3153,14 +3155,14 @@ mod tests {
         assert!(key(
             &mut page,
             Key::End,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(30.0)
         ));
         frame_at(&mut page.view, Instant::<PageLoad>::new(30.0));
         key(
             &mut page,
             Key::PageUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(40.0),
         );
         frame_at(&mut page.view, Instant::<PageLoad>::new(40.0));
@@ -3207,7 +3209,7 @@ mod tests {
             clock.set(now);
             let taken = view.handle_input(&InputEvent::Key {
                 key,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             });
             frame_at(view, now);
             taken.is_yes()
@@ -3310,7 +3312,7 @@ mod tests {
         let ev = InputEvent::PointerDown {
             at: pointer(10.0, y),
             button,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         page.view.handle_input(&ev).is_yes()
     }
@@ -3365,7 +3367,7 @@ mod tests {
         let release = |y: f32| InputEvent::PointerUp {
             at: pointer(10.0, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         button(&mut page, PointerButton::Primary, band_y);
         assert!(page.view.handle_input(&release(band_y)).is_yes());
@@ -3389,7 +3391,7 @@ mod tests {
             !key(
                 &mut page,
                 Key::Enter,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0)
             ),
             "no focus yet"
@@ -3398,7 +3400,7 @@ mod tests {
             assert!(key(
                 &mut page,
                 Key::ArrowUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0)
             ));
             frame(&mut page.view);
@@ -3407,7 +3409,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(retried(&page), [(channel, older)]);
@@ -3558,7 +3560,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::ContextMenu,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(10.0)
         ));
         assert_eq!(page.acted.borrow().as_slice(), [None], "no focus yet");
@@ -3566,7 +3568,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(20.0)
         ));
         frame(&mut page.view);
@@ -3576,19 +3578,19 @@ mod tests {
         assert!(key(
             &mut page,
             Key::ContextMenu,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(30.0)
         ));
         let shift_f10 = InputEvent::Key {
             key: Key::F(FunctionKey::F10),
-            mods: Modifiers::SHIFT,
+            mods: ModifierKeys::SHIFT,
         };
         assert!(page.view.handle_input(&shift_f10).is_yes());
         assert!(
             !key(
                 &mut page,
                 Key::F(FunctionKey::F10),
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(40.0)
             ),
             "a plain F10 is the browser's"
@@ -3694,13 +3696,13 @@ mod tests {
         let press = InputEvent::PointerDown {
             at: pointer(40.0, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         let consumed = page.view.handle_input(&press);
         let up = InputEvent::PointerUp {
             at: pointer(40.0, y),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         let _ = page.view.handle_input(&up);
         consumed.is_yes()
@@ -3716,7 +3718,7 @@ mod tests {
     fn shift_key(page: &mut Page, key: Key) -> bool {
         let ev = InputEvent::Key {
             key,
-            mods: Modifiers::SHIFT,
+            mods: ModifierKeys::SHIFT,
         };
         page.view.handle_input(&ev).is_yes()
     }
@@ -3770,7 +3772,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(1_234.0)
         ));
         frame_with_fonts(&mut page.view);
@@ -3834,7 +3836,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -3851,7 +3853,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -3888,7 +3890,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -3918,7 +3920,7 @@ mod tests {
         let press = InputEvent::PointerDown {
             at: pointer(hit.0, hit.1),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         let _ = page.view.handle_input(&press);
         frame_with_fonts(&mut page.view);
@@ -3933,7 +3935,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -4105,7 +4107,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
@@ -4115,7 +4117,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -4142,7 +4144,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -4207,7 +4209,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::ArrowLeft,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         assert!(shift_key(&mut page, Key::ArrowLeft));
@@ -4215,7 +4217,7 @@ mod tests {
             key(
                 &mut page,
                 Key::ArrowUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0)
             ),
             "the caret takes it"
@@ -4230,7 +4232,7 @@ mod tests {
             !key(
                 &mut page,
                 Key::F(FunctionKey::F5),
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0)
             ),
             "a key it does not use stays the page's"
@@ -4239,7 +4241,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         assert!(!page.view.composer().focused());
@@ -4247,7 +4249,7 @@ mod tests {
             key(
                 &mut page,
                 Key::ArrowUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0)
             ),
             "the list takes it again"
@@ -4268,7 +4270,7 @@ mod tests {
             key(
                 &mut page,
                 Key::Char(KeyChar::A),
-                Modifiers::PRIMARY,
+                ModifierKeys::PRIMARY,
                 Instant::<PageLoad>::new(0.0)
             ),
             "Ctrl+A selects the draft"
@@ -4288,7 +4290,7 @@ mod tests {
         key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(
@@ -4299,7 +4301,7 @@ mod tests {
     }
 
     /// A `Ctrl` chord, with Shift when `shift`.
-    fn chord(page: &mut Page, key: Key, mods: Modifiers) -> bool {
+    fn chord(page: &mut Page, key: Key, mods: Flags<ModifierKeys>) -> bool {
         let ev = InputEvent::Key { key, mods };
         page.view.handle_input(&ev).is_yes()
     }
@@ -4309,7 +4311,7 @@ mod tests {
     fn command(page: &mut Page, key: Key) -> bool {
         let ev = InputEvent::Key {
             key,
-            mods: Modifiers::NONE
+            mods: ModifierKeys::NONE
                 .ctrl_if(KeyState::Released)
                 .meta_if(KeyState::Held),
         };
@@ -4340,7 +4342,7 @@ mod tests {
         key(
             &mut page,
             Key::End,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         assert!(
@@ -4380,13 +4382,13 @@ mod tests {
         press_composer(&mut page);
         type_slowly(&mut page, "hi yo");
         assert!(
-            chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY),
+            chord(&mut page, Key::Char(KeyChar::Z), ModifierKeys::PRIMARY),
             "the composer takes the chord"
         );
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
         assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
         assert_eq!(
             painted(&mut page, channel).as_deref(),
             Some(""),
@@ -4395,23 +4397,27 @@ mod tests {
         assert!(chord(
             &mut page,
             Key::Char(KeyChar::Z),
-            Modifiers::PRIMARY_SHIFT
+            ModifierKeys::PRIMARY_SHIFT
         ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
-        assert!(chord(&mut page, Key::Char(KeyChar::Y), Modifiers::PRIMARY));
+        assert!(chord(
+            &mut page,
+            Key::Char(KeyChar::Y),
+            ModifierKeys::PRIMARY
+        ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yo"));
 
         for _ in 0..2 {
             key(
                 &mut page,
                 Key::Backspace,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0),
             );
             frame_with_fonts(&mut page.view);
         }
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
         assert_eq!(
             painted(&mut page, channel).as_deref(),
             Some("hi yo"),
@@ -4420,10 +4426,14 @@ mod tests {
 
         page.view.paste("there");
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yothere"));
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yo"));
         type_slowly(&mut page, "x");
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY_SHIFT);
+        chord(
+            &mut page,
+            Key::Char(KeyChar::Z),
+            ModifierKeys::PRIMARY_SHIFT,
+        );
         assert_eq!(
             painted(&mut page, channel).as_deref(),
             Some("hi yox"),
@@ -4442,14 +4452,18 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(sent(&page).len(), 1);
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
         assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY_SHIFT);
+        chord(
+            &mut page,
+            Key::Char(KeyChar::Z),
+            ModifierKeys::PRIMARY_SHIFT,
+        );
         assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
         assert!(sent(&page).is_empty(), "no undo reaches the sent message");
     }
@@ -4521,7 +4535,7 @@ mod tests {
             key(
                 &mut page,
                 Key::Backspace,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0),
             );
         }
@@ -4529,7 +4543,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
@@ -4548,19 +4562,19 @@ mod tests {
         key(
             &mut page,
             Key::Char(KeyChar::A),
-            Modifiers::PRIMARY,
+            ModifierKeys::PRIMARY,
             Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Backspace,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -4569,7 +4583,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
@@ -4595,7 +4609,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
@@ -4608,7 +4622,7 @@ mod tests {
         key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         assert!(!page.view.composer().focused());
@@ -4659,7 +4673,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::PageUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(10.0)
         ));
         frame_at(&mut page.view, Instant::<PageLoad>::new(10.0));
@@ -4667,7 +4681,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(20.0)
         ));
         assert_eq!(reads(&page).0, 1, "Escape marks the channel read");
@@ -4679,7 +4693,7 @@ mod tests {
         assert!(key(
             &mut composing,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         assert!(!composing.view.composer().focused());
@@ -4701,7 +4715,7 @@ mod tests {
             !key(
                 &mut thread,
                 Key::Escape,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0)
             ),
             "the thread leaves it"
@@ -4744,7 +4758,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("x"));
@@ -4753,7 +4767,7 @@ mod tests {
         key(
             &mut page,
             Key::Delete,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -4761,7 +4775,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("mine"));
@@ -4770,7 +4784,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -4795,7 +4809,7 @@ mod tests {
             key(
                 &mut page,
                 Key::ArrowUp,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0)
             ),
             "the caret takes it"
@@ -4809,7 +4823,7 @@ mod tests {
         key(
             &mut signed_out,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut signed_out.view);
@@ -4858,7 +4872,7 @@ mod tests {
         let press = InputEvent::PointerDown {
             at: pointer(40.0, 20.0),
             button: PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         let _ = page.view.handle_input(&press);
         assert!(!page.view.composer().focused(), "the list has it back");
@@ -4897,20 +4911,20 @@ mod tests {
         key(
             &mut page,
             Key::ArrowLeft,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         shift_key(&mut page, Key::ArrowLeft);
         key(
             &mut page,
             Key::Char(KeyChar::A),
-            Modifiers::PRIMARY,
+            ModifierKeys::PRIMARY,
             Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::End,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(
@@ -4921,7 +4935,7 @@ mod tests {
         key(
             &mut page,
             Key::Backspace,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         assert_eq!(samples(&page).0, 1, "a deleted character");
@@ -4932,7 +4946,7 @@ mod tests {
         key(
             &mut page,
             Key::Char(KeyChar::A),
-            Modifiers::PRIMARY,
+            ModifierKeys::PRIMARY,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5177,7 +5191,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(1_234.0)
         ));
         frame_with_fonts(&mut page.view);
@@ -5226,7 +5240,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5268,7 +5282,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5292,7 +5306,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         let of = DraftOf::Thread(channel, root);
@@ -5312,7 +5326,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         assert!(!page.view.composer().focused());
@@ -5320,7 +5334,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         let MurmurePane::Channel { channel: shown, at } = page.pane.get() else {
@@ -5333,7 +5347,7 @@ mod tests {
             !key(
                 &mut page,
                 Key::Escape,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0)
             ),
             "no thread left to close"
@@ -5350,7 +5364,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
@@ -5369,13 +5383,13 @@ mod tests {
         key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         drop(std::mem::replace(&mut page.view, channel_view));
@@ -5425,7 +5439,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5438,7 +5452,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5475,7 +5489,7 @@ mod tests {
     fn alt_enter(page: &mut Page) -> bool {
         let ev = InputEvent::Key {
             key: Key::Enter,
-            mods: Modifiers::ALT,
+            mods: ModifierKeys::ALT,
         };
         page.view.handle_input(&ev).is_yes()
     }
@@ -5496,7 +5510,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5713,7 +5727,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
@@ -5727,7 +5741,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Tab,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
@@ -5735,7 +5749,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5763,14 +5777,14 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         key(
             &mut page,
             Key::Home,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         type_text(&mut page, "é ");
@@ -5778,7 +5792,7 @@ mod tests {
         key(
             &mut page,
             Key::End,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         type_text(&mut page, "@channel");
@@ -5786,7 +5800,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5798,19 +5812,19 @@ mod tests {
         key(
             &mut page,
             Key::Backspace,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Backspace,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5845,13 +5859,13 @@ mod tests {
         assert_eq!(painted(&mut page, channel).as_deref(), Some("say done"));
         assert_eq!(page.view.composer().styles(channel), [styled(Bold, 4..8)]);
 
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
         assert_eq!(painted(&mut page, channel).as_deref(), Some("say **done**"));
         assert_eq!(page.view.composer().styles(channel), []);
         key(
             &mut page,
             Key::End,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         type_slowly(&mut page, " _now_");
@@ -5864,7 +5878,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5883,7 +5897,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -5958,7 +5972,7 @@ mod tests {
             key(
                 &mut page,
                 Key::Backspace,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0),
             );
         }
@@ -5979,7 +5993,7 @@ mod tests {
         key(
             &mut page,
             Key::ArrowLeft,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         type_slowly(&mut page, "**x**");
@@ -6041,7 +6055,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6138,7 +6152,7 @@ mod tests {
         press_composer(&mut page);
         type_slowly(&mut page, "one two");
         assert!(
-            chord(&mut page, Key::Char(KeyChar::B), Modifiers::PRIMARY),
+            chord(&mut page, Key::Char(KeyChar::B), ModifierKeys::PRIMARY),
             "no selection: the chord is taken"
         );
         frame_with_fonts(&mut page.view);
@@ -6147,24 +6161,24 @@ mod tests {
             shift_key(&mut page, Key::ArrowLeft);
         }
         frame_with_fonts(&mut page.view);
-        chord(&mut page, Key::Char(KeyChar::B), Modifiers::PRIMARY);
-        chord(&mut page, Key::Char(KeyChar::I), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::B), ModifierKeys::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::I), ModifierKeys::PRIMARY);
         frame_with_fonts(&mut page.view);
         assert_eq!(
             page.view.composer().styles(channel),
             [styled(Bold, 4..7), styled(Italic, 4..7)]
         );
-        chord(&mut page, Key::Char(KeyChar::B), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::B), ModifierKeys::PRIMARY);
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().styles(channel), [styled(Italic, 4..7)]);
         assert!(
-            !chord(&mut page, Key::Char(KeyChar::Q), Modifiers::PRIMARY),
+            !chord(&mut page, Key::Char(KeyChar::Q), ModifierKeys::PRIMARY),
             "no style takes `q`"
         );
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6220,7 +6234,7 @@ mod tests {
         key(
             &mut page,
             Key::ArrowRight,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6253,18 +6267,18 @@ mod tests {
         key(
             &mut page,
             Key::ArrowLeft,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("o"));
-        chord(&mut page, Key::ArrowLeft, Modifiers::PRIMARY);
+        chord(&mut page, Key::ArrowLeft, ModifierKeys::PRIMARY);
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("two"));
         key(
             &mut page,
             Key::Backspace,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6272,7 +6286,7 @@ mod tests {
         shift_key(&mut page, Key::ArrowLeft);
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("e, selected"));
-        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), ModifierKeys::PRIMARY);
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("one two"));
         let count = page.said.borrow().len();
@@ -6294,7 +6308,7 @@ mod tests {
         key(
             &mut page,
             Key::Home,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6307,8 +6321,14 @@ mod tests {
     }
 
     /// The rows a page's shelf keeps in the store, by key.
-    type Rows =
-        Rc<RefCell<std::collections::BTreeMap<ambre_bus::DraftKey, crate::drafts::DraftRow>>>;
+    type Rows = Rc<
+        RefCell<
+            std::collections::BTreeMap<
+                ambre_bus::DraftKey,
+                ambre_core::Opaque<crate::drafts::DraftRows>,
+            >,
+        >,
+    >;
 
     /// Give the page's shelf `me` and a store of `rows`, as the launcher does
     /// once the session and the store are ready.
@@ -6384,7 +6404,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6424,8 +6444,7 @@ mod tests {
         let left: Vec<String> = rows
             .borrow()
             .values()
-            .cloned()
-            .filter_map(|row| String::from_utf8(row.into_bytes()).ok())
+            .map(|row| row.as_str().to_owned())
             .collect();
         assert_eq!(left.len(), 1, "one draft left: {left:?}");
         assert!(left[0].contains("stays"));
@@ -6457,7 +6476,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6465,12 +6484,12 @@ mod tests {
 
         edit(&page);
         frame_with_fonts(&mut page.view);
-        chord(&mut page, Key::Char(KeyChar::A), Modifiers::PRIMARY);
-        chord(&mut page, Key::Char(KeyChar::B), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::A), ModifierKeys::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::B), ModifierKeys::PRIMARY);
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6498,7 +6517,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::ArrowDown,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
@@ -6507,13 +6526,13 @@ mod tests {
         key(
             &mut page,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         key(
             &mut page,
             Key::ArrowUp,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);
@@ -6521,7 +6540,7 @@ mod tests {
         assert!(key(
             &mut page,
             Key::Escape,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0)
         ));
         frame_with_fonts(&mut page.view);
@@ -6606,7 +6625,7 @@ mod tests {
             key(
                 &mut page,
                 Key::Backspace,
-                Modifiers::NONE,
+                ModifierKeys::NONE,
                 Instant::<PageLoad>::new(0.0),
             );
         }
@@ -6638,7 +6657,7 @@ mod tests {
         key(
             &mut page,
             Key::Enter,
-            Modifiers::NONE,
+            ModifierKeys::NONE,
             Instant::<PageLoad>::new(0.0),
         );
         frame_with_fonts(&mut page.view);

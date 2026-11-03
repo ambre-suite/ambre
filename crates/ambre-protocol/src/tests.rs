@@ -3,7 +3,7 @@
 use super::*;
 use crate::messages::{Ciphertext, DeltaAuthor, Ephemerals, Relay, Seq};
 use ambre_core::id::{self, Document, Id, User};
-use ambre_core::{FixedBytes, Payload};
+use ambre_core::{FixedBytes, Opaque, Payload};
 
 #[test]
 fn update_roundtrip() {
@@ -169,11 +169,29 @@ fn ws_messages_roundtrip() {
     }
 }
 
+/// A browser's text prints its kind and length alone, since it names the
+/// peer's addresses, and it encodes as the bare string it replaced.
+#[test]
+fn a_signaling_text_prints_its_length_and_encodes_as_a_bare_string() {
+    let candidate = Opaque::<IceCandidates>::new("candidate:1 1 udp 10.0.0.1");
+    let printed = format!("{candidate:?}");
+    assert_eq!(printed, "IceCandidate(26 bytes)");
+    assert!(!printed.contains("10.0.0.1"));
+    assert_eq!(
+        format!("{:?}", Opaque::<SessionDescriptions>::new("v=0")),
+        "SessionDescription(3 bytes)"
+    );
+    assert_eq!(
+        postcard::to_allocvec(&candidate).unwrap(),
+        postcard::to_allocvec("candidate:1 1 udp 10.0.0.1").unwrap()
+    );
+}
+
 #[test]
 fn signaling_messages_roundtrip() {
     let client_msg = SignalingClientMsg::Offer {
         target_user_id: Id::<User>::mint(),
-        sdp: SessionDescription::new("test sdp".to_owned()),
+        sdp: Opaque::<SessionDescriptions>::new("test sdp".to_owned()),
     };
     let bytes = postcard::to_allocvec(&client_msg).unwrap();
     let decoded: SignalingClientMsg = postcard::from_bytes(&bytes).unwrap();
@@ -611,29 +629,29 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     let client = [
         SignalingClientMsg::Offer {
             target_user_id: peer,
-            sdp: SessionDescription::new("v=0 offer".to_owned()),
+            sdp: Opaque::<SessionDescriptions>::new("v=0 offer".to_owned()),
         },
         SignalingClientMsg::Answer {
             target_user_id: peer,
-            sdp: SessionDescription::new("v=0 answer".to_owned()),
+            sdp: Opaque::<SessionDescriptions>::new("v=0 answer".to_owned()),
         },
         SignalingClientMsg::Ice {
             target_user_id: peer,
-            candidate: IceCandidate::new("candidate:1 1 udp".to_owned()),
+            candidate: Opaque::<IceCandidates>::new("candidate:1 1 udp".to_owned()),
         },
     ];
     let server = [
         SignalingServerMsg::Offer {
             from_user_id: peer,
-            sdp: SessionDescription::new("v=0 offer".to_owned()),
+            sdp: Opaque::<SessionDescriptions>::new("v=0 offer".to_owned()),
         },
         SignalingServerMsg::Answer {
             from_user_id: peer,
-            sdp: SessionDescription::new("v=0 answer".to_owned()),
+            sdp: Opaque::<SessionDescriptions>::new("v=0 answer".to_owned()),
         },
         SignalingServerMsg::Ice {
             from_user_id: peer,
-            candidate: IceCandidate::new("candidate:1 1 udp".to_owned()),
+            candidate: Opaque::<IceCandidates>::new("candidate:1 1 udp".to_owned()),
         },
         SignalingServerMsg::ParticipantJoined { user_id: peer },
         SignalingServerMsg::ParticipantLeft { user_id: peer },

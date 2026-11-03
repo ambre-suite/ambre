@@ -3,7 +3,8 @@
 
 use super::*;
 use ambre_canvas::PointerButton;
-use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers, SelectionMode};
+use ambre_commands::{FunctionKey, Key, KeyChar, ModifierKeys, SelectionMode};
+use ambre_core::Flags;
 use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{Instant, PageLoad};
 use ambre_core::{Point, Px, View};
@@ -87,12 +88,14 @@ impl TrameView {
                 match hit {
                     // Shift extends a band of the same axis.
                     HeaderHit::ColBody(c)
-                        if mods.shift() && self.state.selection.kind == SelKind::Cols =>
+                        if mods.contains(ModifierKeys::SHIFT)
+                            && self.state.selection.kind == SelKind::Cols =>
                     {
                         self.extend_axis(AxisPos::Col(c))
                     }
                     HeaderHit::RowBody(r)
-                        if mods.shift() && self.state.selection.kind == SelKind::Rows =>
+                        if mods.contains(ModifierKeys::SHIFT)
+                            && self.state.selection.kind == SelKind::Rows =>
                     {
                         self.extend_axis(AxisPos::Row(r))
                     }
@@ -186,9 +189,9 @@ impl TrameView {
             } => {
                 self.text_input.focus();
                 if let Some(at) = self.state.cell_at(*at) {
-                    if mods.shift() {
+                    if mods.contains(ModifierKeys::SHIFT) {
                         self.extend_cell(at);
-                    } else if mods.primary() {
+                    } else if mods.contains(ModifierKeys::PRIMARY) {
                         self.disjoin_cell(at);
                     } else {
                         self.select_cell(at);
@@ -347,7 +350,7 @@ impl TrameView {
                 // `primary` is Ctrl, or Cmd on macOS: the jump modifier.
                 // Shift extends the selection range across navigation keys
                 // (Shift+arrows, Shift+Page, Shift+Home/End, Shift+Ctrl+End).
-                let ext = if mods.shift() {
+                let ext = if mods.contains(ModifierKeys::SHIFT) {
                     SelectionMode::Extend
                 } else {
                     SelectionMode::Move
@@ -374,13 +377,21 @@ impl TrameView {
                     // selection: Shift is the reverse-direction modifier here, not
                     // a range extender. preventDefault keeps the browser from
                     // moving focus off the canvas.
-                    Key::Tab if !mods.primary() => {
-                        let step = Delta::<Col>::new(if mods.shift() { -1 } else { 1 });
+                    Key::Tab if !mods.contains(ModifierKeys::PRIMARY) => {
+                        let step = Delta::<Col>::new(if mods.contains(ModifierKeys::SHIFT) {
+                            -1
+                        } else {
+                            1
+                        });
                         self.nav_move(Delta::<Row>::ZERO, step, SelectionMode::Move);
                         Consumed::Yes
                     }
-                    Key::Enter if !mods.primary() => {
-                        let step = Delta::<Row>::new(if mods.shift() { -1 } else { 1 });
+                    Key::Enter if !mods.contains(ModifierKeys::PRIMARY) => {
+                        let step = Delta::<Row>::new(if mods.contains(ModifierKeys::SHIFT) {
+                            -1
+                        } else {
+                            1
+                        });
                         self.nav_move(step, Delta::<Col>::ZERO, SelectionMode::Move);
                         Consumed::Yes
                     }
@@ -397,7 +408,7 @@ impl TrameView {
                         Consumed::Yes
                     }
                     // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
-                    Key::Home if mods.primary() => {
+                    Key::Home if mods.contains(ModifierKeys::PRIMARY) => {
                         self.nav_goto(CellPos::ORIGIN, ext);
                         Consumed::Yes
                     }
@@ -410,7 +421,7 @@ impl TrameView {
                     // target (Shift+Ctrl+End = select to the last non-empty cell).
                     // Best-effort -- the UI thread has no used-range model, so it
                     // scans its local cache (`trame-grid-viewport`).
-                    Key::End if mods.primary() => {
+                    Key::End if mods.contains(ModifierKeys::PRIMARY) => {
                         let at = self
                             .state
                             .last_content_cell()
@@ -436,7 +447,7 @@ impl TrameView {
                     }
                     // Shift+Delete is Cut: don't consume it, so the browser fires
                     // the native `cut` clipboard event the host services (`trame-clipboard`).
-                    Key::Delete if mods.shift() => Consumed::No,
+                    Key::Delete if mods.contains(ModifierKeys::SHIFT) => Consumed::No,
                     // Delete / Backspace clear the active cell.
                     Key::Delete | Key::Backspace => {
                         self.clear_active_cell();
@@ -449,7 +460,7 @@ impl TrameView {
                         Consumed::Yes
                     }
                     // Debug HUD text toggle, moved behind Alt so plain letters type.
-                    Key::Char(KeyChar::T) if mods.alt() => {
+                    Key::Char(KeyChar::T) if mods.contains(ModifierKeys::ALT) => {
                         self.text_pass = match self.text_pass {
                             TextPass::Shapes => TextPass::WithText,
                             TextPass::WithText => TextPass::Shapes,
@@ -475,10 +486,10 @@ impl TrameView {
     pub(crate) fn handle_wheel(
         &mut self,
         delta: ambre_canvas::WheelDelta,
-        mods: Modifiers,
+        mods: Flags<ModifierKeys>,
     ) -> Consumed {
         // Leave Ctrl+wheel to the browser (pinch-zoom gesture); not ours yet.
-        if mods.primary() {
+        if mods.contains(ModifierKeys::PRIMARY) {
             return Consumed::No;
         }
         let outcome = self.scroll.wheel(&mut self.state, delta, self.clock.now());
@@ -553,12 +564,12 @@ impl TrameView {
                 InputEvent::PointerDown {
                     at,
                     button: PointerButton::Primary,
-                    mods: Modifiers::NONE,
+                    mods: ModifierKeys::NONE,
                 },
                 InputEvent::PointerUp {
                     at,
                     button: PointerButton::Primary,
-                    mods: Modifiers::NONE,
+                    mods: ModifierKeys::NONE,
                 },
             ] {
                 // The tap already took the finger, so the click it replays

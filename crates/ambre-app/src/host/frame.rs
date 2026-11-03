@@ -712,7 +712,7 @@ mod tests {
     use ambre_bus::DocType;
     use ambre_bus::LogicCommand;
     use ambre_canvas::InputEvent;
-    use ambre_chrome::commands::{Key, KeyChar, Modifiers};
+    use ambre_chrome::commands::{Key, KeyChar, ModifierKeys};
     use ambre_core::id::{Document, Element, Id};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Affine, Color, DrawSurface, Point, Rect, Size};
@@ -737,7 +737,7 @@ mod tests {
             InputEvent::PointerDown {
                 at: pointer(5.0, 6.0),
                 button: ambre_canvas::PointerButton::Primary,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             },
             InputEvent::PointerMove {
                 at: pointer(5.0, 6.0),
@@ -745,7 +745,7 @@ mod tests {
             InputEvent::PointerUp {
                 at: pointer(5.0, 6.0),
                 button: ambre_canvas::PointerButton::Primary,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             },
             InputEvent::DoubleClick {
                 at: pointer(5.0, 6.0),
@@ -788,13 +788,13 @@ mod tests {
     fn a_key_a_character_a_composition_and_a_wheel_reach_the_child_verbatim() {
         let key = InputEvent::Key {
             key: Key::Char(KeyChar::A),
-            mods: Modifiers::PRIMARY_SHIFT,
+            mods: ModifierKeys::PRIMARY_SHIFT,
         };
         assert!(matches!(
             remap_with(&key, |_| None),
             Some(InputEvent::Key {
                 key: Key::Char(KeyChar::A),
-                mods: Modifiers::PRIMARY_SHIFT
+                mods: ModifierKeys::PRIMARY_SHIFT
             })
         ));
         let text = InputEvent::Text {
@@ -824,7 +824,7 @@ mod tests {
             ),
             ambre_canvas::WheelDeltaMode::Line,
         );
-        let pinch = ambre_chrome::commands::Modifiers::PRIMARY;
+        let pinch = ambre_chrome::commands::ModifierKeys::PRIMARY;
         let wheel = InputEvent::Wheel { delta, mods: pinch };
         assert!(matches!(
             remap_with(&wheel, |_| None),

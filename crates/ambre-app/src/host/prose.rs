@@ -30,7 +30,7 @@ use ambre_canvas::{
     BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
     NoticePublisher, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
-use ambre_chrome::commands::{ClipboardWrite, Modifiers};
+use ambre_chrome::commands::{ClipboardWrite, ModifierKeys};
 use ambre_core::id::{Document, Id};
 use ambre_core::{Authored, Instant, PageLoad};
 use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
@@ -614,7 +614,7 @@ impl ProseView {
     /// to the host.
     fn translate(&self, ev: &InputEvent) -> Option<ProseInput> {
         Some(match ev {
-            InputEvent::Key { key, mods } if !mods.alt() => ProseInput::Key {
+            InputEvent::Key { key, mods } if !mods.contains(ModifierKeys::ALT) => ProseInput::Key {
                 key: ProseKey::from_key(*key, *mods)?,
                 mods: *mods,
             },
@@ -628,7 +628,7 @@ impl ProseView {
             } => ProseInput::Press {
                 at: *at,
                 // The host folds `Cmd` into `primary`; a press reads no Alt.
-                mods: mods.without(Modifiers::ALT),
+                mods: mods.without(ModifierKeys::ALT),
                 now: self.now,
             },
             InputEvent::PointerMove { at } => ProseInput::Drag { at: *at },
@@ -717,7 +717,7 @@ impl ProseView {
                 if let Some(at) = self.state.touch_end(now) {
                     let _ = self.feed(&ProseInput::Press {
                         at,
-                        mods: Modifiers::NONE,
+                        mods: ModifierKeys::NONE,
                         now,
                     });
                     let _ = self.feed(&ProseInput::Release);
@@ -834,7 +834,7 @@ mod tests {
         let _ = view.handle_input(&InputEvent::PointerDown {
             at: pointer(300.0, 200.0),
             button: ambre_canvas::PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         });
         let focused = document.active_element().expect("a focused element");
         assert!(
@@ -887,7 +887,7 @@ mod tests {
                 ambre_canvas::WheelAmount::new(0.0),
                 ambre_canvas::WheelAmount::new(40.0),
             )),
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         view.dirty = false;
         assert!(

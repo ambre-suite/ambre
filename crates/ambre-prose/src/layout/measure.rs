@@ -16,9 +16,9 @@ use ambre_bus::app::prose::{
     Align, DocChar, KeepTogether, KeepWithNext, LineHeight as StoredLineHeight, ParagraphStyle,
 };
 use ambre_core::{Byte, PrintLength, Pt, Weight, char_to_byte};
-use ambre_core::{Doc, Px};
+use ambre_core::{Doc, Flags, Px};
 
-use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
+use ambre_draw::{BundledFamily, LazyScripts, ParleyBrush};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
@@ -297,7 +297,7 @@ pub struct Measurer {
     /// The scripts met since the last full run that no loaded face covers
     /// (`PROSE-110`). A layout carries it so a consumer can tell a settled
     /// measurement from one still waiting for a face.
-    missing: ScriptSet,
+    missing: Flags<LazyScripts>,
 }
 
 impl Default for Measurer {
@@ -318,7 +318,7 @@ impl Measurer {
             font_cx: ambre_draw::sealed_font_context(),
             layout_cx: LayoutContext::new(),
             shaped: Count::<ShapedRuns>::ZERO,
-            missing: ScriptSet::new(),
+            missing: Flags::<LazyScripts>::EMPTY,
         }
     }
 
@@ -335,13 +335,13 @@ impl Measurer {
     ///
     /// [`forget_missing`]: Self::forget_missing
     #[must_use]
-    pub fn missing(&self) -> ScriptSet {
+    pub fn missing(&self) -> Flags<LazyScripts> {
         self.missing
     }
 
     /// Drop what the measurer recorded as missing, before a full run.
     pub fn forget_missing(&mut self) {
-        self.missing = ScriptSet::new();
+        self.missing = Flags::<LazyScripts>::EMPTY;
     }
 
     /// Load a face into the measurer, from the bytes of a font file.
@@ -356,7 +356,7 @@ impl Measurer {
     /// Whether a face has arrived for a script a past run was missing.
     ///
     /// The layout it produced is stale the moment one does (`PROSE-111`).
-    pub fn coverage_grew(&mut self, missing: ScriptSet) -> bool {
+    pub fn coverage_grew(&mut self, missing: Flags<LazyScripts>) -> bool {
         fonts::coverage_grew(&mut self.font_cx, missing)
     }
 
@@ -377,7 +377,7 @@ impl Measurer {
     ) -> Layout<ParleyBrush> {
         self.shaped = self.shaped.incremented();
         let absent = fonts::missing_scripts(&mut self.font_cx, text);
-        self.missing.extend(absent);
+        self.missing.insert(absent);
         shape_paragraph(
             &mut self.font_cx,
             &mut self.layout_cx,
@@ -468,7 +468,7 @@ impl Measurer {
             style,
             width,
             &mut |part, spans, style| {
-                missing.extend(fonts::missing_scripts(font_cx, part));
+                missing.insert(fonts::missing_scripts(font_cx, part));
                 shape_paragraph(font_cx, layout_cx, (part, spans), style, width)
             },
         )?;

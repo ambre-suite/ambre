@@ -1459,7 +1459,7 @@ mod web_embed_tests {
 #[cfg(test)]
 mod routing_tests {
     use ambre_canvas::InputEvent;
-    use ambre_commands::{Key, Modifiers};
+    use ambre_commands::{Key, ModifierKeys};
     use ambre_draw::{Point, Rect};
 
     use super::routes_to_child;
@@ -1475,7 +1475,7 @@ mod routing_tests {
                 ambre_canvas::WheelAmount::new(0.0),
                 ambre_canvas::WheelAmount::new(10.0),
             )),
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         }
     }
 
@@ -1502,7 +1502,7 @@ mod routing_tests {
     fn escape_never_reaches_the_child() {
         let ev = InputEvent::Key {
             key: Key::Escape,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         for at in [Point::new(50.0, 25.0), Point::new(400.0, 400.0)] {
             assert!(!routes_to_child(&ev, at, quad()));
@@ -1520,7 +1520,7 @@ mod routing_tests {
             },
             InputEvent::Key {
                 key: Key::Enter,
-                mods: Modifiers::NONE,
+                mods: ModifierKeys::NONE,
             },
         ] {
             assert!(routes_to_child(&ev, outside, quad()));
@@ -1538,7 +1538,7 @@ mod routing_tests {
                 ambre_core::Px::<ambre_core::View>::new(y),
             ),
             button: ambre_canvas::PointerButton::Primary,
-            mods: Modifiers::NONE,
+            mods: ModifierKeys::NONE,
         };
         // The pointer's own coordinates decide, not `last_pointer`.
         assert!(routes_to_child(&down(50.0, 25.0), far, quad()));

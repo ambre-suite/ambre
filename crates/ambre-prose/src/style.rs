@@ -10,7 +10,9 @@
 //! Nothing here writes. The resolution runs once per run per layout, which is
 //! the row the budget pays for (`ambre-spec-budgets.md section 1`).
 
-use ambre_core::{FontSize, Rgba, Slant, Strikethrough, Underline, Weight};
+use ambre_core::{
+    FontSize, Opaque, OpaqueKind, OpaqueLength, Rgba, Slant, Strikethrough, Underline, Weight,
+};
 use std::collections::BTreeMap;
 
 use crate::doc::DocDefaults;
@@ -20,41 +22,18 @@ use ambre_bus::app::prose::MarkKey;
 use crate::mark::{self, InlineCode, MarkRoot, Script};
 
 /// The marks one run carries, key to stored value.
-pub type MarkSet = BTreeMap<MarkKey, StoredMarkValue>;
+pub type MarkSet = BTreeMap<MarkKey, Opaque<StoredMarkValues>>;
 
-/// A mark value as the document holds it, never checked. A peer on another
-/// build may have written any text, and [`resolve`] parses each one it reads
-/// and drops what fails. A value may be a link or a family the user typed, so
-/// `Debug` prints its length alone.
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct StoredMarkValue(String);
+/// The kind of a mark value as the document holds it, never checked:
+/// `Opaque<StoredMarkValues>`. A peer on another build may have written any
+/// text, and [`resolve`] parses each one it reads and drops what fails. A
+/// value may be a link or a family the user typed, so `Debug` prints its
+/// length alone.
+pub enum StoredMarkValues {}
 
-impl StoredMarkValue {
-    /// The value `text` the document holds.
-    #[must_use]
-    pub fn new(text: impl Into<String>) -> Self {
-        Self(text.into())
-    }
-
-    /// The value as stored, for the parse that reads it.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// The value read as a link target, spelled as stored and never checked.
-    #[must_use]
-    pub fn to_link(&self) -> ambre_core::LinkUrl {
-        ambre_core::LinkUrl::new(self.0.clone())
-    }
-}
-
-impl std::fmt::Debug for StoredMarkValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("StoredMarkValue")
-            .field(&ambre_core::Redacted::new(&self.0))
-            .finish()
-    }
+impl OpaqueKind for StoredMarkValues {
+    const NAME: &'static str = "StoredMarkValue";
+    const LENGTH: OpaqueLength = OpaqueLength::Chars;
 }
 
 /// The block a run sits in, which is the level between the mark and the
@@ -147,7 +126,7 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
 pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -> ResolvedStyle {
     let mut resolved = block_defaults(context, defaults);
     let has = |root: MarkRoot| marks.contains_key(root.as_str());
-    let get = |root: MarkRoot| marks.get(root.as_str()).map(StoredMarkValue::as_str);
+    let get = |root: MarkRoot| marks.get(root.as_str()).map(Opaque::as_str);
     if has(MarkRoot::Bold) {
         resolved.bold = Weight::Bold;
     }
@@ -193,17 +172,18 @@ mod tests {
 
     #[test]
     fn a_stored_mark_value_prints_its_length_alone() {
-        let value = StoredMarkValue::new("https://private.example/page");
+        let value = Opaque::<StoredMarkValues>::new("https://private.example/page");
         assert!(crate::redact::tests::hides(
             &value,
             "https://private.example/page"
         ));
+        assert_eq!(format!("{value:?}"), "StoredMarkValue(28 chars)");
     }
 
     fn marks(pairs: &[(&str, &str)]) -> MarkSet {
         pairs
             .iter()
-            .map(|(key, value)| (MarkKey::from(*key), StoredMarkValue::new(*value)))
+            .map(|(key, value)| (MarkKey::from(*key), Opaque::<StoredMarkValues>::new(*value)))
             .collect()
     }
 

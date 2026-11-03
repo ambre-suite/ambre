@@ -10,7 +10,8 @@
 //! [`missing_scripts`] names what a measurement did not have. The context
 //! itself is sealed in `ambre-draw` (`PROSE-114`), which every thread shares.
 
-use ambre_draw::{BundledFamily, ScriptSet};
+use ambre_core::Flags;
+use ambre_draw::{BundledFamily, LazyScripts};
 use parley::FontContext;
 
 /// Resolve a family to the face the application ships.
@@ -29,12 +30,12 @@ pub fn resolve(family: &ambre_core::FontFamily) -> BundledFamily {
 /// ordinary case. A non-empty one means the text was shaped into tofu, and the
 /// heights it measured are not what a peer holding the face would get.
 #[must_use]
-pub fn missing_scripts(font_cx: &mut FontContext, text: &str) -> ScriptSet {
-    let asked = ScriptSet::of_text(text);
-    let mut missing = ScriptSet::new();
-    for script in asked.iter() {
+pub fn missing_scripts(font_cx: &mut FontContext, text: &str) -> Flags<LazyScripts> {
+    let asked = LazyScripts::of_text(text);
+    let mut missing = Flags::<LazyScripts>::EMPTY;
+    for script in LazyScripts::iter(asked) {
         if font_cx.collection.family_id(script.face_name()).is_none() {
-            missing.insert(script);
+            missing.insert(script.as_set());
         }
     }
     missing
@@ -55,9 +56,8 @@ pub fn register_faces(font_cx: &mut FontContext, face: ambre_core::Payload<ambre
 /// A face registered since a layout was measured invalidates it whole
 /// (`PROSE-111`): every block of that script re-shapes to different heights.
 #[must_use]
-pub fn coverage_grew(font_cx: &mut FontContext, missing: ScriptSet) -> bool {
-    missing
-        .iter()
+pub fn coverage_grew(font_cx: &mut FontContext, missing: Flags<LazyScripts>) -> bool {
+    LazyScripts::iter(missing)
         .any(|script| font_cx.collection.family_id(script.face_name()).is_some())
 }
 
@@ -88,7 +88,8 @@ pub(crate) fn shipped_faces() -> Vec<ambre_core::Payload<ambre_core::FontBytes>>
 #[cfg(test)]
 mod tests {
     use super::{coverage_grew, missing_scripts, resolve};
-    use ambre_draw::{BundledFamily, LazyFont, ScriptSet};
+    use ambre_core::Flags;
+    use ambre_draw::{BundledFamily, LazyFont, LazyScripts};
     use parley::FontContext;
 
     /// The face the family `label` names resolves to.
@@ -140,13 +141,13 @@ mod tests {
             .family_id(LazyFont::Cjk.face_name())
             .is_none()
         {
-            assert!(missing.contains(LazyFont::Cjk));
+            assert!(missing.contains(LazyFont::Cjk.as_set()));
         }
     }
 
     #[test]
     fn coverage_that_never_grew_is_reported_as_such() {
         let mut font_cx = FontContext::new();
-        assert!(!coverage_grew(&mut font_cx, ScriptSet::new()));
+        assert!(!coverage_grew(&mut font_cx, Flags::<LazyScripts>::EMPTY));
     }
 }

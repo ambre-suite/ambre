@@ -855,7 +855,7 @@ mod convergence {
         let document = document_of(&["\u{4e00}\u{4e8c}\u{4e09}".repeat(40)]);
         let mut paginator = paginator_with(&[]);
         let layout = paginator.full(&document);
-        assert!(layout.missing_scripts.contains(LazyFont::Cjk));
+        assert!(layout.missing_scripts.contains(LazyFont::Cjk.as_set()));
     }
 
     /// A face that arrives after a layout was measured throws it away
@@ -872,7 +872,7 @@ mod convergence {
         let mut paginator = paginator_with(&[]);
         let after_full = {
             let layout = paginator.full(&document);
-            assert!(layout.missing_scripts.contains(LazyFont::Cjk));
+            assert!(layout.missing_scripts.contains(LazyFont::Cjk.as_set()));
             paginator.shaped()
         };
         let Ok(bytes) = std::fs::read(format!("{FONT_DIR}NotoSansSC-Regular.otf")) else {

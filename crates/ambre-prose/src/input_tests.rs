@@ -5,7 +5,7 @@
 use crate::layout::run::{Affinity, RunChar};
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocChar;
-use ambre_commands::ClipboardWrite;
+use ambre_commands::{ClipboardWrite, ModifierFold, ModifierKeys};
 use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Commands, StaticKey};
 use ambre_core::{Doc, Px, View};
@@ -75,7 +75,7 @@ impl Rig {
     fn key(&mut self, key: ProseKey, shift: bool, ctrl: bool) -> bool {
         self.input(ProseInput::Key {
             key,
-            mods: ambre_commands::Modifiers::NONE
+            mods: ambre_commands::ModifierKeys::NONE
                 .ctrl_if(ambre_commands::KeyState::from_bool(ctrl))
                 .shift_if(ambre_commands::KeyState::from_bool(shift)),
         })
@@ -88,7 +88,7 @@ impl Rig {
     fn press(&mut self, (x, y): (f32, f32), shift: bool, now: Instant<PageLoad>) -> bool {
         self.input(ProseInput::Press {
             at: view_at(x, y),
-            mods: ambre_commands::Modifiers::NONE
+            mods: ambre_commands::ModifierKeys::NONE
                 .shift_if(ambre_commands::KeyState::from_bool(shift)),
             now,
         })
@@ -724,7 +724,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let mut sent = Vec::new();
     let press = ProseInput::Press {
         at: view_at(600.0, 100.0),
-        mods: ambre_commands::Modifiers::NONE,
+        mods: ambre_commands::ModifierKeys::NONE,
         now: Instant::<PageLoad>::new(0.0),
     };
     assert!(
@@ -770,7 +770,7 @@ fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
     let consumed = ui.handle_input(
         &ProseInput::Press {
             at: view_at(10.0, 10.0),
-            mods: ambre_commands::Modifiers::NONE,
+            mods: ambre_commands::ModifierKeys::NONE,
             now: Instant::<PageLoad>::new(0.0),
         },
         &mut |_| SendResult::Sent,
@@ -1152,7 +1152,8 @@ fn linked() -> (Rig, BlockId) {
 fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
     rig.input(ProseInput::Press {
         at: view_at(x, y),
-        mods: ambre_commands::Modifiers::NONE.ctrl_if(ambre_commands::KeyState::from_bool(follow)),
+        mods: ambre_commands::ModifierKeys::NONE
+            .ctrl_if(ambre_commands::KeyState::from_bool(follow)),
         now: Instant::<PageLoad>::new(0.0),
     })
 }
@@ -2198,7 +2199,7 @@ fn a_printable_character_is_not_a_key() {
         Key::Char(KeyChar::new('=')),
     ] {
         assert_eq!(
-            ProseKey::from_key(key, ambre_commands::Modifiers::NONE),
+            ProseKey::from_key(key, ambre_commands::ModifierKeys::NONE),
             None,
             "{key:?}"
         );
@@ -2726,7 +2727,11 @@ fn the_pipe_spot_is_the_caret_the_paint_drew() {
 fn press_chord(rig: &mut Rig, chord: ambre_commands::KeyBinding) -> Vec<ProseCommand> {
     let key = ProseKey::from_key(chord.key, chord.mods).expect("the view decodes the chord");
     let before = rig.sent.len();
-    assert!(rig.key(key, chord.mods.shift(), chord.mods.primary()));
+    assert!(rig.key(
+        key,
+        chord.mods.contains(ModifierKeys::SHIFT),
+        chord.mods.contains(ModifierKeys::PRIMARY)
+    ));
     rig.sent[before..].to_vec()
 }
 

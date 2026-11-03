@@ -32,7 +32,7 @@ pub use key_link::KeyLink;
 pub use membership::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, ownerless_log};
 pub use messages::{CommitmentTag, Ephemeral, Nonce, SeqUpdate, Signature, Snapshot, Update};
 pub use public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-pub use signaling::{IceCandidate, SessionDescription, SignalingClientMsg, SignalingServerMsg};
+pub use signaling::{IceCandidates, SessionDescriptions, SignalingClientMsg, SignalingServerMsg};
 pub use transcript::SignedTranscript;
 pub use version::{CURRENT_VERSION, check_version};
 pub use ws::{WireFrame, WsClientMsg, WsServerMsg};

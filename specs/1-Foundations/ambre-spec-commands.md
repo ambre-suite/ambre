@@ -97,10 +97,10 @@ pub struct Command {
     pub category: StaticKey<Categories>,
 }
 
-/// A set of three named members, `PRIMARY`, `ALT` and `SHIFT`. One accelerator member, and no
-/// way to name the control and the command keys apart: one table serves every platform
-/// (`UI-THREAD-028`).
-pub struct Modifiers(u8);
+/// The marker of a modifier set, `Flags<ModifierKeys>`: three named members, `PRIMARY`, `ALT`
+/// and `SHIFT`. One accelerator member, and no way to name the control and the command keys
+/// apart: one table serves every platform (`UI-THREAD-028`).
+pub enum ModifierKeys {}
 
 /// Runtime state, derived from the application's state on each query and never stored.
 pub struct CommandState { pub enabled: Availability, pub visible: Listing, pub toggled: Toggle }

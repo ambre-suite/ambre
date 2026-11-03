@@ -16,7 +16,7 @@
 mod keybinding;
 mod mode;
 
-pub use keybinding::{FunctionKey, Key, KeyBinding, KeyChar, KeyState, Modifiers};
+pub use keybinding::{FunctionKey, Key, KeyBinding, KeyChar, KeyState, ModifierFold, ModifierKeys};
 pub use mode::{ClipboardWrite, PasteForm, SelectionMode};
 
 use ambre_core::{Categories, Commands, Icons, StaticKey};
@@ -61,7 +61,7 @@ impl Command {
 /// the chords the universal operations answer (`ambre-spec-commands.md`,
 /// `UI-THREAD-011`).
 pub mod shared {
-    use super::{Key, KeyBinding, KeyChar, Modifiers};
+    use super::{Key, KeyBinding, KeyChar, ModifierKeys};
     use ambre_core::{Commands, StaticKey};
 
     /// The clipboard identities. One intent, one identity, in every
@@ -102,7 +102,7 @@ pub mod shared {
     /// Copy: the modern chord, then the legacy one.
     pub const COPY_CHORDS: &[KeyBinding] = &[
         KeyBinding::primary(KeyChar::C),
-        KeyBinding::new(Modifiers::PRIMARY, Key::Insert),
+        KeyBinding::new(ModifierKeys::PRIMARY, Key::Insert),
     ];
 
     /// Paste: the modern chord, then the legacy one.

@@ -147,7 +147,7 @@ pub struct PageLayout {
     pub first_dirty_page: Option<Pos<Page>>,
     /// The scripts this document uses that no loaded face covered when it was measured
     /// (`PROSE-110`). Empty is the settled case.
-    pub missing_scripts: ScriptSet,
+    pub missing_scripts: Flags<LazyScripts>,
     /// The bands as the document held them when this layout was taken.
     pub bands:            doc::Bands,
 }
