@@ -99,8 +99,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Replies as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Segments as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of Topic gives a caller, and serde's try_from hands its deserialisation error
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of Topic validates
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of ChannelTopic gives a caller, and serde's try_from hands its deserialisation error
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ChannelTopic validates
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Attachment.name | field | String	free-text	file name as the author's file system gave it
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | std::borrow::Cow<'static,str>	newtype-inner	Emoji newtype, borrowed for a static table and owned otherwise
@@ -117,8 +117,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_byte
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::as_str() | ret | &str	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::new(text) | param | impl Into<String>	newtype-inner	newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelTopic::as_str() | ret | &str	newtype-inner	newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelTopic::new(text) | param | impl Into<String>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
@@ -3956,9 +3956,9 @@ ambre-core | src/unit.rs | crate::unit | ViewSpeed.0 | field | f32	newtype-inner
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::get() | ret | f32	newtype-inner	the number of view pixels per millisecond, for a foreign API that takes the float
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::new(value) | param | f32	newtype-inner	the number of view pixels per millisecond a speed wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Mentions as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <TopicRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as TallyKind>::NAME | const | &'static str	free-text	the name a tally prints through Debug, for a log line
 ambre-bus | src/app/prose.rs | crate::app::prose | <TextAck as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <HttpsAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps

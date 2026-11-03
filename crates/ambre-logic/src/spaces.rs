@@ -942,7 +942,7 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{Role, Topic};
+    use ambre_bus::{ChannelTopic, Role};
     use ambre_core::id::Category;
 
     const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
@@ -980,7 +980,7 @@ mod tests {
         PublicChannelDraft {
             channel_id: Id::<Channel>::mint(),
             name: named(name),
-            topic: Topic::new("the weekly figures"),
+            topic: ChannelTopic::new("the weekly figures"),
             category: None,
             position: ambre_bus::CatalogPosition::new(1),
         }
@@ -1229,7 +1229,7 @@ mod tests {
             (
                 entry.channel_id,
                 entry.name.as_str(),
-                entry.topic.as_ref().map(Topic::as_str)
+                entry.topic.as_ref().map(ChannelTopic::as_str)
             ),
             (channel_id, "budget", Some("the weekly figures"))
         );

@@ -29,8 +29,8 @@ use ambre_core::index::Span;
 use std::collections::BTreeSet;
 
 use ambre_bus::{
-    Attachment, Authored, ByteSize, ContentHash, Instant, MediaType, Mention, MentionTarget,
-    MessageDraft, SealedChannelKey, StyleMark, TextStyle, Topic,
+    Attachment, Authored, ByteSize, ChannelTopic, ContentHash, Instant, MediaType, Mention,
+    MentionTarget, MessageDraft, SealedChannelKey, StyleMark, TextStyle,
 };
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN};
 use ambre_core::id::{Category, Channel, Document, Id, Message, Segment, Space, User};
@@ -447,7 +447,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
             ambre_bus::CatalogPosition::new(0),
         )
         .expect("category");
-    let topic = Topic::new("everything").expect("a topic");
+    let topic = ChannelTopic::new("everything").expect("a topic");
     space
         .list_channel(
             channel,

@@ -43,13 +43,13 @@ pub use activity::{Activity, ActivityAnchor, ActivityKind, ActivitySummary, Ment
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
     Attachment, Authored, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
-    ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, Confirmation,
-    ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers,
-    DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel, MemberView, Mention,
-    MentionTarget, Mentions, MessageAt, MessageDraft, MessageView, Messages, MurmureCommand,
-    MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft, PublicChannelDraft,
-    Reaction, Replies, ReplyEcho, Revision, SealedChannelKey, SearchMatch, Segments, SpaceCommand,
-    SpaceEvent, StyleMark, TextStyle, ThreadHead, Topic, Unread, Unreadable,
+    ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, ChannelTopic,
+    Confirmation, ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent,
+    DirectPeers, DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel,
+    MemberView, Mention, MentionTarget, Mentions, MessageAt, MessageDraft, MessageView, Messages,
+    MurmureCommand, MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft,
+    PublicChannelDraft, Reaction, Replies, ReplyEcho, Revision, SealedChannelKey, SearchMatch,
+    Segments, SpaceCommand, SpaceEvent, StyleMark, TextStyle, ThreadHead, Unread, Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{
