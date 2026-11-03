@@ -50,9 +50,9 @@ impl FlattenTol {
         (tol.is_finite() && tol > Px::<Board>::ZERO).then_some(Self(tol))
     }
 
-    /// The tolerance in the bare form kurbo takes.
-    pub fn get(self) -> f64 {
-        self.0.get()
+    /// The tolerance, a board length.
+    pub fn get(self) -> Px<Board> {
+        self.0
     }
 }
 
@@ -108,7 +108,7 @@ fn flatten_to_contours(path: &BezPath, tol: FlattenTol) -> Shape {
             current.clear();
         }
     };
-    kurbo::flatten(path.iter(), tol.get(), |el| match el {
+    kurbo::flatten(path.iter(), tol.get().get(), |el| match el {
         PathEl::MoveTo(p) => {
             push(&mut current, &mut contours);
             current.push([p.x, p.y]);
