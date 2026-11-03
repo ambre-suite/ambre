@@ -238,7 +238,7 @@ fn styling_keeps_every_value() {
         StylePatch {
             bold: Some(ambre_bus::Weight::Bold),
             format: Some(CellFormat::Number),
-            decimals: Some(crate::Decimals::new(0)),
+            decimals: Some(ambre_core::Bounded::new(0)),
             ..Default::default()
         },
     );
@@ -307,7 +307,7 @@ fn a_decimal_step_keeps_the_computed_value() {
         &mut state,
         StylePatch {
             format: Some(CellFormat::Number),
-            decimals: Some(crate::Decimals::new(2)),
+            decimals: Some(ambre_core::Bounded::new(2)),
             ..Default::default()
         },
     );
