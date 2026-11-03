@@ -7,7 +7,7 @@ use ambre_core::id::{Document, Id, Snapshot};
 use ambre_core::{ChainHash, FixedBytes, KeyId, PublicKey};
 use serde::{Deserialize, Serialize};
 
-use crate::messages::{AuthorKey, Ephemerals, Seq};
+use crate::messages::{DeltaAuthor, Ephemerals, Seq};
 
 /// Public data of an [`Update`](crate::messages::Update).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,7 +21,7 @@ pub struct UpdatePublicData {
     /// Snapshot identifier that this update is based on.
     pub snapshot_id: Id<Snapshot>,
     /// Monotonic logical clock (Lamport timestamp) of the author for this document.
-    pub clock: Seq<AuthorKey>,
+    pub clock: Seq<DeltaAuthor>,
 }
 
 /// Public data of a [`Snapshot`](crate::messages::Snapshot).
@@ -44,7 +44,7 @@ pub struct SnapshotPublicData {
     /// The vector contains `(pub_key, clock)` pairs. `pub_key` is the author's 32-byte
     /// Ed25519 public key, and `clock` is the highest clock value of that author
     /// reflected in the snapshot.
-    pub parent_snapshot_update_clocks: Vec<(FixedBytes<PublicKey>, Seq<AuthorKey>)>,
+    pub parent_snapshot_update_clocks: Vec<(FixedBytes<PublicKey>, Seq<DeltaAuthor>)>,
 }
 
 /// Public data of an [`Ephemeral`](crate::messages::Ephemeral).

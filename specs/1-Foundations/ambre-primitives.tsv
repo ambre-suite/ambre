@@ -4065,12 +4065,12 @@ ambre-prose | src/probe.rs | crate::probe | <AnimationFrames as ambre_core::Tall
 ambre-prose | src/view/cache.rs | crate::view::cache | <Builds as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-prose | src/view/cache.rs | crate::view::cache | <CachedRuns as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-prose | src/view/walk.rs | crate::view::walk | <Highlights as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
-ambre-protocol | src/messages.rs | crate::messages | <AuthorKey as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
+ambre-protocol | src/messages.rs | crate::messages | <DeltaAuthor as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
 ambre-protocol | src/messages.rs | crate::messages | <Ephemerals as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
 ambre-server | src/db/content.rs | crate::db::content | <Snapshots as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | <Requests as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-server | src/s3.rs | crate::s3 | <DrainedEntries as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::position() | ret | Option<(usize,Seq<AuthorKey>)>	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/rekey.rs | crate::rekey | Rekey::position() | ret | Option<(usize,Seq<DeltaAuthor>)>	math	count, size, limit, index or jitter local to an algorithm
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | <ImportDepth as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | <CachedBlobs as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <Tiles as ambre_core::TallyKind>::Repr | assoc | u32	newtype-inner	the number a tally of this kind holds, the inside of Tally, u32 wide on the wire

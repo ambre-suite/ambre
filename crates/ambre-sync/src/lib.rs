@@ -57,7 +57,7 @@ use ambre_bus::{
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::{FixedBytes, KeyId, Payload, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
-use ambre_protocol::messages::{AuthorKey, Ephemerals, Relay, Seq, Update};
+use ambre_protocol::messages::{DeltaAuthor, Ephemerals, Relay, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg, encode_client_msg};
 #[cfg(target_arch = "wasm32")]
@@ -681,7 +681,7 @@ struct SyncDocumentState {
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: Id<Snapshot>,
-    local_clock: Seq<AuthorKey>,
+    local_clock: Seq<DeltaAuthor>,
     /// Monotonic counter for outbound ephemerals (anti-replay at the receiver).
     ephemeral_counter: Seq<Ephemerals>,
     /// Highest server-assigned `seq` seen for this document. Used as
@@ -818,7 +818,7 @@ impl SyncDocumentState {
             pending_updates: Vec::new(),
             pending_uploads: Vec::new(),
             current_snapshot_id,
-            local_clock: Seq::<AuthorKey>::new(0),
+            local_clock: Seq::<DeltaAuthor>::new(0),
             ephemeral_counter: Seq::<Ephemerals>::new(0),
             last_seq: Seq::<Relay>::new(0),
             ingested: BTreeSet::new(),
@@ -2009,7 +2009,7 @@ mod seal_tests {
     use ambre_bus::SyncCommand;
     use ambre_core::KeyId;
     use ambre_protocol::messages::{
-        AuthorKey, Ciphertext, CommitmentTag, Ephemerals, Nonce, Seq, Signature,
+        Ciphertext, CommitmentTag, DeltaAuthor, Ephemerals, Nonce, Seq, Signature,
     };
     use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
     use ambre_protocol::ws::decode_client_msg;
@@ -2101,7 +2101,7 @@ mod seal_tests {
                 pub_key,
                 key_id,
                 snapshot_id: Id::<Snapshot>::from_bytes([3u8; 16]),
-                clock: Seq::<AuthorKey>::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

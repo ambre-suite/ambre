@@ -397,7 +397,7 @@ pub struct DeltasQuery {
 #[derive(serde::Serialize)]
 pub struct DeltaEntry {
     pub seq: ambre_core::Seq<ambre_core::Relay>,
-    pub clock: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+    pub clock: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
     pub author_pubkey: FixedBytes<PublicKey>,
     /// The object of its own, for a delta over the inline size. A delta in the
     /// hot tail or in a batch has none, and is read over the socket replay.

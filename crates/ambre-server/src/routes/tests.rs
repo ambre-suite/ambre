@@ -599,7 +599,7 @@ mod handler_tests {
                 redis,
                 &doc,
                 &aa,
-                ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(4)
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(4)
             )
             .await
         ));
@@ -642,7 +642,7 @@ mod handler_tests {
             ambre_core::Seq::<ambre_core::Relay>::new(9),
             &[(
                 aa,
-                ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(9),
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(9),
             )],
         )
         .await
@@ -1467,7 +1467,7 @@ mod handler_tests {
                 &doc,
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1u8; 32]),
                 &snapshot,
-                ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(seq),
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(seq),
                 ambre_core::Seq::<ambre_core::Relay>::new(seq),
                 &ambre_core::ObjectKey::from("k"),
             )
@@ -3367,7 +3367,7 @@ mod handler_tests {
                 &document,
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
                 &Id::<Snapshot>::mint(),
-                ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
                     seq.unsigned_abs(),
                 ),
                 ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),

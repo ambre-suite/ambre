@@ -25,26 +25,26 @@ use ambre_core::{Before, SeqColumn, SeqKind, Wire};
 /// sequencer assigns, shared with the client threads.
 pub use ambre_core::{Relay, Seq};
 
-/// The author key that numbers its own deltas (`ambre-spec-delta-order.md`).
-/// `Seq<AuthorKey>` is the clock a delta carries. Every session of one author
-/// key shares the series, and each update takes a clock above every one the
-/// author used for the document (`SYNC-024`). It is not a Lamport clock: no
+/// The author that numbers its own deltas (`ambre-spec-delta-order.md`).
+/// `Seq<DeltaAuthor>` is the clock a delta carries. Every session of one
+/// author key shares the series, and each update takes a clock above every
+/// one the author used for the document (`SYNC-024`). It is not a Lamport clock: no
 /// peer's clock moves it (`SYNC-025`).
-pub enum AuthorKey {}
+pub enum DeltaAuthor {}
 
-impl SeqKind for AuthorKey {
+impl SeqKind for DeltaAuthor {
     type IssueRight = ();
     const NAME: &'static str = "Clock";
 }
 
 /// The clock crosses the wire in every update.
-impl Wire for AuthorKey {}
+impl Wire for DeltaAuthor {}
 
 /// A rotation hands back the clock before the one a refused frame took.
-impl Before for AuthorKey {}
+impl Before for DeltaAuthor {}
 
 /// The relay stores the clock of each delta in Postgres.
-impl SeqColumn for AuthorKey {}
+impl SeqColumn for DeltaAuthor {}
 
 /// The session that numbers its own ephemerals, client-side. `Seq<Ephemerals>`
 /// is the counter an ephemeral carries, which a receiver checks against a
@@ -96,7 +96,7 @@ impl Update {
         if self.ciphertext.as_bytes().is_empty() {
             return Err(ValidationError::EmptyCiphertext);
         }
-        if self.public_data.clock == Seq::<AuthorKey>::ZERO {
+        if self.public_data.clock == Seq::<DeltaAuthor>::ZERO {
             return Err(ValidationError::ZeroClock);
         }
         Ok(())
@@ -216,7 +216,7 @@ mod validate_tests {
                 pub_key: FixedBytes::from_array([2u8; 32]),
                 key_id: FixedBytes::from_array([4u8; 16]),
                 snapshot_id: Id::from_bytes([3u8; 16]),
-                clock: Seq::<AuthorKey>::new(clock),
+                clock: Seq::<DeltaAuthor>::new(clock),
             },
             commitment_tag: FixedBytes::from_array([0u8; 32]),
             signature: FixedBytes::from_array([0u8; 64]),
@@ -297,7 +297,7 @@ mod validate_tests {
     fn snapshot(
         cipher: Vec<u8>,
         proof: Option<FixedBytes<ambre_core::ChainHash>>,
-        clocks: Vec<(FixedBytes<PublicKey>, Seq<AuthorKey>)>,
+        clocks: Vec<(FixedBytes<PublicKey>, Seq<DeltaAuthor>)>,
     ) -> Snapshot {
         Snapshot {
             ciphertext: Payload::<Ciphertext>::new(cipher),
@@ -318,8 +318,14 @@ mod validate_tests {
     #[test]
     fn snapshot_valid() {
         let clocks = vec![
-            (FixedBytes::from_array([9u8; 32]), Seq::<AuthorKey>::new(1)),
-            (FixedBytes::from_array([8u8; 32]), Seq::<AuthorKey>::new(2)),
+            (
+                FixedBytes::from_array([9u8; 32]),
+                Seq::<DeltaAuthor>::new(1),
+            ),
+            (
+                FixedBytes::from_array([8u8; 32]),
+                Seq::<DeltaAuthor>::new(2),
+            ),
         ];
         assert!(
             snapshot(vec![1], Some(FixedBytes::from_array([1u8; 32])), clocks)
@@ -346,8 +352,8 @@ mod validate_tests {
     fn snapshot_rejects_duplicate_author() {
         let dup = FixedBytes::<PublicKey>::from_array([7u8; 32]);
         let clocks = vec![
-            (dup, Seq::<AuthorKey>::new(1)),
-            (dup, Seq::<AuthorKey>::new(2)),
+            (dup, Seq::<DeltaAuthor>::new(1)),
+            (dup, Seq::<DeltaAuthor>::new(2)),
         ];
         assert_eq!(
             snapshot(vec![1], Some(FixedBytes::from_array([1u8; 32])), clocks).validate(),

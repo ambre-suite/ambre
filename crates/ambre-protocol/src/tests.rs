@@ -1,7 +1,7 @@
 //! Unit tests for the wire protocol types.
 
 use super::*;
-use crate::messages::{AuthorKey, Ciphertext, Ephemerals, Relay, Seq};
+use crate::messages::{Ciphertext, DeltaAuthor, Ephemerals, Relay, Seq};
 use ambre_core::id::{self, Document, Id, User};
 use ambre_core::{FixedBytes, Payload};
 
@@ -15,7 +15,7 @@ fn update_roundtrip() {
             pub_key: FixedBytes::from_array([5u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Seq::<AuthorKey>::new(42),
+            clock: Seq::<DeltaAuthor>::new(42),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -54,11 +54,11 @@ fn snapshot_roundtrip() {
             parent_snapshot_update_clocks: vec![
                 (
                     FixedBytes::from_array([15u8; 32]),
-                    Seq::<AuthorKey>::new(16),
+                    Seq::<DeltaAuthor>::new(16),
                 ),
                 (
                     FixedBytes::from_array([17u8; 32]),
-                    Seq::<AuthorKey>::new(18),
+                    Seq::<DeltaAuthor>::new(18),
                 ),
             ],
         },
@@ -132,7 +132,7 @@ fn ws_messages_roundtrip() {
             pub_key: FixedBytes::from_array([3u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Seq::<AuthorKey>::new(4),
+            clock: Seq::<DeltaAuthor>::new(4),
         },
         commitment_tag: FixedBytes::from_array([5u8; 32]),
         signature: FixedBytes::from_array([6u8; 64]),
@@ -264,7 +264,7 @@ fn sample_update(fill: u8) -> Update {
             pub_key: FixedBytes::from_array([fill + 2; 32]),
             key_id: FixedBytes::from_array([fill + 3; 16]),
             snapshot_id: Id::<id::Snapshot>::from_bytes([fill + 4; 16]),
-            clock: Seq::<AuthorKey>::new(u64::from(fill) + 5),
+            clock: Seq::<DeltaAuthor>::new(u64::from(fill) + 5),
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
         signature: FixedBytes::from_array([fill + 7; 64]),
@@ -350,12 +350,12 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::KeyRefused {
             document_id: doc,
             key_id: FixedBytes::from_array([10; 16]),
-            clock: Seq::<AuthorKey>::new(11),
+            clock: Seq::<DeltaAuthor>::new(11),
         },
         S::ClockRefused {
             document_id: doc,
-            clock: Seq::<AuthorKey>::new(12),
-            expected: Seq::<AuthorKey>::new(13),
+            clock: Seq::<DeltaAuthor>::new(12),
+            expected: Seq::<DeltaAuthor>::new(13),
             signature: FixedBytes::from_array([14; 64]),
         },
         S::MembersChanged { document_id: doc },
@@ -464,7 +464,7 @@ fn the_relay_reads_only_the_listed_fields() {
             pub_key: pk,
             key_id: kid,
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Seq::<AuthorKey>::new(1),
+            clock: Seq::<DeltaAuthor>::new(1),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),

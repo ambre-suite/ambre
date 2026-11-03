@@ -1058,7 +1058,7 @@ mod tests {
     use ambre_core::authorship::SESSION_NONCE_LEN;
     use ambre_core::id::{self, User};
     use ambre_crypto::MasterSeed;
-    use ambre_protocol::messages::{AuthorKey, Ephemerals, Seq};
+    use ambre_protocol::messages::{DeltaAuthor, Ephemerals, Seq};
 
     /// Plaintext as the object seal takes it.
     fn secret(bytes: &[u8]) -> SecretBytes {
@@ -1093,7 +1093,7 @@ mod tests {
             pub_key: author,
             key_id: key_id(),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Seq::<AuthorKey>::new(1),
+            clock: Seq::<DeltaAuthor>::new(1),
         }
     }
 
@@ -1139,8 +1139,8 @@ mod tests {
             snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: vec![
-                (author, Seq::<AuthorKey>::new(1)),
-                (author, Seq::<AuthorKey>::new(2)),
+                (author, Seq::<DeltaAuthor>::new(1)),
+                (author, Seq::<DeltaAuthor>::new(2)),
             ],
         };
         assert!(matches!(

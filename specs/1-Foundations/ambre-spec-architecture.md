@@ -301,7 +301,7 @@ fixes the width, a `u32` or a `u64`, and serde writes the bare number at that wi
 **The capabilities of a family.** A family opts in to what it needs, and no other family gets it.
 `Before` steps back one number, `CountsSince` counts the gap between two numbers as a tally, and
 `SeqColumn` writes the number to a signed 64-bit column. `Seq<Relay>` is the seq of the sequencer,
-and `Seq<AuthorKey>` is the clock of a delta. A `LamportStamp` is no sequence number, since many
+and `Seq<DeltaAuthor>` is the clock of a delta. A `LamportStamp` is no sequence number, since many
 peers issue stamps and two may share one.
 
 **Code.** `crates/ambre-app/src/lib.rs` for the boot and the relay, and `crates/ambre-app/src/host/`

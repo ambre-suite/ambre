@@ -40,8 +40,8 @@ pub enum AppError {
     #[allow(dead_code)]
     #[error("Clock mismatch: expected {expected}, got {got}")]
     ClockMismatch {
-        expected: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
-        got: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+        expected: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
+        got: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
     },
 
     /// The document owes a rotation, so a frame under any key it held is
@@ -312,8 +312,10 @@ mod tests {
     #[tokio::test]
     async fn clock_mismatch_returns_409() {
         let r = AppError::ClockMismatch {
-            expected: ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(5),
-            got: ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(7),
+            expected: ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+                5,
+            ),
+            got: ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(7),
         }
         .into_response();
         assert_eq!(r.status(), StatusCode::CONFLICT);

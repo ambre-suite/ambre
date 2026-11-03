@@ -60,7 +60,7 @@ pub struct UpdateRow {
     pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
     #[allow(dead_code)]
     pub snapshot_id: Id<Snapshot>,
-    pub clock: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+    pub clock: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
     pub seq: ambre_core::Seq<ambre_core::Relay>,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
     pub s3_key: Option<ambre_core::ObjectKey>,
@@ -342,7 +342,7 @@ pub async fn insert_update(
     document_id: &Id<Document>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     snapshot_id: &Id<Snapshot>,
-    clock: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+    clock: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
     seq: ambre_core::Seq<ambre_core::Relay>,
     s3_key: &ambre_core::ObjectKey,
 ) -> Result<(), AppError> {
@@ -372,7 +372,7 @@ pub async fn insert_inline_update(
     document_id: &Id<Document>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     snapshot_id: &Id<Snapshot>,
-    clock: ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+    clock: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
     seq: ambre_core::Seq<ambre_core::Relay>,
     wire: &StoredPayload,
     cap: InlineCap,
@@ -553,7 +553,7 @@ pub struct ClockState {
     /// Per-author `(author_pubkey, max_clock)` high-water marks.
     pub author_clocks: Vec<(
         FixedBytes<ambre_core::PublicKey>,
-        ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>,
+        ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
     )>,
 }
 

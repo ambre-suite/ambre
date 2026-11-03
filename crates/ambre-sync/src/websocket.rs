@@ -1646,7 +1646,7 @@ impl SyncState {
         &mut self,
         document_id: Id<Document>,
         key_id: FixedBytes<KeyId>,
-        clock: Seq<AuthorKey>,
+        clock: Seq<DeltaAuthor>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;

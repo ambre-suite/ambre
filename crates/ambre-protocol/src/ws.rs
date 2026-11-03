@@ -7,7 +7,7 @@
 // has no wire message of its own (`SRV-102`).
 // ============================================================================
 
-use crate::messages::{AuthorKey, Relay, Seq, Signature};
+use crate::messages::{DeltaAuthor, Relay, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::id::{Document, Id, Snapshot};
@@ -206,7 +206,7 @@ pub enum WsServerMsg {
     KeyRefused {
         document_id: Id<Document>,
         key_id: FixedBytes<KeyId>,
-        clock: Seq<AuthorKey>,
+        clock: Seq<DeltaAuthor>,
     },
 
     /// A delta refused for its clock: another session of the same author took
@@ -215,8 +215,8 @@ pub enum WsServerMsg {
     /// again from the `expected` clock on (`SYNC-147`).
     ClockRefused {
         document_id: Id<Document>,
-        clock: Seq<AuthorKey>,
-        expected: Seq<AuthorKey>,
+        clock: Seq<DeltaAuthor>,
+        expected: Seq<DeltaAuthor>,
         signature: FixedBytes<Signature>,
     },
     /// The members of this document changed: someone joined, left, or took

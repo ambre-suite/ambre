@@ -14,7 +14,7 @@ use crate::redis_keys::{
     PendingKey, Presence, RotationOwed, SeqCounter, Sessions, SnapshotAsked,
 };
 use ambre_core::{FixedBytes, PublicKey};
-use ambre_protocol::messages::{AuthorKey, Seq};
+use ambre_protocol::messages::{DeltaAuthor, Seq};
 use ambre_protocol::ws::{Credential, RefreshToken};
 
 /// Atomic Lua script that validates a client clock and assigns a global
@@ -82,7 +82,7 @@ pub async fn verify_clock_and_assign_seq(
     redis: &Client,
     document_id: &Id<Document>,
     pub_key: &FixedBytes<PublicKey>,
-    clock: Seq<AuthorKey>,
+    clock: Seq<DeltaAuthor>,
 ) -> Result<ambre_core::Seq<ambre_core::Relay>, AppError> {
     let pub_key_hex = pub_key.to_hex();
     let clocks_key = DocKey::<Clocks>::of(document_id);
@@ -115,7 +115,7 @@ pub async fn verify_clock_and_assign_seq(
 /// Reads the script's `CLOCK_MISMATCH:<current>` refusal out of a store error.
 /// The expected clock is the one after the current. A document being deleted
 /// is not found; anything else stays a store failure.
-fn clock_refusal(error: &str, got: Seq<AuthorKey>) -> AppError {
+fn clock_refusal(error: &str, got: Seq<DeltaAuthor>) -> AppError {
     if error.contains(DOCUMENT_GONE) {
         return AppError::NotFound {
             resource: Resource::Document,
@@ -136,7 +136,7 @@ fn clock_refusal(error: &str, got: Seq<AuthorKey>) -> AppError {
     });
     match current {
         Some(current) => AppError::ClockMismatch {
-            expected: Seq::<AuthorKey>::new(current.saturating_add(1)),
+            expected: Seq::<DeltaAuthor>::new(current.saturating_add(1)),
             got,
         },
         None => AppError::Redis(format!("clock validation failed: {error}")),
@@ -214,7 +214,7 @@ pub async fn seed_clock_state(
     redis: &Client,
     document_id: &Id<Document>,
     max_seq: ambre_core::Seq<ambre_core::Relay>,
-    author_clocks: &[(FixedBytes<PublicKey>, Seq<AuthorKey>)],
+    author_clocks: &[(FixedBytes<PublicKey>, Seq<DeltaAuthor>)],
 ) -> Result<(), AppError> {
     if author_clocks.is_empty() {
         return Ok(());
@@ -1254,7 +1254,7 @@ mod tests {
     fn the_script_refusal_becomes_the_typed_conflict() {
         let err = clock_refusal(
             "ERR Error running script: CLOCK_MISMATCH:4",
-            Seq::<AuthorKey>::new(7),
+            Seq::<DeltaAuthor>::new(7),
         );
         assert!(
             matches!(
@@ -1266,7 +1266,7 @@ mod tests {
             ),
             "{err:?}"
         );
-        let err = clock_refusal("connection reset by peer", Seq::<AuthorKey>::new(7));
+        let err = clock_refusal("connection reset by peer", Seq::<DeltaAuthor>::new(7));
         assert!(matches!(err, AppError::Redis(_)), "{err:?}");
     }
 }
@@ -1301,7 +1301,7 @@ mod lua_tests {
             .await
             .unwrap();
         let refused =
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(1)).await;
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(1)).await;
         assert!(
             matches!(refused, Err(AppError::RotationOwed)),
             "{refused:?}"
@@ -1324,7 +1324,7 @@ mod lua_tests {
         mirror_rotation_owed(&redis, &doc_id, RotationDebt::Settled)
             .await
             .unwrap();
-        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(1))
+        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(1))
             .await
             .expect("the same clock is accepted once the debt clears");
         assert_eq!(seq, ambre_core::Seq::<ambre_core::Relay>::new(1));
@@ -1347,7 +1347,7 @@ mod lua_tests {
         let pending = format!("doc:{doc_id}:pending");
 
         for clock in 1..=2 {
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(clock))
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(clock))
                 .await
                 .expect("an open segment takes deltas");
         }
@@ -1365,7 +1365,7 @@ mod lua_tests {
             Some(ambre_core::Seq::<ambre_core::Relay>::new(2))
         );
         let refused =
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(3)).await;
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
             "{refused:?}"
@@ -1402,7 +1402,7 @@ mod lua_tests {
             .unwrap();
 
         for clock in 1..=2 {
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(clock))
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(clock))
                 .await
                 .expect("an open segment takes deltas");
         }
@@ -1415,7 +1415,7 @@ mod lua_tests {
             ambre_core::Seq::<ambre_core::Relay>::new(2)
         );
         let refused =
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(3)).await;
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
             "{refused:?}"
@@ -1439,7 +1439,7 @@ mod lua_tests {
         let pending = format!("doc:{doc_id}:pending");
 
         for clock in 1..=2 {
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(clock))
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(clock))
                 .await
                 .expect("amendments take deltas");
         }
@@ -1481,7 +1481,7 @@ mod lua_tests {
             .unwrap()
         );
         let refused =
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(3)).await;
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
             "{refused:?}"
@@ -1500,7 +1500,7 @@ mod lua_tests {
         let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xab; 32]);
 
-        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<AuthorKey>::new(1))
+        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(1))
             .await
             .expect("first update should succeed");
         assert_eq!(seq, ambre_core::Seq::<ambre_core::Relay>::new(1));
@@ -1521,13 +1521,13 @@ mod lua_tests {
         let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0xde; 32]);
 
-        let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<AuthorKey>::new(1))
+        let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<DeltaAuthor>::new(1))
             .await
             .unwrap();
-        let s2 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<AuthorKey>::new(2))
+        let s2 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<DeltaAuthor>::new(2))
             .await
             .unwrap();
-        let s3 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<AuthorKey>::new(3))
+        let s3 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<DeltaAuthor>::new(3))
             .await
             .unwrap();
         assert_eq!(s1, ambre_core::Seq::<ambre_core::Relay>::new(1));
@@ -1550,10 +1550,10 @@ mod lua_tests {
         let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0x11; 32]);
 
-        verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<AuthorKey>::new(1))
+        verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<DeltaAuthor>::new(1))
             .await
             .unwrap();
-        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<AuthorKey>::new(3))
+        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<DeltaAuthor>::new(3))
             .await
             .unwrap_err();
         assert!(
@@ -1583,10 +1583,10 @@ mod lua_tests {
         let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0x22; 32]);
 
-        verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<AuthorKey>::new(1))
+        verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<DeltaAuthor>::new(1))
             .await
             .unwrap();
-        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<AuthorKey>::new(1))
+        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, Seq::<DeltaAuthor>::new(1))
             .await
             .unwrap_err();
         assert!(
@@ -1617,13 +1617,13 @@ mod lua_tests {
         let pk_a = &FixedBytes::<PublicKey>::from_array([0xaa; 32]);
         let pk_b = &FixedBytes::<PublicKey>::from_array([0xbb; 32]);
 
-        let s_a = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Seq::<AuthorKey>::new(1))
+        let s_a = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Seq::<DeltaAuthor>::new(1))
             .await
             .unwrap();
-        let s_b = verify_clock_and_assign_seq(&redis, &doc_id, pk_b, Seq::<AuthorKey>::new(1))
+        let s_b = verify_clock_and_assign_seq(&redis, &doc_id, pk_b, Seq::<DeltaAuthor>::new(1))
             .await
             .unwrap();
-        let s_a2 = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Seq::<AuthorKey>::new(2))
+        let s_a2 = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Seq::<DeltaAuthor>::new(2))
             .await
             .unwrap();
 
@@ -1744,7 +1744,7 @@ mod redis_integration_tests {
         }
         let calls = clients
             .iter()
-            .map(|redis| verify_clock_and_assign_seq(redis, &doc, &ab, Seq::<AuthorKey>::new(1)));
+            .map(|redis| verify_clock_and_assign_seq(redis, &doc, &ab, Seq::<DeltaAuthor>::new(1)));
         let results = futures_util::future::join_all(calls).await;
 
         let numbered: Vec<ambre_core::Seq<ambre_core::Relay>> = results
@@ -1774,7 +1774,7 @@ mod redis_integration_tests {
         let seq: u64 = redis.get(format!("doc:{doc}:seq")).await.unwrap();
         assert_eq!(seq, 1);
         assert_eq!(
-            verify_clock_and_assign_seq(&redis, &doc, &ab, Seq::<AuthorKey>::new(2))
+            verify_clock_and_assign_seq(&redis, &doc, &ab, Seq::<DeltaAuthor>::new(2))
                 .await
                 .unwrap(),
             ambre_core::Seq::<ambre_core::Relay>::new(2)
@@ -2004,14 +2004,14 @@ mod redis_integration_tests {
             &redis,
             &doc,
             ambre_core::Seq::<ambre_core::Relay>::new(5),
-            &[(*author, Seq::<AuthorKey>::new(5))],
+            &[(*author, Seq::<DeltaAuthor>::new(5))],
         )
         .await
         .expect("seed");
 
         // No longer cold, and the author's next update (clock 6) validates.
         assert!(!clock_state_is_cold(&redis, &doc).await.unwrap());
-        let seq = verify_clock_and_assign_seq(&redis, &doc, author, Seq::<AuthorKey>::new(6))
+        let seq = verify_clock_and_assign_seq(&redis, &doc, author, Seq::<DeltaAuthor>::new(6))
             .await
             .expect("clock 6 should validate against a rehydrated current=5");
         assert_eq!(
@@ -2022,7 +2022,7 @@ mod redis_integration_tests {
 
         // A stale clock (already consumed) is still rejected.
         assert!(
-            verify_clock_and_assign_seq(&redis, &doc, author, Seq::<AuthorKey>::new(6))
+            verify_clock_and_assign_seq(&redis, &doc, author, Seq::<DeltaAuthor>::new(6))
                 .await
                 .is_err()
         );

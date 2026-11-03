@@ -3779,7 +3779,7 @@ mod tests {
             &document,
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &snapshot,
-            ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(
+            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
                 seq.unsigned_abs(),
             ),
             ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),

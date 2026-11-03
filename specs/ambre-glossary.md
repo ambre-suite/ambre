@@ -50,7 +50,7 @@
 | :--- | :--- | :--- | :--- |
 | delta | one encrypted change to a document | | `1-Foundations/ambre-spec-delta-order.md` |
 | delta order | the rule placing a delta against its peers | | `1-Foundations/ambre-spec-delta-order.md` |
-| clock | the per-author counter carried by a delta, a `Seq<AuthorKey>` | | `1-Foundations/ambre-spec-delta-order.md` |
+| clock | the per-author counter carried by a delta, a `Seq<DeltaAuthor>` | | `1-Foundations/ambre-spec-delta-order.md` |
 | quarantine | the hold for a delta that cannot apply yet | | `1-Foundations/ambre-spec-delta-order.md` |
 | snapshot | a full document state, encrypted and signed | | `1-Foundations/ambre-spec-delta-order.md` |
 | reference snapshot | the latest snapshot a member other than its author confirmed | | `1-Foundations/ambre-spec-sequencer.md` |

@@ -21,7 +21,7 @@
 use std::collections::VecDeque;
 
 use ambre_core::{FixedBytes, KeyId};
-use ambre_protocol::messages::{AuthorKey, Seq, Signature};
+use ambre_protocol::messages::{DeltaAuthor, Seq, Signature};
 
 use crate::generation::ResendTicket;
 use crate::pipeline::UpdateFrame;
@@ -34,7 +34,7 @@ pub(crate) const UNCONFIRMED_LIMIT: usize = 1024;
 /// One update sent and not yet echoed back by the relay.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SentFrame {
-    pub clock: Seq<AuthorKey>,
+    pub clock: Seq<DeltaAuthor>,
     /// The key the frame was last sealed under.
     pub key_id: FixedBytes<KeyId>,
     /// The signature of its last seal. The relay's echo and refusal carry it.
@@ -45,7 +45,7 @@ pub(crate) struct SentFrame {
 }
 
 /// Refused frames to seal again, as (clock, plaintext), in clock order.
-pub(crate) type RefusedFrames = Vec<(Seq<AuthorKey>, UpdateFrame)>;
+pub(crate) type RefusedFrames = Vec<(Seq<DeltaAuthor>, UpdateFrame)>;
 
 /// What a refusal asks of the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,7 +80,7 @@ pub(crate) struct Rekey {
     /// The rotation the document owes, and whether its payment runs.
     rotation: Rotation,
     /// Lowest refused clock not yet sent again. Every frame from it on is free.
-    refused_from: Option<Seq<AuthorKey>>,
+    refused_from: Option<Seq<DeltaAuthor>>,
     /// Edits made while the rotation is owed, sealed once it lands.
     waiting: Vec<UpdateFrame>,
     /// The relay refused a delta by name. It holds an edit this client made,
@@ -153,7 +153,7 @@ impl Rekey {
     pub(crate) fn resend_failed(
         &mut self,
         ticket: Seq<ResendTicket>,
-    ) -> Option<(FixedBytes<Signature>, Seq<AuthorKey>, Vec<UpdateFrame>)> {
+    ) -> Option<(FixedBytes<Signature>, Seq<DeltaAuthor>, Vec<UpdateFrame>)> {
         let (signature, armed) = self.failed?;
         if armed != ticket {
             return None;
@@ -168,7 +168,7 @@ impl Rekey {
     fn take_from(
         &mut self,
         signature: &FixedBytes<Signature>,
-    ) -> Option<(Seq<AuthorKey>, Vec<UpdateFrame>)> {
+    ) -> Option<(Seq<DeltaAuthor>, Vec<UpdateFrame>)> {
         let (at, from) = self.position(signature)?;
         if self.refused_from.is_some_and(|c| c >= from) {
             self.refused_from = None;
@@ -223,14 +223,14 @@ impl Rekey {
     }
 
     /// The delta at `clock` was sealed again, under a new signature.
-    pub(crate) fn resealed(&mut self, clock: Seq<AuthorKey>, signature: FixedBytes<Signature>) {
+    pub(crate) fn resealed(&mut self, clock: Seq<DeltaAuthor>, signature: FixedBytes<Signature>) {
         if let Some(frame) = self.sent.iter_mut().find(|f| f.clock == clock) {
             frame.signature = signature;
         }
     }
 
     /// The index and the clock of the delta signed `signature`.
-    fn position(&self, signature: &FixedBytes<Signature>) -> Option<(usize, Seq<AuthorKey>)> {
+    fn position(&self, signature: &FixedBytes<Signature>) -> Option<(usize, Seq<DeltaAuthor>)> {
         self.sent
             .iter()
             .enumerate()
@@ -243,7 +243,7 @@ impl Rekey {
     pub(crate) fn refused(
         &mut self,
         key_id: FixedBytes<KeyId>,
-        clock: Seq<AuthorKey>,
+        clock: Seq<DeltaAuthor>,
         current: FixedBytes<KeyId>,
     ) -> Refusal {
         let named = self
@@ -369,7 +369,7 @@ mod tests {
 
     fn frame(clock: u64, signature: u8) -> SentFrame {
         SentFrame {
-            clock: Seq::<AuthorKey>::new(clock),
+            clock: Seq::<DeltaAuthor>::new(clock),
             key_id: key(1),
             signature: sig(signature),
             payload: body(clock as u8),
@@ -393,11 +393,11 @@ mod tests {
         let mut r = three_sent();
         r.confirm(&sig(1));
         assert_eq!(
-            r.refused(key(1), Seq::<AuthorKey>::new(2), key(1)),
+            r.refused(key(1), Seq::<DeltaAuthor>::new(2), key(1)),
             Refusal::Settle
         );
         assert_eq!(
-            r.refused(key(1), Seq::<AuthorKey>::new(3), key(1)),
+            r.refused(key(1), Seq::<DeltaAuthor>::new(3), key(1)),
             Refusal::Wait
         );
         assert!(r.owes());
@@ -407,15 +407,15 @@ mod tests {
         assert_eq!(
             resend,
             vec![
-                (Seq::<AuthorKey>::new(2), body(2)),
-                (Seq::<AuthorKey>::new(3), body(3))
+                (Seq::<DeltaAuthor>::new(2), body(2)),
+                (Seq::<DeltaAuthor>::new(3), body(3))
             ]
         );
         assert_eq!(waiting, vec![body(9)]);
         assert!(!r.owes());
         // A late copy of a refusal names the key the frame no longer carries.
         assert_eq!(
-            r.refused(key(1), Seq::<AuthorKey>::new(3), key(2)),
+            r.refused(key(1), Seq::<DeltaAuthor>::new(3), key(2)),
             Refusal::Stale
         );
     }
@@ -426,15 +426,15 @@ mod tests {
     fn a_refusal_of_an_older_key_resends_without_paying() {
         let mut r = three_sent();
         assert_eq!(
-            r.refused(key(1), Seq::<AuthorKey>::new(2), key(2)),
+            r.refused(key(1), Seq::<DeltaAuthor>::new(2), key(2)),
             Refusal::Resend
         );
         assert!(!r.owes());
         assert_eq!(
             r.take_refused(key(2)),
             vec![
-                (Seq::<AuthorKey>::new(2), body(2)),
-                (Seq::<AuthorKey>::new(3), body(3))
+                (Seq::<DeltaAuthor>::new(2), body(2)),
+                (Seq::<DeltaAuthor>::new(3), body(3))
             ]
         );
         assert_eq!(r.take_refused(key(2)), Vec::new(), "sent again once");
@@ -473,7 +473,7 @@ mod tests {
         r.confirm(&sig(2));
         assert_eq!(r.sent_len(), 1);
         assert_eq!(
-            r.refused(key(1), Seq::<AuthorKey>::new(1), key(1)),
+            r.refused(key(1), Seq::<DeltaAuthor>::new(1), key(1)),
             Refusal::Stale
         );
         let mut big = Rekey::default();

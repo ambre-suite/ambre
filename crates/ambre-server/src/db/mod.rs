@@ -79,8 +79,8 @@ fn decode_seq(value: i64) -> Result<ambre_core::Seq<ambre_core::Relay>, sqlx::Er
 /// A stored clock. A negative one is a decode error, as for [`decode_seq`].
 fn decode_clock(
     value: i64,
-) -> Result<ambre_protocol::messages::Seq<ambre_protocol::messages::AuthorKey>, sqlx::Error> {
-    ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::try_from(value)
+) -> Result<ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>, sqlx::Error> {
+    ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::try_from(value)
         .map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
@@ -401,7 +401,7 @@ mod tests {
                 &document_id,
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
-                ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
                     seq.unsigned_abs(),
                 ),
                 ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
@@ -483,7 +483,7 @@ mod tests {
                 &document_id,
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
-                ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(
+                ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
                     seq.unsigned_abs(),
                 ),
                 ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),

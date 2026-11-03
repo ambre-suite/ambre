@@ -906,8 +906,8 @@ mod postcard_tests {
     use ambre_core::id::{Document, Id, Snapshot};
     use ambre_core::{FixedBytes, PublicKey, RefusalCode};
     use ambre_protocol::messages::{
-        AuthorKey, Ciphertext, CommitmentTag, Ephemeral, Ephemerals, Nonce, Relay, Seq, SeqUpdate,
-        Signature, Update,
+        Ciphertext, CommitmentTag, DeltaAuthor, Ephemeral, Ephemerals, Nonce, Relay, Seq,
+        SeqUpdate, Signature, Update,
     };
     use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
     use ambre_protocol::ws::{
@@ -924,7 +924,7 @@ mod postcard_tests {
                 pub_key: FixedBytes::<PublicKey>::from_array([6u8; 32]),
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([7u8; 16]),
-                clock: Seq::<AuthorKey>::new(42),
+                clock: Seq::<DeltaAuthor>::new(42),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([8u8; 32]),
             signature: FixedBytes::<Signature>::from_array([9u8; 64]),
@@ -1447,7 +1447,7 @@ mod delta_size_cap_tests {
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{
-        AuthorKey, Ciphertext, CommitmentTag, Nonce, Seq, Signature, Update,
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
     };
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
@@ -1515,7 +1515,7 @@ mod delta_size_cap_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Seq::<AuthorKey>::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -1725,7 +1725,7 @@ mod access_tests {
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{
-        AuthorKey, Ciphertext, CommitmentTag, Nonce, Seq, Signature, Update,
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
     };
     use ambre_protocol::public_data::UpdatePublicData;
     use ambre_protocol::ws::{WsServerMsg, decode_server_msg};
@@ -1783,7 +1783,7 @@ mod access_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Seq::<AuthorKey>::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2026,7 +2026,7 @@ mod ed25519_tests {
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{
-        AuthorKey, Ciphertext, CommitmentTag, Nonce, Seq, Signature, Update,
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
     };
     use ambre_protocol::public_data::UpdatePublicData;
     use ed25519_dalek::{Signer, SigningKey};
@@ -2047,7 +2047,7 @@ mod ed25519_tests {
             pub_key: pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([1u8; 16]),
-            clock: Seq::<AuthorKey>::new(1),
+            clock: Seq::<DeltaAuthor>::new(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([3u8; 24]);
         let ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![4, 5, 6]);
@@ -2143,7 +2143,7 @@ mod ed25519_tests {
                 pub_key: pubkey,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Seq::<AuthorKey>::new(0),
+                clock: Seq::<DeltaAuthor>::new(0),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2167,7 +2167,7 @@ mod ed25519_tests {
             pub_key: pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-            clock: Seq::<AuthorKey>::new(0),
+            clock: Seq::<DeltaAuthor>::new(0),
         };
         let nonce = FixedBytes::<Nonce>::from_array([0u8; 24]);
         let ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![1, 2, 3]);
@@ -2273,7 +2273,7 @@ mod refusal_tests {
 
     fn seq_update(seq: u64) -> ambre_protocol::SeqUpdate {
         use ambre_protocol::messages::{
-            AuthorKey, Ciphertext, CommitmentTag, Nonce, Relay, Seq, Signature,
+            Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Relay, Seq, Signature,
         };
         ambre_protocol::SeqUpdate {
             seq: Seq::<Relay>::new(seq),
@@ -2285,7 +2285,7 @@ mod refusal_tests {
                     pub_key: ambre_core::FixedBytes::<PublicKey>::from_array([1u8; 32]),
                     key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                     snapshot_id: Id::<ambre_core::id::Snapshot>::from_bytes([0u8; 16]),
-                    clock: Seq::<AuthorKey>::new(seq),
+                    clock: Seq::<DeltaAuthor>::new(seq),
                 },
                 commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
                 signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2327,10 +2327,9 @@ mod refusal_tests {
         let refusal = update_refusal(
             &update,
             &AppError::ClockMismatch {
-                expected: ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(
-                    5,
-                ),
-                got: ambre_protocol::messages::Seq::<ambre_protocol::messages::AuthorKey>::new(9),
+                expected:
+                    ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(5),
+                got: ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(9),
             },
         );
         let WsServerMsg::ClockRefused {
@@ -2494,7 +2493,7 @@ mod hot_tail_tests {
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{
-        AuthorKey, Ciphertext, CommitmentTag, Nonce, Seq, Signature, Update,
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
     };
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
@@ -2538,7 +2537,7 @@ mod hot_tail_tests {
             pub_key: FixedBytes::<PublicKey>::from_array(key.verifying_key().to_bytes()),
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-            clock: Seq::<AuthorKey>::new(clock),
+            clock: Seq::<DeltaAuthor>::new(clock),
         };
         let ciphertext = vec![u8::try_from(clock % 256).unwrap(); len];
         let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
@@ -2757,7 +2756,7 @@ mod channel_gate_tests {
     use ambre_core::PublicKey;
     use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{
-        AuthorKey, Ciphertext, CommitmentTag, Nonce, Seq, Signature, Update,
+        Ciphertext, CommitmentTag, DeltaAuthor, Nonce, Seq, Signature, Update,
     };
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
@@ -2840,7 +2839,7 @@ mod channel_gate_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Seq::<AuthorKey>::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

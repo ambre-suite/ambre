@@ -203,7 +203,7 @@ impl Default for MockBlindRelay {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_protocol::messages::{AuthorKey, Seq};
+    use ambre_protocol::messages::{DeltaAuthor, Seq};
     use ambre_protocol::public_data::UpdatePublicData;
     use ambre_protocol::ws::encode_client_msg;
 
@@ -225,7 +225,7 @@ mod tests {
                 pub_key: ambre_core::FixedBytes::from_array([1u8; 32]),
                 key_id: ambre_core::FixedBytes::from_array([2u8; 16]),
                 snapshot_id: Id::<Snapshot>::mint(),
-                clock: Seq::<AuthorKey>::new(1),
+                clock: Seq::<DeltaAuthor>::new(1),
             },
             commitment_tag: ambre_core::FixedBytes::from_array([0u8; 32]),
             signature: ambre_core::FixedBytes::from_array([0u8; 64]),
