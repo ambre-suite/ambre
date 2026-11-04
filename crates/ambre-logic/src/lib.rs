@@ -1221,7 +1221,7 @@ pub fn run(
 #[cfg(test)]
 fn test_link<T>() -> (WorkerSender<T>, Receiver<T>) {
     ambre_bus::conduit::to_main(
-        ambre_bus::conduit::ChannelCapacity::new(4096),
+        ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<4096>(),
         &Doorbell::new(),
     )
 }
@@ -1257,12 +1257,14 @@ fn a_logic_thread_that_cannot_wait_emits_a_fatal_event() {
     let taken = bell.clone();
     let bound = std::thread::spawn(move || taken.bind().is_some()).join();
     assert!(matches!(bound, Ok(true)), "another thread holds the bell");
-    let (_from_ui_tx, from_ui) =
-        ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
+    let (_from_ui_tx, from_ui) = ambre_bus::conduit::local(ambre_core::Bounded::<
+        ambre_bus::conduit::ChannelSlots,
+    >::of::<4>());
     let (to_ui, ui) = test_link();
     let (to_sync, sync) = test_link();
-    let (_from_sync_tx, from_sync) =
-        ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
+    let (_from_sync_tx, from_sync) = ambre_bus::conduit::local(ambre_core::Bounded::<
+        ambre_bus::conduit::ChannelSlots,
+    >::of::<4>());
     let (to_persist, persist) = test_link();
     run(bell, from_ui, to_ui, to_sync, from_sync, to_persist);
     let told: Vec<_> = ui.try_iter().collect();
@@ -1422,11 +1424,11 @@ mod pass_tests {
     fn a_burst_of_keystrokes_is_answered_once() {
         let mut rig = rig();
         let (to_logic, from_ui) = ambre_bus::conduit::to_worker(
-            ambre_bus::conduit::ChannelCapacity::new(64),
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
             &Doorbell::new(),
         );
         let (_to_logic_events, from_sync) = ambre_bus::conduit::to_worker::<LogicEvent>(
-            ambre_bus::conduit::ChannelCapacity::new(64),
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
             &Doorbell::new(),
         );
         for pos in 0..3 {
@@ -1511,11 +1513,11 @@ mod pass_tests {
     fn a_document_closed_in_the_pass_keeps_its_last_edit() {
         let mut rig = rig();
         let (to_logic, from_ui) = ambre_bus::conduit::to_worker(
-            ambre_bus::conduit::ChannelCapacity::new(64),
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
             &Doorbell::new(),
         );
         let (_to_logic_events, from_sync) = ambre_bus::conduit::to_worker::<LogicEvent>(
-            ambre_bus::conduit::ChannelCapacity::new(64),
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
             &Doorbell::new(),
         );
         to_logic.try_send(keystroke(&rig, 0)).expect("queued");
@@ -1567,11 +1569,11 @@ mod pass_tests {
         state.open_with_identity(document_id, DocType::Toile);
         state.answer_pass();
         let (to_logic, from_ui) = ambre_bus::conduit::to_worker(
-            ambre_bus::conduit::ChannelCapacity::new(64),
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
             &Doorbell::new(),
         );
         let (_to_logic_events, from_sync) = ambre_bus::conduit::to_worker::<LogicEvent>(
-            ambre_bus::conduit::ChannelCapacity::new(64),
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
             &Doorbell::new(),
         );
         Board {

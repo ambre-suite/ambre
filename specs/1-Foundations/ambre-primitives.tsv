@@ -298,12 +298,6 @@ ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep.0 |
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it
-ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::new(values) | param | usize	newtype-inner	the number of values a backlog holds, as a mark names it
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity.0 | field | usize	newtype-inner	the number of values a bounded channel holds
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::backlog(factor) | param | usize	math	a multiplier of the capacity, not a length
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::get() | ret | usize	newtype-inner	the number of values a bounded channel holds
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::new(values) | param | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | Doorbell::is_current() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
@@ -313,6 +307,13 @@ ambre-bus | src/conduit.rs | crate::conduit | Receiver<T>::len() | ret | usize	m
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/conduit.rs | crate::conduit | <Backlogged as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-bus | src/conduit.rs | crate::conduit | <Backlogged as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::Repr | assoc | u32	newtype-inner	the number a value of this quantity holds
+ambre-bus | src/conduit.rs | crate::conduit | backlog(factor) | param | u32	math	a multiplier of the capacity, not a length
 ambre-bus | src/conduit.rs | crate::conduit | UnboundedSender<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/event.rs | crate::event | ApiRequest::as_str() | ret | &'static str	newtype-inner	the wire word of the ApiRequest enum
 ambre-bus | src/event.rs | crate::event | LogicEvent::AmendmentsLinkFailed.message | field | String	free-text	user-facing or log message
@@ -3408,7 +3409,6 @@ ambre-primitives | src/scan.rs | crate::scan | ends_on_metavariable() | ret | bo
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript.0 | field | Vec<u8>	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::as_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::new(bytes) | param | Vec<u8>	newtype-inner	the bytes one signature covers
-ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::is_below() | ret | bool	generic	predicate result: a const comparison, which Marks::new runs at compile time
 ambre-sync | src/pipeline.rs | crate::pipeline | <SealedBlob as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedBlob's own accessor, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::Encoded<ambre_core::SealedName> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed name's own bytes, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<ambre_core::SealedPreviousKey> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed previous key's own bytes, through the object trait

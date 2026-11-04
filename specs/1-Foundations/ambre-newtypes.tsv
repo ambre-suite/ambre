@@ -15,8 +15,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber | f64	a finite f64, checked where it is built: a NaN or an infinity the engine yields is refused
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority | i64	the evaluation order of conditional-format rules: it orders and counts nothing
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
-ambre-bus | src/conduit.rs | crate::conduit | BacklogLength | usize	a usize length compared in a const fn, so a Marks pair checks at compile time
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity | usize	a usize capacity whose zero holds one value, as the channel constructor reads it
 ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty: draw mints one from a random draw alone, a total door Validated does not keep
 ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key the shelf spells and the store ranges over in the order of its text
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id of a registered font blob, private to the glyph atlas

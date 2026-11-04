@@ -37,15 +37,15 @@ struct Rig {
 
 impl Rig {
     fn new() -> Self {
-        Self::with_queue(256)
+        Self::with_queue(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<256>())
     }
 
     /// A board whose queue to the Logic thread holds `capacity` commands.
-    fn with_queue(capacity: usize) -> Self {
-        let (tx, to_logic) =
-            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(capacity));
-        let (from_logic, rx) =
-            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(256));
+    fn with_queue(capacity: ambre_core::Bounded<ambre_bus::conduit::ChannelSlots>) -> Self {
+        let (tx, to_logic) = ambre_bus::conduit::local(capacity);
+        let (from_logic, rx) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<256>());
         let notices = NoticePublisher::new();
         let view = ToileView::new(
             Id::<Document>::mint(),
@@ -2962,7 +2962,8 @@ impl Rig {
 /// and the next frame offers it again.
 #[test]
 fn a_dropped_viewport_request_is_offered_again() {
-    let mut rig = Rig::with_queue(1);
+    let mut rig =
+        Rig::with_queue(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>());
     assert!(
         rig.view.send_edit(ToileCommand::RequestBoardIds),
         "the queue is full"
@@ -2989,7 +2990,8 @@ fn a_dropped_viewport_request_is_offered_again() {
 /// flight, and the next frame offers it again.
 #[test]
 fn a_dropped_media_request_is_offered_again() {
-    let mut rig = Rig::with_queue(2);
+    let mut rig =
+        Rig::with_queue(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<2>());
     assert!(
         rig.view.send_edit(ToileCommand::RequestBoardIds),
         "the queue is full"
@@ -3020,7 +3022,8 @@ fn a_dropped_media_request_is_offered_again() {
 /// takes it again once the queue drains.
 #[test]
 fn a_busy_board_takes_no_input() {
-    let mut rig = Rig::with_queue(1);
+    let mut rig =
+        Rig::with_queue(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>());
     rig.show(vec![DisplayNode::Element(sticky(
         "a",
         Rect::new(0.0, 0.0, 100.0, 100.0),

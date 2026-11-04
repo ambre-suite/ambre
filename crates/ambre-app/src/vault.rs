@@ -157,7 +157,8 @@ mod tests {
     /// is the vault's, so no view sees it (`RESID-026`).
     #[wasm_bindgen_test]
     fn a_seal_asks_the_worker_and_takes_its_answer() {
-        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
+        let (tx, rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
         let vault = Vault::new(tx);
         let got = Rc::new(RefCell::new(None));
         let doc = Id::<Document>::mint();
@@ -199,7 +200,8 @@ mod tests {
     /// the rows read back open to nothing.
     #[wasm_bindgen_test]
     fn a_locked_store_answers_nothing() {
-        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
+        let (tx, rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
         let vault = Vault::new(tx);
         let sealed = Rc::new(Cell::new(false));
         let opened = Rc::new(Cell::new(false));
@@ -234,7 +236,8 @@ mod tests {
     /// out of its wrapper with no copy, and its bytes keep their address.
     #[wasm_bindgen_test]
     fn an_opened_row_moves_out_with_no_copy() {
-        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
+        let (tx, rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
         let vault = Vault::new(tx);
         let moved = Rc::new(Cell::new(None));
         let row = SealedRow {
@@ -262,7 +265,8 @@ mod tests {
     /// order once the channel has room.
     #[wasm_bindgen_test]
     fn a_full_channel_holds_the_requests_in_order() {
-        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(1));
+        let (tx, rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>());
         let vault = Vault::new(tx);
         for key in ["a", "b"] {
             vault.seal(
@@ -290,7 +294,8 @@ mod tests {
     /// No rows to open answers at once, with no request.
     #[wasm_bindgen_test]
     fn no_rows_open_at_once() {
-        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
+        let (tx, rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
         let vault = Vault::new(tx);
         let opened = Rc::new(Cell::new(false));
         vault.open(Vec::new(), {

@@ -179,11 +179,11 @@ mod tests {
             .map(|peer| written_by(ambre_core::PeerId::new(peer), 20 << 10))
             .collect();
         let (from_ui_tx, from_ui) = ambre_bus::conduit::to_worker(
-            ambre_bus::conduit::ChannelCapacity::new(64),
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
             &Doorbell::new(),
         );
         let (from_sync_tx, from_sync) = ambre_bus::conduit::to_worker(
-            ambre_bus::conduit::ChannelCapacity::new(64),
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
             &Doorbell::new(),
         );
         drop(from_ui_tx);

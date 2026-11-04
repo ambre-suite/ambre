@@ -61,15 +61,15 @@ struct Rig {
 
 impl Rig {
     fn new() -> Self {
-        Self::with_queue(256)
+        Self::with_queue(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<256>())
     }
 
     /// A view whose queue to the Logic thread holds `capacity` commands.
-    fn with_queue(capacity: usize) -> Self {
-        let (tx, to_logic) =
-            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(capacity));
-        let (from_logic, rx) =
-            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(256));
+    fn with_queue(capacity: ambre_core::Bounded<ambre_bus::conduit::ChannelSlots>) -> Self {
+        let (tx, to_logic) = ambre_bus::conduit::local(capacity);
+        let (from_logic, rx) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<256>());
         let clock = TestClock::default();
         let theme = ThemeControl::default();
         let view = TrameView::new(
@@ -539,7 +539,9 @@ impl Rig {
 
     /// Cut the Logic thread off, so every later send is refused.
     fn lose_logic(&mut self) {
-        let (_tx, rx) = ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(1));
+        let (_tx, rx) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<1>());
         drop(std::mem::replace(&mut self.to_logic, rx));
     }
 
@@ -1764,7 +1766,8 @@ fn a_refused_send_is_never_silent() {
 /// takes it again once the queue drains.
 #[test]
 fn a_busy_grid_takes_no_input() {
-    let mut rig = Rig::with_queue(1);
+    let mut rig =
+        Rig::with_queue(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>());
     rig.frame();
     rig.to_logic.try_iter().for_each(drop);
     for _ in 0..2 {
@@ -1802,7 +1805,8 @@ fn a_dropped_scroll_request_is_offered_again() {
             })
             .count()
     };
-    let mut rig = Rig::with_queue(1);
+    let mut rig =
+        Rig::with_queue(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>());
     rig.frame();
     rig.to_logic.try_iter().for_each(drop);
     let cmd = rig.view.set_active_cmd();
