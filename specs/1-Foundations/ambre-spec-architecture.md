@@ -71,6 +71,8 @@ prefix is `ARCH`.
 | `ARCH-059` | `INV` | The element identifier of a Toile frame MUST hold the same text as the frame identifier. | `3-Toile/ambre-spec-toile-schema.md section 2` | type-level -- `From<Id<Frame>> for Id<Element>` in the `id` module of `ambre-core` moves the text over unchanged, and the doctest of the allowed forms compiles it; `ambre_core::id::tests::a_frame_is_the_element_of_the_same_text` | none | verified |
 | `ARCH-060` | `INV` | Code MUST NOT convert an element identifier into a frame identifier except through the board, which answers one for a frame alone. | `3-Toile/ambre-spec-toile-schema.md section 2` | type-level -- no conversion leads from `Id<Element>` to `Id<Frame>`, and the fourth `compile_fail` doctest of the `id` module of `ambre-core` shows it refused. `Id::from_text` is the decode of a stored text, and the engine checks the kind again where the id lands; `ambre_toile::logic::state::presentation::frame_tests::only_an_existing_frame_reads_as_a_frame` | none | verified |
 | `ARCH-061` | `INV` | A `Scale` MUST join only a pair of pixel spaces that `ambre-core` declares: document to view, CSS to device, board to view. | `ai/ambre-rust-style.md`, the arithmetic of the newtype rule; `ambre-spec-high-density.md` | type-level -- `ambre_core::Scale` bounds its source by the sealed `ambre_core::ScalesTo`, so a pair outside the three names no type. The `compile_fail` doctests of `ambre_core::ScalesTo` show four such pairs refused, and a board zoom refused by `Px<Doc>::zoomed`; `ambre_core::scale::tests::a_board_length_scales_into_the_view_with_the_bits_of_the_bare_arithmetic` | none | verified |
+| `ARCH-064` | `INV` | An instant the relay stamped MUST NOT stand where an author's instant is expected. | this spec section 2, the time bases; `ai/ambre-rust-style.md`, the newtype rule | type-level -- `Relayed` is a `TimeBase` marker of its own, so the two instants are two types. The first `compile_fail` doctest of `ambre_core::Relayed` shows an author's instant refused | none | verified |
+| `ARCH-065` | `INV` | An instant the relay stamped MUST meet the reader's clock through one named method alone. | this spec section 2, the time bases; `ARCH-064` | type-level -- `Instant::age_at` is the one method that takes both clocks, and the second `compile_fail` doctest of `ambre_core::Relayed` shows `since` refused across them; `ambre_core::span::tests::a_relayed_instant_ages_on_the_readers_clock_and_never_below_zero` -- the span it gives, zero when the reader's clock runs behind | none | verified |
 | `ARCH-062` | `INV` | A struct that the source writes outside a test, with no generic parameter and exactly one field once each `PhantomData` marker is set apart, MUST NOT hold that field as an integer, a float, a `String` or a `Vec<u8>`, unless one line of the newtype exceptions file names it with a reason. Such a newtype MUST be an instance of a generic family of `ambre-core` instead. The file MUST NOT hold a line that names no such struct. | `ambre-spec-newtypes.md section 1`; `ai/ambre-rust-style.md`, the newtype rule | `ambre_primitives::newtypes::tests::a_single_field_struct_over_a_primitive_is_counted`; `::a_family_is_not_counted_and_a_marker_is_no_field`; `::any_other_shape_is_not_counted`; `::the_key_names_the_inline_module_and_the_enclosing_fn`; `::test_code_is_not_counted`; `::a_listed_newtype_with_a_reason_passes`; `::a_newtype_no_line_names_is_refused`; `::a_line_that_names_no_newtype_is_stale`; `::a_line_that_breaks_the_format_is_refused`; `::a_missing_header_or_file_is_refused`; `::a_prune_removes_the_stale_lines_and_nothing_else`; ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job. The census reads each file the walk of `ARCH-033` reaches, and the type as the source writes it: an alias that names a primitive, and a struct a macro writes, are out of its reach | none | verified |
 | `ARCH-063` | `INV` | Each line of the newtype exceptions file MUST give a reason true of its newtype, which names why no generic family of `ambre-core` fits it. | `ambre-spec-newtypes.md section 1` | human-review -- the reviewer reads every line a change adds to `specs/1-Foundations/ambre-newtypes.tsv`, against the newtype its key names, the reasons of `ambre-spec-newtypes.md section 1` and the families of its section 2 | unheld -- `domain-meaning` -- the gate checks that a reason is written, never that it is true | human-review |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | `ambre_logic::authorship_tests::two_tabs_of_one_user_converge_as_two_users_do` -- two sessions of one user, one cell edited at once; `ambre_sync::updates::tests::each_open_draws_a_new_peer_and_a_repeated_open_keeps_it` -- each session its own PeerID; `ambre_server::ws::pubsub_hub::tests::a_frame_from_one_instance_reaches_a_subscriber_of_the_other` -- the relay fans out per connection, never per user | none | verified |
@@ -112,7 +114,7 @@ The user types, then closes the document before the Logic thread has answered th
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 55 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 57 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher too, a failure path that waits on a queue, and a write on a
   failing thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full
@@ -288,10 +290,14 @@ signed `i64` of a spreadsheet calendar, and `FracDay` its `f64`. A unit a clock 
 A point in time is `Instant<C>`, distinct from `std::time::Instant`. Its `TimeBase` marker names
 the clock and the epoch. An instant moves only by a span of its own unit.
 
-**The time bases.** `Authored` is an author's untrusted wall clock. `UnixMs` and `UnixSec` are the
-reader's own clock, and `PageLoad` is the page clock. `SheetDay` counts a spreadsheet date
-in whole days from 1899-12-30, and `SheetDateTime` adds the time of day. The seal keeps both in
-`ambre-core`, though only Trame reads them.
+**The time bases.** `Authored` is an author's untrusted wall clock. `Relayed` is the relay's
+clock, as it stamps a row. `UnixMs` and `UnixSec` are the reader's own clock, and `PageLoad` is
+the page clock. `SheetDay` counts a spreadsheet date in whole days from 1899-12-30, and
+`SheetDateTime` adds the time of day. The seal keeps both in `ambre-core`, though only Trame reads
+them.
+
+An `Instant<Relayed>` never stands for an `Instant<Authored>`. It meets the reader's clock at
+`Instant::age_at` alone, for a display (`ARCH-064`, `ARCH-065`).
 
 An instant and a `LamportStamp` share `StoredAsI64`, the signed integer a CRDT or a Postgres row
 keeps. Each type writes the bare number of its unit on the wire and in the store.

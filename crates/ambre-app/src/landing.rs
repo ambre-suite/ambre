@@ -31,7 +31,7 @@ use leptos_router::hooks::use_navigate;
 use ambre_chrome::{ComposedName, Toasts};
 
 use crate::route;
-use ambre_bus::{Authored, Instant};
+use ambre_core::{Instant, Relayed, Sec, UnixMs};
 
 /// One row in the document list, already reduced to display-ready fields.
 /// `name` is the plaintext title decrypted by the Sync thread (`None` = never
@@ -41,8 +41,9 @@ pub struct DocItem {
     pub document_id: Id<Document>,
     pub doc_type: DocType,
     pub name: Option<ambre_core::Validated<ambre_core::Name>>,
-    /// Epoch milliseconds of the last modification (routing metadata, plaintext).
-    pub updated_at: Instant<Authored>,
+    /// The relay's clock at the last modification (routing metadata,
+    /// plaintext). `None` when no relay listed the document.
+    pub updated_at: Option<Instant<Relayed>>,
     /// Total member count; `> 1` => shared.
     pub member_count: ambre_core::Count<ambre_core::Members>,
 }
@@ -536,25 +537,27 @@ fn DeleteConfirm(
     }
 }
 
-/// Formats an epoch-millisecond timestamp as a coarse relative time ("2 h ago").
-/// `0` (no server timestamp) renders as an empty string rather than a fake date.
-fn rel_time(updated_at: Instant<Authored>) -> String {
-    let updated_at_ms = updated_at.get();
-    if updated_at_ms == 0 {
+/// Formats the relay's last write as a coarse relative time ("2 h ago"). No
+/// relay time renders as an empty string rather than a fake date.
+///
+/// The reader's clock meets the relay's through `Instant::age_at` alone, for
+/// display: a reader whose clock runs behind reads "just now".
+fn rel_time(updated_at: Option<Instant<Relayed>>) -> String {
+    let Some(updated_at) = updated_at else {
         return String::new();
-    }
-    let now = js_sys::Date::now();
-    let delta_s = ((now - updated_at_ms as f64) / 1000.0).max(0.0);
-    if delta_s < 60.0 {
+    };
+    let now = Instant::<UnixMs>::new(js_sys::Date::now() as u64);
+    let age_s = updated_at.age_at(now).to_floor::<Sec>().get();
+    if age_s < 60 {
         "just now".to_owned()
-    } else if delta_s < 3600.0 {
-        format!("{} min ago", (delta_s / 60.0) as u64)
-    } else if delta_s < 86_400.0 {
-        format!("{} h ago", (delta_s / 3600.0) as u64)
-    } else if delta_s < 2_592_000.0 {
-        format!("{} d ago", (delta_s / 86_400.0) as u64)
+    } else if age_s < 3600 {
+        format!("{} min ago", age_s / 60)
+    } else if age_s < 86_400 {
+        format!("{} h ago", age_s / 3600)
+    } else if age_s < 2_592_000 {
+        format!("{} d ago", age_s / 86_400)
     } else {
-        format!("{} mo ago", (delta_s / 2_592_000.0) as u64)
+        format!("{} mo ago", age_s / 2_592_000)
     }
 }
 
@@ -679,7 +682,6 @@ fn sign_in_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{Authored, Instant};
     use leptos::mount::mount_to;
     use wasm_bindgen::JsCast;
     use wasm_bindgen_test::*;
@@ -1079,7 +1081,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
             doc_type: DocType::Prose,
             name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Plan").unwrap()),
-            updated_at: Instant::<Authored>::new(0),
+            updated_at: None,
             member_count: ambre_core::Count::<ambre_core::Members>::ONE,
         };
         let docs = RwSignal::new(vec![item.clone()]);

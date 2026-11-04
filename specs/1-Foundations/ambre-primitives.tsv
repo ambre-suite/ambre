@@ -975,9 +975,6 @@ ambre-core | src/serde_id.rs | crate::serde_id | TextId::to_text() | ret | Strin
 ambre-core | src/serde_id.rs | crate::serde_id | texts_to_ids(texts) | param | Vec<String>	generic	generic text-id serde helper
 ambre-core | src/span.rs | crate::span | <Failures as crate::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | LamportStamp.0 | field | u64	newtype-inner	LamportStamp field or storage conversion
-ambre-core | src/span.rs | crate::span | Rfc3339.0 | field | String	newtype-inner	Rfc3339 newtype
-ambre-core | src/span.rs | crate::span | Rfc3339::as_str() | ret | &str	newtype-inner	Rfc3339 newtype
-ambre-core | src/span.rs | crate::span | Rfc3339::formatted(text) | param | String	newtype-inner	Rfc3339 newtype
 ambre-core | src/status.rs | crate::status | <SnapshotStatus as FromStr>::from_str(word) | param | &str	newtype-inner	the word the relay stores, which the enum's own fallible constructor reads
 ambre-core | src/status.rs | crate::status | HttpStatus.0 | field | u16	newtype-inner	HttpStatus field or accessor
 ambre-core | src/status.rs | crate::status | HttpStatus::is_client_error() | ret | bool	generic	predicate result
@@ -3799,6 +3796,7 @@ ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::Repr | asso
 ambre-canvas | src/tokens.rs | crate::tokens | TokenPx.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
 ambre-core | src/span.rs | crate::span | <Authored as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <PageLoad as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <Relayed as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <UnixMs as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <UnixSec as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <Ms as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line

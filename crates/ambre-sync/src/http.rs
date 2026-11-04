@@ -1429,7 +1429,9 @@ pub(crate) struct DocumentEntry {
     /// Total member count; `> 1` => shared.
     #[serde(default)]
     pub member_count: ambre_core::Count<ambre_core::Members>,
-    pub updated_at: ambre_core::Rfc3339,
+    /// The relay's clock when it last wrote the document, in Unix
+    /// milliseconds (`SYNC-181`).
+    pub updated_at: ambre_core::Instant<ambre_core::Relayed>,
 }
 
 #[derive(Serialize)]
@@ -2182,6 +2184,37 @@ mod tests {
     }
 
     /// The relay's JSON `bool` reads as a [`ambre_core::Creation`] and an
+    /// `SYNC-181`: the client reads the number the relay sends, on the
+    /// relay's clock. The relay half is `ambre_server::routes::tests::
+    /// handler_tests::a_listed_document_sends_its_update_time_as_relay_milliseconds`,
+    /// which pins the same number.
+    #[test]
+    fn a_listed_document_reads_its_update_time_unchanged() {
+        let document = Id::<Document>::mint();
+        let listed: DocumentListResponse = serde_json::from_value(serde_json::json!({
+            "documents": [{
+                "id": document.to_string(), "doc_type": "prose", "role": "owner",
+                "updated_at": 1_767_312_245_123_u64,
+            }],
+        }))
+        .expect("a listing");
+        let entry = listed.documents.first().expect("one entry");
+        assert_eq!(
+            entry.updated_at,
+            ambre_core::Instant::<ambre_core::Relayed>::new(1_767_312_245_123)
+        );
+        let text: Result<DocumentListResponse, _> = serde_json::from_value(serde_json::json!({
+            "documents": [{
+                "id": document.to_string(), "doc_type": "prose", "role": "owner",
+                "updated_at": "2026-01-02T00:04:05.123+00:00",
+            }],
+        }));
+        assert!(
+            text.is_err(),
+            "a text time is refused, never read as the epoch"
+        );
+    }
+
     /// [`ambre_core::activity::Activity`]: the answers keep the shape the relay writes.
     #[test]
     fn a_relay_bool_reads_as_its_flag() {

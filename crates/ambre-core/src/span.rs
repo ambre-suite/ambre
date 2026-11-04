@@ -19,6 +19,7 @@
 //! | Time base | Unit | Example |
 //! | :--- | :--- | :--- |
 //! | [`Authored`] | [`Ms`] | the time of a message, which an author's clock writes |
+//! | [`Relayed`] | [`Ms`] | the update time of a listed document, which the relay stamps |
 //! | [`UnixMs`] | [`Ms`] | the window of the relay's rate limiter |
 //! | [`UnixSec`] | [`Sec`] | a token's `exp`, a delete's second sweep |
 //! | [`PageLoad`] | [`FracMs`] | a frame callback, read on the page's monotonic clock |
@@ -70,6 +71,7 @@ mod sealed {
     impl Sealed for super::Day {}
     impl Sealed for super::FracDay {}
     impl Sealed for super::Authored {}
+    impl Sealed for super::Relayed {}
     impl Sealed for super::UnixMs {}
     impl Sealed for super::UnixSec {}
     impl Sealed for super::PageLoad {}
@@ -256,6 +258,26 @@ impl TimeUnit for FracDay {
 /// because the Logic thread reads no clock.
 pub enum Authored {}
 
+/// A wall clock in Unix milliseconds, as the relay's clock reads it when the
+/// relay writes a row: the update time of a listed document.
+///
+/// A client reads it and stamps nothing on it. Apart from [`Authored`], which
+/// an untrusted author's clock writes, so one never stands for the other:
+///
+/// ```compile_fail,E0308
+/// use ambre_core::{Authored, Instant, Relayed};
+/// let _: Instant<Relayed> = Instant::<Authored>::new(3);
+/// ```
+///
+/// Apart from [`UnixMs`] too, the reader's own clock. The two meet at
+/// [`Instant::age_at`] alone, for display, and never through `since`:
+///
+/// ```compile_fail,E0308
+/// use ambre_core::{Instant, Relayed, UnixMs};
+/// let _ = Instant::<Relayed>::new(3).since(Instant::<UnixMs>::new(1));
+/// ```
+pub enum Relayed {}
+
 /// Whole milliseconds since the Unix epoch, read off the reader's own
 /// clock. The sliding window of the relay's rate limiter reads it, and so
 /// does the deadline of a client's reconnect. Apart from [`Authored`],
@@ -284,6 +306,11 @@ pub enum SheetDateTime {}
 impl TimeBase for Authored {
     type Unit = Ms;
     const NAME: &'static str = "Timestamp";
+}
+
+impl TimeBase for Relayed {
+    type Unit = Ms;
+    const NAME: &'static str = "RelayMillis";
 }
 
 impl TimeBase for UnixMs {
@@ -672,6 +699,19 @@ impl Instant<UnixMs> {
     }
 }
 
+impl Instant<Relayed> {
+    /// The span from this instant to `now`, read on the reader's clock, zero
+    /// when the reader's clock runs behind the relay's.
+    ///
+    /// The one place a relay instant meets the reader's clock. Two clocks
+    /// drift apart, so the span is good for a display, such as "2 h ago",
+    /// and for no rule.
+    #[must_use]
+    pub const fn age_at(self, now: Instant<UnixMs>) -> TimeSpan<Ms> {
+        TimeSpan::new(now.get().saturating_sub(self.get()))
+    }
+}
+
 impl Instant<PageLoad> {
     /// The instant `span` after this one.
     #[must_use]
@@ -949,7 +989,7 @@ pub mod stored_as_i64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        Authored, Day, Failures, FracMs, Instant, LamportStamp, Ms, Ns, PageLoad, Sec,
+        Authored, Day, Failures, FracMs, Instant, LamportStamp, Ms, Ns, PageLoad, Relayed, Sec,
         SheetDateTime, SheetDay, StoredAsI64, TimeSpan, UnixMs, UnixSec,
     };
     use crate::Count;
@@ -1181,32 +1221,14 @@ mod tests {
         assert_eq!(at(250).since(at(1_000)), ms(0));
         assert_eq!(at(7).since(at(7)), ms(0));
     }
-}
 
-/// An instant as RFC 3339 text, the form the relay's JSON writes a row's
-/// creation and update time in, such as `2026-01-02T03:04:05+00:00`.
-///
-/// The relay formats it, so the type checks no syntax. A client reads it
-/// through a lenient date parser, and an unreadable value reads as the epoch.
-/// A distinct type keeps it apart from free text and from a name.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Rfc3339(String);
-
-impl Rfc3339 {
-    /// The instant a date formatter wrote as RFC 3339 text.
-    pub fn formatted(text: String) -> Self {
-        Self(text)
-    }
-
-    /// The text, for the date parser that reads it.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for Rfc3339 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+    #[test]
+    fn a_relayed_instant_ages_on_the_readers_clock_and_never_below_zero() {
+        let stamped = Instant::<Relayed>::new(1_000);
+        let ms = TimeSpan::<Ms>::new;
+        assert_eq!(stamped.age_at(Instant::<UnixMs>::new(4_000)), ms(3_000));
+        assert_eq!(stamped.age_at(Instant::<UnixMs>::new(400)), ms(0));
+        assert_eq!(serde_json::to_string(&stamped).unwrap(), "1000");
+        assert_eq!(format!("{stamped:?}"), "RelayMillis(1000)");
     }
 }

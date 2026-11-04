@@ -100,8 +100,9 @@ pub struct DocumentSummary {
     /// Decrypted from `name_enc` by the Sync thread.
     pub name: Option<ambre_core::Validated<ambre_core::Name>>,
     pub role: Role,
-    /// Epoch milliseconds.
-    pub updated_at: Instant<Authored>,
+    /// The relay's clock when it last wrote the document. `None` when no
+    /// relay listed it: a document known to this session alone.
+    pub updated_at: Option<Instant<ambre_core::Relayed>>,
     /// Total member count (routing metadata, plaintext). `> 1` => shared.
     pub member_count: ambre_core::Count<ambre_core::Members>,
 }
