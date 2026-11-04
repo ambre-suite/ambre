@@ -225,9 +225,8 @@ pub async fn invite_document_member(
     Ok(())
 }
 
-/// The columns of one `document_members` row that a join writes: who joins,
-/// with which role, the copy of the document key wrapped for them, and who
-/// let them in.
+/// The columns of one `document_members` row that a join writes. They name
+/// who joins, the role, the key copy wrapped for them, and who let them in.
 pub struct NewMember<'a> {
     pub user_id: &'a Id<User>,
     pub role: ambre_core::Role,
@@ -689,9 +688,8 @@ pub async fn rotate_document_keys(
     Ok(())
 }
 
-/// One rotation of a document key: who rotates, the new key wrapped for each
-/// member who stays, the members the rotator names, and the link that signs
-/// the new key.
+/// One rotation of a document key. It names who rotates, the new key wrapped
+/// for each member who stays, the members named, and the link that signs it.
 pub struct Rotation<'a> {
     pub rotated_by: &'a Id<User>,
     pub keys: &'a [(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
