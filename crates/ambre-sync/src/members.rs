@@ -104,8 +104,8 @@ impl SyncState {
                     document_id,
                     user_id: Id::<User>::mint(),
                     display_name: invitee_email
-                        .and_then(|email| ambre_core::DisplayName::cut_to_fit(email.as_str()))
-                        .unwrap_or_else(|| ambre_core::DisplayName::handle_of(&invitee)),
+                        .and_then(|email| ambre_core::cut_display_name_to_fit(email.as_str()))
+                        .unwrap_or_else(|| ambre_core::display_handle(&invitee)),
                 },
             );
             return;
@@ -364,7 +364,11 @@ impl SyncState {
     /// response into [`UserInfo`] values, and replies with
     /// [`RestEvent::UserSearchResults`]. The query is percent-encoded whole
     /// before it is placed in the URL (`SYNC-179`).
-    pub(crate) fn handle_search_users(&self, id: Seq<Request>, query: ambre_core::UserSearch) {
+    pub(crate) fn handle_search_users(
+        &self,
+        id: Seq<Request>,
+        query: ambre_core::Validated<ambre_core::UserSearch>,
+    ) {
         let event_tx = self.event_tx.clone();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;

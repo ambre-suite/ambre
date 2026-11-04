@@ -517,8 +517,10 @@ pub(super) fn board_of_every_key() -> ToileState {
         ElementKind::Embed,
         Point::new(40.0, 200.0),
         InitContent::Embed(
-            ambre_bus::app::toile::WebAddress::parse("https://example.invalid")
-                .expect("a safe address"),
+            ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse(
+                "https://example.invalid",
+            )
+            .expect("a safe address"),
         ),
         None,
     );

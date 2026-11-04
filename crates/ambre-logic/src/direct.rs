@@ -374,7 +374,7 @@ mod tests {
         state.my_user_id = Some(Id::<User>::mint());
         let member = |_| ambre_bus::MemberInfo {
             user_id: Id::<User>::mint(),
-            display_name: ambre_core::DisplayName::new("M").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("M").unwrap(),
             email: ambre_core::Email::from("m@test.local"),
             role: ambre_bus::Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,
@@ -612,7 +612,8 @@ mod tests {
             state.handle_logic_command(LogicCommand::Channel {
                 channel_id,
                 command: MurmureCommand::Name {
-                    name: name.map(|n| ambre_core::Name::new(n).unwrap()),
+                    name: name
+                        .map(|n| ambre_core::Validated::<ambre_core::Name>::parse(n).unwrap()),
                 },
             });
             assert!(matches!(
@@ -621,14 +622,14 @@ mod tests {
                     SyncCommand::SendUpdate { document_id, summary: None, .. },
                     SyncCommand::NameChannel { meta: sealed, name: sealed_name },
                 ] if *document_id == meta.document_id() && *sealed == meta
-                    && sealed_name.as_ref().map(ambre_core::Name::as_str) == shown
+                    && sealed_name.as_ref().map(ambre_core::Validated::as_str) == shown
             ));
             assert!(matches!(
                 drain(&ui_rx).as_slice(),
                 [UiEvent::Channel {
                     channel_id: id,
                     event: MurmureEvent::Named { name },
-                }] if *id == channel_id && name.as_ref().map(ambre_core::Name::as_str) == shown
+                }] if *id == channel_id && name.as_ref().map(ambre_core::Validated::as_str) == shown
             ));
         }
     }

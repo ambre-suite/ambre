@@ -237,7 +237,10 @@ pub(crate) fn rotate_entries_for(
     new_doc_key: &DocumentKey,
     anchor: Option<FixedBytes<EntryDigest>>,
     members: &[http::DocumentMemberEntry],
-) -> (Vec<http::RotateKeyEntry>, Vec<ambre_core::DisplayName>) {
+) -> (
+    Vec<http::RotateKeyEntry>,
+    Vec<ambre_core::Validated<ambre_core::DisplayName>>,
+) {
     let mut unwrapped = Vec::new();
     let entries = members
         .iter()
@@ -857,7 +860,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 "the new key could not be shared with {}: their key is unreadable",
                 unwrapped
                     .iter()
-                    .map(ambre_core::DisplayName::as_str)
+                    .map(ambre_core::Validated::as_str)
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -1527,7 +1530,8 @@ mod tests {
     ) -> http::DocumentMemberEntry {
         http::DocumentMemberEntry {
             user_id: Id::<User>::parse_str(uid).expect("a test id"),
-            display_name: ambre_core::DisplayName::new("Member").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Member")
+                .unwrap(),
             email: "m@test.local".into(),
             signing_pub_key: http::ServedKey::of(FixedBytes::from_array([0; 32])),
             exchange_pub_key: http::ServedKey::of(exchange_pub_key),
@@ -1683,7 +1687,10 @@ mod tests {
             entries[0].user_id,
             Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap()
         );
-        assert_eq!(unwrapped, [ambre_core::DisplayName::new("Carol").unwrap()]);
+        assert_eq!(
+            unwrapped,
+            [ambre_core::Validated::<ambre_core::DisplayName>::parse("Carol").unwrap()]
+        );
     }
 
     #[test]

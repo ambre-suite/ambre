@@ -9,6 +9,7 @@ use super::*;
 use crate::formula::ACTIVE_SHEET;
 use crate::formula::text::CellText;
 use crate::formula::types::SheetQualifier;
+use ambre_core::Validated;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 
@@ -142,14 +143,15 @@ impl TrameState {
             return;
         };
         // Names cannot reference other names: resolve sheet qualifiers only.
-        let no_names: HashMap<DefinedName, NameTarget> = HashMap::new();
+        let no_names: HashMap<Validated<DefinedName>, NameTarget> = HashMap::new();
         // Resolved on first need. Reading the order list registers its root
         // container in the snapshot, and a workbook with no legacy definition
         // must not pay for it.
         let mut legacy_sheet: Option<Pos<EngineSheet>> = None;
         for (name, reference) in names.iter() {
             // A key without a name's shape is one no formula can write.
-            let (Ok(name), LoroValue::String(reference)) = (DefinedName::new(name), reference)
+            let (Ok(name), LoroValue::String(reference)) =
+                (Validated::<DefinedName>::parse(name), reference)
             else {
                 continue;
             };
@@ -210,7 +212,7 @@ impl TrameState {
     /// checked first.
     pub(super) fn name_target(
         &self,
-        name: &DefinedName,
+        name: &Validated<DefinedName>,
         reference: &str,
     ) -> Result<StoredNameTarget, TrameOutcome> {
         // The grammar tries a bareword as a name last, after a function call, a
@@ -221,7 +223,8 @@ impl TrameState {
         if !readable {
             return Err(TrameOutcome::display_only(vec![TrameEvent::Error {
                 message: format!(
-                    "\"{name}\" cannot be used as a name: a formula would not read it"
+                    "\"{}\" cannot be used as a name: a formula would not read it",
+                    name.as_str()
                 ),
             }]));
         }
@@ -238,7 +241,7 @@ impl TrameState {
     /// [`canonical_name_reference`](Self::canonical_name_reference).
     pub(super) fn define_name(
         &mut self,
-        name: &DefinedName,
+        name: &Validated<DefinedName>,
         target: &StoredNameTarget,
     ) -> TrameOutcome {
         let stored = &target.0;
@@ -286,7 +289,7 @@ impl TrameState {
         };
         // The target must resolve now: the qualifier names a live sheet, and the
         // inner node is a reference and not, say, a nested name.
-        let no_names: HashMap<DefinedName, NameTarget> = HashMap::new();
+        let no_names: HashMap<Validated<DefinedName>, NameTarget> = HashMap::new();
         let ctx = TrameCtx {
             engine_sheet_by_name: &self.engine_sheet_by_name,
             engine_sheet_by_id: &self.engine_sheet_by_id,
@@ -299,7 +302,7 @@ impl TrameState {
     }
 
     /// Remove a named range and reseed. A no-op if the name is undefined.
-    pub(super) fn delete_name(&mut self, name: &DefinedName) -> TrameOutcome {
+    pub(super) fn delete_name(&mut self, name: &Validated<DefinedName>) -> TrameOutcome {
         let map = self.doc.get_map(Root::NamedRanges.as_str());
         if map.get(name.as_str()).is_none() {
             return TrameOutcome::display_only(vec![]);

@@ -98,7 +98,7 @@ pub struct DocumentSummary {
     pub document_id: Id<Document>,
     pub doc_type: DocType,
     /// Decrypted from `name_enc` by the Sync thread.
-    pub name: Option<ambre_core::Name>,
+    pub name: Option<ambre_core::Validated<ambre_core::Name>>,
     pub role: Role,
     /// Epoch milliseconds.
     pub updated_at: Instant<Authored>,
@@ -110,7 +110,7 @@ pub struct DocumentSummary {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemberInfo {
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub email: ambre_core::Email,
     pub role: Role,
     /// What the signed membership log says of this row
@@ -182,7 +182,7 @@ pub struct SealedRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserInfo {
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub email: ambre_core::Email,
 }
 
@@ -209,13 +209,15 @@ pub enum RestCommand {
     SetupAccount {
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
         email: ambre_core::Email,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
     },
     /// Dev-only: authenticate as `username` (created on the fly server-side),
     /// deriving keys deterministically from the username. Triggered by the
     /// `?user=<name>` URL param to test multi-user behaviour on one machine.
     /// Rejected unless the server runs with `DEV_MODE`. -> `SessionReady`.
-    DevLogin { username: ambre_core::DisplayName },
+    DevLogin {
+        username: ambre_core::Validated<ambre_core::DisplayName>,
+    },
     /// Change the account passphrase. -> `PassphraseChanged`.
     ChangePassphrase {
         current_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
@@ -237,14 +239,14 @@ pub enum RestCommand {
     CreateDocument {
         doc_type: DocType,
         /// Plaintext name (encrypted by the Sync thread before upload).
-        name: ambre_core::Name,
+        name: ambre_core::Validated<ambre_core::Name>,
     },
     /// Delete a document. The Logic thread drops its in-memory state (hook). -> `DocumentDeleted`.
     DeleteDocument { document_id: Id<Document> },
     /// Rename a document. -> `DocumentRenamed`.
     RenameDocument {
         document_id: Id<Document>,
-        name: ambre_core::Name,
+        name: ambre_core::Validated<ambre_core::Name>,
     },
 
     // -- Sharing -----------------------------------------------------------------
@@ -300,7 +302,9 @@ pub enum RestCommand {
 
     // -- Users -------------------------------------------------------------------
     /// Search users by email prefix. -> `UserSearchResults`.
-    SearchUsers { query: ambre_core::UserSearch },
+    SearchUsers {
+        query: ambre_core::Validated<ambre_core::UserSearch>,
+    },
 
     // -- Media -------------------------------------------------------------------
     /// Upload a media file. -> `MediaUploaded`.
@@ -368,7 +372,9 @@ pub enum RestCommand {
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     /// Create an ephemeral meeting room. -> `MeetingCreated`.
-    CreateMeeting { name: ambre_core::Name },
+    CreateMeeting {
+        name: ambre_core::Validated<ambre_core::Name>,
+    },
     /// Join a meeting. -> `MeetingJoined`.
     JoinMeeting { meeting_id: Id<Meeting> },
     /// Leave a meeting. -> `MeetingLeft`.
@@ -416,7 +422,7 @@ pub enum RestEvent {
     // -- Session -----------------------------------------------------------------
     SessionReady {
         user_id: Id<User>,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
     },
     /// First connection: no keys on the server -- the UI must show onboarding.
@@ -454,7 +460,7 @@ pub enum RestEvent {
     InviteeKey {
         document_id: Id<Document>,
         user_id: Id<User>,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
         exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
@@ -469,7 +475,7 @@ pub enum RestEvent {
     InviteSent {
         document_id: Id<Document>,
         user_id: Id<User>,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
     },
     /// Revocation initiated by **this** client is complete.
     RevocationComplete {
@@ -568,7 +574,7 @@ pub enum RestEvent {
     /// `keys_stored` says whether the next step is an unlock or a setup.
     ProviderSignedIn {
         user_id: Id<User>,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
         keys_stored: KeySetup,
     },

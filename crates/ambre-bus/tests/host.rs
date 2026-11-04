@@ -284,7 +284,7 @@ fn sync_command_roundtrips_through_postcard() {
         id: Seq::nth(42),
         cmd: RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: ambre_core::Name::new("Budget").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("Budget").unwrap(),
         },
     });
     roundtrip_sync(&SyncCommand::OpenDocument {
@@ -507,7 +507,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             id: Seq::nth(5),
             cmd: RestCommand::CreateDocument {
                 doc_type: DocType::Toile,
-                name: ambre_core::Name::new("Plan").unwrap(),
+                name: ambre_core::Validated::<ambre_core::Name>::parse("Plan").unwrap(),
             },
         },
         SyncCommand::OpenDocument {
@@ -569,7 +569,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             meta,
             segment,
             visibility: ambre_core::Visibility::Private,
-            name: Some(ambre_core::Name::new("board").unwrap()),
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("board").unwrap()),
         },
         SyncCommand::NameChannel { meta, name: None },
         SyncCommand::JoinChannel {
@@ -713,7 +713,8 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             members: vec![MemberInfo {
                 user_id: user,
-                display_name: ambre_core::DisplayName::new("Ada").unwrap(),
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada")
+                    .unwrap(),
                 email: "ada@example.org".into(),
                 role: Role::Editor,
                 standing: MemberStanding::Verified,
@@ -894,11 +895,13 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             spaces: vec![space],
             names: vec![ChannelName {
                 channel_id: chan,
-                name: ambre_core::Name::new("board").unwrap(),
+                name: ambre_core::Validated::<ambre_core::Name>::parse("board").unwrap(),
             }],
             peers: vec![DirectPeers {
                 channel_id: direct,
-                names: vec![ambre_core::DisplayName::new("Bob").unwrap()],
+                names: vec![
+                    ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap(),
+                ],
             }],
             metas: vec![ChannelMeta {
                 channel_id: chan,

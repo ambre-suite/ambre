@@ -66,13 +66,13 @@ ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | DEV_USER_KEY | const | &str	free-text	single storage key literal
-ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before DisplayName::new reads it
+ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before the rule of a DisplayName reads it
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
-ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before DisplayName::new reads it
+ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before the rule of a DisplayName reads it
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	free-text	worker URL
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
@@ -99,8 +99,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Replies as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Segments as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of ChannelTopic gives a caller, and serde's try_from hands its deserialisation error
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ChannelTopic validates
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Attachment.name | field | String	free-text	file name as the author's file system gave it
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | std::borrow::Cow<'static,str>	newtype-inner	Emoji newtype, borrowed for a static table and owned otherwise
@@ -117,8 +115,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_byte
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelTopic::as_str() | ret | &str	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelTopic::new(text) | param | impl Into<String>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
@@ -231,11 +227,7 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.sk
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::NotesChanged.notes | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::as_str() | ret | &str	newtype-inner	WebAddress newtype
-ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::into_string() | ret | String	newtype-inner	WebAddress newtype
-ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of WebAddress validates
 ambre-bus | src/app/toile.rs | crate::app::toile | AddressError::message() | ret | &'static str	free-text	AddressError message text
-ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::parse(text) | param | &str	free-text	address text the user typed or the document holds, checked into a WebAddress
 ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
 ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme(s) | param | &str	generic	generic parser/reader/formatter over text
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
@@ -913,24 +905,33 @@ ambre-core | src/media.rs | crate::media | MediaType::as_str() | ret | &str	newt
 ambre-core | src/media.rs | crate::media | ByteSize::get() | ret | u64	newtype-inner	the ByteSize newtype unwrapped, for a caller outside its module
 ambre-core | src/media.rs | crate::media | ByteSize::new(value) | param | u64	newtype-inner	the constructor of the ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::new(value) | param | String	newtype-inner	the constructor of the MediaType newtype
-ambre-core | src/name.rs | crate::name | <DisplayName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of DisplayName validates
-ambre-core | src/name.rs | crate::name | <DisplayNameRule as Rule>::admit() | ret | Result<String,InvalidDisplayName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/name.rs | crate::name | <DisplayNameRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/name.rs | crate::name | <NameLength as Rule>::admit() | ret | Result<String,NameTooLong>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/name.rs | crate::name | <NameLength as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/name.rs | crate::name | DisplayName::as_str() | ret | &str	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | DisplayName::cut_to_fit(text) | param | &str	newtype-inner	DisplayName constructor input
-ambre-core | src/name.rs | crate::name | DisplayName::into_string() | ret | String	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | DisplayName::new(text) | param | &str	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | NAME_MAX_CHARS | const | usize	generic	name cap and its predicate
 ambre-core | src/name.rs | crate::name | NAME_TOO_LONG | const | &str	free-text	user-facing message
-ambre-core | src/name.rs | crate::name | Name::as_str() | ret | &str	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | Name::cut_to_fit(text) | param | &str	newtype-inner	Name constructor, the text it cuts to the cap
-ambre-core | src/name.rs | crate::name | Name::into_string() | ret | String	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | Name::is_empty() | ret | bool	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | Name::new(text) | param | impl Into<String>	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | name_fits() | ret | bool	generic	name cap and its predicate
 ambre-core | src/name.rs | crate::name | name_fits(name) | param | &str	generic	name cap and its predicate
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as Rule>::admit() | ret | Result<String,InvalidDefinedName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as ambre_core::Rule>::admit() | ret | Result<String,InvalidOrgName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as ambre_core::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <DisplayName as Rule>::admit() | ret | Result<String,InvalidDisplayName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <DisplayName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <Name as Rule>::admit() | ret | Result<String,NameTooLong>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <Name as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <Validated<DisplayName> as TryFrom<String>>::try_from(text) | param | String	generic	the stored text a relay row read checks through the rule of a display name
+ambre-core | src/name.rs | crate::name | cut_display_name_to_fit(text) | param | &str	generic	the raw text a total door trims and cuts to the cap of a display name, such as an identity provider's
+ambre-core | src/name.rs | crate::name | cut_name_to_fit(text) | param | &str	generic	the raw text a total door cuts to the cap of a name, a name composed from other names
+ambre-core | src/name.rs | crate::name | name_is_empty() | ret | bool	generic	whether a name is the empty name, a fact that selects no mode
+ambre-core | src/search.rs | crate::search | <SearchQuery as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-core | src/search.rs | crate::search | <SearchQuery as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/search.rs | crate::search | <SearchQuery as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/search.rs | crate::search | <UserSearch as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-core | src/search.rs | crate::search | <UserSearch as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/search.rs | crate::search | <UserSearch as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of ObjectKey copies into its text
 ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of ObjectKey wraps
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey.0 | field | String	newtype-inner	ObjectKey newtype
@@ -969,14 +970,6 @@ ambre-core | src/schema.rs | crate::schema | SchemaMigration.apply | field | fn(
 ambre-core | src/schema.rs | crate::schema | scaffold_peer(scaffold) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes: the Loro update a step exports, opaque to the hash as scaffold_peer's input is
 ambre-core | src/schema.rs | crate::schema | StepFingerprint.0 | field | u64	newtype-inner	the FNV-1a hash a migration step fingerprint holds
-ambre-core | src/search.rs | crate::search | <SearchQuery as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of SearchQuery gives a caller, and serde's try_from hands its deserialisation error
-ambre-core | src/search.rs | crate::search | <SearchQuery as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of SearchQuery validates
-ambre-core | src/search.rs | crate::search | <UserSearch as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of UserSearch gives a caller, and serde's try_from hands its deserialisation error
-ambre-core | src/search.rs | crate::search | <UserSearch as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of UserSearch trims and checks
-ambre-core | src/search.rs | crate::search | SearchQuery::as_str() | ret | &str	newtype-inner	the message search text, as typed, never blank
-ambre-core | src/search.rs | crate::search | SearchQuery::new(text) | param | String	newtype-inner	the query text the fallible constructor of SearchQuery checks
-ambre-core | src/search.rs | crate::search | UserSearch::as_str() | ret | &str	newtype-inner	the trimmed search text of UserSearch
-ambre-core | src/search.rs | crate::search | UserSearch::new(text) | param | &str	newtype-inner	the query text the fallible constructor of UserSearch trims and checks
 ambre-core | src/serde_enums.rs | crate::serde_enums | read_word(parse) | param | impl FnOnce(&str)->Option<T>	generic	generic serde helper
 ambre-core | src/serde_enums.rs | crate::serde_enums | read_word(words) | param | &'static[&'static str]	generic	generic serde helper
 ambre-core | src/serde_enums.rs | crate::serde_enums::channel_document_kind | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
@@ -2128,8 +2121,6 @@ ambre-server | src/db/mod.rs | crate::db | id_to_uuid() | ret | uuid::Uuid	gener
 ambre-server | src/db/mod.rs | crate::db | uuid_row_to_id(u) | param | uuid::Uuid	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | uuid_to_core() | ret | ambre_core::Uuid	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | uuid_to_core(u) | param | uuid::Uuid	generic	generic codec/parser/bytes API
-ambre-server | src/db/orgs.rs | crate::db::orgs | OrgName::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of OrgName validates, as a request body carries it
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrganizationRow.name | field | String	free-text	row keeps legacy name text by design; OrgName validates at the request seam (SRV-233)
 ambre-server | src/db/orgs.rs | crate::db::orgs | delete_organization() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | param | Option<&str>	free-text	recovery reason text
@@ -3023,11 +3014,6 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice()
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	generic	the codec of an enum that carries data: the style name the tree stores and the lookup matches back
 ambre-prose | src/doc.rs | crate::doc | RefusalCause::sentence() | ret | &'static str	free-text	log and refusal sentence of the cause
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	looks a name table up by the key text the document stores
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <NameShape as Rule>::admit() | ret | Result<String,InvalidDefinedName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <NameShape as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName::as_str() | ret | &str	newtype-inner	enum/newtype own accessor or constructor
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName::new(text) | param | &str	newtype-inner	the fallible constructor that checks the name shape
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter.0 | field | u8	newtype-inner	the byte of a validated CSV separator
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter::byte() | ret | u8	newtype-inner	hands the byte to the csv crate's reader and writer builders
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter::new(byte) | param | u8	newtype-inner	the fallible constructor that checks the byte
@@ -3902,13 +3888,8 @@ ambre-core | src/unit.rs | crate::unit | ViewSpeed.0 | field | f32	newtype-inner
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::get() | ret | f32	newtype-inner	the number of view pixels per millisecond, for a foreign API that takes the float
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::new(value) | param | f32	newtype-inner	the number of view pixels per millisecond a speed wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Mentions as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopicRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-bus | src/app/prose.rs | crate::app::prose | <TextAck as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-bus | src/app/toile.rs | crate::app::toile | <HttpsAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/toile.rs | crate::app::toile | <HttpsAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/id.rs | crate::id | <CondFormat as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
 ambre-core | src/id.rs | crate::id | <CondFormat as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
 ambre-core | src/id.rs | crate::id | <FilterView as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
@@ -3919,12 +3900,6 @@ ambre-core | src/id.rs | crate::id | <Sheet as Entity>::Repr | assoc | String	ne
 ambre-core | src/member_count.rs | crate::member_count | <Members as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-core | src/member_count.rs | crate::member_count | <Count<Members> as TryFrom<i64>>::try_from(n) | param | i64	newtype-inner	the i64 the fallible constructor of a member count validates
 ambre-core | src/member_count.rs | crate::member_count | Count<Members>::is_shared() | ret | bool	generic	predicate result
-ambre-core | src/search.rs | crate::search | <SearchQueryRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
-ambre-core | src/search.rs | crate::search | <SearchQueryRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/search.rs | crate::search | <SearchQueryRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/search.rs | crate::search | <UserSearchRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
-ambre-core | src/search.rs | crate::search | <UserSearchRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/search.rs | crate::search | <UserSearchRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/static_key.rs | crate::static_key | <Canvases as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Categories as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Commands as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
@@ -3939,8 +3914,6 @@ ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::MIN | const | u8
 ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
 ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <HtmlNode as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgNameRule as ambre_core::Rule>::admit() | ret | Result<String,InvalidOrgName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgNameRule as ambre_core::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | <ImportElement as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | <ImportGroupRank as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <EngineSheet as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line

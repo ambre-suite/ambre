@@ -210,8 +210,9 @@ pub fn pending(document: &LoroDoc) -> Vec<Suggestion> {
         out.push(Suggestion {
             suggestion_id: id,
             kind,
-            author: doc::read_string(&entry, doc::AnnotKey::Author)
-                .and_then(|name| ambre_core::DisplayName::new(&name).ok()),
+            author: doc::read_string(&entry, doc::AnnotKey::Author).and_then(|name| {
+                ambre_core::Validated::<ambre_core::DisplayName>::parse(&name).ok()
+            }),
             user_id,
             spans: vec![span],
         });

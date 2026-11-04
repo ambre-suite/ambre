@@ -1839,7 +1839,7 @@ mod handler_tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-1".to_owned()),
             &ambre_core::Email::from("new@example.com"),
-            &ambre_core::DisplayName::new("New").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("New").unwrap(),
         )
         .await
         .unwrap();
@@ -1922,7 +1922,7 @@ mod handler_tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-2".to_owned()),
             &ambre_core::Email::from("keyless@example.com"),
-            &ambre_core::DisplayName::new("Keyless").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Keyless").unwrap(),
         )
         .await
         .unwrap();
@@ -2009,7 +2009,7 @@ mod handler_tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-3".to_owned()),
             &ambre_core::Email::from("c@example.com"),
-            &ambre_core::DisplayName::new("C").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("C").unwrap(),
         )
         .await
         .unwrap();
@@ -2033,7 +2033,7 @@ mod handler_tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-4".to_owned()),
             &ambre_core::Email::from("d@example.com"),
-            &ambre_core::DisplayName::new("D").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("D").unwrap(),
         )
         .await
         .unwrap();

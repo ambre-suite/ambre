@@ -448,7 +448,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
             ambre_bus::CatalogPosition::new(0),
         )
         .expect("category");
-    let topic = ChannelTopic::new("everything").expect("a topic");
+    let topic = ambre_core::Validated::<ChannelTopic>::parse("everything").expect("a topic");
     space
         .list_channel(
             channel,

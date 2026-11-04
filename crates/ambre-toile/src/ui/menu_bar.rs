@@ -66,8 +66,8 @@ pub const DECK: StaticKey<Commands> = StaticKey::<Commands>::new("toile.present.
 /// only once its bytes are read.
 pub const IMPORT_FILE: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.import");
 /// Put a web page on the board (`TOILE-087`). A UI-only intent: the shell owns
-/// the dialog that takes the address, and the board learns of it only once the
-/// address has passed `WebAddress::parse`.
+/// the dialog that takes the address. The board learns of it only once the
+/// address has passed its rule.
 pub const EMBED_WEB: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.embed_web");
 /// Put another Ambre document on the board (`TOILE-086`). A UI-only intent for
 /// the same reason: only the launcher knows which documents this user may open,

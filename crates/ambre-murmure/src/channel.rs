@@ -131,7 +131,7 @@ enum Created {
     /// The `meta` document, listing the first active segment.
     Meta {
         channel_type: ChannelType,
-        name: Option<ambre_core::Name>,
+        name: Option<ambre_core::Validated<ambre_core::Name>>,
         active: Id<Segment>,
         now: Instant<Authored>,
     },
@@ -328,7 +328,7 @@ impl ChannelState {
     pub fn create(
         channel_id: Id<Channel>,
         channel_type: ChannelType,
-        name: Option<&ambre_core::Name>,
+        name: Option<&ambre_core::Validated<ambre_core::Name>>,
         now: Instant<Authored>,
     ) -> Result<Self, MurmureError> {
         let active_id = Id::<Document>::mint();
@@ -592,7 +592,7 @@ impl ChannelState {
 
     /// The name of the channel, absent when it has none (`MURMURE-018`) or
     /// one past the cap.
-    pub fn name(&self) -> Option<ambre_core::Name> {
+    pub fn name(&self) -> Option<ambre_core::Validated<ambre_core::Name>> {
         schema::name(&crate::schema::channel(&self.meta.doc), ChannelKey::Name)
     }
 
@@ -607,14 +607,17 @@ impl ChannelState {
     /// name lives in its catalogue too. [`MurmureError::Crdt`] when Loro
     /// refuses a write or the export. [`MurmureError::NoSession`] before the
     /// PeerID of `meta` landed.
-    pub fn name_direct(&mut self, name: Option<&ambre_core::Name>) -> Result<Named, MurmureError> {
+    pub fn name_direct(
+        &mut self,
+        name: Option<&ambre_core::Validated<ambre_core::Name>>,
+    ) -> Result<Named, MurmureError> {
         if self.channel_type() != Some(ChannelType::Direct) {
             return Err(MurmureError::NotDirect(self.channel_id));
         }
         let meta = self.meta_id();
         let name = name
-            .map(ambre_core::Name::trimmed)
-            .filter(|n| !n.is_empty());
+            .map(ambre_core::trimmed_name)
+            .filter(|n| !ambre_core::name_is_empty(n));
         let (doc, session) = self.meta.session()?;
         let channel = crate::schema::channel(doc);
         match &name {

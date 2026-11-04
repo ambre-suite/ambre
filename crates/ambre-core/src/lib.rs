@@ -165,8 +165,9 @@ pub use mode::{
     LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle, Visibility, WordMatch,
 };
 pub use name::{
-    DisplayName, DisplayNameRule, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name,
-    NameLength, NameTooLong, name_fits,
+    DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong,
+    cut_display_name_to_fit, cut_name_to_fit, display_handle, name_fits, name_is_empty,
+    name_plaintext, trimmed_name,
 };
 pub use object_key::ObjectKey;
 pub use opaque::{Opaque, OpaqueKind, OpaqueLength, SealedAtRest, WireOpaque};
@@ -187,7 +188,7 @@ pub use schema::{
     SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
     migration_peer, scaffold_peer, verdict,
 };
-pub use search::{SearchQuery, SearchQueryRule, UserSearch, UserSearchRule};
+pub use search::{SearchQuery, UserSearch};
 pub use secret::{
     AccessToken, Confidential, ConfidentialKind, Credential, CredentialKind, OidcCode, OidcState,
     Passphrase, Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret, WireConfidential,

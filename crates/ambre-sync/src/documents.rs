@@ -90,16 +90,16 @@ impl SyncState {
     }
 
     /// Seals a document name with the full envelope, bound to its document
-    /// (`SYNC-018`, `SYNC-068`). A [`ambre_core::Name`] never runs past its
+    /// (`SYNC-018`, `SYNC-068`). A `Validated<Name>` never runs past its
     /// budget, so the relay never holds one it would refuse (`SYNC-178`).
     pub(crate) fn seal_document_name(
         document_id: Id<Document>,
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
-        name: &ambre_core::Name,
+        name: &ambre_core::Validated<ambre_core::Name>,
     ) -> Result<ambre_core::Encoded<ambre_core::SealedName>, pipeline::PipelineError> {
         let sealed = pipeline::seal_object(
-            &name.to_plaintext(),
+            &ambre_core::name_plaintext(name),
             &pipeline::name_aad(document_id),
             doc_key,
             signing_key,
@@ -126,7 +126,7 @@ impl SyncState {
         &mut self,
         id: Seq<Request>,
         doc_type: DocType,
-        name: ambre_core::Name,
+        name: ambre_core::Validated<ambre_core::Name>,
     ) {
         let event_tx = self.event_tx.clone();
 
@@ -154,7 +154,7 @@ impl SyncState {
 
                 // Sealing and wrapping fail only on a bug. The document is not
                 // created then, and the caller reads why.
-                let name_enc = if name.is_empty() {
+                let name_enc = if ambre_core::name_is_empty(&name) {
                     Ok(None)
                 } else {
                     Self::seal_document_name(document_id, &doc_key, &author.signing_key, &name)
@@ -207,7 +207,7 @@ impl SyncState {
                 }
             });
         } else {
-            tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
+            tracing::info!("Sync: CreateDocument {doc_type:?} {name:?}");
             let document_id = Id::<Document>::mint();
             self.doc_metadata.insert(document_id, (doc_type, name));
             self.reply(
@@ -254,7 +254,7 @@ impl SyncState {
         &mut self,
         id: Seq<Request>,
         document_id: Id<Document>,
-        name: ambre_core::Name,
+        name: ambre_core::Validated<ambre_core::Name>,
     ) {
         let event_tx = self.event_tx.clone();
 
@@ -346,7 +346,7 @@ impl SyncState {
                 }
             });
         } else {
-            tracing::info!("Sync: RenameDocument {document_id:?} '{name}'");
+            tracing::info!("Sync: RenameDocument {document_id:?} {name:?}");
             if let Some((_doc_type, old_name)) = self.doc_metadata.get_mut(&document_id) {
                 *old_name = name;
             }
@@ -377,7 +377,7 @@ impl ListedName<'_> {
         url_scheme: crate::http::UrlScheme,
         api_base: &crate::http::Url<crate::http::RelayHost>,
         auth: &http::AuthContext,
-    ) -> Option<ambre_core::Name> {
+    ) -> Option<ambre_core::Validated<ambre_core::Name>> {
         let current = self.unwrap_key(exchange_key)?;
         // One request more, and only for a name older than the current key.
         let links = if pipeline::object_key(self.name_enc).ok()? == current.id() {
@@ -424,7 +424,7 @@ pub(crate) fn open_name(
     current: &DocumentKey,
     sealed: &ambre_core::Encoded<ambre_core::SealedName>,
     links: Vec<ambre_protocol::KeyLink>,
-) -> Option<ambre_core::Name> {
+) -> Option<ambre_core::Validated<ambre_core::Name>> {
     let chain = crate::chain::Chain::new(document_id, links);
     let wanted = pipeline::object_key(sealed).ok()?;
     let key = crate::chain::find_key(document_id, current, &[], &chain, wanted)?;
@@ -435,7 +435,7 @@ pub(crate) fn open_name(
         let text = std::str::from_utf8(bytes)
             .ok()
             .filter(|text| ambre_core::name_fits(text))?;
-        ambre_core::Name::new(text).ok()
+        ambre_core::Validated::<ambre_core::Name>::parse(text).ok()
     })
 }
 
@@ -457,7 +457,7 @@ mod tests {
             document_id,
             &doc_key,
             &signing_key,
-            &ambre_core::Name::new(name).unwrap(),
+            &ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
         )
         .unwrap();
         let bytes = sent.as_bytes().to_vec();
@@ -466,7 +466,7 @@ mod tests {
         assert_eq!(
             open_name(document_id, &doc_key, &sent, Vec::new())
                 .as_ref()
-                .map(ambre_core::Name::as_str),
+                .map(ambre_core::Validated::as_str),
             Some(name)
         );
         let other = DocumentKey::generate();
@@ -474,7 +474,7 @@ mod tests {
     }
 
     /// `SYNC-178`: a name past its budget is refused before it is sealed: no
-    /// [`ambre_core::Name`] holds it. The longest name, in four-byte
+    /// `Validated<Name>` holds it. The longest name, in four-byte
     /// characters, seals within what the relay reads, and an empty one is the
     /// overhead alone.
     #[test]
@@ -483,7 +483,7 @@ mod tests {
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let seal = |name: &str| {
-            let name = ambre_core::Name::new(name).unwrap();
+            let name = ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap();
             SyncState::seal_document_name(document_id, &doc_key, &signing_key, &name)
         };
         let longest = "\u{1F600}".repeat(ambre_core::Encoded::<ambre_core::SealedName>::MAX_CHARS);
@@ -496,7 +496,10 @@ mod tests {
             ambre_core::Encoded::<ambre_core::SealedName>::OVERHEAD
         );
         let past = "a".repeat(ambre_core::Encoded::<ambre_core::SealedName>::MAX_CHARS + 1);
-        assert_eq!(ambre_core::Name::new(past), Err(ambre_core::NameTooLong));
+        assert_eq!(
+            ambre_core::Validated::<ambre_core::Name>::parse(past),
+            Err(ambre_core::NameTooLong)
+        );
     }
 
     /// A sealed name that is no text, or that runs past the cap, opens to no
@@ -523,7 +526,7 @@ mod tests {
         assert_eq!(
             open(at_cap.as_bytes())
                 .as_ref()
-                .map(ambre_core::Name::as_str),
+                .map(ambre_core::Validated::as_str),
             Some(at_cap.as_str())
         );
         assert_eq!(open(past.as_bytes()), None);
@@ -546,14 +549,14 @@ mod tests {
             document_id,
             &keys[0],
             &signing_key,
-            &ambre_core::Name::new("Budget").unwrap(),
+            &ambre_core::Validated::<ambre_core::Name>::parse("Budget").unwrap(),
         )
         .unwrap();
         let current = &keys[3];
         assert_eq!(
             open_name(document_id, current, &name, links.clone())
                 .as_ref()
-                .map(ambre_core::Name::as_str),
+                .map(ambre_core::Validated::as_str),
             Some("Budget")
         );
         assert_eq!(open_name(document_id, current, &name, Vec::new()), None);

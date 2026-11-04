@@ -12,7 +12,9 @@ use ambre_bus::{
     SealedChannelKey,
 };
 use ambre_core::id::{Category, Channel, Document, Id, Space};
-use ambre_core::{DeltaBytes, LoroPayloadRef, Name, Payload, PeerEntryBytes, SnapshotBytes};
+use ambre_core::{
+    DeltaBytes, LoroPayloadRef, Name, Payload, PeerEntryBytes, SnapshotBytes, Validated,
+};
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::channel::ChannelState;
@@ -24,7 +26,7 @@ use crate::session::Session;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listing<'a> {
     /// Absent when the channel has none.
-    pub topic: Option<&'a ChannelTopic>,
+    pub topic: Option<&'a Validated<ChannelTopic>>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
@@ -44,7 +46,7 @@ pub struct SpaceState {
     /// The name and the creation time of a space created here, written again
     /// under its PeerID once the session lands. `None` for a space the relay
     /// served.
-    created: Option<(Name, Instant<Authored>)>,
+    created: Option<(Validated<Name>, Instant<Authored>)>,
 }
 
 impl SpaceState {
@@ -63,7 +65,7 @@ impl SpaceState {
     /// cap makes no [`Name`], so it never reaches here (`MURMURE-579`).
     pub fn create(
         space_id: Id<Space>,
-        name: &Name,
+        name: &Validated<Name>,
         now: Instant<Authored>,
     ) -> Result<Self, MurmureError> {
         let doc = LoroDoc::new();
@@ -155,7 +157,7 @@ impl SpaceState {
     }
 
     /// The name of the space, absent when it has none or one past the cap.
-    pub fn name(&self) -> Option<ambre_core::Name> {
+    pub fn name(&self) -> Option<ambre_core::Validated<ambre_core::Name>> {
         schema::name(&crate::schema::space(&self.doc), SpaceKey::Name)
     }
 
@@ -202,7 +204,7 @@ impl SpaceState {
     pub fn put_category(
         &mut self,
         category_id: Id<Category>,
-        name: &Name,
+        name: &Validated<Name>,
         position: CatalogPosition,
     ) -> Result<Payload<DeltaBytes>, MurmureError> {
         self.writable()?;
@@ -358,7 +360,8 @@ impl SpaceState {
             found.push(CatalogueEntry {
                 channel_id,
                 name: schema::name(&entry, EntryKey::Name).unwrap_or_default(),
-                topic: schema::string(&entry, EntryKey::Topic).and_then(ChannelTopic::new),
+                topic: schema::string(&entry, EntryKey::Topic)
+                    .and_then(|text| Validated::<ChannelTopic>::parse(text).ok()),
                 category: schema::string(&entry, EntryKey::Category)
                     .and_then(|s| Id::<Category>::parse_str(&s).ok()),
                 position: position_of(&entry, EntryKey::Position),
@@ -405,11 +408,11 @@ impl SpaceState {
 fn write_created(
     doc: &LoroDoc,
     space_id: Id<Space>,
-    name: &Name,
+    name: &Validated<Name>,
     now: Instant<Authored>,
 ) -> Result<(), MurmureError> {
     schema::write_space_header(doc, space_id, now)?;
-    if !name.is_empty() {
+    if !ambre_core::name_is_empty(name) {
         crate::schema::space(doc).insert(SpaceKey::Name, name.as_str())?;
     }
     doc.commit();

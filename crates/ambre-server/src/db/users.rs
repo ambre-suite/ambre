@@ -14,7 +14,7 @@ pub struct UserRow {
     /// self-asserted at `/auth/setup`. A verified email wins any collision (#3):
     /// an OIDC login reclaims an unverified holder's email.
     pub email_verified: EmailProof,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub master_key_enc: Option<ambre_core::Encoded<ambre_core::WrappedMasterKey>>,
     pub master_key_salt: Option<FixedBytes<ambre_core::MasterKeySalt>>,
     /// `None` until the account registers its keys: a provider login creates
@@ -32,7 +32,7 @@ pub struct UserInfoRow {
     /// Surfaced in search so the sharer sees the TOFU signal for an unverified,
     /// possibly-squatted recipient before wrapping the doc key to them (#3).
     pub email_verified: EmailProof,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub signing_pubkey: FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
 }
@@ -142,7 +142,7 @@ pub async fn get_user_by_email(
 pub async fn create_user(
     pool: &PgPool,
     email: &ambre_core::Email,
-    display_name: &ambre_core::DisplayName,
+    display_name: &ambre_core::Validated<ambre_core::DisplayName>,
     master_key_enc: &ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     master_key_salt: &FixedBytes<ambre_core::MasterKeySalt>,
     signing_pubkey: &FixedBytes<ambre_core::PublicKey>,
@@ -206,7 +206,7 @@ pub async fn upsert_user_from_oidc(
     oidc_provider: ambre_core::OidcProvider,
     oidc_subject: &openidconnect::SubjectIdentifier,
     email: &ambre_core::Email,
-    display_name: &ambre_core::DisplayName,
+    display_name: &ambre_core::Validated<ambre_core::DisplayName>,
 ) -> Result<UserRow, AppError> {
     let mut tx = pool.begin().await?;
 
@@ -278,11 +278,11 @@ pub async fn upsert_user_from_oidc(
 /// server. Gated by `Config::dev_mode` at the call site.
 pub async fn dev_upsert_user(
     pool: &PgPool,
-    username: &ambre_core::DisplayName,
+    username: &ambre_core::Validated<ambre_core::DisplayName>,
     signing_pubkey: &FixedBytes<ambre_core::PublicKey>,
     exchange_pubkey: &FixedBytes<ambre_core::ExchangePublicKey>,
 ) -> Result<UserRow, AppError> {
-    let email = format!("{username}@dev.local");
+    let email = format!("{}@dev.local", username.as_str());
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
     // UPDATE), so we can log creation without a prior existence check.
     let row = sqlx::query(
@@ -321,13 +321,16 @@ pub async fn dev_upsert_user(
     })
 }
 
-pub use ambre_core::UserSearch;
+pub use ambre_core::{UserSearch, Validated};
 
 /// Full-text search over users by email or display name (ILIKE).
 ///
 /// An account without keys is left out: nothing can be shared with it until it
 /// registers them (`SRV-163`).
-pub async fn search_users(pool: &PgPool, query: &UserSearch) -> Result<Vec<UserInfoRow>, AppError> {
+pub async fn search_users(
+    pool: &PgPool,
+    query: &Validated<UserSearch>,
+) -> Result<Vec<UserInfoRow>, AppError> {
     // Escape the LIKE metacharacters (`\ % _`) in the user-supplied query so they
     // match literally. Without this a caller could pass `%` / `_` as wildcards and
     // widen `ILIKE '%q%'` into a directory-enumeration primitive, defeating the
@@ -427,7 +430,7 @@ mod tests {
         let squatter = create_user(
             &pool,
             &ambre_core::Email::from("alice@example.com"),
-            &ambre_core::DisplayName::new("Alice").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
             &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
@@ -446,7 +449,7 @@ mod tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-123".to_owned()),
             &ambre_core::Email::from("Alice@example.com"),
-            &ambre_core::DisplayName::new("Alice").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
         )
         .await
         .expect("verified login must reclaim the squatted email");
@@ -486,7 +489,7 @@ mod tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-1".to_owned()),
             &ambre_core::Email::from("dave@example.com"),
-            &ambre_core::DisplayName::new("Dave").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Dave").unwrap(),
         )
         .await
         .expect("verified login");
@@ -494,7 +497,7 @@ mod tests {
         let err = create_user(
             &pool,
             &ambre_core::Email::from("DAVE@example.com"),
-            &ambre_core::DisplayName::new("Impostor").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Impostor").unwrap(),
             &ambre_core::Encoded::new([9u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([8u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([7u8; 32]),
@@ -516,7 +519,7 @@ mod tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-a".to_owned()),
             &ambre_core::Email::from("erin@example.com"),
-            &ambre_core::DisplayName::new("Erin").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Erin").unwrap(),
         )
         .await
         .expect("first verified login");
@@ -526,7 +529,7 @@ mod tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-b".to_owned()),
             &ambre_core::Email::from("erin@example.com"),
-            &ambre_core::DisplayName::new("Erin").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Erin").unwrap(),
         )
         .await
         .expect_err("a second verified identity must not steal the email");
@@ -543,7 +546,7 @@ mod tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-x".to_owned()),
             &ambre_core::Email::from("frank@example.com"),
-            &ambre_core::DisplayName::new("Frank").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Frank").unwrap(),
         )
         .await
         .expect("first login");
@@ -552,7 +555,7 @@ mod tests {
             ambre_core::OidcProvider::Google,
             &openidconnect::SubjectIdentifier::new("sub-x".to_owned()),
             &ambre_core::Email::from("frank@example.com"),
-            &ambre_core::DisplayName::new("Frank").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Frank").unwrap(),
         )
         .await
         .expect("re-login must not self-conflict");
@@ -567,7 +570,7 @@ mod tests {
         create_user(
             &pool,
             &ambre_core::Email::from("bob@example.com"),
-            &ambre_core::DisplayName::new("Bob").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap(),
             &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
@@ -579,7 +582,7 @@ mod tests {
         let err = create_user(
             &pool,
             &ambre_core::Email::from("BOB@example.com"),
-            &ambre_core::DisplayName::new("Impostor").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Impostor").unwrap(),
             &ambre_core::Encoded::new([9u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([8u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([7u8; 32]),
@@ -598,7 +601,7 @@ mod tests {
         let created = create_user(
             &pool,
             &ambre_core::Email::from("carol@example.com"),
-            &ambre_core::DisplayName::new("Carol").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Carol").unwrap(),
             &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),

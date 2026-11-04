@@ -136,7 +136,7 @@ is the anchor, and the two shapes it sits in.
 pub struct PresencePayload {
     pub anchor:       CellAnchor,
     pub selection:    Option<(CellAnchor, CellAnchor)>,  // top-left, bottom-right
-    pub display_name: Option<DisplayName>,               // cosmetic (`PRESENCE-004`)
+    pub display_name: Option<Validated<DisplayName>>,               // cosmetic (`PRESENCE-004`)
 }
 
 /// A cell anchor that survives a structural change: the row and column **uids**
@@ -152,7 +152,7 @@ pub struct CellAnchor {
 /// (`PRESENCE-006`); the positions are the anchors resolved against the `SheetIndex`.
 pub struct RemoteCursorPayload {
     pub user_id:      Id<User>,
-    pub display_name: Option<DisplayName>,
+    pub display_name: Option<Validated<DisplayName>>,
     pub color:        Color,
     pub sheet_id:     Id<Sheet>,
     pub at:           CellPos,

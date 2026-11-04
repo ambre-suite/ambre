@@ -2,6 +2,7 @@
 //! (`features/ambre-spec-murmure-spaces.md`).
 
 use ambre_bus::{Authored, ChannelTopic, Instant, SealedChannelKey};
+use ambre_core::Validated;
 use ambre_core::id::{Category, Channel, Id, Space};
 use loro::{LoroDoc, LoroValue};
 
@@ -24,8 +25,8 @@ fn sealed(byte: u8) -> SealedChannelKey {
     SealedChannelKey::from_bytes(vec![byte; 72])
 }
 
-fn topic(text: &str) -> ChannelTopic {
-    ChannelTopic::new(text).expect("a topic")
+fn topic(text: &str) -> Validated<ChannelTopic> {
+    Validated::<ChannelTopic>::parse(text).expect("a topic")
 }
 
 /// A listing with no topic and no category.
@@ -57,7 +58,7 @@ fn a_new_space_is_one_document_that_holds_no_member() {
     let space = SpaceState::create(space_id, &crate::fit_name("Acme"), NOW).expect("create");
     assert_eq!(space.document_id(), space_id.document_id());
     assert_eq!(
-        space.name().as_ref().map(ambre_core::Name::as_str),
+        space.name().as_ref().map(ambre_core::Validated::as_str),
         Some("Acme")
     );
     let header = crate::schema::header(space.doc());
@@ -87,7 +88,7 @@ fn a_space_reopens_from_its_payloads() {
         .expect("list");
     let reopened = SpaceState::open(space_id, &[(&first).into(), (&delta).into()]).expect("open");
     assert_eq!(
-        reopened.name().as_ref().map(ambre_core::Name::as_str),
+        reopened.name().as_ref().map(ambre_core::Validated::as_str),
         Some("Acme")
     );
     assert_eq!(reopened.catalogue(), space.catalogue());

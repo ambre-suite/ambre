@@ -266,7 +266,7 @@ enum SyncEvent {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Seq<Request>>,
         user_id: Id<User>,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
         master_seed: MasterSeed,
         signing_key: SigningKey,
@@ -278,7 +278,7 @@ enum SyncEvent {
     ProviderSignedIn {
         id: Seq<Request>,
         user_id: Id<User>,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
         keys_stored: ambre_bus::KeySetup,
         tokens: http::TokenPair,
@@ -500,7 +500,7 @@ enum SyncEvent {
         id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
@@ -519,7 +519,7 @@ enum SyncEvent {
         id: Seq<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
     },
     /// Key rotation initiated by this client is finished: the server has the new
     /// `doc_key_enc` entries and the new key must be swapped locally.
@@ -1149,7 +1149,7 @@ pub struct SyncState {
     documents: HashMap<Id<Document>, SyncDocumentState>,
 
     // -- Document metadata (in-memory mirror for mock mode) --------------------
-    doc_metadata: HashMap<Id<Document>, (DocType, ambre_core::Name)>,
+    doc_metadata: HashMap<Id<Document>, (DocType, ambre_core::Validated<ambre_core::Name>)>,
 
     /// Opens received before the session keys were ready (for example a deep-link
     /// refresh dispatches `OpenDocument` at frame 0, before `DevLogin` lands). Held
@@ -1184,7 +1184,7 @@ pub struct SyncState {
     /// silently re-login if the refresh token is also dead. That happens when
     /// the server restarts with a fresh JWT key and an empty Redis. `None` in a
     /// real (non-dev) session, where reauth relies solely on the refresh token.
-    dev_username: Option<ambre_core::DisplayName>,
+    dev_username: Option<ambre_core::Validated<ambre_core::DisplayName>>,
 }
 
 impl SyncState {
@@ -1707,7 +1707,7 @@ impl SyncState {
             RestCommand::OpenLocalRows { rows } => self.handle_open_local_rows(id, rows),
 
             // -- Meetings ------------------------------------------------------
-            RestCommand::CreateMeeting { name } => tracing::info!("Sync: CreateMeeting '{name}'"),
+            RestCommand::CreateMeeting { name } => tracing::info!("Sync: CreateMeeting {name:?}"),
             RestCommand::JoinMeeting { meeting_id } => {
                 tracing::info!("Sync: JoinMeeting {meeting_id:?}");
             }

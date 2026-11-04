@@ -102,7 +102,7 @@ pub struct InviteRequest {
 pub struct InviteResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// Whether the invitee's email was provider-verified (OIDC) rather than
     /// self-asserted at `/auth/setup` (#3). The document key is wrapped to the
     /// invitee's exchange key here. An unverified recipient is a squat candidate,

@@ -335,7 +335,7 @@ pub struct IrRun {
     /// These four replace `suggestion`.
     pub suggest_ins:    Option<Uuid>,
     pub suggest_del:    Option<Uuid>,
-    pub suggest_author: Option<DisplayName>,
+    pub suggest_author: Option<Validated<DisplayName>>,
     pub suggest_date:   Option<Instant<Authored>>,
     /// Set inside a header or a footer alone.
     pub field:          Option<HeaderField>,
@@ -389,7 +389,7 @@ pub struct IrComment {
 
 pub struct IrReply {
     pub id:         Uuid,
-    pub author:     DisplayName,
+    pub author:     Validated<DisplayName>,
     pub created_at: Instant<Authored>,
     pub text:       String,
 }

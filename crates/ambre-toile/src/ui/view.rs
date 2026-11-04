@@ -4211,7 +4211,7 @@ impl ToileView {
 
     /// Drain the embed the shell resolved for us this frame (`TOILE-086`,
     /// `TOILE-087`). The address has already been through
-    /// [`WebAddress::parse`](ambre_bus::app::toile::WebAddress::parse) on the
+    /// [`WebAddress`](ambre_bus::app::toile::WebAddress) on the
     /// shell's side. The dialog refuses what it cannot accept. The user learns
     /// of a bad address while it is still on screen, rather than after a box
     /// lands on the board. Placing writes a reference and nothing else, so it

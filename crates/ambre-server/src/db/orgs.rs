@@ -4,17 +4,7 @@
 use super::*;
 use ambre_core::{Bounded, Bounds, Refusal};
 
-/// The name an organization is created or renamed with: trimmed, never blank,
-/// at most [`ambre_core::NAME_MAX_CHARS`] characters (`SRV-233`). A row read
-/// back keeps its name as text, so a name stored before the rule still lists.
-/// A request body decodes it through [`OrgNameRule`], so a body naming a
-/// name that breaks the rule does not decode. `Debug` prints the length
-/// alone.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(transparent)]
-pub struct OrgName(ambre_core::Validated<OrgNameRule>);
-
-/// The error of a name [`OrgNameRule`] refuses.
+/// The error of a name the rule of an [`OrgName`] refuses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error(
     "an organization name is blank or past {} characters",
@@ -22,12 +12,16 @@ pub struct OrgName(ambre_core::Validated<OrgNameRule>);
 )]
 pub struct InvalidOrgName;
 
-/// The rule of an [`OrgName`]: trimmed, never blank, at most
-/// [`ambre_core::NAME_MAX_CHARS`] characters. The rule keeps the trimmed
-/// text.
-pub enum OrgNameRule {}
+/// The rule of the name an organization is created or renamed with: trimmed,
+/// never blank, at most [`ambre_core::NAME_MAX_CHARS`] characters
+/// (`SRV-233`). A `Validated<OrgName>` holds one, and the rule keeps the
+/// trimmed text. A row read back keeps its name as text, so a name stored
+/// before the rule still lists. A request body decodes it through the rule,
+/// so a body naming a name that breaks the rule does not decode. `Debug`
+/// prints the length alone.
+pub enum OrgName {}
 
-impl ambre_core::Rule for OrgNameRule {
+impl ambre_core::Rule for OrgName {
     type Error = InvalidOrgName;
 
     fn admit(text: String) -> Result<String, InvalidOrgName> {
@@ -42,31 +36,20 @@ impl ambre_core::Rule for OrgNameRule {
     }
 }
 
-impl TryFrom<String> for OrgName {
-    type Error = InvalidOrgName;
-
-    fn try_from(text: String) -> Result<Self, InvalidOrgName> {
-        ambre_core::Validated::parse(text).map(Self)
-    }
-}
-
-impl OrgName {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
 #[cfg(test)]
 mod org_name_tests {
     use super::OrgName;
+    use ambre_core::Validated;
 
     /// A body decodes a name trimmed, and refuses a blank one with the
     /// words of the rule.
     #[test]
     fn a_body_decodes_a_trimmed_name_and_refuses_a_blank_one() {
-        let name: OrgName = serde_json::from_str("\" Acme \"").expect("a name");
+        let name: Validated<OrgName> = serde_json::from_str("\" Acme \"").expect("a name");
         assert_eq!(name.as_str(), "Acme");
-        let refused = serde_json::from_str::<OrgName>("\"  \"")
+        assert_eq!(serde_json::to_string(&name).expect("a name"), "\"Acme\"");
+        assert_eq!(format!("{name:?}"), "4 chars");
+        let refused = serde_json::from_str::<Validated<OrgName>>("\"  \"")
             .expect_err("blank")
             .to_string();
         assert!(
@@ -198,7 +181,7 @@ pub struct OrgMemberRow {
     #[sqlx(try_from = "String")]
     pub email: ambre_core::Email,
     #[sqlx(try_from = "String")]
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     #[sqlx(try_from = "String")]
     pub role: ambre_core::Role,
     #[sqlx(try_from = "PgOptBytes")]
@@ -209,7 +192,7 @@ pub struct OrgMemberRow {
 /// Creates an organization and inserts its first member as owner.
 pub async fn create_organization(
     pool: &PgPool,
-    name: &OrgName,
+    name: &ambre_core::Validated<OrgName>,
     org_pubkey: &FixedBytes<ambre_core::ExchangePublicKey>,
     shamir: ShamirParams,
     owner_id: &Id<User>,
@@ -283,7 +266,7 @@ pub async fn list_user_organizations(
 pub async fn update_organization(
     pool: &PgPool,
     org_id: &Id<Org>,
-    name: &OrgName,
+    name: &ambre_core::Validated<OrgName>,
 ) -> Result<Option<OrganizationRow>, AppError> {
     sqlx::query_as::<_, OrganizationRow>(
         "UPDATE organizations SET name = $2 WHERE id = $1

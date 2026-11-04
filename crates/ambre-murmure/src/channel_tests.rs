@@ -24,7 +24,10 @@ const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 /// The query a member searching for `text` sends.
 fn parse_query(text: &str) -> Option<Query> {
-    Query::parse(&ambre_core::SearchQuery::new(text.to_owned()).expect("not blank"))
+    Query::parse(
+        &ambre_core::Validated::<ambre_core::SearchQuery>::parse(text.to_owned())
+            .expect("not blank"),
+    )
 }
 
 fn draft(text: &str) -> MessageDraft {
@@ -852,7 +855,7 @@ fn a_name_one_member_sets_reaches_every_member() {
     assert_eq!(
         named.event,
         MurmureEvent::Named {
-            name: Some(ambre_core::Name::new("trip").unwrap())
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("trip").unwrap())
         }
     );
     let events = bob
@@ -861,11 +864,11 @@ fn a_name_one_member_sets_reaches_every_member() {
     assert_eq!(
         events,
         [MurmureEvent::Named {
-            name: Some(ambre_core::Name::new("trip").unwrap())
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("trip").unwrap())
         }]
     );
     assert_eq!(
-        bob.name().as_ref().map(ambre_core::Name::as_str),
+        bob.name().as_ref().map(ambre_core::Validated::as_str),
         Some("trip")
     );
 
@@ -876,7 +879,7 @@ fn a_name_one_member_sets_reaches_every_member() {
         .apply_remote(renamed.meta.document_id(), (&renamed.delta).into())
         .expect("apply");
     assert_eq!(
-        alice.name().as_ref().map(ambre_core::Name::as_str),
+        alice.name().as_ref().map(ambre_core::Validated::as_str),
         Some("holiday")
     );
 }
@@ -981,7 +984,7 @@ fn only_a_direct_message_takes_a_name_from_a_member() {
             Err(MurmureError::NotDirect(state.channel_id()))
         );
         assert_eq!(
-            state.name().as_ref().map(ambre_core::Name::as_str),
+            state.name().as_ref().map(ambre_core::Validated::as_str),
             Some("team")
         );
     }

@@ -346,7 +346,7 @@ fn a_channel_named_shows_its_name_in_the_header() {
     let named = UiEvent::Channel {
         channel_id: direct,
         event: MurmureEvent::Named {
-            name: Some(ambre_core::Name::new("Ada").unwrap()),
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Ada").unwrap()),
         },
     };
     assert!(relay.absorb(&named).is_empty());
@@ -355,7 +355,7 @@ fn a_channel_named_shows_its_name_in_the_header() {
             .channel_name()
             .get_untracked()
             .as_ref()
-            .map(ambre_core::Name::as_str),
+            .map(ambre_core::Validated::as_str),
         Some("Ada")
     );
 }
@@ -376,7 +376,7 @@ fn three_named() -> (Owner, MurmureRelay, [Id<Channel>; 3]) {
     let member = |channel_id, place| MemberChannel { channel_id, place };
     let name = |channel_id, name: &str| ChannelName {
         channel_id,
-        name: ambre_core::Name::new(name).unwrap(),
+        name: ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
     };
     relay.absorb(&UiEvent::MemberChannels {
         channels: vec![
@@ -460,7 +460,7 @@ fn a_space_with(
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: users[0],
-            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
             email: ambre_bus::Email::from("alice@test.local"),
         },
     });
@@ -476,11 +476,11 @@ fn a_space_with(
     relay.absorb(&UiEvent::Space {
         space_id: space,
         event: SpaceEvent::Catalogue {
-            name: Some(ambre_core::Name::new("Acme").unwrap()),
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Acme").unwrap()),
             categories: Vec::new(),
             channels: vec![CatalogueEntry {
                 channel_id: general,
-                name: ambre_core::Name::new("general").unwrap(),
+                name: ambre_core::Validated::<ambre_core::Name>::parse("general").unwrap(),
                 topic: None,
                 category: None,
                 position: ambre_bus::CatalogPosition::FIRST,
@@ -489,7 +489,7 @@ fn a_space_with(
     });
     let member = |user_id, name: &str| MemberView {
         user_id,
-        display_name: ambre_core::DisplayName::new(name).unwrap(),
+        display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse(name).unwrap(),
         presence: Presence::Offline,
     };
     relay.absorb(&UiEvent::Space {
@@ -657,7 +657,7 @@ fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
     });
     let view = |user_id, name: &str| MemberView {
         user_id,
-        display_name: ambre_core::DisplayName::new(name).unwrap(),
+        display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse(name).unwrap(),
         presence: Presence::Offline,
     };
     relay.absorb(&UiEvent::Space {
@@ -735,7 +735,7 @@ fn the_invite_control_offers_no_member_of_the_channel() {
 
     let info = |user_id| MemberInfo {
         user_id,
-        display_name: ambre_core::DisplayName::new("Member").unwrap(),
+        display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Member").unwrap(),
         email: ambre_bus::Email::new(String::new()),
         role: Role::Editor,
         standing: MemberStanding::Verified,
@@ -952,7 +952,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: me,
-            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
             email: ambre_bus::Email::from("alice@test.local"),
         },
     });
@@ -1019,7 +1019,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: me,
-            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
             email: ambre_bus::Email::from("alice@test.local"),
         },
     });
@@ -1291,7 +1291,8 @@ fn found(query: &str, budget: Id<Channel>, zeta: Id<Channel>) -> UiEvent {
         also_in_thread: None,
     };
     UiEvent::MessageSearch {
-        query: ambre_core::SearchQuery::new(query.to_owned()).expect("a word"),
+        query: ambre_core::Validated::<ambre_core::SearchQuery>::parse(query.to_owned())
+            .expect("a word"),
         channels: vec![
             ChannelMatches {
                 channel_id: budget,
@@ -1347,7 +1348,7 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     let groups = relay.search_groups().get_untracked();
     assert_eq!(groups.len(), 1, "a channel with no match shows no group");
     assert_eq!(
-        groups[0].name.as_ref().map(ambre_core::Name::as_str),
+        groups[0].name.as_ref().map(ambre_core::Validated::as_str),
         Some("budget")
     );
     let texts: Vec<&str> = groups[0].matches.iter().map(|(_, t)| t.as_str()).collect();
@@ -1527,7 +1528,7 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
         names: Vec::new(),
         peers: vec![ambre_bus::DirectPeers {
             channel_id: direct,
-            names: vec![ambre_core::DisplayName::new("Bob").unwrap()],
+            names: vec![ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap()],
         }],
     });
     relay.pane.set(MurmurePane::ChannelList);

@@ -46,19 +46,16 @@ impl InvalidDefinedName {
     }
 }
 
-/// The name of a workbook named range, as a formula writes it (`TOTAL`), case
-/// kept (`trame-named-ranges`). It is an ASCII letter or underscore, then ASCII
-/// letters, digits and underscores, which is the shape of a formula bareword.
-/// The grammar reads some such words as something else first, a cell
-/// reference (`A1`) or a boolean (`TRUE`). `DefineName` refuses those.
-/// `Debug` prints the length alone, so a log carries none of the name.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct DefinedName(Validated<NameShape>);
+/// The rule of the name of a workbook named range, as a formula writes it
+/// (`TOTAL`), case kept (`trame-named-ranges`). It is an ASCII letter or
+/// underscore, then ASCII letters, digits and underscores, which is the shape
+/// of a formula bareword. A `Validated<DefinedName>` holds one. The grammar
+/// reads some such words as something else first, a cell reference (`A1`) or
+/// a boolean (`TRUE`). `DefineName` refuses those. `Debug` prints the length
+/// alone, so a log carries none of the name.
+pub enum DefinedName {}
 
-/// The rule of a [`DefinedName`]: the shape of a formula bareword.
-pub enum NameShape {}
-
-impl Rule for NameShape {
+impl Rule for DefinedName {
     type Error = InvalidDefinedName;
 
     fn admit(text: String) -> Result<String, InvalidDefinedName> {
@@ -71,34 +68,6 @@ impl Rule for NameShape {
         } else {
             Err(InvalidDefinedName(Redacted::new(text)))
         }
-    }
-}
-
-impl DefinedName {
-    /// The name `text` is.
-    ///
-    /// # Errors
-    ///
-    /// [`InvalidDefinedName`] when `text` does not have the shape of a name.
-    pub fn new(text: &str) -> Result<Self, InvalidDefinedName> {
-        Validated::parse(text).map(Self)
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl std::fmt::Display for DefinedName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.0.as_str())
-    }
-}
-
-/// A name table is looked up by the key text the document stores.
-impl std::borrow::Borrow<str> for DefinedName {
-    fn borrow(&self) -> &str {
-        self.0.as_str()
     }
 }
 
@@ -715,14 +684,14 @@ pub enum TrameCommand {
     /// recomputation (`trame-named-ranges`). A reference that
     /// fails to parse leaves any formula using the name as `#PARSE!`.
     DefineName {
-        name: DefinedName,
+        name: Validated<DefinedName>,
         reference: String,
     },
 
     /// Remove a named range. Formulas referencing the now-undefined name
     /// re-evaluate to a parse error on the next recomputation. A no-op if the
     /// name does not exist.
-    DeleteName { name: DefinedName },
+    DeleteName { name: Validated<DefinedName> },
 
     /// Switch the sheet the UI is looking at to `sheet_id`. The Logic thread rebuilds its
     /// active-sheet derived caches (index, merges, formatting, formula engine). It then
@@ -1314,6 +1283,7 @@ impl TrameCommand {
 #[cfg(test)]
 mod tests {
     use super::{CsvDelimiter, DefinedName, SheetName, SheetNameRefusal};
+    use ambre_core::Validated;
 
     /// A sheet name, its key and a defined name print their length alone in
     /// `Debug`, and none of the text a user typed.
@@ -1322,11 +1292,24 @@ mod tests {
         let sheet = SheetName::new("Payroll").unwrap();
         assert_eq!(format!("{sheet:?}"), "SheetName(7 chars)");
         assert_eq!(format!("{:?}", sheet.key()), "SheetNameKey(7 chars)");
-        let name = DefinedName::new("TOTAL").unwrap();
-        assert_eq!(format!("{name:?}"), "DefinedName(5 chars)");
-        let refused = DefinedName::new("Q3 layoffs").unwrap_err();
+        let name = Validated::<DefinedName>::parse("TOTAL").unwrap();
+        assert_eq!(format!("{name:?}"), "5 chars");
+        let refused = Validated::<DefinedName>::parse("Q3 layoffs").unwrap_err();
         assert_eq!(format!("{refused:?}"), "InvalidDefinedName(10 chars)");
         assert!(refused.to_string().contains("Q3 layoffs"));
+    }
+
+    /// A defined name travels as its bare text, and a decode refuses a text
+    /// without a name's shape, as the parse does.
+    #[test]
+    fn a_defined_name_travels_as_its_text() {
+        let name = Validated::<DefinedName>::parse("Total_1").unwrap();
+        assert_eq!(serde_json::to_string(&name).unwrap(), "\"Total_1\"");
+        assert_eq!(
+            postcard::to_allocvec(&name).unwrap(),
+            postcard::to_allocvec("Total_1").unwrap()
+        );
+        assert!(serde_json::from_str::<Validated<DefinedName>>("\"1st\"").is_err());
     }
 
     /// The Excel rule: 1 to 31 characters, none of `: \ / ? * [ ]`, and no
@@ -1422,12 +1405,15 @@ mod tests {
     fn a_name_is_a_letter_or_underscore_then_word_characters() {
         for name in ["TOTAL", "_TOTAL_2", "a", "_", "A1", "TRUE"] {
             assert!(
-                DefinedName::new(name).is_ok(),
+                Validated::<DefinedName>::parse(name).is_ok(),
                 "{name:?} has a name's shape"
             );
         }
         for text in ["", "1TOTAL", "MY TOTAL", "TOTAL!", "TÔTAL", "A-B"] {
-            assert!(DefinedName::new(text).is_err(), "{text:?} is refused");
+            assert!(
+                Validated::<DefinedName>::parse(text).is_err(),
+                "{text:?} is refused"
+            );
         }
     }
 

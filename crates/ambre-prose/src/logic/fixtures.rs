@@ -414,7 +414,8 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         seeded_document_id(AUTHOR_SEED).uuid(),
     ));
     state.set_display_name(
-        ambre_core::DisplayName::new("Fixture Author").map_err(FixtureError::Name)?,
+        ambre_core::Validated::<ambre_core::DisplayName>::parse("Fixture Author")
+            .map_err(FixtureError::Name)?,
     );
 
     let title = tree_id(

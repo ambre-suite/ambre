@@ -299,7 +299,10 @@ fn error_literal(input: &str) -> nom::IResult<&str, FormulaError> {
 /// [`resolve_refs`]; here we only capture the identifier, which always has a
 /// name's shape.
 fn name_ref(input: &str) -> nom::IResult<&str, Expr> {
-    map_res(identifier, |s: &str| DefinedName::new(s).map(Expr::Name)).parse(input)
+    map_res(identifier, |s: &str| {
+        Validated::<DefinedName>::parse(s).map(Expr::Name)
+    })
+    .parse(input)
 }
 
 // -----------------------------------------------------------------------------

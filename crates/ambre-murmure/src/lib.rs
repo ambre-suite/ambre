@@ -79,8 +79,8 @@ mod schema_shape;
 /// The name `text` is, for a test that names a channel, a space or a
 /// category within the cap.
 #[cfg(test)]
-pub(crate) fn fit_name(text: &str) -> ambre_core::Name {
-    ambre_core::Name::new(text).expect("a name within the cap")
+pub(crate) fn fit_name(text: &str) -> ambre_core::Validated<ambre_core::Name> {
+    ambre_core::Validated::<ambre_core::Name>::parse(text).expect("a name within the cap")
 }
 #[cfg(test)]
 mod space_tests;

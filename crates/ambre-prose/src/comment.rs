@@ -102,7 +102,7 @@ fn read_reply(map: &Fields<ReplyKey>) -> Option<CommentReply> {
     Some(CommentReply {
         reply_id: Id::<Reply>::parse_str(&doc::read_string(map, ReplyKey::Id)?).ok()?,
         author: doc::read_string(map, ReplyKey::Author)
-            .and_then(|name| ambre_core::DisplayName::new(&name).ok()),
+            .and_then(|name| ambre_core::Validated::<ambre_core::DisplayName>::parse(&name).ok()),
         user_id: Id::<User>::parse_str(&doc::read_string(map, ReplyKey::User)?).ok()?,
         created_at: Instant::<Authored>::from_i64(
             doc::read_i64(map, ReplyKey::Created).unwrap_or(0),

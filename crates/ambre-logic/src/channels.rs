@@ -15,7 +15,6 @@ use ambre_bus::{
     MemberInfo, Mention, MentionTarget, Mentions, OpenFailure, Relay, Seq, SignedDelta, Unread,
     Unreadable,
 };
-use ambre_core::Name;
 use ambre_murmure::{
     ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Receipt,
     Sample, Screened, SeekStep, Sent, Signer, ThreadTarget, members_only, screen,
@@ -1449,7 +1448,10 @@ impl LogicState {
             }
             MurmureCommand::Name { name } => {
                 // Trimmed once, so the sealed name is the name `meta` holds.
-                let name = name.as_ref().map(Name::trimmed).filter(|n| !n.is_empty());
+                let name = name
+                    .as_ref()
+                    .map(ambre_core::trimmed_name)
+                    .filter(|n| !ambre_core::name_is_empty(n));
                 match channel.name_direct(name.as_ref()) {
                     Ok(named) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
@@ -2082,7 +2084,7 @@ impl LogicState {
     /// Search every open channel for `query` (the Murmure search spec). Each
     /// engine reads the segments it holds, and nothing reaches the Sync
     /// worker: the query never leaves the client, and no segment loads.
-    pub(crate) fn search_messages(&self, query: ambre_core::SearchQuery) {
+    pub(crate) fn search_messages(&self, query: ambre_core::Validated<ambre_core::SearchQuery>) {
         let mut channels: Vec<ChannelMatches> = match Query::parse(&query) {
             Some(parsed) => self
                 .channels
@@ -2159,7 +2161,8 @@ mod tests {
             id: None,
             evt: RestEvent::SessionReady {
                 user_id: user,
-                display_name: ambre_core::DisplayName::new("alice").unwrap(),
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("alice")
+                    .unwrap(),
                 email: ambre_core::Email::from("alice@example.com"),
             },
         });
@@ -3185,11 +3188,11 @@ mod tests {
         let spaces = vec![Id::<Space>::mint()];
         let names = vec![ambre_bus::ChannelName {
             channel_id: channels[0].channel_id,
-            name: ambre_core::Name::new("board").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("board").unwrap(),
         }];
         let peers = vec![ambre_bus::DirectPeers {
             channel_id: channels[1].channel_id,
-            names: vec![ambre_core::DisplayName::new("Bob").unwrap()],
+            names: vec![ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap()],
         }];
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: channels.clone(),
@@ -3586,7 +3589,8 @@ mod tests {
         drain(&ui);
 
         state.handle_logic_command(LogicCommand::SearchMessages {
-            query: ambre_core::SearchQuery::new("Budget".to_owned()).expect("a word"),
+            query: ambre_core::Validated::<ambre_core::SearchQuery>::parse("Budget".to_owned())
+                .expect("a word"),
         });
         assert!(drain(&sync).is_empty(), "the query never leaves the client");
         let shown = drain(&ui);
@@ -3615,7 +3619,8 @@ mod tests {
         );
 
         state.handle_logic_command(LogicCommand::SearchMessages {
-            query: ambre_core::SearchQuery::new(" ? ".to_owned()).expect("not blank"),
+            query: ambre_core::Validated::<ambre_core::SearchQuery>::parse(" ? ".to_owned())
+                .expect("not blank"),
         });
         assert!(matches!(
             drain(&ui).as_slice(),
@@ -4311,7 +4316,7 @@ mod tests {
     fn member(user_id: Id<User>) -> MemberInfo {
         MemberInfo {
             user_id,
-            display_name: ambre_core::DisplayName::new("bob").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("bob").unwrap(),
             email: ambre_core::Email::from("bob@example.org"),
             role: Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,

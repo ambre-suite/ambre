@@ -85,7 +85,7 @@ pub struct CallbackResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// [`SignIn::NewUser`] when the user row holds no master key yet. The
     /// client then prompts the user to set one up. The wire keeps the name
     /// and the `bool` of the field.

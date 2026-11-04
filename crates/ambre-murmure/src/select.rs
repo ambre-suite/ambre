@@ -100,7 +100,7 @@ impl TextSelection {
     pub fn copied(
         &self,
         list: &MessageList,
-        name_of: &dyn Fn(Id<User>) -> Option<ambre_core::DisplayName>,
+        name_of: &dyn Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>,
         time_of: &dyn Fn(Instant<Authored>) -> String,
     ) -> Option<String> {
         let keys = list.keys();
@@ -126,7 +126,7 @@ impl TextSelection {
                 continue;
             };
             let author = name_of(message.author)
-                .map(ambre_core::DisplayName::into_string)
+                .map(ambre_core::Validated::into_string)
                 .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
             parts.push(format!("{author}, {}\n{words}", time_of(message.ts)));
         }
@@ -162,9 +162,11 @@ mod tests {
     }
 
     fn copy(list: &MessageList, selection: TextSelection) -> Option<String> {
-        selection.copied(list, &|_| ambre_core::DisplayName::new("Ada").ok(), &|ts| {
-            format!("t{}", ts.get())
-        })
+        selection.copied(
+            list,
+            &|_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
+            &|ts| format!("t{}", ts.get()),
+        )
     }
 
     /// A selection reads the same whichever way the drag went, and each

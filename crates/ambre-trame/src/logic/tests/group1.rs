@@ -555,7 +555,7 @@ fn definition_that_is_not_a_reference_is_refused() {
 fn name_a_formula_cannot_read_is_refused() {
     for text in ["1TOTAL", "MY TOTAL", ""] {
         assert!(
-            crate::DefinedName::new(text).is_err(),
+            ambre_core::Validated::<crate::DefinedName>::parse(text).is_err(),
             "{text:?} is no name"
         );
     }

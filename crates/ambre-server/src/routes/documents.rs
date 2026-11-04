@@ -28,7 +28,7 @@ pub struct SetupAccountRequest {
     pub email: ambre_core::Email,
     /// User-supplied display name (N3). A body whose name breaks the rule
     /// does not decode (`SRV-234`).
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
     /// A key that is not 32 bytes of hexadecimal refuses the body when it is
@@ -40,7 +40,7 @@ pub struct SetupAccountRequest {
 /// Bounds the client-supplied email: syntactically plausible and
 /// length-bounded. Full email verification is out of scope; this only rejects
 /// obvious garbage and unbounded input. The display name needs no check here:
-/// a [`ambre_core::DisplayName`] holds its rule.
+/// a `Validated<DisplayName>` holds its rule.
 fn validate_email(email: &ambre_core::Email) -> Result<(), AppError> {
     let email = email.as_str().trim();
     let email_ok = (3..=254).contains(&email.len())
@@ -106,7 +106,7 @@ pub struct MeResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
 }
 
 pub async fn me(
@@ -435,7 +435,7 @@ pub struct UserInfoJson {
     /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
     /// the TOFU out-of-band key check. Additive field; older clients ignore it.
     pub email_verified: crate::db::EmailProof,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub signing_pubkey: FixedBytes<PublicKey>,
     pub exchange_pubkey: FixedBytes<ExchangePublicKey>,
 }
@@ -455,15 +455,15 @@ pub struct PubkeysResponse {
 #[derive(serde::Deserialize)]
 pub struct SearchUsersParams {
     #[serde(default, deserialize_with = "search_text")]
-    query: Option<db::UserSearch>,
+    query: Option<db::Validated<db::UserSearch>>,
 }
 
-/// Reads the `query` parameter as a [`db::UserSearch`].
+/// Reads the `query` parameter through the rule of a [`db::UserSearch`].
 fn search_text<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
-) -> Result<Option<db::UserSearch>, D::Error> {
+) -> Result<Option<db::Validated<db::UserSearch>>, D::Error> {
     let text: std::borrow::Cow<'de, str> = serde::Deserialize::deserialize(deserializer)?;
-    Ok(db::UserSearch::new(&text))
+    Ok(db::Validated::<db::UserSearch>::parse(text).ok())
 }
 
 pub async fn search_users(
@@ -533,7 +533,7 @@ pub struct MemberInfoJson {
     /// Whether the member's email was provider-verified (#3). Additive field;
     /// older clients ignore it.
     pub email_verified: crate::db::EmailProof,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// Serialized as its lowercase word.
     pub role: Role,
     pub signing_pub_key: FixedBytes<PublicKey>,

@@ -44,7 +44,7 @@ pub(crate) struct TofuPrompt {
     pub(crate) user_id: Id<User>,
     /// The recipient's display name, shown in the prompt. `None` when the
     /// relay named no one, and the prompt reads "This member".
-    pub(crate) display_name: Option<ambre_core::DisplayName>,
+    pub(crate) display_name: Option<ambre_core::Validated<ambre_core::DisplayName>>,
     /// Raw X25519 key the server just returned: pinned on confirmation and
     /// sent beside the request, so Sync wraps only if it still matches.
     pub(crate) exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
@@ -197,7 +197,7 @@ pub(crate) fn TofuDialog(
                                     }}
                                 </h2>
                                 <p class="ambre-tofu-who">
-                                    <span class="ambre-tofu-name">{p.display_name.as_ref().map_or("This member", ambre_core::DisplayName::as_str).to_owned()}</span>
+                                    <span class="ambre-tofu-name">{p.display_name.as_ref().map_or("This member", ambre_core::Validated::as_str).to_owned()}</span>
                                     {email
                                         .map(|email| {
                                             view! { <span class="ambre-tofu-email">{email}</span> }
@@ -281,7 +281,7 @@ mod tests {
                 email: ambre_core::Email::from("bob@test.local"),
             },
             user_id: Id::<User>::mint(),
-            display_name: ambre_core::DisplayName::new("Bob").ok(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").ok(),
             exchange_pub_key: FixedBytes::from_array([byte; 32]),
             fingerprint: ambre_bus::KeyFingerprint::new("ABCD EFGH".to_owned()),
             contact: KeyContact::New,

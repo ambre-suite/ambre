@@ -258,10 +258,9 @@ impl ToileState {
             }
             // A peer may have written any text here, so the stored address
             // passes the same check as a typed one (`TOILE-267`).
-            ElementKind::Embed => DisplayGeom::Embed(
-                str_of(em, ElementKey::Url)
-                    .and_then(|url| ambre_bus::app::toile::WebAddress::parse(&url).ok()),
-            ),
+            ElementKind::Embed => DisplayGeom::Embed(str_of(em, ElementKey::Url).and_then(|url| {
+                ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse(&url).ok()
+            })),
             ElementKind::DocEmbed => {
                 // Parse back the reference; on any parse failure fall to Frame so
                 // the node still paints a placeholder rather than vanishing.

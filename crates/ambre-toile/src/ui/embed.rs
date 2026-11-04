@@ -35,7 +35,7 @@ use ambre_canvas::InputEvent;
 use ambre_commands::Key;
 
 use super::viewport::ViewportTransform;
-use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan, Validated};
 
 /// How long a `doc_embed` must stay out of the culled set before its child
 /// document's sync session closes ("Opening the child").
@@ -192,8 +192,8 @@ pub const DEFAULT_EMBED_SIZE: Size = Size::new(640.0, 400.0);
 /// What a placement dialog answered with.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EmbedTarget {
-    /// A web page, by an address already through [`WebAddress::parse`].
-    Web(WebAddress),
+    /// A web page, by an address already through [`WebAddress`].
+    Web(Validated<WebAddress>),
     /// Another Ambre document, by reference (`TOILE-021`): the board stores the
     /// id and never the content.
     Document {
@@ -289,8 +289,8 @@ pub struct VisibleWebEmbed {
     /// The board element carrying the address: the shell's key for its frame.
     pub element: Id<Element>,
     /// The address, as stored. A peer may have written it, so the board read
-    /// it back through [`WebAddress::parse`] (`TOILE-267`).
-    pub url: WebAddress,
+    /// it back through [`WebAddress`] (`TOILE-267`).
+    pub url: Validated<WebAddress>,
     /// Where the frame goes, in screen pixels: the AABB of the
     /// element's quad, like a nested document's. What the board clips to.
     pub screen_rect: Rect,
@@ -1222,22 +1222,22 @@ mod tests {
 
 #[cfg(test)]
 mod address_tests {
-    use super::WebAddress;
+    use super::{Validated, WebAddress};
     use ambre_bus::app::toile::AddressError;
 
     /// A host typed on its own is the common case, and it is https.
     #[test]
     fn a_bare_host_becomes_an_https_address() {
         assert_eq!(
-            WebAddress::parse("example.com")
+            Validated::<WebAddress>::parse("example.com")
                 .as_ref()
-                .map(WebAddress::as_str),
+                .map(Validated::as_str),
             Ok("https://example.com")
         );
         assert_eq!(
-            WebAddress::parse("  example.com/a/b?q=1#top  ")
+            Validated::<WebAddress>::parse("  example.com/a/b?q=1#top  ")
                 .as_ref()
-                .map(WebAddress::as_str),
+                .map(Validated::as_str),
             Ok("https://example.com/a/b?q=1#top")
         );
     }
@@ -1246,9 +1246,9 @@ mod address_tests {
     #[test]
     fn a_host_with_a_port_keeps_its_port() {
         assert_eq!(
-            WebAddress::parse("example.com:8443/x")
+            Validated::<WebAddress>::parse("example.com:8443/x")
                 .as_ref()
-                .map(WebAddress::as_str),
+                .map(Validated::as_str),
             Ok("https://example.com:8443/x")
         );
     }
@@ -1256,16 +1256,16 @@ mod address_tests {
     #[test]
     fn an_https_address_survives_verbatim() {
         assert_eq!(
-            WebAddress::parse("https://example.com/a")
+            Validated::<WebAddress>::parse("https://example.com/a")
                 .as_ref()
-                .map(WebAddress::as_str),
+                .map(Validated::as_str),
             Ok("https://example.com/a")
         );
         // The parser compares the scheme without case, then normalizes it.
         assert_eq!(
-            WebAddress::parse("HTTPS://Example.COM/A")
+            Validated::<WebAddress>::parse("HTTPS://Example.COM/A")
                 .as_ref()
-                .map(WebAddress::as_str),
+                .map(Validated::as_str),
             Ok("https://Example.COM/A")
         );
     }
@@ -1284,7 +1284,7 @@ mod address_tests {
             "about:blank",
         ] {
             assert_eq!(
-                WebAddress::parse(typed),
+                Validated::<WebAddress>::parse(typed),
                 Err(AddressError::NotHttps),
                 "{typed} must not reach a frame"
             );
@@ -1297,14 +1297,14 @@ mod address_tests {
     fn a_scheme_hidden_behind_a_control_character_is_refused() {
         for typed in ["java\nscript:alert(1)", "java\tscript:alert(1)"] {
             assert!(
-                WebAddress::parse(typed).is_err(),
+                Validated::<WebAddress>::parse(typed).is_err(),
                 "{typed:?} must not be accepted"
             );
         }
         // The parser strips leading control characters, then reads the scheme
         // beneath them for what it is.
         assert_eq!(
-            WebAddress::parse("\u{0}\njavascript:alert(1)"),
+            Validated::<WebAddress>::parse("\u{0}\njavascript:alert(1)"),
             Err(AddressError::NotHttps)
         );
     }
@@ -1315,7 +1315,7 @@ mod address_tests {
     #[test]
     fn plain_http_is_refused_and_not_upgraded() {
         assert_eq!(
-            WebAddress::parse("http://example.com"),
+            Validated::<WebAddress>::parse("http://example.com"),
             Err(AddressError::NotHttps)
         );
     }
@@ -1323,16 +1323,31 @@ mod address_tests {
     /// `TOILE-087`: an address that names no site is refused before it is placed.
     #[test]
     fn an_address_with_no_site_in_it_is_refused() {
-        assert_eq!(WebAddress::parse(""), Err(AddressError::Empty));
-        assert_eq!(WebAddress::parse("   "), Err(AddressError::Empty));
-        assert_eq!(WebAddress::parse("https://"), Err(AddressError::NoHost));
-        assert_eq!(WebAddress::parse("https:///a"), Err(AddressError::NoHost));
-        assert_eq!(WebAddress::parse("https://@/a"), Err(AddressError::NoHost));
+        assert_eq!(Validated::<WebAddress>::parse(""), Err(AddressError::Empty));
         assert_eq!(
-            WebAddress::parse("https://:8080/a"),
+            Validated::<WebAddress>::parse("   "),
+            Err(AddressError::Empty)
+        );
+        assert_eq!(
+            Validated::<WebAddress>::parse("https://"),
             Err(AddressError::NoHost)
         );
-        assert_eq!(WebAddress::parse("example .com"), Err(AddressError::NoHost));
+        assert_eq!(
+            Validated::<WebAddress>::parse("https:///a"),
+            Err(AddressError::NoHost)
+        );
+        assert_eq!(
+            Validated::<WebAddress>::parse("https://@/a"),
+            Err(AddressError::NoHost)
+        );
+        assert_eq!(
+            Validated::<WebAddress>::parse("https://:8080/a"),
+            Err(AddressError::NoHost)
+        );
+        assert_eq!(
+            Validated::<WebAddress>::parse("example .com"),
+            Err(AddressError::NoHost)
+        );
     }
 
     /// `TOILE-087`: every refusal has a sentence, and none of them is empty.
@@ -1361,7 +1376,7 @@ mod web_embed_tests {
     /// one helper covers both kinds.
     fn web(id: &str, bounds: Rect, url: &str) -> DisplayElement {
         let mut e = doc_embed(id, Id::<Document>::mint(), bounds, 0.0);
-        e.geom = DisplayGeom::Embed(super::WebAddress::parse(url).ok());
+        e.geom = DisplayGeom::Embed(ambre_core::Validated::<super::WebAddress>::parse(url).ok());
         e
     }
 
@@ -1599,7 +1614,8 @@ mod placement_tests {
     #[test]
     fn a_web_address_lands_centred_under_its_drop_point() {
         let cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
-        let url = super::WebAddress::parse("https://example.com").expect("a safe address");
+        let url = ambre_core::Validated::<super::WebAddress>::parse("https://example.com")
+            .expect("a safe address");
         let placed = PlacedEmbed {
             target: EmbedTarget::Web(url.clone()),
             at: Some(Point::new(100.0, 50.0)),

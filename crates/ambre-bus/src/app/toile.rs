@@ -494,23 +494,41 @@ impl LinkTarget {
     }
 }
 
-/// The address of a web page that an embed frames (`toile-embeds`).
+/// The rule of the address of a web page that an embed frames
+/// (`toile-embeds`): an `https` address with a host. A
+/// `Validated<WebAddress>` holds one, with its scheme written out.
 ///
-/// [`WebAddress::parse`] is the only way in, for a typed address and a stored
-/// one alike. Deserialisation goes through it too. A peer's `javascript:` or
-/// `data:` text therefore never becomes a `WebAddress`, and never reaches a
-/// frame (`TOILE-088`, `TOILE-267`). A user typed the address, so `Debug`
-/// prints its length alone.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct WebAddress(Validated<HttpsAddress>);
+/// The rule is the only way in, for a typed address and a stored one alike.
+/// Deserialisation goes through it too. A peer's `javascript:` or `data:`
+/// text therefore never becomes an address, and never reaches a frame
+/// (`TOILE-088`, `TOILE-267`). A user typed the address, so `Debug` prints
+/// its length alone.
+///
+/// **Only `https` survives.** A bare `example.com` reads as
+/// `https://example.com`, and every explicit scheme other than `https` gets
+/// a refusal, `http` included. Two reasons, and neither is taste.
+///
+/// * A `javascript:`, `data:` or `blob:` frame executes with the embedder's
+///   own origin as its opener: the attack `TOILE-088` names.
+/// * The browser blocks a plain-`http` frame inside a page served over TLS
+///   as mixed content. Accepting one would put a box on the board that never
+///   paints.
+///
+/// The rule parses by hand rather than through a URL crate. The board needs
+/// the scheme and a non-empty host and nothing else. A conforming parser
+/// would carry the IDNA tables into the wasm bundle for the rest. A parsed
+/// address parses again to itself, so a stored address reads back as it was
+/// written.
+///
+/// # Errors
+///
+/// * [`AddressError::Empty`] on an empty text.
+/// * [`AddressError::NotHttps`] on any scheme other than `https`.
+/// * [`AddressError::NoHost`] on a missing host, or a host holding a
+///   character no host may carry.
+pub enum WebAddress {}
 
-/// The rule of a [`WebAddress`]: an `https` address with a host, as
-/// [`WebAddress::parse`] states it. The rule keeps the address with its
-/// scheme written out.
-pub enum HttpsAddress {}
-
-impl Rule for HttpsAddress {
+impl Rule for WebAddress {
     type Error = AddressError;
 
     fn admit(text: String) -> Result<String, AddressError> {
@@ -583,48 +601,6 @@ impl std::fmt::Display for AddressError {
     }
 }
 
-impl WebAddress {
-    /// Turn `text` into the address a frame may load, or say why it cannot
-    /// (`TOILE-088`). The text is what a user typed, or what the document
-    /// holds.
-    ///
-    /// **Only `https` survives.** A bare `example.com` reads as
-    /// `https://example.com`, and every explicit scheme other than `https`
-    /// gets a refusal, `http` included. Two reasons, and neither is taste.
-    ///
-    /// * A `javascript:`, `data:` or `blob:` frame executes with the
-    ///   embedder's own origin as its opener: the attack `TOILE-088` names.
-    /// * The browser blocks a plain-`http` frame inside a page served over TLS
-    ///   as mixed content. Accepting one would put a box on the board that
-    ///   never paints.
-    ///
-    /// This parses by hand rather than through a URL crate. The board needs
-    /// the scheme and a non-empty host and nothing else. A conforming parser
-    /// would carry the IDNA tables into the wasm bundle for the rest. A parsed
-    /// address parses again to itself, so a stored address reads back as it
-    /// was written.
-    ///
-    /// # Errors
-    ///
-    /// * [`AddressError::Empty`] on an empty text.
-    /// * [`AddressError::NotHttps`] on any scheme other than `https`.
-    /// * [`AddressError::NoHost`] on a missing host, or a host holding a
-    ///   character no host may carry.
-    pub fn parse(text: &str) -> Result<Self, AddressError> {
-        Validated::parse(text).map(Self)
-    }
-
-    /// The address's text, for the frame that loads it.
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    /// The address's text, for the document that stores it.
-    pub fn into_string(self) -> String {
-        self.0.into_string()
-    }
-}
-
 /// Split `s` at an explicit URL scheme, returning it and the remainder. `None`
 /// when the text carries no scheme. A `host:port` deliberately carries none:
 /// what follows its colon is a port rather than a path.
@@ -644,33 +620,11 @@ fn split_scheme(s: &str) -> Option<(&str, &str)> {
     (shaped && !is_port).then_some((scheme, rest))
 }
 
-/// A stored or received text read as an address, refused as
-/// [`WebAddress::parse`] refuses one.
-impl TryFrom<String> for WebAddress {
-    type Error = AddressError;
-
-    fn try_from(text: String) -> Result<Self, Self::Error> {
-        Validated::parse(text).map(Self)
-    }
-}
-
-impl From<WebAddress> for String {
-    fn from(address: WebAddress) -> Self {
-        address.0.into_string()
-    }
-}
-
-/// The link target of a web page, once its address passed the address gate.
-impl From<WebAddress> for ambre_core::LinkUrl {
-    fn from(address: WebAddress) -> Self {
-        Self::new(address.0.into_string())
-    }
-}
-
-impl std::fmt::Display for WebAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.0.as_str())
-    }
+/// The link target of a web page, once its address passed the rule of a
+/// [`WebAddress`].
+#[must_use]
+pub fn link_url(address: Validated<WebAddress>) -> ambre_core::LinkUrl {
+    ambre_core::LinkUrl::new(address.into_string())
 }
 
 // =============================================================================
@@ -1044,13 +998,13 @@ pub struct ClipboardPayload {
 pub enum InitContent {
     None,
     Path(BezPath),
-    Image(MediaRef),   // the picture's blob, key into `media` once stored
-    Embed(WebAddress), // web url (sandboxed iframe)
+    Image(MediaRef),              // the picture's blob, key into `media` once stored
+    Embed(Validated<WebAddress>), // web url (sandboxed iframe)
     DocEmbed {
         document_id: Id<Document>,
         doc_type: DocType,
     }, // nested Ambre document (`toile-embeds`)
-    Text(String),      // initial plain body (sticky / text)
+    Text(String),                 // initial plain body (sticky / text)
 }
 
 impl fmt::Debug for InitContent {
@@ -2460,9 +2414,9 @@ impl ToileCommand {
 /// display-name rule. A forged name never drops the cursor it labels.
 fn lenient_name<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
-) -> Result<Option<ambre_core::DisplayName>, D::Error> {
+) -> Result<Option<ambre_core::Validated<ambre_core::DisplayName>>, D::Error> {
     let name = Option::<String>::deserialize(deserializer)?;
-    Ok(name.and_then(|text| ambre_core::DisplayName::new(&text).ok()))
+    Ok(name.and_then(|text| ambre_core::Validated::<ambre_core::DisplayName>::parse(&text).ok()))
 }
 
 /// One ephemeral presence sample the local peer broadcasts
@@ -2482,7 +2436,7 @@ pub struct PresencePayload {
     /// short handle derived from that id. So does a name that breaks the
     /// display-name rule: the sample stays, the name is dropped.
     #[serde(deserialize_with = "lenient_name")]
-    pub name: Option<ambre_core::DisplayName>,
+    pub name: Option<ambre_core::Validated<ambre_core::DisplayName>>,
     /// World-space pointer; `None` means the pointer left the board.
     pub cursor: Option<Point>,
     /// The peer's current selection, drawn as halos. Empty = nothing selected.
@@ -2964,9 +2918,9 @@ pub enum DisplayGeom {
     /// (`toile-embeds`).
     Group,
     /// Web url (sandboxed iframe). `None` when the document holds no address
-    /// that [`WebAddress::parse`] accepts: the placeholder paints, and no
+    /// that the rule of a [`WebAddress`] accepts: the placeholder paints, and no
     /// frame loads (`TOILE-267`).
-    Embed(Option<WebAddress>),
+    Embed(Option<Validated<WebAddress>>),
     /// Nested Ambre document (`toile-embeds`).
     DocEmbed {
         document_id: Id<Document>,
@@ -3090,7 +3044,7 @@ mod tests {
             insert: secret.clone(),
             ..TextDelta::default()
         };
-        let address = WebAddress::parse("https://a.example").expect("an address");
+        let address = Validated::<WebAddress>::parse("https://a.example").expect("an address");
         let ts = Instant::<Authored>::default();
         let message = CommentMessage {
             author: Id::<User>::mint(),
@@ -3205,7 +3159,7 @@ mod tests {
             assert!(line.contains("10 chars"), "{line}");
             assert!(!line.contains("Q3 layoffs"), "{line}");
         }
-        assert_eq!(format!("{address:?}"), "WebAddress(17 chars)");
+        assert_eq!(format!("{address:?}"), "17 chars");
         // A failure reason prints as `Variant(N chars)`.
         assert_eq!(
             format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
@@ -3275,14 +3229,17 @@ mod tests {
     /// far side. A safe one keeps its bytes, and an unsafe one never decodes.
     #[test]
     fn a_received_address_is_checked_again() {
-        let safe = WebAddress::parse("https://example.com/a").expect("a safe address");
+        let safe = Validated::<WebAddress>::parse("https://example.com/a").expect("a safe address");
         let bytes = postcard::to_allocvec(&safe).expect("encodes");
         assert_eq!(
             postcard::to_allocvec(&"https://example.com/a").expect("encodes"),
             bytes,
             "the wire carries the bare text"
         );
-        assert_eq!(postcard::from_bytes::<WebAddress>(&bytes), Ok(safe));
+        assert_eq!(
+            postcard::from_bytes::<Validated<WebAddress>>(&bytes),
+            Ok(safe)
+        );
         for hostile in [
             "javascript:alert(1)",
             "data:text/html,x",
@@ -3290,7 +3247,7 @@ mod tests {
         ] {
             let bytes = postcard::to_allocvec(&hostile).expect("encodes");
             assert!(
-                postcard::from_bytes::<WebAddress>(&bytes).is_err(),
+                postcard::from_bytes::<Validated<WebAddress>>(&bytes).is_err(),
                 "{hostile}"
             );
         }
@@ -3311,7 +3268,7 @@ mod tests {
         let read: PresencePayload = postcard::from_bytes(&forged).unwrap();
         assert_eq!(read, plain);
         let named = PresencePayload {
-            name: ambre_core::DisplayName::new("Ada").ok(),
+            name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
             ..plain
         };
         let bytes = postcard::to_allocvec(&named).unwrap();

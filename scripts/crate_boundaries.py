@@ -1640,14 +1640,21 @@ def struct_fields(lines: list[tuple[int, str]]) -> list[tuple[str, int, str, str
 
 def state_type(ty: str) -> str | None:
     """The type a field holds state of: wrappers peeled, the path's last segment.
-    `None` for a tuple, an array, a primitive or an identifier."""
+    `None` for a tuple, an array, a primitive or an identifier.
+
+    A family keeps its arguments: `Validated<WebAddress>` and
+    `Validated<DisplayName>` are two states, as two hand-written types were.
+    """
     ty = ty.strip().lstrip("&").strip()
     generic = re.match(r"^([\w:]+)\s*<(.*)>$", ty)
     if generic:
         head = generic.group(1).split("::")[-1]
         if head in TYPE_WRAPPERS:
             return state_type(generic.group(2))
-        ty = head
+        if head in PRIMITIVES or head.endswith("Id"):
+            return None
+        arguments = re.sub(r"\b\w+::", "", re.sub(r"\s+", "", generic.group(2)))
+        return f"{head}<{arguments}>"
     if not re.fullmatch(r"[\w:]+", ty):
         return None
     name = ty.split("::")[-1]

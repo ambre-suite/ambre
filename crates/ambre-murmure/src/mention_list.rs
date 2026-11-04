@@ -32,7 +32,7 @@ impl Circular for MentionEntry {}
 #[derive(Clone, PartialEq, Eq)]
 pub struct Offer {
     pub target: MentionTarget,
-    pub name: ambre_core::DisplayName,
+    pub name: ambre_core::Validated<ambre_core::DisplayName>,
 }
 
 impl std::fmt::Debug for Offer {
@@ -95,7 +95,7 @@ pub fn query_at(text: &str, caret: Pos<Byte>) -> Option<(Pos<Byte>, &str)> {
 }
 
 /// Whether a word of `name` starts with `query`, case folded.
-fn matches(name: &ambre_core::DisplayName, query: &str) -> bool {
+fn matches(name: &ambre_core::Validated<ambre_core::DisplayName>, query: &str) -> bool {
     let query = query.to_lowercase();
     name.as_str()
         .to_lowercase()
@@ -107,10 +107,10 @@ fn matches(name: &ambre_core::DisplayName, query: &str) -> bool {
 /// order. `me` is never offered.
 pub fn offers(
     query: &str,
-    members: &[(Id<User>, ambre_core::DisplayName)],
+    members: &[(Id<User>, ambre_core::Validated<ambre_core::DisplayName>)],
     me: Option<Id<User>>,
 ) -> Vec<Offer> {
-    let mut kept: Vec<&(Id<User>, ambre_core::DisplayName)> = members
+    let mut kept: Vec<&(Id<User>, ambre_core::Validated<ambre_core::DisplayName>)> = members
         .iter()
         .filter(|(user, name)| Some(*user) != me && matches(name, query))
         .collect();
@@ -119,7 +119,7 @@ pub fn offers(
     // test holds it first in the list.
     let channel = AT_CHANNEL
         .starts_with(&query.to_lowercase())
-        .then(|| ambre_core::DisplayName::new(AT_CHANNEL).ok())
+        .then(|| ambre_core::Validated::<ambre_core::DisplayName>::parse(AT_CHANNEL).ok())
         .flatten()
         .map(|name| Offer {
             target: MentionTarget::Channel,
@@ -143,7 +143,8 @@ mod tests {
     /// prints a length and a count.
     #[test]
     fn an_offer_debugs_its_name_length_alone() {
-        let name = ambre_core::DisplayName::new("Secretary").expect("a name");
+        let name =
+            ambre_core::Validated::<ambre_core::DisplayName>::parse("Secretary").expect("a name");
         let members = [(Id::<User>::mint(), name)];
         let found = offers("sec", &members, None);
         let shown = format!("{found:?}");
@@ -204,9 +205,18 @@ mod tests {
     fn the_channel_leads_and_members_follow_by_name() {
         let (alice, bob, carol) = (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
         let members = vec![
-            (carol, ambre_core::DisplayName::new("carol Chen").unwrap()),
-            (bob, ambre_core::DisplayName::new("Bob").unwrap()),
-            (alice, ambre_core::DisplayName::new("Alice").unwrap()),
+            (
+                carol,
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("carol Chen").unwrap(),
+            ),
+            (
+                bob,
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap(),
+            ),
+            (
+                alice,
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
+            ),
         ];
         let names = |query, me| -> Vec<String> {
             offers(query, &members, me)

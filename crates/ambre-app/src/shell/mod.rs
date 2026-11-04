@@ -46,7 +46,7 @@ pub(crate) fn mount_shell(
     toile_store_slot: Slot<CommandStates>,
     anchor_slot: Slot<RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>>>,
     toasts_slot: Slot<Toasts>,
-    user_slot: Slot<RwSignal<Option<ambre_core::DisplayName>>>,
+    user_slot: Slot<RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>>,
     docs_slot: Slot<RwSignal<Vec<DocItem>>>,
     members_slot: Slot<RwSignal<Vec<MemberInfo>>>,
     devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>>,
@@ -118,7 +118,7 @@ pub(crate) fn mount_shell(
         *anchor_slot.borrow_mut() = Some(anchor_pos);
         let toasts = Toasts::new();
         *toasts_slot.borrow_mut() = Some(toasts);
-        let username = RwSignal::new(None::<ambre_core::DisplayName>);
+        let username = RwSignal::new(None::<ambre_core::Validated<ambre_core::DisplayName>>);
         *user_slot.borrow_mut() = Some(username);
         let docs = RwSignal::new(Vec::<DocItem>::new());
         *docs_slot.borrow_mut() = Some(docs);

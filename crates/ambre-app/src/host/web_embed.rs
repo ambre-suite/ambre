@@ -24,6 +24,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::toile::WebAddress;
+use ambre_core::Validated;
 use ambre_core::id::{Element, Id};
 use ambre_toile::ui::embed::VisibleWebEmbed;
 use wasm_bindgen::JsCast;
@@ -52,7 +53,7 @@ pub struct WebFrames {
     /// The address each frame was last pointed at, so a board redraw does not
     /// reload a page that has not changed. Reloading on every frame would make
     /// an embedded page unusable.
-    urls: HashMap<Id<Element>, WebAddress>,
+    urls: HashMap<Id<Element>, Validated<WebAddress>>,
 }
 
 impl WebFrames {
@@ -164,6 +165,7 @@ fn place(frame: &web_sys::HtmlIFrameElement, e: &VisibleWebEmbed) {
 mod tests {
     use super::WebFrames;
     use ambre_bus::app::toile::WebAddress;
+    use ambre_core::Validated;
     use ambre_core::id::{Element, Id};
     use ambre_draw::{Affine, Rect, Size};
     use ambre_toile::ui::embed::VisibleWebEmbed;
@@ -186,7 +188,7 @@ mod tests {
         let embed = VisibleWebEmbed {
             element: Id::<Element>::from_text("page".to_owned()),
             // `.invalid` never resolves, so the test reaches no network.
-            url: WebAddress::parse("https://example.invalid").expect("a safe address"),
+            url: Validated::<WebAddress>::parse("https://example.invalid").expect("a safe address"),
             screen_rect: Rect::new(0.0, 0.0, 200.0, 100.0),
             layout_size: Size::new(200.0, 100.0),
             to_screen: Affine::IDENTITY,

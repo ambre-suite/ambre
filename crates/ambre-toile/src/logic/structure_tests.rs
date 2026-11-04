@@ -203,7 +203,8 @@ fn a_seed_of_another_kind_is_refused() {
         (
             ElementKind::Sticky,
             InitContent::Embed(
-                ambre_bus::app::toile::WebAddress::parse("https://x.test").expect("a safe address"),
+                ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse("https://x.test")
+                    .expect("a safe address"),
             ),
         ),
     ] {

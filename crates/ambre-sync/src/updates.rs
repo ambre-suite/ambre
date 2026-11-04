@@ -2652,7 +2652,7 @@ mod tests {
     fn listed(user_id: Id<User>) -> MemberInfo {
         MemberInfo {
             user_id,
-            display_name: ambre_core::DisplayName::new("Carol").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Carol").unwrap(),
             email: "carol@example.org".into(),
             role: Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,

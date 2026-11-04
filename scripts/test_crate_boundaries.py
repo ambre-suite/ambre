@@ -252,6 +252,15 @@ class CrateBoundaries(unittest.TestCase):
             write(root, rel, text)
             return self.run_checks(root)
 
+    def test_a_family_state_is_told_apart_by_its_marker(self):
+        web = cb.state_type("Validated<WebAddress>")
+        shown = cb.state_type("RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>")
+        self.assertEqual(web, "Validated<WebAddress>")
+        self.assertNotEqual(web, cb.state_type("Option<Validated<DisplayName>>"))
+        self.assertEqual(cb.state_type("Option<ambre_core::Validated<ambre_core::DisplayName>>"), "Validated<DisplayName>")
+        self.assertIsNone(cb.state_type("Id<User>"))
+        self.assertEqual(shown, "RwSignal<Option<Validated<DisplayName>>>")
+
     def test_a_view_holding_the_document_is_refused(self):
         for line in (
             "fn draw(d: &loro::LoroDoc) {}\n",

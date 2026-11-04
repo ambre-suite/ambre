@@ -153,7 +153,7 @@ pub struct ProseState {
     my_user_id: Option<Id<User>>,
     /// This session's display name, stamped on every outbound presence sample.
     /// Cosmetic: it decides neither identity nor colour (`PRESENCE-004`).
-    my_name: Option<ambre_core::DisplayName>,
+    my_name: Option<ambre_core::Validated<ambre_core::DisplayName>>,
     /// The threads the last whole-text walk found with no mark. A keystroke
     /// does not walk the text again for them (`comments::refresh_anchors`).
     orphans: std::collections::HashSet<Id<ambre_core::id::Comment>>,
@@ -170,7 +170,7 @@ pub struct ProseState {
         Id<User>,
         (
             crate::events::CursorPosition,
-            Option<ambre_core::DisplayName>,
+            Option<ambre_core::Validated<ambre_core::DisplayName>>,
         ),
     >,
     /// Every user with a session open on this document, as far as this peer
@@ -566,7 +566,7 @@ impl ProseState {
     }
 
     /// Seed this session's display name, from the same `SessionReady`.
-    pub fn set_display_name(&mut self, name: ambre_core::DisplayName) {
+    pub fn set_display_name(&mut self, name: ambre_core::Validated<ambre_core::DisplayName>) {
         self.my_name = Some(name);
     }
 

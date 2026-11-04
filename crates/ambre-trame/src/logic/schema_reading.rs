@@ -273,7 +273,11 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
         }
         Root::NamedRanges => Some(format!(
             "{key} names {}",
-            target_reading(reader.named.get(key)?)
+            target_reading(
+                reader
+                    .named
+                    .get(&ambre_core::Validated::<crate::DefinedName>::parse(key).ok()?)?
+            )
         )),
         Root::Meta => None,
     }
