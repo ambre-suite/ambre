@@ -108,7 +108,6 @@ CREATE TABLE snapshots (
     id            UUID NOT NULL DEFAULT gen_random_uuid(),
     document_id   UUID NOT NULL,
     author_pubkey BYTEA NOT NULL,
-    update_clocks JSONB NOT NULL DEFAULT '{}',
     s3_key        TEXT NOT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     covered_seq   BIGINT NOT NULL DEFAULT 0,
