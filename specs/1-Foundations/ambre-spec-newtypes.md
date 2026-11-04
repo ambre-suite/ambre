@@ -82,7 +82,7 @@ A marker is written one way, so a reader meets no variant of it.
 | The serde form | the bare representation, transparent | the wire and the store keep the bytes of the type it replaced |
 | A closed set | a sealed marker trait | a crate downstream adds no marker where the set is a decision |
 | A capability | a trait the marker implements, one line per marker | a method that some markers must not have is never inherent |
-| A name | the family and its marker in full: `Count<EditUpdates>` | a type alias hides the family, and the workspace writes none |
+| A name | the family and its marker in full: `Count<EditUpdates>` | a type alias hides the family, so none stands for a family instance alone. An alias stays only where the compound type it names -- a tuple, a container, a closure -- fails `clippy::type_complexity` once written out at its uses |
 | The fields | private, read through `new` and `get` | a family that checks nothing still has one door |
 
 ---
