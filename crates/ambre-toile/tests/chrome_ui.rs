@@ -1039,8 +1039,10 @@ fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
     assert_eq!(
         placed.target,
         EmbedTarget::Web(
-            ambre_bus::app::toile::WebAddress::parse("https://example.com")
-                .expect("a safe address")
+            ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse(
+                "https://example.com"
+            )
+            .expect("a safe address")
         )
     );
     assert_eq!(

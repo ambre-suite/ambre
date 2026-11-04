@@ -26,7 +26,7 @@ use crate::session::Session;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listing<'a> {
     /// Absent when the channel has none.
-    pub topic: Option<&'a ChannelTopic>,
+    pub topic: Option<&'a Validated<ChannelTopic>>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
@@ -360,7 +360,8 @@ impl SpaceState {
             found.push(CatalogueEntry {
                 channel_id,
                 name: schema::name(&entry, EntryKey::Name).unwrap_or_default(),
-                topic: schema::string(&entry, EntryKey::Topic).and_then(ChannelTopic::new),
+                topic: schema::string(&entry, EntryKey::Topic)
+                    .and_then(|text| Validated::<ChannelTopic>::parse(text).ok()),
                 category: schema::string(&entry, EntryKey::Category)
                     .and_then(|s| Id::<Category>::parse_str(&s).ok()),
                 position: position_of(&entry, EntryKey::Position),

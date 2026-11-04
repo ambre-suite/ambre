@@ -9,7 +9,8 @@
 // ============================================================================
 
 use ambre_bus::DocType;
-use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementKind, ShapeKind, WebAddress};
+use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementKind, ShapeKind};
+use ambre_core::Validated;
 use ambre_core::id::{Element, Id};
 use ambre_core::index::Len;
 
@@ -78,7 +79,7 @@ fn kind_name(element: &DisplayElement) -> &'static str {
 fn element_text(geom: &DisplayGeom) -> Option<&str> {
     match geom {
         DisplayGeom::Sticky(s) | DisplayGeom::Text(s) | DisplayGeom::Frame(s) => Some(s),
-        DisplayGeom::Embed(url) => url.as_ref().map(WebAddress::as_str),
+        DisplayGeom::Embed(url) => url.as_ref().map(Validated::as_str),
         _ => None,
     }
 }

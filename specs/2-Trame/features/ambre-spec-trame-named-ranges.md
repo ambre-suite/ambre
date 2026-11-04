@@ -91,7 +91,7 @@ and the name is the unit two concurrent writers race for.
 **Defining, in steps.** Both commands follow one shape:
 
 1. For a definition, refuse a key the grammar would not read as a name (`TRAME-155`). The
-   command carries a `DefinedName`, which only a text with a name's shape makes. The grammar reads
+   command carries a `Validated<DefinedName>`, which only a text with a name's shape makes. The grammar reads
    some such words as something else first, `A1` or `TRUE`, and those are refused here. Refuse a
    text that is not a reference to a live sheet (`TRAME-069`). A refusal answers with an error and
    writes nothing.
@@ -112,7 +112,7 @@ and the name is the unit two concurrent writers race for.
 |---|---|
 | How a name is written | a bareword inside a formula: `=SUM(TOTAL)` |
 | When the grammar tries it | last: after a function call, a qualified reference, an error literal and a plain reference |
-| What a name may be called | an ASCII letter or underscore, then ASCII letters, digits and underscores: a `DefinedName`. `DefineName` also refuses a word the grammar reads first (`TRAME-155`) |
+| What a name may be called | an ASCII letter or underscore, then ASCII letters, digits and underscores: a `Validated<DefinedName>`. `DefineName` also refuses a word the grammar reads first (`TRAME-155`) |
 | What `TRUEVALUE` is | a name. A bareword merely starting with `TRUE` is not the boolean |
 | Where a name may be used | any formula in the workbook. There is no per-sheet scope |
 | How a user defines one | no way. No name manager, no dialog, no menu entry sends either command |

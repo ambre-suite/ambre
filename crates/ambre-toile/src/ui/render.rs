@@ -2081,7 +2081,10 @@ mod tests {
         };
         for geom in [
             DisplayGeom::Embed(
-                ambre_bus::app::toile::WebAddress::parse("https://example.org").ok(),
+                ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse(
+                    "https://example.org",
+                )
+                .ok(),
             ),
             doc,
         ] {

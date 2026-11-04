@@ -980,7 +980,7 @@ mod tests {
         PublicChannelDraft {
             channel_id: Id::<Channel>::mint(),
             name: named(name),
-            topic: ChannelTopic::new("the weekly figures"),
+            topic: ambre_core::Validated::<ChannelTopic>::parse("the weekly figures").ok(),
             category: None,
             position: ambre_bus::CatalogPosition::new(1),
         }
@@ -1231,7 +1231,7 @@ mod tests {
             (
                 entry.channel_id,
                 entry.name.as_str(),
-                entry.topic.as_ref().map(ChannelTopic::as_str)
+                entry.topic.as_ref().map(ambre_core::Validated::as_str)
             ),
             (channel_id, "budget", Some("the weekly figures"))
         );

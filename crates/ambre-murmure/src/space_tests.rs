@@ -2,6 +2,7 @@
 //! (`features/ambre-spec-murmure-spaces.md`).
 
 use ambre_bus::{Authored, ChannelTopic, Instant, SealedChannelKey};
+use ambre_core::Validated;
 use ambre_core::id::{Category, Channel, Id, Space};
 use loro::{LoroDoc, LoroValue};
 
@@ -24,8 +25,8 @@ fn sealed(byte: u8) -> SealedChannelKey {
     SealedChannelKey::from_bytes(vec![byte; 72])
 }
 
-fn topic(text: &str) -> ChannelTopic {
-    ChannelTopic::new(text).expect("a topic")
+fn topic(text: &str) -> Validated<ChannelTopic> {
+    Validated::<ChannelTopic>::parse(text).expect("a topic")
 }
 
 /// A listing with no topic and no category.

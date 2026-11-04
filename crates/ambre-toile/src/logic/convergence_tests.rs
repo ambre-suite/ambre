@@ -4785,7 +4785,8 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
             size: Size::new(100.0, 100.0),
             fill: None,
             content: InitContent::Embed(
-                ambre_bus::app::toile::WebAddress::parse("example.com").expect("a safe address"),
+                ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse("example.com")
+                    .expect("a safe address"),
             ),
             correlate: None,
         });

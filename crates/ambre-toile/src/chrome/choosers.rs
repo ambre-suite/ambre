@@ -20,7 +20,8 @@ use super::handler::ToileDialogs;
 use crate::ui::deck::DeckSignals;
 use crate::ui::embed::{EmbedTarget, PlacedEmbed};
 use crate::ui::link::LinkEdit;
-use ambre_bus::app::toile::{AddressError, WebAddress};
+use ambre_bus::app::toile::{AddressError, WebAddress, link_url};
+use ambre_core::Validated;
 
 /// A document the user may embed or link to, as the launcher's list names it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -226,7 +227,7 @@ fn place_web_embed(
     open: RwSignal<Openness>,
     placed: RwSignal<Option<PlacedEmbed>>,
 ) {
-    match WebAddress::parse(&typed.get_untracked()) {
+    match Validated::<WebAddress>::parse(typed.get_untracked()) {
         Ok(url) => {
             placed.set(Some(PlacedEmbed {
                 target: EmbedTarget::Web(url),
@@ -246,9 +247,9 @@ fn set_web_link(
     open: RwSignal<Openness>,
     edit: RwSignal<Option<LinkEdit>>,
 ) {
-    match WebAddress::parse(&typed.get_untracked()) {
+    match Validated::<WebAddress>::parse(typed.get_untracked()) {
         Ok(url) => {
-            edit.set(Some(LinkEdit::new(Some(LinkTarget::Url(url.into())))));
+            edit.set(Some(LinkEdit::new(Some(LinkTarget::Url(link_url(url))))));
             open.set(Openness::Closed);
         }
         Err(e) => error.set(Some(e)),

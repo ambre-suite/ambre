@@ -885,20 +885,16 @@ impl std::fmt::Debug for SealedChannelKey {
     }
 }
 
-/// The topic of a channel: a line of text under its name. The name keeps it
-/// apart from the relay topic, a publish-subscribe address.
+/// The rule of the topic of a channel: a line of text under its name. The
+/// name keeps it apart from the relay topic, a publish-subscribe address. A
+/// `Validated<ChannelTopic>` holds one.
 ///
 /// Never empty: a channel with no topic holds no topic at all, so the
 /// catalogue stores an absent key rather than an empty string. A member typed
 /// it, so `Debug` prints its length alone.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ChannelTopic(Validated<ChannelTopicRule>);
+pub enum ChannelTopic {}
 
-/// The rule of a [`ChannelTopic`]: never empty.
-pub enum ChannelTopicRule {}
-
-impl Rule for ChannelTopicRule {
+impl Rule for ChannelTopic {
     type Error = &'static str;
 
     fn admit(text: String) -> Result<String, Self::Error> {
@@ -907,32 +903,6 @@ impl Rule for ChannelTopicRule {
         } else {
             Ok(text)
         }
-    }
-}
-
-impl ChannelTopic {
-    /// The topic `text` states, or `None` for an empty text.
-    pub fn new(text: impl Into<String>) -> Option<Self> {
-        Validated::parse(text).ok().map(Self)
-    }
-
-    /// The text of the topic.
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl TryFrom<String> for ChannelTopic {
-    type Error = &'static str;
-
-    fn try_from(text: String) -> Result<Self, Self::Error> {
-        Validated::parse(text).map(Self)
-    }
-}
-
-impl From<ChannelTopic> for String {
-    fn from(topic: ChannelTopic) -> Self {
-        topic.0.into_string()
     }
 }
 
@@ -988,7 +958,7 @@ pub struct CategoryView {
 pub struct CatalogueEntry {
     pub channel_id: Id<Channel>,
     pub name: ambre_core::Validated<ambre_core::Name>,
-    pub topic: Option<ChannelTopic>,
+    pub topic: Option<Validated<ChannelTopic>>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
@@ -1001,7 +971,7 @@ pub struct PublicChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
     pub channel_id: Id<Channel>,
     pub name: ambre_core::Validated<ambre_core::Name>,
-    pub topic: Option<ChannelTopic>,
+    pub topic: Option<Validated<ChannelTopic>>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
@@ -1161,6 +1131,7 @@ pub enum SpaceEvent {
 #[cfg(test)]
 mod tests {
     use super::{ChannelTopic, MurmureCommand, SealedChannelKey};
+    use ambre_core::Validated;
     use ambre_core::id::{Id, Message, Segment, User};
     use ambre_core::{Ciphertext, FixedBytes, KeyId, Nonce, Payload};
 
@@ -1202,14 +1173,28 @@ mod tests {
     /// wire, so the catalogue never stores an empty string.
     #[test]
     fn a_topic_is_never_empty() {
-        assert_eq!(ChannelTopic::new(""), None);
-        let figures = ChannelTopic::new("the weekly figures").expect("a topic");
+        assert_eq!(
+            Validated::<ChannelTopic>::parse(""),
+            Err("a topic is never empty")
+        );
+        let figures = Validated::<ChannelTopic>::parse("the weekly figures").expect("a topic");
         assert_eq!(figures.as_str(), "the weekly figures");
 
         let bytes = postcard::to_allocvec(&figures).expect("encode");
-        assert_eq!(postcard::from_bytes::<ChannelTopic>(&bytes), Ok(figures));
+        assert_eq!(
+            bytes,
+            postcard::to_allocvec("the weekly figures").expect("encode")
+        );
+        assert_eq!(
+            serde_json::to_string(&figures).expect("encode"),
+            "\"the weekly figures\""
+        );
+        assert_eq!(
+            postcard::from_bytes::<Validated<ChannelTopic>>(&bytes),
+            Ok(figures)
+        );
         let empty = postcard::to_allocvec("").expect("encode");
-        assert!(postcard::from_bytes::<ChannelTopic>(&empty).is_err());
+        assert!(postcard::from_bytes::<Validated<ChannelTopic>>(&empty).is_err());
     }
 
     /// A topic, a draft, a file's name and a message body print their length
@@ -1222,8 +1207,8 @@ mod tests {
         };
         use ambre_core::{Authored, Instant};
         let secret = "Q3 layoffs";
-        let topic = ChannelTopic::new(secret).expect("a topic");
-        assert_eq!(format!("{topic:?}"), "ChannelTopic(10 chars)");
+        let topic = Validated::<ChannelTopic>::parse(secret).expect("a topic");
+        assert_eq!(format!("{topic:?}"), "10 chars");
         let draft = MessageDraft {
             text: secret.to_owned(),
             mentions: Vec::new(),

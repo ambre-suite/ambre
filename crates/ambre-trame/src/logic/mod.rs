@@ -13,6 +13,7 @@
 // (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
 // ============================================================================
 
+use ambre_core::Validated;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use ambre_core::{Bounded, Doc, Px};
@@ -50,7 +51,7 @@ pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 struct TrameCtx<'a> {
     engine_sheet_by_name: &'a HashMap<SheetNameKey, Pos<EngineSheet>>,
     engine_sheet_by_id: &'a HashMap<Id<Sheet>, Pos<EngineSheet>>,
-    named: &'a HashMap<DefinedName, NameTarget>,
+    named: &'a HashMap<Validated<DefinedName>, NameTarget>,
 }
 
 impl FormulaCtx for TrameCtx<'_> {
@@ -62,7 +63,7 @@ impl FormulaCtx for TrameCtx<'_> {
     fn resolve_sheet_id(&self, id: &Id<Sheet>) -> Option<Pos<EngineSheet>> {
         self.engine_sheet_by_id.get(id).copied()
     }
-    fn resolve_name(&self, name: &DefinedName) -> Option<NameTarget> {
+    fn resolve_name(&self, name: &Validated<DefinedName>) -> Option<NameTarget> {
         self.named.get(name).cloned()
     }
 }
@@ -221,7 +222,7 @@ pub struct TrameState {
     sheet_id_to_name: HashMap<Id<Sheet>, SheetName>,
     /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
     /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
-    named: HashMap<DefinedName, NameTarget>,
+    named: HashMap<Validated<DefinedName>, NameTarget>,
     /// The cell writes refused since the last [`finish_cell_writes`], which
     /// reports them to the user (`TRAME-211`, `TRAME-UI-164`). Every write path
     /// ends there, so none of them can refuse in silence.

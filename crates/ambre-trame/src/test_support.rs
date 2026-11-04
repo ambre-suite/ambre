@@ -133,8 +133,9 @@ pub fn session(n: u64) -> ambre_bus::Token<crate::EditSession> {
 /// # Panics
 ///
 /// When `text` does not have a name's shape.
-pub fn name(text: &str) -> crate::DefinedName {
-    crate::DefinedName::new(text).expect("a test name has a name's shape")
+pub fn name(text: &str) -> ambre_core::Validated<crate::DefinedName> {
+    ambre_core::Validated::<crate::DefinedName>::parse(text)
+        .expect("a test name has a name's shape")
 }
 
 /// The sheet name `text`, which a test writes under the rule a rename obeys.

@@ -238,7 +238,10 @@ impl FormulaCtx for TestCtx {
             _ => None,
         }
     }
-    fn resolve_name(&self, name: &ambre_bus::DefinedName) -> Option<NameTarget> {
+    fn resolve_name(
+        &self,
+        name: &ambre_core::Validated<ambre_bus::DefinedName>,
+    ) -> Option<NameTarget> {
         match name.as_str() {
             "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(
                 S2,

@@ -1,3 +1,4 @@
+use ambre_core::Validated;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Axis, Len, Numbered, Pos, Span};
 use ambre_core::{Ordinal, OrdinalKind};
@@ -831,7 +832,7 @@ pub enum Expr {
         inner: Box<Expr>,
     },
     /// A bareword reference to a named range, resolved by the context.
-    Name(DefinedName),
+    Name(Validated<DefinedName>),
     BinOp {
         kind: BinOpKind,
         lhs: Box<Expr>,
@@ -885,7 +886,7 @@ pub trait FormulaCtx {
     /// or `None` if the sheet was deleted (the reference becomes `#REF!`).
     fn resolve_sheet_id(&self, id: &Id<Sheet>) -> Option<Pos<EngineSheet>>;
     /// Resolve a defined name (`TOTAL`) to its target, or `None` if undefined.
-    fn resolve_name(&self, name: &DefinedName) -> Option<NameTarget>;
+    fn resolve_name(&self, name: &Validated<DefinedName>) -> Option<NameTarget>;
 }
 
 /// Default context: a single sheet (index 0), no cross-sheet references, no
@@ -899,7 +900,7 @@ impl FormulaCtx for SingleSheetCtx {
     fn resolve_sheet_id(&self, _id: &Id<Sheet>) -> Option<Pos<EngineSheet>> {
         None
     }
-    fn resolve_name(&self, _name: &DefinedName) -> Option<NameTarget> {
+    fn resolve_name(&self, _name: &Validated<DefinedName>) -> Option<NameTarget> {
         None
     }
 }

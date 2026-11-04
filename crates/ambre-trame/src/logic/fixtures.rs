@@ -397,7 +397,8 @@ fn build_multi_sheet(state: &mut TrameState) {
         state.handle_command(TrameCommand::SetCellsBatch { cells });
         if name == "Data" {
             state.handle_command(TrameCommand::DefineName {
-                name: crate::DefinedName::new("readings").expect("a fixed name"),
+                name: ambre_core::Validated::<crate::DefinedName>::parse("readings")
+                    .expect("a fixed name"),
                 // Qualified by display name: the definition is stored under the
                 // sheet's id, so it survives a rename (`TRAME-067`).
                 reference: "Data!A1:A8".to_owned(),
