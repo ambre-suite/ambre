@@ -6,7 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::count::{CountColumn, CountKind, IndexedAs};
 use crate::fixed_bytes::{FixedBytes, FixedRole};
+use crate::text_offset::Byte;
 use crate::{Displayed, Rule, Validated};
 
 /// The rule of the content address of a media blob, which the relay stores
@@ -169,76 +171,77 @@ impl KnownMediaType {
     }
 }
 
-/// A size in bytes.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
-)]
-#[serde(transparent)]
-pub struct ByteSize(u64);
+/// The marker of a size in bytes: `Count<Octets>`, the size of a file, a
+/// blob or a buffer. Named apart from the [`crate::text_offset::Byte`] axis,
+/// which a size in bytes reads its length on.
+///
+/// A file may pass 4 GiB, so the count is 64 bits wide, while an index
+/// length is 32: [`crate::Count::saturating_len`] holds the gap. Serde writes the
+/// bare `u64` the hand-written `ByteSize` wrote, and `Debug` keeps its name.
+pub enum Octets {}
 
-impl ByteSize {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-
-    /// The size of a buffer `len` bytes long, saturating at `u64::MAX`.
-    #[must_use]
-    pub fn of(len: usize) -> Self {
-        Self(u64::try_from(len).unwrap_or(u64::MAX))
-    }
-
-    /// The size as a buffer length, saturating at `usize::MAX`.
-    #[must_use]
-    pub fn as_len(self) -> usize {
-        usize::try_from(self.0).unwrap_or(usize::MAX)
-    }
-
-    /// The two sizes together, saturating at `u64::MAX` bytes.
-    #[must_use]
-    pub const fn saturating_add(self, other: Self) -> Self {
-        Self(self.0.saturating_add(other.0))
-    }
-
-    /// The bytes past `other`, or zero when `other` is larger.
-    #[must_use]
-    pub const fn saturating_sub(self, other: Self) -> Self {
-        Self(self.0.saturating_sub(other.0))
-    }
-
-    /// The size as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
-    pub fn to_i64_saturating(self) -> i64 {
-        i64::try_from(self.0).unwrap_or(i64::MAX)
-    }
-
-    /// A size a Postgres `BIGINT` stored. A negative value, which no
-    /// `octet_length` returns, reads as zero.
-    pub fn from_i64(stored: i64) -> Self {
-        Self(u64::try_from(stored).unwrap_or(0))
-    }
+impl CountKind for Octets {
+    type Repr = u64;
+    const NAME: &'static str = "ByteSize";
 }
 
-impl std::iter::Sum for ByteSize {
-    fn sum<I: Iterator<Item = Self>>(sizes: I) -> Self {
-        sizes.fold(Self(0), Self::saturating_add)
-    }
+/// The relay keeps a size in a Postgres `BIGINT`.
+impl CountColumn for Octets {}
+
+/// A buffer is reserved and sliced by its size.
+impl IndexedAs for Octets {
+    type Axis = Byte;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ByteSize, ContentHash, ContentHashError, FixedBytes, MediaAddress};
+    use super::{ContentHash, ContentHashError, FixedBytes, MediaAddress, Octets};
+    use crate::Count;
     use crate::Validated;
+    use crate::index::Len;
+    use crate::span::StoredAsI64;
+    use crate::text_offset::Byte;
+
+    /// The hand-written `ByteSize` a `Count<Octets>` replaced: a transparent
+    /// `u64`, as it derived its serde.
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[serde(transparent)]
+    struct ByteSize(u64);
+
+    /// A size writes the bytes `ByteSize` wrote, in postcard and in JSON,
+    /// reads them back, and prints the old name.
+    #[test]
+    fn a_size_writes_the_bytes_of_the_type_it_replaced() {
+        for n in [0, 7, 300, u64::from(u32::MAX) + 1, u64::MAX] {
+            let size = Count::<Octets>::new(n);
+            let old = ByteSize(n);
+            let bytes = postcard::to_allocvec(&size).unwrap();
+            assert_eq!(bytes, postcard::to_allocvec(&old).unwrap());
+            assert_eq!(postcard::from_bytes::<Count<Octets>>(&bytes).unwrap(), size);
+            let json = serde_json::to_string(&size).unwrap();
+            assert_eq!(json, serde_json::to_string(&old).unwrap());
+            assert_eq!(serde_json::from_str::<Count<Octets>>(&json).unwrap(), size);
+        }
+        assert_eq!(format!("{:?}", Count::<Octets>::new(4)), "ByteSize(4)");
+        assert_eq!(Count::<Octets>::from_i64(-1), Count::<Octets>::ZERO);
+        assert_eq!(Count::<Octets>::new(u64::MAX).to_i64_saturating(), i64::MAX);
+    }
+
+    /// A size reads as a length up to `u32::MAX`, and holds there past it:
+    /// it never truncates to the low 32 bits.
+    #[test]
+    fn a_size_past_an_index_length_saturates_at_its_top() {
+        let len = |n: u64| Count::<Octets>::new(n).saturating_len();
+        assert_eq!(len(7), Len::<Byte>::new(7));
+        let top = u64::from(u32::MAX);
+        assert_eq!(len(top), Len::<Byte>::new(u32::MAX));
+        assert_eq!(len(top + 1), Len::<Byte>::new(u32::MAX));
+        assert_eq!(len(top + 8), Len::<Byte>::new(u32::MAX));
+        assert_eq!(len(u64::MAX), Len::<Byte>::new(u32::MAX));
+    }
 
     #[test]
     fn a_media_value_serializes_as_its_bare_inner_value() {
-        assert_eq!(serde_json::to_string(&ByteSize(7)).unwrap(), "7");
-        assert_eq!(ByteSize::from_i64(-1), ByteSize(0));
-        assert_eq!(ByteSize(u64::MAX).to_i64_saturating(), i64::MAX);
         let hex = "ab".repeat(32);
         let hash = Validated::<ContentHash>::parse(hex.clone()).unwrap();
         assert_eq!(format!("{hash:?}"), format!("ContentHash({hex:?})"));

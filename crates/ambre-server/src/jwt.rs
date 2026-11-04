@@ -67,7 +67,7 @@ pub enum JwtSeedRefusal {
     #[error("JWT_SIGNING_SEED is not valid hex")]
     NotHex,
     #[error("JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not {}", .0.get())]
-    Length(ambre_core::ByteSize),
+    Length(ambre_core::Count<ambre_core::Octets>),
 }
 
 /// Builds a signing key from a seed `fill` writes. The seed is written into a
@@ -241,10 +241,12 @@ mod tests {
         assert_eq!(format!("{seed:?}"), "JwtSeed([REDACTED])");
         assert_eq!(
             read("ab".repeat(31)).err(),
-            Some(JwtSeedRefusal::Length(ambre_core::ByteSize::new(31)))
+            Some(JwtSeedRefusal::Length(ambre_core::Count::<
+                ambre_core::Octets,
+            >::new(31)))
         );
         assert_eq!(
-            JwtSeedRefusal::Length(ambre_core::ByteSize::new(31)).to_string(),
+            JwtSeedRefusal::Length(ambre_core::Count::<ambre_core::Octets>::new(31)).to_string(),
             "JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not 31"
         );
         assert_eq!(read("zz".to_owned()).err(), Some(JwtSeedRefusal::NotHex));

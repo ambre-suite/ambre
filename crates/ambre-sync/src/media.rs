@@ -441,7 +441,7 @@ async fn upload_leg(
             &base.join("/media/upload-url"),
             &http::UploadUrlRequest {
                 content_hash: content_hash.clone(),
-                size: ambre_core::ByteSize::new(size),
+                size: ambre_core::Count::<ambre_core::Octets>::new(size),
             },
         )
         .await
@@ -454,7 +454,7 @@ async fn upload_leg(
         &base.join("/media"),
         &http::ConfirmUploadRequest {
             content_hash: content_hash.clone(),
-            size: ambre_core::ByteSize::new(size),
+            size: ambre_core::Count::<ambre_core::Octets>::new(size),
         },
     )
     .await

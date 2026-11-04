@@ -39,7 +39,6 @@ ambre-core | src/envelope.rs | crate::envelope | Aad | Vec<u8>	associated data b
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint | String	a key fingerprint grouped for reading aloud, which the trust check compares
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed | u64	the constant a fixture author picks: it pins the PeerID, the commit clock and the document id
 ambre-core | src/font.rs | crate::font | FontSize | f32	points, finite and not negative, read capped at FontSize::MAX (CANVAS-088)
-ambre-core | src/media.rs | crate::media | ByteSize | u64	the u64 size of a file or a blob: an index length is u32, and a file may pass 4 GiB
 ambre-core | src/media.rs | crate::media | MediaType | String	a media type as the browser names it, such as image/png, carried whole
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey | String	the relay's name for one object of the object store, which the client carries whole
 ambre-core | src/schema.rs | crate::schema | Fnv | u64	the running state of an FNV-1a hash, private to the step fingerprint

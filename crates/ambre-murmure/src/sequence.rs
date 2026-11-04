@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use ambre_core::id::{Id, Message};
-use ambre_core::{ByteSize, LoroPayloadRef, Payload, Relay, Seq, SnapshotBytes};
+use ambre_core::{Count, LoroPayloadRef, Octets, Payload, Relay, Seq, SnapshotBytes};
 use loro::{
     ContainerID, ContainerTrait, ID, ImportBlobMetadata, ImportStatus, LoroDoc, LoroError,
     VersionVector,
@@ -23,7 +23,7 @@ use crate::schema::{self, MessageKey, Root};
 /// `loro`, so the two never read as each other.
 pub(crate) const FRAME_MAGIC: &[u8; 4] = b"amsq";
 /// One table row: a message identifier, then its number.
-const ROW_SIZE: ByteSize = ByteSize::new(16 + 8);
+const ROW_SIZE: Count<Octets> = Count::<Octets>::new(16 + 8);
 
 /// Where a payload stands in the relay's order of its document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -234,8 +234,9 @@ impl Sequence {
             .collect();
         rows.sort_unstable();
         let count = u32::try_from(rows.len()).unwrap_or(u32::MAX);
-        let mut out =
-            Vec::with_capacity(8 + rows.len() * ROW_SIZE.as_len() + loro.as_bytes().len());
+        let mut out = Vec::with_capacity(
+            8 + rows.len() * ROW_SIZE.saturating_len().to_usize() + loro.as_bytes().len(),
+        );
         out.extend_from_slice(FRAME_MAGIC);
         out.extend_from_slice(&count.to_le_bytes());
         for (id, seq) in rows.into_iter().take(count as usize) {
@@ -303,7 +304,7 @@ fn split(payload: &Payload<SnapshotBytes>) -> Option<Framed<'_>> {
     let (count, rest) = rest.split_first_chunk::<4>()?;
     let len = usize::try_from(u32::from_le_bytes(*count))
         .ok()?
-        .checked_mul(ROW_SIZE.as_len())?;
+        .checked_mul(ROW_SIZE.saturating_len().to_usize())?;
     (rest.len() >= len).then(|| {
         let (rows, loro) = rest.split_at(len);
         Framed {
@@ -355,7 +356,7 @@ fn table(
         framed
             .rows
             .0
-            .chunks_exact(ROW_SIZE.as_len())
+            .chunks_exact(ROW_SIZE.saturating_len().to_usize())
             .filter_map(|row| {
                 let (id, seq) = row.split_first_chunk::<16>()?;
                 let seq = Seq::<Relay>::new(u64::from_le_bytes(seq.try_into().ok()?));

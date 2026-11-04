@@ -22,7 +22,7 @@ pub struct UploadUrlRequest {
     /// Declared size of the encrypted blob. Validated against `media_max_size`
     /// and bound into the presigned PUT URL so the upload cannot exceed it.
     #[serde(rename = "size_bytes")]
-    pub size: ambre_core::ByteSize,
+    pub size: ambre_core::Count<ambre_core::Octets>,
 }
 #[derive(serde::Serialize)]
 pub struct UploadUrlResponse {
@@ -46,7 +46,9 @@ pub async fn media_upload_url(
     // Reject an oversized blob before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size == ambre_core::ByteSize::new(0) || req.size > state.config.media_max_size {
+    if req.size == ambre_core::Count::<ambre_core::Octets>::new(0)
+        || req.size > state.config.media_max_size
+    {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
             req.size.get(),
@@ -113,7 +115,7 @@ pub async fn media_download_url(
 pub struct ConfirmUploadRequest {
     pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     #[serde(rename = "size_bytes")]
-    pub size: ambre_core::ByteSize,
+    pub size: ambre_core::Count<ambre_core::Octets>,
 }
 
 pub async fn media_confirm_upload(
@@ -135,7 +137,9 @@ pub async fn media_confirm_upload(
     }
     // Mirror the upload-url cap so a recorded `media` row can never claim a size
     // the upload path would have refused.
-    if req.size == ambre_core::ByteSize::new(0) || req.size > state.config.media_max_size {
+    if req.size == ambre_core::Count::<ambre_core::Octets>::new(0)
+        || req.size > state.config.media_max_size
+    {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
             req.size.get(),

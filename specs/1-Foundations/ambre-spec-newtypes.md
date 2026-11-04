@@ -56,7 +56,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A span of time in a unit | `TimeSpan<U>` | `TimeUnit`, sealed | `ClockUnit` |
 | An instant on a time base | `Instant<C>` | `TimeBase`, sealed | -- |
 | A position, a length, a difference and a range in an index space | `Pos<A>`, `Len<A>`, `Delta<A>`, `Span<A>`, `IdxVec<A, T>` | `Axis` | `Numbered`, `Shown`, `Circular`, `MeasuresAs<B>`, `MapsTo<B>` |
-| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `CountColumn` |
+| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `CountColumn`, `IndexedAs` |
 | A number one issuer hands out going up, each once | `Seq<K>` | `SeqKind`, with its `IssueRight` | `Wire`, `Before`, `CountsSince`, `SeqColumn` |
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
 | A format or a schema version | `Version<K>` | `VersionKind`, with its `Repr` | `Current`, `OpenRange` |

@@ -413,7 +413,7 @@ mod tests {
                 .expect("an address"),
             name: "a".to_owned(),
             media_type: ambre_core::MediaType::from(media_type),
-            size: ambre_bus::ByteSize::new(1),
+            size: ambre_core::Count::<ambre_core::Octets>::new(1),
         };
         save_file(&file("image/png"), vec![1].into());
         js_sys::Reflect::set(&window, &key, &original).expect("open restored");

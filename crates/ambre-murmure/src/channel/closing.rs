@@ -7,7 +7,7 @@
 
 use ambre_bus::{Authored, Instant, Messages, MurmureEvent};
 use ambre_core::id::{Id, Segment};
-use ambre_core::{ByteSize, Count, DeltaBytes, Failures, Ms, Payload, PeerEntryBytes, TimeSpan};
+use ambre_core::{Count, DeltaBytes, Failures, Ms, Octets, Payload, PeerEntryBytes, TimeSpan};
 use loro::{ExportMode, LoroDoc};
 
 use super::{
@@ -25,7 +25,7 @@ pub const SEGMENT_MESSAGES: Count<Messages> = Count::<Messages>::new(5000);
 
 /// The snapshot bytes past which an active segment asks to close, whatever
 /// its message count: the 2 MB bound of the same row (`MURMURE-481`).
-pub const SEGMENT_SNAPSHOT_SIZE: ByteSize = ByteSize::new(2 * 1024 * 1024);
+pub const SEGMENT_SNAPSHOT_SIZE: Count<Octets> = Count::<Octets>::new(2 * 1024 * 1024);
 
 /// The delay before a successor that failed to open is fetched again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
@@ -69,7 +69,7 @@ impl ChannelState {
     /// This channel, with segments that ask to close past `bytes` of
     /// snapshot.
     #[must_use]
-    pub fn with_segment_snapshot_size(mut self, bytes: ByteSize) -> Self {
+    pub fn with_segment_snapshot_size(mut self, bytes: Count<Octets>) -> Self {
         self.segment_snapshot_size = bytes;
         self
     }
@@ -116,13 +116,17 @@ impl ChannelState {
         let Ok(snapshot) = self.active.doc.export(ExportMode::Snapshot) else {
             return false;
         };
-        let bytes = ByteSize::of(snapshot.len());
+        let bytes = Count::<Octets>::of(snapshot.len());
         if bytes >= self.segment_snapshot_size {
             return true;
         }
         let held = usize::try_from(messages.get()).unwrap_or(usize::MAX);
         let per_message = (snapshot.len() / held.max(1)).max(1);
-        let room = self.segment_snapshot_size.saturating_sub(bytes).as_len();
+        let room = self
+            .segment_snapshot_size
+            .minus(bytes)
+            .saturating_len()
+            .to_usize();
         let step = (room / per_message / 2).max(1);
         self.active.probe_at = messages.plus(Count::<Messages>::of(step));
         false

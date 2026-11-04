@@ -2029,7 +2029,7 @@ pub(crate) struct DocumentMemberEntry {
 pub(crate) struct UploadUrlRequest {
     pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     #[serde(rename = "size_bytes")]
-    pub size: ambre_core::ByteSize,
+    pub size: ambre_core::Count<ambre_core::Octets>,
 }
 
 #[derive(Deserialize)]
@@ -2054,7 +2054,7 @@ pub(crate) struct DownloadUrlResponse {
 pub(crate) struct ConfirmUploadRequest {
     pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     #[serde(rename = "size_bytes")]
-    pub size: ambre_core::ByteSize,
+    pub size: ambre_core::Count<ambre_core::Octets>,
 }
 
 /// A transport that answers from a script and keeps every request it was
@@ -2793,12 +2793,12 @@ mod tests {
         let ask = UploadUrlRequest {
             content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse("ab".repeat(32))
                 .expect("a hash"),
-            size: ambre_core::ByteSize::new(64),
+            size: ambre_core::Count::<ambre_core::Octets>::new(64),
         };
         let confirm = ConfirmUploadRequest {
             content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse("ab".repeat(32))
                 .expect("a hash"),
-            size: ambre_core::ByteSize::new(64),
+            size: ambre_core::Count::<ambre_core::Octets>::new(64),
         };
         assert_eq!(
             fields(serde_json::to_value(&ask).expect("serializes")),

@@ -156,7 +156,8 @@ impl ClipValue {
 }
 
 /// The longest family name a paste keeps, in bytes.
-const FAMILY_MAX: ambre_core::ByteSize = ambre_core::ByteSize::new(64);
+const FAMILY_MAX: ambre_core::Count<ambre_core::Octets> =
+    ambre_core::Count::<ambre_core::Octets>::new(64);
 
 /// The value a paste writes under `root`, from either half of the clipboard
 /// (`PROSE-UI-220`, `PROSE-UI-234`). The value passes the grammar of a typed
@@ -182,7 +183,7 @@ fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
 /// that runs.
 fn safe_link(href: &str) -> bool {
     let lower = href.get(..8).unwrap_or(href).to_ascii_lowercase();
-    crate::link::within_href_max(ambre_core::ByteSize::of(href.len()))
+    crate::link::within_href_max(ambre_core::Count::<ambre_core::Octets>::of(href.len()))
         && ["http://", "https://", "mailto:"]
             .iter()
             .any(|scheme| lower.starts_with(scheme))
@@ -192,7 +193,7 @@ fn safe_link(href: &str) -> bool {
 /// a control character or one that closes a style declaration.
 fn safe_family(name: &str) -> bool {
     !name.is_empty()
-        && ambre_core::ByteSize::of(name.len()) <= FAMILY_MAX
+        && ambre_core::Count::<ambre_core::Octets>::of(name.len()) <= FAMILY_MAX
         && name
             .chars()
             .all(|c| !c.is_control() && !matches!(c, '<' | '>' | ';' | '"'))
@@ -683,7 +684,10 @@ mod tests {
     /// never lands, so no export writes it.
     #[test]
     fn a_crafted_link_lands_only_when_a_reader_may_follow_it() {
-        let long = format!("https://example.org/{}", "a".repeat(HREF_MAX.as_len()));
+        let long = format!(
+            "https://example.org/{}",
+            "a".repeat(HREF_MAX.saturating_len().to_usize())
+        );
         let written = pasted_marks(vec![
             run("a", text("javascript:alert(1)")),
             run("a", text("data:text/html,<script>alert(1)</script>")),
@@ -899,8 +903,11 @@ mod tests {
         let (mut state, _) = document();
         let block = append(&mut state, BlockInit::Paragraph, "link ink mark size");
         let body = crate::doc::get_block_text(&state.doc, &crate::events::tree_id(block));
-        let long = format!("https://example.org/{}", "a".repeat(HREF_MAX.as_len()));
-        let family = "A".repeat(FAMILY_MAX.as_len() + 1);
+        let long = format!(
+            "https://example.org/{}",
+            "a".repeat(HREF_MAX.saturating_len().to_usize())
+        );
+        let family = "A".repeat(FAMILY_MAX.saturating_len().to_usize() + 1);
         for (range, key, value) in [
             (0..4, "ff", family.as_str()),
             (0..4, "a", "javascript:alert(1)"),

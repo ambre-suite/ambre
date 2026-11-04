@@ -23,7 +23,8 @@ use crate::doc::StoredLevel;
 use crate::mark::InlineCode;
 
 /// The largest file a Markdown import reads.
-pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize::new(16 * 1024 * 1024);
+pub const MAX_SIZE: ambre_core::Count<ambre_core::Octets> =
+    ambre_core::Count::<ambre_core::Octets>::new(16 * 1024 * 1024);
 
 /// The deepest list the form keeps. A deeper item lands at this depth, so a
 /// hostile file cannot grow the recursion of the passes that follow.
@@ -595,7 +596,7 @@ mod tests {
             Err(InteropError::ParseFailed(_))
         ));
         assert!(matches!(
-            read_bytes(&vec![b'a'; MAX_SIZE.as_len() + 1]),
+            read_bytes(&vec![b'a'; MAX_SIZE.saturating_len().to_usize() + 1]),
             Err(InteropError::TooLarge(_))
         ));
     }

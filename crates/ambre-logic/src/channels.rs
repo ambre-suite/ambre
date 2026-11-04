@@ -2115,11 +2115,12 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, Attachment, Authored, ByteSize, ContentHash, FoldAnswer, Instant,
-        LeaseAnswer, MediaType, Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand,
+        ActivityKind, Attachment, Authored, ContentHash, FoldAnswer, Instant, LeaseAnswer,
+        MediaType, Mention, MentionTarget, MessageDraft, MurmureEvent, Octets, RestCommand,
         RestEvent,
     };
     use ambre_core::Char;
+    use ambre_core::Count;
     use ambre_core::Px;
     use ambre_core::Validated;
     use ambre_core::id::Lease;
@@ -3905,7 +3906,7 @@ mod tests {
                     media_ref: Validated::<ContentHash>::parse(&file).expect("a content hash"),
                     name: "plan.pdf".to_owned(),
                     media_type: MediaType::new("application/pdf".to_owned()),
-                    size: ByteSize::new(2048),
+                    size: Count::<Octets>::new(2048),
                 }],
                 now,
                 confirmed,

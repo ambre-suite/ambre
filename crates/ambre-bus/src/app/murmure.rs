@@ -274,7 +274,7 @@ impl From<String> for Emoji {
 // the relay (`SYNC-053`). The three types live in `ambre-core`, which the
 // relay's media routes share. A message names its file by the address the
 // Sync worker gave it, read back through `Validated::<ContentHash>::parse`.
-pub use ambre_core::{ByteSize, ContentHash, MediaType};
+pub use ambre_core::{ContentHash, MediaType, Octets};
 
 /// A file a message carries: its address, never its bytes (`MURMURE-017`).
 /// `Debug` prints the length of the file's name alone.
@@ -284,7 +284,7 @@ pub struct Attachment {
     /// The file's name, as its author's file system gave it.
     pub name: String,
     pub media_type: MediaType,
-    pub size: ByteSize,
+    pub size: Count<Octets>,
 }
 
 impl std::fmt::Debug for Attachment {
@@ -318,7 +318,7 @@ pub struct PictureFrame {
 
 impl Picture {
     /// The bytes its frames hold.
-    pub fn bytes(&self) -> ByteSize {
+    pub fn bytes(&self) -> Count<Octets> {
         self.frames.iter().map(|f| f.pixels.len()).sum()
     }
 }
@@ -1202,8 +1202,8 @@ mod tests {
     #[test]
     fn a_text_of_a_conversation_prints_its_length_alone() {
         use super::{
-            Attachment, ByteSize, ContentHash, Deletion, MediaType, MessageAt, MessageDraft,
-            MessageView, Revision,
+            Attachment, ContentHash, Count, Deletion, MediaType, MessageAt, MessageDraft,
+            MessageView, Octets, Revision,
         };
         use ambre_core::{Authored, Instant};
         let secret = "Q3 layoffs";
@@ -1218,7 +1218,7 @@ mod tests {
             media_ref: Validated::<ContentHash>::parse("a".repeat(64)).expect("an address"),
             name: secret.to_owned(),
             media_type: MediaType::new("text/plain".to_owned()),
-            size: ByteSize::new(1),
+            size: Count::<Octets>::new(1),
         };
         let view = MessageView {
             id: Id::<Message>::mint(),

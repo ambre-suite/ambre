@@ -556,7 +556,7 @@ mod tests {
     #[test]
     fn a_link_longer_than_a_copy_writes_exports_as_its_text() {
         let base = "https://example.org/";
-        let max = crate::link::HREF_MAX.as_len();
+        let max = crate::link::HREF_MAX.saturating_len().to_usize();
         let edge = format!("{base}{}", "a".repeat(max - base.len()));
         let long = format!("{edge}a");
         let link = |url: &str, text: &str| IrRun {

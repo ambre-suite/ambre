@@ -38,12 +38,12 @@ const ANCHOR_LEN: usize = 32;
 /// id, the author's key, the signature, the commitment and the nonce, each at
 /// the size its own type states. The layout byte's type lives in `ambre-sync`,
 /// which this crate cannot see, so its one byte is written here.
-const OBJECT_HEADER_LEN: usize = crate::ByteSize::new(1)
-    .saturating_add(FixedBytes::<KeyId>::SIZE)
-    .saturating_add(FixedBytes::<PublicKey>::SIZE)
-    .saturating_add(FixedBytes::<Signature>::SIZE)
-    .saturating_add(FixedBytes::<CommitmentTag>::SIZE)
-    .saturating_add(FixedBytes::<Nonce>::SIZE)
+const OBJECT_HEADER_LEN: usize = crate::Count::<crate::Octets>::new(1)
+    .plus(FixedBytes::<KeyId>::SIZE)
+    .plus(FixedBytes::<PublicKey>::SIZE)
+    .plus(FixedBytes::<Signature>::SIZE)
+    .plus(FixedBytes::<CommitmentTag>::SIZE)
+    .plus(FixedBytes::<Nonce>::SIZE)
     .get() as usize;
 /// The most bytes one character takes in UTF-8.
 const UTF8_MAX_LEN: usize = 4;

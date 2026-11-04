@@ -3,25 +3,24 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use ambre_core::ByteSize;
 use ambre_core::id::{Document, Id};
+use ambre_core::{Count, Octets};
 
 use crate::db::{Deltas, InlineCap};
 use crate::error::AppError;
 use crate::payload::StoredPayload;
 use crate::state::AppState;
-use ambre_core::Count;
 use ambre_core::{Sec, TimeSpan};
 
 /// A delta whose sealed envelope is under this size lives in its index row
 /// (`ambre-spec-budgets.md`, the inline delta size row).
-pub const INLINE_DELTA_MAX_SIZE: ByteSize = ByteSize::new(64 * 1024);
+pub const INLINE_DELTA_MAX_SIZE: Count<Octets> = Count::<Octets>::new(64 * 1024);
 
 /// The most a document holds inline (`ambre-spec-budgets.md`, the inline
 /// deltas per document row; `SRV-150`).
 pub const INLINE_CAP: InlineCap = InlineCap {
     deltas: Count::<Deltas>::new(256),
-    bytes: ByteSize::new(256 * 1024),
+    bytes: Count::<Octets>::new(256 * 1024),
 };
 
 /// How long a document goes without a write before its whole tail moves out
@@ -34,7 +33,7 @@ const IDLE_PASS_LIMIT: ambre_core::Bounded<crate::db::QueryLimit> =
 
 /// Whether a tail of `deltas` rows and `bytes` bytes should move now. The move
 /// starts at three quarters of the cap, so a write rarely meets a full tail.
-pub fn past_watermark(deltas: Count<Deltas>, bytes: ByteSize) -> bool {
+pub fn past_watermark(deltas: Count<Deltas>, bytes: Count<Octets>) -> bool {
     let mark = INLINE_CAP.three_quarters();
     deltas >= mark.deltas || bytes >= mark.bytes
 }
@@ -44,9 +43,9 @@ pub fn past_watermark(deltas: Count<Deltas>, bytes: ByteSize) -> bool {
 fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)]) -> usize {
     let quarter = INLINE_CAP.quarter();
     let mut kept = Count::<Deltas>::new(0);
-    let mut bytes = ByteSize::new(0);
+    let mut bytes = Count::<Octets>::new(0);
     for (_, wire) in tail.iter().rev() {
-        let next = bytes.saturating_add(ByteSize::of(wire.len()));
+        let next = bytes.plus(Count::<Octets>::of(wire.len()));
         if kept.incremented() > quarter.deltas || next > quarter.bytes {
             break;
         }
@@ -249,15 +248,21 @@ mod tests {
     /// `SRV-151`: the move starts at three quarters of the count or the bytes.
     #[test]
     fn a_move_starts_at_three_quarters_of_either_bound() {
-        assert!(!past_watermark(Count::<Deltas>::new(191), ByteSize::new(0)));
-        assert!(past_watermark(Count::<Deltas>::new(192), ByteSize::new(0)));
+        assert!(!past_watermark(
+            Count::<Deltas>::new(191),
+            Count::<Octets>::new(0)
+        ));
+        assert!(past_watermark(
+            Count::<Deltas>::new(192),
+            Count::<Octets>::new(0)
+        ));
         assert!(!past_watermark(
             Count::<Deltas>::new(1),
-            ByteSize::new(192 * 1024 - 1)
+            Count::<Octets>::new(192 * 1024 - 1)
         ));
         assert!(past_watermark(
             Count::<Deltas>::new(1),
-            ByteSize::new(192 * 1024)
+            Count::<Octets>::new(192 * 1024)
         ));
     }
 
@@ -390,7 +395,7 @@ mod db_tests {
         let other = create_test_document(&state.db, owner, "prose").await;
         let small = InlineCap {
             deltas: Count::<Deltas>::new(100),
-            bytes: ByteSize::new(10),
+            bytes: Count::<Octets>::new(10),
         };
         assert!(matches!(
             inline(&state, &other, 1, &[0; 6], small).await,

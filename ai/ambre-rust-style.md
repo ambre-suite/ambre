@@ -21,9 +21,9 @@
   These cases take a type, and none of them is `local`, `generic` or `math`:
   * A pixel length, a width, a height or a font size that crosses a function boundary is a unit
     quantity.
-  * A byte count or a byte size is a unit quantity, `ByteSize`. Opaque bytes are never `math`:
-    a blob is a newtype, or `foreign-api` at the foreign call.
-  * The length of a constant array stays a `usize`. It becomes a `ByteSize` when another crate
+  * A byte count or a byte size is a unit quantity, `Count<Octets>`. Opaque bytes are never
+    `math`: a blob is a newtype, or `foreign-api` at the foreign call.
+  * The length of a constant array stays a `usize`. It becomes a `Count<Octets>` when another crate
     frames bytes with it at run time.
   * A value with a parse into a type carries the parsed type, never the text.
   * A parse that needs a runtime context still types the parts that parse without it. Only the

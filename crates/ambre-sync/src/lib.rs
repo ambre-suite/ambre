@@ -1386,7 +1386,8 @@ impl SyncState {
         // shared-memory threading model. Browsers reject `WebSocket.send` on a
         // view backed by a SharedArrayBuffer, so copy into a fresh (non-shared)
         // ArrayBuffer first.
-        let buf = js_sys::Uint8Array::new_with_length(wire.len().as_len() as u32);
+        let buf =
+            js_sys::Uint8Array::new_with_length(wire.len().saturating_len().to_usize() as u32);
         buf.copy_from(wire.as_bytes());
         if let Err(e) = ws.send_with_array_buffer(&buf.buffer()) {
             tracing::warn!("[Sync->Server] WebSocket send failed ({e:?}); reconnect will retry");

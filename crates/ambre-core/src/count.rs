@@ -32,6 +32,7 @@ use std::marker::PhantomData;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::index::{Axis, Len};
 use crate::span::StoredAsI64;
 
 mod sealed {
@@ -164,6 +165,28 @@ pub trait Divisor: CountKind<Repr = u64> {}
 /// store has no store spelling.
 pub trait CountColumn: CountKind<Repr = u64> {}
 
+/// A 64-bit count that an index of [`IndexedAs::Axis`] reads as a length:
+/// a size in bytes that a buffer is sliced or reserved by.
+///
+/// A capability that each kind opts in to. The count is 64 bits wide and a
+/// [`Len`] is 32, so [`Count::saturating_len`] holds a count past `u32::MAX`
+/// at `u32::MAX` and never truncates it. A count that indexes nothing has no
+/// length:
+///
+/// ```compile_fail,E0599
+/// use ambre_core::{Count, CountKind};
+/// enum Rows {}
+/// impl CountKind for Rows {
+///     type Repr = u64;
+///     const NAME: &'static str = "RowCount";
+/// }
+/// let _ = Count::<Rows>::new(3).saturating_len();
+/// ```
+pub trait IndexedAs: CountKind<Repr = u64> {
+    /// The axis whose length the count reads as.
+    type Axis: Axis;
+}
+
 /// A running count of the things `K` names, held at the top rather than
 /// wrapping.
 ///
@@ -273,12 +296,36 @@ impl<K: CountKind<Repr = u64>> Count<K, u64> {
     }
 }
 
+/// The counts together, held at the top, as [`Count::plus`] adds two.
+impl<K: CountKind<Repr = u32>> std::iter::Sum for Count<K, u32> {
+    fn sum<I: Iterator<Item = Self>>(counts: I) -> Self {
+        counts.fold(Self::ZERO, Self::plus)
+    }
+}
+
+/// The counts together, held at the top, as [`Count::plus`] adds two.
+impl<K: CountKind<Repr = u64>> std::iter::Sum for Count<K, u64> {
+    fn sum<I: Iterator<Item = Self>>(counts: I) -> Self {
+        counts.fold(Self::ZERO, Self::plus)
+    }
+}
+
 impl<K: Divisor> Count<K, u64> {
     /// The count as the divisor of a sum, for an average. A count past 2^53
     /// rounds to the nearest `f64`.
     #[must_use]
     pub const fn as_f64(self) -> f64 {
         self.raw as f64
+    }
+}
+
+impl<K: IndexedAs> Count<K, u64> {
+    /// The count as a length on its axis, held at `u32::MAX`, the top of a
+    /// [`Len`]. A count past it saturates and is never truncated: a buffer
+    /// that long is past every bound the workspace reserves or slices by.
+    #[must_use]
+    pub fn saturating_len(self) -> Len<K::Axis> {
+        Len::new(u32::try_from(self.raw).unwrap_or(u32::MAX))
     }
 }
 
@@ -474,5 +521,16 @@ mod tests {
         assert_eq!(Count::<Cells>::saturating_from_u64(u64::MAX), top);
         assert_eq!(Count::<Seen>::saturating_from_u64(u64::MAX).get(), u32::MAX);
         assert!((Count::<Cells>::new(4).as_f64() - 4.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_sum_of_counts_holds_at_the_top_of_its_width() {
+        let seen = [3, 4].map(Count::<Seen>::new);
+        assert_eq!(seen.into_iter().sum::<Count<Seen>>().get(), 7);
+        let full = [u32::MAX, 1].map(Count::<Seen>::new);
+        assert_eq!(full.into_iter().sum::<Count<Seen>>().get(), u32::MAX);
+        let wide = [u64::MAX, 1].map(Count::<Cells>::new);
+        assert_eq!(wide.into_iter().sum::<Count<Cells>>().get(), u64::MAX);
+        assert_eq!(std::iter::empty().sum::<Count<Cells>>(), Count::ZERO);
     }
 }

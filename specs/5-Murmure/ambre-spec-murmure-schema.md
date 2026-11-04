@@ -98,7 +98,7 @@ pub struct CustomEmojiId(Uuid);         // not built: minted by the admin's clie
 pub struct TagId(Uuid);                 // not built: minted by the forum owner's client
 pub struct ImportOrigin { pub name: String, pub ts: Instant<Authored> }  // not built
 pub struct MediaType(String);           // a lower-case type and subtype
-pub struct ByteSize(u64);
+pub enum Octets {}                      // a size in bytes is a Count<Octets>, a bare u64
 pub struct SealedChannelKey(Vec<u8>);   // a channel key, sealed under the space key
 pub enum DocumentKind { Space, Meta, Segment, Amendments, Thread }
 pub enum ChannelType { Direct, Private, Public }
@@ -136,7 +136,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
 | segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `Id<Message>`, `Id<User>`, `Instant<Authored>`, `Id<Document>`, `Id<Document>`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `Id<Meeting>`, `NoticeKind`, `Id<User>` | the key | messages | built |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark and the style marks | none: char-CRDT | messages, mentions | built |
-| segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
+| segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: Count<Octets>}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
 | segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and an `Id<User>` | an `Instant<Authored>` | the entry | reactions | built |
 | segment, thread | `messages/{n}/tags` | Map | a `TagId` | `true` | the entry | forums | design |
 | segment, thread | `messages/{n}/actions` | List | position | `{id: String, label: String}` | list order, no LWW | bots | design |

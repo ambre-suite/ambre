@@ -522,7 +522,8 @@ pub fn write_ambre_sealed(
     nonce: &FixedBytes<Nonce>,
     ciphertext: &Payload<Ciphertext>,
 ) -> Payload<SealedContainer> {
-    let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len().as_len());
+    let mut out =
+        Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len().saturating_len().to_usize());
     out.extend_from_slice(sealed_aad(salt).as_bytes());
     nonce.push_to(&mut out);
     debug_assert_eq!(out.len(), SEALED_HEADER_LEN);

@@ -9,7 +9,7 @@
 
 use super::*;
 use crate::SurfaceSize;
-use ambre_core::ByteSize;
+use ambre_core::{Count, Octets};
 use ambre_core::{Css, Device, Image, Px, Scale, Size, Texel, View};
 use ambre_draw::{Color, ImageSource, Line, Rect};
 use std::collections::HashMap;
@@ -152,12 +152,12 @@ pub struct QuadRenderer {
 /// therefore carry their own ceiling rather than sharing an unstated remainder.
 /// At four bytes a texel a full budget is roughly six 1024x1024 photographs, and
 /// the chain adds a third to each.
-const IMAGE_VRAM_BUDGET: ByteSize = ByteSize::new(24 * 1024 * 1024);
+const IMAGE_VRAM_BUDGET: Count<Octets> = Count::<Octets>::new(24 * 1024 * 1024);
 
 /// One cached picture: what a draw binds, and what holding it costs.
 struct CacheEntry<T> {
     payload: T,
-    bytes: ByteSize,
+    bytes: Count<Octets>,
     /// The size of the upload. A key reused at a different size is content that
     /// changed behind its identity, so the cache replaces the entry rather than
     /// stretching it (`ImageSource::key`).
@@ -180,17 +180,17 @@ struct CacheEntry<T> {
 /// (`ambre-spec-testing.md section 2`).
 struct ImageCache<T> {
     map: HashMap<ImageKey, CacheEntry<T>>,
-    bytes: ByteSize,
-    budget: ByteSize,
+    bytes: Count<Octets>,
+    budget: Count<Octets>,
     /// Monotonic per-frame counter, stamped onto an entry at each draw.
     clock: u64,
 }
 
 impl<T> ImageCache<T> {
-    fn new(budget: ByteSize) -> Self {
+    fn new(budget: Count<Octets>) -> Self {
         Self {
             map: HashMap::new(),
-            bytes: ByteSize::new(0),
+            bytes: Count::<Octets>::new(0),
             budget,
             clock: 0,
         }
@@ -221,9 +221,9 @@ impl<T> ImageCache<T> {
     /// insert evicts it.
     fn insert(&mut self, key: ImageKey, entry: CacheEntry<T>) {
         if let Some(old) = self.map.remove(&key) {
-            self.bytes = self.bytes.saturating_sub(old.bytes);
+            self.bytes = self.bytes.minus(old.bytes);
         }
-        self.bytes = self.bytes.saturating_add(entry.bytes);
+        self.bytes = self.bytes.plus(entry.bytes);
         self.map.insert(key, entry);
         while self.bytes > self.budget && self.map.len() > 1 {
             let victim = self
@@ -234,7 +234,7 @@ impl<T> ImageCache<T> {
             match victim {
                 Some(k) => {
                     if let Some(v) = self.map.remove(&k) {
-                        self.bytes = self.bytes.saturating_sub(v.bytes);
+                        self.bytes = self.bytes.minus(v.bytes);
                     }
                 }
                 None => break,
@@ -906,7 +906,10 @@ impl QuadRenderer {
         image: &ImageSource<'_>,
     ) -> Option<CacheEntry<wgpu::BindGroup>> {
         let level0 = mipmap::level0_size(image.size);
-        let level0_pixels = image.pixels.as_bytes().get(..level0.as_len())?;
+        let level0_pixels = image
+            .pixels
+            .as_bytes()
+            .get(..level0.saturating_len().to_usize())?;
         let chain = mipmap::build_chain(image.pixels, image.size);
         let levels = mipmap::level_count(image.size);
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -958,7 +961,7 @@ impl QuadRenderer {
                 level.width,
                 level.height,
             );
-            bytes = bytes.saturating_add(level.pixels.len());
+            bytes = bytes.plus(level.pixels.len());
         }
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1380,7 +1383,7 @@ mod image_cache_tests {
     fn entry(bytes: u64, w: u32, h: u32, last_used: u64) -> CacheEntry<u32> {
         CacheEntry {
             payload: w,
-            bytes: ByteSize::new(bytes),
+            bytes: Count::<Octets>::new(bytes),
             size: Size::new(Px::new(w), Px::new(h)),
             last_used,
         }
@@ -1391,7 +1394,7 @@ mod image_cache_tests {
     /// eviction picks at random rather than least-recently-drawn.
     #[test]
     fn a_hit_stamps_the_entry_with_the_current_frame() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
+        let mut c: ImageCache<u32> = ImageCache::new(Count::<Octets>::new(1024));
         c.insert(ImageKey::new(1), entry(16, 2, 2, 0));
         c.clock = 7;
         assert_eq!(
@@ -1406,7 +1409,7 @@ mod image_cache_tests {
     /// content (`ImageSource::key`).
     #[test]
     fn a_key_at_another_size_is_a_miss() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
+        let mut c: ImageCache<u32> = ImageCache::new(Count::<Octets>::new(1024));
         c.insert(ImageKey::new(1), entry(16, 2, 2, 0));
         assert_eq!(
             c.get(ImageKey::new(1), Size::new(Px::new(4), Px::new(4))),
@@ -1423,10 +1426,10 @@ mod image_cache_tests {
     /// the picture the user is looking at to keep one they scrolled past.
     #[test]
     fn the_least_recently_drawn_entry_is_evicted_first() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(100));
+        let mut c: ImageCache<u32> = ImageCache::new(Count::<Octets>::new(100));
         c.insert(ImageKey::new(1), entry(40, 1, 1, 5)); // drawn recently
         c.insert(ImageKey::new(2), entry(40, 2, 2, 1)); // drawn long ago
-        assert_eq!(c.bytes, ByteSize::new(80));
+        assert_eq!(c.bytes, Count::<Octets>::new(80));
         c.insert(ImageKey::new(3), entry(40, 3, 3, 9));
         assert!(
             c.bound(ImageKey::new(2)).is_none(),
@@ -1434,18 +1437,18 @@ mod image_cache_tests {
         );
         assert!(c.bound(ImageKey::new(1)).is_some());
         assert!(c.bound(ImageKey::new(3)).is_some());
-        assert_eq!(c.bytes, ByteSize::new(80));
+        assert_eq!(c.bytes, Count::<Octets>::new(80));
     }
 
     /// Re-inserting a key replaces it rather than counting its bytes twice. An
     /// image re-uploaded at a new size must not leak the budget of the old one.
     #[test]
     fn reinserting_a_key_replaces_its_cost() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
+        let mut c: ImageCache<u32> = ImageCache::new(Count::<Octets>::new(1024));
         c.insert(ImageKey::new(1), entry(40, 1, 1, 0));
         c.insert(ImageKey::new(1), entry(64, 1, 1, 0));
         assert_eq!(c.map.len(), 1);
-        assert_eq!(c.bytes, ByteSize::new(64));
+        assert_eq!(c.bytes, Count::<Octets>::new(64));
     }
 
     /// The cache keeps one picture larger than the whole budget. Evicting down
@@ -1453,7 +1456,7 @@ mod image_cache_tests {
     /// and the next insert reclaims it anyway.
     #[test]
     fn a_lone_oversized_entry_survives() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(100));
+        let mut c: ImageCache<u32> = ImageCache::new(Count::<Octets>::new(100));
         c.insert(ImageKey::new(1), entry(4096, 1, 1, 0));
         assert!(c.bound(ImageKey::new(1)).is_some());
         assert_eq!(c.map.len(), 1);

@@ -458,7 +458,7 @@ fn a_wrap_has_a_length_the_wire_reads() {
     );
     let doc_key = DocumentKey::from_array([0x55; 32]);
     let length = |wrapped: ecdh::WrappedKey| {
-        wrapped.nonce.as_slice().len() + wrapped.ciphertext.len().as_len()
+        wrapped.nonce.as_slice().len() + wrapped.ciphertext.len().saturating_len().to_usize()
     };
     let bare = length(ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap());
     let anchored = length(
@@ -617,7 +617,9 @@ fn a_key_id_is_derived_from_the_key() {
     assert_ne!(key.id(), DocumentKey::from_array([0x12; 32]).id());
     assert_ne!(
         key.id().as_array()[..],
-        [0x11; 32][..FixedBytes::<ambre_core::KeyId>::SIZE.as_len()]
+        [0x11; 32][..FixedBytes::<ambre_core::KeyId>::SIZE
+            .saturating_len()
+            .to_usize()]
     );
 }
 

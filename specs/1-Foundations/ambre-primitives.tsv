@@ -893,17 +893,10 @@ ambre-core | src/link.rs | crate::link | LinkUrl::as_str() | ret | &str	newtype-
 ambre-core | src/link.rs | crate::link | LinkUrl::new(text) | param | String	newtype-inner	LinkUrl newtype
 ambre-core | src/media.rs | crate::media | <MediaType as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MediaType copies into its text
 ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of MediaType wraps
-ambre-core | src/media.rs | crate::media | ByteSize.0 | field | u64	newtype-inner	ContentHash/MediaType/ByteSize newtype
-ambre-core | src/media.rs | crate::media | ByteSize::as_len() | ret | usize	newtype-inner	ByteSize constructor or accessor
-ambre-core | src/media.rs | crate::media | ByteSize::from_i64(stored) | param | i64	newtype-inner	ByteSize storage conversion
-ambre-core | src/media.rs | crate::media | ByteSize::of(len) | param | usize	newtype-inner	ByteSize constructor or accessor
-ambre-core | src/media.rs | crate::media | ByteSize::to_i64_saturating() | ret | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | KnownMediaType::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/media.rs | crate::media | MEDIA_ADDRESS_LEN | const | usize	generic	length constant
 ambre-core | src/media.rs | crate::media | MediaType.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
-ambre-core | src/media.rs | crate::media | ByteSize::get() | ret | u64	newtype-inner	the ByteSize newtype unwrapped, for a caller outside its module
-ambre-core | src/media.rs | crate::media | ByteSize::new(value) | param | u64	newtype-inner	the constructor of the ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::new(value) | param | String	newtype-inner	the constructor of the MediaType newtype
 ambre-core | src/name.rs | crate::name | NAME_MAX_CHARS | const | usize	generic	name cap and its predicate
 ambre-core | src/name.rs | crate::name | NAME_TOO_LONG | const | &str	free-text	user-facing message
@@ -4064,6 +4057,8 @@ ambre-bus | src/app/prose.rs | crate::app::prose | <CodeLang as Rule>::admit() |
 ambre-bus | src/app/prose.rs | crate::app::prose | <CodeLang as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit() | ret | Result<String,NotALangTag>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/media.rs | crate::media | <Octets as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-core | src/media.rs | crate::media | <Octets as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count, u64 wide on the wire and in the store
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit() | ret | Result<String,ContentHashError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps

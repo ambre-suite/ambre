@@ -30,7 +30,7 @@ macro_rules! define_layout_version {
 
             /// Bytes of the layout byte in front of what it lays out: one,
             /// the width `repr(u8)` gives it.
-            pub const SIZE: $crate::ByteSize = $crate::ByteSize::new(1);
+            pub const SIZE: $crate::Count<$crate::Octets> = $crate::Count::new(1);
 
             /// The byte that names this layout in front of what it lays out.
             #[must_use]
@@ -71,6 +71,6 @@ mod tests {
         assert_eq!(Shape::from_byte(Shape::CURRENT.byte()), Some(Shape::V2));
         assert_eq!(Shape::from_byte(0), None);
         assert_eq!(Shape::from_byte(3), None);
-        assert_eq!(Shape::SIZE, crate::ByteSize::new(1));
+        assert_eq!(Shape::SIZE, crate::Count::<crate::Octets>::new(1));
     }
 }

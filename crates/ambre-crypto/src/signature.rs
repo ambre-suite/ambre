@@ -42,7 +42,7 @@ fn message(
 ) -> Vec<u8> {
     let mut msg = Vec::with_capacity(
         16 + nonce.as_slice().len()
-            + ciphertext.len().as_len()
+            + ciphertext.len().saturating_len().to_usize()
             + aad.as_bytes().len()
             + commitment_tag.as_slice().len(),
     );
