@@ -1068,7 +1068,7 @@ pub(crate) fn self_join_entry(
     head: &http::JoinHeadResponse,
     key: FixedBytes<KeyId>,
 ) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
-    if head.length.is_first() {
+    if head.length == ambre_core::Seq::ZERO {
         return Ok(None);
     }
     let meta = head.meta_id.document_id();

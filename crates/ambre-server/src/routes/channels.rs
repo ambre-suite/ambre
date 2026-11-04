@@ -242,7 +242,7 @@ pub struct JoinHeadJson {
     /// The role the self-join grants, which its entry must name.
     pub role: Role,
     /// The number of entries, the position the self-join takes.
-    pub length: ambre_protocol::LogPosition,
+    pub length: ambre_core::Seq<ambre_protocol::LogPlaces>,
     /// The last entry, base64 url-safe, absent on an empty log.
     pub last: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
@@ -922,7 +922,7 @@ pub async fn join_channel_head(
     Ok(axum::Json(JoinHeadJson {
         meta_id,
         role,
-        length: ambre_protocol::LogPosition::after(log.len()),
+        length: ambre_protocol::place_after(log.len()),
         last: log.last().cloned(),
     }))
 }
@@ -1046,7 +1046,7 @@ mod tests {
         let key = signing_key();
         let mut entry = ambre_protocol::MembershipEntry {
             document,
-            position: ambre_protocol::LogPosition::new(position),
+            position: ambre_core::Seq::<ambre_protocol::LogPlaces>::new(position),
             member: who,
             member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
                 key.verifying_key().to_bytes(),
@@ -1078,7 +1078,7 @@ mod tests {
     async fn open_log(state: &AppState, meta: Id<Document>, creator: Id<User>) {
         let text = signed_entry(meta, 0, creator, MembershipAct::Create, Role::Owner);
         let entry = db::LogEntry {
-            position: ambre_protocol::LogPosition::FIRST,
+            position: ambre_core::Seq::<ambre_protocol::LogPlaces>::ZERO,
             bytes: text,
         };
         db::add_document_member(
@@ -1751,7 +1751,10 @@ mod tests {
         let axum::Json(answer) = head(alice).await.expect("head");
         assert_eq!(answer.meta_id, channel.meta);
         assert_eq!(answer.role, Role::Editor);
-        assert_eq!(answer.length, ambre_protocol::LogPosition::new(1));
+        assert_eq!(
+            answer.length,
+            ambre_core::Seq::<ambre_protocol::LogPlaces>::new(1)
+        );
         assert!(answer.last.is_some());
     }
 
@@ -2601,7 +2604,7 @@ mod tests {
         let signing = signing_key();
         let mut entry = ambre_protocol::MembershipEntry {
             document,
-            position: ambre_protocol::LogPosition::new(position),
+            position: ambre_core::Seq::<ambre_protocol::LogPlaces>::new(position),
             member,
             member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
                 signing.verifying_key().to_bytes(),

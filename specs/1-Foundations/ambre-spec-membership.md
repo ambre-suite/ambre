@@ -185,7 +185,7 @@ client check what the relay serves.
 ```rust
 pub struct MembershipEntry {
     pub document: Id<Document>,
-    pub position: LogPosition,          // the place in the log, from zero
+    pub position: Seq<LogPlaces>,       // the place in the log, from zero
     pub member: Id<User>,
     pub member_key: PublicKey,          // the member's signing key
     pub act: MembershipAct,

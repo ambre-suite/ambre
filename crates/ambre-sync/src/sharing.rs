@@ -3342,7 +3342,8 @@ mod tests {
     // -- The signed membership log (`ambre-spec-membership.md`).
 
     use ambre_bus::MemberStanding;
-    use ambre_protocol::LogPosition;
+    use ambre_core::Seq;
+    use ambre_protocol::LogPlaces;
 
     /// A copy of `author`, for a task that takes its own.
     fn same(author: &Author) -> Author {
@@ -3573,14 +3574,17 @@ mod tests {
         assert!(matches!(erx.try_recv(), Ok(SyncEvent::InviteSent { .. })));
         assert!(lrx.try_recv().is_err());
         let calls = http.calls();
-        let positions: Vec<LogPosition> = calls
+        let positions: Vec<Seq<LogPlaces>> = calls
             .iter()
             .filter_map(|call| match call {
                 Call::Post(_, body) => Some(posted_entry(body).position),
                 _ => None,
             })
             .collect();
-        assert_eq!(positions, vec![LogPosition::new(1), LogPosition::new(2)]);
+        assert_eq!(
+            positions,
+            vec![Seq::<LogPlaces>::new(1), Seq::<LogPlaces>::new(2)]
+        );
     }
 
     /// Holds `SYNC-132` at the revoke: the request carries the entry that

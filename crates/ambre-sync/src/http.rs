@@ -1661,7 +1661,7 @@ pub(crate) struct JoinHeadResponse {
     /// The role the relay grants the self-join, which the entry must name.
     pub role: ambre_bus::Role,
     /// The number of entries, the position the self-join takes.
-    pub length: ambre_protocol::LogPosition,
+    pub length: ambre_core::Seq<ambre_protocol::LogPlaces>,
     /// The last entry (base64), absent on an empty log.
     #[serde(default)]
     pub last: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
