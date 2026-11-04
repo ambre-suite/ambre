@@ -83,6 +83,7 @@ pub mod payload;
 pub mod provider;
 pub mod public_key;
 pub mod redacted;
+pub mod refused;
 /// Which documents a client holds, and which leave first
 /// (`ambre-spec-residency.md`).
 pub mod residency;
@@ -147,7 +148,7 @@ pub use fixtures::{
 };
 pub use flags::{Flags, FlagsKind, FlagsRepr};
 pub use font::{
-    FontFamily, FontSize, FontWeight, InvalidFontSize, Slant, Strikethrough, Underline, Weight,
+    FontFamily, FontPoints, FontSize, FontWeight, Slant, Strikethrough, Underline, Weight,
     WordBreak,
 };
 pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
@@ -158,7 +159,7 @@ pub use media::{
     ByteSize, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress,
     MediaType,
 };
-pub use member_count::{MemberCountError, Members};
+pub use member_count::Members;
 pub use mode::{
     AfterDrop, Availability, CaseMatch, Creation, DocumentScope, FinalizeEnd, HistoryStep,
     LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle, Visibility, WordMatch,
@@ -179,6 +180,7 @@ pub use payload::{
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
 pub use redacted::Redacted;
+pub use refused::{Refused, Refuses};
 pub use role::{DocumentRank, OrganizationRank, Role};
 pub use scale::Scale;
 pub use schema::{
@@ -204,7 +206,7 @@ pub use span::{
 };
 pub use static_key::{Canvases, Categories, Commands, Icons, KeyKind, StaticKey};
 pub use status::{
-    ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
+    ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusWord,
     UnreadableCause, WriteStatus,
 };
 pub use text_offset::{

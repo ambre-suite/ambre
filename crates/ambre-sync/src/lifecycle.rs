@@ -5,9 +5,9 @@
 
 use std::rc::Rc;
 
-use ambre_core::{Instant, Ms, TimeSpan, UnixMs};
+use ambre_core::{Bounded, Instant, Ms, TimeSpan, UnixMs};
 
-use ambre_protocol::ws::CloseCode;
+use ambre_protocol::ws::{CloseCode, RelayClose};
 
 /// The first reconnect delay.
 const BASE_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(250);
@@ -92,12 +92,12 @@ impl Lifecycle {
     /// still needs it. `jitter` is a fraction in `[0, 1)` added to the delay.
     pub(crate) fn closed(
         &mut self,
-        code: Option<CloseCode>,
+        code: Option<Bounded<CloseCode>>,
         demand: Demand,
         now: Instant<UnixMs>,
         jitter: f64,
     ) -> Next {
-        if code == Some(CloseCode::SETUP_REQUIRED) {
+        if code == Some(Bounded::<CloseCode>::SETUP_REQUIRED) {
             // A renewed session would have no keys either (`SYNC-133`).
             self.deadline = None;
             return Next::SetupOwed;
@@ -105,7 +105,7 @@ impl Lifecycle {
         if demand == Demand::Unneeded {
             return Next::Idle;
         }
-        if code == Some(CloseCode::UNAUTHORIZED) {
+        if code == Some(Bounded::<CloseCode>::UNAUTHORIZED) {
             // A dead token is cured by a renewal, which no backoff can be
             // (`SYNC-063`).
             return Next::Renew;
@@ -175,7 +175,7 @@ mod tests {
         let mut waits = Vec::new();
         for _ in 0..8 {
             let Next::Wait { delay } =
-                lifecycle.closed(CloseCode::new(1006), Demand::Needed, now, 0.0)
+                lifecycle.closed(Bounded::<CloseCode>::new(1006), Demand::Needed, now, 0.0)
             else {
                 panic!("a close backs off");
             };
@@ -199,7 +199,7 @@ mod tests {
     fn the_wait_resets_on_a_frame_alone() {
         let mut lifecycle = Lifecycle::default();
         lifecycle.closed(
-            CloseCode::new(1006),
+            Bounded::<CloseCode>::new(1006),
             Demand::Needed,
             Instant::<UnixMs>::new(0),
             0.0,
@@ -208,7 +208,7 @@ mod tests {
         // Opened and closed again with no frame between.
         assert_eq!(
             lifecycle.closed(
-                CloseCode::new(1006),
+                Bounded::<CloseCode>::new(1006),
                 Demand::Needed,
                 Instant::<UnixMs>::new(250),
                 0.0
@@ -221,7 +221,7 @@ mod tests {
         lifecycle.frame();
         assert_eq!(
             lifecycle.closed(
-                CloseCode::new(1006),
+                Bounded::<CloseCode>::new(1006),
                 Demand::Needed,
                 Instant::<UnixMs>::new(800),
                 0.0
@@ -238,14 +238,14 @@ mod tests {
     fn an_authentication_refusal_renews_and_reopens() {
         let mut lifecycle = Lifecycle::default();
         lifecycle.closed(
-            CloseCode::new(1006),
+            Bounded::<CloseCode>::new(1006),
             Demand::Needed,
             Instant::<UnixMs>::new(0),
             0.0,
         );
         assert_eq!(
             lifecycle.closed(
-                Some(CloseCode::UNAUTHORIZED),
+                Some(Bounded::<CloseCode>::UNAUTHORIZED),
                 Demand::Needed,
                 Instant::<UnixMs>::new(10),
                 0.0
@@ -260,7 +260,7 @@ mod tests {
         );
         assert_eq!(
             lifecycle.closed(
-                CloseCode::new(1006),
+                Bounded::<CloseCode>::new(1006),
                 Demand::Needed,
                 Instant::<UnixMs>::new(20),
                 0.0
@@ -280,7 +280,7 @@ mod tests {
         assert_eq!(
             errored.closed(None, Demand::Needed, Instant::<UnixMs>::new(0), 0.5),
             closed.closed(
-                CloseCode::new(1006),
+                Bounded::<CloseCode>::new(1006),
                 Demand::Needed,
                 Instant::<UnixMs>::new(0),
                 0.5
@@ -295,14 +295,14 @@ mod tests {
 
         let mut lifecycle = Lifecycle::default();
         lifecycle.closed(
-            CloseCode::new(1006),
+            Bounded::<CloseCode>::new(1006),
             Demand::Needed,
             Instant::<UnixMs>::new(0),
             0.0,
         );
         assert_eq!(
             lifecycle.closed(
-                Some(CloseCode::SETUP_REQUIRED),
+                Some(Bounded::<CloseCode>::SETUP_REQUIRED),
                 Demand::Needed,
                 Instant::<UnixMs>::new(0),
                 0.0
@@ -316,7 +316,7 @@ mod tests {
         );
         assert_eq!(
             lifecycle.closed(
-                CloseCode::new(1006),
+                Bounded::<CloseCode>::new(1006),
                 Demand::Unneeded,
                 Instant::<UnixMs>::new(0),
                 0.0

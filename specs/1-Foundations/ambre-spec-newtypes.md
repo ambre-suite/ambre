@@ -21,11 +21,10 @@
 
 | Reason | Example |
 | :--- | :--- |
-| An invariant no family checks | `CellNumber` is finite; `Month` lies in one to twelve |
+| An invariant no family checks | `CellNumber` is finite; `LineSpacingMultiple` lies above zero |
 | An operation no sibling shares | `Rgba` reads its channels; `StackDepth` refuses a pop below zero |
-| A width or a meaning a foreign definition fixes | `PeerId` is a Loro PeerID; `CloseCode` is RFC 6455's |
+| A width or a meaning a foreign definition fixes | `PeerId` is a Loro PeerID; `HttpStatus` is HTTP's |
 | A door no family keeps closed | `SealedBlob` is built by the seal alone, while `Payload::new` is public |
-| The error of a refused value, which echoes it | `NotACellNumber`, `InvalidFontSize` |
 | A crate that cannot depend on `ambre-core` | the primitive gate, which reads the workspace and links none of it |
 
 | Element | Where | What holds it |
@@ -62,6 +61,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
 | A format or a schema version | `Version<K>` | `VersionKind`, with its `Repr` | `Current`, `OpenRange` |
 | A number between two bounds | `Bounded<K>` | `Bounds`, with its `Repr` | `Defaulted`, `Saturates` |
+| The error of a refused value, which echoes it | `Refused<K>` | `Refuses`, with its `Raw` and its message | -- |
 | A text a rule checked once, at the door | `Validated<V>` | `Rule` | -- |
 | A text of one kind that crosses or is stored, read by no code that carries it, and that a log never prints | `Opaque<K>` | `OpaqueKind`, with its `LENGTH` | `WireOpaque`, `SealedAtRest` |
 | Text a log never prints | `Redacted<T>` | -- | -- |

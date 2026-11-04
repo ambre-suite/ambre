@@ -11,7 +11,9 @@ use crate::messages::{DeltaAuthor, Relay, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::id::{Document, Id, Snapshot};
-use ambre_core::{DocType, FixedBytes, KeyId, Payload, PublicKey, RefusalCode};
+use ambre_core::{
+    Bounded, Bounds, DocType, FixedBytes, KeyId, Payload, PublicKey, Refusal, RefusalCode,
+};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -63,56 +65,51 @@ pub enum WsClientMsg {
 /// whose hand-written serde keeps the bare text this wire carried before.
 pub use ambre_core::{AccessToken, Credential, RefreshToken};
 
-/// The code of a WebSocket close frame, 1000 to 4999 (RFC 6455 section 7.4).
-/// The relay closes a refused upgrade with a code of the application range,
-/// and Sync reads the same constants, so the two never drift. A socket that
-/// failed without a close has no code: Sync carries it as `None`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CloseCode(u16);
+/// The code of a WebSocket close frame, 1000 to 4999 (RFC 6455 section 7.4):
+/// the marker of a [`Bounded<CloseCode>`]. The relay closes a refused upgrade
+/// with a code of the application range, and Sync reads the same constants,
+/// so the two never drift. A socket that failed without a close has no code:
+/// Sync carries it as `None`.
+pub enum CloseCode {}
 
-impl CloseCode {
+impl Bounds for CloseCode {
+    type Repr = u16;
+    const MIN: u16 = 1000;
+    const MAX: u16 = 4999;
+    const NAME: &'static str = "CloseCode";
+    const REFUSAL: Refusal = Refusal::new("a close code lies in 1000..=4999, not ", "");
+}
+
+/// The codes the relay closes a refused upgrade with, and the reason text it
+/// sends beside each. A trait, since a crate adds no inherent item to
+/// [`Bounded`], which `ambre-core` owns.
+pub trait RelayClose: Sized {
     /// An upgrade refused on authentication (expired or rotated token): the
     /// client renews its token and reconnects (`SRV-046`). Mirrors HTTP 401.
-    pub const UNAUTHORIZED: Self = Self(4401);
+    const UNAUTHORIZED: Self;
 
     /// An upgrade refused for a key setup still owed. A renewal cannot cure
     /// it, so the client neither renews nor retries (`SRV-164`). Mirrors the
     /// HTTP 403 of `SETUP_REQUIRED`.
-    pub const SETUP_REQUIRED: Self = Self(4403);
-
-    /// The code `raw` names, or `None` outside 1000 to 4999, which no close
-    /// frame carries.
-    #[must_use]
-    pub const fn new(raw: u16) -> Option<Self> {
-        if raw >= 1000 && raw <= 4999 {
-            Some(Self(raw))
-        } else {
-            None
-        }
-    }
-
-    /// The number the close frame carries.
-    #[must_use]
-    pub const fn get(self) -> u16 {
-        self.0
-    }
+    const SETUP_REQUIRED: Self;
 
     /// The reason text the relay sends beside a refusal code, `None` for a
     /// code the relay never sends.
-    #[must_use]
-    pub const fn reason(self) -> Option<&'static str> {
-        match self {
-            Self::UNAUTHORIZED => Some("unauthorized"),
-            Self::SETUP_REQUIRED => Some("setup required"),
-            _ => None,
-        }
-    }
+    fn reason(self) -> Option<&'static str>;
 }
 
-impl std::fmt::Display for CloseCode {
-    /// The bare number, `4401` for an authentication refusal.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+impl RelayClose for Bounded<CloseCode> {
+    const UNAUTHORIZED: Self = Self::of_u16::<4401>();
+    const SETUP_REQUIRED: Self = Self::of_u16::<4403>();
+
+    fn reason(self) -> Option<&'static str> {
+        if self == Self::UNAUTHORIZED {
+            Some("unauthorized")
+        } else if self == Self::SETUP_REQUIRED {
+            Some("setup required")
+        } else {
+            None
+        }
     }
 }
 

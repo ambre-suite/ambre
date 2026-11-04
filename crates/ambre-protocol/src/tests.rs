@@ -569,17 +569,52 @@ fn the_relay_reads_only_the_listed_fields() {
 /// stands for a socket that failed without a close.
 #[test]
 fn a_close_code_is_one_a_close_frame_can_carry() {
-    use crate::ws::CloseCode;
-    assert_eq!(CloseCode::new(0), None);
-    assert_eq!(CloseCode::new(999), None);
-    assert_eq!(CloseCode::new(5000), None);
-    assert_eq!(CloseCode::new(4401), Some(CloseCode::UNAUTHORIZED));
-    assert_eq!(CloseCode::new(4403), Some(CloseCode::SETUP_REQUIRED));
-    assert_ne!(CloseCode::UNAUTHORIZED, CloseCode::SETUP_REQUIRED);
-    assert_eq!(CloseCode::new(1006).map(CloseCode::get), Some(1006));
-    assert_eq!(CloseCode::UNAUTHORIZED.reason(), Some("unauthorized"));
-    assert_eq!(CloseCode::SETUP_REQUIRED.reason(), Some("setup required"));
-    assert_eq!(CloseCode::new(1006).and_then(CloseCode::reason), None);
+    use crate::ws::{CloseCode, RelayClose};
+    use ambre_core::Bounded;
+    assert_eq!(Bounded::<CloseCode>::new(0), None);
+    assert_eq!(Bounded::<CloseCode>::new(999), None);
+    assert_eq!(Bounded::<CloseCode>::new(5000), None);
+    assert_eq!(
+        Bounded::<CloseCode>::new(1000),
+        Some(Bounded::<CloseCode>::MIN)
+    );
+    assert_eq!(
+        Bounded::<CloseCode>::new(4999),
+        Some(Bounded::<CloseCode>::MAX)
+    );
+    assert_eq!(
+        Bounded::<CloseCode>::new(4401),
+        Some(Bounded::<CloseCode>::UNAUTHORIZED)
+    );
+    assert_eq!(
+        Bounded::<CloseCode>::new(4403),
+        Some(Bounded::<CloseCode>::SETUP_REQUIRED)
+    );
+    assert_ne!(
+        Bounded::<CloseCode>::UNAUTHORIZED,
+        Bounded::<CloseCode>::SETUP_REQUIRED
+    );
+    assert_eq!(
+        Bounded::<CloseCode>::new(1006).map(Bounded::<CloseCode>::get),
+        Some(1006)
+    );
+    assert_eq!(
+        Bounded::<CloseCode>::UNAUTHORIZED.reason(),
+        Some("unauthorized")
+    );
+    assert_eq!(
+        Bounded::<CloseCode>::SETUP_REQUIRED.reason(),
+        Some("setup required")
+    );
+    assert_eq!(
+        Bounded::<CloseCode>::new(1006).and_then(Bounded::<CloseCode>::reason),
+        None
+    );
+    assert_eq!(Bounded::<CloseCode>::UNAUTHORIZED.to_string(), "4401");
+    assert_eq!(
+        format!("{:?}", Bounded::<CloseCode>::UNAUTHORIZED),
+        "CloseCode(4401)"
+    );
 }
 
 /// The Blake2b digest of `frame`, first 16 bytes, in hex: the form the frames

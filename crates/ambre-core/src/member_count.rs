@@ -1,8 +1,9 @@
 //! How many members a document has: routing metadata the relay counts.
 
-use thiserror::Error;
+use std::fmt;
 
 use crate::count::{Count, CountKind};
+use crate::refused::{Refused, Refuses};
 
 /// The members on a document, as the relay counts them. More than one means
 /// the document is shared.
@@ -27,30 +28,22 @@ impl Count<Members> {
     }
 }
 
-/// A store's count that is not one: negative, or past 32 bits.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
-#[error("a member count of {0} does not fit 32 bits")]
-pub struct MemberCountError(i64);
+/// A store's count that is not one: negative, or past 32 bits. The error
+/// echoes the store's `i64`.
+impl Refuses for Members {
+    type Raw = i64;
+    const NAME: &'static str = "MemberCountError";
 
-impl MemberCountError {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: i64) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> i64 {
-        self.0
+    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "a member count of {raw} does not fit 32 bits")
     }
 }
 
 impl TryFrom<i64> for Count<Members> {
-    type Error = MemberCountError;
+    type Error = Refused<Members>;
 
     fn try_from(n: i64) -> Result<Self, Self::Error> {
-        u32::try_from(n)
-            .map(Self::new)
-            .map_err(|_| MemberCountError(n))
+        u32::try_from(n).map(Self::new).map_err(|_| Refused::new(n))
     }
 }
 
@@ -61,12 +54,15 @@ mod tests {
     #[test]
     fn a_count_reads_from_the_store_checked_and_crosses_the_wire_bare() {
         assert_eq!(Count::<Members>::try_from(3), Ok(Count::<Members>::new(3)));
-        assert_eq!(Count::<Members>::try_from(-1), Err(MemberCountError(-1)));
+        assert_eq!(Count::<Members>::try_from(-1), Err(Refused::new(-1)));
         let past = i64::from(u32::MAX) + 1;
+        let refused = Count::<Members>::try_from(past).expect_err("past 32 bits");
+        assert_eq!(refused.get(), past);
         assert_eq!(
-            Count::<Members>::try_from(past),
-            Err(MemberCountError(past))
+            refused.to_string(),
+            "a member count of 4294967296 does not fit 32 bits"
         );
+        assert_eq!(format!("{refused:?}"), "MemberCountError(4294967296)");
         assert!(Count::<Members>::new(2).is_shared());
         assert!(!Count::<Members>::ONE.is_shared());
         assert_eq!(

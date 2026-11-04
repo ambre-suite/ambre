@@ -26,13 +26,14 @@ use crate::space::Board;
 use crate::unit::Px;
 
 mod sealed {
-    /// Closes [`super::BoundedRepr`]: a bounded number is an `f32`, a `u8`, a
-    /// `u16`, an `i16` or a `u32`.
+    /// Closes [`super::BoundedRepr`]: a bounded number is an `f32`, an `f64`,
+    /// a `u8`, a `u16`, an `i16` or a `u32`.
     pub trait Sealed {}
 }
 
-/// The number a bounded value holds. Sealed: an `f32`, a `u8`, a `u16`, an
-/// `i16` or a `u32`.
+/// The number a bounded value holds. Sealed: an `f32`, an `f64`, a `u8`, a
+/// `u16`, an `i16` or a `u32`. A float refuses NaN, which lies outside every
+/// pair of bounds, since it compares false with each.
 pub trait BoundedRepr:
     sealed::Sealed
     + Copy
@@ -47,6 +48,8 @@ pub trait BoundedRepr:
 
 impl sealed::Sealed for f32 {}
 impl BoundedRepr for f32 {}
+impl sealed::Sealed for f64 {}
+impl BoundedRepr for f64 {}
 impl sealed::Sealed for u8 {}
 impl BoundedRepr for u8 {}
 impl sealed::Sealed for u16 {}
@@ -245,6 +248,38 @@ impl<K: Bounds<Repr = u8>> Bounded<K> {
     /// outside the bounds is a compile error.
     #[must_use]
     pub const fn of_u8<const N: u8>() -> Self {
+        const {
+            assert!(K::MIN <= N && N <= K::MAX, "a constant outside its bounds");
+        }
+        Self::at(N)
+    }
+}
+
+/// The `const` door of a quantity over a `u16`, as [`Bounded::of`] is for a
+/// `u32`.
+impl<K: Bounds<Repr = u16>> Bounded<K> {
+    /// The value `N`, checked while the crate compiles: a constant outside
+    /// the bounds fails the build.
+    ///
+    /// ```compile_fail
+    /// use ambre_core::{Bounded, Bounds, Refusal};
+    /// enum Code {}
+    /// impl Bounds for Code {
+    ///     type Repr = u16;
+    ///     const MIN: u16 = 1000;
+    ///     const MAX: u16 = 4999;
+    ///     const NAME: &'static str = "Code";
+    ///     const REFUSAL: Refusal = Refusal::new("", "");
+    /// }
+    /// const LOW: Bounded<Code> = Bounded::<Code>::of_u16::<999>();
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Never at run time: the check runs in a `const` block, so a value
+    /// outside the bounds is a compile error.
+    #[must_use]
+    pub const fn of_u16<const N: u16>() -> Self {
         const {
             assert!(K::MIN <= N && N <= K::MAX, "a constant outside its bounds");
         }
@@ -542,6 +577,51 @@ mod tests {
                 "{wide}"
             );
         }
+    }
+
+    /// A test quantity of an `f64` phase.
+    enum Share {}
+    impl Bounds for Share {
+        type Repr = f64;
+        const MIN: f64 = 0.0;
+        const MAX: f64 = 1.0;
+        const NAME: &'static str = "Share";
+        const REFUSAL: Refusal = Refusal::new("", " is no share");
+    }
+
+    /// A test quantity of a 16-bit code, for the `const` door.
+    enum Code {}
+    impl Bounds for Code {
+        type Repr = u16;
+        const MIN: u16 = 1000;
+        const MAX: u16 = 4999;
+        const NAME: &'static str = "Code";
+        const REFUSAL: Refusal = Refusal::new("", " is no code");
+    }
+
+    #[test]
+    fn a_double_refuses_nan_and_keeps_the_bytes_of_its_number() {
+        assert_eq!(Bounded::<Share>::new(f64::NAN), None);
+        assert_eq!(Bounded::<Share>::new(1.5), None);
+        let half = Bounded::<Share>::new(0.5).expect("in range");
+        let bytes = postcard::to_allocvec(&half).expect("encode");
+        assert_eq!(bytes, postcard::to_allocvec(&0.5_f64).expect("encode"));
+        assert_eq!(
+            postcard::from_bytes::<Bounded<Share>>(&bytes).ok(),
+            Some(half)
+        );
+        let nan = postcard::to_allocvec(&f64::NAN).expect("encode");
+        assert!(postcard::from_bytes::<Bounded<Share>>(&nan).is_err());
+        assert_eq!(serde_json::to_string(&half).expect("encode"), "0.5");
+        assert_eq!(format!("{half:?}"), "Share(0.5)");
+    }
+
+    #[test]
+    fn a_16_bit_const_door_checks_its_value_while_the_crate_compiles() {
+        const LOWEST: Bounded<Code> = Bounded::<Code>::of_u16::<1000>();
+        const INSIDE: Bounded<Code> = Bounded::<Code>::of_u16::<4401>();
+        assert_eq!(LOWEST, Bounded::MIN);
+        assert_eq!(INSIDE.get(), 4401);
     }
 
     #[test]

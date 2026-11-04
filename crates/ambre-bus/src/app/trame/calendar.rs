@@ -13,7 +13,7 @@
 // The year and the month live in `ambre-core`, which Prose shares. The day
 // stays here: it runs past either end of its month, as `DATE` reads it.
 
-use ambre_core::{Day, Instant, SheetDay, TimeSpan};
+use ambre_core::{Bounded, Day, Instant, SheetDay, TimeSpan};
 pub use ambre_core::{Month, Year};
 
 /// A count of months, from January of some year. It may run past December
@@ -73,7 +73,7 @@ impl DayOfMonth {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DateParts {
     pub year: Year,
-    pub month: Month,
+    pub month: Bounded<Month>,
     pub day: DayOfMonth,
 }
 
@@ -95,9 +95,9 @@ impl DateParts {
             year: Year::new(if month <= 2 { y + 1 } else { y }),
             // The arithmetic keeps the month in 1 to 12; January stands in
             // for a value it never computes.
-            month: match Month::new(month) {
+            month: match Bounded::<Month>::numbered(month) {
                 Some(month) => month,
-                None => Month::JANUARY,
+                None => Bounded::<Month>::JANUARY,
             },
             day: DayOfMonth(day),
         }
@@ -116,9 +116,9 @@ impl DateParts {
             year: Year::new(year.get() + months.0.div_euclid(12)),
             // The remainder keeps the month in 1 to 12. A count of months
             // past either end of a year is a `MonthCount`.
-            month: match Month::new(months.0.rem_euclid(12) + 1) {
+            month: match Bounded::<Month>::numbered(months.0.rem_euclid(12) + 1) {
                 Some(month) => month,
-                None => Month::JANUARY,
+                None => Bounded::<Month>::JANUARY,
             },
             day,
         }
@@ -180,9 +180,12 @@ mod tests {
     #[test]
     fn a_month_runs_from_one_to_twelve_and_a_count_carries_into_the_year() {
         for refused in [0, 13, -1] {
-            assert_eq!(Month::new(refused), None, "{refused}");
+            assert_eq!(Bounded::<Month>::numbered(refused), None, "{refused}");
         }
-        assert_eq!(Month::new(12).map(Month::get), Some(12));
+        assert_eq!(
+            Bounded::<Month>::numbered(12).map(Bounded::<Month>::get),
+            Some(12)
+        );
         let carried =
             DateParts::of_months(Year::new(2024), MonthCount::new(12), DayOfMonth::new(5));
         assert_eq!((carried.year.get(), carried.month.get()), (2025, 1));

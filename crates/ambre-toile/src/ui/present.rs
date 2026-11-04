@@ -15,10 +15,10 @@
 use ambre_bus::app::toile::FrameSnapshot;
 use ambre_draw::Point;
 
-use crate::logic::animate::{AnimatedElement, Phase, ease_in_out_cubic, smart_animate};
+use crate::logic::animate::{AnimatedElement, Phase, Tween, ease_in_out_cubic, smart_animate};
 
 use super::viewport::ViewportTransform;
-use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
+use ambre_core::{Bounded, FracMs, Instant, PageLoad, TimeSpan};
 
 /// One in-flight slide transition. Built by the view on a `SlideChanged` event
 /// and advanced each frame. The camera glides from `cam_from` to `(cam_to_center,
@@ -97,9 +97,9 @@ impl Transition {
     pub fn advance(&mut self, now: Instant<PageLoad>) -> TransitionFrame {
         let start = *self.started_at.get_or_insert(now);
         let raw = if self.dur.is_zero() {
-            Phase::END
+            Bounded::<Phase>::MAX
         } else {
-            Phase::clamped((now - start) / TimeSpan::<FracMs>::from_duration(self.dur))
+            Bounded::<Phase>::clamped((now - start) / TimeSpan::<FracMs>::from_duration(self.dur))
         };
         let eased = ease_in_out_cubic(raw);
         TransitionFrame {
@@ -110,7 +110,7 @@ impl Transition {
                 eased,
             ),
             overrides: smart_animate(&self.from, &self.to, eased),
-            phase: TransitionPhase::from_bool(raw == Phase::END),
+            phase: TransitionPhase::from_bool(raw == Bounded::<Phase>::MAX),
         }
     }
 }

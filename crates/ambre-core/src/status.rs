@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+use crate::refused::{Refused, Refuses};
+
 /// Who vouched for a snapshot (`SRV-126`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -37,33 +39,29 @@ impl fmt::Display for SnapshotStatus {
     }
 }
 
-/// A word that names no status of its set.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("unknown status: {0}")]
-pub struct StatusError(String);
+/// A word that names no status of its set: the marker of its
+/// [`Refused<StatusWord>`], which echoes the word.
+pub enum StatusWord {}
 
-impl StatusError {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: String) -> Self {
-        Self(value)
-    }
+impl Refuses for StatusWord {
+    type Raw = String;
+    const NAME: &'static str = "StatusError";
 
-    /// Returns the raw text.
-    pub fn as_str(&self) -> &str {
-        &self.0
+    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown status: {raw}")
     }
 }
 
 /// Parses a snapshot status from its word, exactly as `as_str` writes it.
 impl FromStr for SnapshotStatus {
-    type Err = StatusError;
+    type Err = Refused<StatusWord>;
 
     fn from_str(word: &str) -> Result<Self, Self::Err> {
         match word {
             "pending" => Ok(Self::Pending),
             "self" => Ok(Self::SelfConfirmed),
             "confirmed" => Ok(Self::Confirmed),
-            _ => Err(StatusError(word.to_string())),
+            _ => Err(Refused::new(word.to_string())),
         }
     }
 }
@@ -145,12 +143,12 @@ macro_rules! closed_words {
 
         /// Parses a member from its word, exactly as `as_str` writes it.
         impl FromStr for $name {
-            type Err = StatusError;
+            type Err = Refused<StatusWord>;
 
             fn from_str(word: &str) -> Result<Self, Self::Err> {
                 match word {
                     $( $word => Ok(Self::$variant), )+
-                    _ => Err(StatusError(word.to_string())),
+                    _ => Err(Refused::new(word.to_string())),
                 }
             }
         }
@@ -393,7 +391,7 @@ mod tests {
             );
             assert_eq!(
                 word.parse::<RefusalCode>(),
-                Err(StatusError(word.to_string()))
+                Err(Refused::new(word.to_string()))
             );
         }
         assert!(serde_json::from_value::<RefusalCode>(serde_json::json!(3)).is_err());
@@ -452,7 +450,7 @@ mod tests {
         }
         assert_eq!(
             "Self".parse::<SnapshotStatus>(),
-            Err(StatusError("Self".to_string()))
+            Err(Refused::new("Self".to_string()))
         );
         assert!(serde_json::from_value::<SnapshotStatus>(serde_json::json!("vouched")).is_err());
     }

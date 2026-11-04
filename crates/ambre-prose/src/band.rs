@@ -131,7 +131,7 @@ fn field_value(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CivilDate {
     year: Year,
-    month: Month,
+    month: Bounded<Month>,
     day: Bounded<MonthDay>,
 }
 
@@ -144,7 +144,7 @@ impl CivilDate {
 
     /// The month, from one.
     #[must_use]
-    pub const fn month(self) -> Month {
+    pub const fn month(self) -> Bounded<Month> {
         self.month
     }
 
@@ -201,7 +201,7 @@ pub fn civil_date(at: Instant<Authored>) -> CivilDate {
     // fallbacks stand in for a value it never answers.
     CivilDate {
         year: Year::new(year),
-        month: Month::new(month).unwrap_or(Month::JANUARY),
+        month: Bounded::<Month>::numbered(month).unwrap_or(Bounded::<Month>::JANUARY),
         day: u8::try_from(day)
             .ok()
             .and_then(Bounded::new)
@@ -366,9 +366,12 @@ mod tests {
     /// A month past twelve, or a day past 31, builds no date part.
     #[test]
     fn a_month_or_a_day_out_of_the_calendar_is_refused() {
-        assert_eq!(Month::new(0), None);
-        assert_eq!(Month::new(13), None);
-        assert_eq!(Month::new(12).map(Month::get), Some(12));
+        assert_eq!(Bounded::<Month>::numbered(0), None);
+        assert_eq!(Bounded::<Month>::numbered(13), None);
+        assert_eq!(
+            Bounded::<Month>::numbered(12).map(Bounded::<Month>::get),
+            Some(12)
+        );
         assert_eq!(Bounded::<MonthDay>::new(0), None);
         assert_eq!(Bounded::<MonthDay>::new(32), None);
         assert_eq!(Bounded::<MonthDay>::new(31).map(Bounded::get), Some(31));
