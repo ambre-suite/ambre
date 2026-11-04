@@ -52,7 +52,6 @@ ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millise
 ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller chooses, read for equality alone and never a hash of the pixels
 ambre-draw | src/testing.rs | crate::testing | StackDepth | u32	the open pushes of a test double: popped answers None below zero, the renderer bug the double catches
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports, a length only once WheelDelta::to_px reads it
-ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash | String	the error of a refused commit id: it echoes the refused text
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo | usize	the gate depends on no workspace crate: a 1-based line number of the allowlist, for its messages

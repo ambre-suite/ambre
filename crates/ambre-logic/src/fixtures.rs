@@ -32,7 +32,7 @@ use ambre_trame::logic::TrameState;
 use ambre_trame::logic::fixtures::{TRAME_BENCH_FIXTURES, TRAME_FIXTURES};
 
 use crate::DocState;
-use ambre_core::{Ns, Rule, TimeSpan, Validated};
+use ambre_core::{Ns, Refused, Refuses, Rule, TimeSpan, Validated};
 
 // -----------------------------------------------------------------------------
 // On-disk layout
@@ -92,33 +92,27 @@ pub struct BenchBaseline {
 pub enum CommitHash {}
 
 /// A text that is no commit id: too short, too long, or not lowercase hex.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("{0:?} is not a commit id")]
-pub struct InvalidCommitHash(String);
+/// The error, `Refused<CommitHash>`, echoes the refused text.
+impl Refuses for CommitHash {
+    type Raw = String;
+    const NAME: &'static str = "InvalidCommitHash";
 
-impl InvalidCommitHash {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: String) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw text.
-    pub fn as_str(&self) -> &str {
-        &self.0
+    fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{raw:?} is not a commit id")
     }
 }
 
 impl Rule for CommitHash {
-    type Error = InvalidCommitHash;
+    type Error = Refused<CommitHash>;
 
     const LOGGED_AS: Option<&'static str> = Some("CommitHash");
 
-    fn admit(text: String) -> Result<String, InvalidCommitHash> {
+    fn admit(text: String) -> Result<String, Refused<CommitHash>> {
         let hex = text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
         if hex && (4..=40).contains(&text.len()) {
             Ok(text)
         } else {
-            Err(InvalidCommitHash(text))
+            Err(Refused::new(text))
         }
     }
 }

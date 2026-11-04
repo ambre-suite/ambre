@@ -3117,10 +3117,9 @@ ambre-core | src/mode.rs | crate::mode | LinkState::connected_if(open) | param |
 ambre-core | src/mode.rs | crate::mode | LinkState::is_connected() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::is_resolved() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::resolved_if(resolved) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash.0 | field | String	free-text	the rejected text the error prints
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::Raw | assoc | String	generic	the refused value the error echoes
 ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	free-text	the manifest's wire word for a build with no commit id
-ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash::as_str() | ret | &str	newtype-inner	the InvalidCommitHash newtype unwrapped, for a caller outside its module
-ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash::new(value) | param | String	newtype-inner	the constructor of the InvalidCommitHash newtype
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(Pos<Block>,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | IdxVec<SlashChoice,&'static str>	free-text	the labels of the slash menu entries
 ambre-prose | src/view/slash.rs | crate::view::slash | <SlashChoice as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -4068,7 +4067,7 @@ ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::LOGGED_AS | const | 
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit() | ret | Result<String,ContentHashError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
-ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit() | ret | Result<String,InvalidCommitHash>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit() | ret | Result<String,Refused<CommitHash>>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::admit() | ret | Result<String,NotAFunctionName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
