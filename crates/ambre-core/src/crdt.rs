@@ -66,9 +66,6 @@ macro_rules! crdt_names {
             $($(#[$variant_meta])* $variant),+
         }
 
-        // A schema whose belt never walks `ALL`, or whose reader never parses
-        // a stored word, leaves one of the two unused.
-        #[allow(dead_code)]
         impl $name {
             /// Every name of the set, in declaration order.
             $vis const ALL: &'static [Self] = &[$(Self::$variant),+];
@@ -88,6 +85,15 @@ macro_rules! crdt_names {
                 Self::ALL.iter().copied().find(|name| name.as_str() == word)
             }
         }
+
+        // A schema whose belt never walks `ALL`, or whose reader never parses
+        // a stored word, leaves one of the two unused. The set is whole in
+        // every schema, so this constant names each item once.
+        const _: () = {
+            let _ = $name::ALL;
+            let _ = $name::as_str;
+            let _ = $name::parse;
+        };
 
         $(
             impl $crate::crdt::$role for $name {
@@ -109,7 +115,7 @@ macro_rules! crdt_names {
 /// The handle is written by a macro because no crate every application shares
 /// links Loro. One definition, expanded in each application, keeps the copies
 /// from drifting. An application that calls only part of the handle leaves the
-/// rest unused, so the impls allow dead code.
+/// rest unused, so an anonymous constant names every method.
 #[macro_export]
 macro_rules! loro_fields {
     ($vis:vis) => {
@@ -121,7 +127,6 @@ macro_rules! loro_fields {
             schema: ::core::marker::PhantomData<fn() -> K>,
         }
 
-        #[allow(dead_code)]
         impl<K: $crate::crdt::FieldKey> Fields<K> {
             /// Reads `map` as a map of the schema `K`. The caller names the
             /// schema the container holds.
@@ -214,7 +219,6 @@ macro_rules! loro_fields {
             schema: ::core::marker::PhantomData<fn() -> K>,
         }
 
-        #[allow(dead_code)]
         impl<'a, K: $crate::crdt::FieldKey> FieldValues<'a, K> {
             /// Reads `map` as a deep value of the schema `K`.
             #[must_use]
@@ -237,6 +241,33 @@ macro_rules! loro_fields {
                 self.map.get(key.as_str())
             }
         }
+
+        // An application that calls only part of a handle leaves the rest
+        // unused. The handle is whole in every application, so this constant
+        // names each method once, through a key type that has no value.
+        const _: () = {
+            #[derive(Clone, Copy)]
+            enum Unread {}
+
+            impl $crate::crdt::FieldKey for Unread {
+                fn as_str(self) -> &'static str {
+                    match self {}
+                }
+            }
+
+            let _ = Fields::<Unread>::of;
+            let _ = Fields::<Unread>::map;
+            let _ = Fields::<Unread>::get;
+            let _ = Fields::<Unread>::value;
+            let _ = Fields::<Unread>::contains;
+            let _ = |fields: &Fields<Unread>, key| fields.insert(key, ::loro::LoroValue::Null);
+            let _ = Fields::<Unread>::insert_container::<::loro::LoroMap>;
+            let _ = Fields::<Unread>::ensure_mergeable_map;
+            let _ = Fields::<Unread>::delete;
+            let _ = FieldValues::<'static, Unread>::of;
+            let _ = FieldValues::<'static, Unread>::map;
+            let _ = FieldValues::<'static, Unread>::get;
+        };
     };
 }
 

@@ -5,7 +5,7 @@
 //! shipped build when no other table of any workspace manifest names it.
 //! This test reads every manifest of the workspace and refuses such a table.
 
-#![allow(
+#![expect(
     clippy::panic,
     clippy::expect_used,
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"

@@ -752,7 +752,7 @@ impl<A: Axis, T> Index<Pos<A>> for IdxVec<A, T> {
 
     /// The item at `pos`. It panics past the end, as a slice index does;
     /// `get` is the call that cannot.
-    #[allow(
+    #[expect(
         clippy::indexing_slicing,
         reason = "the operator keeps the slice contract; `get` is the checked call"
     )]
@@ -764,7 +764,7 @@ impl<A: Axis, T> Index<Pos<A>> for IdxVec<A, T> {
 impl<A: Axis, T> IndexMut<Pos<A>> for IdxVec<A, T> {
     /// The item at `pos`, mutable. It panics past the end, as a slice index
     /// does; `get_mut` is the call that cannot.
-    #[allow(
+    #[expect(
         clippy::indexing_slicing,
         reason = "the operator keeps the slice contract; `get_mut` is the checked call"
     )]
