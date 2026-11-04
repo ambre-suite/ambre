@@ -1098,8 +1098,9 @@ pub struct SyncState {
     /// The socket's reconnect state: the backoff and its deadline. A relay
     /// that rejects the upgrade (for example a 429) is not hammered.
     lifecycle: lifecycle::Lifecycle,
-    /// The clock the lifecycle reads. A host test advances its own.
-    clock: lifecycle::Clock,
+    /// The wall clock the lifecycle reads. A host test swaps in one it
+    /// advances by hand.
+    clock: Rc<dyn Fn() -> ambre_core::Instant<ambre_core::UnixMs>>,
     /// Set when the relay refused the socket for a key setup still owed, and
     /// cleared once a session with keys is stored. While set, no timer or
     /// renewal reopens the socket (`SYNC-133`).

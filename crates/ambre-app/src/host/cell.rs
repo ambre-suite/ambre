@@ -31,16 +31,12 @@ const INPUTS: [&str; 6] = [
 /// A DOM listener a cell holds, with the event it listens to.
 type Listener = (&'static str, Closure<dyn FnMut(web_sys::Event)>);
 
-/// The id of the cell whose field last took the keys, shared with the
-/// listeners of every cell.
-type Typist = Rc<std::cell::Cell<Option<StaticKey<Canvases>>>>;
-
 /// A cell's claim on the text pipe. A press, a tap or an edit loaded from a
 /// menu focuses its field. Whoever takes the pipe back lets that field go.
 #[derive(Clone)]
 struct Claim {
     id: StaticKey<Canvases>,
-    typist: Typist,
+    typist: Rc<std::cell::Cell<Option<StaticKey<Canvases>>>>,
 }
 
 impl Claim {
@@ -56,7 +52,9 @@ impl Claim {
 #[derive(Default)]
 pub(super) struct Cells {
     bound: HashMap<StaticKey<Canvases>, Bound>,
-    typist: Typist,
+    /// The id of the cell whose field last took the keys, shared with the
+    /// listeners of every cell.
+    typist: Rc<std::cell::Cell<Option<StaticKey<Canvases>>>>,
     /// Whether the content view's field held the keys at the last settle.
     content_held: bool,
 }
@@ -195,7 +193,7 @@ impl Bound {
         canvas: HtmlCanvasElement,
         size: SurfaceSize,
         view: AppView,
-        typist: &Typist,
+        typist: &Rc<std::cell::Cell<Option<StaticKey<Canvases>>>>,
     ) -> Option<Self> {
         let view = Rc::new(RefCell::new(view));
         let gpu: Rc<RefCell<Option<GpuState>>> = Rc::new(RefCell::new(None));
@@ -799,7 +797,7 @@ mod tests {
         );
         paint(&mut view);
         let size = size_backing_store(&canvas).unwrap();
-        let typist = Typist::default();
+        let typist = Rc::default();
         let bound = Bound::bind(
             THREAD_CANVAS,
             canvas.clone(),

@@ -26,6 +26,8 @@ fn web_embed_layer() -> Option<web_sys::HtmlElement> {
 /// owner their (throwaway) chrome signals need. Given the embedded document's id,
 /// type and child canvas size, it wires a demultiplexed Logic->UI queue and
 /// returns the view. `FrameHost` stays app-agnostic: it only calls this.
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 pub type MakeChild = Rc<dyn Fn(Id<Document>, DocType, Size) -> AppView>;
 
 /// Rewrite an input event for the focused child ("Input focus"). Pointer

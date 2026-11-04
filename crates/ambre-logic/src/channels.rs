@@ -2136,6 +2136,8 @@ mod tests {
     }
 
     /// What Logic hands the local store.
+    ///
+    /// Written out at its uses, the type fails `clippy::type_complexity`.
     type StoreRx = Receiver<(Id<Document>, PersistWrite)>;
 
     /// The harness, with what Logic hands the local store.

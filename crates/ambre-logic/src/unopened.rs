@@ -10,6 +10,8 @@ use ambre_bus::{ChannelDocumentKind, ChannelMeta, DocumentActivity};
 
 /// The segments of a channel, each with the last number the activity
 /// answer gave, if any.
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 type Segments = Vec<(Id<Document>, Option<Seq<Relay>>)>;
 
 /// What the Logic thread knows of the channels it may watch unopened.
