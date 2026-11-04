@@ -305,6 +305,10 @@ license = "AGPL-3.0-only"
 # The "no `unsafe`" pillar of `README.md`, held by the build: every crate
 # inherits this table (`ARCH-032`), so none can open an unchecked block.
 unsafe_code = "forbid"
+# A kept silence whose reason is gone fails the build (`ARCH-068`). `deny` and
+# not the default `warn`: the wasm lint lines run under `-A warnings`, which
+# would hide a `warn` there.
+unfulfilled_lint_expectations = "deny"
 
 [workspace.lints.clippy]
 missing_errors_doc = "deny"
@@ -319,6 +323,9 @@ unreachable = "deny"
 todo = "deny"
 unimplemented = "deny"
 indexing_slicing = "deny"
+# No lint silenced without its reason (`ARCH-068`): a kept site carries an
+# `#[expect]` with a `reason`, never an `#[allow]`.
+allow_attributes = "deny"
 
 [profile.dev.package."*"]
 opt-level = 3

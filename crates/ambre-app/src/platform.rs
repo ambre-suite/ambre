@@ -724,7 +724,14 @@ fn read_ambre_file(
 
 /// A plaintext container the picker read, on its way to the store's seal.
 #[derive(Clone)]
-pub(crate) struct OpenedFile(pub(crate) ambre_core::Payload<ambre_core::PlaintextContainer>);
+pub(crate) struct OpenedFile(ambre_core::Payload<ambre_core::PlaintextContainer>);
+
+impl OpenedFile {
+    /// The container the picker read, handed on to its seal.
+    pub(crate) fn into_payload(self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
+        self.0
+    }
+}
 
 /// Attribute a plaintext container, persist its payload sealed and navigate
 /// to it.

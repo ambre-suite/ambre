@@ -1233,7 +1233,7 @@ pub fn main() {
         // copy does (`RESID-025`).
         if let Some(file) = opened_file.get_untracked() {
             opened_file.set(None);
-            platform::open_plaintext_container(file.0, toasts, vault_frame.clone());
+            platform::open_plaintext_container(file.into_payload(), toasts, vault_frame.clone());
         }
         // TOFU: a confirmed prompt -> pin the fetched key in `trusted_keys` and
         // fire phase 2 of the invite (`ambre-spec-key-verification.md`). Handled here
