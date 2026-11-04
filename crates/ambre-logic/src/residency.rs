@@ -179,6 +179,8 @@ mod tests {
     }
 
     /// The state, its one document, and the Sync, persist and UI outboxes.
+    ///
+    /// Written out at its uses, the type fails `clippy::type_complexity`.
     type Opened = (
         LogicState,
         Id<Document>,

@@ -728,6 +728,8 @@ pub enum PersistWrite<
 
 /// A [`PersistWrite`] as the store receives it: its snapshot or delta is a
 /// row the Sync worker sealed.
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 pub type SealedWrite = PersistWrite<
     ambre_core::Payload<ambre_core::SealedRowBytes>,
     ambre_core::Payload<ambre_core::SealedRowBytes>,

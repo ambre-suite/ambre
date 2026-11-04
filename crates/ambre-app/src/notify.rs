@@ -14,9 +14,6 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{Notification, NotificationOptions, NotificationPermission};
 
-/// What a click on a notice runs: open its channel at its message.
-pub(crate) type Opener = Rc<dyn Fn(Id<Channel>, Option<MessageRef>)>;
-
 /// What the page does with a notice, given the browser's permission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Act {
@@ -49,7 +46,11 @@ pub(crate) fn act(permission: NotificationPermission, asked: Question) -> Act {
 /// Raise `notice`, asking for the permission first when none was given.
 /// A click on it calls `open` with its channel and its message. A browser
 /// with no notifications raises nothing.
-pub(crate) fn deliver(notice: Notice, asked: &Rc<Cell<Question>>, open: Opener) {
+pub(crate) fn deliver(
+    notice: Notice,
+    asked: &Rc<Cell<Question>>,
+    open: Rc<dyn Fn(Id<Channel>, Option<MessageRef>)>,
+) {
     if !has_notifications() {
         return;
     }
@@ -87,7 +88,7 @@ fn has_notifications() -> bool {
 
 /// Show one notification. Its tag is the channel, so a second message of
 /// the same channel replaces the first rather than stacking.
-fn raise(notice: &Notice, open: Opener) {
+fn raise(notice: &Notice, open: Rc<dyn Fn(Id<Channel>, Option<MessageRef>)>) {
     let options = NotificationOptions::new();
     options.set_tag(&notice.channel_id.to_string());
     let Ok(shown) = Notification::new_with_options(&notice.title, &options) else {

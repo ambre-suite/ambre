@@ -116,10 +116,14 @@ const SYNC_INBOX_MARKS: Marks = match Marks::new(
 /// The child fan-out registry: every live view of a nested document, by
 /// document. A list rather than a slot -- two embeds of one document are two
 /// views (`TOILE-UI-097`).
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 type ChildRoutes = Rc<RefCell<HashMap<Id<Document>, Vec<ambre_bus::conduit::Sender<UiEvent>>>>>;
 
 /// What a child's queue could not take yet, oldest first, by document
 /// (`TOILE-UI-340`).
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 type ChildBacklog = Rc<RefCell<HashMap<Id<Document>, VecDeque<UiEvent>>>>;
 
 /// A handle the shell mount fills and the imperative wiring reads back.
@@ -1085,7 +1089,7 @@ pub fn main() {
     // A click on a notification opens its channel at its message (the
     // Murmure notifications spec). The permission is asked once per page.
     let notice_asked = Rc::new(std::cell::Cell::new(notify::Question::Unasked));
-    let open_noticed: notify::Opener = {
+    let open_noticed: Rc<dyn Fn(Id<ambre_core::id::Channel>, Option<ambre_murmure::MessageRef>)> = {
         let tx = ui_to_logic_tx.clone();
         Rc::new(move |channel, at| {
             if let Some(command) = murmure_relay.open_at(channel, at) {

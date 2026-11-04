@@ -128,6 +128,8 @@ impl Sample {
 }
 
 /// Where a member types: the channel's composer, or a thread's by its root.
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 type Place = Option<Id<Message>>;
 
 /// The other members who watch an open channel and who type in it, and when

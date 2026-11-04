@@ -261,15 +261,16 @@ tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one 
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
 **The four obstacles.** The first three hold one row each today: the frame on the phone, the page a
-deployment serves, and what an allowlist line means. The fourth holds six rows of the primitive
-gate, `ARCH-041` to `ARCH-044`, `ARCH-047` and `ARCH-050`: what rustc resolves and syn does not.
+deployment serves, and what an allowlist line means. The fourth holds seven rows of the primitive
+gate, `ARCH-041` to `ARCH-044`, `ARCH-047`, `ARCH-050` and `ARCH-067`: what rustc and clippy resolve
+and syn does not.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
 | `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it | -- |
-| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, what a macro writes, what an alias of a foreign crate stands for, which value a function hands back, which files a build the gate does not run reads, and what a committer hides from the gate on purpose. The primitive gate parses with `syn`, expands nothing and reads no foreign source. It reads what rustc read in its own compiles alone | -- |
+| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, what a macro writes, what an alias of a foreign crate stands for, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate parses with `syn`, expands nothing and reads no foreign source. It reads what rustc read in its own compiles alone | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so

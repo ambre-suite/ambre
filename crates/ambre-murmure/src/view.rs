@@ -142,6 +142,8 @@ pub struct PageReads {
 }
 
 /// What the page does with a file fetched, and its bytes.
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 pub type SaveFile = Rc<dyn Fn(&Attachment, ambre_core::Payload<ambre_core::MediaBytes>)>;
 
 /// The id of the content canvas, which the channel's region paints. The
@@ -2018,6 +2020,8 @@ mod tests {
     }
 
     /// A file the view handed the page, and its bytes.
+    ///
+    /// Written out at its uses, the type fails `clippy::type_complexity`.
     type Saved = (Attachment, ambre_core::Payload<ambre_core::MediaBytes>);
 
     /// A format bar the view handed the page, and whether the thread's
@@ -6338,19 +6342,21 @@ mod tests {
         );
     }
 
-    /// The rows a page's shelf keeps in the store, by key.
-    type Rows = Rc<
-        RefCell<
-            std::collections::BTreeMap<
-                ambre_bus::DraftKey,
-                ambre_core::Opaque<crate::drafts::DraftRows>,
+    /// Give the page's shelf `me` and a store of `rows`, as the launcher does
+    /// once the session and the store are ready. The store keeps the rows by
+    /// key.
+    fn keep_drafts(
+        page: &Page,
+        me: Id<User>,
+        rows: &Rc<
+            RefCell<
+                std::collections::BTreeMap<
+                    ambre_bus::DraftKey,
+                    ambre_core::Opaque<crate::drafts::DraftRows>,
+                >,
             >,
         >,
-    >;
-
-    /// Give the page's shelf `me` and a store of `rows`, as the launcher does
-    /// once the session and the store are ready.
-    fn keep_drafts(page: &Page, me: Id<User>, rows: &Rows) {
+    ) {
         use crate::drafts::DraftWrite;
         let store = Rc::clone(rows);
         page.view.reads.drafts.set_sink(Rc::new(move |write| {
@@ -6378,7 +6384,7 @@ mod tests {
     #[test]
     fn a_draft_comes_back_after_a_reload() {
         let (channel, me) = (Id::<Channel>::mint(), Id::<User>::mint());
-        let rows = Rows::default();
+        let rows = Rc::default();
         let mut page = composing(channel);
         keep_drafts(&page, me, &rows);
         press_composer(&mut page);
@@ -6412,7 +6418,7 @@ mod tests {
     #[test]
     fn a_sent_draft_leaves_the_store() {
         let (channel, me) = (Id::<Channel>::mint(), Id::<User>::mint());
-        let rows = Rows::default();
+        let rows = Rc::default();
         let mut page = composing(channel);
         keep_drafts(&page, me, &rows);
         press_composer(&mut page);
@@ -6440,7 +6446,7 @@ mod tests {
             Id::<Channel>::mint(),
             Id::<User>::mint(),
         );
-        let rows = Rows::default();
+        let rows = Rc::default();
         let mut page = composing(kept);
         keep_drafts(&page, me, &rows);
         press_composer(&mut page);

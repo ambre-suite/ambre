@@ -32,6 +32,7 @@
 | The rule | `ambre-spec-architecture.md` section 1.1, `ARCH-062` | the primitive gate, `crates/ambre-primitives/src/newtypes.rs` |
 | The exceptions | `specs/1-Foundations/ambre-newtypes.tsv`: a key, then a reason | the gate refuses a newtype no line names, a line that names none, and an empty reason. A reviewer reads each reason a change adds, `ARCH-063` |
 | The census | every struct of the walk outside a test, with no generic parameter and one field once `PhantomData` is set apart, over an integer, a float, a `String` or a `Vec<u8>` | the gate reads the type as the source writes it: an alias or a macro hides it, and a reviewer holds both |
+| A name | an alias that stands for a family alone, section 3 | the gate refuses it, `ARCH-066`. It reads the families from section 2, and refuses one that `ambre-core` declares as no generic struct. A reviewer and `clippy::type_complexity` hold an alias of a compound type, `ARCH-067` |
 | A stale line | a line whose newtype was folded or removed | `cargo run -p ambre-primitives -- --prune` removes it, and nothing else |
 
 ---
@@ -61,6 +62,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
 | A format or a schema version | `Version<K>` | `VersionKind`, with its `Repr` | `Current`, `OpenRange` |
 | A number between two bounds | `Bounded<K>` | `Bounds`, with its `Repr` | `Defaulted`, `Saturates` |
+| The error of a number outside its bounds, which echoes it | `OutOfRange<K>` | `Bounds`, the marker of the `Bounded<K>` it failed | -- |
 | The error of a refused value, which echoes it | `Refused<K>` | `Refuses`, with its `Raw` and its message | -- |
 | A text a rule checked once, at the door | `Validated<V>` | `Rule`, with its `LOGGED_AS` | `Displayed` |
 | A text of one kind that crosses or is stored, read by no code that carries it, and that a log never prints | `Opaque<K>` | `OpaqueKind`, with its `LENGTH` | `WireOpaque`, `SealedAtRest` |

@@ -51,6 +51,8 @@ pub(crate) enum SelectUnit {
 }
 
 /// A place in the text: a block and a code-point offset.
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 pub(crate) type Spot = (BlockId, Pos<DocChar>);
 
 impl ProseUiState {

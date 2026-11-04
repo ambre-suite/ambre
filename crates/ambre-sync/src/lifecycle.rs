@@ -15,12 +15,9 @@ const BASE_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(250);
 /// The longest reconnect delay before jitter.
 const MAX_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(10_000);
 
-/// The worker's wall clock. A host test swaps in one it advances by hand.
-pub(crate) type Clock = Rc<dyn Fn() -> Instant<UnixMs>>;
-
 /// The clock of the running worker: the browser's wall clock.
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn system_clock() -> Clock {
+pub(crate) fn system_clock() -> Rc<dyn Fn() -> Instant<UnixMs>> {
     // The wall clock is a positive count of milliseconds well below 2^53, so
     // the conversion is exact.
     Rc::new(|| Instant::<UnixMs>::new(js_sys::Date::now() as u64))
@@ -28,7 +25,7 @@ pub(crate) fn system_clock() -> Clock {
 
 /// The clock of a native build: the system's wall clock.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn system_clock() -> Clock {
+pub(crate) fn system_clock() -> Rc<dyn Fn() -> Instant<UnixMs>> {
     Rc::new(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

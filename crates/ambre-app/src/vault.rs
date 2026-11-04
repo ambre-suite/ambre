@@ -19,14 +19,15 @@ use ambre_bus::{
 };
 use ambre_core::Seq;
 
-/// What one sealed row comes back as: `None` when the store is locked.
-type Sealed = Box<dyn FnOnce(Option<Payload<SealedRowBytes>>)>;
 /// What rows read back open to, one slot each: `None` when the store is
 /// locked.
+///
+/// Written out at its uses, the type fails `clippy::type_complexity`.
 type Opened = Box<dyn FnOnce(Option<Vec<Option<Confidential<Plaintext>>>>)>;
 
 enum Pending {
-    Seal(Sealed),
+    /// What one sealed row comes back as: `None` when the store is locked.
+    Seal(Box<dyn FnOnce(Option<Payload<SealedRowBytes>>)>),
     Open(Opened),
 }
 
