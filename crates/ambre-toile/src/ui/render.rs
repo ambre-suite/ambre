@@ -76,7 +76,10 @@ const ARROW_SELECT_W: ambre_core::Px<ambre_core::View> =
 ///
 /// The walk draws what the PDF page draws, from the same view, at board units
 /// (`CANVAS-074`). The camera is the only thing the screen adds to it.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each argument is an independent input of one frame, and the screen, the PDF export and the benches set them apart"
+)]
 pub fn paint_content<S: DrawSurface>(
     surface: &mut S,
     vp: &DisplayViewport,
@@ -168,7 +171,10 @@ fn selection_rotation(
 /// and its handles (`TOILE-UI-083`). A slide is what the room is looking at.
 /// The link badges stay: following a link is navigation, and a presenter uses
 /// it.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each argument is an independent mark of one frame, and the view and the tests set them apart"
+)]
 pub fn paint_overlay<S: DrawSurface>(
     surface: &mut S,
     selection: &[Id<Element>],

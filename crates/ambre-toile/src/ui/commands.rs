@@ -42,7 +42,10 @@ macro_rules! describe {
     ($($title_fn:ident: $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr;)*) => {
         // The generated title functions. Named after the identities, so the
         // module carries the case exemption rather than every call site.
-        #[allow(non_snake_case)]
+        #[expect(
+            non_snake_case,
+            reason = "each title function takes the name of its command constant"
+        )]
         mod titles {
             use super::Locale;
             // One language ships today and nothing supplies an active locale,

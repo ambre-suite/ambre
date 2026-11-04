@@ -67,18 +67,20 @@ pub(crate) fn sheet_camera(state: &TrameUiState) -> Affine {
 /// The cells, lines, merges and borders come from the sheet's walk, under the
 /// camera (`CANVAS-074`). The base fill and the per-cell UI layers are the
 /// screen's own, drawn before and after it.
-#[allow(clippy::too_many_arguments)]
 pub fn draw_cells<S: DrawSurface>(
     surface: &mut S,
     state: &TrameUiState,
     palette: &Palette,
-    font_cx: &mut FontContext,
-    text_cache: &mut TextCache,
-    text_pass: TextPass,
+    pen: TextPen<'_>,
     strip_rect: Option<Rect>,
     clock: &dyn Clock,
     stats: &mut DrawStats,
 ) {
+    let TextPen {
+        font_cx,
+        cache: text_cache,
+        pass: text_pass,
+    } = pen;
     let w = state.canvas_width.get();
     let h = state.grid_bottom().get();
 

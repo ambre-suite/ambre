@@ -35,7 +35,10 @@ macro_rules! commands {
 
         // The generated title functions. Named after the constants, so the
         // module carries the case exemption rather than every call site.
-        #[allow(non_snake_case)]
+        #[expect(
+            non_snake_case,
+            reason = "each title function takes the name of its command constant"
+        )]
         mod titles {
             use super::Locale;
             // One language ships today and nothing supplies an active locale,

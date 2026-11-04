@@ -164,7 +164,6 @@ impl PeerCursors {
     /// Paint every known peer's presence into the top overlay pass, in screen
     /// space above all content. `now` is the frame clock, which ages the
     /// laser trails (`TOILE-UI-077`). Pure over `DrawSurface`: host-testable.
-    #[allow(clippy::too_many_arguments)]
     pub fn paint<S: DrawSurface>(
         &self,
         surface: &mut S,
@@ -189,7 +188,10 @@ impl PeerCursors {
 }
 
 /// Paint one peer's overlay: selection ghosts, live stroke, laser trail, cursor.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the peer, the camera and the shaping context are three inputs, and paint reads each one apart"
+)]
 fn paint_peer<S: DrawSurface>(
     surface: &mut S,
     user_id: &Id<User>,

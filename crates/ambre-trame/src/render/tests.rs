@@ -159,9 +159,11 @@ fn draw_cells_on_fills_each_and_counts_nonempty_text() {
         &mut s,
         &l,
         palette,
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
         cells,
         |_| true,
     );
@@ -268,9 +270,11 @@ fn col_headers_draw_bg_separator_and_active_tint() {
         palette,
         Some(Pos::<Col>::new(0)),
         None,
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
     );
 
     // The full-width header strip.
@@ -314,9 +318,11 @@ fn col_headers_draw_hover_tint() {
         palette,
         Some(Pos::<Col>::new(0)),
         Some(Pos::<Col>::new(1)),
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
     );
 
     assert!(
@@ -341,9 +347,11 @@ fn col_headers_skip_hover_tint_on_active_column() {
         palette,
         Some(Pos::<Col>::new(0)),
         Some(Pos::<Col>::new(0)),
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
     );
 
     assert_eq!(
@@ -369,9 +377,11 @@ fn row_headers_draw_hover_tint() {
         None,
         Some(Pos::<Row>::new(1)),
         CornerHover::Plain,
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
     );
 
     assert!(
@@ -397,9 +407,11 @@ fn row_headers_draw_corner_hover_tint() {
         None,
         None,
         CornerHover::Hovered,
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
     );
 
     assert!(
@@ -424,9 +436,11 @@ fn row_headers_draw_per_row_separators() {
         None,
         None,
         CornerHover::Plain,
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
     );
 
     // The right separator plus one per-row hairline: strictly more than the
@@ -455,9 +469,11 @@ fn row_headers_skip_tint_when_inactive() {
         None,
         None,
         CornerHover::Plain,
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
     );
 
     assert_eq!(
@@ -490,9 +506,11 @@ fn row_headers_draw_active_tint() {
         Some(Pos::<Row>::new(2)),
         None,
         CornerHover::Plain,
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
     );
 
     // One tint, over the band of row 2 alone.
@@ -532,9 +550,11 @@ fn draw_one(l: &GridLayout<'_>, row: u32, col: u32, content: CellContent<'_>) ->
         &mut s,
         l,
         palette,
-        &mut fc,
-        &mut tc,
-        TextPass::WithText,
+        TextPen {
+            font_cx: &mut fc,
+            cache: &mut tc,
+            pass: TextPass::WithText,
+        },
         [(at(row, col), content)],
         |_| true,
     );

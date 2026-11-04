@@ -34,7 +34,6 @@ pub(super) struct Wire {
 }
 
 impl ToileState {
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn create_connector(
         &mut self,
         from: Id<Element>,
@@ -66,7 +65,6 @@ impl ToileState {
     /// failed write when the container insert fails.
     /// The caller owns the `doc.commit()` so an import lands its connectors inside
     /// the one import undo group (`toile-import-export`).
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn create_connector_inner(
         &mut self,
         from: Id<Element>,

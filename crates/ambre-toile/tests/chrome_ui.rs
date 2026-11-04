@@ -18,11 +18,9 @@
 //! On the host target the whole file is empty (the `cfg` gate below), so the
 //! native tier (`just test-native`) skips it cleanly.
 #![cfg(target_arch = "wasm32")]
-#![allow(
+#![expect(
     clippy::unwrap_used,
     clippy::expect_used,
-    clippy::panic,
-    clippy::indexing_slicing,
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 

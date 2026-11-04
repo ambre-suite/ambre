@@ -11,35 +11,6 @@ use ambre_core::index::Pos;
 // Text helper
 // -----------------------------------------------------------------------------
 
-/// Shape `text` and emit its glyph runs at `origin` (the layout's top-left). Shared by the headers, the HUD, and any one-shot label.
-#[allow(clippy::too_many_arguments)]
-pub fn draw_text<S: DrawSurface>(
-    surface: &mut S,
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    text: &str,
-    font_size: Px<View>,
-    max_width: Px<View>,
-    align: Alignment,
-    origin: Point,
-    color: Color,
-) {
-    if text.is_empty() {
-        return;
-    }
-    let layout: &Layout<ParleyBrush> = cache.get_or_build(
-        font_cx,
-        text,
-        font_size,
-        max_width,
-        align,
-        ambre_canvas::Weight::Regular,
-        ambre_canvas::Slant::Upright,
-    );
-    let brush = Brush::Solid(color);
-    draw_layout_runs(surface, layout, origin, &brush);
-}
-
 /// Emit every glyph run of an already-built `layout` at `origin` (the layout's
 /// top-left) in a single `brush`. This is the one place the
 /// `lines() -> items() -> GlyphRun` walk lives. The headers, the inline editor
@@ -69,7 +40,6 @@ pub fn draw_layout_runs<S: DrawSurface>(
 /// decorations in `deco_color`. Shared by the plain-cell and merged-cell text
 /// paths. Both draw a 1px underline just below the baseline, and a 1px
 /// strikethrough at ~0.3em above it.
-#[allow(clippy::too_many_arguments)]
 pub fn draw_layout_runs_decorated<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,

@@ -437,13 +437,11 @@ impl Selection {
     }
 
     /// True if `col` is within the live rectangle's column span.
-    #[allow(dead_code)]
     pub fn contains_col(&self, col: Pos<Col>) -> bool {
         self.live_rect().cols().contains(col)
     }
 
     /// True if `row` is within the live rectangle's row span.
-    #[allow(dead_code)]
     pub fn contains_row(&self, row: Pos<Row>) -> bool {
         self.live_rect().rows().contains(row)
     }

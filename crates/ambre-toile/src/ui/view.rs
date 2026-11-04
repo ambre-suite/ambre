@@ -15,10 +15,12 @@
 
 use ambre_commands::{ClipboardWrite, Key, KeyChar, ModifierKeys};
 use ambre_core::Flags;
+#[cfg(any(test, target_arch = "wasm32"))]
 use ambre_core::{Commands, StaticKey};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
+#[cfg(any(test, target_arch = "wasm32"))]
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, DisplayConnector, DisplayElement, DisplayGeom,
@@ -32,10 +34,13 @@ use ambre_core::id::{Connector, Document, Element, Id, Thread};
 const EDIT_LOST: &str = "Someone deleted what you were editing. Your edit was not saved.";
 /// What the user is told when a frame entry finds no frame to act on
 /// (`TOILE-UI-153`).
+#[cfg(any(test, target_arch = "wasm32"))]
 const NO_FRAME_CONTAINS: &str = "No frame contains the selection, so nothing was added.";
+#[cfg(any(test, target_arch = "wasm32"))]
 const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was removed.";
 /// What the user is told when a fit to the selection has nothing to fit
 /// (`TOILE-UI-160`).
+#[cfg(any(test, target_arch = "wasm32"))]
 const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
 use ambre_bus::{AppCommand, AppEvent, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent};
 use ambre_canvas::{
@@ -50,6 +55,7 @@ use ambre_draw::{Consumed, FontContext, Point, Rect, Vec2};
 use crate::logic::animate::AnimatedElement;
 use crate::logic::text_merge::merge_text;
 
+#[cfg(any(test, target_arch = "wasm32"))]
 use super::PanelState;
 use super::arrow;
 #[cfg(target_arch = "wasm32")]
@@ -695,7 +701,10 @@ impl ambre_draw::HitTest for ToileView {
 }
 
 impl ToileView {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one argument per channel, publisher and chrome signal, and the caller in ambre-app builds each one apart"
+    )]
     pub fn new(
         document_id: Id<Document>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
@@ -2151,10 +2160,7 @@ impl ToileView {
     /// Apply a whole style from the inspector to the live selection, locked
     /// members included: the refusal belongs to the write (`TOILE-UI-182`).
     /// The selection itself is left as it was (`TOILE-UI-176`).
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        allow(dead_code, reason = "the inspector signal that calls it is wasm-only")
-    )]
+    #[cfg(any(test, target_arch = "wasm32"))]
     fn apply_restyle(&mut self, style: ambre_bus::app::toile::ElementStyle) {
         if self.selection.is_empty() {
             // An arrow takes the same edit through its own command
@@ -2192,10 +2198,7 @@ impl ToileView {
     /// The floating bar this frame shows, with the canvas at `offset` in the
     /// page. None while a move, a resize or a rotate is in flight, so the bar
     /// does not follow the preview (`TOILE-UI-170`).
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        allow(dead_code, reason = "the bar signal that reads it is wasm-only")
-    )]
+    #[cfg(any(test, target_arch = "wasm32"))]
     fn float_bar_at(
         &self,
         canvas_origin: ambre_core::Point<ambre_core::Px<ambre_core::Css>>,
@@ -2236,10 +2239,7 @@ impl ToileView {
     /// Apply one bar edit to the live selection. The base is the selection's
     /// style as it stands now, so two quick edits compose (`TOILE-UI-179`).
     /// The selection itself is left as it was (`TOILE-UI-181`).
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        allow(dead_code, reason = "the bar signal that calls it is wasm-only")
-    )]
+    #[cfg(any(test, target_arch = "wasm32"))]
     fn apply_quick_style(&mut self, edit: super::floatbar::StyleEdit) {
         if self.selection.is_empty() {
             if let Some(id) = self.arrow.clone()
@@ -2334,10 +2334,7 @@ impl ToileView {
 
     /// The re-read itself, over what the panel shows: whether it is open, and
     /// the thread it shows whole. A closed panel reads nothing.
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        allow(dead_code, reason = "the panel signals that feed it are wasm-only")
-    )]
+    #[cfg(any(test, target_arch = "wasm32"))]
     fn reread_comments_shown(
         &mut self,
         panel: PanelState,
@@ -2469,8 +2466,7 @@ impl ToileView {
         self.deck.panel.set(PanelState::Open);
         self.send_edit(ToileCommand::ReadDeck);
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    #[allow(dead_code, reason = "the menu bar that calls it is wasm-only")]
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     fn show_deck_panel(&mut self) {}
 
     /// Re-read the deck after it changed, while the panel is open.
@@ -2483,10 +2479,7 @@ impl ToileView {
 
     /// The re-read itself, over whether the panel is open
     /// (`TOILE-FEAT-098`). A closed panel reads nothing.
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        allow(dead_code, reason = "the panel signal that feeds it is wasm-only")
-    )]
+    #[cfg(any(test, target_arch = "wasm32"))]
     fn reread_deck_shown(&mut self, panel: PanelState) {
         if panel.is_open() {
             self.send_edit(ToileCommand::ReadDeck);
@@ -2549,10 +2542,7 @@ impl ToileView {
     /// its own target. An element anchor may sit outside the culled set. The
     /// view asks Logic for its bounds and recentres when the answer lands, the
     /// same round trip as the find focus.
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        allow(dead_code, reason = "the panel intent that calls it is wasm-only")
-    )]
+    #[cfg(any(test, target_arch = "wasm32"))]
     fn focus_thread(&mut self, anchor: &CommentAnchor) {
         match anchor {
             CommentAnchor::Point(at) => {
@@ -2628,10 +2618,7 @@ impl ToileView {
     /// selection). Every other id is resolved against the selection by
     /// `menu::resolve_menu_command` and emitted. The shell reaches it through
     /// `drain_menu_cmd` on wasm; the host tests call it directly.
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        allow(dead_code, reason = "the menu signal that calls it is wasm-only")
-    )]
+    #[cfg(any(test, target_arch = "wasm32"))]
     fn apply_menu_command(&mut self, id: StaticKey<Commands>) {
         use super::menu_bar as mb;
 
@@ -2976,7 +2963,13 @@ impl ToileView {
     /// The cursor for the pointer at `screen`. Pure over the machine + selection +
     /// camera. Only `publish_cursor` (wasm) consumes it; kept compiled on the host
     /// so the mapping type-checks there too.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        expect(
+            dead_code,
+            reason = "only the wasm publish_cursor reads it, and the host build type-checks the mapping"
+        )
+    )]
     fn cursor_at(&self, screen: Point) -> Option<super::palette::CanvasCursor> {
         // A single selected element rotates its handles, so the directional resize
         // cursor rotates with them (`toile-tools`).
