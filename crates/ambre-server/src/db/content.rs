@@ -9,20 +9,13 @@ use ambre_core::Count;
 #[derive(Debug)]
 pub struct SnapshotRow {
     pub id: Id<Snapshot>,
-    #[allow(dead_code)]
-    pub document_id: Id<Document>,
-    #[allow(dead_code)]
     pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
-    #[allow(dead_code)]
-    pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into this snapshot. Clients gate their
     /// post-open `RequestMissing` on this value to skip the replayed history.
     pub covered_seq: ambre_core::Seq<ambre_core::Relay>,
     /// Who vouched for it (`SRV-126`).
     pub status: SnapshotStatus,
-    #[allow(dead_code)]
-    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 pub use ambre_core::SnapshotStatus;
@@ -34,32 +27,24 @@ fn parse_status(text: &str) -> Result<SnapshotStatus, AppError> {
 }
 
 /// The columns [`snapshot_row`] reads, in one place for every query.
-const SNAPSHOT_COLUMNS: &str = "id, document_id, author_pubkey, \
-    update_clocks, s3_key, covered_seq, status, created_at";
+const SNAPSHOT_COLUMNS: &str = "id, author_pubkey, s3_key, covered_seq, status";
 
 /// One `snapshots` row, read from [`SNAPSHOT_COLUMNS`].
 fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
     let status: String = r.try_get("status")?;
     Ok(SnapshotRow {
         id: r.try_get::<PgId, _>("id")?.into(),
-        document_id: r.try_get::<PgId, _>("document_id")?.into(),
         author_pubkey: decode_key(r.try_get("author_pubkey")?)?,
-        update_clocks: r.try_get("update_clocks")?,
         s3_key: ambre_core::ObjectKey::new(r.try_get("s3_key")?),
         covered_seq: decode_seq(r.try_get("covered_seq")?)?,
         status: parse_status(&status)?,
-        created_at: r.try_get("created_at")?,
     })
 }
 
 /// Row from `updates` (encrypted deltas indexed by seq). No `Debug`: it may
 /// hold a frame (`ZK-006`).
 pub struct UpdateRow {
-    #[allow(dead_code)]
-    pub document_id: Id<Document>,
     pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
-    #[allow(dead_code)]
-    pub snapshot_id: Id<Snapshot>,
     pub clock: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
     pub seq: ambre_core::Seq<ambre_core::Relay>,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
@@ -68,8 +53,6 @@ pub struct UpdateRow {
     pub wire: Option<StoredPayload>,
     /// The batch object that holds the frame (`SRV-151`).
     pub batch_key: Option<ambre_core::ObjectKey>,
-    #[allow(dead_code)]
-    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// How many snapshots of one document a compaction keeps.
@@ -362,18 +345,23 @@ pub async fn insert_update(
     Ok(())
 }
 
+/// The key columns of one `updates` row, which every insert of a delta
+/// writes together.
+pub struct NewUpdate<'a> {
+    pub document_id: &'a Id<Document>,
+    pub author_pubkey: &'a FixedBytes<ambre_core::PublicKey>,
+    pub snapshot_id: &'a Id<Snapshot>,
+    pub clock: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
+    pub seq: ambre_core::Seq<ambre_core::Relay>,
+}
+
 /// Inserts a delta with its sealed envelope in the row, unless the document's
 /// inline tail is at `cap` (`SRV-148`, `SRV-150`). The count and the insert
 /// are one statement. Two writers racing at the cap may each see room, so the
 /// tail can pass it by the writers in flight at once.
-#[allow(clippy::too_many_arguments)]
 pub async fn insert_inline_update(
     pool: &PgPool,
-    document_id: &Id<Document>,
-    author_pubkey: &FixedBytes<ambre_core::PublicKey>,
-    snapshot_id: &Id<Snapshot>,
-    clock: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
-    seq: ambre_core::Seq<ambre_core::Relay>,
+    update: &NewUpdate<'_>,
     wire: &StoredPayload,
     cap: InlineCap,
 ) -> Result<InlineInsert, AppError> {
@@ -390,11 +378,11 @@ pub async fn insert_inline_update(
          ) \
          SELECT n, bytes, n < $7 AND bytes + octet_length($6) <= $8 FROM tail",
     )
-    .bind(id_to_uuid(*document_id))
-    .bind(author_pubkey.as_slice())
-    .bind(id_to_uuid(*snapshot_id))
-    .bind(clock.to_i64_saturating())
-    .bind(seq.to_i64_saturating())
+    .bind(id_to_uuid(*update.document_id))
+    .bind(update.author_pubkey.as_slice())
+    .bind(id_to_uuid(*update.snapshot_id))
+    .bind(update.clock.to_i64_saturating())
+    .bind(update.seq.to_i64_saturating())
     .bind(wire)
     .bind(cap.deltas.to_i64_saturating())
     .bind(cap.bytes.to_i64_saturating())
@@ -512,7 +500,7 @@ pub async fn get_updates_after(
 ) -> Result<Vec<UpdateRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
-        "SELECT document_id, author_pubkey, snapshot_id, clock, seq, s3_key, wire, batch_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
+        "SELECT author_pubkey, clock, seq, s3_key, wire, batch_key FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
     )
     .bind(did)
     .bind(after_seq.to_i64_saturating())
@@ -523,9 +511,7 @@ pub async fn get_updates_after(
     rows.into_iter()
         .map(|r| {
             Ok(UpdateRow {
-                document_id: r.try_get::<PgId, _>("document_id")?.into(),
                 author_pubkey: decode_key(r.try_get("author_pubkey")?)?,
-                snapshot_id: r.try_get::<PgId, _>("snapshot_id")?.into(),
                 clock: decode_clock(r.try_get("clock")?)?,
                 seq: decode_seq(r.try_get("seq")?)?,
                 s3_key: r
@@ -535,7 +521,6 @@ pub async fn get_updates_after(
                 batch_key: r
                     .try_get::<Option<String>, _>("batch_key")?
                     .map(ambre_core::ObjectKey::new),
-                created_at: r.try_get("created_at")?,
             })
         })
         .collect()

@@ -1385,7 +1385,6 @@ pub(super) struct ChannelMeta {
 /// document, taken before `meta`'s. A leave of the space holds that lock
 /// while it empties every channel of it, so no join lands behind it
 /// (`SRV-136`). A caller no longer a member is refused with a 403.
-#[allow(clippy::too_many_arguments)]
 pub async fn add_channel_member_if_absent(
     pool: &PgPool,
     space: &Id<Space>,

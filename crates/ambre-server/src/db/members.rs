@@ -7,13 +7,12 @@ use ambre_core::{Instant, UnixSec};
 /// Row from `document_members`.
 #[derive(Debug)]
 pub struct MemberRow {
-    #[allow(dead_code)]
-    pub document_id: Id<Document>,
-    #[allow(dead_code)]
-    pub user_id: Id<User>,
     pub role: ambre_core::Role,
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "only a test reads who invited the member")
+    )]
     pub invited_by: Option<Id<User>>,
 }
 
@@ -62,8 +61,6 @@ pub struct MemberWithUserRow {
     pub signing_pubkey: FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    #[allow(dead_code)]
-    pub invited_by: Option<Id<User>>,
     /// Exchange public key of the member who wrapped `doc_key_enc` (the inviter,
     /// or the member themselves for a self-wrap at creation). The recipient needs
     /// this peer key to perform the ECDH unwrap -- their own key is the wrong DH
@@ -200,7 +197,10 @@ pub async fn membership_log(
 /// rotation has replaced that key (`SRV-168`). The check runs under the
 /// document lock every rotation takes, so the two are ordered. An invitation
 /// that lands first is among the members a rotation must name (`SRV-167`).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the member, role and key copy are the arguments add_document_member takes one by one"
+)]
 pub async fn invite_document_member(
     pool: &PgPool,
     document_id: &Id<Document>,
@@ -312,7 +312,7 @@ pub async fn get_document_member(
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
     let row = sqlx::query(concat!(
-        "SELECT document_id, user_id, role, doc_key_enc, invited_by FROM document_members \
+        "SELECT role, doc_key_enc, invited_by FROM document_members \
          WHERE document_id = ",
         access_document!(),
         " AND user_id = $2"
@@ -324,8 +324,6 @@ pub async fn get_document_member(
 
     match row {
         Some(r) => Ok(Some(MemberRow {
-            document_id: r.try_get::<PgId, _>("document_id")?.into(),
-            user_id: r.try_get::<PgId, _>("user_id")?.into(),
             role: decode_role(r.try_get("role")?)?,
             doc_key_enc: ambre_core::Encoded::new(r.try_get("doc_key_enc")?),
             invited_by: r.try_get::<PgOptId, _>("invited_by")?.into(),
@@ -348,7 +346,7 @@ pub async fn list_document_members(
 ) -> Result<Vec<MemberWithUserRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(concat!(
-        "SELECT dm.user_id, u.email, u.email_verified, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by \
+        "SELECT dm.user_id, u.email, u.email_verified, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by \
          WHERE u.signing_pubkey IS NOT NULL AND dm.document_id = ",
         access_document!()
     ))
@@ -367,7 +365,6 @@ pub async fn list_document_members(
                 signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
                 exchange_pubkey: decode_exchange_key(r.try_get("exchange_pubkey")?)?,
                 doc_key_enc: ambre_core::Encoded::new(r.try_get("doc_key_enc")?),
-                invited_by: r.try_get::<PgOptId, _>("invited_by")?.into(),
                 wrapper_exchange_pubkey: decode_opt_exchange_key(
                     r.try_get("wrapper_exchange_pubkey")?,
                 )?,
@@ -442,7 +439,10 @@ pub(super) async fn owe_rotation(
 ///
 /// A removal from a space takes the member out of every channel of it, in
 /// the same transaction (`SRV-136`). Those channels are answered.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the keys, members and link are the arguments rotate_document_keys takes one by one"
+)]
 pub async fn revoke_and_rotate(
     pool: &PgPool,
     document_id: &Id<Document>,

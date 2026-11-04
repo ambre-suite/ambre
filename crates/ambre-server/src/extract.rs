@@ -187,7 +187,10 @@ mod tests {
 
     #[derive(serde::Deserialize)]
     struct Probe {
-        #[allow(dead_code)]
+        #[expect(
+            dead_code,
+            reason = "the probe exists for the parse of its field alone"
+        )]
         word: Word,
     }
 

@@ -323,20 +323,19 @@ mod db_tests {
     ) -> InlineInsert {
         let snap = Id::<Snapshot>::mint();
         let wire = StoredPayload::new(wire.to_vec());
-        crate::db::insert_inline_update(
-            &state.db,
-            doc,
-            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
-            &snap,
-            ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
+        let author = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]);
+        let key = crate::db::NewUpdate {
+            document_id: doc,
+            author_pubkey: &author,
+            snapshot_id: &snap,
+            clock: ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(
                 seq.unsigned_abs(),
             ),
-            ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
-            &wire,
-            cap,
-        )
-        .await
-        .unwrap()
+            seq: ambre_core::Seq::<ambre_core::Relay>::new(seq.unsigned_abs()),
+        };
+        crate::db::insert_inline_update(&state.db, &key, &wire, cap)
+            .await
+            .unwrap()
     }
 
     /// The frame of delta `seq`: a few bytes no other delta has.

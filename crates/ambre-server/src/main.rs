@@ -35,8 +35,6 @@ use axum::http::HeaderValue;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-#[allow(clippy::single_component_path_imports)]
-use tracing_subscriber;
 
 use ambre_core::{Sec, TimeSpan};
 use state::{AppState, Config};

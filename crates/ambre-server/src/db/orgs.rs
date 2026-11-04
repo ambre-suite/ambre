@@ -160,7 +160,6 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for ShamirParams {
 
 /// Row from the `organizations` table.
 #[derive(Debug, sqlx::FromRow)]
-#[allow(dead_code)]
 pub struct OrganizationRow {
     #[sqlx(try_from = "PgId")]
     pub id: Id<Org>,
@@ -169,12 +168,10 @@ pub struct OrganizationRow {
     pub org_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
     #[sqlx(flatten)]
     pub shamir: ShamirParams,
-    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Row from `organization_members` joined with `users`.
 #[derive(Debug, sqlx::FromRow)]
-#[allow(dead_code)]
 pub struct OrgMemberRow {
     #[sqlx(try_from = "PgId")]
     pub user_id: Id<User>,
@@ -186,7 +183,6 @@ pub struct OrgMemberRow {
     pub role: ambre_core::Role,
     #[sqlx(try_from = "PgOptBytes")]
     pub shamir_share_enc: Option<ambre_core::Encoded<ambre_core::SealedShare>>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Creates an organization and inserts its first member as owner.
@@ -205,7 +201,7 @@ pub async fn create_organization(
     let org = sqlx::query_as::<_, OrganizationRow>(
         "INSERT INTO organizations (id, name, org_pubkey, shamir_threshold, shamir_total)
          VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at",
+         RETURNING id, name, org_pubkey, shamir_threshold, shamir_total",
     )
     .bind(id_to_uuid(*org_id))
     .bind(name.as_str())
@@ -234,7 +230,7 @@ pub async fn get_organization(
     org_id: &Id<Org>,
 ) -> Result<Option<OrganizationRow>, AppError> {
     sqlx::query_as::<_, OrganizationRow>(
-        "SELECT id, name, org_pubkey, shamir_threshold, shamir_total, created_at
+        "SELECT id, name, org_pubkey, shamir_threshold, shamir_total
          FROM organizations WHERE id = $1",
     )
     .bind(id_to_uuid(*org_id))
@@ -250,7 +246,7 @@ pub async fn list_user_organizations(
 ) -> Result<Vec<OrganizationRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     sqlx::query_as::<_, OrganizationRow>(
-        "SELECT o.id, o.name, o.org_pubkey, o.shamir_threshold, o.shamir_total, o.created_at
+        "SELECT o.id, o.name, o.org_pubkey, o.shamir_threshold, o.shamir_total
          FROM organizations o
          JOIN organization_members om ON om.org_id = o.id
          WHERE om.user_id = $1
@@ -270,7 +266,7 @@ pub async fn update_organization(
 ) -> Result<Option<OrganizationRow>, AppError> {
     sqlx::query_as::<_, OrganizationRow>(
         "UPDATE organizations SET name = $2 WHERE id = $1
-         RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at",
+         RETURNING id, name, org_pubkey, shamir_threshold, shamir_total",
     )
     .bind(id_to_uuid(*org_id))
     .bind(name.as_str())
@@ -378,8 +374,7 @@ pub async fn list_org_members(
     org_id: &Id<Org>,
 ) -> Result<Vec<OrgMemberRow>, AppError> {
     sqlx::query_as::<_, OrgMemberRow>(
-        "SELECT om.user_id, u.email, u.display_name, om.role, om.shamir_share_enc,
-                om.created_at
+        "SELECT om.user_id, u.email, u.display_name, om.role, om.shamir_share_enc
          FROM organization_members om
          JOIN users u ON u.id = om.user_id
          WHERE om.org_id = $1
@@ -398,7 +393,7 @@ pub async fn get_org_member(
     user_id: &Id<User>,
 ) -> Result<Option<OrgMembershipRow>, AppError> {
     sqlx::query_as::<_, OrgMembershipRow>(
-        "SELECT org_id, user_id, role, shamir_share_enc, created_at
+        "SELECT role
          FROM organization_members
          WHERE org_id = $1 AND user_id = $2",
     )
@@ -411,21 +406,9 @@ pub async fn get_org_member(
 
 /// Raw `organization_members` row (no join).
 #[derive(Debug, sqlx::FromRow)]
-#[allow(dead_code)]
 pub struct OrgMembershipRow {
-    #[allow(dead_code)]
-    #[sqlx(try_from = "PgId")]
-    pub org_id: Id<Org>,
-    #[allow(dead_code)]
-    #[sqlx(try_from = "PgId")]
-    pub user_id: Id<User>,
     #[sqlx(try_from = "String")]
     pub role: ambre_core::Role,
-    #[allow(dead_code)]
-    #[sqlx(try_from = "PgOptBytes")]
-    pub shamir_share_enc: Option<ambre_core::Encoded<ambre_core::SealedShare>>,
-    #[allow(dead_code)]
-    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Removes a member from an organization.
@@ -502,30 +485,6 @@ pub async fn update_org_member_role(
 
     tx.commit().await?;
     Ok(())
-}
-
-/// Collects Shamir shares for a given organization from the database.
-#[allow(dead_code)]
-pub async fn get_org_shamir_shares(
-    pool: &PgPool,
-    org_id: &Id<Org>,
-) -> Result<Vec<(Id<User>, ambre_core::Encoded<ambre_core::SealedShare>)>, AppError> {
-    let rows = sqlx::query(
-        "SELECT user_id, shamir_share_enc FROM organization_members WHERE org_id = $1 AND shamir_share_enc IS NOT NULL"
-    )
-    .bind(id_to_uuid(*org_id))
-    .fetch_all(pool)
-    .await?;
-    let shares = rows
-        .iter()
-        .map(|r| {
-            Ok((
-                r.try_get::<PgId, _>("user_id")?.into(),
-                ambre_core::Encoded::new(r.try_get("shamir_share_enc")?),
-            ))
-        })
-        .collect::<Result<Vec<(Id<User>, ambre_core::Encoded<ambre_core::SealedShare>)>, sqlx::Error>>()?;
-    Ok(shares)
 }
 
 /// Logs a master key recovery event.

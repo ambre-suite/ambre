@@ -575,7 +575,6 @@ mod tests {
                 [0u8; 32],
             ),
             shamir: split(3, 5),
-            created_at: chrono::Utc::now(),
         };
         let resp = org_to_response(&org);
         assert_eq!(resp.id.to_string(), "00000000-0000-0000-0000-000000000001");
@@ -596,7 +595,6 @@ mod tests {
                 .unwrap(),
             role: Role::Admin,
             shamir_share_enc: Some(ambre_core::Encoded::new(vec![1, 2, 3])),
-            created_at: chrono::Utc::now(),
         };
         let resp = member_to_response(&member);
         assert_eq!(
@@ -623,7 +621,6 @@ mod tests {
                 .unwrap(),
             role: Role::Member,
             shamir_share_enc: None,
-            created_at: chrono::Utc::now(),
         };
         let resp = member_to_response(&member);
         assert_eq!(resp.role, Role::Member);
@@ -671,7 +668,6 @@ mod tests {
 
         #[sqlx::test]
         #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-        #[allow(unreachable_code, unused_variables)]
         async fn list_organizations_requires_auth(pool: sqlx::PgPool) {
             let state = crate::test_helpers::test_app_state(pool).await;
             let app = build_org_router(state);
@@ -688,7 +684,6 @@ mod tests {
 
         #[sqlx::test]
         #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-        #[allow(unreachable_code, unused_variables)]
         async fn get_unknown_organization_returns_unauthorized(pool: sqlx::PgPool) {
             let state = crate::test_helpers::test_app_state(pool).await;
             let app = build_org_router(state);
@@ -705,7 +700,6 @@ mod tests {
 
         #[sqlx::test]
         #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-        #[allow(unreachable_code, unused_variables)]
         async fn delete_organization_requires_auth(pool: sqlx::PgPool) {
             let state = crate::test_helpers::test_app_state(pool).await;
             let app = build_org_router(state);
@@ -722,7 +716,6 @@ mod tests {
 
         #[sqlx::test]
         #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-        #[allow(unreachable_code, unused_variables)]
         async fn recovery_requires_auth(pool: sqlx::PgPool) {
             let state = crate::test_helpers::test_app_state(pool).await;
             let app = build_org_router(state);

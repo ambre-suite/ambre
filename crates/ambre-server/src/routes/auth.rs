@@ -317,7 +317,6 @@ mod tests {
     ) -> db::UserRow {
         db::UserRow {
             id: Id::<User>::mint(),
-            oidc_subject: Some(openidconnect::SubjectIdentifier::new("subject".into())),
             email: "a@example.com".into(),
             email_verified: db::EmailProof::Verified,
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("A").unwrap(),

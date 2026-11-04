@@ -1,8 +1,6 @@
 use ambre_core::RefusalCode;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-#[allow(clippy::single_component_path_imports)]
-use tracing;
 
 /// Typed error covering all server failure modes.
 ///
@@ -37,7 +35,6 @@ pub enum AppError {
     #[error("Conflict: {detail}")]
     Conflict { detail: String },
 
-    #[allow(dead_code)]
     #[error("Clock mismatch: expected {expected}, got {got}")]
     ClockMismatch {
         expected: ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
@@ -72,15 +69,6 @@ pub enum AppError {
     #[error("Invalid signature")]
     InvalidSignature,
 
-    #[allow(dead_code)]
-    #[error("Snapshot required")]
-    SnapshotRequired,
-
-    #[allow(dead_code)]
-    #[error("Compaction lock held")]
-    CompactionLockHeld,
-
-    #[allow(dead_code)]
     #[error("Unknown OIDC provider: {0}")]
     UnknownProvider(String),
 
@@ -99,7 +87,6 @@ pub enum AppError {
     #[error("Postcard decode error: {0}")]
     Decode(#[from] postcard::Error),
 
-    #[allow(dead_code)]
     #[error("OIDC error: {0}")]
     Oidc(String),
 }
@@ -135,8 +122,6 @@ impl AppError {
             AppError::KeyChanged => RefusalCode::KeyChanged,
             AppError::LogMoved => RefusalCode::LogMoved,
             AppError::InvalidSignature => RefusalCode::InvalidSignature,
-            AppError::SnapshotRequired => RefusalCode::SnapshotRequired,
-            AppError::CompactionLockHeld => RefusalCode::CompactionLockHeld,
             AppError::UnknownProvider(_) => RefusalCode::UnknownProvider,
             AppError::BadRequest(_) => RefusalCode::BadRequest,
             AppError::PayloadTooLarge(_) => RefusalCode::PayloadTooLarge,
@@ -329,18 +314,6 @@ mod tests {
         assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
         let b = extract_body(r).await;
         assert_eq!(b["error"], "INVALID_SIGNATURE");
-    }
-
-    #[test]
-    fn snapshot_required_returns_409() {
-        let r = AppError::SnapshotRequired.into_response();
-        assert_eq!(r.status(), StatusCode::CONFLICT);
-    }
-
-    #[test]
-    fn compaction_lock_held_returns_409() {
-        let r = AppError::CompactionLockHeld.into_response();
-        assert_eq!(r.status(), StatusCode::CONFLICT);
     }
 
     #[test]

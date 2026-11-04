@@ -3,12 +3,10 @@
 
 use super::*;
 
-/// Row returned by `SELECT * FROM users`.
+/// A `users` row, with the columns the relay reads back.
 #[derive(Debug)]
 pub struct UserRow {
     pub id: Id<User>,
-    #[allow(dead_code)]
-    pub oidc_subject: Option<openidconnect::SubjectIdentifier>,
     pub email: ambre_core::Email,
     /// Whether `email` was proven by a provider (OIDC/dev) rather than merely
     /// self-asserted at `/auth/setup`. A verified email wins any collision (#3):
@@ -54,7 +52,7 @@ ambre_core::define_flag!(@sqlx EmailProof);
 pub async fn get_user(pool: &PgPool, user_id: &Id<User>) -> Result<Option<UserRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     let row = sqlx::query(
-        "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey FROM users WHERE id = $1"
+        "SELECT id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey FROM users WHERE id = $1"
     )
     .bind(uid)
     .fetch_optional(pool)
@@ -63,9 +61,6 @@ pub async fn get_user(pool: &PgPool, user_id: &Id<User>) -> Result<Option<UserRo
     match row {
         Some(r) => Ok(Some(UserRow {
             id: r.try_get::<PgId, _>("id")?.into(),
-            oidc_subject: r
-                .try_get::<Option<String>, _>("oidc_subject")?
-                .map(openidconnect::SubjectIdentifier::new),
             email: ambre_core::Email::new(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: decode_display_name(r.try_get("display_name")?)?,
@@ -106,7 +101,7 @@ pub async fn get_user_by_email(
     email: &ambre_core::Email,
 ) -> Result<Option<UserRow>, AppError> {
     let row = sqlx::query(
-        "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey FROM users WHERE lower(email) = lower($1)"
+        "SELECT id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey FROM users WHERE lower(email) = lower($1)"
     )
     .bind(email.as_str())
     .fetch_optional(pool)
@@ -115,9 +110,6 @@ pub async fn get_user_by_email(
     match row {
         Some(r) => Ok(Some(UserRow {
             id: r.try_get::<PgId, _>("id")?.into(),
-            oidc_subject: r
-                .try_get::<Option<String>, _>("oidc_subject")?
-                .map(openidconnect::SubjectIdentifier::new),
             email: ambre_core::Email::new(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: decode_display_name(r.try_get("display_name")?)?,
@@ -149,7 +141,7 @@ pub async fn create_user(
     exchange_pubkey: &FixedBytes<ambre_core::ExchangePublicKey>,
 ) -> Result<UserRow, AppError> {
     let row = sqlx::query(
-        "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey"
+        "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey"
     )
     .bind(email.as_str())
     .bind(display_name.as_str())
@@ -165,9 +157,6 @@ pub async fn create_user(
 
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_subject: row
-            .try_get::<Option<String>, _>("oidc_subject")?
-            .map(openidconnect::SubjectIdentifier::new),
         email: ambre_core::Email::new(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
@@ -229,7 +218,7 @@ pub async fn upsert_user_from_oidc(
     .await?;
 
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(oidc_provider.as_str())
     .bind(oidc_subject.as_str())
@@ -242,9 +231,6 @@ pub async fn upsert_user_from_oidc(
     let inserted: bool = row.try_get("inserted")?;
     let user = UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_subject: row
-            .try_get::<Option<String>, _>("oidc_subject")?
-            .map(openidconnect::SubjectIdentifier::new),
         email: ambre_core::Email::new(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
@@ -286,7 +272,7 @@ pub async fn dev_upsert_user(
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
     // UPDATE), so we can log creation without a prior existence check.
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(username.as_str())
     .bind(&email)
@@ -303,9 +289,6 @@ pub async fn dev_upsert_user(
 
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_subject: row
-            .try_get::<Option<String>, _>("oidc_subject")?
-            .map(openidconnect::SubjectIdentifier::new),
         email: ambre_core::Email::new(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
