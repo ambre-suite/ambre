@@ -204,10 +204,12 @@ pub async fn invite_to_document(
     db::invite_document_member(
         &state.db,
         &doc_id,
-        &invitee_id,
-        role,
-        &doc_key_enc,
-        &s.user_id,
+        &db::NewMember {
+            user_id: &invitee_id,
+            role,
+            doc_key_enc: &doc_key_enc,
+            invited_by: &s.user_id,
+        },
         &key_id,
         entry.as_ref(),
     )
@@ -385,10 +387,12 @@ pub async fn revoke_and_rotate(
                 &state.db,
                 &doc_id,
                 &target,
-                &s.user_id,
-                &keys,
-                &members,
-                &link,
+                &db::Rotation {
+                    rotated_by: &s.user_id,
+                    keys: &keys,
+                    members: &members,
+                    link: &link,
+                },
                 entry.as_ref(),
                 sweep_due,
             )
@@ -631,7 +635,13 @@ pub async fn rotate_document_key(
     let keys = decode_keys(&req.keys);
     let members = req.members;
     let link = decode_link(&req.link, doc_id)?;
-    db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys, &members, &link).await?;
+    let rotation = db::Rotation {
+        rotated_by: &s.user_id,
+        keys: &keys,
+        members: &members,
+        link: &link,
+    };
+    db::rotate_document_keys(&state.db, &doc_id, &rotation).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     // The rotation landed, so the debt is cleared (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;

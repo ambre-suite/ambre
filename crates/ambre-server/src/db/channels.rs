@@ -1594,10 +1594,12 @@ mod tests {
         add_document_member(
             pool,
             &document,
-            &member,
-            ambre_core::Role::Editor,
-            &ambre_core::Encoded::new([6u8; 32].to_vec()),
-            &owner,
+            &crate::db::NewMember {
+                user_id: &member,
+                role: ambre_core::Role::Editor,
+                doc_key_enc: &ambre_core::Encoded::new([6u8; 32].to_vec()),
+                invited_by: &owner,
+            },
             None,
         )
         .await

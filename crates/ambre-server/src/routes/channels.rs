@@ -1084,10 +1084,12 @@ mod tests {
         db::add_document_member(
             &state.db,
             &meta,
-            &creator,
-            Role::Owner,
-            &ambre_core::Encoded::new([6; 32].to_vec()),
-            &creator,
+            &db::NewMember {
+                user_id: &creator,
+                role: Role::Owner,
+                doc_key_enc: &ambre_core::Encoded::new([6; 32].to_vec()),
+                invited_by: &creator,
+            },
             Some(&entry),
         )
         .await
@@ -1131,10 +1133,12 @@ mod tests {
         db::add_document_member(
             &state.db,
             &document,
-            &member,
-            role,
-            &ambre_core::Encoded::new([6; 32].to_vec()),
-            &member,
+            &db::NewMember {
+                user_id: &member,
+                role,
+                doc_key_enc: &ambre_core::Encoded::new([6; 32].to_vec()),
+                invited_by: &member,
+            },
             None,
         )
         .await

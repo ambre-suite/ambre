@@ -371,10 +371,12 @@ pub async fn create_test_document(
     db::add_document_member(
         pool,
         &doc_id,
-        &owner_id,
-        ambre_core::Role::Owner,
-        &ambre_core::Encoded::new([5u8; 32].to_vec()),
-        &owner_id,
+        &db::NewMember {
+            user_id: &owner_id,
+            role: ambre_core::Role::Owner,
+            doc_key_enc: &ambre_core::Encoded::new([5u8; 32].to_vec()),
+            invited_by: &owner_id,
+        },
         None,
     )
     .await

@@ -304,10 +304,12 @@ pub async fn create_document(
         db::add_document_member(
             &state.db,
             &doc_id,
-            &s.user_id,
-            Role::Owner,
-            &doc_key_enc,
-            &s.user_id,
+            &db::NewMember {
+                user_id: &s.user_id,
+                role: Role::Owner,
+                doc_key_enc: &doc_key_enc,
+                invited_by: &s.user_id,
+            },
             entry.as_ref(),
         )
         .await?;

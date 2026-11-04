@@ -222,10 +222,12 @@ mod tests {
             db::add_document_member(
                 pool,
                 &meta,
-                member,
-                ambre_core::Role::Viewer,
-                &ambre_core::Encoded::new([6u8; 32].to_vec()),
-                &owner,
+                &db::NewMember {
+                    user_id: member,
+                    role: ambre_core::Role::Viewer,
+                    doc_key_enc: &ambre_core::Encoded::new([6u8; 32].to_vec()),
+                    invited_by: &owner,
+                },
                 None,
             )
             .await

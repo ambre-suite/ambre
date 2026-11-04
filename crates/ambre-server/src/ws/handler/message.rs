@@ -1806,10 +1806,12 @@ mod access_tests {
         db::add_document_member(
             pool,
             &doc_id,
-            &editor,
-            ambre_core::Role::Editor,
-            &ambre_core::Encoded::new([5u8; 32].to_vec()),
-            &owner,
+            &db::NewMember {
+                user_id: &editor,
+                role: ambre_core::Role::Editor,
+                doc_key_enc: &ambre_core::Encoded::new([5u8; 32].to_vec()),
+                invited_by: &owner,
+            },
             None,
         )
         .await
@@ -2821,10 +2823,12 @@ mod channel_gate_tests {
             db::add_document_member(
                 pool,
                 &meta,
-                &member,
-                role,
-                &ambre_core::Encoded::new([6u8; 32].to_vec()),
-                &owner,
+                &db::NewMember {
+                    user_id: &member,
+                    role,
+                    doc_key_enc: &ambre_core::Encoded::new([6u8; 32].to_vec()),
+                    invited_by: &owner,
+                },
                 None,
             )
             .await

@@ -107,10 +107,7 @@ macro_rules! access_document {
 pub async fn add_document_member(
     pool: &PgPool,
     document_id: &Id<Document>,
-    user_id: &Id<User>,
-    role: ambre_core::Role,
-    doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    invited_by: &Id<User>,
+    member: &NewMember<'_>,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
@@ -118,7 +115,7 @@ pub async fn add_document_member(
         lock_document(&mut tx, *document_id).await?;
         append_entry(&mut tx, *document_id, entry).await?;
     }
-    upsert_member(&mut tx, document_id, user_id, role, doc_key_enc, invited_by).await?;
+    upsert_member(&mut tx, document_id, member).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -197,17 +194,10 @@ pub async fn membership_log(
 /// rotation has replaced that key (`SRV-168`). The check runs under the
 /// document lock every rotation takes, so the two are ordered. An invitation
 /// that lands first is among the members a rotation must name (`SRV-167`).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the member, role and key copy are the arguments add_document_member takes one by one"
-)]
 pub async fn invite_document_member(
     pool: &PgPool,
     document_id: &Id<Document>,
-    user_id: &Id<User>,
-    role: ambre_core::Role,
-    doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    invited_by: &Id<User>,
+    member: &NewMember<'_>,
     key_id: &FixedBytes<ambre_core::KeyId>,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
@@ -230,20 +220,33 @@ pub async fn invite_document_member(
         return Err(AppError::KeyChanged);
     }
     record_change(&mut tx, *document_id, entry).await?;
-    upsert_member(&mut tx, document_id, user_id, role, doc_key_enc, invited_by).await?;
+    upsert_member(&mut tx, document_id, member).await?;
     tx.commit().await?;
     Ok(())
+}
+
+/// The columns of one `document_members` row that a join writes: who joins,
+/// with which role, the copy of the document key wrapped for them, and who
+/// let them in.
+pub struct NewMember<'a> {
+    pub user_id: &'a Id<User>,
+    pub role: ambre_core::Role,
+    pub doc_key_enc: &'a ambre_core::Encoded<ambre_core::WrappedDocKey>,
+    pub invited_by: &'a Id<User>,
 }
 
 /// The upsert behind both adds, inside the caller's transaction.
 async fn upsert_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: &Id<Document>,
-    user_id: &Id<User>,
-    role: ambre_core::Role,
-    doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    invited_by: &Id<User>,
+    member: &NewMember<'_>,
 ) -> Result<(), AppError> {
+    let NewMember {
+        user_id,
+        role,
+        doc_key_enc,
+        invited_by,
+    } = *member;
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
     let inviter = id_to_uuid(*invited_by);
@@ -439,18 +442,11 @@ pub(super) async fn owe_rotation(
 ///
 /// A removal from a space takes the member out of every channel of it, in
 /// the same transaction (`SRV-136`). Those channels are answered.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the keys, members and link are the arguments rotate_document_keys takes one by one"
-)]
 pub async fn revoke_and_rotate(
     pool: &PgPool,
     document_id: &Id<Document>,
     user_id: &Id<User>,
-    rotated_by: &Id<User>,
-    keys: &[(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
-    members: &[Id<User>],
-    link: &ambre_protocol::KeyLink,
+    rotation: &Rotation<'_>,
     entry: Option<&LogEntry>,
     sweep_due: Instant<UnixSec>,
 ) -> Result<Option<SpaceLeave>, AppError> {
@@ -460,7 +456,7 @@ pub async fn revoke_and_rotate(
     lock_document(&mut tx, *document_id).await?;
     record_change(&mut tx, *document_id, entry).await?;
     delete_member(&mut tx, *document_id, *user_id, None).await?;
-    rewrap_members(&mut tx, *document_id, *rotated_by, keys, members, link).await?;
+    rewrap_members(&mut tx, *document_id, rotation).await?;
     let left = super::channels::leave_space_channels_in(
         &mut tx,
         Id::<Space>::from_document(*document_id),
@@ -684,16 +680,23 @@ pub async fn update_document_member_role(
 pub async fn rotate_document_keys(
     pool: &PgPool,
     document_id: &Id<Document>,
-    rotated_by: &Id<User>,
-    keys: &[(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
-    members: &[Id<User>],
-    link: &ambre_protocol::KeyLink,
+    rotation: &Rotation<'_>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
     lock_document(&mut tx, *document_id).await?;
-    rewrap_members(&mut tx, *document_id, *rotated_by, keys, members, link).await?;
+    rewrap_members(&mut tx, *document_id, rotation).await?;
     tx.commit().await?;
     Ok(())
+}
+
+/// One rotation of a document key: who rotates, the new key wrapped for each
+/// member who stays, the members the rotator names, and the link that signs
+/// the new key.
+pub struct Rotation<'a> {
+    pub rotated_by: &'a Id<User>,
+    pub keys: &'a [(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
+    pub members: &'a [Id<User>],
+    pub link: &'a ambre_protocol::KeyLink,
 }
 
 /// Stores the rotation's link and writes each member's new wrapped copy. It
@@ -706,13 +709,16 @@ pub async fn rotate_document_keys(
 async fn rewrap_members(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: Id<Document>,
-    rotator: Id<User>,
-    keys: &[(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
-    members: &[Id<User>],
-    link: &ambre_protocol::KeyLink,
+    rotation: &Rotation<'_>,
 ) -> Result<(), AppError> {
+    let Rotation {
+        rotated_by,
+        keys,
+        members,
+        link,
+    } = *rotation;
     let did = id_to_uuid(document_id);
-    let rotator_uuid = id_to_uuid(rotator);
+    let rotator_uuid = id_to_uuid(*rotated_by);
     // The same rows the member list serves (`SRV-163`): an account without
     // keys is in neither, so it cannot hold a rotation back.
     let current: Vec<uuid::Uuid> = sqlx::query_scalar(
