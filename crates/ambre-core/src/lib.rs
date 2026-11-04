@@ -209,5 +209,5 @@ pub use unit::{
     Mm, PX_PER_MM, Point, PrintLength, PrintUnit, Pt, Px, Radians, Size, Vector, ViewSpeed,
 };
 pub use uuid::Uuid;
-pub use validated::{Rule, Validated};
+pub use validated::{Loggable, Rule, Validated};
 pub use version::{Current, OpenRange, Version, VersionKind, VersionRepr};

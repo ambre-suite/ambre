@@ -19,7 +19,10 @@
 //! ```
 //!
 //! The text is plaintext a member wrote, so it is held [`Redacted`]: `Debug`
-//! prints the length alone. Serde sees the text itself.
+//! prints the length alone. Serde sees the text itself. A rule whose text is
+//! safe in a log opts in to print it. Its [`Rule::LOGGED_AS`] names the text
+//! in `Debug`, and [`Loggable`] gives it a `Display`. A rule that forgets
+//! either one keeps the text out of a log.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
@@ -37,6 +40,12 @@ pub trait Rule: 'static {
     /// Why a text breaks the rule. A decode prints it.
     type Error: fmt::Display;
 
+    /// The name `Debug` prints the text under, as `Name("text")`, when the
+    /// text is safe in a log: a tag, a digest, a code word. `None`, the
+    /// default, prints the length alone, so a rule that sets nothing leaks
+    /// nothing.
+    const LOGGED_AS: Option<&'static str> = None;
+
     /// The text the rule keeps for `text`, which it may normalize, as a trim
     /// does.
     ///
@@ -45,6 +54,23 @@ pub trait Rule: 'static {
     /// [`Rule::Error`] when `text` breaks the rule.
     fn admit(text: String) -> Result<String, Self::Error>;
 }
+
+/// The capability of a rule whose text is safe in a log: a [`Validated`] of
+/// it has a `Display`, which writes the text. A rule that does not opt in
+/// has none, so no `to_string` or format writes its text by mistake.
+///
+/// ```compile_fail,E0277
+/// use ambre_core::{Rule, Validated};
+/// enum Secretish {}
+/// impl Rule for Secretish {
+///     type Error = &'static str;
+///     fn admit(text: String) -> Result<String, Self::Error> { Ok(text) }
+/// }
+/// fn show(text: &Validated<Secretish>) -> String {
+///     format!("{text}")
+/// }
+/// ```
+pub trait Loggable: Rule {}
 
 /// A text that the rule `V` admitted.
 pub struct Validated<V: Rule> {
@@ -117,10 +143,22 @@ impl<V: Rule> Hash for Validated<V> {
     }
 }
 
-/// `N chars`, as [`Redacted`] prints it.
+/// `N chars`, as [`Redacted`] prints it, unless the rule names the text
+/// through [`Rule::LOGGED_AS`]: then `Name("text")`, as a derive prints a
+/// newtype over a `String`.
 impl<V: Rule> fmt::Debug for Validated<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.text, f)
+        match V::LOGGED_AS {
+            Some(name) => f.debug_tuple(name).field(&self.as_str()).finish(),
+            None => fmt::Debug::fmt(&self.text, f),
+        }
+    }
+}
+
+/// The text as admitted, for a rule that opted in through [`Loggable`].
+impl<V: Loggable> fmt::Display for Validated<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -134,5 +172,71 @@ impl<V: Rule> Serialize for Validated<V> {
 impl<'de, V: Rule> Deserialize<'de> for Validated<V> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Self::parse(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Loggable, Rule, Validated};
+
+    /// A rule that sets nothing, as a text a member wrote takes.
+    enum Masked {}
+
+    impl Rule for Masked {
+        type Error = &'static str;
+
+        fn admit(text: String) -> Result<String, Self::Error> {
+            if text.is_empty() {
+                Err("empty")
+            } else {
+                Ok(text)
+            }
+        }
+    }
+
+    /// A rule that opts in to a log, as a tag or a digest does.
+    enum Named {}
+
+    impl Rule for Named {
+        type Error = &'static str;
+
+        const LOGGED_AS: Option<&'static str> = Some("Named");
+
+        fn admit(text: String) -> Result<String, Self::Error> {
+            Ok(text.to_ascii_uppercase())
+        }
+    }
+
+    impl Loggable for Named {}
+
+    #[test]
+    fn a_rule_that_sets_nothing_prints_the_length_alone() {
+        let text = Validated::<Masked>::parse("secret").unwrap();
+        assert_eq!(format!("{text:?}"), "6 chars");
+        assert_eq!(format!("{:?}", Some(text)), "Some(6 chars)");
+    }
+
+    #[test]
+    fn a_logged_rule_prints_the_text_under_its_name() {
+        let text = Validated::<Named>::parse("sum").unwrap();
+        assert_eq!(format!("{text:?}"), "Named(\"SUM\")");
+        assert_eq!(text.to_string(), "SUM");
+    }
+
+    /// The serde form is the bare string in postcard and JSON alike. A decode
+    /// goes through the rule: it refuses and normalises as a parse.
+    #[test]
+    fn serde_reads_and_writes_the_bare_string_through_the_rule() {
+        let text = Validated::<Named>::parse("sum").unwrap();
+        assert_eq!(serde_json::to_string(&text).unwrap(), "\"SUM\"");
+        assert_eq!(
+            postcard::to_allocvec(&text).unwrap(),
+            postcard::to_allocvec("SUM").unwrap()
+        );
+        let read: Validated<Named> = serde_json::from_str("\"sum\"").unwrap();
+        assert_eq!(read, text);
+        assert!(serde_json::from_str::<Validated<Masked>>("\"\"").is_err());
+        let bytes = postcard::to_allocvec("").unwrap();
+        assert!(postcard::from_bytes::<Validated<Masked>>(&bytes).is_err());
     }
 }
