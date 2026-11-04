@@ -2844,6 +2844,8 @@
   {"edge": "cites-section", "from": "SRV-001", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "verified-by", "from": "SRV-001", "to": "ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext"},
   {"edge": "cites-pillar", "from": "SRV-014", "to": "Security"},
+  {"edge": "cites-pillar", "from": "SRV-246", "to": "Security"},
+  {"edge": "cites-rule", "from": "SRV-246", "to": "ARCH-028"},
   {"edge": "cites-section", "from": "SRV-021", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "verified-by", "from": "SRV-021", "to": "ambre_server::routes::tests::handler_tests::a_session_crosses_instances_and_a_sign_out_ends_it_on_both"},
   {"edge": "cites-section", "from": "SRV-241", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},

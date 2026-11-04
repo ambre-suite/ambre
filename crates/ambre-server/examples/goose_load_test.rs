@@ -24,11 +24,10 @@
 //! * `-t, --run-time` -- default `120s`.
 //! * `--report-file` -- no default; pass it to generate an HTML report.
 
-#![allow(
+// The relay silences no lint without its reason (`SRV-246`).
+#![deny(clippy::allow_attributes)]
+#![expect(
     clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::indexing_slicing,
     reason = "a load harness run by hand stops on its first broken step"
 )]
 

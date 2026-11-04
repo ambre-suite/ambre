@@ -42,8 +42,6 @@ use rustis::commands::ScanOptions;
 use rustis::commands::{GenericCommands, ListCommands};
 use std::marker::PhantomData;
 use std::time::Duration;
-#[allow(clippy::single_component_path_imports)]
-use tracing;
 
 use ambre_core::id::{Document, Id, Snapshot};
 

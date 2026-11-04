@@ -5,6 +5,9 @@
 // asserts by panicking, so the lint stops at its boundary, as the panic lints
 // of `clippy.toml` do (`ARCH-028`).
 #![cfg_attr(not(test), deny(clippy::arithmetic_side_effects))]
+// A lint the relay silences names its reason, and the build fails once the
+// reason is gone (`SRV-246`): `expect`, never `allow`.
+#![deny(clippy::allow_attributes)]
 
 mod auth;
 mod compaction;
@@ -35,8 +38,6 @@ use axum::http::HeaderValue;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-#[allow(clippy::single_component_path_imports)]
-use tracing_subscriber;
 
 use ambre_core::{Sec, TimeSpan};
 use state::{AppState, Config};

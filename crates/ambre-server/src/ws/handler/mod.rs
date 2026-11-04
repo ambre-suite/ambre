@@ -17,8 +17,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-#[allow(clippy::single_component_path_imports)]
-use tracing;
 
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{Bounded, FixedBytes, PublicKey, RefusalCode};

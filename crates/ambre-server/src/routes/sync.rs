@@ -204,7 +204,10 @@ pub async fn report_snapshot(
 /// broadcasts `SnapshotAvailable` to all subscribers.
 #[derive(serde::Deserialize)]
 pub struct CreateSnapshotRequest {
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "the body keeps its wire shape: one without a valid snapshot id stays refused"
+    )]
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
     pub author_pubkey: FixedBytes<PublicKey>,

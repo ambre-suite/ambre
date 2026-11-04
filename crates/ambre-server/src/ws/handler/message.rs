@@ -570,17 +570,15 @@ async fn store_index_row(
     if ambre_core::Count::<ambre_core::Octets>::of(wire.len())
         < crate::hot_tail::INLINE_DELTA_MAX_SIZE
     {
-        let inline = db::insert_inline_update(
-            &state.db,
-            &doc_id,
-            author,
+        let key = db::NewUpdate {
+            document_id: &doc_id,
+            author_pubkey: author,
             snapshot_id,
             clock,
             seq,
-            wire,
-            crate::hot_tail::INLINE_CAP,
-        )
-        .await?;
+        };
+        let inline =
+            db::insert_inline_update(&state.db, &key, wire, crate::hot_tail::INLINE_CAP).await?;
         match inline {
             db::InlineInsert::Stored { deltas, bytes } => {
                 if crate::hot_tail::past_watermark(deltas, bytes) {
