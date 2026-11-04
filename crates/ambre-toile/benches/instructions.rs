@@ -11,7 +11,7 @@
 //! Run with no operation named, as `cargo bench` does, every operation runs
 //! once: a smoke test.
 
-#![allow(
+#![expect(
     clippy::expect_used,
     reason = "a bench aborts on a fixture it cannot run"
 )]

@@ -9,7 +9,7 @@
 //! stays concurrent with every change the author sends (`TOILE-265`).
 //! `synced` is the same reader once the author has seen that scaffolding.
 
-#![allow(
+#![expect(
     clippy::expect_used,
     clippy::indexing_slicing,
     reason = "a bench aborts on a fixture it cannot run"

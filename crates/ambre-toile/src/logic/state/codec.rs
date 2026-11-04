@@ -279,7 +279,6 @@ pub(super) fn doc_type_from_tag(s: &str) -> Option<ambre_core::DocType> {
 
 // -- connector map (de)serialization ------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
 pub(super) fn write_connector(
     cm: &Fields<ConnectorKey>,
     from: &Id<Element>,
