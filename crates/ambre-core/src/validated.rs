@@ -19,10 +19,9 @@
 //! ```
 //!
 //! The text is plaintext a member wrote, so it is held [`Redacted`]: `Debug`
-//! prints the length alone. Serde sees the text itself. A rule whose text is
-//! safe in a log opts in to print it. Its [`Rule::LOGGED_AS`] names the text
-//! in `Debug`, and [`Loggable`] gives it a `Display`. A rule that forgets
-//! either one keeps the text out of a log.
+//! prints the length alone. Serde sees the text itself. [`Rule::LOGGED_AS`]
+//! alone decides what a log prints, through `Debug`. [`Displayed`] gives a
+//! `Display` to a rule whose text the code renders back.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
@@ -41,9 +40,9 @@ pub trait Rule: 'static {
     type Error: fmt::Display;
 
     /// The name `Debug` prints the text under, as `Name("text")`, when the
-    /// text is safe in a log: a tag, a digest, a code word. `None`, the
-    /// default, prints the length alone, so a rule that sets nothing leaks
-    /// nothing.
+    /// text is safe in a log: a tag, a digest, a code word. It alone decides
+    /// what a log prints. `None`, the default, prints the length alone, so a
+    /// rule that sets nothing leaks nothing.
     const LOGGED_AS: Option<&'static str> = None;
 
     /// The text the rule keeps for `text`, which it may normalize, as a trim
@@ -55,9 +54,10 @@ pub trait Rule: 'static {
     fn admit(text: String) -> Result<String, Self::Error>;
 }
 
-/// The capability of a rule whose text is safe in a log: a [`Validated`] of
-/// it has a `Display`, which writes the text. A rule that does not opt in
-/// has none, so no `to_string` or format writes its text by mistake.
+/// The capability of a rule whose text the code renders back, such as the
+/// output of a formula: a [`Validated`] of it has a `Display`. `Display` can
+/// still reach a log through `%`. So a rule opts in only when a renderer must
+/// write its text. A rule that does not opt in has no `to_string`.
 ///
 /// ```compile_fail,E0277
 /// use ambre_core::{Rule, Validated};
@@ -70,7 +70,7 @@ pub trait Rule: 'static {
 ///     format!("{text}")
 /// }
 /// ```
-pub trait Loggable: Rule {}
+pub trait Displayed: Rule {}
 
 /// A text that the rule `V` admitted.
 pub struct Validated<V: Rule> {
@@ -155,8 +155,8 @@ impl<V: Rule> fmt::Debug for Validated<V> {
     }
 }
 
-/// The text as admitted, for a rule that opted in through [`Loggable`].
-impl<V: Loggable> fmt::Display for Validated<V> {
+/// The text as admitted, for a rule a renderer writes, through [`Displayed`].
+impl<V: Displayed> fmt::Display for Validated<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
@@ -177,7 +177,7 @@ impl<'de, V: Rule> Deserialize<'de> for Validated<V> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Loggable, Rule, Validated};
+    use super::{Displayed, Rule, Validated};
 
     /// A rule that sets nothing, as a text a member wrote takes.
     enum Masked {}
@@ -207,7 +207,7 @@ mod tests {
         }
     }
 
-    impl Loggable for Named {}
+    impl Displayed for Named {}
 
     #[test]
     fn a_rule_that_sets_nothing_prints_the_length_alone() {

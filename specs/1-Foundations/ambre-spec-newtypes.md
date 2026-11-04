@@ -62,7 +62,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
 | A format or a schema version | `Version<K>` | `VersionKind`, with its `Repr` | `Current`, `OpenRange` |
 | A number between two bounds | `Bounded<K>` | `Bounds`, with its `Repr` | `Defaulted`, `Saturates` |
-| A text a rule checked once, at the door | `Validated<V>` | `Rule`, with its `LOGGED_AS` | `Loggable` |
+| A text a rule checked once, at the door | `Validated<V>` | `Rule`, with its `LOGGED_AS` | `Displayed` |
 | Text a log never prints | `Redacted<T>` | -- | -- |
 
 ---

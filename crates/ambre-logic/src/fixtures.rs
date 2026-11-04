@@ -32,7 +32,7 @@ use ambre_trame::logic::TrameState;
 use ambre_trame::logic::fixtures::{TRAME_BENCH_FIXTURES, TRAME_FIXTURES};
 
 use crate::DocState;
-use ambre_core::{Loggable, Ns, Rule, TimeSpan, Validated};
+use ambre_core::{Ns, Rule, TimeSpan, Validated};
 
 // -----------------------------------------------------------------------------
 // On-disk layout
@@ -122,10 +122,6 @@ impl Rule for CommitHash {
         }
     }
 }
-
-/// A commit id names a public revision of the repository, so a log may print
-/// it.
-impl Loggable for CommitHash {}
 
 /// The file form of a baseline's commit: the id, or `unknown` for none.
 mod unknown_commit {

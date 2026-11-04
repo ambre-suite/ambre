@@ -196,7 +196,6 @@ fn a_baseline_round_trips_through_its_file() {
 fn a_commit_id_is_four_to_forty_lowercase_hex_digits() {
     let id = Validated::<CommitHash>::parse("abc1234").expect("a short id");
     assert_eq!(format!("{id:?}"), "CommitHash(\"abc1234\")");
-    assert_eq!(id.to_string(), "abc1234");
     assert!(Validated::<CommitHash>::parse("a".repeat(40)).is_ok());
     for bad in ["abc", "ABC1234", "abc123g", &"a".repeat(41)] {
         assert_eq!(

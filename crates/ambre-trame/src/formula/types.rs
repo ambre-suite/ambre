@@ -1,6 +1,6 @@
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Axis, Len, Numbered, Pos, Span};
-use ambre_core::{Loggable, Ordinal, OrdinalKind, Rule, Validated};
+use ambre_core::{Displayed, Ordinal, OrdinalKind, Rule, Validated};
 use std::fmt;
 
 use ambre_bus::{CellPos, Col, DefinedName, Row, SheetName};
@@ -789,8 +789,6 @@ impl fmt::Display for NotAFunctionName {
 impl Rule for FunctionName {
     type Error = NotAFunctionName;
 
-    const LOGGED_AS: Option<&'static str> = Some("FunctionName");
-
     fn admit(text: String) -> Result<String, NotAFunctionName> {
         let mut chars = text.chars();
         let head = chars.next().ok_or(NotAFunctionName)?;
@@ -804,9 +802,9 @@ impl Rule for FunctionName {
     }
 }
 
-/// A name is a word of the formula language, checked to an ASCII identifier.
-/// Its `Display` renders the call back into the formula text.
-impl Loggable for FunctionName {}
+/// The renderer writes the call back into the formula text through `Display`.
+/// `Debug` masks the name: an unknown one is text the user typed.
+impl Displayed for FunctionName {}
 
 // -----------------------------------------------------------------------------
 // Expr -- AST produced by the parser
@@ -1060,7 +1058,7 @@ mod tests {
         );
         assert_eq!(
             Validated::<FunctionName>::parse("sum").map(|n| format!("{n:?}")),
-            Ok("FunctionName(\"SUM\")".into())
+            Ok("3 chars".into())
         );
         for bad in ["", "1A", "A-B", "\u{e9}t\u{e9}"] {
             assert_eq!(

@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::fixed_bytes::{FixedBytes, FixedRole};
-use crate::{Loggable, Rule, Validated};
+use crate::{Displayed, Rule, Validated};
 
 /// The rule of the content address of a media blob, which the relay stores
 /// it under (`ambre-spec-media.md`). A `Validated<ContentHash>` holds one, a
@@ -46,9 +46,8 @@ impl Rule for ContentHash {
     }
 }
 
-/// A hash is a keyed digest, so it reveals nothing of the blob. The relay
-/// names the blob by it, so a log may print it.
-impl Loggable for ContentHash {}
+/// The relay names the blob by its hash, so a route and a store key write it.
+impl Displayed for ContentHash {}
 
 /// The width of a [`MediaAddress`], in bytes.
 pub const MEDIA_ADDRESS_LEN: usize = 32;

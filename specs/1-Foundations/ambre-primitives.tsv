@@ -4097,7 +4097,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit(te
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::admit() | ret | Result<String,NotAFunctionName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-bus | src/app/prose.rs | crate::app::prose | stored_code_lang() | ret | &str	generic	the stored spelling of an optional tag, empty for plain, read back through the CodeLang rule
 ambre-core | src/lang.rs | crate::lang | is_lang_tag() | ret | bool	generic	whether a text has the shape of RFC 5646, the check of the LangTag rule
 ambre-core | src/lang.rs | crate::lang | is_lang_tag(text) | param | &str	generic	the raw text the LangTag rule checks

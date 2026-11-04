@@ -1,6 +1,6 @@
 //! A language tag, as a document names the language its content is in.
 
-use crate::{Loggable, Rule, Validated};
+use crate::{Rule, Validated};
 
 /// The rule of a well-formed BCP 47 language tag: `en`, `fr-CA`,
 /// `zh-Hant-TW`. A `Validated<LangTag>` holds one.
@@ -30,9 +30,6 @@ impl Rule for LangTag {
         }
     }
 }
-
-/// A tag names a language, never a member's text, so a log may print it.
-impl Loggable for LangTag {}
 
 /// Whether `text` has the shape of RFC 5646.
 fn is_lang_tag(text: &str) -> bool {
@@ -120,13 +117,12 @@ mod tests {
         );
     }
 
-    /// `Debug` and `Display` print the tag as the hand-written type did, and
+    /// `Debug` prints the tag as the hand-written type did, and
     /// the serde form is the bare string.
     #[test]
     fn a_tag_prints_and_travels_as_its_text() {
         let tag = Validated::<LangTag>::parse("fr-CA").unwrap();
         assert_eq!(format!("{tag:?}"), "LangTag(\"fr-CA\")");
-        assert_eq!(tag.to_string(), "fr-CA");
         assert_eq!(serde_json::to_string(&tag).unwrap(), "\"fr-CA\"");
         assert!(serde_json::from_str::<Validated<LangTag>>("\"fr_CA\"").is_err());
     }
