@@ -1244,7 +1244,8 @@ mod tests {
             Pos::<DocChar>::ZERO,
         );
         state.apply_event(&ProseEvent::MediaArrived {
-            content_hash: ambre_core::ContentHash::parse(&"a".repeat(64)).expect("a hash"),
+            content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse("a".repeat(64))
+                .expect("a hash"),
             blocks: Vec::new(),
         });
         assert_eq!(state.draft.text_of(block, ""), "hel");

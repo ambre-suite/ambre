@@ -109,7 +109,7 @@ which language, never what the language renders (`LOCALE-009`).
 ```rust
 /// The document's locale: one well-formed tag, or none when the document names no language.
 /// `None` is a value, not a missing one: a consumer that resolves to it formats without a locale.
-pub struct DocumentLocale(Option<LangTag>);
+pub struct DocumentLocale(Option<Validated<LangTag>>);
 
 impl DocumentLocale {
     /// The locale a text spells. Refuses a text that is no well-formed tag (`LOCALE-010`).

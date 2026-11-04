@@ -78,7 +78,7 @@ status values are normative in `ambre-spec-template.md`.
 ```rust
 pub struct SpellChecker {
     dict: zspell::Dictionary,
-    lang: LangTag,
+    lang: Validated<LangTag>,
 }
 
 pub struct SpellError {

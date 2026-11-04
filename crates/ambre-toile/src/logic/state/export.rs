@@ -33,7 +33,7 @@ impl ToileState {
     /// an exported page therefore get this resolution (`TOILE-IO-100`).
     pub(super) fn decoded_thumbnail(
         &self,
-        hash: &ambre_core::ContentHash,
+        hash: &ambre_core::Validated<ambre_core::ContentHash>,
     ) -> Option<crate::ui::render::DecodedImage> {
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
@@ -60,7 +60,7 @@ impl ToileState {
     /// inline (`TOILE-IO-087`).
     fn thumbnail_png(
         &self,
-        hash: &ambre_core::ContentHash,
+        hash: &ambre_core::Validated<ambre_core::ContentHash>,
     ) -> Option<ambre_core::Payload<ambre_core::ThumbnailPng>> {
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
@@ -149,15 +149,18 @@ impl ToileState {
                 _ => None,
             },
             media_hash: match kind {
-                ElementKind::Image => str_of(&em, ElementKey::Hash)
-                    .and_then(|hash| ambre_core::ContentHash::parse(&hash)),
+                ElementKind::Image => str_of(&em, ElementKey::Hash).and_then(|hash| {
+                    ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).ok()
+                }),
                 _ => None,
             },
             // The plaintext thumbnail, re-encoded as the PNG the export writes
             // inline (`TOILE-IO-087`).
             image_png: match kind {
                 ElementKind::Image => str_of(&em, ElementKey::Hash)
-                    .and_then(|hash| ambre_core::ContentHash::parse(&hash))
+                    .and_then(|hash| {
+                        ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).ok()
+                    })
                     .and_then(|hash| self.thumbnail_png(&hash)),
                 _ => None,
             },
@@ -218,7 +221,8 @@ impl ToileState {
         for (hash, entry) in entries.iter() {
             // A peer wrote the key, so a text that spells no address is left
             // out like bytes that do not decode.
-            let Some(hash) = ambre_core::ContentHash::parse(hash) else {
+            let Some(hash) = ambre_core::Validated::<ambre_core::ContentHash>::parse(hash).ok()
+            else {
                 continue;
             };
             let loro::LoroValue::Map(fields) = entry else {
@@ -424,6 +428,7 @@ mod media_request_tests {
     use crate::logic::interop::{ContentHash, ImportBatch, MediaBlob};
 
     use super::super::ToileState;
+    use ambre_core::Validated;
 
     /// A media entry whose thumbnail is a real PNG, so the decode path under
     /// test is the one that runs in the application.
@@ -441,7 +446,7 @@ mod media_request_tests {
             .unwrap();
         MediaBlob {
             media: crate::logic::command::MediaRef::Stored(
-                ContentHash::parse(hash).expect("a hash"),
+                Validated::<ContentHash>::parse(hash).expect("a hash"),
             ),
             plaintext: ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from("image/png"),
@@ -467,7 +472,7 @@ mod media_request_tests {
     fn a_media_request_answers_with_decoded_pixels() {
         let mut st = board_with_media(IMG, 4, 2);
         let out = st.handle_command(ToileCommand::RequestMedia {
-            hashes: vec![ContentHash::parse(IMG).expect("a hash")],
+            hashes: vec![Validated::<ContentHash>::parse(IMG).expect("a hash")],
         });
         let answer = out
             .display
@@ -495,7 +500,7 @@ mod media_request_tests {
     fn an_unknown_address_is_answered_with_nothing() {
         let mut st = board_with_media(IMG, 2, 2);
         let out = st.handle_command(ToileCommand::RequestMedia {
-            hashes: vec![ContentHash::parse(&"2".repeat(64)).expect("a hash")],
+            hashes: vec![Validated::<ContentHash>::parse("2".repeat(64)).expect("a hash")],
         });
         assert!(out.display.is_empty());
     }
@@ -506,7 +511,7 @@ mod media_request_tests {
     fn a_media_request_writes_nothing() {
         let mut st = board_with_media(IMG, 2, 2);
         let out = st.handle_command(ToileCommand::RequestMedia {
-            hashes: vec![ContentHash::parse(IMG).expect("a hash")],
+            hashes: vec![Validated::<ContentHash>::parse(IMG).expect("a hash")],
         });
         assert!(out.update.is_none(), "a read-only command exports no delta");
         assert!(!ToileCommand::RequestMedia { hashes: Vec::new() }.is_mutating());
@@ -520,7 +525,7 @@ mod media_request_tests {
         let mut st = board_with_media(IMG, 4, 2);
         let before = st.export_snapshot();
         let out = st.handle_command(ToileCommand::RequestMedia {
-            hashes: vec![ContentHash::parse(IMG).expect("a hash")],
+            hashes: vec![Validated::<ContentHash>::parse(IMG).expect("a hash")],
         });
         assert!(
             out.display

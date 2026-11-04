@@ -5,6 +5,7 @@
 //! (`PROSE-040`, `PROSE-095`). A converged document therefore holds only the
 //! parentages section 4 declares, because no peer ever wrote another one.
 
+use ambre_core::Validated;
 use loro::{TreeID, TreeParentId};
 
 use ambre_bus::app::prose::CodeLang;
@@ -78,8 +79,8 @@ impl ProseState {
 
     /// The language a live code block carries.
     #[must_use]
-    pub fn code_lang_of(&self, id: &BlockId) -> Option<CodeLang> {
-        CodeLang::new(self.stored_lang(&tree_id(*id))?.to_string())
+    pub fn code_lang_of(&self, id: &BlockId) -> Option<Validated<CodeLang>> {
+        Validated::<CodeLang>::parse(self.stored_lang(&tree_id(*id))?.to_string()).ok()
     }
 
     /// The language text a block stores as written. The empty text of a
@@ -94,10 +95,15 @@ impl ProseState {
 
     /// The content hash a live image block addresses. A peer wrote it, so a
     /// text that spells no address reads as none.
-    pub(super) fn image_hash(&self, id: &TreeID) -> Option<ambre_core::ContentHash> {
+    pub(super) fn image_hash(
+        &self,
+        id: &TreeID,
+    ) -> Option<ambre_core::Validated<ambre_core::ContentHash>> {
         let attrs = self.attrs_of(id)?;
         match attrs.value(doc::AttrKey::ContentHash)? {
-            loro::LoroValue::String(s) => ambre_core::ContentHash::parse(&s),
+            loro::LoroValue::String(s) => {
+                ambre_core::Validated::<ambre_core::ContentHash>::parse(s.to_string()).ok()
+            }
             _ => None,
         }
     }
@@ -201,7 +207,7 @@ impl ProseState {
             }
             BlockInit::CodeBlock { lang } => attrs(
                 doc::AttrKey::Lang,
-                ambre_bus::app::prose::CodeLang::stored(lang.as_ref()).into(),
+                ambre_bus::app::prose::stored_code_lang(lang.as_ref()).into(),
             ),
             BlockInit::ListItem { style } => {
                 let map = doc::attrs_at(&node)
@@ -397,12 +403,12 @@ impl ProseState {
     pub(super) fn set_code_lang(
         &mut self,
         id: &TreeID,
-        lang: Option<&ambre_bus::app::prose::CodeLang>,
+        lang: Option<&ambre_core::Validated<ambre_bus::app::prose::CodeLang>>,
     ) -> ProseOutcome {
         if doc::block_type_of(&doc::blocks(&self.doc), id) != Some(BlockType::CodeBlock) {
             return Self::err_no_block(id);
         }
-        let stored = ambre_bus::app::prose::CodeLang::stored(lang);
+        let stored = ambre_bus::app::prose::stored_code_lang(lang);
         self.write_attr(id, doc::AttrKey::Lang, stored.into())
     }
 

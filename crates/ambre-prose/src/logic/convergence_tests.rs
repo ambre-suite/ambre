@@ -229,7 +229,7 @@ fn a_converged_document_holds_only_the_parentages_the_format_declares() {
             parent_id: None,
             after_id: Some(first),
             init: BlockInit::CodeBlock {
-                lang: ambre_bus::app::prose::CodeLang::new("rust"),
+                lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
             },
             style_id: None,
         })

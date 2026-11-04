@@ -215,14 +215,14 @@ fn workspace_root() -> Result<PathBuf, FixtureError> {
 ///
 /// A baseline with no commit is still a baseline. The rule is about the
 /// machine, so a checkout without git yields a poorer record, not a refusal.
-fn head_commit() -> Option<fixtures::CommitHash> {
+fn head_commit() -> Option<ambre_core::Validated<fixtures::CommitHash>> {
     std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()
         .ok()
         .filter(|out| out.status.success())
         .and_then(|out| String::from_utf8(out.stdout).ok())
-        .and_then(|s| fixtures::CommitHash::new(s.trim()).ok())
+        .and_then(|s| ambre_core::Validated::parse(s.trim()).ok())
 }
 
 /// Copy one artifact into `frozen/`, then run the retention pass. The cap holds

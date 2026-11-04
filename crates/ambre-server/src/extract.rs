@@ -112,8 +112,8 @@ impl<E: Routed> PathPart for Id<E> {
 }
 
 /// A content address reads as the framework reads it: it checks nothing.
-impl PathPart for ambre_core::ContentHash {
-    type Raw = ambre_core::ContentHash;
+impl PathPart for ambre_core::Validated<ambre_core::ContentHash> {
+    type Raw = ambre_core::Validated<ambre_core::ContentHash>;
 
     fn part(raw: Self::Raw) -> Result<Self, Resource> {
         Ok(raw)

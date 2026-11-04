@@ -2027,7 +2027,7 @@ pub(crate) struct DocumentMemberEntry {
 /// sealed size, and nothing else of the blob (`SYNC-053`).
 #[derive(Serialize)]
 pub(crate) struct UploadUrlRequest {
-    pub content_hash: ambre_core::ContentHash,
+    pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     #[serde(rename = "size_bytes")]
     pub size: ambre_core::ByteSize,
 }
@@ -2041,7 +2041,7 @@ pub(crate) struct UploadUrlResponse {
 
 #[derive(Serialize)]
 pub(crate) struct DownloadUrlRequest {
-    pub content_hash: ambre_core::ContentHash,
+    pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
 }
 
 #[derive(Deserialize)]
@@ -2052,7 +2052,7 @@ pub(crate) struct DownloadUrlResponse {
 /// Confirms one put. The same two fields as [`UploadUrlRequest`] (`SYNC-053`).
 #[derive(Serialize)]
 pub(crate) struct ConfirmUploadRequest {
-    pub content_hash: ambre_core::ContentHash,
+    pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     #[serde(rename = "size_bytes")]
     pub size: ambre_core::ByteSize,
 }
@@ -2791,11 +2791,13 @@ mod tests {
         };
         let expected = ["content_hash", "size_bytes"];
         let ask = UploadUrlRequest {
-            content_hash: ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash"),
+            content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse("ab".repeat(32))
+                .expect("a hash"),
             size: ambre_core::ByteSize::new(64),
         };
         let confirm = ConfirmUploadRequest {
-            content_hash: ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash"),
+            content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse("ab".repeat(32))
+                .expect("a hash"),
             size: ambre_core::ByteSize::new(64),
         };
         assert_eq!(

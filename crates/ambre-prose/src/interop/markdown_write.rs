@@ -131,7 +131,7 @@ impl Writer {
             }
             IrBlock::CodeBlock { lang, text } => {
                 let fence = fence_for(text);
-                let info = ambre_bus::app::prose::CodeLang::stored(lang.as_ref());
+                let info = ambre_bus::app::prose::stored_code_lang(lang.as_ref());
                 self.line(indent, &format!("{fence}{info}"));
                 for line in text.split('\n') {
                     self.line(indent, line);
@@ -651,7 +651,7 @@ mod tests {
             },
             para(vec![bold, both, IrRun::plain(" and "), link]),
             IrBlock::CodeBlock {
-                lang: ambre_bus::app::prose::CodeLang::new("rust"),
+                lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
                 text: "fn main() {}".to_owned(),
             },
         ]);

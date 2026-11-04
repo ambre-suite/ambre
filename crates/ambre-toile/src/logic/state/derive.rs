@@ -251,9 +251,11 @@ impl ToileState {
                 DisplayGeom::Path(path_of(em).unwrap_or_default())
             }
             // An image or an embed that names no source paints its placeholder.
-            ElementKind::Image => DisplayGeom::Image(
-                str_of(em, ElementKey::Hash).and_then(|hash| ambre_core::ContentHash::parse(&hash)),
-            ),
+            ElementKind::Image => {
+                DisplayGeom::Image(str_of(em, ElementKey::Hash).and_then(|hash| {
+                    ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).ok()
+                }))
+            }
             // A peer may have written any text here, so the stored address
             // passes the same check as a typed one (`TOILE-267`).
             ElementKind::Embed => DisplayGeom::Embed(

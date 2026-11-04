@@ -2998,7 +2998,9 @@ fn a_dropped_media_request_is_offered_again() {
     let mut picture = sticky("p", Rect::new(0.0, 0.0, 100.0, 100.0));
     picture.kind = ElementKind::Image;
     let hash = "f".repeat(64);
-    picture.geom = ambre_bus::app::toile::DisplayGeom::Image(ambre_core::ContentHash::parse(&hash));
+    picture.geom = ambre_bus::app::toile::DisplayGeom::Image(
+        ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).ok(),
+    );
     rig.show(vec![DisplayNode::Element(picture)]);
     let asks = |sent: &[ToileCommand]| {
         sent.iter()
@@ -3009,7 +3011,7 @@ fn a_dropped_media_request_is_offered_again() {
     assert!(rig.view.media_requested.is_empty());
     rig.view.update();
     assert_eq!(asks(&rig.drain()), 1);
-    assert!(rig.view.media_requested.contains(hash.as_str()));
+    assert!(rig.view.media_requested.iter().any(|h| h.as_str() == hash));
     rig.view.update();
     assert_eq!(asks(&rig.drain()), 0, "a request in flight is asked once");
 }

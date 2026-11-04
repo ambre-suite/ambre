@@ -11,16 +11,25 @@
 
 use super::*;
 use ambre_bus::{ContentHash, RestCommand, RestEvent};
+use ambre_core::Validated;
 
 impl LogicState {
     /// Ask the relay to erase each of `files`, stored under `document_id`.
-    pub(crate) fn erase_files(&mut self, document_id: Id<Document>, files: Vec<ContentHash>) {
+    pub(crate) fn erase_files(
+        &mut self,
+        document_id: Id<Document>,
+        files: Vec<Validated<ContentHash>>,
+    ) {
         for file in files {
             self.erase(document_id, file);
         }
     }
 
-    fn erase(&mut self, document_id: Id<Document>, content_hash: ambre_core::ContentHash) {
+    fn erase(
+        &mut self,
+        document_id: Id<Document>,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
+    ) {
         let id = ambre_bus::next_request();
         self.erasing.insert(id, (document_id, content_hash.clone()));
         self.send_to_sync(SyncCommand::Rest {

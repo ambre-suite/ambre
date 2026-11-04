@@ -6,6 +6,7 @@
 //! (`MURMURE-132`). A failed upload adds nothing, and the page tells the user
 //! (`MURMURE-133`). A draft never sends while one of its files still uploads.
 
+use ambre_core::Validated;
 use ambre_core::index::{Axis, Len, Pos};
 use std::collections::HashMap;
 
@@ -196,7 +197,11 @@ impl Uploads {
 
     /// The relay stored the file of `id` under `content_hash`, which its
     /// reader already checked. `None` for a request this model never held.
-    pub fn uploaded(&mut self, id: Seq<Request>, content_hash: &ContentHash) -> Option<Uploaded> {
+    pub fn uploaded(
+        &mut self,
+        id: Seq<Request>,
+        content_hash: &Validated<ContentHash>,
+    ) -> Option<Uploaded> {
         let pending = self.pending.remove(&id)?;
         self.ready.entry(pending.of).or_default().push(Attachment {
             media_ref: content_hash.clone(),
@@ -337,7 +342,7 @@ mod tests {
     /// A fetched file named `name`.
     fn received(name: &str) -> Attachment {
         Attachment {
-            media_ref: ContentHash::parse(HASH).expect("an address"),
+            media_ref: Validated::<ContentHash>::parse(HASH).expect("an address"),
             name: name.to_owned(),
             media_type: MediaType::new("application/pdf".to_owned()),
             size: ByteSize::new(10),
@@ -377,7 +382,10 @@ mod tests {
         assert!(uploads.busy(of));
         assert!(uploads.ready(of).is_empty());
         assert_eq!(
-            uploads.uploaded(Seq::nth(1), &ContentHash::parse(HASH).expect("an address")),
+            uploads.uploaded(
+                Seq::nth(1),
+                &Validated::<ContentHash>::parse(HASH).expect("an address")
+            ),
             Some(Uploaded::Ready(of))
         );
         assert!(!uploads.busy(of));

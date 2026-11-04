@@ -6,6 +6,7 @@
 //! script and a remote reference included, so nothing a page carries runs or
 //! loads. The walk holds its own stack, so a deep tree never recurses.
 
+use ambre_core::Validated;
 use ambre_core::index::{IdxVec, Pos};
 use ambre_core::{Rgb, Rgba};
 use std::cell::{Cell, RefCell};
@@ -705,7 +706,7 @@ impl Reader {
 }
 
 /// The language a code block names through a `language-` or `lang-` class.
-fn language(attrs: &[Attribute]) -> Option<CodeLang> {
+fn language(attrs: &[Attribute]) -> Option<Validated<CodeLang>> {
     attr(attrs, &local_name!("class"))
         .into_iter()
         .flat_map(str::split_ascii_whitespace)
@@ -715,12 +716,13 @@ fn language(attrs: &[Attribute]) -> Option<CodeLang> {
                 .or_else(|| class.strip_prefix("lang-"))
         })
         .and_then(|lang| {
-            CodeLang::new(
+            Validated::<CodeLang>::parse(
                 lang.chars()
                     .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '+' | '#'))
                     .take(32)
                     .collect::<String>(),
             )
+            .ok()
         })
 }
 
@@ -1087,7 +1089,10 @@ mod tests {
         );
         let blocks = read(html);
         assert_eq!(texts(&blocks), ["one two", "fn a() {}\n    b();", "x"]);
-        assert_eq!(blocks[1].kind, ClipKind::Code(CodeLang::new("rust")));
+        assert_eq!(
+            blocks[1].kind,
+            ClipKind::Code(Validated::<CodeLang>::parse("rust").ok())
+        );
         assert_eq!(blocks[2].kind, ClipKind::Ordered(OrderedStyle::LowerRoman));
     }
 

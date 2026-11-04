@@ -25,7 +25,7 @@
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
 use ambre_core::index::{Axis, Delta, Len, MapsTo, MeasuresAs, Numbered, Pos, Shown, Span};
-use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted, Refused, Refuses};
+use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted, Refused, Refuses, Rule, Validated};
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
@@ -458,29 +458,33 @@ impl std::fmt::Display for HeadingLevel {
     }
 }
 
-/// The language a code block is marked as. A tag is never empty: a block
-/// with no language reads as plain and carries `None`, so the empty string
-/// is never a language.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CodeLang(String);
+/// The rule of the language a code block is marked as. A
+/// `Validated<CodeLang>` holds one. A tag is never empty: a block with no
+/// language reads as plain and carries `None`. The user typed the tag after
+/// a fence, so it opts in to no log: `Debug` prints its length alone.
+pub enum CodeLang {}
 
-impl CodeLang {
-    /// The tag `text` names, `None` for the empty text, which reads as plain.
-    pub fn new(text: impl Into<String>) -> Option<Self> {
-        let text = text.into();
-        (!text.is_empty()).then_some(Self(text))
-    }
+/// The empty text, which names no language: a block without one is plain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("a code language is never empty")]
+pub struct EmptyCodeLang;
 
-    /// The tag as written.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+impl Rule for CodeLang {
+    type Error = EmptyCodeLang;
 
-    /// The text a block stores for `lang`: the tag, or the empty text of a
-    /// plain block.
-    pub fn stored(lang: Option<&Self>) -> &str {
-        lang.map_or("", Self::as_str)
+    fn admit(text: String) -> Result<String, EmptyCodeLang> {
+        if text.is_empty() {
+            Err(EmptyCodeLang)
+        } else {
+            Ok(text)
+        }
     }
+}
+
+/// The text a block stores for `lang`: the tag, or the empty text of a plain
+/// block.
+pub fn stored_code_lang(lang: Option<&Validated<CodeLang>>) -> &str {
+    lang.map_or("", Validated::as_str)
 }
 
 /// The typed initializer of `InsertBlock`.
@@ -503,7 +507,7 @@ pub enum BlockInit {
     },
     /// `None` reads as plain.
     CodeBlock {
-        lang: Option<CodeLang>,
+        lang: Option<Validated<CodeLang>>,
     },
     HRule,
     PageBreak,
@@ -1489,7 +1493,7 @@ pub enum ProseCommand {
     /// `None` sets the block back to plain.
     SetCodeLang {
         block_id: BlockId,
-        lang: Option<CodeLang>,
+        lang: Option<Validated<CodeLang>>,
     },
 
     // -- Lists (`features/ambre-spec-prose-lists.md`) --
@@ -2507,7 +2511,7 @@ pub enum ProseEvent {
     /// (`PROSE-059`, `PROSE-060`). The bytes stay in the Logic thread's cache;
     /// the view asks for them when it paints.
     MediaArrived {
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
         blocks: Vec<BlockId>,
     },
     /// A full-state read the schema gate refused (`SCHEMA-008`).
@@ -2973,6 +2977,17 @@ mod tests {
             "a line-height multiple is finite and above zero, not 0"
         );
         assert_eq!(format!("{ratio:?}"), "InvalidLineSpacingMultiple(0.0)");
+    }
+
+    /// A code language is a word the user typed after a fence: `Debug` prints
+    /// its length alone, and the empty text names no language.
+    #[test]
+    fn a_code_language_prints_its_length_alone_and_is_never_empty() {
+        let lang = Validated::<CodeLang>::parse("privatelang").expect("a tag");
+        assert_eq!(format!("{lang:?}"), "11 chars");
+        assert_eq!(stored_code_lang(Some(&lang)), "privatelang");
+        assert_eq!(stored_code_lang(None), "");
+        assert_eq!(Validated::<CodeLang>::parse(""), Err(EmptyCodeLang));
     }
 
     /// A style name and a mark value print their length alone in `Debug`,

@@ -53,7 +53,7 @@ pub struct DecodedImage {
 
 /// Resolved image pixels for this frame, keyed by media hash. Empty when no
 /// image element is present (or its media has not been decoded yet).
-pub type ImageStore = HashMap<ambre_core::ContentHash, DecodedImage>;
+pub type ImageStore = HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>;
 
 /// Inner padding, in board units, between an element's border and its body,
 /// and between a caption's plate and its words. The inline editor applies the

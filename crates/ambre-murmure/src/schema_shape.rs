@@ -25,6 +25,7 @@
 //! holds no step yet.
 
 use ambre_bus::Char;
+use ambre_core::Validated;
 use ambre_core::index::Span;
 use std::collections::BTreeSet;
 
@@ -218,7 +219,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     }
     // The first message carries a file, by its address alone.
     let file = Attachment {
-        media_ref: ContentHash::parse(&"ab".repeat(32)).expect("an address"),
+        media_ref: Validated::<ContentHash>::parse("ab".repeat(32)).expect("an address"),
         name: "plan.pdf".to_owned(),
         media_type: MediaType::new("application/pdf".to_owned()),
         size: ByteSize::new(2_048),

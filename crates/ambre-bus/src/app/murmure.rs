@@ -273,14 +273,14 @@ impl From<String> for Emoji {
 // A file's media type is shown and used to open the file, and never sent to
 // the relay (`SYNC-053`). The three types live in `ambre-core`, which the
 // relay's media routes share. A message names its file by the address the
-// Sync worker gave it, read back through `ContentHash::parse`.
+// Sync worker gave it, read back through `Validated::<ContentHash>::parse`.
 pub use ambre_core::{ByteSize, ContentHash, MediaType};
 
 /// A file a message carries: its address, never its bytes (`MURMURE-017`).
 /// `Debug` prints the length of the file's name alone.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Attachment {
-    pub media_ref: ContentHash,
+    pub media_ref: Validated<ContentHash>,
     /// The file's name, as its author's file system gave it.
     pub name: String,
     pub media_type: MediaType,
@@ -483,11 +483,11 @@ pub enum MurmureCommand {
     /// `meta`. The answer is the `MediaDownloaded` of request `id`.
     FetchFile {
         id: ambre_core::Seq<crate::Request>,
-        media_ref: ContentHash,
+        media_ref: Validated<ContentHash>,
     },
     /// Fetch the image `media_ref` of a message and decode it for its
     /// preview. The answer is [`MurmureEvent::Picture`].
-    ShowPicture { media_ref: ContentHash },
+    ShowPicture { media_ref: Validated<ContentHash> },
 }
 
 impl MurmureCommand {
@@ -796,7 +796,7 @@ pub enum MurmureEvent {
     /// `ShowPicture`. `None` when it could not be fetched or decoded: the
     /// view keeps its chip alone.
     Picture {
-        media_ref: ContentHash,
+        media_ref: Validated<ContentHash>,
         picture: Option<Picture>,
     },
 }
@@ -1154,6 +1154,7 @@ pub enum SpaceEvent {
 #[cfg(test)]
 mod tests {
     use super::{ChannelTopic, MurmureCommand, SealedChannelKey};
+    use ambre_core::Validated;
     use ambre_core::id::{Id, Message, Segment, User};
     use ambre_core::{Ciphertext, FixedBytes, KeyId, Nonce, Payload};
 
@@ -1223,7 +1224,7 @@ mod tests {
             styles: Vec::new(),
         };
         let attachment = Attachment {
-            media_ref: ContentHash::parse(&"a".repeat(64)).expect("an address"),
+            media_ref: Validated::<ContentHash>::parse("a".repeat(64)).expect("an address"),
             name: secret.to_owned(),
             media_type: MediaType::new("text/plain".to_owned()),
             size: ByteSize::new(1),

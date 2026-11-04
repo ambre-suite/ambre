@@ -5,6 +5,7 @@
 //! It paints them on any drawing surface: the page's canvas, or the
 //! recording surface of a host test.
 
+use ambre_core::Validated;
 use ambre_core::index::{IdxVec, Len, Pos, Span};
 use std::collections::HashMap;
 
@@ -66,7 +67,7 @@ impl std::fmt::Debug for Pictured<'_> {
 /// next frame of one is due.
 #[derive(Debug, Default)]
 struct Played {
-    files: Vec<ContentHash>,
+    files: Vec<Validated<ContentHash>>,
     next: Option<Instant<PageLoad>>,
 }
 
@@ -176,7 +177,7 @@ pub struct Painted {
     pub file: Option<Attachment>,
     /// The files whose preview this paint drew, decoded or not. Only these
     /// are on screen, so only these play (`MURMURE-131`).
-    pub pictures: Vec<ContentHash>,
+    pub pictures: Vec<Validated<ContentHash>>,
     /// When the next frame of a picture on screen is due, `None` when none
     /// plays.
     pub next_frame: Option<Instant<PageLoad>>,
@@ -1481,7 +1482,7 @@ pub(crate) mod tests {
         use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType};
         let ada = Id::<User>::mint();
         let file = Attachment {
-            media_ref: ContentHash::parse(&"0".repeat(64)).expect("an address"),
+            media_ref: Validated::<ContentHash>::parse("0".repeat(64)).expect("an address"),
             name: "a.png".to_owned(),
             media_type: MediaType::new("image/png".to_owned()),
             size: ByteSize::new(2048),
@@ -1533,7 +1534,7 @@ pub(crate) mod tests {
         use ambre_bus::{Attachment, ByteSize, MediaType, Picture, PictureFrame};
         let ada = Id::<User>::mint();
         let file = Attachment {
-            media_ref: ContentHash::parse(&"a".repeat(64)).expect("an address"),
+            media_ref: Validated::<ContentHash>::parse("a".repeat(64)).expect("an address"),
             name: "a.gif".to_owned(),
             media_type: MediaType::new("image/gif".to_owned()),
             size: ByteSize::new(2048),

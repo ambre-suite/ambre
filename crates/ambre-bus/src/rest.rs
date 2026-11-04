@@ -315,7 +315,7 @@ pub enum RestCommand {
     /// Download a media file. -> `MediaDownloaded`.
     DownloadMedia {
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     },
     /// Erase this user's upload of a media file. -> `MediaErased`.
     ///
@@ -324,7 +324,7 @@ pub enum RestCommand {
     /// answers `MediaErased` too; only a failure to reach the relay is an error.
     EraseMedia {
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     },
 
     // -- The native file (`.ambre`) ----------------------------------------------
@@ -497,17 +497,17 @@ pub enum RestEvent {
     // -- Media -------------------------------------------------------------------
     MediaUploaded {
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     },
     MediaDownloaded {
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
         /// Decrypted raw media bytes, ready for display.
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
     MediaErased {
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     },
 
     // -- The native file (`.ambre`) ----------------------------------------------

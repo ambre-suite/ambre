@@ -651,7 +651,7 @@ pub struct ToileView {
     /// address the document cannot resolve never gets an answer and stays here.
     /// That is what stops the view asking again for a picture that is not there
     /// (`toile-media`).
-    media_requested: HashSet<ambre_core::ContentHash>,
+    media_requested: HashSet<ambre_core::Validated<ambre_core::ContentHash>>,
     /// A media request the queue dropped. The next frame offers it again
     /// (`BUS-024`): a viewport reply may never come to ask for it.
     media_retry: bool,

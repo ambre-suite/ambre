@@ -2751,7 +2751,7 @@ mod handler_tests {
         let media = crate::s3::format_s3_media_key(
             &env,
             &doc,
-            &ambre_core::ContentHash::parse(&hash).expect("a hash"),
+            &ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).expect("a hash"),
         );
         let snapshot = format!("{env}/documents/{doc_id}/snapshots/s1");
         let stub = S3Stub::spawn([media.as_str().to_owned(), snapshot.clone()]).await;
@@ -2766,7 +2766,7 @@ mod handler_tests {
                 StatusCode::OK
             );
         }
-        let hash = ambre_core::ContentHash::parse(&hash).expect("a hash");
+        let hash = ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).expect("a hash");
         let held = || crate::db::document_holds_media(&state.db, &doc, &hash);
 
         assert_eq!(

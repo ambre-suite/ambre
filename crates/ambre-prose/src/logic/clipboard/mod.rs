@@ -12,6 +12,7 @@ mod html_read;
 mod html_write;
 mod sink;
 
+use ambre_core::Validated;
 use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
@@ -55,13 +56,14 @@ enum ClipKind {
     Todo(crate::events::TodoMark),
     /// A code block, `None` for a plain one. The payload spells it as the
     /// text the block stores, the empty text for a plain block.
-    Code(#[serde(with = "stored_lang")] Option<CodeLang>),
+    Code(#[serde(with = "stored_lang")] Option<Validated<CodeLang>>),
 }
 
 /// The code language as the payload spells it: the stored text, so the bytes
 /// stay those a payload of a bare string wrote.
 mod stored_lang {
     use ambre_bus::app::prose::CodeLang;
+    use ambre_core::Validated;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     #[expect(
@@ -69,16 +71,16 @@ mod stored_lang {
         reason = "serde's `with` hands the field by reference"
     )]
     pub(super) fn serialize<S: Serializer>(
-        lang: &Option<CodeLang>,
+        lang: &Option<Validated<CodeLang>>,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        CodeLang::stored(lang.as_ref()).serialize(serializer)
+        ambre_bus::app::prose::stored_code_lang(lang.as_ref()).serialize(serializer)
     }
 
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
-    ) -> Result<Option<CodeLang>, D::Error> {
-        String::deserialize(deserializer).map(CodeLang::new)
+    ) -> Result<Option<Validated<CodeLang>>, D::Error> {
+        String::deserialize(deserializer).map(|tag| Validated::<CodeLang>::parse(tag).ok())
     }
 }
 
@@ -736,7 +738,7 @@ mod tests {
         assert_eq!(bytes(&ClipKind::Ordered(OrderedStyle::LowerRoman)), [3, 3]);
         assert_eq!(bytes(&ClipKind::Code(None)), [5, 0]);
         assert_eq!(
-            bytes(&ClipKind::Code(CodeLang::new("rs"))),
+            bytes(&ClipKind::Code(Validated::<CodeLang>::parse("rs").ok())),
             [5, 2, b'r', b's']
         );
         assert!(postcard::from_bytes::<ClipKind>(&[3, 9]).is_err());
@@ -856,7 +858,7 @@ mod tests {
         let code = append(
             &mut state,
             BlockInit::CodeBlock {
-                lang: ambre_bus::app::prose::CodeLang::new("rust"),
+                lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
             },
             "a < b && c",
         );

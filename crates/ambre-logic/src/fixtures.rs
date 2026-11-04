@@ -32,7 +32,7 @@ use ambre_trame::logic::TrameState;
 use ambre_trame::logic::fixtures::{TRAME_BENCH_FIXTURES, TRAME_FIXTURES};
 
 use crate::DocState;
-use ambre_core::{Ns, TimeSpan};
+use ambre_core::{Ns, Rule, TimeSpan, Validated};
 
 // -----------------------------------------------------------------------------
 // On-disk layout
@@ -79,7 +79,7 @@ pub struct BenchBaseline {
     /// figures describe. `None` is a checkout git did not answer for, written
     /// `unknown` in the file.
     #[serde(with = "unknown_commit")]
-    pub commit: Option<CommitHash>,
+    pub commit: Option<Validated<CommitHash>>,
 
     /// One entry per benchmark: its `criterion` id, and the mean in nanoseconds.
     /// Nanoseconds because that is what `criterion` reports, and a converted
@@ -87,9 +87,9 @@ pub struct BenchBaseline {
     pub measurements: Vec<BenchMeasurement>,
 }
 
-/// A git commit id, abbreviated or full: 4 to 40 lowercase hexadecimal digits.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CommitHash(String);
+/// The rule of a git commit id, abbreviated or full: 4 to 40 lowercase
+/// hexadecimal digits. A `Validated<CommitHash>` holds one.
+pub enum CommitHash {}
 
 /// A text that is no commit id: too short, too long, or not lowercase hex.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -108,54 +108,44 @@ impl InvalidCommitHash {
     }
 }
 
-impl CommitHash {
-    /// The id `text` spells.
-    ///
-    /// # Errors
-    /// [`InvalidCommitHash`] when `text` is not 4 to 40 lowercase hex digits.
-    pub fn new(text: &str) -> Result<Self, InvalidCommitHash> {
+impl Rule for CommitHash {
+    type Error = InvalidCommitHash;
+
+    const LOGGED_AS: Option<&'static str> = Some("CommitHash");
+
+    fn admit(text: String) -> Result<String, InvalidCommitHash> {
         let hex = text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
         if hex && (4..=40).contains(&text.len()) {
-            Ok(Self(text.to_owned()))
+            Ok(text)
         } else {
-            Err(InvalidCommitHash(text.to_owned()))
+            Err(InvalidCommitHash(text))
         }
-    }
-
-    /// The id as git prints it.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for CommitHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
     }
 }
 
 /// The file form of a baseline's commit: the id, or `unknown` for none.
 mod unknown_commit {
     use super::CommitHash;
+    use ambre_core::Validated;
     use serde::{Deserialize, Deserializer, Serializer};
 
     const UNKNOWN: &str = "unknown";
 
     pub(super) fn serialize<S: Serializer>(
-        commit: &Option<CommitHash>,
+        commit: &Option<Validated<CommitHash>>,
         out: S,
     ) -> Result<S::Ok, S::Error> {
-        out.serialize_str(commit.as_ref().map_or(UNKNOWN, CommitHash::as_str))
+        out.serialize_str(commit.as_ref().map_or(UNKNOWN, Validated::as_str))
     }
 
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         input: D,
-    ) -> Result<Option<CommitHash>, D::Error> {
+    ) -> Result<Option<Validated<CommitHash>>, D::Error> {
         let text = String::deserialize(input)?;
         if text == UNKNOWN {
             return Ok(None);
         }
-        CommitHash::new(&text)
+        Validated::parse(text)
             .map(Some)
             .map_err(serde::de::Error::custom)
     }

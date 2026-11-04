@@ -10,6 +10,7 @@
 use ambre_bus::app::prose::{
     CodeLang, ConversionFormat, ConversionReport, DroppedElement, HeadingLevel, InteropError,
 };
+use ambre_core::Validated;
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
 use ambre_core::{Count, Slant, Strikethrough, Weight};
@@ -96,7 +97,7 @@ enum Leaf {
     Heading(HeadingLevel),
     Cell,
     Code {
-        lang: Option<CodeLang>,
+        lang: Option<Validated<CodeLang>>,
         text: String,
     },
 }
@@ -200,9 +201,10 @@ impl Reader {
             Tag::CodeBlock(kind) => {
                 self.flush();
                 let lang = match kind {
-                    CodeBlockKind::Fenced(info) => {
-                        info.split_whitespace().next().and_then(CodeLang::new)
-                    }
+                    CodeBlockKind::Fenced(info) => info
+                        .split_whitespace()
+                        .next()
+                        .and_then(|tag| Validated::<CodeLang>::parse(tag).ok()),
                     CodeBlockKind::Indented => None,
                 };
                 self.leaf = Some(Leaf::Code {
@@ -522,7 +524,7 @@ mod tests {
                     IrRun::plain("."),
                 ]),
                 IrBlock::CodeBlock {
-                    lang: CodeLang::new("rust"),
+                    lang: Validated::<CodeLang>::parse("rust").ok(),
                     text: "let a = 1;".to_owned()
                 },
             ]

@@ -7,6 +7,7 @@
 //! reduced motion picks the first, and nothing off screen is painted, so
 //! nothing off screen plays (`MURMURE-130`, `MURMURE-131`).
 
+use ambre_core::Validated;
 use ambre_core::index::Axis;
 use ambre_core::index::Pos;
 use std::collections::HashMap;
@@ -80,7 +81,7 @@ impl Screens {
 
 /// The pictures of the page, by the file they decode.
 pub struct Pictures {
-    held: HashMap<ContentHash, Held>,
+    held: HashMap<Validated<ContentHash>, Held>,
     bytes: ByteSize,
     cap: ByteSize,
     /// The latest paint, which orders the pictures by their last one.
@@ -118,7 +119,7 @@ impl Pictures {
 
     /// `media_ref` is drawn by this paint. Returns `true` when it is to be
     /// asked of the Logic thread: never asked, or dropped since.
-    pub fn want(&mut self, media_ref: &ContentHash) -> bool {
+    pub fn want(&mut self, media_ref: &Validated<ContentHash>) -> bool {
         match self.held.get_mut(media_ref) {
             Some(Held::Shown { painted, .. }) => {
                 *painted = self.paint;
@@ -134,7 +135,7 @@ impl Pictures {
 
     /// The Logic thread's answer for `media_ref`. `None` leaves its chip
     /// alone. Returns `false` for a picture this shelf never asked.
-    pub fn land(&mut self, media_ref: ContentHash, picture: Option<Picture>) -> bool {
+    pub fn land(&mut self, media_ref: Validated<ContentHash>, picture: Option<Picture>) -> bool {
         if !matches!(self.held.get(&media_ref), Some(Held::Asked)) {
             return false;
         }
@@ -154,7 +155,7 @@ impl Pictures {
     }
 
     /// The decoded picture of `media_ref`, if it is held.
-    pub fn get(&self, media_ref: &ContentHash) -> Option<&Picture> {
+    pub fn get(&self, media_ref: &Validated<ContentHash>) -> Option<&Picture> {
         match self.held.get(media_ref) {
             Some(Held::Shown { picture, .. }) => Some(picture),
             _ => None,
@@ -162,7 +163,7 @@ impl Pictures {
     }
 
     /// Whether `media_ref` could not be shown.
-    pub fn failed(&self, media_ref: &ContentHash) -> bool {
+    pub fn failed(&self, media_ref: &Validated<ContentHash>) -> bool {
         matches!(self.held.get(media_ref), Some(Held::Failed))
     }
 
@@ -235,7 +236,7 @@ pub fn frame(picture: &Picture, index: Pos<AnimationFrame>) -> Option<&ambre_bus
 
 /// The key of frame `index` of `media_ref`: one texture per frame, so a
 /// frame played again is drawn from what the renderer already holds.
-pub fn frame_key(media_ref: &ContentHash, index: Pos<AnimationFrame>) -> ImageKey {
+pub fn frame_key(media_ref: &Validated<ContentHash>, index: Pos<AnimationFrame>) -> ImageKey {
     let base = ImageKey::from_address(media_ref).get();
     ImageKey::new(base ^ u64::from(index.get()).rotate_right(16))
 }
@@ -248,8 +249,8 @@ mod tests {
     use ambre_core::Px;
     use ambre_core::{Ms, TimeSpan};
 
-    fn file(c: char) -> ContentHash {
-        ContentHash::parse(&format!("{c}{}", "0".repeat(63))).expect("a content hash")
+    fn file(c: char) -> Validated<ContentHash> {
+        Validated::<ContentHash>::parse(format!("{c}{}", "0".repeat(63))).expect("a content hash")
     }
 
     fn picture(delays: &[u32], bytes: usize) -> Picture {

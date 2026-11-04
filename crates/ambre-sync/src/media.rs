@@ -31,7 +31,7 @@ fn seal_blob(
 fn open_blob(
     blob: &Payload<pipeline::FetchedBlob>,
     document_id: Id<Document>,
-    content_hash: &ambre_core::ContentHash,
+    content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
     doc_key: &DocumentKey,
 ) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, SyncError> {
     let address = FixedBytes::<MediaAddress>::of_hash(content_hash);
@@ -50,7 +50,7 @@ fn open_blob(
 /// cached one, or one the chain recovers (`SYNC-042`, `SYNC-045`).
 fn open_blob_named(
     blob: &Payload<pipeline::FetchedBlob>,
-    content_hash: &ambre_core::ContentHash,
+    content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
     keyring: &crate::chain::Keyring,
 ) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, SyncError> {
     let wanted = pipeline::object_key(blob)?;
@@ -183,7 +183,7 @@ impl SyncState {
         &self,
         id: Seq<Request>,
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     ) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
@@ -230,7 +230,7 @@ impl SyncState {
         &self,
         id: Seq<Request>,
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     ) {
         let Some(tx) = self.event_tx.clone() else {
             self.reply(
@@ -373,7 +373,7 @@ async fn download_media(
     http: &impl MediaHttp,
     base: &crate::http::Url<http::Route>,
     id: Seq<Request>,
-    content_hash: ambre_core::ContentHash,
+    content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     keyring: &crate::chain::Keyring,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
@@ -401,7 +401,7 @@ async fn erase_media(
     base: &crate::http::Url<http::Route>,
     id: Seq<Request>,
     document_id: Id<Document>,
-    content_hash: ambre_core::ContentHash,
+    content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
@@ -432,7 +432,7 @@ async fn erase_media(
 async fn upload_leg(
     http: &impl MediaHttp,
     base: &crate::http::Url<http::Route>,
-    content_hash: &ambre_core::ContentHash,
+    content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
     blob: &pipeline::SealedBlob,
 ) -> Result<(), http::Failed> {
     let size = blob.len() as u64;
@@ -467,7 +467,7 @@ async fn upload_leg(
 async fn download_leg(
     http: &impl MediaHttp,
     base: &crate::http::Url<http::Route>,
-    content_hash: &ambre_core::ContentHash,
+    content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
     keyring: &crate::chain::Keyring,
 ) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, http::Failed> {
     let link: http::DownloadUrlResponse = http
@@ -692,7 +692,8 @@ mod tests {
             let mut http = FakeMedia::new(fail, Vec::new());
             http.erase_status = ambre_core::HttpStatus::new(status);
             let id = ambre_bus::next_request();
-            let hash = ambre_core::ContentHash::parse(&"cd".repeat(32)).expect("a hash");
+            let hash = ambre_core::Validated::<ambre_core::ContentHash>::parse("cd".repeat(32))
+                .expect("a hash");
             erase_media(&http, &base(), id, document_id, hash, &tx, &logic).await;
             let (errors, sent) = answers(&logic_rx, &events);
             if erased {
@@ -827,7 +828,10 @@ mod tests {
         data: &[u8],
         document_id: Id<Document>,
         key: &DocumentKey,
-    ) -> (Payload<pipeline::FetchedBlob>, ambre_core::ContentHash) {
+    ) -> (
+        Payload<pipeline::FetchedBlob>,
+        ambre_core::Validated<ambre_core::ContentHash>,
+    ) {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let data = ambre_core::Payload::new(data.to_vec());
         let address = ambre_crypto::commitment::media_address(key, &data);
@@ -909,6 +913,9 @@ mod tests {
         );
         assert!(open_blob(forged, document_id, &wanted, &key).is_err());
         // A text that is no address never reaches the opener: no hash spells it.
-        assert_eq!(ambre_core::ContentHash::parse("not hex"), None);
+        assert_eq!(
+            ambre_core::Validated::<ambre_core::ContentHash>::parse("not hex").ok(),
+            None
+        );
     }
 }

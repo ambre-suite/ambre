@@ -18,6 +18,7 @@ use ambre_bus::app::prose::{
     CodeLang, ConversionFormat, ConversionLosses, ConversionReport, ConversionWarning,
     DroppedElement, FootnoteCall, LiftedBlock, UnsupportedFeature,
 };
+use ambre_core::Validated;
 
 use ambre_core::{Count, Ordinal, Slant, Strikethrough, Underline, Weight};
 
@@ -142,7 +143,7 @@ pub enum IrBlock {
         rows: Vec<IrTableRow>,
     },
     CodeBlock {
-        lang: Option<CodeLang>,
+        lang: Option<Validated<CodeLang>>,
         text: String,
     },
     Image {

@@ -214,7 +214,7 @@ thread leaves as a return value (`PROSE-024`).
 pub struct ProseState {
     doc:              LoroDoc,
     undo:             UndoManager,
-    media_cache:      HashMap<ContentHash, MediaBytes>,
+    media_cache:      HashMap<Validated<ContentHash>, MediaBytes>,
     last_exported_vv: VersionVector,
     peer:             PeerId,
     my_user_id:       Option<Id<User>>,
@@ -282,7 +282,7 @@ impl ProseState {
         -> Result<Vec<ProseEvent>, ambre_core::schema::SchemaError>;
 
     /// A decrypted picture arrived on its own Logic route: cache it, invalidate what showed it.
-    pub fn on_media_downloaded(&mut self, content_hash: ContentHash, data: MediaBytes)
+    pub fn on_media_downloaded(&mut self, content_hash: Validated<ContentHash>, data: MediaBytes)
         -> Vec<ProseEvent>;
 }
 ```
@@ -372,7 +372,7 @@ pub enum ProseCommand {
     SetBlockStyle { block_id: BlockId, style_id: StyleId },
     /// `features/ambre-spec-prose-headings.md`; the level is clamped to 1..=6.
     SetHeadingLevel { block_id: BlockId, level: Option<HeadingLevel> },
-    SetCodeLang     { block_id: BlockId, lang: Option<CodeLang> },
+    SetCodeLang     { block_id: BlockId, lang: Option<Validated<CodeLang>> },
     /// The command is coarse and the storage is per property: the handler writes only what
     /// changed (`PROSE-FEAT-025`, `features/ambre-spec-prose-inline-styles.md`).
     SetParagraphStyle { block_id: BlockId, style: ParagraphStyle },
@@ -496,7 +496,7 @@ pub enum ProseCommand {
 
     // -- Not built: pictures (`features/ambre-spec-prose-images.md`) --
     InsertImage      { parent_id: Option<BlockId>, after_id: Option<BlockId>,
-                       content_hash: ContentHash, alt: String, size: Size<Px<Image>> },
+                       content_hash: Validated<ContentHash>, alt: String, size: Size<Px<Image>> },
     /// `lock_aspect` keeps the intrinsic ratio; the dispatcher validates and clamps
     /// (`PROSE-FEAT-058`, `PROSE-FEAT-059`).
     ResizeImage      { block_id: BlockId, size: Size<Px<Image>>, lock_aspect: bool },
@@ -508,7 +508,7 @@ pub enum ProseCommand {
     RetryImageLoad   { block_id: BlockId },
 
     // -- Not built: spell check (`features/ambre-spec-prose-spell-check.md`) --
-    SetSpellCheckLang     { lang: LangTag },
+    SetSpellCheckLang     { lang: Validated<LangTag> },
     AcceptSpellSuggestion { block_id: BlockId, range: Span<DocChar>, replacement: String },
     /// Writes the reader's own dictionary, never the document.
     AddToDictionary       { word: String },
@@ -526,7 +526,7 @@ pub enum BlockInit {
     /// The marker is mandatory at creation (`features/ambre-spec-prose-lists.md`).
     ListItem  { style: ListStyle },
     /// No language reads as plain.
-    CodeBlock { lang: Option<CodeLang> },
+    CodeBlock { lang: Option<Validated<CodeLang>> },
     HRule,
     PageBreak,
 }
@@ -565,7 +565,7 @@ pub enum ProseEvent {
     RemoteCursors { cursors: Vec<RemoteCursor> },
     /// A picture finished decrypting, and the blocks that show it are stale (`PROSE-059`,
     /// `PROSE-060`). The bytes stay in the Logic thread's cache.
-    MediaArrived  { content_hash: ContentHash, blocks: Vec<BlockId> },
+    MediaArrived  { content_hash: Validated<ContentHash>, blocks: Vec<BlockId> },
     /// A full-state read the schema gate refused (`SCHEMA-008`, `PROSE-097`).
     DocumentRefused { reason: String },
     /// The clipboard payload built from the selection: a plain-text mirror, its HTML for

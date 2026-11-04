@@ -2119,6 +2119,7 @@ mod tests {
     };
     use ambre_core::Char;
     use ambre_core::Px;
+    use ambre_core::Validated;
     use ambre_core::id::Lease;
     use ambre_core::index::Span;
     use ambre_core::{Ms, TimeSpan};
@@ -3805,7 +3806,13 @@ mod tests {
     }
 
     /// The erase a delete asks for, as `(request, document, file)`.
-    fn erases(sent: &[SyncCommand]) -> Vec<(Seq<Request>, Id<Document>, ambre_core::ContentHash)> {
+    fn erases(
+        sent: &[SyncCommand],
+    ) -> Vec<(
+        Seq<Request>,
+        Id<Document>,
+        ambre_core::Validated<ambre_core::ContentHash>,
+    )> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3829,7 +3836,7 @@ mod tests {
         signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
-        let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
+        let file = Validated::<ContentHash>::parse("cd".repeat(32)).expect("a content hash");
         let (up, down) = (Seq::nth(41), Seq::nth(42));
         drain(&sync);
 
@@ -3890,7 +3897,7 @@ mod tests {
             MurmureCommand::SendMessage {
                 draft,
                 attachments: vec![Attachment {
-                    media_ref: ContentHash::parse(&file).expect("a content hash"),
+                    media_ref: Validated::<ContentHash>::parse(&file).expect("a content hash"),
                     name: "plan.pdf".to_owned(),
                     media_type: MediaType::new("application/pdf".to_owned()),
                     size: ByteSize::new(2048),
@@ -3946,7 +3953,7 @@ mod tests {
             id: Some(again),
             evt: RestEvent::MediaErased {
                 document_id: meta,
-                content_hash: ContentHash::parse(&file).expect("a content hash"),
+                content_hash: Validated::<ContentHash>::parse(&file).expect("a content hash"),
             },
         });
         assert!(drain(&ui).is_empty(), "no view awaits the erase");
@@ -3963,7 +3970,11 @@ mod tests {
     /// The image of a preview, as `(request, document, file)`.
     fn downloads(
         sent: &[SyncCommand],
-    ) -> Vec<(Seq<Request>, Id<Document>, ambre_core::ContentHash)> {
+    ) -> Vec<(
+        Seq<Request>,
+        Id<Document>,
+        ambre_core::Validated<ambre_core::ContentHash>,
+    )> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3987,7 +3998,7 @@ mod tests {
         signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
-        let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
+        let file = Validated::<ContentHash>::parse("cd".repeat(32)).expect("a content hash");
         drain(&sync);
         for _ in 0..2 {
             let media_ref = file.clone();

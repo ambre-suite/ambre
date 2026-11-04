@@ -153,7 +153,7 @@ pub use font::{
 };
 pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
 pub use key_id::{KEY_ID_LEN, KeyId};
-pub use lang::LangTag;
+pub use lang::{LangTag, NotALangTag, primary_subtag};
 pub use link::LinkUrl;
 pub use media::{
     ByteSize, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress,
@@ -217,5 +217,5 @@ pub use unit::{
     Mm, PX_PER_MM, Point, PrintLength, PrintUnit, Pt, Px, Radians, Size, Vector, ViewSpeed,
 };
 pub use uuid::Uuid;
-pub use validated::{Rule, Validated};
+pub use validated::{Displayed, Rule, Validated};
 pub use version::{Current, OpenRange, Version, VersionKind, VersionRepr};

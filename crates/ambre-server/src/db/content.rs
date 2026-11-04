@@ -674,7 +674,7 @@ pub async fn insert_media(
     pool: &PgPool,
     document_id: &Id<Document>,
     uploaded_by: &Id<User>,
-    content_hash: &ambre_core::ContentHash,
+    content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
     size: ambre_core::ByteSize,
     s3_key: &ambre_core::ObjectKey,
 ) -> Result<(), AppError> {
@@ -729,7 +729,7 @@ pub async fn erase_media_claim(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: &Id<Document>,
     user: &Id<User>,
-    content_hash: &ambre_core::ContentHash,
+    content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
 ) -> Result<MediaErase, AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user);
@@ -779,7 +779,7 @@ pub async fn erase_media_claim(
 pub async fn document_holds_media(
     pool: &PgPool,
     document_id: &Id<Document>,
-    content_hash: &ambre_core::ContentHash,
+    content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
 ) -> Result<bool, AppError> {
     let did = id_to_uuid(*document_id);
     let held: bool = sqlx::query_scalar(

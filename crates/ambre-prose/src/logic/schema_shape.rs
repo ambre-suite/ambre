@@ -375,7 +375,7 @@ pub(super) fn document_of_every_key() -> ProseState {
             style: ListStyle::Todo(crate::events::TodoMark::Done),
         },
         BlockInit::CodeBlock {
-            lang: ambre_bus::app::prose::CodeLang::new("rust"),
+            lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
         },
         BlockInit::HRule,
         BlockInit::PageBreak,

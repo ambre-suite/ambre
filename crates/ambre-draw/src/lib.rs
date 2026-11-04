@@ -100,7 +100,7 @@ impl ImageKey {
 
     /// Fold the leading bytes of a content address, its hex digest, into a
     /// key. Two different addresses collide only if their first bytes do.
-    pub fn from_address(address: &ambre_core::ContentHash) -> Self {
+    pub fn from_address(address: &ambre_core::Validated<ambre_core::ContentHash>) -> Self {
         let mut acc = 0u64;
         for b in address.as_str().as_bytes().iter().take(16) {
             acc = acc.rotate_left(8) ^ u64::from(*b);

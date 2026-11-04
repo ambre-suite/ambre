@@ -107,7 +107,7 @@ pub struct FnCtx {
     pub cell_col: Option<Pos<Col>>,
 }
 
-pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue;
+pub fn call_builtin(name: &Validated<FunctionName>, args: &[CellValue], ctx: FnCtx) -> CellValue;
 ```
 
 **Reading arguments.** Three flattenings, and the choice between them is the semantics:

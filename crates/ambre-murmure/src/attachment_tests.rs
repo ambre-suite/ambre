@@ -5,6 +5,7 @@ use crate::Receipt;
 use ambre_bus::{
     Attachment, Authored, ByteSize, ContentHash, Instant, MediaType, MessageDraft, MurmureEvent,
 };
+use ambre_core::Validated;
 use ambre_core::id::{Channel, Id, User};
 
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel};
@@ -13,7 +14,7 @@ const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 fn file(hex: char, name: &str) -> Attachment {
     Attachment {
-        media_ref: ContentHash::parse(&hex.to_string().repeat(64)).expect("an address"),
+        media_ref: Validated::<ContentHash>::parse(hex.to_string().repeat(64)).expect("an address"),
         name: name.to_owned(),
         media_type: MediaType::new("image/png".to_owned()),
         size: ByteSize::new(4_096),

@@ -34,6 +34,7 @@
 
 use ambre_core::Px;
 use ambre_core::Rgba;
+use ambre_core::Validated;
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Board, Char, StoredBoard};
 use std::collections::BTreeSet;
@@ -68,8 +69,8 @@ const FROZEN: &str = include_str!("../../../schema/shapes.txt");
 
 /// The address the sample board's picture and its media entry share. Every
 /// reader checks a stored hash, so the sample spells a real one.
-fn sample_hash() -> ContentHash {
-    ContentHash::parse(&"0".repeat(64)).expect("sixty-four hex digits")
+fn sample_hash() -> Validated<ContentHash> {
+    Validated::<ContentHash>::parse("0".repeat(64)).expect("sixty-four hex digits")
 }
 
 /// The frozen scaffolding identities, one section per `SCHEMA_VERSION`.

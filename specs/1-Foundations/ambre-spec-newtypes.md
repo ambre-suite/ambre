@@ -62,7 +62,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A format or a schema version | `Version<K>` | `VersionKind`, with its `Repr` | `Current`, `OpenRange` |
 | A number between two bounds | `Bounded<K>` | `Bounds`, with its `Repr` | `Defaulted`, `Saturates` |
 | The error of a refused value, which echoes it | `Refused<K>` | `Refuses`, with its `Raw` and its message | -- |
-| A text a rule checked once, at the door | `Validated<V>` | `Rule` | -- |
+| A text a rule checked once, at the door | `Validated<V>` | `Rule`, with its `LOGGED_AS` | `Displayed` |
 | A text of one kind that crosses or is stored, read by no code that carries it, and that a log never prints | `Opaque<K>` | `OpaqueKind`, with its `LENGTH` | `WireOpaque`, `SealedAtRest` |
 | Text a log never prints | `Redacted<T>` | -- | -- |
 | A small set of named bits, built in a `const` table | `Flags<K>` | `FlagsKind`, with its `Repr` of `u8` and its `ALL`, the mask a const door checks at compile time | -- |
@@ -78,7 +78,7 @@ A marker is written one way, so a reader meets no variant of it.
 | The marker | an empty `enum` | no value of it exists, so none is built by mistake |
 | The phantom field | `PhantomData<fn() -> M>` | the family stays `Send` and `Sync` whatever the marker, and owns no `M` |
 | The derived traits | `Clone`, `Copy`, `Eq`, `Ord`, `Hash` and `Debug` written by hand on the family | a derive bounds the marker, which implements none of them |
-| The `Debug` name | a `NAME` constant of the marker trait | a log, a test and a ZK rule keep the name the hand-written type printed |
+| The `Debug` name | a `NAME` constant of the marker trait. A `Rule` names its text in `LOGGED_AS`, and the default `None` masks the text | a log, a test and a ZK rule keep the name the hand-written type printed. A rule that forgets the opt-in leaks no text |
 | The serde form | the bare representation, transparent | the wire and the store keep the bytes of the type it replaced |
 | A closed set | a sealed marker trait | a crate downstream adds no marker where the set is a decision |
 | A capability | a trait the marker implements, one line per marker | a method that some markers must not have is never inherent |

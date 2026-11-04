@@ -44,7 +44,7 @@ pub enum ToileRequest {
     },
     DownloadMedia {
         id: Seq<Request>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     },
 }
 

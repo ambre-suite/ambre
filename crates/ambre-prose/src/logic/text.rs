@@ -405,8 +405,8 @@ mod tests {
     use crate::events::HeadingLevel;
     use crate::events::{BlockInit, ProseCommand};
     use crate::logic::ProseState;
-    use ambre_bus::app::prose::CodeLang;
     use ambre_bus::app::prose::DocChar;
+    use ambre_core::Validated;
     use ambre_core::index::{Pos, Span};
 
     #[test]
@@ -743,7 +743,7 @@ mod tests {
             parent_id: None,
             after_id: Some(first),
             init: BlockInit::CodeBlock {
-                lang: ambre_bus::app::prose::CodeLang::new("rust"),
+                lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
             },
             style_id: None,
         });
@@ -769,7 +769,7 @@ mod tests {
             state
                 .code_lang_of(&new_block)
                 .as_ref()
-                .map(CodeLang::as_str),
+                .map(Validated::as_str),
             Some("rust")
         );
     }

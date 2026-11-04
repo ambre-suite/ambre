@@ -8,7 +8,10 @@
 
 use ambre_core::StoredAsI64;
 use ambre_core::index::{Len, Pos};
-use ambre_core::{Authored, Bounded, Bounds, Instant, LangTag, Month, Ms, Refusal, TimeSpan, Year};
+use ambre_core::{
+    Authored, Bounded, Bounds, Instant, LangTag, Month, Ms, Refusal, TimeSpan, Validated, Year,
+    primary_subtag,
+};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
@@ -211,8 +214,8 @@ pub fn civil_date(at: Instant<Authored>) -> CivilDate {
 
 /// The twelve month names of the languages that have a long and a short form
 /// here. Any other language draws the calendar form for all three formats.
-fn months(lang: &LangTag) -> Option<[&'static str; 12]> {
-    Some(match lang.primary().as_str() {
+fn months(lang: &Validated<LangTag>) -> Option<[&'static str; 12]> {
+    Some(match primary_subtag(lang).as_str() {
         "en" => [
             "January",
             "February",
@@ -322,7 +325,7 @@ fn months(lang: &LangTag) -> Option<[&'static str; 12]> {
 pub fn format_date(
     at: Instant<Authored>,
     format: DateFieldFormat,
-    lang: Option<&LangTag>,
+    lang: Option<&Validated<LangTag>>,
 ) -> String {
     let date = civil_date(at);
     let (year, month, day) = (date.year, date.month, date.day);
@@ -330,7 +333,7 @@ pub fn format_date(
     let Some((lang, names)) = lang.and_then(|lang| Some((lang, months(lang)?))) else {
         return iso;
     };
-    let primary = lang.primary();
+    let primary = primary_subtag(lang);
     // January sits at place zero of the twelve names.
     let place = usize::from(month.get()).saturating_sub(1);
     let name = names.get(place).copied().unwrap_or("");
@@ -415,8 +418,8 @@ mod tests {
         assert_eq!(field_of("b", &LoroValue::from("")), None);
     }
 
-    fn tag(text: &str) -> Option<LangTag> {
-        LangTag::parse(text)
+    fn tag(text: &str) -> Option<Validated<LangTag>> {
+        Validated::parse(text).ok()
     }
 
     #[test]

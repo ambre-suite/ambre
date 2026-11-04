@@ -1,63 +1,69 @@
 //! A language tag, as a document names the language its content is in.
 
-/// A well-formed BCP 47 language tag: `en`, `fr-CA`, `zh-Hant-TW`.
+use crate::{Rule, Validated};
+
+/// The rule of a well-formed BCP 47 language tag: `en`, `fr-CA`,
+/// `zh-Hant-TW`. A `Validated<LangTag>` holds one.
 ///
 /// The check is RFC 5646's shape, not its registry. Subtags hold one to eight
 /// ASCII letters and digits and are joined by `-`. The first holds two to
 /// eight letters, or is the `x` or `i` prefix. A tag that passes may still
-/// name no language anybody speaks; a text that fails is no tag at all.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct LangTag(String);
+/// name no language anybody speaks; a text that fails is no tag at all. The
+/// rule keeps the tag as written.
+pub enum LangTag {}
 
-impl LangTag {
-    /// The tag `text` spells, or `None` when it is not a well-formed tag.
-    #[must_use]
-    pub fn parse(text: &str) -> Option<Self> {
-        let mut subtags = text.split('-');
-        let primary = subtags.next()?;
-        let prefix = primary.eq_ignore_ascii_case("x") || primary.eq_ignore_ascii_case("i");
-        let language = (2..=8).contains(&primary.len())
-            && primary.bytes().all(|byte| byte.is_ascii_alphabetic());
-        if !(language || prefix) {
-            return None;
-        }
-        let mut rest = 0_usize;
-        for subtag in subtags {
-            if !(1..=8).contains(&subtag.len())
-                || !subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
-            {
-                return None;
-            }
-            rest += 1;
-        }
-        // A bare `x` or `i` is a prefix with nothing after it.
-        if prefix && rest == 0 {
-            return None;
-        }
-        Some(Self(text.to_owned()))
-    }
+/// A text that is no well-formed language tag.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("a language tag has the shape of RFC 5646")]
+pub struct NotALangTag;
 
-    /// The tag as written.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+impl Rule for LangTag {
+    type Error = NotALangTag;
 
-    /// The primary language subtag, lowercased: `fr` for `fr-CA`.
-    #[must_use]
-    pub fn primary(&self) -> String {
-        self.0
-            .split('-')
-            .next()
-            .unwrap_or_default()
-            .to_ascii_lowercase()
+    const LOGGED_AS: Option<&'static str> = Some("LangTag");
+
+    fn admit(text: String) -> Result<String, NotALangTag> {
+        if is_lang_tag(&text) {
+            Ok(text)
+        } else {
+            Err(NotALangTag)
+        }
     }
 }
 
-impl std::fmt::Display for LangTag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+/// Whether `text` has the shape of RFC 5646.
+fn is_lang_tag(text: &str) -> bool {
+    let mut subtags = text.split('-');
+    let Some(primary) = subtags.next() else {
+        return false;
+    };
+    let prefix = primary.eq_ignore_ascii_case("x") || primary.eq_ignore_ascii_case("i");
+    let language =
+        (2..=8).contains(&primary.len()) && primary.bytes().all(|byte| byte.is_ascii_alphabetic());
+    if !(language || prefix) {
+        return false;
     }
+    let mut rest = 0_usize;
+    for subtag in subtags {
+        if !(1..=8).contains(&subtag.len())
+            || !subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        {
+            return false;
+        }
+        rest += 1;
+    }
+    // A bare `x` or `i` is a prefix with nothing after it.
+    !(prefix && rest == 0)
+}
+
+/// The primary language subtag of `tag`, lowercased: `fr` for `fr-CA`.
+#[must_use]
+pub fn primary_subtag(tag: &Validated<LangTag>) -> String {
+    tag.as_str()
+        .split('-')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase()
 }
 
 #[cfg(test)]
@@ -74,7 +80,10 @@ mod tests {
             "x-private",
             "EN-us",
         ] {
-            assert_eq!(LangTag::parse(text).map(|tag| tag.0), Some(text.to_owned()));
+            assert_eq!(
+                Validated::<LangTag>::parse(text).map(Validated::into_string),
+                Ok(text.to_owned())
+            );
         }
     }
 
@@ -92,15 +101,29 @@ mod tests {
             "en-toolongsubtag",
             "fr CA",
         ] {
-            assert_eq!(LangTag::parse(text), None, "{text:?}");
+            assert_eq!(
+                Validated::<LangTag>::parse(text),
+                Err(NotALangTag),
+                "{text:?}"
+            );
         }
     }
 
     #[test]
     fn the_primary_subtag_is_read_lowercased() {
         assert_eq!(
-            LangTag::parse("FR-ca").map(|tag| tag.primary()),
-            Some("fr".to_owned())
+            Validated::<LangTag>::parse("FR-ca").map(|tag| primary_subtag(&tag)),
+            Ok("fr".to_owned())
         );
+    }
+
+    /// `Debug` prints the tag as the hand-written type did, and
+    /// the serde form is the bare string.
+    #[test]
+    fn a_tag_prints_and_travels_as_its_text() {
+        let tag = Validated::<LangTag>::parse("fr-CA").unwrap();
+        assert_eq!(format!("{tag:?}"), "LangTag(\"fr-CA\")");
+        assert_eq!(serde_json::to_string(&tag).unwrap(), "\"fr-CA\"");
+        assert!(serde_json::from_str::<Validated<LangTag>>("\"fr_CA\"").is_err());
     }
 }
