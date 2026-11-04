@@ -25,11 +25,11 @@ use ambre_core::index::Span;
 use ambre_core::{Px, Surface};
 use ambre_draw::{Clock, Color, DrawSurface, FontContext, Rect};
 
-use ambre_canvas::{Palette, TextCache};
+use ambre_canvas::Palette;
 
 use super::TrameUiState;
 use super::grid::{self, COL_WIDTH, CellEditor, ROW_HEIGHT};
-use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout, TextPass};
+use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout, TextPen};
 use crate::{CellPos, Col, LAST_COL, LAST_ROW, Row, TOTAL_COLS, TOTAL_ROWS};
 
 // Rendering entry points are split by layer; shared layout/stats/helpers stay
@@ -175,6 +175,7 @@ fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::TextPass;
     use ambre_core::index::{Delta, Pos};
 
     fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
@@ -331,7 +332,12 @@ mod tests {
             let palette = Theme::Light.palette();
             let (mut screen, clock, mut font_cx, mut cache, mut stats) = harness();
             draw_cells(
-                &mut screen, &state, palette, &mut font_cx, &mut cache, TextPass::WithText, None, &clock,
+                &mut screen,
+                &state,
+                palette,
+                TextPen { font_cx: &mut font_cx, cache: &mut cache, pass: TextPass::WithText },
+                None,
+                &clock,
                 &mut stats,
             );
 
@@ -380,9 +386,11 @@ mod tests {
                 &mut surface,
                 &state,
                 palette,
-                &mut font_cx,
-                &mut cache,
-                TextPass::WithText,
+                TextPen {
+                    font_cx: &mut font_cx,
+                    cache: &mut cache,
+                    pass: TextPass::WithText,
+                },
                 None,
                 &clock,
                 &mut stats,
@@ -411,9 +419,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             None,
             &clock,
             &mut stats,
@@ -471,9 +481,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             Some(strip),
             &clock,
             &mut stats,
@@ -510,9 +522,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             None,
             &clock,
             &mut stats,
@@ -547,9 +561,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             None,
             &clock,
             &mut stats,
@@ -615,9 +631,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             None,
             &clock,
             &mut stats,
@@ -653,9 +671,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             Some(header_corner),
             &clock,
             &mut stats,
@@ -678,9 +698,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             &clock,
             &mut stats,
         );
@@ -720,9 +742,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             &clock,
             &mut stats,
         );
@@ -757,9 +781,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             &clock,
             &mut stats,
         );
@@ -792,9 +818,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             &clock,
             &mut stats,
         );
@@ -841,9 +869,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             &clock,
             &mut stats,
         );
@@ -894,9 +924,11 @@ mod tests {
                 &mut surface,
                 &state,
                 palette,
-                &mut font_cx,
-                &mut cache,
-                TextPass::WithText,
+                TextPen {
+                    font_cx: &mut font_cx,
+                    cache: &mut cache,
+                    pass: TextPass::WithText,
+                },
                 &clock,
                 &mut stats,
             );
@@ -946,9 +978,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             None,
             &clock,
             &mut stats,
@@ -982,9 +1016,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             None,
             &clock,
             &mut stats,
@@ -1014,9 +1050,11 @@ mod tests {
             &mut surface,
             &state,
             palette,
-            &mut font_cx,
-            &mut cache,
-            TextPass::WithText,
+            TextPen {
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                pass: TextPass::WithText,
+            },
             None,
             &clock,
             &mut stats,

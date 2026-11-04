@@ -8,7 +8,10 @@ use ambre_core::index::{Delta, Pos};
 impl TrameView {
     /// A view of `document_id`, reading time from `clock`: the page's on screen,
     /// a test's natively. The view itself never reads the browser's.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one argument per channel, publisher and chrome signal, and the caller in ambre-app builds each one apart"
+    )]
     pub fn new(
         document_id: Id<Document>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,

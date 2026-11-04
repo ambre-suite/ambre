@@ -58,14 +58,11 @@ pub(super) fn spill_width<E: Fn(CellPos) -> bool>(
 /// Grid lines are *not* drawn here: call [`draw_grid_lines_on`] afterwards so the
 /// separators sit on top of the fills. Returns the number of cells that actually
 /// had non-empty text drawn (font-independent count for stats/tests).
-#[allow(clippy::too_many_arguments)]
 pub fn draw_cells_on<'a, S, I, E>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
-    font_cx: &mut FontContext,
-    text_cache: &mut TextCache,
-    text_pass: TextPass,
+    pen: TextPen<'_>,
     cells: I,
     is_empty: E,
 ) -> ambre_core::Count<ambre_canvas::CellsDrawn>
@@ -74,6 +71,11 @@ where
     I: IntoIterator<Item = (CellPos, CellContent<'a>)>,
     E: Fn(CellPos) -> bool,
 {
+    let TextPen {
+        font_cx,
+        cache: text_cache,
+        pass: text_pass,
+    } = pen;
     let mut drawn = ambre_core::Count::<ambre_canvas::CellsDrawn>::ZERO;
 
     for (at, content) in cells {

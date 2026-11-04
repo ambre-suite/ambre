@@ -120,6 +120,17 @@ pub enum TextPass {
     WithText,
 }
 
+/// What a paint shapes its text with. The shaping context, the shaped-text
+/// cache and the text pass travel together through every painter of the sheet.
+pub struct TextPen<'t> {
+    /// The shaping context.
+    pub font_cx: &'t mut FontContext,
+    /// The shaped-text cache.
+    pub cache: &'t mut TextCache,
+    /// Whether the text lands, or only the fills, lines and borders.
+    pub pass: TextPass,
+}
+
 /// The sheet's walk: the shaping context and the caches it keeps between
 /// calls.
 pub struct SheetWalk<'t> {
@@ -203,9 +214,11 @@ impl DocumentWalk for SheetWalk<'_> {
             surface,
             &layout,
             palette,
-            self.font_cx,
-            self.text_cache,
-            view.text_pass,
+            TextPen {
+                font_cx: &mut *self.font_cx,
+                cache: &mut *self.text_cache,
+                pass: view.text_pass,
+            },
             cells,
             is_empty,
         );
@@ -221,9 +234,11 @@ impl DocumentWalk for SheetWalk<'_> {
                     surface,
                     &layout,
                     palette,
-                    self.font_cx,
-                    self.text_cache,
-                    view.text_pass,
+                    TextPen {
+                        font_cx: &mut *self.font_cx,
+                        cache: &mut *self.text_cache,
+                        pass: view.text_pass,
+                    },
                     std::iter::once((master, span, content)),
                 );
             }

@@ -18,17 +18,19 @@ use ambre_core::index::{Len, Pos};
 ///
 /// `active_col == None` (PDF) skips the highlight; `hover_col == None` skips the
 /// hover tint.
-#[allow(clippy::too_many_arguments)]
 pub fn draw_col_headers_on<S: DrawSurface>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
     active_col: Option<Pos<Col>>,
     hover_col: Option<Pos<Col>>,
-    font_cx: &mut FontContext,
-    text_cache: &mut TextCache,
-    text_pass: TextPass,
+    pen: TextPen<'_>,
 ) {
+    let TextPen {
+        font_cx,
+        cache: text_cache,
+        pass: text_pass,
+    } = pen;
     // The surface draws in bare f64: the lengths unwrap once, here.
     let w = layout.width.get();
     let hh = layout.header_height.get();
@@ -143,7 +145,6 @@ ambre_core::define_flag! {
 ///
 /// `active_row == None` (PDF) skips the highlight; `hover_row == None` skips the
 /// row hover tint; `hover_corner` tints the top-left select-all corner.
-#[allow(clippy::too_many_arguments)]
 pub fn draw_row_headers_on<S: DrawSurface>(
     surface: &mut S,
     layout: &GridLayout<'_>,
@@ -151,10 +152,13 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     active_row: Option<Pos<Row>>,
     hover_row: Option<Pos<Row>>,
     hover_corner: CornerHover,
-    font_cx: &mut FontContext,
-    text_cache: &mut TextCache,
-    text_pass: TextPass,
+    pen: TextPen<'_>,
 ) {
+    let TextPen {
+        font_cx,
+        cache: text_cache,
+        pass: text_pass,
+    } = pen;
     // The surface draws in bare f64: the lengths unwrap once, here.
     let h = layout.height.get();
     let hw = layout.header_width.get();

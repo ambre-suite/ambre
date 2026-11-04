@@ -2943,7 +2943,6 @@ ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/render/text.rs | crate::render::text | col_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/text.rs | crate::render::text | draw_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | row_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string

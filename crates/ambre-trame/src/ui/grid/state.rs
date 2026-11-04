@@ -51,7 +51,6 @@ impl TrameUiState {
     }
 
     /// Update canvas dimensions and recompute the visible range.
-    #[allow(dead_code)]
     pub fn resize(&mut self, width: Px<Surface>, height: Px<Surface>) {
         self.canvas_width = width;
         self.canvas_height = height;

@@ -26,20 +26,22 @@ use super::*;
 ///
 /// Call *after* [`draw_cells_on`] + [`draw_grid_lines_on`]. Returns the number
 /// of masters that had non-empty text drawn (font-independent count).
-#[allow(clippy::too_many_arguments)]
 pub fn draw_merges_on<'a, S, I>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
-    font_cx: &mut FontContext,
-    text_cache: &mut TextCache,
-    text_pass: TextPass,
+    pen: TextPen<'_>,
     merges: I,
 ) -> ambre_core::Count<ambre_canvas::CellsDrawn>
 where
     S: DrawSurface,
     I: IntoIterator<Item = (CellPos, MergeSpan, CellContent<'a>)>,
 {
+    let TextPen {
+        font_cx,
+        cache: text_cache,
+        pass: text_pass,
+    } = pen;
     let mut drawn = ambre_core::Count::<ambre_canvas::CellsDrawn>::ZERO;
 
     for (master, span, content) in merges {

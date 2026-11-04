@@ -34,7 +34,7 @@ use super::grid::{
     TrameUiState,
 };
 use super::renderer::{self, DrawStats};
-use crate::render::{CommitDirection, FormulaAction, TextPass};
+use crate::render::{CommitDirection, FormulaAction, TextPass, TextPen};
 use crate::{CellPos, CellRect, Col, MergeSpan, Row};
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
@@ -138,7 +138,7 @@ enum PerfMark {
 }
 
 // Only the browser reads the names: a native build has no panel.
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+#[cfg(target_arch = "wasm32")]
 impl PerfMark {
     /// The name the Performance panel shows.
     fn name(self) -> &'static str {
@@ -156,7 +156,7 @@ enum PerfMeasure {
     InputToCaret,
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+#[cfg(target_arch = "wasm32")]
 impl PerfMeasure {
     /// The name the Performance panel shows.
     fn name(self) -> &'static str {
@@ -510,7 +510,6 @@ pub struct TrameView {
     last_clip: Option<ambre_bus::ClipboardBlob>,
 }
 
-#[allow(clippy::too_many_arguments)]
 // The `impl TrameView` block is spread across sibling modules; all reach the
 // free helpers, consts and types here via `use super::*`.
 mod frame;
@@ -538,7 +537,7 @@ pub(crate) enum GridCursor {
 
 impl GridCursor {
     /// The CSS `cursor` value, the empty one for [`Self::Unset`].
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg(target_arch = "wasm32")]
     pub(crate) const fn css(self) -> &'static str {
         match self {
             Self::Unset => "",
@@ -552,7 +551,6 @@ impl GridCursor {
 
 /// What the view does with a focused formula bar and no edit session.
 #[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 pub(crate) enum FormulaBarSync {
     /// Nothing moved.
     Idle,
@@ -613,7 +611,6 @@ impl FormulaBar {
     /// session (`TRAME-UI-155`). A stored value that moved under the bar is a
     /// collaborator's. The session it would open is one the user never
     /// started.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn sync(&self, seed: &str) -> FormulaBarSync {
         if self.text != self.shown {
             FormulaBarSync::OpenSession

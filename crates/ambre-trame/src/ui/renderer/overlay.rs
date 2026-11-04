@@ -236,17 +236,19 @@ pub(crate) fn dashed_v<S: DrawSurface>(
 /// Draw the overlay layer (headers + active border + header labels + HUD).
 /// This is re-rendered every dirty frame onto the swapchain after the cells
 /// layer has been blitted from its persistent offscreen.
-#[allow(clippy::too_many_arguments)]
 pub fn draw_overlay<S: DrawSurface>(
     surface: &mut S,
     state: &TrameUiState,
     palette: &Palette,
-    font_cx: &mut FontContext,
-    text_cache: &mut TextCache,
-    text_pass: TextPass,
+    pen: TextPen<'_>,
     clock: &dyn Clock,
     stats: &mut DrawStats,
 ) {
+    let TextPen {
+        font_cx,
+        cache: text_cache,
+        pass: text_pass,
+    } = pen;
     let t0 = clock.now();
 
     let layout = screen_layout(state);
@@ -270,9 +272,11 @@ pub fn draw_overlay<S: DrawSurface>(
         palette,
         Some(state.active_col()),
         hover_col,
-        font_cx,
-        text_cache,
-        text_pass,
+        TextPen {
+            font_cx,
+            cache: text_cache,
+            pass: text_pass,
+        },
     );
     render::draw_row_headers_on(
         surface,
@@ -281,9 +285,11 @@ pub fn draw_overlay<S: DrawSurface>(
         Some(state.active_row()),
         hover_row,
         hover_corner,
-        font_cx,
-        text_cache,
-        text_pass,
+        TextPen {
+            font_cx,
+            cache: text_cache,
+            pass: text_pass,
+        },
     );
 
     // -- 1b. Funnel badge on the filtered column's letter header (`trame-shared-filter`), kept
