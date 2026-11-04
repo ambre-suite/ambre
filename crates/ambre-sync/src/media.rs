@@ -255,7 +255,6 @@ impl SyncState {
 
 /// The requests the two media legs make, abstracted over the transport so
 /// that a host test drives each step failing.
-#[allow(async_fn_in_trait)] // single-threaded worker; futures are intentionally !Send
 pub(crate) trait MediaHttp {
     /// An authenticated request to the relay.
     async fn post_json<B: Serialize, R: DeserializeOwned>(

@@ -355,7 +355,6 @@ pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>, log: &Log) ->
 /// The HTTP operations the sharing tasks need, abstracted over the transport.
 /// Authentication (Bearer token + refresh-on-401) is the implementation's
 /// concern, not the task's -- the real impl carries an `AuthContext`.
-#[allow(async_fn_in_trait)] // single-threaded worker; futures are intentionally !Send
 pub(crate) trait ShareHttp {
     async fn get_json<T: DeserializeOwned>(
         &self,

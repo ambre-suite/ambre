@@ -12,14 +12,12 @@ use serde::{Deserialize, Serialize};
 /// (`SYNC-100`, `SYNC-061`). Their roles keep them apart: only the access
 /// token presents itself as a bearer.
 pub(crate) use ambre_core::{AccessToken, Credential, RefreshToken};
-use ambre_core::{Ms, Sec, TimeSpan};
+use ambre_core::{Ms, TimeSpan};
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct TokenPair {
     pub access_token: Credential<AccessToken>,
     pub refresh_token: Credential<RefreshToken>,
-    #[allow(dead_code)]
-    pub access_expires_in: TimeSpan<Sec>,
 }
 
 pub(crate) type TokenStore = Rc<RefCell<Option<TokenPair>>>;
@@ -198,7 +196,13 @@ impl UrlKind for Socket {
 impl Url<Socket> {
     /// The socket of `host`, under the TLS choice `scheme` makes for its
     /// routes.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(
+        not(any(test, target_arch = "wasm32")),
+        expect(
+            dead_code,
+            reason = "only the wasm socket and a test build the socket address"
+        )
+    )]
     pub(crate) fn of(scheme: UrlScheme, host: &Url<RelayHost>) -> Self {
         let socket = match scheme {
             UrlScheme::Http => "ws",
@@ -377,7 +381,13 @@ impl AuthContext {
 
     /// Renews the token pair over the browser's `fetch`. The socket calls it
     /// on its own refusal, which only the wasm build reaches.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        expect(
+            dead_code,
+            reason = "only the wasm socket renews the token pair over fetch"
+        )
+    )]
     pub(crate) async fn refresh(&self) -> Result<(), HttpError> {
         self.refresh_via(&Fetch).await
     }
@@ -396,7 +406,6 @@ impl AuthContext {
 
     /// Revokes the session's refresh token at the relay over the browser's
     /// `fetch` (`SRV-026`).
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) async fn revoke(&self) -> Result<(), HttpError> {
         self.revoke_via(&Fetch).await
     }
@@ -535,7 +544,6 @@ pub(crate) struct Incoming {
 /// What moves a request and brings its answer back. The renewal, the replay
 /// and the error mapping live above it, so a host test drives them through a
 /// scripted transport.
-#[allow(async_fn_in_trait)] // single-threaded worker; futures are intentionally !Send
 pub(crate) trait Transport {
     /// Sends `request`. An error is a request that got no answer at all.
     async fn send(&self, request: &Outgoing) -> Result<Incoming, TransportError>;
@@ -1007,7 +1015,6 @@ pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
 }
 
 /// HTTP GET to JSON deserialized response.
-#[allow(dead_code)]
 pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
     url: &Url<Route>,
 ) -> Result<T, HttpError> {
@@ -1077,7 +1084,6 @@ pub(crate) async fn delete_status_auth(
 /// PUTs a sealed blob to a presigned object-storage URL. It takes what the seal
 /// built and nothing else, so no plaintext reaches object storage (`SYNC-049`,
 /// `ZK-001`).
-#[allow(dead_code)]
 pub(crate) async fn put_sealed(
     url: &ambre_core::Credential<ambre_core::PresignedUrl>,
     blob: &crate::pipeline::SealedBlob,
@@ -1149,7 +1155,6 @@ pub(crate) async fn fetch_bytes(
 /// leaves the client. The server only receives the wrapped master key and the
 /// Argon2 salt needed to re-derive the unwrap key locally on future unlocks.
 #[derive(Serialize)]
-#[allow(dead_code)]
 pub(crate) struct SetupAccountRequest {
     pub email: ambre_core::Email,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
@@ -1160,13 +1165,9 @@ pub(crate) struct SetupAccountRequest {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub(crate) struct SetupAccountResponse {
-    #[serde(with = "ambre_core::serde_id::text")]
-    pub user_id: Id<User>,
     pub access_token: Credential<AccessToken>,
     pub refresh_token: Credential<RefreshToken>,
-    pub access_expires_in: TimeSpan<Sec>,
 }
 
 #[derive(Serialize)]
@@ -1183,7 +1184,6 @@ pub(crate) struct DevLoginResponse {
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub access_token: Credential<AccessToken>,
     pub refresh_token: Credential<RefreshToken>,
-    pub access_expires_in: TimeSpan<Sec>,
 }
 
 /// The relay's answer to `GET /api/auth/{provider}/login`.
@@ -1209,7 +1209,6 @@ pub(crate) struct ProviderCallbackResponse {
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub access_token: Credential<AccessToken>,
     pub refresh_token: Credential<RefreshToken>,
-    pub access_expires_in: TimeSpan<Sec>,
 }
 
 #[derive(Deserialize)]
@@ -1226,25 +1225,7 @@ impl MasterKeyResponse {
     }
 }
 
-#[derive(Serialize)]
-#[allow(dead_code)]
-pub(crate) struct SetupKeyRequest {
-    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
-    pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
-    pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
-    pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-}
-
 #[derive(Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct StoreMasterKeysResponse {
-    pub access_token: Credential<AccessToken>,
-    pub refresh_token: Credential<RefreshToken>,
-    pub access_expires_in: TimeSpan<Sec>,
-}
-
-#[derive(Deserialize)]
-#[allow(dead_code)]
 pub(crate) struct AuthMeResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
@@ -1640,7 +1621,13 @@ pub(crate) struct CreateDirectMessageRequest {
 pub(crate) struct DirectMessageResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub channel_id: Id<Channel>,
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "only a test reads whether the relay created the direct message"
+        )
+    )]
     pub created: ambre_core::Creation,
 }
 
@@ -1670,12 +1657,9 @@ pub(crate) struct JoinHeadResponse {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub(crate) struct CreateDocumentResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub document_id: Id<Document>,
-    #[serde(with = "ambre_core::serde_enums::doc_type")]
-    pub doc_type: ambre_core::DocType,
 }
 
 #[derive(Serialize)]
@@ -1696,7 +1680,6 @@ pub(crate) struct MembersResponse {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub(crate) struct MemberEntry {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
@@ -1718,8 +1701,6 @@ pub(crate) struct MemberEntry {
 pub(crate) struct SnapshotMetadataResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
-    #[allow(dead_code)]
-    pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into the snapshot: the open path gates its
     /// `RequestMissing` on this to skip the already-replayed history.
     pub covered_seq: Seq<Relay>,
@@ -1803,7 +1784,6 @@ pub(crate) struct UserInfoEntry {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub(crate) struct PubkeysResponse {
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
@@ -2035,8 +2015,6 @@ pub(crate) struct UploadUrlRequest {
 #[derive(Deserialize)]
 pub(crate) struct UploadUrlResponse {
     pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
-    #[allow(dead_code)]
-    pub s3_key: ambre_core::ObjectKey,
 }
 
 #[derive(Serialize)]
@@ -2062,7 +2040,7 @@ pub(crate) struct ConfirmUploadRequest {
 #[cfg(test)]
 pub(crate) mod scripted {
     use super::*;
-    use ambre_core::{Ms, Sec, TimeSpan};
+    use ambre_core::{Ms, TimeSpan};
     use std::cell::Cell;
     use std::collections::VecDeque;
 
@@ -2140,7 +2118,6 @@ pub(crate) mod scripted {
             tokens: Rc::new(RefCell::new(Some(TokenPair {
                 access_token: Credential::new(access.to_owned()),
                 refresh_token: Credential::new(refresh.to_owned()),
-                access_expires_in: TimeSpan::<Sec>::new(900),
             }))),
         }
     }

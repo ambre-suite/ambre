@@ -3,11 +3,8 @@
 // Integration tests for the SYNC P1 pipeline -- session lifecycle, document CRUD,
 // multi-document open/close, and mock WebSocket transport verification.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
+#![expect(
     clippy::panic,
-    clippy::indexing_slicing,
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 

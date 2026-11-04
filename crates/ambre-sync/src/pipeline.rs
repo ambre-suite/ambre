@@ -469,7 +469,6 @@ pub fn seal_update(
 }
 
 /// Verifies, decrypts and decompresses an [`Update`] back to its CRDT payload.
-#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<UpdateFrame, PipelineError> {
     check_key(update.public_data.key_id, doc_key)?;
     let aad = aad_of(&update.public_data)?;
@@ -574,7 +573,6 @@ pub fn seal_ephemeral(
 }
 
 /// Verifies, decrypts and decompresses an [`Ephemeral`] back to its payload.
-#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 pub fn open_ephemeral(
     ephemeral: &Ephemeral,
     doc_key: &DocumentKey,

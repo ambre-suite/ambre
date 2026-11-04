@@ -451,7 +451,6 @@ impl SyncState {
     /// Called by the select loop on a `WsDisconnected` event. Clears the socket
     /// and notifies the Logic thread that every open document lost its
     /// connection. A reconnection is attempted immediately.
-    #[allow(dead_code)]
     pub(crate) fn handle_ws_disconnected(
         &mut self,
         code: Option<Bounded<CloseCode>>,
@@ -488,7 +487,6 @@ impl SyncState {
     /// Dispatches WebSocket frames to the existing [`handle_ws_message`]
     /// pipeline, applies state mutations from HTTP result events, and handles
     /// disconnection / errors.
-    #[allow(dead_code)]
     pub(crate) fn handle_sync_event(&mut self, event: SyncEvent) {
         match event {
             SyncEvent::WsMessage(msg) => self.handle_ws_message(msg),
@@ -1276,7 +1274,6 @@ impl SyncState {
     /// Demultiplex an inbound [`WsServerMsg`] received from the WebSocket.
     /// Decoding from wire bytes is done in the `onmessage` callback;
     /// this method receives the already-decoded message.
-    #[allow(dead_code)]
     pub(crate) fn handle_ws_message(&mut self, server_msg: WsServerMsg) {
         // Any wire message from the server proves the connection is authenticated and
         // live, so the reconnect backoff resets. A bare `onopen` is NOT enough:
@@ -1676,7 +1673,7 @@ mod tests {
     use ambre_bus::DocType;
     use ambre_core::id::{Document, Id, User};
     use ambre_core::{Bounded, RefusalCode, Relay, Seq};
-    use ambre_core::{Instant, Sec, TimeSpan, UnixMs};
+    use ambre_core::{Instant, UnixMs};
     use ambre_crypto::{DocumentKey, MasterSeed};
     use ambre_protocol::ws::{CloseCode, RelayClose};
     use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg};
@@ -1772,7 +1769,6 @@ mod tests {
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: Credential::new("access".to_owned()),
             refresh_token: Credential::new("refresh".to_owned()),
-            access_expires_in: TimeSpan::<Sec>::new(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
@@ -1817,7 +1813,6 @@ mod tests {
             tokens: TokenPair {
                 access_token: Credential::new("access".to_owned()),
                 refresh_token: Credential::new("refresh".to_owned()),
-                access_expires_in: TimeSpan::<Sec>::new(60),
             },
         });
         assert_eq!(state.socket_opens, 1);
@@ -2019,7 +2014,6 @@ mod tests {
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: Credential::new("acc-s3cr3t".to_owned()),
             refresh_token: Credential::new("ref-s3cr3t".to_owned()),
-            access_expires_in: TimeSpan::<Sec>::new(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
@@ -2042,7 +2036,6 @@ mod tests {
         let pair = TokenPair {
             access_token: Credential::new("acc-s3cr3t".to_owned()),
             refresh_token: Credential::new("ref-s3cr3t".to_owned()),
-            access_expires_in: TimeSpan::<Sec>::new(60),
         };
         let shown = format!("{pair:?}");
         assert!(!shown.contains("s3cr3t"), "{shown}");

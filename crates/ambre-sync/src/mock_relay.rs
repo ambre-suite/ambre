@@ -1,4 +1,4 @@
-#![allow(
+#![expect(
     clippy::expect_used,
     reason = "a test double fails the test that misuses it"
 )]
@@ -34,8 +34,6 @@ pub struct MockBlindRelay {
 struct DocumentState {
     updates: Vec<(Seq<Relay>, Update)>,
     snapshots: Vec<Id<Snapshot>>,
-    #[allow(dead_code)]
-    subscribers: Vec<Id<User>>,
 }
 
 impl MockBlindRelay {
@@ -84,7 +82,6 @@ impl MockBlindRelay {
                     .or_insert_with(|| DocumentState {
                         updates: Vec::new(),
                         snapshots: Vec::new(),
-                        subscribers: Vec::new(),
                     });
                 // Send existing updates to the new subscriber.
                 // (In a real test, the subscriber ID is tracked; here we broadcast.)
@@ -109,7 +106,6 @@ impl MockBlindRelay {
                     .or_insert_with(|| DocumentState {
                         updates: Vec::new(),
                         snapshots: Vec::new(),
-                        subscribers: Vec::new(),
                     });
                 let seq = self.next_seq;
                 self.next_seq = seq.next();
@@ -176,7 +172,6 @@ impl MockBlindRelay {
             .or_insert_with(|| DocumentState {
                 updates: Vec::new(),
                 snapshots: Vec::new(),
-                subscribers: Vec::new(),
             });
         state.snapshots.push(snapshot_id);
         // The snapshot folds in every delta the document holds so far.
