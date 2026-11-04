@@ -199,11 +199,9 @@ pub use http::{RelayHost, Url, UrlKind};
 /// Soft threshold: once this many updates are quarantined for a document, we ask
 /// the server to resend the missing history (`RequestMissing`). The parent
 /// snapshot can then arrive and release them.
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 const QUARANTINE_ALERT: usize = 900;
 /// Hard cap: beyond this, the oldest update (by `clock`) is dropped to bound the
 /// shared heap, and a `SyncWarning` is raised.
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 const QUARANTINE_LIMIT: usize = 1000;
 
 /// How many of a document's latest sequence numbers the duplicate guard
@@ -223,7 +221,13 @@ const MAX_EPHEMERAL_REMOTE_AUTHORS: usize = 512;
 // onclose / onerror) and by HTTP tasks spawned via spawn_local.
 // -----------------------------------------------------------------------------
 
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    expect(
+        dead_code,
+        reason = "only the wasm socket and request callbacks raise these events"
+    )
+)]
 enum SyncEvent {
     WsMessage(WsServerMsg),
     /// The socket closed with `code`, or failed with no close frame, which
@@ -656,9 +660,7 @@ impl SyncEvent {
 // Per-document sync session
 // -----------------------------------------------------------------------------
 
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 struct SyncDocumentState {
-    #[allow(dead_code)]
     document_id: Id<Document>,
     doc_key: DocumentKey,
     /// Document kind, used for lazy server creation on the first outbound update.
@@ -855,7 +857,6 @@ impl SyncDocumentState {
     }
 
     /// Total number of quarantined updates across all parent snapshots.
-    #[allow(dead_code)]
     fn quarantine_len(&self) -> usize {
         self.quarantine.values().map(Vec::len).sum()
     }
@@ -1051,10 +1052,8 @@ pub struct SyncState {
     /// Outbound sink: Sync -> Logic thread (postMessage in the worker).
     logic_tx: LogicSink,
     /// Base URL for REST API calls (for example `"api.ambre.app"`).
-    #[allow(dead_code)]
     api_base: crate::http::Url<crate::http::RelayHost>,
     /// URL scheme: `Http` on localhost, `Https` otherwise.
-    #[allow(dead_code)]
     url_scheme: crate::http::UrlScheme,
     /// Access + refresh tokens returned by login/setup and rotated by HTTP 401
     /// retry helpers. Kept in worker memory only.
@@ -1084,16 +1083,11 @@ pub struct SyncState {
     /// JS closures attached to the WebSocket (onmessage / onclose / onerror).
     /// Kept alive to prevent GC. Each is type-erased to `JsValue` because the
     /// callback signatures differ (MessageEvent / CloseEvent / Event).
-    #[allow(dead_code)]
     _onmessage: Option<Closure<dyn FnMut(JsValue)>>,
-    #[allow(dead_code)]
     _onclose: Option<Closure<dyn FnMut(JsValue)>>,
-    #[allow(dead_code)]
     _onerror: Option<Closure<dyn FnMut(JsValue)>>,
-    #[allow(dead_code)]
     _onopen: Option<Closure<dyn FnMut(JsValue)>>,
     /// Closure kept alive for the pending reconnect `setTimeout`, if any.
-    #[allow(dead_code)]
     _reconnect_timer: Option<Closure<dyn FnMut()>>,
     /// The socket's reconnect state: the backoff and its deadline. A relay
     /// that rejects the upgrade (for example a 429) is not hammered.
@@ -1190,7 +1184,6 @@ pub struct SyncState {
 
 impl SyncState {
     /// A signed-out worker state: the session's tokens arrive with a sign-in.
-    #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
     pub fn new(logic_tx: LogicSink, api_base: Url<RelayHost>) -> Self {
         let url_scheme = crate::http::UrlScheme::of(&api_base);
         Self {
@@ -1239,7 +1232,6 @@ impl SyncState {
     /// Stores the sender half of the internal event queue. Called once by
     /// [`run_wasm`] before the select loop, so JS closures and HTTP tasks can
     /// push events into the main loop without blocking.
-    #[allow(dead_code)]
     pub(crate) fn set_event_tx(&mut self, tx: ambre_bus::conduit::UnboundedSender<SyncEvent>) {
         self.event_tx = Some(tx);
     }
@@ -1266,7 +1258,6 @@ impl SyncState {
     /// Routes a decrypted inbound payload to the Logic thread, or raises a
     /// non-fatal `SyncWarning` on a decode/decrypt failure (drop semantics).
     /// `opened` is `None` when the document is not open in this session.
-    #[allow(dead_code)]
     fn deliver_remote<T>(
         &self,
         document_id: Id<Document>,
@@ -1752,7 +1743,13 @@ pub async fn run_wasm(
 /// The worker's loop: one wait over the commands relayed in and the events
 /// of its own socket and requests. Between them it yields, so the tasks
 /// beside it keep running (`SYNC-058`). It returns once the commands close.
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+#[cfg_attr(
+    not(any(test, target_arch = "wasm32")),
+    expect(
+        dead_code,
+        reason = "only the wasm worker entry point and the tests drive the loop"
+    )
+)]
 async fn run(cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>, mut state: SyncState) {
     use futures_util::future::FutureExt;
 

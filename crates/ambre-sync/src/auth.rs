@@ -202,7 +202,6 @@ impl SyncState {
                             tokens: http::TokenPair {
                                 access_token: resp.access_token,
                                 refresh_token: resp.refresh_token,
-                                access_expires_in: resp.access_expires_in,
                             },
                         });
                     }
@@ -304,7 +303,6 @@ impl SyncState {
                 tokens: Rc::new(RefCell::new(Some(http::TokenPair {
                     access_token: resp.access_token,
                     refresh_token: resp.refresh_token,
-                    access_expires_in: resp.access_expires_in,
                 }))),
             };
             let keys_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
@@ -408,7 +406,6 @@ impl SyncState {
                             tokens: http::TokenPair {
                                 access_token: resp.access_token,
                                 refresh_token: resp.refresh_token,
-                                access_expires_in: resp.access_expires_in,
                             },
                         });
                     }
@@ -530,7 +527,6 @@ mod unlock_tests {
 
     use super::*;
     use crate::http::{Credential, TokenPair};
-    use ambre_core::{Sec, TimeSpan};
 
     /// A sign-out during `/auth/me` empties the store: the unlock fails, and
     /// no token pair reaches the session.
@@ -552,7 +548,6 @@ mod unlock_tests {
         let pair = TokenPair {
             access_token: Credential::new("acc-s3cr3t".to_owned()),
             refresh_token: Credential::new("ref-s3cr3t".to_owned()),
-            access_expires_in: TimeSpan::<Sec>::new(60),
         };
         let store: http::TokenStore = Rc::new(RefCell::new(Some(pair.clone())));
         let announced = session_tokens(&store).expect("the store holds a pair");
@@ -565,7 +560,6 @@ mod unlock_tests {
 mod provider_tests {
     use super::*;
     use crate::http::{Credential, TokenPair};
-    use ambre_core::{Sec, TimeSpan};
 
     fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
@@ -588,7 +582,6 @@ mod provider_tests {
             tokens: TokenPair {
                 access_token: Credential::new("access-s3cr3t".to_owned()),
                 refresh_token: Credential::new("refresh-s3cr3t".to_owned()),
-                access_expires_in: TimeSpan::<Sec>::new(60),
             },
         }
     }

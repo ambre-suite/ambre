@@ -3,7 +3,7 @@
 // In-memory WebSocket transport for testing the Sync pipeline without WASM or
 // network. Two `ambre_bus::conduit` pairs form a bidirectional client<->server loop.
 
-#![allow(
+#![expect(
     clippy::expect_used,
     reason = "a test double fails the test that misuses it"
 )]

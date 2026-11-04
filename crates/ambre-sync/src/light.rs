@@ -364,7 +364,10 @@ impl SyncState {
     }
 
     /// The kind of a document held as a light subscription.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "only a test reads the kind of a light document")
+    )]
     pub(crate) fn light_doc_type(&self, document_id: Id<Document>) -> Option<DocType> {
         self.light.get(&document_id).map(|light| light.doc_type)
     }

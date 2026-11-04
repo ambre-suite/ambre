@@ -49,7 +49,6 @@ impl SyncState {
     /// it is decrypted and delivered immediately. Otherwise it is held in
     /// quarantine until the parent snapshot arrives, then released in `clock`
     /// order by [`release_quarantine`].
-    #[allow(dead_code)]
     pub(crate) fn receive_update(&mut self, seq: Seq<Relay>, update: Update) {
         let document_id = update.public_data.document_id;
         if let Some(opened) = self.ingest_update(seq, update) {
@@ -1731,7 +1730,6 @@ pub(crate) enum MembersAnswer<T> {
 impl<T> MembersAnswer<T> {
     /// Classifies the outcome of the members request. Only a `404` is an absent
     /// document; a transport or decoding failure is never read as one.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn classify(outcome: Result<Option<T>, crate::http::HttpError>) -> Self {
         match outcome {
             Ok(Some(members)) => Self::Exists(members),
@@ -1744,7 +1742,6 @@ impl<T> MembersAnswer<T> {
 /// Why an open that met `error` on its members request failed. A relay that
 /// refused the request itself refused the open. Any other failure may clear
 /// on a later open (`SYNC-173`).
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 pub(crate) fn members_failure_cause(error: &crate::http::HttpError) -> OpenFailure {
     match error.failure() {
         ApiFailure::Relay { status, code } if status.is_client_error() => {
@@ -1756,7 +1753,6 @@ pub(crate) fn members_failure_cause(error: &crate::http::HttpError) -> OpenFailu
 
 /// What an open that met `error` on its members request tells the user. A
 /// relay that refused, or whose answer does not read, was reached.
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 pub(crate) fn members_failure_message(error: &crate::http::HttpError) -> String {
     match error.failure() {
         ApiFailure::Relay { .. } => format!("the relay refused the members request: {error}"),
