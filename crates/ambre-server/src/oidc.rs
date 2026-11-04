@@ -54,7 +54,7 @@ pub type OidcClients = Arc<HashMap<ambre_core::OidcProvider, OidcProviderState>>
 /// authorization code flow at the OIDC provider.
 #[derive(serde::Serialize)]
 pub struct LoginResponse {
-    pub url: ambre_core::ProviderUrl,
+    pub url: ambre_core::Opaque<ambre_core::ProviderUrls>,
     pub state: ambre_core::Credential<ambre_core::OidcState>,
 }
 
@@ -228,7 +228,7 @@ pub async fn login_url(
 
     Ok((
         LoginResponse {
-            url: ambre_core::ProviderUrl::new(auth_url.to_string()),
+            url: ambre_core::Opaque::<ambre_core::ProviderUrls>::new(auth_url.to_string()),
             state: ambre_core::Credential::new(csrf_secret),
         },
         oidc_state,

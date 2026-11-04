@@ -1,22 +1,17 @@
 //! The short, readable digest of a public key a user checks out of band.
 
-use serde::{Deserialize, Serialize};
+use crate::{OpaqueKind, OpaqueLength, WireOpaque};
 
-/// The fingerprint of a public key, grouped for reading aloud
-/// (`ambre-spec-key-verification.md`). A distinct type, so a display name or
-/// the key's own hex never takes its place in the trust check.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct KeyFingerprint(String);
+/// The kind of the fingerprint of a public key, grouped for reading aloud
+/// (`ambre-spec-key-verification.md`): `Opaque<KeyFingerprints>`. A distinct
+/// kind, so a display name or the key's own hex never takes its place in the
+/// trust check. The trust dialog shows it through `as_str`. It encodes as
+/// the bare string it replaced.
+pub enum KeyFingerprints {}
 
-impl KeyFingerprint {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: String) -> Self {
-        Self(value)
-    }
-
-    /// The fingerprint, as the trust dialog shows it.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+impl OpaqueKind for KeyFingerprints {
+    const NAME: &'static str = "KeyFingerprint";
+    const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 }
+
+impl WireOpaque for KeyFingerprints {}

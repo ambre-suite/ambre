@@ -241,9 +241,8 @@ pub use ambre_core::text_offset::{
     Byte, Char, Utf16, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte,
 };
 pub use ambre_core::{
-    ApiFailure, ChannelDocumentKind, DocType, Email, FixedBytes, FracMs, HttpStatus, Instant,
-    KeyFingerprint, Ms, PageLoad, PublicKey, RefusalCode, Relay, Role, Seq, TimeSpan,
-    UnreadableCause, Uuid,
+    ApiFailure, ChannelDocumentKind, DocType, Email, FixedBytes, FracMs, HttpStatus, Instant, Ms,
+    PageLoad, PublicKey, RefusalCode, Relay, Role, Seq, TimeSpan, UnreadableCause, Uuid,
 };
 
 #[cfg(test)]

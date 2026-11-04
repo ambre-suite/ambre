@@ -49,7 +49,7 @@ pub(crate) struct TofuPrompt {
     /// sent beside the request, so Sync wraps only if it still matches.
     pub(crate) exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
     /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
-    pub(crate) fingerprint: ambre_bus::KeyFingerprint,
+    pub(crate) fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     /// Whether the key is a first contact or diverges from the pin.
     pub(crate) contact: KeyContact,
 }
@@ -283,7 +283,9 @@ mod tests {
             user_id: Id::<User>::mint(),
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").ok(),
             exchange_pub_key: FixedBytes::from_array([byte; 32]),
-            fingerprint: ambre_bus::KeyFingerprint::new("ABCD EFGH".to_owned()),
+            fingerprint: ambre_core::Opaque::<ambre_core::KeyFingerprints>::new(
+                "ABCD EFGH".to_owned(),
+            ),
             contact: KeyContact::New,
         }
     }

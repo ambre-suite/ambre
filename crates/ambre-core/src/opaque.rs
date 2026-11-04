@@ -27,6 +27,7 @@
 //! mix in it.
 
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -142,6 +143,14 @@ impl<K: OpaqueKind> PartialEq for Opaque<K> {
 
 impl<K: OpaqueKind> Eq for Opaque<K> {}
 
+/// Hashes the text, so an opaque text keys a map. A map reads no text: it
+/// compares texts, as `Eq` does. No bound lands on the marker.
+impl<K: OpaqueKind> Hash for Opaque<K> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.text.hash(state);
+    }
+}
+
 /// The empty text.
 impl<K: OpaqueKind> Default for Opaque<K> {
     fn default() -> Self {
@@ -242,6 +251,24 @@ mod tests {
         assert_eq!(Opaque::<Rows>::from_bytes(vec![0xff, 0xfe]), None);
         let plaintext = row.into_plaintext();
         plaintext.with_plaintext(|bytes| assert_eq!(bytes, b"{\"text\":\"hi\"}"));
+    }
+
+    /// Two equal texts hash alike, so an opaque text keys a map, and a
+    /// marker that implements no `Hash` still gets it.
+    #[test]
+    fn an_opaque_text_keys_a_map_by_its_text() {
+        let mut seen = std::collections::HashMap::new();
+        seen.insert(Opaque::<Candidates>::new("candidate:1"), 1);
+        seen.insert(Opaque::<Candidates>::new("candidate:2"), 2);
+        assert_eq!(
+            seen.get(&Opaque::<Candidates>::new("candidate:1")),
+            Some(&1)
+        );
+        assert_eq!(seen.get(&Opaque::<Candidates>::new("candidate:3")), None);
+        assert_eq!(
+            seen.insert(Opaque::<Candidates>::new("candidate:2"), 4),
+            Some(2)
+        );
     }
 
     #[test]

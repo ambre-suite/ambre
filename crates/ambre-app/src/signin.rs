@@ -65,7 +65,7 @@ pub(crate) fn accept_return(
 
 /// Whether `url` may be followed: an `https` address. The address is data from
 /// the relay, and a `javascript:` one would run in this page's origin.
-pub(crate) fn is_followable(url: &ambre_core::ProviderUrl) -> bool {
+pub(crate) fn is_followable(url: &ambre_core::Opaque<ambre_core::ProviderUrls>) -> bool {
     web_sys::Url::new(url.as_str()).is_ok_and(|u| u.protocol() == "https:")
 }
 
@@ -73,9 +73,9 @@ pub(crate) fn is_followable(url: &ambre_core::ProviderUrl) -> bool {
 /// `navigate` there (`CHROME-095`). Refused, and nothing remembered, unless the
 /// address is followable.
 pub(crate) fn follow_address(
-    url: &ambre_core::ProviderUrl,
+    url: &ambre_core::Opaque<ambre_core::ProviderUrls>,
     state: &ambre_core::Credential<ambre_core::OidcState>,
-    navigate: impl FnOnce(&ambre_core::ProviderUrl),
+    navigate: impl FnOnce(&ambre_core::Opaque<ambre_core::ProviderUrls>),
 ) -> bool {
     if !is_followable(url) {
         tracing::warn!("Sign-in: the relay answered an address that is not https");
@@ -221,7 +221,7 @@ mod tests {
         let _ = take_pending_state();
         let mut went = None;
         let address = "https://accounts.example.org/o/oauth2/auth?state=st9";
-        let url = ambre_core::ProviderUrl::new(address.to_owned());
+        let url = ambre_core::Opaque::<ambre_core::ProviderUrls>::new(address.to_owned());
         assert!(follow_address(&url, &state("st9"), |u| went = Some(u.as_str().to_owned())));
         assert_eq!(went.as_deref(), Some(address));
         assert_eq!(text(take_pending_state()).as_deref(), Some("st9"));
@@ -235,7 +235,7 @@ mod tests {
             let mut went = false;
             assert!(
                 !follow_address(
-                    &ambre_core::ProviderUrl::new(bad.to_owned()),
+                    &ambre_core::Opaque::<ambre_core::ProviderUrls>::new(bad.to_owned()),
                     &state("st9"),
                     |_| went = true
                 ),
