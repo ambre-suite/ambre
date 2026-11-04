@@ -536,7 +536,7 @@ fn the_worst_admitted_formula_fits_a_small_stack() {
             1 << 20
         })
         .spawn(move || {
-            let mut indices = crate::formula::compile::SheetIndices::new();
+            let mut indices = std::collections::HashMap::new();
             indices.insert(S0, crate::formula::test_index::index_with(4, 4));
             for formula in &worst {
                 let ast = parse_formula(formula).expect("admitted");

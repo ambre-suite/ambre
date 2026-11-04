@@ -1062,7 +1062,7 @@ fn find_dir(
 ) -> crate::logic::command::FindResults {
     let out = st.handle_command(ToileCommand::Find {
         query: ambre_bus::app::find::FindText::new(query.to_owned())
-            .map(|text| crate::logic::command::FindQuery::new(text, options)),
+            .map(|text| ambre_bus::app::find::FindQuery::new(text, options)),
         from,
         direction,
     });

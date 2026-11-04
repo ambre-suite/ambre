@@ -28,7 +28,7 @@ use krilla::page::PageSettings;
 use crate::logic::command::DisplayViewport;
 use crate::ui::grid;
 use crate::ui::viewport::ViewportTransform;
-use crate::ui::walk::{BoardView, BoardWalk, ImageStore};
+use crate::ui::walk::{BoardView, BoardWalk, DecodedImage};
 
 /// Output page dimensions, in PDF points (1 pt = 1/72 inch). The export camera's
 /// pixel size equals these points 1:1, so the on-screen `fit_bounds` math maps
@@ -110,7 +110,7 @@ pub fn export_pdf(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    images: &ImageStore,
+    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
 ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
     if pages.is_empty() {
         return Err(PdfExportError::Empty);
@@ -148,7 +148,7 @@ pub(crate) fn paint_page<S: DrawSurface>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    images: &ImageStore,
+    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
 ) {
     grid::paint_background(s, &pdf_page.camera, palette);
     // The region is the frame, so the page carries only slide content. The
@@ -234,7 +234,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &ImageStore::new(),
+            &HashMap::new(),
         )
         .expect("export must succeed");
         assert!(
@@ -261,7 +261,7 @@ mod tests {
                 palette,
                 &mut font_cx,
                 &mut tc,
-                &ImageStore::new(),
+                &HashMap::new(),
             )
             .expect("export must succeed")
         };
@@ -323,7 +323,7 @@ mod tests {
                 palette,
                 &mut font_cx,
                 &mut tc,
-                &ImageStore::new(),
+                &HashMap::new(),
             )
             .expect("export must succeed")
         };
@@ -348,7 +348,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &ImageStore::new(),
+            &HashMap::new(),
         )
         .unwrap_err();
         assert_eq!(err, PdfExportError::Empty);
@@ -369,7 +369,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &ImageStore::new(),
+            &HashMap::new(),
         )
         .expect("export must succeed");
         assert!(bytes.as_bytes().starts_with(b"%PDF"));
@@ -392,7 +392,7 @@ mod tests {
             font_cx.collection.register_fonts(bytes.into(), None);
         }
         let mut tc = TextCache::new();
-        let images = ImageStore::new();
+        let images = HashMap::new();
 
         let mut printed = RecordingSurface::new();
         paint_page(&mut printed, &page, palette, &mut font_cx, &mut tc, &images);
@@ -459,7 +459,7 @@ mod tests {
                 font_cx.collection.register_fonts(bytes.into(), None);
             }
             let mut tc = TextCache::new();
-            let images = ImageStore::new();
+            let images = HashMap::new();
             let anim = HashMap::new();
             let camera = ViewportTransform {
                 center: ambre_draw::Point::new(x, y),
@@ -522,7 +522,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &ImageStore::new(),
+            &HashMap::new(),
         );
         assert!(
             page.count(|op| matches!(op, DrawOp::Glyphs { .. })).get() >= 1,

@@ -44,9 +44,6 @@ pub(crate) struct SentFrame {
     pub payload: UpdateFrame,
 }
 
-/// Refused frames to seal again, as (clock, plaintext), in clock order.
-pub(crate) type RefusedFrames = Vec<(Seq<DeltaAuthor>, UpdateFrame)>;
-
 /// What a refusal asks of the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Refusal {
@@ -320,7 +317,7 @@ impl Rekey {
     pub(crate) fn key_installed(
         &mut self,
         current: FixedBytes<KeyId>,
-    ) -> (RefusedFrames, Vec<UpdateFrame>) {
+    ) -> (Vec<(Seq<DeltaAuthor>, UpdateFrame)>, Vec<UpdateFrame>) {
         self.rotation = Rotation::Settled;
         (
             self.take_refused(current),
@@ -330,7 +327,10 @@ impl Rekey {
 
     /// Every refused frame, marked as sealed under `current` from now on, so a
     /// late refusal of its earlier sealing reads as stale.
-    pub(crate) fn take_refused(&mut self, current: FixedBytes<KeyId>) -> RefusedFrames {
+    pub(crate) fn take_refused(
+        &mut self,
+        current: FixedBytes<KeyId>,
+    ) -> Vec<(Seq<DeltaAuthor>, UpdateFrame)> {
         let Some(from) = self.refused_from.take() else {
             return Vec::new();
         };

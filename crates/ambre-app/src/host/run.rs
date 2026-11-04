@@ -380,7 +380,7 @@ where
             Closure::<dyn FnMut(web_sys::WheelEvent)>::new(move |event: web_sys::WheelEvent| {
                 let ev = InputEvent::Wheel {
                     delta: ambre_canvas::WheelDelta::new(
-                        ambre_canvas::WheelVector::new(
+                        ambre_core::Vector::new(
                             ambre_canvas::WheelAmount::new(event.delta_x()),
                             ambre_canvas::WheelAmount::new(event.delta_y()),
                         ),

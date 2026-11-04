@@ -1486,7 +1486,7 @@ mod routing_tests {
 
     fn wheel() -> InputEvent {
         InputEvent::Wheel {
-            delta: ambre_canvas::WheelDelta::pixels(ambre_canvas::WheelVector::new(
+            delta: ambre_canvas::WheelDelta::pixels(ambre_core::Vector::new(
                 ambre_canvas::WheelAmount::new(0.0),
                 ambre_canvas::WheelAmount::new(10.0),
             )),

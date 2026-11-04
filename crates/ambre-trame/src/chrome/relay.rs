@@ -19,11 +19,13 @@ use ambre_bus::{
 use ambre_core::id::{Id, Sheet};
 use leptos::prelude::*;
 
-use super::find_replace::{FindQuery, ReplaceRequest};
+use super::find_replace::ReplaceRequest;
 use super::popovers::FilterPopoverState;
 use super::sheet_tabs::ReorderSheet;
 use super::sort_dialog::{SortApply, SortDialogState};
 use super::status::SelStats;
+use ambre_bus::app::find::FindQuery;
+use ambre_bus::app::trame::FindOptions;
 
 /// What one of Trame's panels asks of the sheet.
 pub enum TrameIntent {
@@ -34,7 +36,7 @@ pub enum TrameIntent {
     /// Sort the selection on the dialog's levels (`trame-sort`).
     Sort(SortApply),
     /// Step to the next match (`trame-find-replace`); `None` clears the highlight.
-    Find(Option<FindQuery>),
+    Find(Option<FindQuery<FindOptions>>),
     /// Replace the focused match.
     Replace(ReplaceRequest),
     /// Replace every match.

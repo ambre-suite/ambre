@@ -177,7 +177,7 @@ mod tests {
         for step in 0..5 {
             s.wheel(
                 &mut g,
-                WheelDelta::pixels(ambre_canvas::WheelVector::new(
+                WheelDelta::pixels(ambre_core::Vector::new(
                     ambre_canvas::WheelAmount::new(0.0),
                     ambre_canvas::WheelAmount::new(16.0),
                 )),
@@ -203,7 +203,7 @@ mod tests {
             s.wheel(
                 &mut g,
                 WheelDelta::new(
-                    ambre_canvas::WheelVector::new(
+                    ambre_core::Vector::new(
                         ambre_canvas::WheelAmount::new(0.0),
                         ambre_canvas::WheelAmount::new(16.0),
                     ),

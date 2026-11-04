@@ -21,8 +21,8 @@ use petgraph::Direction;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{Dfs, EdgeRef};
 
-use super::compile::SheetIndices;
 use super::types::{AxisId, CellId, EngineSheet, RangeId};
+use crate::model::SheetIndex;
 
 // -----------------------------------------------------------------------------
 // CycleError
@@ -195,7 +195,11 @@ impl DependencyGraph {
     /// Containment is tested per sheet: `indices` carries every sheet's index.
     /// A dependent reached through a cross-sheet edge lives on its own sheet,
     /// whose uids the edited cell's index knows nothing about.
-    pub fn collect_dirty(&self, changed: CellId, indices: &SheetIndices) -> HashSet<CellId> {
+    pub fn collect_dirty(
+        &self,
+        changed: CellId,
+        indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
+    ) -> HashSet<CellId> {
         let mut dirty = HashSet::new();
         // A reference typed past the used range kept its position, and the
         // line it named exists now. The edit reaches it under that position
@@ -266,7 +270,7 @@ impl DependencyGraph {
 /// The ids a reference may hold for the bound cell `cell`: each axis kept as
 /// the position it sits at today. Empty for a cell with a virtual axis, or one
 /// whose lines its sheet index does not hold.
-fn position_aliases(cell: CellId, indices: &SheetIndices) -> Vec<CellId> {
+fn position_aliases(cell: CellId, indices: &HashMap<Pos<EngineSheet>, SheetIndex>) -> Vec<CellId> {
     let (Some(row), Some(col)) = (cell.row_uid(), cell.col_uid()) else {
         return Vec::new();
     };
@@ -296,7 +300,6 @@ impl Default for DependencyGraph {
 
 #[cfg(test)]
 mod tests {
-    use super::super::compile::SheetIndices;
     use super::super::test_index::indices_with;
     use super::super::types::{ACTIVE_SHEET, AxisId, RangeEndpoint};
     use super::*;
@@ -510,7 +513,7 @@ mod tests {
         // Editing Sheet0!A1 must reach C1: once the fixpoint walks past B1 it has
         // to test B1's containment through *sheet 1's* index. Sheet 0's index
         // knows none of sheet 1's uids, so reusing it silently drops the link.
-        let mut indices = SheetIndices::new();
+        let mut indices = HashMap::new();
         indices.insert(Pos::<EngineSheet>::new(0), sheet_index(0, 10, 10));
         indices.insert(Pos::<EngineSheet>::new(1), sheet_index(1, 10, 10));
 

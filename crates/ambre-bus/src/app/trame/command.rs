@@ -636,7 +636,9 @@ pub enum TrameCommand {
     /// sheet plus the index of the one to focus; no CRDT delta is emitted. The UI moves the
     /// active cell onto the focused match, so a repeated `FindNext` advances. `None` is the
     /// emptied field: the reply carries no match, which clears the highlight (`FIND-005`).
-    FindNext { query: Option<super::FindQuery> },
+    FindNext {
+        query: Option<crate::app::find::FindQuery<super::FindOptions>>,
+    },
 
     /// Replace every match of `query` with `replacement` across the active sheet (or all
     /// sheets for [`SheetScope::All`](super::SheetScope)) in a single undo group
@@ -648,7 +650,7 @@ pub enum TrameCommand {
     /// [`DataReset`](crate::TrameEvent::DataReset) so the UI re-fetches. `None` replaces
     /// nothing.
     ReplaceAll {
-        query: Option<super::FindQuery>,
+        query: Option<crate::app::find::FindQuery<super::FindOptions>>,
         replacement: String,
     },
 
@@ -661,7 +663,7 @@ pub enum TrameCommand {
     /// following match. Replies with [`ReplaceDone`](crate::TrameEvent::ReplaceDone) (`0`
     /// or `1`). `None` replaces nothing.
     ReplaceOne {
-        query: Option<super::FindQuery>,
+        query: Option<crate::app::find::FindQuery<super::FindOptions>>,
         replacement: String,
     },
 

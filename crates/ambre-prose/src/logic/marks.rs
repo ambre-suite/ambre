@@ -10,6 +10,7 @@
 use ambre_bus::app::prose::{DocChar, MarkKey};
 use ambre_core::Opaque;
 use ambre_core::index::{Len, Pos, Span};
+use std::collections::BTreeMap;
 
 use loro::TreeID;
 
@@ -20,7 +21,7 @@ use crate::events::{
     ActiveMarks, BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, TriState, tree_id,
 };
 use crate::mark::{self, MarkRoot};
-use crate::style::{BlockContext, MarkSet, ResolvedStyle, StoredMarkValues, resolve};
+use crate::style::{BlockContext, ResolvedStyle, StoredMarkValues, resolve};
 
 use super::ProseState;
 
@@ -346,7 +347,7 @@ struct MarkFold {
 }
 
 impl MarkFold {
-    fn take(&mut self, marks: &MarkSet) {
+    fn take(&mut self, marks: &BTreeMap<MarkKey, Opaque<StoredMarkValues>>) {
         for (key, seen) in BAR_KEYS.iter().zip(self.seen.iter_mut()) {
             *seen = seen.with(marks.contains_key(key.as_str()));
         }
@@ -397,12 +398,12 @@ fn refused_as(key: &MarkKey, value: Option<&str>, error: &mark::MarkValueError) 
 ///
 /// A run Loro carries no mark field for carries no mark, which is an empty set
 /// rather than a missing one.
-fn marks_of_run(fields: &LoroValue) -> MarkSet {
+fn marks_of_run(fields: &LoroValue) -> BTreeMap<MarkKey, Opaque<StoredMarkValues>> {
     let LoroValue::Map(fields) = fields else {
-        return MarkSet::new();
+        return BTreeMap::new();
     };
     let Some(LoroValue::Map(marks)) = fields.get(RUN_MARKS) else {
-        return MarkSet::new();
+        return BTreeMap::new();
     };
     marks
         .iter()

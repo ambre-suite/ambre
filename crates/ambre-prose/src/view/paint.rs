@@ -114,16 +114,13 @@ fn place(content: ContentBox, run: &ShapedRun, piece: Fragment) -> Placed {
     }
 }
 
-/// One end of a selection, as the run drawn for its block counts it.
-type RunSpot = (BlockId, Pos<RunChar>);
-
 /// The code-point range of `block` a selection from `start` to `end` covers,
 /// the two ends already in flow order and read on the runs drawn.
 fn covered(
     ui: &ProseUiState,
     block: BlockId,
     len: Len<RunChar>,
-    ends: (RunSpot, RunSpot),
+    ends: ((BlockId, Pos<RunChar>), (BlockId, Pos<RunChar>)),
 ) -> Option<Span<RunChar>> {
     let ((first, from), (last, to)) = ends;
     let len = len.as_end();

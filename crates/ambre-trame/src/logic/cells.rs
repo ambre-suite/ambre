@@ -296,8 +296,8 @@ impl TrameState {
     /// resolve references. The active sheet is local index 0 (reusing the
     /// maintained [`Self::index`]); other sheets are rebuilt on demand. Local
     /// indices match [`Self::sheets_by_idx`] (active pinned first).
-    pub(super) fn engine_indices(&self) -> SheetIndices {
-        let mut m = SheetIndices::new();
+    pub(super) fn engine_indices(&self) -> HashMap<Pos<EngineSheet>, SheetIndex> {
+        let mut m = HashMap::new();
         for (idx, id) in self.sheets_by_idx.iter().enumerate() {
             let index = if idx == ACTIVE_SHEET.to_usize() {
                 self.index.clone()

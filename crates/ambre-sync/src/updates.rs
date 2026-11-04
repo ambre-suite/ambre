@@ -1,6 +1,6 @@
 use super::*;
 use crate::pipeline::UpdateFrame;
-use crate::rekey::{RefusedFrames, SentFrame};
+use crate::rekey::SentFrame;
 use ambre_core::FixedBytes;
 use ambre_core::{Ms, Payload, TimeSpan};
 use ambre_protocol::messages::Signature;
@@ -1146,7 +1146,7 @@ impl SyncState {
     pub(crate) fn resend_refused(
         &mut self,
         document_id: Id<Document>,
-        refused: RefusedFrames,
+        refused: Vec<(Seq<DeltaAuthor>, UpdateFrame)>,
         waiting: Vec<UpdateFrame>,
     ) {
         if let (Some(signing_key), Some(pub_key)) =

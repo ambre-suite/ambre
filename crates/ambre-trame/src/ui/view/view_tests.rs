@@ -1234,7 +1234,7 @@ impl Rig {
         self.view
             .handle_input(&InputEvent::Wheel {
                 delta: ambre_canvas::WheelDelta::new(
-                    ambre_canvas::WheelVector::new(
+                    ambre_core::Vector::new(
                         ambre_canvas::WheelAmount::new(0.0),
                         ambre_canvas::WheelAmount::new(dy),
                     ),

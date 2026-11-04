@@ -478,7 +478,7 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
     if let Some(wheel) = event.dyn_ref::<web_sys::WheelEvent>() {
         return Some(InputEvent::Wheel {
             delta: ambre_canvas::WheelDelta::new(
-                ambre_canvas::WheelVector::new(
+                ambre_core::Vector::new(
                     ambre_canvas::WheelAmount::new(wheel.delta_x()),
                     ambre_canvas::WheelAmount::new(wheel.delta_y()),
                 ),

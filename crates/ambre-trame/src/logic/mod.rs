@@ -25,9 +25,7 @@ use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::formula::text::{DisplayForm, SourceForm, StoredForm};
 use crate::formula::types::CellValue;
 use crate::formula::types::Expr;
-use crate::formula::{
-    AxisId, CellId, EngineSheet, FormulaCtx, FormulaEngine, NameTarget, SheetIndices, render,
-};
+use crate::formula::{AxisId, CellId, EngineSheet, FormulaCtx, FormulaEngine, NameTarget, render};
 use crate::model::{CellKey, Line, SheetIndex, Uid, parse_cell_key};
 use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{

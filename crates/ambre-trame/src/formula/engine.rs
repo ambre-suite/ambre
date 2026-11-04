@@ -15,11 +15,12 @@ use std::collections::{HashMap, HashSet};
 use petgraph::visit::Topo;
 
 use super::cache::BytecodeCache;
-use super::compile::SheetIndices;
 use super::dag::DependencyGraph;
 use super::text::StoredForm;
-use super::types::{CellId, CellValue, FormulaCtx};
+use super::types::{CellId, CellValue, EngineSheet, FormulaCtx};
 use super::vm::EvalContext;
+use crate::model::SheetIndex;
+use ambre_core::index::Pos;
 use ambre_core::{Instant, SheetDateTime};
 
 /// Central orchestrator for the Trame formula engine.
@@ -54,7 +55,7 @@ impl FormulaEngine {
         &mut self,
         cell: CellId,
         raw: CellText<StoredForm>,
-        indices: &SheetIndices,
+        indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
         ctx: &dyn FormulaCtx,
     ) {
         // The same text compiles to the same bytecode and computes the same
@@ -104,7 +105,7 @@ impl FormulaEngine {
     }
 
     /// Recompute every cell in the `dirty` set in topological order.
-    pub fn compute_all_dirty(&mut self, indices: &SheetIndices) {
+    pub fn compute_all_dirty(&mut self, indices: &HashMap<Pos<EngineSheet>, SheetIndex>) {
         if self.dirty.is_empty() {
             return;
         }
@@ -200,7 +201,6 @@ impl Default for FormulaEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::super::compile::SheetIndices;
     use super::super::test_index::{index_with, indices_with, stored};
     use super::super::types::SingleSheetCtx;
     use super::*;
@@ -488,7 +488,7 @@ mod tests {
         // re-parse against the new order would produce.
         let mut moved = index_with(10, 10);
         moved.apply_move_row(Pos::<Row>::new(0), Pos::<Row>::new(1));
-        let mut indices = SheetIndices::new();
+        let mut indices = HashMap::new();
         indices.insert(ACTIVE_SHEET, moved);
         engine.mark_all_dirty();
         engine.compute_all_dirty(&indices);

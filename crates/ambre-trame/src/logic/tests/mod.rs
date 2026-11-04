@@ -139,9 +139,9 @@ fn seed_col_a(state: &mut TrameState, values: &[&str]) {
 fn find_query(
     text: String,
     options: crate::FindOptions,
-) -> Option<ambre_bus::app::trame::FindQuery> {
+) -> Option<ambre_bus::app::find::FindQuery<crate::FindOptions>> {
     ambre_bus::app::find::FindText::new(text)
-        .map(|text| ambre_bus::app::trame::FindQuery::new(text, options))
+        .map(|text| ambre_bus::app::find::FindQuery::new(text, options))
 }
 
 /// Seed a few cells on the active sheet for the find/replace tests.

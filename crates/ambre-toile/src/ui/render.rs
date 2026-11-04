@@ -33,10 +33,10 @@ use super::tool::{
     world_rect_to_screen,
 };
 use super::viewport::ViewportTransform;
+pub use super::walk::DecodedImage;
 use super::walk::{
     BoardView, BoardWalk, ellipse_path, polyline_path, rect_path, roundrect_path, triangle_path,
 };
-pub use super::walk::{DecodedImage, ImageStore};
 pub(crate) use super::walk::{paint_label_plate, rotate_about};
 
 /// The media addresses a display list names and the view cannot paint: not in
@@ -47,7 +47,7 @@ pub(crate) use super::walk::{paint_label_plate, rotate_about};
 /// on screen (`toile-media`).
 pub fn missing_media(
     nodes: &[DisplayNode],
-    images: &ImageStore,
+    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
     requested: &std::collections::HashSet<ambre_core::Validated<ambre_core::ContentHash>>,
 ) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
     let mut out: Vec<ambre_core::Validated<ambre_core::ContentHash>> = Vec::new();
@@ -89,7 +89,7 @@ pub fn paint_content<S: DrawSurface>(
     // element whose hash is present paints real pixels via `draw_image`; one
     // absent paints a placeholder box (`toile-media`). Empty on a board
     // with no images or whose media has not yet been decoded.
-    images: &ImageStore,
+    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
     // Smart Animate overrides for an in-flight slide transition. Keyed by element
     // id, each replaces the element's transform / bounds / opacity / fill for
     // this frame. Empty when no transition is active. Fade-only ids (a new / gone
@@ -779,7 +779,7 @@ mod tests {
             &mut font_cx,
             &mut tc,
             None,
-            &ImageStore::new(),
+            &HashMap::new(),
             &HashMap::new(),
             PresentMode::Editing,
         );
@@ -843,7 +843,7 @@ mod tests {
             &mut font_cx,
             &mut tc,
             None,
-            &ImageStore::new(),
+            &HashMap::new(),
             &anim,
             PresentMode::Presenting, // focus mode: grid suppressed
         );
@@ -900,7 +900,7 @@ mod tests {
             &mut font_cx,
             &mut tc,
             None,
-            &ImageStore::new(),
+            &HashMap::new(),
             &HashMap::new(),
             PresentMode::Editing,
         );
@@ -1151,7 +1151,7 @@ mod tests {
             // Not a picture: it names no address at all.
             elem("d", DisplayGeom::Rect, b),
         ];
-        let mut images = ImageStore::new();
+        let mut images = HashMap::new();
         images.insert(
             hh('1'),
             DecodedImage {
@@ -1172,14 +1172,10 @@ mod tests {
         let nodes = vec![elem("a", DisplayGeom::Image(Some(hh('1'))), b)];
         let mut pending = std::collections::HashSet::new();
         pending.insert(hh('1'));
-        assert!(missing_media(&nodes, &ImageStore::new(), &pending).is_empty());
+        assert!(missing_media(&nodes, &HashMap::new(), &pending).is_empty());
         // With nothing pending, the same list does ask.
         assert_eq!(
-            missing_media(
-                &nodes,
-                &ImageStore::new(),
-                &std::collections::HashSet::new()
-            ),
+            missing_media(&nodes, &HashMap::new(), &std::collections::HashSet::new()),
             vec![hh('1')]
         );
     }
@@ -1202,7 +1198,7 @@ mod tests {
             ],
         };
         // Only "h1" is decoded; "h2" is still pending.
-        let mut images = ImageStore::new();
+        let mut images = HashMap::new();
         images.insert(
             hh('1'),
             DecodedImage {
@@ -1881,7 +1877,7 @@ mod tests {
     #[derive(Default)]
     struct Pass {
         editing: Option<crate::ui::edit::EditTarget>,
-        images: ImageStore,
+        images: HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
         anim: HashMap<Id<Element>, AnimatedElement>,
         present: PresentMode,
     }

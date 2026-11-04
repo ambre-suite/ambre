@@ -182,11 +182,6 @@ const HUB_PRIVATE_CHANNEL: &str = "__ambre_pubsub_hub__";
 /// at a bounded rate rather than in a hot loop.
 const HUB_RESTART_DELAY: Duration = Duration::from_secs(1);
 
-/// topic -> (conn_id -> sink). The presence of an entry for a topic means the
-/// current stream holds a live Redis SUBSCRIBE on it; emptying it triggers
-/// UNSUBSCRIBE.
-type Routes = HashMap<Topic, HashMap<ConnectionId, mpsc::Sender<StoredPayload>>>;
-
 /// Why one run of the hub ended.
 enum HubExit {
     /// Every handle is dropped: the server is shutting down.
@@ -199,7 +194,10 @@ enum HubExit {
 /// that panics or loses its stream (`SRV-101`). The routing table lives here, so
 /// a new run serves every connection the last one served.
 async fn supervise_hub(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver<HubCmd>) {
-    let mut routes = Routes::new();
+    // topic -> (conn_id -> sink). The presence of an entry for a topic means
+    // the current stream holds a live Redis SUBSCRIBE on it; emptying it
+    // triggers UNSUBSCRIBE.
+    let mut routes = HashMap::new();
     loop {
         match crate::supervise::contained("pubsub hub", hub_run(&redis, &mut cmd_rx, &mut routes))
             .await
@@ -215,7 +213,7 @@ async fn supervise_hub(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver
 async fn hub_run(
     redis: &rustis::client::Client,
     cmd_rx: &mut mpsc::Receiver<HubCmd>,
-    routes: &mut Routes,
+    routes: &mut HashMap<Topic, HashMap<ConnectionId, mpsc::Sender<StoredPayload>>>,
 ) -> HubExit {
     let mut pubsub = match redis.subscribe(HUB_PRIVATE_CHANNEL).await {
         Ok(p) => p,

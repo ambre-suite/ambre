@@ -24,7 +24,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::app::find::Match;
+use ambre_bus::app::find::{FindQuery, Match};
 use ambre_bus::{
     AppCommand, AppEvent, CellFormat, CellStyle, Col, HAlign, Row, SheetName, SheetTab,
     TrameCommand, TrameEvent, UiEvent, VAlign,
@@ -37,10 +37,9 @@ use ambre_core::id::{Document, Id};
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Commands, StaticKey};
 use ambre_trame::chrome::{
-    self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindQuery, FindReplace, FindReplaceState,
-    FormatBar, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE,
-    SelStats, SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar, StyleState, Toggles,
-    UNDO,
+    self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindReplace, FindReplaceState, FormatBar,
+    IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE, SelStats,
+    SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar, StyleState, Toggles, UNDO,
 };
 use ambre_trame::ui::commands as registry;
 use leptos::mount::mount_to;
@@ -134,7 +133,7 @@ fn style_applied_mirrors_into_style_state() {
 fn a_replace_request_prints_the_replacement_length_alone() {
     let text = ambre_bus::app::find::FindText::new("q".to_owned());
     let request = chrome::ReplaceRequest {
-        query: chrome::FindQuery::new(text.expect("a test query is not empty"), Default::default()),
+        query: FindQuery::new(text.expect("a test query is not empty"), Default::default()),
         replacement: "salary".to_owned(),
     };
     let printed = format!("{request:?}");
@@ -328,7 +327,8 @@ fn find_replace_panel_opens_in_find_mode() {
     let container = mount_in_container(|| {
         let state = RwSignal::new(None::<FindReplaceState>);
         let result = RwSignal::new(None::<chrome::FindPosition>);
-        let noop_find = Callback::new(|_: Option<FindQuery>| {});
+        let noop_find =
+            Callback::new(|_: Option<FindQuery<ambre_bus::app::trame::FindOptions>>| {});
         let noop_replace = Callback::new(|_: ReplaceRequest| {});
         // Open the panel in find mode after the initial render so the closed ->
         // open transition is what the DOM reflects.

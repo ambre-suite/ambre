@@ -1030,11 +1030,8 @@ impl FirstPage {
     }
 }
 
-/// What a search looks for (`features/ambre-spec-prose-find-replace.md`):
-/// the shared shape over Prose's own options.
-pub type FindQuery = super::find::FindQuery<FindOptions>;
-
-/// The refinements of a Prose search.
+/// The refinements of a Prose search, which a
+/// `FindQuery<FindOptions>` carries (`features/ambre-spec-prose-find-replace.md`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct FindOptions {
     pub case: ambre_core::CaseMatch,
@@ -1697,7 +1694,7 @@ pub enum ProseCommand {
     /// (`PROSE-FEAT-151`). `None` is the emptied field: it closes the open
     /// search and the highlight clears (`FIND-005`).
     FindStart {
-        query: Option<FindQuery>,
+        query: Option<super::find::FindQuery<FindOptions>>,
     },
     FindNext,
     FindPrev,

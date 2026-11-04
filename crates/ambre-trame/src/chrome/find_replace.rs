@@ -15,7 +15,7 @@ use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
-use ambre_bus::app::find::Match;
+use ambre_bus::app::find::{FindQuery, Match};
 
 use crate::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
@@ -45,16 +45,11 @@ pub struct FindReplaceState {
     pub mode: FindMode,
 }
 
-/// A `FindNext` request: the find text plus the options, or `None` for an
-/// emptied field. A find reads only the case and the extent. The launcher
-/// forwards it as [`ambre_bus::TrameCommand::FindNext`].
-pub use ambre_bus::app::trame::FindQuery;
-
 /// A `ReplaceOne` or `ReplaceAll` request. The panel sends none for an empty
 /// query. The launcher forwards it as [`ambre_bus::TrameCommand::ReplaceAll`].
 #[derive(Clone, PartialEq, Eq)]
 pub struct ReplaceRequest {
-    pub query: FindQuery,
+    pub query: FindQuery<FindOptions>,
     pub replacement: String,
 }
 
@@ -99,7 +94,10 @@ impl FindPosition {
 pub fn FindReplace(
     state: RwSignal<Option<FindReplaceState>>,
     result: RwSignal<Option<FindPosition>>,
-    on_find: Callback<Option<FindQuery>>,
+    // A `FindNext` request: the find text plus the options, or `None` for an
+    // emptied field. A find reads only the case and the extent. The launcher
+    // forwards it as `TrameCommand::FindNext`.
+    on_find: Callback<Option<FindQuery<FindOptions>>>,
     on_replace: Callback<ReplaceRequest>,
     on_replace_all: Callback<ReplaceRequest>,
 ) -> impl IntoView {

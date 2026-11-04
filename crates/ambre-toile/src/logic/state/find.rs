@@ -11,8 +11,9 @@ use ambre_bus::app::find::Match;
 use ambre_core::StepDirection;
 use ambre_core::index::{Delta, Len, Pos};
 
-use crate::logic::command::{FindOptions, FindQuery, FindResults, ToileEvent, ToileOutcome};
+use crate::logic::command::{FindOptions, FindResults, ToileEvent, ToileOutcome};
 use crate::logic::model::NodeId;
+use ambre_bus::app::find::FindQuery;
 use ambre_core::id::{Element, Id};
 
 use super::ToileState;
@@ -27,7 +28,7 @@ impl ToileState {
     /// no sync payload. No query yields no hits (the UI's "clear" signal).
     pub(super) fn find(
         &self,
-        query: Option<&FindQuery>,
+        query: Option<&FindQuery<FindOptions>>,
         from: Option<&Id<Element>>,
         direction: StepDirection,
     ) -> ToileOutcome {
@@ -40,7 +41,7 @@ impl ToileState {
     /// `layers` walk comes first, then any element absent from `layers`,
     /// appended in `Id<Element>` order (the well-formedness fallback). A
     /// concurrently dropped `layers` entry therefore never hides a hit.
-    fn find_hits(&self, query: &FindQuery) -> Vec<Id<Element>> {
+    fn find_hits(&self, query: &FindQuery<FindOptions>) -> Vec<Id<Element>> {
         let mut hits = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for node in &self.layers {
@@ -66,7 +67,7 @@ impl ToileState {
 
     /// Whether the element's searchable text (sticky / text body, frame title)
     /// matches `query` under the given options. Non-text elements never match.
-    fn element_matches(&self, id: &Id<Element>, query: &FindQuery) -> bool {
+    fn element_matches(&self, id: &Id<Element>, query: &FindQuery<FindOptions>) -> bool {
         let Some(em) = self.element_map(id) else {
             return false;
         };
@@ -108,7 +109,7 @@ fn next_focus(
 /// Substring test of the query text, honoring its case and word options. Case
 /// folding is a plain lowercase on both sides (adequate for the Latin-script
 /// MVP).
-fn text_matches(haystack: &str, query: &FindQuery) -> bool {
+fn text_matches(haystack: &str, query: &FindQuery<FindOptions>) -> bool {
     let options = query.options;
     // The matcher below runs on raw or case-folded text alike, so the newtype
     // ends here.

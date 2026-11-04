@@ -23,13 +23,11 @@ use super::types::{
     RangeEndpoint, RangeId, SpanLines,
 };
 
-/// Per-sheet indices, keyed by the engine's local sheet index ([`Pos<EngineSheet>`]), used to
-/// bind positional references to row/column `Uid`s during compilation.
-pub type SheetIndices = HashMap<Pos<EngineSheet>, SheetIndex>;
-
 /// Compile an AST into a [`CellBytecode`] (ops + dependencies), resolving
-/// positional references against `indices`.
-pub fn compile(ast: &Expr, indices: &SheetIndices) -> CellBytecode {
+/// positional references against `indices`. The indices are per sheet, keyed
+/// by the engine's local sheet index. They bind positional references to
+/// row and column `Uid`s.
+pub fn compile(ast: &Expr, indices: &HashMap<Pos<EngineSheet>, SheetIndex>) -> CellBytecode {
     let mut ops = Vec::new();
     let mut cell_deps = Vec::new();
     let mut range_deps = Vec::new();
@@ -41,7 +39,7 @@ pub fn compile(ast: &Expr, indices: &SheetIndices) -> CellBytecode {
     }
 }
 
-fn resolve_cell(r: &CellRef, indices: &SheetIndices) -> CellId {
+fn resolve_cell(r: &CellRef, indices: &HashMap<Pos<EngineSheet>, SheetIndex>) -> CellId {
     let idx = indices.get(&r.sheet);
     let row = bind(idx, r.row);
     let col = bind(idx, r.col);
@@ -60,7 +58,7 @@ fn resolve_cell(r: &CellRef, indices: &SheetIndices) -> CellId {
 /// sorting the rows inside `SUM(A1:A3)` leaves the block (and its total) intact.
 /// Single-cell references, by contrast, bind to their row/column `Uid` and follow
 /// the data (see [`resolve_cell`] and `trame-formula-engine`).
-fn resolve_range(r: &RangeDep, _indices: &SheetIndices) -> RangeId {
+fn resolve_range(r: &RangeDep, _indices: &HashMap<Pos<EngineSheet>, SheetIndex>) -> RangeId {
     RangeId {
         sheet: r.sheet,
         row_start: at(r.row_start),
@@ -108,7 +106,7 @@ fn bind<L: Line>(index: Option<&SheetIndex>, pos: Pos<L>) -> AxisId<Pos<L>> {
 
 fn compile_into(
     ast: &Expr,
-    indices: &SheetIndices,
+    indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
     ops: &mut Vec<Op>,
     cell_deps: &mut Vec<CellId>,
     range_deps: &mut Vec<RangeId>,
@@ -195,7 +193,7 @@ mod tests {
 
     fn compile_str(input: &str) -> CellBytecode {
         let ast = parse_formula(input).unwrap();
-        let mut indices = SheetIndices::new();
+        let mut indices = HashMap::new();
         indices.insert(ACTIVE_SHEET, index_with(20, 10));
         compile(&ast, &indices)
     }

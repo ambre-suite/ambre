@@ -75,8 +75,8 @@ pub mod fonts;
 pub mod request_registry;
 
 // -- Convenience re-exports --------------------------------------------------
-pub use ambre_draw::wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
-pub use anchor::{Anchor, AnchorPublisher};
+pub use ambre_draw::wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode};
+pub use anchor::AnchorPublisher;
 pub use busy::BusyPublisher;
 pub use density::SurfaceSize;
 #[cfg(target_arch = "wasm32")]

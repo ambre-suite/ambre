@@ -19,17 +19,12 @@ use std::rc::Rc;
 
 use ambre_core::{Point, Px, View};
 
-/// A point relative to the canvas content cell's top-left, that the chrome
-/// can glue floating DOM UI to. Conventionally the horizontal centre and top
-/// edge of the selection, so a toolbar centres above it.
-pub type Anchor = Point<Px<View>>;
-
 /// One-slot signal: the view writes the current selection anchor (or `None` to
 /// hide), the chrome reads it from its per-frame pump. Cheap to clone (shared
 /// `Rc<Cell>`); lives on the UI thread only, so it stays `!Send`.
 #[derive(Clone, Default)]
 pub struct AnchorPublisher {
-    slot: Rc<Cell<Option<Anchor>>>,
+    slot: Rc<Cell<Option<Point<Px<View>>>>>,
 }
 
 impl AnchorPublisher {
@@ -37,13 +32,16 @@ impl AnchorPublisher {
         Self::default()
     }
 
-    /// Publish the current anchor (`None` hides the floating UI).
-    pub fn publish(&self, anchor: Option<Anchor>) {
+    /// Publish the current anchor (`None` hides the floating UI). The anchor
+    /// is a point relative to the top-left of the canvas content cell.
+    /// Conventionally it is the horizontal centre and the top edge of the
+    /// selection, so a toolbar centres above it.
+    pub fn publish(&self, anchor: Option<Point<Px<View>>>) {
         self.slot.set(anchor);
     }
 
     /// Read the latest published anchor.
-    pub fn read(&self) -> Option<Anchor> {
+    pub fn read(&self) -> Option<Point<Px<View>>> {
         self.slot.get()
     }
 }

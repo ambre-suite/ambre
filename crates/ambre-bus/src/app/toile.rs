@@ -1090,9 +1090,6 @@ pub enum End {
     To,
 }
 
-/// A board `Find` (`toile-find`): the shared shape over Toile's own options.
-pub type FindQuery = super::find::FindQuery<FindOptions>;
-
 /// Options for a board `Find` (`toile-find`). Search runs against
 /// each element's plaintext body (sticky / text) and frame title; `case`
 /// toggles case folding, `word` may require a word-boundary match. Replace is
@@ -2097,7 +2094,7 @@ pub enum ToileCommand {
     /// the first hit. A `None` `query` is the emptied field, answered with no hit
     /// (`FIND-005`). No CRDT effect.
     Find {
-        query: Option<FindQuery>,
+        query: Option<super::find::FindQuery<FindOptions>>,
         from: Option<Id<Element>>,
         direction: ambre_core::StepDirection,
     },

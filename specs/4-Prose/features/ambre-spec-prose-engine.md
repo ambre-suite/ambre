@@ -436,7 +436,7 @@ pub enum ProseCommand {
     StampModified         { now: Instant<Authored> },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
-    FindStart  { query: FindQuery },
+    FindStart  { query: FindQuery<FindOptions> },
     FindNext,
     FindPrev,
     FindClose,
