@@ -51,10 +51,6 @@ pub struct DecodedImage {
     pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
 }
 
-/// Resolved image pixels for this frame, keyed by media hash. Empty when no
-/// image element is present (or its media has not been decoded yet).
-pub type ImageStore = HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>;
-
 /// Inner padding, in board units, between an element's border and its body,
 /// and between a caption's plate and its words. The inline editor applies the
 /// same inset, so a body does not move when an edit opens or closes.
@@ -67,7 +63,7 @@ pub struct BoardView<'v> {
     /// The theme the board paints in.
     pub palette: &'v Palette,
     /// Decoded image pixels, keyed by media hash (`toile-media`).
-    pub images: &'v ImageStore,
+    pub images: &'v HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
     /// Smart Animate or gesture overrides, keyed by element id. Each replaces
     /// the element's transform, bounds, opacity and fill. Empty at rest.
     pub anim: &'v HashMap<Id<Element>, AnimatedElement>,
@@ -486,7 +482,7 @@ fn anim_style(base: &ElementStyle, a: Option<&AnimatedElement>) -> ElementStyle 
 fn paint_element<S: DrawSurface>(
     surface: &mut S,
     e: &DisplayElement,
-    images: &ImageStore,
+    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
     anim: Option<&AnimatedElement>,
 ) {
     let transform = anim.map(anim_transform).unwrap_or(e.transform);

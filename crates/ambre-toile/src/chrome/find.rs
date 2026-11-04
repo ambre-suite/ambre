@@ -15,7 +15,8 @@
 // canvas view handles the highlight + camera recenter off the same event.
 // ============================================================================
 
-use ambre_bus::app::toile::{FindOptions, FindQuery, FindResults};
+use ambre_bus::app::find::FindQuery;
+use ambre_bus::app::toile::{FindOptions, FindResults};
 use ambre_core::StepDirection;
 use ambre_core::id::{Element, Id};
 use ambre_core::index::{Len, Pos};
@@ -32,7 +33,7 @@ use ambre_bus::app::find::Match;
 /// `focus` forward or backward from `from` itself (toile-find).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FindRequest {
-    pub query: Option<FindQuery>,
+    pub query: Option<FindQuery<FindOptions>>,
     pub from: Option<Id<Element>>,
     pub direction: StepDirection,
 }

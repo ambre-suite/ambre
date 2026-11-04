@@ -19,9 +19,6 @@ use std::collections::VecDeque;
 /// slice always takes one delta, whatever its size.
 pub(crate) const REPLAY_SLICE_BYTES: usize = 64 << 10;
 
-/// The deltas of a replay not yet imported, oldest first, with their seq.
-pub(crate) type ReplayQueue = VecDeque<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)>;
-
 impl LogicState {
     /// Queue the accepted deltas of a replay, and import its first slice now.
     pub(crate) fn replay(
@@ -118,7 +115,7 @@ impl LogicState {
 
 /// Take the oldest deltas up to [`REPLAY_SLICE_BYTES`], and at least one.
 fn take_slice(
-    queue: &mut ReplayQueue,
+    queue: &mut VecDeque<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)>,
 ) -> Vec<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)> {
     let mut bytes = 0usize;
     let mut slice = Vec::new();
@@ -219,7 +216,7 @@ mod tests {
     /// A slice always takes one delta, even one past the slice size.
     #[test]
     fn a_slice_takes_one_delta_whatever_its_size() {
-        let mut queue: ReplayQueue = [
+        let mut queue: VecDeque<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)> = [
             (
                 ambre_core::Seq::<ambre_core::Relay>::new(1),
                 vec![0; REPLAY_SLICE_BYTES * 2].into(),

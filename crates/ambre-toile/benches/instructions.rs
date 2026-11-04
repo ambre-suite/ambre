@@ -26,7 +26,7 @@ use ambre_core::id::{Element, Id};
 use ambre_draw::FontContext;
 use ambre_draw::testing::RecordingSurface;
 use ambre_toile::logic::command::DisplayViewport;
-use ambre_toile::ui::render::{ImageStore, paint_content};
+use ambre_toile::ui::render::paint_content;
 use ambre_toile::ui::viewport::ViewportTransform;
 use ambre_toile::{ElementKind, InitContent, ToileCommand, ToileEvent, ToileOutcome, ToileState};
 use kurbo::{Affine, Point, Rect, Size};
@@ -204,7 +204,7 @@ fn walk(
         font_cx,
         cache,
         None,
-        &ImageStore::new(),
+        &HashMap::new(),
         &HashMap::new(),
         ambre_bus::app::toile::PresentMode::Editing,
     );

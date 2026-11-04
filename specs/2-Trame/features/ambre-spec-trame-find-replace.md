@@ -90,9 +90,7 @@ The *find text* is the query as typed, never empty (`FindText`): an empty field 
 shared `FindQuery`. Trame widens the options to four, one enum per panel checkbox:
 
 ```rust
-// ambre_bus::app::trame
-pub type FindQuery = find::FindQuery<FindOptions>;
-
+// ambre_bus::app::trame -- a command carries `find::FindQuery<FindOptions>`
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FindOptions {
     pub case: CaseMatch,      // Insensitive | Sensitive

@@ -22,10 +22,10 @@
 
 use std::path::{Path, PathBuf};
 
-use ambre_core::{Ns, TimeSpan, Validated};
+use ambre_core::{Ns, Refused, TimeSpan, Validated};
 use ambre_logic::fixtures::{
     BASELINE_DIR, BENCH_DIR, BENCH_REGISTRY, BenchBaseline, BenchMeasurement, CORPUS_DIR,
-    CommitHash, InvalidCommitHash, REGISTRY, baselines_in, corpus_root,
+    CommitHash, REGISTRY, baselines_in, corpus_root,
 };
 
 /// The workspace root, derived from the corpus root the loader already resolves.
@@ -200,8 +200,11 @@ fn a_commit_id_is_four_to_forty_lowercase_hex_digits() {
     for bad in ["abc", "ABC1234", "abc123g", &"a".repeat(41)] {
         assert_eq!(
             Validated::<CommitHash>::parse(bad),
-            Err(InvalidCommitHash::new(bad.to_owned())),
+            Err(Refused::<CommitHash>::new(bad.to_owned())),
             "{bad}"
         );
     }
+    let refused = Validated::<CommitHash>::parse("abc").expect_err("too short");
+    assert_eq!(refused.to_string(), "\"abc\" is not a commit id");
+    assert_eq!(format!("{refused:?}"), "InvalidCommitHash(\"abc\")");
 }

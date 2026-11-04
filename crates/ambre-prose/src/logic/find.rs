@@ -6,7 +6,7 @@
 //! (`PROSE-FEAT-035`). Every offset is a count of code points, the unit a
 //! block's text is indexed in (`PROSE-045`).
 
-use ambre_bus::app::find::Match;
+use ambre_bus::app::find::{FindQuery, Match};
 use ambre_bus::app::prose::{DocChar, FindRefusal};
 use ambre_core::StepDirection;
 use ambre_core::index::Delta;
@@ -15,7 +15,7 @@ use loro::TreeID;
 
 use crate::doc;
 use crate::events::{
-    FindMatch, FindQuery, ProseEvent, ProseOutcome, ProseRefusal, block_id, tree_id,
+    FindMatch, FindOptions, ProseEvent, ProseOutcome, ProseRefusal, block_id, tree_id,
 };
 
 use super::ProseState;
@@ -24,7 +24,7 @@ use super::ProseState;
 /// An emptied field opens none: it closes the open one (`FIND-005`).
 #[derive(Debug)]
 pub(super) struct FindSession {
-    query: FindQuery,
+    query: FindQuery<FindOptions>,
     matches: Vec<FindMatch>,
     current: Option<Pos<Match>>,
 }
@@ -35,7 +35,7 @@ pub(super) struct FindSession {
 /// The case fold maps one code point to one, so a span in the folded text is
 /// the same span in the original. A code point whose lower case is longer
 /// than one is compared as it is.
-pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<Span<DocChar>> {
+pub(crate) fn match_offsets(hay: &str, query: &FindQuery<FindOptions>) -> Vec<Span<DocChar>> {
     let fold = |c: char| -> char {
         if query.options.case == ambre_core::CaseMatch::Sensitive {
             return c;
@@ -79,7 +79,7 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<Span<DocChar>> 
 impl ProseState {
     /// Every match in the document, in block order: body blocks only
     /// (`PROSE-FEAT-033`, `PROSE-FEAT-150`).
-    pub(super) fn find_all(&self, query: &FindQuery) -> Vec<FindMatch> {
+    pub(super) fn find_all(&self, query: &FindQuery<FindOptions>) -> Vec<FindMatch> {
         let tree = doc::blocks(&self.doc);
         self.document_order()
             .into_iter()
@@ -100,7 +100,7 @@ impl ProseState {
     /// (`PROSE-FEAT-151`). No query is the emptied field: it closes the open
     /// search and clears the highlight, so a step after it answers
     /// [`FindRefusal::NoSearch`] (`FIND-005`).
-    pub(super) fn find_start(&mut self, query: Option<FindQuery>) -> ProseOutcome {
+    pub(super) fn find_start(&mut self, query: Option<FindQuery<FindOptions>>) -> ProseOutcome {
         let Some(query) = query else {
             return self.find_close();
         };
@@ -253,7 +253,7 @@ impl ProseState {
 
     /// The open query, for a test.
     #[cfg(test)]
-    fn find_query(&self) -> Option<&FindQuery> {
+    fn find_query(&self) -> Option<&FindQuery<FindOptions>> {
         self.find.as_ref().map(|s| &s.query)
     }
 }
@@ -271,13 +271,13 @@ mod tests {
     use crate::events::{BlockId, BlockInit, ProseCommand};
     use ambre_bus::app::prose::DocChar;
 
-    fn query(text: &str) -> Option<FindQuery> {
+    fn query(text: &str) -> Option<FindQuery<FindOptions>> {
         ambre_bus::app::find::FindText::new(text.to_owned())
             .map(|text| FindQuery::new(text, crate::events::FindOptions::default()))
     }
 
     /// The query for a non-empty `text`, for the scan alone.
-    fn needle(text: &str) -> FindQuery {
+    fn needle(text: &str) -> FindQuery<FindOptions> {
         query(text).expect("a non-empty text")
     }
 

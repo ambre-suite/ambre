@@ -22,7 +22,6 @@ pub(crate) mod test_index;
 #[cfg(not(target_arch = "wasm32"))]
 mod prop_tests;
 
-pub use compile::SheetIndices;
 pub use engine::FormulaEngine;
 pub use types::{
     ACTIVE_SHEET, AxisId, CellId, CellRef, CellValue, EngineSheet, FormulaCtx, FormulaError,

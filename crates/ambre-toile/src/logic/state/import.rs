@@ -1100,7 +1100,10 @@ mod tests {
             },
         );
         let pages = st.pdf_pages(crate::logic::interop::PageSize::default());
-        let paint = |images: &crate::ui::render::ImageStore| {
+        let paint = |images: &std::collections::HashMap<
+            ambre_core::Validated<ambre_core::ContentHash>,
+            crate::ui::render::DecodedImage,
+        >| {
             let mut s = RecordingSurface::new();
             crate::logic::interop::paint_page(
                 &mut s,
@@ -1119,7 +1122,7 @@ mod tests {
             })
         };
         assert_eq!(paint(&st.decoded_media()).get(), 1, "the picture's pixels");
-        assert_eq!(paint(&crate::ui::render::ImageStore::new()).get(), 0);
+        assert_eq!(paint(&std::collections::HashMap::new()).get(), 0);
     }
 
     /// `TOILE-IO-036`: the undo of a picture import takes back the entry it

@@ -455,7 +455,10 @@ pub(crate) mod tests {
             &mut ui,
             ProseCommand::FindStart {
                 query: ambre_bus::app::find::FindText::new("needle".to_owned()).map(|text| {
-                    crate::events::FindQuery::new(text, crate::events::FindOptions::default())
+                    ambre_bus::app::find::FindQuery::new(
+                        text,
+                        crate::events::FindOptions::default(),
+                    )
                 }),
             },
         );

@@ -1119,7 +1119,7 @@ fn two_camera_moves_in_one_frame_send_one_viewport_request() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     for dy in [40.0, 60.0] {
         rig.input(InputEvent::Wheel {
-            delta: ambre_canvas::WheelDelta::pixels(ambre_canvas::WheelVector::new(
+            delta: ambre_canvas::WheelDelta::pixels(ambre_core::Vector::new(
                 ambre_canvas::WheelAmount::new(0.0),
                 ambre_canvas::WheelAmount::new(dy),
             )),
@@ -1724,7 +1724,7 @@ fn a_find_step_recentres_without_a_zoom_or_a_selection() {
 fn wheel(rig: &mut Rig, (dx, dy): (f64, f64), delta_mode: u32, mods: Flags<ModifierKeys>) {
     rig.input(InputEvent::Wheel {
         delta: ambre_canvas::WheelDelta::new(
-            ambre_canvas::WheelVector::new(
+            ambre_core::Vector::new(
                 ambre_canvas::WheelAmount::new(dx),
                 ambre_canvas::WheelAmount::new(dy),
             ),

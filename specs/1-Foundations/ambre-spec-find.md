@@ -113,7 +113,7 @@ pub struct FindQuery<O> { pub text: FindText, pub options: O }
 // ambre_bus::app::<app>
 /// Each application declares its own, and every one opens on the case.
 pub struct FindOptions { pub case: CaseMatch, /* the application's own refinements */ }
-pub type FindQuery = find::FindQuery<FindOptions>;
+// A command writes the query in full, with no alias: `find::FindQuery<FindOptions>`.
 ```
 
 **Steps, when a query arrives.** The same walk everywhere; step 2 is the application's own order.

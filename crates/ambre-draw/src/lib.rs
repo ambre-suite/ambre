@@ -27,7 +27,7 @@ pub use types::*;
 pub mod kinetic;
 
 pub mod wheel;
-pub use wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
+pub use wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode};
 
 pub mod consumed;
 pub use consumed::Consumed;

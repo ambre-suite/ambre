@@ -16,9 +16,9 @@ use ambre_bus::{
     TrameCommand, TrameEvent, UiEvent,
 };
 use ambre_canvas::{
-    Anchor, AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats,
-    InputEvent, LayerRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput,
-    Theme, ThemeControl,
+    AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats, InputEvent,
+    LayerRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme,
+    ThemeControl,
 };
 use ambre_commands::ClipboardWrite;
 use ambre_core::id::{Document, Id};
@@ -331,7 +331,7 @@ pub struct TrameView {
     /// transform-sync a floating selection toolbar onto it.
     anchor: AnchorPublisher,
     /// Last anchor published, so it is only re-published on change.
-    last_anchor: Option<Anchor>,
+    last_anchor: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
     /// Publishes the per-frame perf snapshot (fps + timings) so the DOM status
     /// bar can render it -- the HUD left the wgpu overlay (`trame-status-bar`).
     perf_pub: PerfPublisher,

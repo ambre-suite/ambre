@@ -212,8 +212,13 @@ impl ToileState {
     /// entry's inline thumbnail, decoded to pixels. An entry whose bytes do not
     /// decode is left out, so its element paints the placeholder box rather than
     /// failing the export.
-    pub(super) fn decoded_media(&self) -> crate::ui::render::ImageStore {
-        let mut out = crate::ui::render::ImageStore::new();
+    pub(super) fn decoded_media(
+        &self,
+    ) -> std::collections::HashMap<
+        ambre_core::Validated<ambre_core::ContentHash>,
+        crate::ui::render::DecodedImage,
+    > {
+        let mut out = std::collections::HashMap::new();
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
             return out;

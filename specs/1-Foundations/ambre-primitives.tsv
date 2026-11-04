@@ -563,8 +563,9 @@ ambre-canvas | src/theme.rs | crate::theme | Theme::as_u8() | ret | u8	newtype-i
 ambre-canvas | src/theme.rs | crate::theme | Theme::data_attr() | ret | &'static str	newtype-inner	the enum's own word on the data-theme attribute, which the stylesheet matches
 ambre-canvas | src/theme.rs | crate::theme | Theme::from_u8(v) | param | u8	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/tokens.rs | crate::tokens | <OpaqueColour as TryFrom<TokenColour>>::Error | assoc | String	generic	an error that echoes the refused colour
-ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused scale name
-ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ScaleName validates as snake_case
+ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::Error | assoc | String	generic	an error that echoes the refused scale name
+ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused colour text
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
 ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	free-text	the Palette field name of each typed colour, written into the generated Rust module
@@ -573,7 +574,6 @@ ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'stati
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.rust | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Photo::vars() | ret | [(&'static str,TokenColour);7]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated stylesheet
-ambre-canvas | src/tokens.rs | crate::tokens | ScaleName.0 | field | String	newtype-inner	newtype inner, a scale name its constructor checked
 ambre-canvas | src/tokens.rs | crate::tokens | TokenError::Refused.0 | field | String	generic	the refusal message of the source
 ambre-canvas | src/tokens.rs | crate::tokens | check_scale() | ret | Result<(),String>	generic	an error that echoes the refused scale name
 ambre-canvas | src/tokens.rs | crate::tokens | generate() | ret | Result<Generated,String>	generic	an error that echoes the refused token
@@ -3117,10 +3117,9 @@ ambre-core | src/mode.rs | crate::mode | LinkState::connected_if(open) | param |
 ambre-core | src/mode.rs | crate::mode | LinkState::is_connected() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::is_resolved() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::resolved_if(resolved) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash.0 | field | String	free-text	the rejected text the error prints
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::Raw | assoc | String	generic	the refused value the error echoes
 ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	free-text	the manifest's wire word for a build with no commit id
-ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash::as_str() | ret | &str	newtype-inner	the InvalidCommitHash newtype unwrapped, for a caller outside its module
-ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash::new(value) | param | String	newtype-inner	the constructor of the InvalidCommitHash newtype
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(Pos<Block>,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | IdxVec<SlashChoice,&'static str>	free-text	the labels of the slash menu entries
 ambre-prose | src/view/slash.rs | crate::view::slash | <SlashChoice as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -4068,7 +4067,7 @@ ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::LOGGED_AS | const | 
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit() | ret | Result<String,ContentHashError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
-ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit() | ret | Result<String,InvalidCommitHash>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit() | ret | Result<String,Refused<CommitHash>>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::admit() | ret | Result<String,NotAFunctionName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps

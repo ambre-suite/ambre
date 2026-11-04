@@ -79,7 +79,7 @@ A search touches no shared state, so this section carries no table
 /// Refinements, both local to the panel.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FindOptions { pub case: CaseMatch, pub word: WordMatch }
-pub type FindQuery = find::FindQuery<FindOptions>;
+// `Find` carries `find::FindQuery<FindOptions>`, written in full.
 
 /// `hits` in paint order; `focus` is the element to recentre on.
 pub struct FindResults { pub hits: Vec<Id<Element>>, pub focus: Option<Id<Element>> }

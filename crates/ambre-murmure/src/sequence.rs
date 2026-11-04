@@ -186,7 +186,7 @@ impl Sequence {
 
     /// Match every noted update against `messages`, each with the operation
     /// that created it, as [`created`] reads them.
-    pub(crate) fn resolve_created(&mut self, messages: &[Created]) {
+    pub(crate) fn resolve_created(&mut self, messages: &[(Id<Message>, ID)]) {
         let ranges = std::mem::take(&mut self.unresolved);
         if ranges.is_empty() {
             return;
@@ -247,12 +247,9 @@ impl Sequence {
     }
 }
 
-/// A message with the operation that created it.
-pub(crate) type Created = (Id<Message>, ID);
-
 /// Each message of `doc` with the operation that created it. A message with
 /// no readable identifier is skipped: the view skips it too.
-pub(crate) fn created(doc: &LoroDoc) -> Vec<Created> {
+pub(crate) fn created(doc: &LoroDoc) -> Vec<(Id<Message>, ID)> {
     let list = crate::schema::root_list(doc, Root::Messages);
     let mut out = Vec::with_capacity(list.len());
     list.for_each(|item| {

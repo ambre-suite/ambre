@@ -17,10 +17,12 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::{Col, Row};
 
 use super::cache::BytecodeCache;
-use super::compile::SheetIndices;
 use super::functions::call_builtin;
 use super::text::fold_cmp;
-use super::types::{CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal};
+use super::types::{
+    CellId, CellValue, EngineSheet, FormulaError, Op, RangeId, RangeValue, nearly_equal,
+};
+use crate::model::SheetIndex;
 use ambre_core::{Cells, Count, Instant, SheetDateTime};
 
 /// Upper bound on the number of cells a single range reference may materialize
@@ -69,7 +71,7 @@ pub struct EvalContext<'a> {
     /// `eval_cell` calls for non-dirty cells can reuse prior results.
     pub formula_cache: &'a HashMap<CellId, CellValue>,
     /// Per-sheet position <-> uid indices, used to resolve references at eval.
-    pub indices: &'a SheetIndices,
+    pub indices: &'a HashMap<Pos<EngineSheet>, SheetIndex>,
     /// Evaluation clock as an Excel serial number. Shared by every cell in the
     /// pass so `TODAY()`/`NOW()` are stable within one recomputation.
     pub now_serial: Instant<SheetDateTime>,
@@ -90,7 +92,7 @@ impl<'a> EvalContext<'a> {
     pub fn new(
         bc: &'a BytecodeCache,
         formula_cache: &'a HashMap<CellId, CellValue>,
-        indices: &'a SheetIndices,
+        indices: &'a HashMap<Pos<EngineSheet>, SheetIndex>,
         now_serial: Instant<SheetDateTime>,
     ) -> Self {
         Self {
@@ -481,7 +483,7 @@ mod tests {
 
         let mut idx = index_with(10, 10);
         idx.apply_delete_row(Pos::<Row>::new(0)); // removes row_uid(0)
-        let mut indices = super::super::compile::SheetIndices::new();
+        let mut indices = HashMap::new();
         indices.insert(ACTIVE_SHEET, idx);
 
         let cache = HashMap::new();

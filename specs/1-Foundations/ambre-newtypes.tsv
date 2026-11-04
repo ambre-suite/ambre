@@ -2,30 +2,29 @@
 # One line per hand-written single-field newtype over an integer, a float, a String or a Vec<u8>,
 # with the reason no generic family of ambre-core fits it. Add a line by hand only; a reviewer reads it.
 key	reason
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition | u32	a rank in a space's catalogue: it orders, ties broken by id, and counts and addresses nothing
-ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, which no Payload role offers
+ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition | u32	a rank in a space's catalogue: it orders, ties broken by id, and counts and addresses nothing. Zero is a rank, so it is no Ordinal, and no issuer hands it out, so it is no Seq
+ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, and they would have to move into core. Its serde is the derived Vec<u8>, which the base64 of Encoded would change
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple | f32	a ratio that is finite and above zero, checked where it is built
 ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason | String	free text the user reads: why an import or an export left a construct behind
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed weight of one vote, which travels and is stored as the bare i32
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount | i64	a signed count of months that may run past December or below January, as DATE and EDATE read it
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount | i64	a signed count of months that may run past December or below January, as DATE and EDATE read it. TimeSpan<Month> would need a Month unit over an i64 in core, which no other site uses
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber | f64	a finite f64, checked where it is built: a NaN or an infinity the engine yields is refused
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority | i64	the evaluation order of conditional-format rules: it orders and counts nothing
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority | i64	the evaluation order of conditional-format rules: it orders and counts nothing. Zero is a rank, so it is no Ordinal, and no issuer hands it out, so it is no Seq
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength | usize	a usize length compared in a const fn, so a Marks pair checks at compile time
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity | usize	a usize capacity whose zero holds one value, as the channel constructor reads it
-ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty: draw mints one from a random draw alone, a total door Validated does not keep
+ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty. draw mints one from a random draw infallibly, which the public door of Validated cannot do
 ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key the shelf spells and the store ranges over in the order of its text
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id of a registered font blob, private to the glyph atlas
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId | u16	a glyph index as the shaper names it, a u16 the font defines
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey | u32	a raster size quantized to a hundredth of a pixel so it hashes, private to the atlas
-ambre-canvas | src/tokens.rs | crate::tokens | ScaleName | String	a snake_case token name, checked as the token source is read
 ambre-canvas | src/tokens.rs | crate::tokens | TokenPx | u32	a whole CSS pixel length as the token source writes it, written out as a Px<View>
 ambre-chrome | src/composed.rs | crate::composed | ComposedName | String	a name composed for display alone: it converts to no String, so it is never stored (CHROME-080)
-ambre-core | src/activity.rs | crate::activity | ActivityAnchor | Vec<u8>	an anchor bounded to MAX_ANCHOR_LEN bytes where it is built, while serde reads any length
+ambre-core | src/activity.rs | crate::activity | ActivityAnchor | Vec<u8>	an anchor bounded to MAX_ANCHOR_LEN bytes where it is built, while serde reads any length. Encoded would refuse an anchor past MAX_LEN at decode, and writes base64
 ambre-core | src/authorship.rs | crate::authorship | IdCounter | u32	an id part: next ends at u32::MAX and never wraps or holds, so two mints never share a value
 ambre-core | src/authorship.rs | crate::authorship | OpCounter | i32	the counter half of a Loro ID, an i32 Loro defines
 ambre-core | src/authorship.rs | crate::authorship | PeerId | u64	a Loro PeerID, a u64 Loro defines
@@ -40,21 +39,20 @@ ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint | String	a
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed | u64	the constant a fixture author picks: it pins the PeerID, the commit clock and the document id
 ambre-core | src/font.rs | crate::font | FontSize | f32	points, finite and not negative, read capped at FontSize::MAX (CANVAS-088)
 ambre-core | src/media.rs | crate::media | ByteSize | u64	the u64 size of a file or a blob: an index length is u32, and a file may pass 4 GiB
-ambre-core | src/media.rs | crate::media | MediaType | String	a media type as the browser names it, such as image/png, carried whole
+ambre-core | src/media.rs | crate::media | MediaType | String	a media type as the browser names it, such as image/png, carried whole. The upload and schema code read and match it, so it is no Opaque, and it has no rule
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey | String	the relay's name for one object of the object store, which the client carries whole
 ambre-core | src/schema.rs | crate::schema | Fnv | u64	the running state of an FNV-1a hash, private to the step fingerprint
 ambre-core | src/schema.rs | crate::schema | StepFingerprint | u64	a migration step fingerprint, only compared and printed as sixteen hex digits
 ambre-core | src/span.rs | crate::span | FrameRate | f32	frames per second of the page clock, measured and shown, never stored or sent
 ambre-core | src/span.rs | crate::span | LamportStamp | u64	a Lamport stamp: many peers issue stamps and two may share a value, so it is no Seq
-ambre-core | src/span.rs | crate::span | Rfc3339 | String	a timestamp text the relay formats, which a client reads through a lenient parser
+ambre-core | src/span.rs | crate::span | Rfc3339 | String	a timestamp text the relay formats, which a client reads through a lenient parser. A client parses it (sync/documents.rs, js_sys::Date::parse), so it is no Opaque, and it has no rule
 ambre-core | src/status.rs | crate::status | HttpStatus | u16	an HTTP status the relay answered, a u16 the HTTP standard defines
 ambre-core | src/unit.rs | crate::unit | Radians | f64	the one angle unit of the workspace, with to_degrees for a format that takes degrees
 ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millisecond: Px::per writes it and ViewSpeed::over turns it back into a move
 ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller chooses, read for equality alone and never a hash of the pixels
-ambre-draw | src/testing.rs | crate::testing | StackDepth | u32	the open pushes of a test double: popped answers None below zero, the renderer bug the double catches
+ambre-draw | src/testing.rs | crate::testing | StackDepth | u32	the open pushes of a test double: popped answers None below zero, the renderer bug the double catches. Count::minus saturates, which would hide a pop below zero
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports, a length only once WheelDelta::to_px reads it
-ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash | String	the error of a refused commit id: it echoes the refused text
-ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to
+ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to, one per kind, which Opaque::new would open
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo | usize	the gate depends on no workspace crate: a 1-based line number of the allowlist, for its messages
 ambre-primitives | src/scan.rs | crate::scan | AliasCount | usize	the gate depends on no workspace crate: the aliases one type has opened, held to a bound
@@ -71,13 +69,13 @@ ambre-protocol | src/membership.rs | crate::membership | LogPosition | u64	the p
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript | Vec<u8>	the bytes one signature covers, built in its own crate alone, while Payload has a public constructor
 ambre-server | src/db/mod.rs | crate::db | PgKey | Vec<u8>	a stored public key as sqlx reads it, decoded through try_from
 ambre-server | src/payload.rs | crate::payload | StoredPayload | Vec<u8>	payload bytes with a sqlx::Type impl, which the orphan rule bars on ambre_core::Payload
-ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken | String	the value a lock holder writes, which a release compares
-ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId | String	one socket's key in the routing table of the hub
-ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic | String	a Redis PubSub topic, one constructor per kind
-ambre-sync | src/http.rs | crate::http | ShownTarget | String	a relay route, or an object link without its query, as a log shows it
-ambre-sync | src/pipeline.rs | crate::pipeline | OpenedPayload | Vec<u8>	an opened payload that moves with no copy into the one role it reads, private to the pipeline
+ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken | String	the value a lock holder writes, which a release compares. Its one door is fresh, which Opaque::new would open
+ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId | String	one socket's key in the routing table of the hub. Its doors are new and the test door named, which Opaque::new would open
+ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic | String	a Redis PubSub topic, one constructor per kind, which Opaque::new would open
+ambre-sync | src/http.rs | crate::http | ShownTarget | String	a relay route, or an object link without its query, as a log shows it. Target alone builds it, which Opaque::new would open
+ambre-sync | src/pipeline.rs | crate::pipeline | OpenedPayload | Vec<u8>	an opened payload that moves with no copy into the one role it reads, private to the pipeline. One of its roles, UpdateFrame, is no Payload, so into_role cannot carry it
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob | Vec<u8>	bytes the seal alone builds, so a blob leaves the worker sealed (SYNC-049, ZK-001)
-ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame | Vec<u8>	a transient frame of document plaintext that its owner wipes through UpdateFrame::wipe (ARCH-015)
+ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame | Vec<u8>	a transient frame of document plaintext that its owner wipes through UpdateFrame::wipe (ARCH-015). Its door is closed: from_bytes is pub(crate). A wipe cannot be inherent on Payload outside core
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey | String	a target id and a user id joined by a slash (TOILE-229)
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Depth | isize	the edit steps of a Myers path, signed for the diagonal arithmetic, private to the search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Diagonal | isize	a signed diagonal of the Myers graph, private to the search

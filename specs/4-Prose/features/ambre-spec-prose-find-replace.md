@@ -99,9 +99,8 @@ thread, and nothing about a search is persisted (`ambre-spec-find.md`, `FIND-001
 **The query and a match:**
 
 ```rust
-// ambre_bus::app::prose -- the shared shape is `ambre-spec-find.md section 3`
-pub type FindQuery = find::FindQuery<FindOptions>;
-
+// ambre_bus::app::prose -- the shared shape is `ambre-spec-find.md section 3`;
+// a command carries `find::FindQuery<FindOptions>`, written in full
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct FindOptions {
     pub case:    CaseMatch,
@@ -120,11 +119,11 @@ pub struct FindMatch { pub block_id: BlockId, pub range: Span<DocChar> }
 // ambre-prose/src/logic/find.rs
 impl ProseState {
     /// Every match in the document, in block order (`PROSE-FEAT-033`, `PROSE-FEAT-034`).
-    fn find_all(&self, query: &FindQuery) -> Vec<FindMatch>;
+    fn find_all(&self, query: &FindQuery<FindOptions>) -> Vec<FindMatch>;
 
     /// Open a search. No query, the emptied field, closes the open one, so a
     /// step after it is refused as `FindRefusal::NoSearch` (`FIND-005`).
-    fn find_start(&mut self, query: Option<FindQuery>) -> ProseOutcome;
+    fn find_start(&mut self, query: Option<FindQuery<FindOptions>>) -> ProseOutcome;
 
     /// The replacements, from the end of the document backwards, in one commit
     /// (`PROSE-FEAT-036`).
@@ -133,7 +132,7 @@ impl ProseState {
 
 /// The match spans inside one block's text, honouring case and whole-word, and never
 /// overlapping (`PROSE-FEAT-035`).
-fn match_offsets(hay: &str, query: &FindQuery) -> Vec<Span<DocChar>>;
+fn match_offsets(hay: &str, query: &FindQuery<FindOptions>) -> Vec<Span<DocChar>>;
 ```
 
 * **What is searched** -- the body blocks of the movable tree, in document order, and nothing else.

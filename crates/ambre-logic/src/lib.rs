@@ -532,9 +532,9 @@ struct LiveDoc {
     /// this horizon. Sync is asked to open it once the read lands
     /// (`RESID-010`).
     restoring: Option<Seq<Relay>>,
-    /// The deltas of a replay not yet imported, one slice a pass
-    /// (`SYNC-131`).
-    replay: replay::ReplayQueue,
+    /// The deltas of a replay not yet imported, oldest first, with their seq,
+    /// one slice a pass (`SYNC-131`).
+    replay: std::collections::VecDeque<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)>,
     /// `DocumentReady` landed while the replay was still being imported:
     /// what reads the whole replay runs after its last slice.
     ready_held: bool,
@@ -571,7 +571,7 @@ impl LiveDoc {
             relay: loro::VersionVector::default(),
             earlier: Vec::new(),
             restoring: None,
-            replay: replay::ReplayQueue::new(),
+            replay: std::collections::VecDeque::new(),
             ready_held: false,
         }
     }

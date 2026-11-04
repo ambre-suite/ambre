@@ -790,7 +790,7 @@ mod pdf_tests {
             ambre_canvas::Theme::Light.palette(),
             &mut ambre_draw::FontContext::default(),
             &mut ambre_canvas::TextCache::new(),
-            &crate::ui::render::ImageStore::new(),
+            &std::collections::HashMap::new(),
         );
         s
     }
@@ -889,7 +889,7 @@ mod pdf_tests {
             &mut ambre_draw::FontContext::default(),
             &mut ambre_canvas::TextCache::new(),
             None,
-            &crate::ui::render::ImageStore::new(),
+            &std::collections::HashMap::new(),
             &std::collections::HashMap::new(),
             ambre_bus::app::toile::PresentMode::Editing,
         );

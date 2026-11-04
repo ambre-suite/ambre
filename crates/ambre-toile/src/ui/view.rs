@@ -645,7 +645,7 @@ pub struct ToileView {
     /// placeholder box. The screen-side population (from `MediaDownloaded`) lands
     /// with the media cache slice; the field is here so the walk has a stable
     /// source today.
-    images: render::ImageStore,
+    images: HashMap<ambre_core::Validated<ambre_core::ContentHash>, render::DecodedImage>,
     /// Addresses already asked for and not yet answered. The view asks for a
     /// picture once rather than on every frame that fails to paint it. An
     /// address the document cannot resolve never gets an answer and stays here.
@@ -861,7 +861,7 @@ impl ToileView {
             anim_overrides: HashMap::new(),
             gesture_overrides: HashMap::new(),
             gesture_commit_pending: false,
-            images: render::ImageStore::new(),
+            images: HashMap::new(),
             media_requested: HashSet::new(),
             media_retry: false,
             embed_focus: embed::EmbedFocus::default(),
@@ -4469,19 +4469,17 @@ mod view_tests;
 #[cfg(test)]
 mod wheel_tests {
     use super::{WHEEL_MOUSE_NOTCH, WheelDevice, wheel_device};
-    use ambre_canvas::{WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
+    use ambre_canvas::{WheelAmount, WheelDelta, WheelDeltaMode};
     use ambre_core::{Css, Px, Vector};
 
     /// A notched step, in line units.
     const LINE: WheelDelta = WheelDelta::new(
-        WheelVector::new(WheelAmount::new(0.0), WheelAmount::new(1.0)),
+        Vector::new(WheelAmount::new(0.0), WheelAmount::new(1.0)),
         WheelDeltaMode::Line,
     );
     /// A pixel glide.
-    const GLIDE: WheelDelta = WheelDelta::pixels(WheelVector::new(
-        WheelAmount::new(0.0),
-        WheelAmount::new(1.0),
-    ));
+    const GLIDE: WheelDelta =
+        WheelDelta::pixels(Vector::new(WheelAmount::new(0.0), WheelAmount::new(1.0)));
 
     #[test]
     fn line_or_page_delta_mode_is_a_mouse() {

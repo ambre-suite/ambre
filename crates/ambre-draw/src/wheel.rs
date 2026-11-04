@@ -66,29 +66,26 @@ impl WheelAmount {
     }
 }
 
-/// The two axes of a wheel delta, in the unit the browser gave them.
-pub type WheelVector = Vector<WheelAmount>;
-
 /// One wheel event's deltas, in the unit the browser gave them.
 ///
 /// The fields are private: a view reads the distance through
 /// [`WheelDelta::to_px`], which asks it what a line and a page are worth.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WheelDelta {
-    amount: WheelVector,
+    amount: Vector<WheelAmount>,
     mode: WheelDeltaMode,
 }
 
 impl WheelDelta {
     /// A delta of `amount` in `mode` units.
     #[must_use]
-    pub const fn new(amount: WheelVector, mode: WheelDeltaMode) -> Self {
+    pub const fn new(amount: Vector<WheelAmount>, mode: WheelDeltaMode) -> Self {
         Self { amount, mode }
     }
 
     /// A delta of `amount` CSS pixels.
     #[must_use]
-    pub const fn pixels(amount: WheelVector) -> Self {
+    pub const fn pixels(amount: Vector<WheelAmount>) -> Self {
         Self::new(amount, WheelDeltaMode::Pixel)
     }
 
@@ -120,7 +117,7 @@ impl WheelDelta {
 
 #[cfg(test)]
 mod tests {
-    use super::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
+    use super::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode};
     use ambre_core::{Css, Px, Vector};
 
     const LINE: Vector<Px<Css>> = Vector::new(WHEEL_LINE, WHEEL_LINE);
@@ -130,8 +127,8 @@ mod tests {
         Vector::new(Px::<Css>::new(dx), Px::<Css>::new(dy))
     }
 
-    fn units(dx: f64, dy: f64) -> WheelVector {
-        WheelVector::new(WheelAmount::new(dx), WheelAmount::new(dy))
+    fn units(dx: f64, dy: f64) -> Vector<WheelAmount> {
+        Vector::new(WheelAmount::new(dx), WheelAmount::new(dy))
     }
 
     /// `KINETIC-015`: each unit reads as its pixels, on both axes.

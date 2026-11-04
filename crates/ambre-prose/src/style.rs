@@ -21,9 +21,6 @@ use ambre_bus::app::prose::MarkKey;
 
 use crate::mark::{self, InlineCode, MarkRoot, Script};
 
-/// The marks one run carries, key to stored value.
-pub type MarkSet = BTreeMap<MarkKey, Opaque<StoredMarkValues>>;
-
 /// The kind of a mark value as the document holds it, never checked:
 /// `Opaque<StoredMarkValues>`. A peer on another build may have written any
 /// text, and [`resolve`] parses each one it reads and drops what fails. A
@@ -123,7 +120,11 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
 /// one. The write path refused it already (`PROSE-FEAT-022`), so a malformed
 /// value here came from a document this build did not write.
 #[must_use]
-pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -> ResolvedStyle {
+pub fn resolve(
+    marks: &BTreeMap<MarkKey, Opaque<StoredMarkValues>>,
+    context: BlockContext,
+    defaults: &DocDefaults,
+) -> ResolvedStyle {
     let mut resolved = block_defaults(context, defaults);
     let has = |root: MarkRoot| marks.contains_key(root.as_str());
     let get = |root: MarkRoot| marks.get(root.as_str()).map(Opaque::as_str);
@@ -180,7 +181,7 @@ mod tests {
         assert_eq!(format!("{value:?}"), "StoredMarkValue(28 chars)");
     }
 
-    fn marks(pairs: &[(&str, &str)]) -> MarkSet {
+    fn marks(pairs: &[(&str, &str)]) -> BTreeMap<MarkKey, Opaque<StoredMarkValues>> {
         pairs
             .iter()
             .map(|(key, value)| (MarkKey::from(*key), Opaque::<StoredMarkValues>::new(*value)))
@@ -218,12 +219,12 @@ mod tests {
     fn a_mark_wins_over_the_block_which_wins_over_the_defaults() {
         let defaults = DocDefaults::default();
         // The defaults alone.
-        let plain = resolve(&MarkSet::new(), body(), &defaults);
+        let plain = resolve(&BTreeMap::new(), body(), &defaults);
         assert_eq!(plain.font_size, defaults.font_size);
         assert_eq!(plain.bold, Weight::Regular);
 
         // The block type, above the defaults.
-        let titled = resolve(&MarkSet::new(), heading(1), &defaults);
+        let titled = resolve(&BTreeMap::new(), heading(1), &defaults);
         assert_eq!(
             titled.bold,
             Weight::Bold,
@@ -252,7 +253,7 @@ mod tests {
             font_size: mark::FONT_SIZE_MAX,
             ..DocDefaults::default()
         };
-        let titled = resolve(&MarkSet::new(), heading(1), &capped);
+        let titled = resolve(&BTreeMap::new(), heading(1), &capped);
         assert_eq!(titled.font_size, mark::FONT_SIZE_MAX);
     }
 
@@ -260,7 +261,7 @@ mod tests {
     /// reader stops there (`PROSE-FEAT-177`).
     #[test]
     fn a_property_no_level_carries_resolves_to_a_decided_absence() {
-        let resolved = resolve(&MarkSet::new(), body(), &DocDefaults::default());
+        let resolved = resolve(&BTreeMap::new(), body(), &DocDefaults::default());
         assert_eq!(resolved.color, None);
         assert_eq!(resolved.background, None);
         assert_eq!(resolved.link, None);

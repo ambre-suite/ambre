@@ -51,9 +51,7 @@ pub use commands::{
     context_entries_for, init_command_states, mirror_event, new_doc_label, notify_event,
     status_label,
 };
-pub use find_replace::{
-    FindMode, FindPosition, FindQuery, FindReplace, FindReplaceState, ReplaceRequest,
-};
+pub use find_replace::{FindMode, FindPosition, FindReplace, FindReplaceState, ReplaceRequest};
 pub use formula_bar::FormulaBar;
 pub use handler::TrameHandler;
 pub use popovers::{FilterPopover, FilterPopoverState, SheetFilter};

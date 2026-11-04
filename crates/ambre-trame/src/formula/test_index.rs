@@ -3,7 +3,10 @@
 //! `Uid`s without a live `LoroDoc`. Rows use peer 1, columns peer 2; the counter
 //! is the grid position, so `row_id(p)`/`col_id(p)` are stable and distinct.
 
+use crate::formula::EngineSheet;
 use crate::model::{SheetIndex, Uid};
+use ambre_core::index::Pos;
+use std::collections::HashMap;
 
 /// A `SheetIndex` with `rows` materialized rows and `cols` materialized columns.
 pub fn index_with(rows: usize, cols: usize) -> SheetIndex {
@@ -23,9 +26,9 @@ pub fn index_with(rows: usize, cols: usize) -> SheetIndex {
     idx
 }
 
-/// A single-sheet `SheetIndices` map (sheet 0) sized `rows` x `cols`.
-pub fn indices_with(rows: usize, cols: usize) -> super::SheetIndices {
-    let mut m = super::SheetIndices::new();
+/// A single-sheet index map (sheet 0) sized `rows` x `cols`.
+pub fn indices_with(rows: usize, cols: usize) -> HashMap<Pos<EngineSheet>, SheetIndex> {
+    let mut m = HashMap::new();
     m.insert(super::ACTIVE_SHEET, index_with(rows, cols));
     m
 }

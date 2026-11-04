@@ -8,12 +8,15 @@
 use crate::formula::text::CellText;
 use std::collections::{HashMap, HashSet};
 
-use super::compile::{SheetIndices, compile};
+use super::compile::compile;
 use super::dag::DependencyGraph;
 use super::identity::unbind;
 use super::parser::{parse_formula, resolve_refs};
 use super::text::StoredForm;
+use super::types::EngineSheet;
 use super::types::{CellBytecode, CellId, CellValue, FormulaCtx, FormulaError, SheetQualifier};
+use crate::model::SheetIndex;
+use ambre_core::index::Pos;
 
 /// Caches compiled bytecode and tracks stale cells for incremental compilation.
 pub struct BytecodeCache {
@@ -84,7 +87,7 @@ impl BytecodeCache {
         &mut self,
         cell: CellId,
         raw: CellText<StoredForm>,
-        indices: &SheetIndices,
+        indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
         deps: &mut DependencyGraph,
         ctx: &dyn FormulaCtx,
     ) -> Option<CellValue> {
