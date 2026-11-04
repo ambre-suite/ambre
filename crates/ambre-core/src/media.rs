@@ -7,37 +7,48 @@
 use serde::{Deserialize, Serialize};
 
 use crate::fixed_bytes::{FixedBytes, FixedRole};
+use crate::{Loggable, Rule, Validated};
 
-/// The content address of a media blob, which the relay stores it under
-/// (`ambre-spec-media.md`). A distinct type, so an element id or a URL never
-/// takes its place.
+/// The rule of the content address of a media blob, which the relay stores
+/// it under (`ambre-spec-media.md`). A `Validated<ContentHash>` holds one, a
+/// distinct type, so an element id or a URL never takes its place.
 ///
 /// An address is the lowercase hex spelling of a [`MediaAddress`]: sixty-four
-/// characters. [`ContentHash::parse`] and [`FixedBytes::content_hash`] are
-/// the only ways in. Serde reads through the same check, so a peer, the relay
-/// or the store never hands over another text. The serde form is the bare
+/// characters. [`Validated::parse`] and [`FixedBytes::content_hash`] are the
+/// only ways in. Serde reads through the same check, so a peer, the relay or
+/// the store never hands over another text. The serde form is the bare
 /// string, as before the check.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
-#[serde(try_from = "String")]
-pub struct ContentHash(String);
+pub enum ContentHash {}
 
 /// A text that spells no content address.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("a content hash is sixty-four lowercase hex characters")]
 pub struct ContentHashError;
 
-impl ContentHash {
-    /// The address `word` spells, or `None` for anything else.
-    #[must_use]
-    pub fn parse(word: &str) -> Option<Self> {
-        Self::try_from(word.to_owned()).ok()
-    }
+/// The one check of a hash, which serde reads through too: sixty-four
+/// lowercase hex characters, the spelling of a [`MediaAddress`]. The text is
+/// kept, never copied.
+impl Rule for ContentHash {
+    type Error = ContentHashError;
 
-    /// The address, as the relay names it.
-    pub fn as_str(&self) -> &str {
-        &self.0
+    const LOGGED_AS: Option<&'static str> = Some("ContentHash");
+
+    fn admit(text: String) -> Result<String, ContentHashError> {
+        let is_address = text.len() == 2 * MEDIA_ADDRESS_LEN
+            && text
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+        if is_address {
+            Ok(text)
+        } else {
+            Err(ContentHashError)
+        }
     }
 }
+
+/// A hash is a keyed digest, so it reveals nothing of the blob. The relay
+/// names the blob by it, so a log may print it.
+impl Loggable for ContentHash {}
 
 /// The width of a [`MediaAddress`], in bytes.
 pub const MEDIA_ADDRESS_LEN: usize = 32;
@@ -57,59 +68,21 @@ impl FixedRole for MediaAddress {
 impl FixedBytes<MediaAddress> {
     /// The hex spelling the relay names the blob by.
     #[must_use]
-    pub fn content_hash(&self) -> ContentHash {
-        ContentHash(self.to_hex())
+    pub fn content_hash(&self) -> Validated<ContentHash> {
+        Validated::admitted(self.to_hex())
     }
 
     /// Reads an address back from its hex spelling. A [`ContentHash`] holds
     /// sixty-four lowercase hex characters by construction, so every hash
     /// spells exactly one address.
     #[must_use]
-    pub fn of_hash(hash: &ContentHash) -> Self {
+    pub fn of_hash(hash: &Validated<ContentHash>) -> Self {
         let mut bytes = [0u8; MEDIA_ADDRESS_LEN];
         // The decode fails only on a wrong length or a non-hex byte, and the
         // check of `ContentHash` refuses both before a hash exists.
-        let decoded = hex::decode_to_slice(&hash.0, &mut bytes);
+        let decoded = hex::decode_to_slice(hash.as_str(), &mut bytes);
         debug_assert!(decoded.is_ok(), "a ContentHash spells an address");
         Self::from_array(bytes)
-    }
-}
-
-impl std::fmt::Display for ContentHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::borrow::Borrow<str> for ContentHash {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-/// The one check of a hash, which serde reads through too: sixty-four
-/// lowercase hex characters, the spelling of a [`MediaAddress`]. The text is
-/// kept, never copied.
-impl TryFrom<String> for ContentHash {
-    type Error = ContentHashError;
-
-    fn try_from(text: String) -> Result<Self, Self::Error> {
-        let is_address = text.len() == 2 * MEDIA_ADDRESS_LEN
-            && text
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
-        if is_address {
-            Ok(Self(text))
-        } else {
-            Err(ContentHashError)
-        }
-    }
-}
-
-/// The bare string, as `#[serde(transparent)]` wrote it.
-impl Serialize for ContentHash {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0)
     }
 }
 
@@ -259,7 +232,8 @@ impl std::iter::Sum for ByteSize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ByteSize, ContentHash, FixedBytes, MediaAddress};
+    use super::{ByteSize, ContentHash, ContentHashError, FixedBytes, MediaAddress};
+    use crate::Validated;
 
     #[test]
     fn a_media_value_serializes_as_its_bare_inner_value() {
@@ -267,7 +241,9 @@ mod tests {
         assert_eq!(ByteSize::from_i64(-1), ByteSize(0));
         assert_eq!(ByteSize(u64::MAX).to_i64_saturating(), i64::MAX);
         let hex = "ab".repeat(32);
-        let hash = ContentHash::parse(&hex).unwrap();
+        let hash = Validated::<ContentHash>::parse(hex.clone()).unwrap();
+        assert_eq!(format!("{hash:?}"), format!("ContentHash({hex:?})"));
+        assert_eq!(hash.to_string(), hex);
         assert_eq!(
             serde_json::to_string(&hash).unwrap(),
             serde_json::to_string(&hex).unwrap()
@@ -292,8 +268,8 @@ mod tests {
     fn a_hash_takes_sixty_four_lowercase_hex_characters_alone() {
         let hex = "0a".repeat(32);
         assert_eq!(
-            ContentHash::parse(&hex).map(|hash| hash.as_str().to_owned()),
-            Some(hex.clone())
+            Validated::<ContentHash>::parse(hex.clone()).map(Validated::into_string),
+            Ok(hex.clone())
         );
         let refused = [
             hex.to_uppercase(),
@@ -303,21 +279,27 @@ mod tests {
             String::new(),
         ];
         for text in refused {
-            assert_eq!(ContentHash::parse(&text), None, "{text}");
+            assert_eq!(
+                Validated::<ContentHash>::parse(text.clone()),
+                Err(ContentHashError),
+                "{text}"
+            );
             let json = serde_json::to_string(&text).unwrap();
             assert!(
-                serde_json::from_str::<ContentHash>(&json).is_err(),
+                serde_json::from_str::<Validated<ContentHash>>(&json).is_err(),
                 "{text}"
             );
             let bytes = postcard::to_allocvec(&text).unwrap();
             assert!(
-                postcard::from_bytes::<ContentHash>(&bytes).is_err(),
+                postcard::from_bytes::<Validated<ContentHash>>(&bytes).is_err(),
                 "{text}"
             );
         }
         let json = serde_json::to_string(&hex).unwrap();
         assert_eq!(
-            serde_json::from_str::<ContentHash>(&json).unwrap().as_str(),
+            serde_json::from_str::<Validated<ContentHash>>(&json)
+                .unwrap()
+                .as_str(),
             hex
         );
     }

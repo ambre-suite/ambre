@@ -36,6 +36,6 @@ pub fn stored(text: &str) -> crate::formula::text::CellText<super::text::StoredF
 }
 
 /// The function name `text`, which must be an identifier.
-pub fn function(text: &str) -> super::types::FunctionName {
-    super::types::FunctionName::parse(text).expect("an identifier")
+pub fn function(text: &str) -> ambre_core::Validated<super::types::FunctionName> {
+    ambre_core::Validated::<super::types::FunctionName>::parse(text).expect("an identifier")
 }

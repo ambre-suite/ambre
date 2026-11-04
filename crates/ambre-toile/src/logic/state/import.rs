@@ -9,6 +9,7 @@
 //! (`TOILE-IO-028`). One Loro undo group spans every slice.
 
 use ambre_core::Count;
+use ambre_core::Validated;
 use ambre_core::index::Pos;
 use std::collections::HashMap;
 
@@ -37,7 +38,7 @@ use super::names::{Fields, MediaKey, Root};
 /// blob at `slot` and every `image` element that referenced it
 /// (`toile-media`). Called as each upload confirmation lands, so by the time
 /// the batch is applied no pending slot survives.
-fn rewrite_hash(batch: &mut ImportBatch, slot: Pos<ImportSlot>, hash: &ContentHash) {
+fn rewrite_hash(batch: &mut ImportBatch, slot: Pos<ImportSlot>, hash: &Validated<ContentHash>) {
     let pending = MediaRef::Pending(slot);
     let stored = MediaRef::Stored(hash.clone());
     if let Some(blob) = slot.to_index().and_then(|i| batch.media.get_mut(i)) {
@@ -593,7 +594,7 @@ impl ToileState {
         let media = self.doc.get_map(Root::Media.as_str());
         let mut created = Count::<MediaEntries>::ZERO;
         for blob in blobs {
-            let Some(key) = blob.media.stored().map(ContentHash::as_str) else {
+            let Some(key) = blob.media.stored().map(Validated::as_str) else {
                 // No address from Sync yet: a pending slot never becomes a key.
                 continue;
             };
@@ -656,7 +657,7 @@ impl ToileState {
 #[cfg(test)]
 mod tests {
     use ambre_core::index::Pos;
-    use ambre_core::{Count, Elements, Rgba};
+    use ambre_core::{Count, Elements, Rgba, Validated};
     use kurbo::{Point, Size};
 
     use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
@@ -785,8 +786,8 @@ mod tests {
     }
 
     /// The address `label` names, as Sync hands it back.
-    fn hash_of(label: &str) -> ContentHash {
-        ContentHash::parse(&hx(label)).expect("a label of at most 32 bytes")
+    fn hash_of(label: &str) -> Validated<ContentHash> {
+        Validated::<ContentHash>::parse(hx(label)).expect("a label of at most 32 bytes")
     }
 
     fn blob(hash: &str, w: u32, h: u32, mime: &str) -> MediaBlob {
@@ -838,7 +839,7 @@ mod tests {
         let mut st = ToileState::new();
         // An empty text spells no address, so no blob can carry one as a key.
         // A blob Sync has not answered yet carries its pending slot instead.
-        assert_eq!(ContentHash::parse(""), None);
+        assert_eq!(Validated::<ContentHash>::parse("").ok(), None);
         let pending = MediaBlob {
             media: MediaRef::Pending(Pos::<ImportSlot>::ZERO),
             ..blob("unused", 10, 10, "image/png")

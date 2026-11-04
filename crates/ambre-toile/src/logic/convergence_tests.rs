@@ -4807,7 +4807,8 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
 #[test]
 fn a_peers_traversal_in_a_picture_address_derives_no_address() {
     let mut peer = ToileState::new();
-    let hash = ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash");
+    let hash =
+        ambre_core::Validated::<ambre_core::ContentHash>::parse("ab".repeat(32)).expect("a hash");
     let out = peer.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Image,
         at: Point::ZERO,

@@ -18,7 +18,7 @@ use crate::state::AppState;
 /// cannot compute from any file it has (`SRV-059`).
 #[derive(serde::Deserialize)]
 pub struct UploadUrlRequest {
-    pub content_hash: ambre_core::ContentHash,
+    pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     /// Declared size of the encrypted blob. Validated against `media_max_size`
     /// and bound into the presigned PUT URL so the upload cannot exceed it.
     #[serde(rename = "size_bytes")]
@@ -71,7 +71,7 @@ pub async fn media_upload_url(
 /// Request for a presigned S3 download URL by content hash.
 #[derive(serde::Deserialize)]
 pub struct DownloadUrlRequest {
-    pub content_hash: ambre_core::ContentHash,
+    pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
 }
 #[derive(serde::Serialize)]
 pub struct DownloadUrlResponse {
@@ -111,7 +111,7 @@ pub async fn media_download_url(
 /// (`SYNC-053`).
 #[derive(serde::Deserialize)]
 pub struct ConfirmUploadRequest {
-    pub content_hash: ambre_core::ContentHash,
+    pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     #[serde(rename = "size_bytes")]
     pub size: ambre_core::ByteSize,
 }
@@ -162,7 +162,7 @@ pub async fn media_confirm_upload(
 #[derive(serde::Serialize)]
 pub struct MediaConfirmed {
     pub status: ambre_core::WriteStatus,
-    pub content_hash: ambre_core::ContentHash,
+    pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
 }
 
 /// Erases the caller's upload of a blob (`SRV-139`).
@@ -175,7 +175,10 @@ pub struct MediaConfirmed {
 pub async fn media_erase(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, content_hash)): PathId<(Id<Document>, ambre_core::ContentHash)>,
+    PathId((doc_id, content_hash)): PathId<(
+        Id<Document>,
+        ambre_core::Validated<ambre_core::ContentHash>,
+    )>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
@@ -207,5 +210,5 @@ pub async fn media_erase(
 #[derive(serde::Serialize)]
 pub struct MediaErased {
     pub status: ambre_core::WriteStatus,
-    pub content_hash: ambre_core::ContentHash,
+    pub content_hash: ambre_core::Validated<ambre_core::ContentHash>,
 }

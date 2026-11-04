@@ -22,10 +22,10 @@
 
 use std::path::{Path, PathBuf};
 
-use ambre_core::{Ns, TimeSpan};
+use ambre_core::{Ns, TimeSpan, Validated};
 use ambre_logic::fixtures::{
     BASELINE_DIR, BENCH_DIR, BENCH_REGISTRY, BenchBaseline, BenchMeasurement, CORPUS_DIR,
-    CommitHash, REGISTRY, baselines_in, corpus_root,
+    CommitHash, InvalidCommitHash, REGISTRY, baselines_in, corpus_root,
 };
 
 /// The workspace root, derived from the corpus root the loader already resolves.
@@ -145,14 +145,14 @@ fn a_blank_machine_is_not_a_named_machine() {
     }];
     let named = BenchBaseline {
         machine: "Ryzen 7 5800X, 32 GB, Linux 6.18".to_owned(),
-        commit: CommitHash::new("abc1234").ok(),
+        commit: Validated::<CommitHash>::parse("abc1234").ok(),
         measurements: measurements.clone(),
     };
     assert!(named.names_its_machine());
     for blank in ["", "   ", "\t"] {
         let unnamed = BenchBaseline {
             machine: blank.to_owned(),
-            commit: CommitHash::new("abc1234").ok(),
+            commit: Validated::<CommitHash>::parse("abc1234").ok(),
             measurements: measurements.clone(),
         };
         assert!(
@@ -171,7 +171,7 @@ fn a_blank_machine_is_not_a_named_machine() {
 fn a_baseline_round_trips_through_its_file() {
     let baseline = BenchBaseline {
         machine: "Ryzen 7 5800X, 32 GB, Linux 6.18".to_owned(),
-        commit: CommitHash::new("abc1234").ok(),
+        commit: Validated::<CommitHash>::parse("abc1234").ok(),
         measurements: vec![BenchMeasurement {
             id: "toile_viewport/toile/bench_board_50k".to_owned(),
             mean_ns: TimeSpan::<Ns>::new(5_062_900_000),
@@ -188,4 +188,21 @@ fn a_baseline_round_trips_through_its_file() {
     assert_eq!(read.len(), 1, "one baseline in, one out");
     assert_eq!(read[0].1, baseline, "every field survives the encoding");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A commit id is 4 to 40 lowercase hex digits. The refusal echoes the text,
+/// and `Debug` prints the id under its old name.
+#[test]
+fn a_commit_id_is_four_to_forty_lowercase_hex_digits() {
+    let id = Validated::<CommitHash>::parse("abc1234").expect("a short id");
+    assert_eq!(format!("{id:?}"), "CommitHash(\"abc1234\")");
+    assert_eq!(id.to_string(), "abc1234");
+    assert!(Validated::<CommitHash>::parse("a".repeat(40)).is_ok());
+    for bad in ["abc", "ABC1234", "abc123g", &"a".repeat(41)] {
+        assert_eq!(
+            Validated::<CommitHash>::parse(bad),
+            Err(InvalidCommitHash::new(bad.to_owned())),
+            "{bad}"
+        );
+    }
 }

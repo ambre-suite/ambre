@@ -147,7 +147,7 @@ pub use font::{
 };
 pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
 pub use key_id::{KEY_ID_LEN, KeyId};
-pub use lang::LangTag;
+pub use lang::{LangTag, NotALangTag, primary_subtag};
 pub use link::LinkUrl;
 pub use media::{
     ByteSize, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress,

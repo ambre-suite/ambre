@@ -12,6 +12,7 @@
 //! `RestCommand::UploadMedia` / `DownloadMedia` service plane.
 
 use ambre_core::Count;
+use ambre_core::Validated;
 use std::collections::HashMap;
 
 /// The content address of a media blob. The hash itself is computed
@@ -79,9 +80,9 @@ impl MediaCacheCapacity {
 /// only, consistent with the confidentiality posture.
 pub struct MediaCache {
     capacity: MediaCacheCapacity,
-    entries: HashMap<ContentHash, Entry>,
+    entries: HashMap<Validated<ContentHash>, Entry>,
     /// Access order, least-recently-used at the front, most-recently at the back.
-    order: Vec<ContentHash>,
+    order: Vec<Validated<ContentHash>>,
 }
 
 impl MediaCache {
@@ -108,7 +109,7 @@ impl MediaCache {
     /// issues a `DownloadMedia`. A repeated request (in-flight, ready, or failed)
     /// returns [`RequestOutcome::CacheHit`] and issues no fetch: the dedup that
     /// collapses identical images to one blob.
-    pub fn request(&mut self, hash: &ContentHash) -> RequestOutcome {
+    pub fn request(&mut self, hash: &Validated<ContentHash>) -> RequestOutcome {
         if let Some(entry) = self.entries.get(hash) {
             let state = entry.state;
             self.touch(hash);
@@ -129,7 +130,7 @@ impl MediaCache {
     /// resolved an unknown or already-terminal slot. The transition is still
     /// applied: last write wins, matching a late-arriving download. Touches the
     /// entry as most-recently-used.
-    pub fn resolve(&mut self, hash: &ContentHash, pixels: Vec<u8>) -> bool {
+    pub fn resolve(&mut self, hash: &Validated<ContentHash>, pixels: Vec<u8>) -> bool {
         let was_loading = matches!(
             self.entries.get(hash).map(|e| e.state),
             Some(MediaState::Loading)
@@ -155,7 +156,7 @@ impl MediaCache {
 
     /// Mark a blob's fetch/decode as failed. Idempotent; creates the slot
     /// if the failure races ahead of the request record.
-    pub fn fail(&mut self, hash: &ContentHash) {
+    pub fn fail(&mut self, hash: &Validated<ContentHash>) {
         match self.entries.get_mut(hash) {
             Some(entry) => {
                 entry.state = MediaState::Failed;
@@ -175,20 +176,20 @@ impl MediaCache {
     }
 
     /// The current lifecycle state of `hash`, or `None` if never requested.
-    pub fn state(&self, hash: &ContentHash) -> Option<MediaState> {
+    pub fn state(&self, hash: &Validated<ContentHash>) -> Option<MediaState> {
         self.entries.get(hash).map(|e| e.state)
     }
 
     /// The decoded pixels of a `Ready` blob, or `None` otherwise. A cache hit here
     /// is the "0 refetch" path.
-    pub fn pixels(&self, hash: &ContentHash) -> Option<&[u8]> {
+    pub fn pixels(&self, hash: &Validated<ContentHash>) -> Option<&[u8]> {
         self.entries.get(hash).and_then(|e| e.pixels.as_deref())
     }
 
     // --- internal LRU bookkeeping -------------------------------------------
 
     /// Move `hash` to the most-recently-used position. Assumes it is resident.
-    fn touch(&mut self, hash: &ContentHash) {
+    fn touch(&mut self, hash: &Validated<ContentHash>) {
         if let Some(pos) = self.order.iter().position(|h| h == hash) {
             let h = self.order.remove(pos);
             self.order.push(h);
@@ -197,7 +198,7 @@ impl MediaCache {
 
     /// Insert a fresh entry as most-recently-used, evicting the LRU non-`Loading`
     /// entry if over capacity.
-    fn insert(&mut self, hash: ContentHash, entry: Entry) {
+    fn insert(&mut self, hash: Validated<ContentHash>, entry: Entry) {
         self.entries.insert(hash.clone(), entry);
         self.order.push(hash);
         self.evict_if_needed();
@@ -231,8 +232,8 @@ mod tests {
     use super::*;
 
     /// The hash that repeats the hex digit `s` sixty-four times.
-    fn h(s: &str) -> ContentHash {
-        ContentHash::parse(&s.repeat(64)).expect("a hex digit")
+    fn h(s: &str) -> Validated<ContentHash> {
+        Validated::<ContentHash>::parse(s.repeat(64)).expect("a hex digit")
     }
 
     #[test]

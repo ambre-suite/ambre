@@ -8,6 +8,7 @@
 //! peers never race on it.
 
 use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType};
+use ambre_core::Validated;
 use loro::{Container, LoroList, LoroMap, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -68,7 +69,8 @@ pub(crate) fn read(message: &Fields<MessageKey>) -> Vec<Attachment> {
 /// One attachment, `None` when a field is absent or unreadable.
 fn read_entry(entry: &Fields<AttachmentKey>) -> Option<Attachment> {
     Some(Attachment {
-        media_ref: ContentHash::parse(&schema::string(entry, AttachmentKey::Media)?)?,
+        media_ref: Validated::<ContentHash>::parse(&schema::string(entry, AttachmentKey::Media)?)
+            .ok()?,
         name: schema::string(entry, AttachmentKey::Name)?,
         media_type: MediaType::new(schema::string(entry, AttachmentKey::Type)?),
         size: ByteSize::new(schema::unsigned(entry, AttachmentKey::Size)?),

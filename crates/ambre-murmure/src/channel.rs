@@ -7,6 +7,7 @@
 //! remote delta reaches the one it names and no other (`MURMURE-024`).
 
 use ambre_core::Count;
+use ambre_core::Validated;
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
@@ -1357,7 +1358,7 @@ impl ChannelState {
         segment: Id<Segment>,
         message: Id<Message>,
         author: Id<User>,
-    ) -> Vec<ContentHash> {
+    ) -> Vec<Validated<ContentHash>> {
         let Some(target) = self.messages(segment).ok().and_then(|messages| {
             messages.into_iter().find(|view| {
                 view.id == message && view.author == author && view.deleted == Deletion::Live
@@ -1374,7 +1375,7 @@ impl ChannelState {
                 view.author == author && view.deleted == Deletion::Live && view.id != message
             })
             .collect();
-        let mut erasable: Vec<ContentHash> = Vec::new();
+        let mut erasable: Vec<Validated<ContentHash>> = Vec::new();
         for attachment in target.attachments {
             let elsewhere = others.iter().any(|view| {
                 view.attachments

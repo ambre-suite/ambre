@@ -6,6 +6,7 @@
 //! (`ambre-spec-murmure-attachments.md`). The view gets frames at the size of the preview, never
 //! the file, so a frame costs it a texture and no decode.
 
+use ambre_core::Validated;
 use ambre_core::{Image, Px, Size};
 use std::io::Cursor;
 
@@ -42,7 +43,7 @@ impl LogicState {
         &mut self,
         channel_id: Id<Channel>,
         document_id: Id<Document>,
-        media_ref: ContentHash,
+        media_ref: Validated<ContentHash>,
     ) {
         let asked = (channel_id, media_ref);
         if self.picturing.values().any(|held| *held == asked) {
@@ -87,7 +88,7 @@ impl LogicState {
     fn send_picture(
         &self,
         channel_id: Id<Channel>,
-        media_ref: ContentHash,
+        media_ref: Validated<ContentHash>,
         picture: Option<Picture>,
     ) {
         self.send_to_ui(UiEvent::Channel {

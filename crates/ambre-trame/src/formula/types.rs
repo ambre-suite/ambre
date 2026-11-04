@@ -1,6 +1,6 @@
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Axis, Len, Numbered, Pos, Span};
-use ambre_core::{Ordinal, OrdinalKind};
+use ambre_core::{Loggable, Ordinal, OrdinalKind, Rule, Validated};
 use std::fmt;
 
 use ambre_bus::{CellPos, Col, DefinedName, Row, SheetName};
@@ -683,7 +683,7 @@ pub enum Op {
     /// `n_args` values are popped from the stack and passed to the named
     /// built-in function; the result is pushed back.
     CallFn {
-        name: FunctionName,
+        name: Validated<FunctionName>,
         n_args: Len<Arg>,
     },
 }
@@ -767,36 +767,46 @@ impl StoredCell {
     }
 }
 
-/// The name of a function a formula calls, upper-cased. It reads as the
-/// parser reads it: a letter or `_`, then letters, digits and `_`, all ASCII.
+/// The rule of the name of a function a formula calls, upper-cased. A
+/// `Validated<FunctionName>` holds one. It reads as the parser reads it: a
+/// letter or `_`, then letters, digits and `_`, all ASCII. The rule keeps the
+/// name upper-cased.
 ///
 /// A name no built-in answers is still a name: the call evaluates to `#N/A`,
 /// and the formula renders it back as written.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FunctionName(String);
+pub enum FunctionName {}
 
-impl FunctionName {
-    /// The name `text` reads as, upper-cased, or `None` when `text` is not an
-    /// identifier.
-    pub fn parse(text: &str) -> Option<Self> {
+/// A text that is no identifier, so it names no function.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NotAFunctionName;
+
+impl fmt::Display for NotAFunctionName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("a function name is an ASCII identifier")
+    }
+}
+
+impl Rule for FunctionName {
+    type Error = NotAFunctionName;
+
+    const LOGGED_AS: Option<&'static str> = Some("FunctionName");
+
+    fn admit(text: String) -> Result<String, NotAFunctionName> {
         let mut chars = text.chars();
-        let head = chars.next()?;
+        let head = chars.next().ok_or(NotAFunctionName)?;
         let ok = (head.is_ascii_alphabetic() || head == '_')
             && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
-        ok.then(|| Self(text.to_ascii_uppercase()))
-    }
-
-    /// The name, upper-cased.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for FunctionName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        if ok {
+            Ok(text.to_ascii_uppercase())
+        } else {
+            Err(NotAFunctionName)
+        }
     }
 }
+
+/// A name is a word of the formula language, checked to an ASCII identifier.
+/// Its `Display` renders the call back into the formula text.
+impl Loggable for FunctionName {}
 
 // -----------------------------------------------------------------------------
 // Expr -- AST produced by the parser
@@ -842,7 +852,7 @@ pub enum Expr {
         operand: Box<Expr>,
     },
     FnCall {
-        name: FunctionName,
+        name: Validated<FunctionName>,
         args: Vec<Expr>,
     },
 }
@@ -1041,15 +1051,23 @@ mod tests {
     #[test]
     fn a_function_name_is_an_upper_cased_identifier() {
         assert_eq!(
-            FunctionName::parse("sum").map(|n| n.to_string()),
-            Some("SUM".into())
+            Validated::<FunctionName>::parse("sum").map(|n| n.to_string()),
+            Ok("SUM".into())
         );
         assert_eq!(
-            FunctionName::parse("_x1").map(|n| n.to_string()),
-            Some("_X1".into())
+            Validated::<FunctionName>::parse("_x1").map(|n| n.to_string()),
+            Ok("_X1".into())
+        );
+        assert_eq!(
+            Validated::<FunctionName>::parse("sum").map(|n| format!("{n:?}")),
+            Ok("FunctionName(\"SUM\")".into())
         );
         for bad in ["", "1A", "A-B", "\u{e9}t\u{e9}"] {
-            assert_eq!(FunctionName::parse(bad), None, "{bad}");
+            assert_eq!(
+                Validated::<FunctionName>::parse(bad),
+                Err(NotAFunctionName),
+                "{bad}"
+            );
         }
     }
 

@@ -4,7 +4,6 @@
 key	reason
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition | u32	a rank in a space's catalogue: it orders, ties broken by id, and counts and addresses nothing
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, which no Payload role offers
-ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang | String	a language tag that is never empty: a block with no language carries None
 ambre-bus | src/app/prose.rs | crate::app::prose | InvalidHeadingLevel | u8	the error of a refused heading level: it echoes the refused byte
 ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple | f32	the error of a refused line-height multiple: it echoes the refused value
 ambre-bus | src/app/prose.rs | crate::app::prose | InvalidOrderedStyle | u8	the error of a refused ordinal style code: it echoes the refused byte
@@ -23,7 +22,7 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NotACellNumber |
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength | usize	a usize length compared in a const fn, so a Marks pair checks at compile time
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity | usize	a usize capacity whose zero holds one value, as the channel constructor reads it
-ambre-bus | src/lib.rs | crate | ClipToken | String	the clipboard ownership token of a tab: never empty, so an empty read never matches it
+ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty: draw mints one from a random draw alone, a total door Validated does not keep
 ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key the shelf spells and the store ranges over in the order of its text
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id of a registered font blob, private to the glyph atlas
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId | u16	a glyph index as the shaper names it, a u16 the font defines
@@ -48,9 +47,7 @@ ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint | String	a
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed | u64	the constant a fixture author picks: it pins the PeerID, the commit clock and the document id
 ambre-core | src/font.rs | crate::font | FontSize | f32	points, finite and not negative, read capped at FontSize::MAX (CANVAS-088)
 ambre-core | src/font.rs | crate::font | InvalidFontSize | f32	the error of a refused font size: it echoes the refused value
-ambre-core | src/lang.rs | crate::lang | LangTag | String	a BCP 47 tag, checked to the shape of RFC 5646 where it is built
 ambre-core | src/media.rs | crate::media | ByteSize | u64	the u64 size of a file or a blob: an index length is u32, and a file may pass 4 GiB
-ambre-core | src/media.rs | crate::media | ContentHash | String	sixty-four lowercase hex characters, checked where it is built and by serde
 ambre-core | src/media.rs | crate::media | MediaType | String	a media type as the browser names it, such as image/png, carried whole
 ambre-core | src/member_count.rs | crate::member_count | MemberCountError | i64	the error of a refused member count: it echoes the store's i64
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey | String	the relay's name for one object of the object store, which the client carries whole
@@ -68,7 +65,6 @@ ambre-draw | src/peer.rs | crate::peer | Hue | u16	a whole hue in degrees below 
 ambre-draw | src/testing.rs | crate::testing | StackDepth | u32	the open pushes of a test double: popped answers None below zero, the renderer bug the double catches
 ambre-draw | src/text.rs | crate::text | ScriptSet | u8	a set of lazy scripts held as bits, with set operations
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports, a length only once WheelDelta::to_px reads it
-ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash | String	four to forty lowercase hex digits, checked where it is built
 ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash | String	the error of a refused commit id: it echoes the refused text
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow | String	the JSON text of a draft row, what the user typed: Debug prints its length alone
@@ -105,7 +101,6 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Depth | isize
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Diagonal | isize	a signed diagonal of the Myers graph, private to the search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | GraphOffset | isize	a signed offset into one text of the Myers graph, private to the search
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate | f64	a log-zoom rate per pixel of wheel, private to the view
-ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName | String	an upper-cased formula function name, checked to the shape the parser reads
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term | i64	a signed place in a fill series, private to the fill
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer | String	the root name of one sheet's container, joined in one place
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey | String	the 51-character key of the cell maps, a row and a column joined in one place (trame-schema)

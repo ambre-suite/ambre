@@ -193,7 +193,7 @@ pub fn is_valid_snapshot_key(
 pub fn format_s3_media_key(
     env_prefix: &StoreText<EnvPrefix>,
     document_id: &Id<Document>,
-    content_hash: &ambre_core::ContentHash,
+    content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
 ) -> ambre_core::ObjectKey {
     let content_hash = content_hash.as_str();
     ambre_core::ObjectKey::new(format!(
@@ -831,7 +831,8 @@ mod tests {
     fn media_key_content_addressed() {
         let doc_id = Id::<Document>::from_bytes([3u8; 16]);
         let hash = "abc123def456".repeat(5) + "abcd";
-        let content_hash = ambre_core::ContentHash::parse(&hash).expect("a hash");
+        let content_hash =
+            ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).expect("a hash");
         let key = format_s3_media_key(&env("dev"), &doc_id, &content_hash);
         assert!(key.as_str().ends_with(&format!("media/{hash}")));
         assert!(key.as_str().contains("/documents/"));
@@ -971,7 +972,10 @@ mod tests {
     #[test]
     fn content_hash_validation() {
         let read = |text: &str| {
-            serde_json::from_value::<ambre_core::ContentHash>(serde_json::json!(text)).is_ok()
+            serde_json::from_value::<ambre_core::Validated<ambre_core::ContentHash>>(
+                serde_json::json!(text),
+            )
+            .is_ok()
         };
         assert!(read(&"a".repeat(64)));
         assert!(read(&"0123456789abcdef".repeat(4)));
@@ -985,7 +989,11 @@ mod tests {
             String::new(),
         ] {
             assert!(!read(&refused), "{refused}");
-            assert_eq!(ambre_core::ContentHash::parse(&refused), None, "{refused}");
+            assert_eq!(
+                ambre_core::Validated::<ambre_core::ContentHash>::parse(&refused).ok(),
+                None,
+                "{refused}"
+            );
         }
     }
 }

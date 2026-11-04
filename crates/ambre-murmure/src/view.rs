@@ -1905,6 +1905,7 @@ impl MurmureView {
 #[cfg(test)]
 mod tests {
     use ambre_bus::{Byte, ByteSize, Char};
+    use ambre_core::Validated;
     use ambre_core::index::Span;
     use std::cell::Cell;
 
@@ -3842,7 +3843,7 @@ mod tests {
 
         let evt = RestEvent::MediaUploaded {
             document_id: Id::<Document>::mint(),
-            content_hash: ContentHash::parse(HASH).expect("an address"),
+            content_hash: Validated::<ContentHash>::parse(HASH).expect("an address"),
         };
         page.events
             .try_send(UiEvent::Rest { id: Some(id), evt })
@@ -3905,7 +3906,7 @@ mod tests {
         let id = drop_file(&mut page, channel, "a.png");
         let evt = RestEvent::MediaUploaded {
             document_id: Id::<Document>::mint(),
-            content_hash: ContentHash::parse(HASH).expect("an address"),
+            content_hash: Validated::<ContentHash>::parse(HASH).expect("an address"),
         };
         page.events
             .try_send(UiEvent::Rest { id: Some(id), evt })
@@ -3947,7 +3948,7 @@ mod tests {
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let file = Attachment {
-            media_ref: ContentHash::parse(HASH).expect("an address"),
+            media_ref: Validated::<ContentHash>::parse(HASH).expect("an address"),
             name: "a.png".to_owned(),
             media_type: MediaType::new("image/png".to_owned()),
             size: ByteSize::new(3),
@@ -3965,7 +3966,7 @@ mod tests {
         assert_eq!((channel_id, media_ref.as_str()), (channel, HASH));
         let evt = RestEvent::MediaDownloaded {
             document_id: Id::<Document>::mint(),
-            content_hash: ContentHash::parse(HASH).expect("an address"),
+            content_hash: Validated::<ContentHash>::parse(HASH).expect("an address"),
             data: vec![1, 2, 3].into(),
         };
         page.events
@@ -3993,7 +3994,7 @@ mod tests {
     /// A message of `texts.len()` rows whose first carries an animated image.
     fn gif_list(page: &Page, channel: Id<Channel>, texts: &[&str]) -> Attachment {
         let file = Attachment {
-            media_ref: ContentHash::parse(HASH).expect("an address"),
+            media_ref: Validated::<ContentHash>::parse(HASH).expect("an address"),
             name: "a.gif".to_owned(),
             media_type: MediaType::new("image/gif".to_owned()),
             size: ByteSize::new(3),

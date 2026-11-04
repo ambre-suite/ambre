@@ -139,7 +139,10 @@ pub struct ProseState {
     undo: UndoManager,
     /// Decrypted picture bytes, by content hash. Session state: it never enters
     /// the document (`PROSE-044`) and it dies with the tab.
-    media_cache: HashMap<ambre_core::ContentHash, ambre_core::Payload<ambre_core::MediaBytes>>,
+    media_cache: HashMap<
+        ambre_core::Validated<ambre_core::ContentHash>,
+        ambre_core::Payload<ambre_core::MediaBytes>,
+    >,
     /// The version vector already exported to Sync. A delta is every operation
     /// past it (`PROSE-050`, `PROSE-098`).
     last_exported_vv: VersionVector,
@@ -1077,7 +1080,7 @@ impl ProseState {
     /// the cache is session state (`PROSE-044`).
     pub fn on_media_downloaded(
         &mut self,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     ) -> Vec<ProseEvent> {
         let blocks = self.blocks_showing(&content_hash);
@@ -1092,7 +1095,7 @@ impl ProseState {
     #[must_use]
     pub fn cached_media(
         &self,
-        content_hash: &ambre_core::ContentHash,
+        content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
     ) -> Option<&ambre_core::Payload<ambre_core::MediaBytes>> {
         self.media_cache.get(content_hash)
     }
@@ -1118,7 +1121,7 @@ impl ProseState {
     /// name them in one order.
     fn blocks_showing(
         &self,
-        content_hash: &ambre_core::ContentHash,
+        content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
     ) -> Vec<crate::events::BlockId> {
         let tree = doc::blocks(&self.doc);
         let mut ids: Vec<TreeID> = tree
@@ -1858,8 +1861,9 @@ mod tests {
     }
 
     /// The address that repeats the hex `digit` sixty-four times.
-    fn hash_of(digit: char) -> ambre_core::ContentHash {
-        ambre_core::ContentHash::parse(&digit.to_string().repeat(64)).expect("a hex digit")
+    fn hash_of(digit: char) -> ambre_core::Validated<ambre_core::ContentHash> {
+        ambre_core::Validated::<ambre_core::ContentHash>::parse(digit.to_string().repeat(64))
+            .expect("a hex digit")
     }
 
     /// The history state each command reports, if any.

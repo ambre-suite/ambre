@@ -900,17 +900,11 @@ ambre-core | src/id.rs | crate::id | Id<E>::parse_str(s) | param | &str	newtype-
 ambre-core | src/id.rs | crate::id | Id<E>::to_hyphenated() | ret | String	newtype-inner	the identifier's own hyphenated UUID text
 ambre-core | src/id.rs | crate::id | Id<E>::uuid() | ret | Uuid	newtype-inner	the Uuid an identifier holds, its one way out
 ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	generic	length of the [u8;N] KeyId array, read only as an array length in KeyId's own signatures; a crate that frames a key id uses KeyId::SIZE and KeyId::split_from
-ambre-core | src/lang.rs | crate::lang | LangTag.0 | field | String	newtype-inner	LangTag newtype accessor
-ambre-core | src/lang.rs | crate::lang | LangTag::as_str() | ret | &str	newtype-inner	LangTag newtype accessor
-ambre-core | src/lang.rs | crate::lang | LangTag::parse(text) | param | &str	newtype-inner	LangTag constructor, the text it validates
-ambre-core | src/lang.rs | crate::lang | LangTag::primary() | ret | String	newtype-inner	LangTag primary subtag, lowercased
 ambre-core | src/link.rs | crate::link | <LinkUrl as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of LinkUrl copies into its text
 ambre-core | src/link.rs | crate::link | <LinkUrl as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of LinkUrl wraps
 ambre-core | src/link.rs | crate::link | LinkUrl.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
 ambre-core | src/link.rs | crate::link | LinkUrl::as_str() | ret | &str	newtype-inner	LinkUrl newtype
 ambre-core | src/link.rs | crate::link | LinkUrl::new(text) | param | String	newtype-inner	LinkUrl newtype
-ambre-core | src/media.rs | crate::media | <ContentHash as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the checked constructor of ContentHash keeps, which serde reads through
-ambre-core | src/media.rs | crate::media | <ContentHash as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of ContentHash, lent through Borrow
 ambre-core | src/media.rs | crate::media | <MediaType as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MediaType copies into its text
 ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of MediaType wraps
 ambre-core | src/media.rs | crate::media | ByteSize.0 | field | u64	newtype-inner	ContentHash/MediaType/ByteSize newtype
@@ -918,9 +912,6 @@ ambre-core | src/media.rs | crate::media | ByteSize::as_len() | ret | usize	newt
 ambre-core | src/media.rs | crate::media | ByteSize::from_i64(stored) | param | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | ByteSize::of(len) | param | usize	newtype-inner	ByteSize constructor or accessor
 ambre-core | src/media.rs | crate::media | ByteSize::to_i64_saturating() | ret | i64	newtype-inner	ByteSize storage conversion
-ambre-core | src/media.rs | crate::media | ContentHash.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
-ambre-core | src/media.rs | crate::media | ContentHash::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
-ambre-core | src/media.rs | crate::media | ContentHash::parse(word) | param | &str	newtype-inner	the text the checked constructor of ContentHash reads
 ambre-core | src/media.rs | crate::media | KnownMediaType::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/media.rs | crate::media | MEDIA_ADDRESS_LEN | const | usize	generic	length constant
 ambre-core | src/media.rs | crate::media | MediaType.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
@@ -3066,9 +3057,6 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | GridCursor::css() | ret | &
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar::sync(seed) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Invalid.0 | field | String	free-text	the column text it could not read, echoed in the message
 ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Overflow.0 | field | String	free-text	the column text past the last column, echoed in the message
-ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName.0 | field | String	newtype-inner	the upper-cased identifier FunctionName::parse checks
-ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::as_str() | ret | &str	newtype-inner	borrow of the checked name
-ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::parse(text) | param | &str	newtype-inner	the text the constructor checks
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	free-text	the formula text where parsing stopped, echoed in the message
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	free-text	the formula text left unread, echoed in the message
 ambre-trame | src/formula/types.rs | crate::formula::types | <Arg as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -3120,10 +3108,6 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfD
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.seconds | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-bus | src/app/prose.rs | crate::app::prose | BandState::is_on() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/prose.rs | crate::app::prose | BandState::on_if(shown) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang.0 | field | String	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang::new(text) | param | impl Into<String>	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang::stored() | ret | &str	generic	the stored spelling of an optional tag, empty for plain, read back by CodeLang::new
 ambre-bus | src/app/prose.rs | crate::app::prose | DroppedElement::label() | ret | &'static str	free-text	the closed set's display label
 ambre-bus | src/app/prose.rs | crate::app::prose | FindRefusal::label() | ret | &'static str	free-text	the closed set's display label
 ambre-bus | src/app/prose.rs | crate::app::prose | FirstPage::has_own() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
@@ -3170,9 +3154,6 @@ ambre-core | src/mode.rs | crate::mode | LinkState::connected_if(open) | param |
 ambre-core | src/mode.rs | crate::mode | LinkState::is_connected() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::is_resolved() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::resolved_if(resolved) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash.0 | field | String	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::new(text) | param | &str	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash.0 | field | String	free-text	the rejected text the error prints
 ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	free-text	the manifest's wire word for a build with no commit id
 ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash::as_str() | ret | &str	newtype-inner	the InvalidCommitHash newtype unwrapped, for a caller outside its module
@@ -4103,3 +4084,21 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | <Pending
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | <BoardWalks as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <FormulaNesting as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <Operators as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-bus | src/app/prose.rs | crate::app::prose | <CodeLang as Rule>::admit() | ret | Result<String,EmptyCodeLang>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-bus | src/app/prose.rs | crate::app::prose | <CodeLang as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit() | ret | Result<String,NotALangTag>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit() | ret | Result<String,ContentHashError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit() | ret | Result<String,InvalidCommitHash>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::admit() | ret | Result<String,NotAFunctionName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-bus | src/app/prose.rs | crate::app::prose | stored_code_lang() | ret | &str	generic	the stored spelling of an optional tag, empty for plain, read back through the CodeLang rule
+ambre-core | src/lang.rs | crate::lang | is_lang_tag() | ret | bool	generic	whether a text has the shape of RFC 5646, the check of the LangTag rule
+ambre-core | src/lang.rs | crate::lang | is_lang_tag(text) | param | &str	generic	the raw text the LangTag rule checks
+ambre-core | src/lang.rs | crate::lang | primary_subtag() | ret | String	generic	the primary subtag of a tag, lowercased, which a caller matches against language codes

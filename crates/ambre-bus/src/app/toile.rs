@@ -1094,7 +1094,7 @@ impl Axis for ImportSlot {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MediaRef {
     /// The content address Sync returned.
-    Stored(ambre_core::ContentHash),
+    Stored(ambre_core::Validated<ambre_core::ContentHash>),
     /// The blob at this slot of an import, before Sync answers.
     Pending(Pos<ImportSlot>),
 }
@@ -1103,7 +1103,7 @@ impl MediaRef {
     /// The address, or `None` while the blob is pending. An empty address
     /// is no address either.
     #[must_use]
-    pub fn stored(&self) -> Option<&ambre_core::ContentHash> {
+    pub fn stored(&self) -> Option<&ambre_core::Validated<ambre_core::ContentHash>> {
         match self {
             Self::Stored(hash) if !hash.as_str().is_empty() => Some(hash),
             Self::Stored(_) | Self::Pending(_) => None,
@@ -1852,7 +1852,7 @@ pub enum ToileCommand {
     /// `MediaDecoded`. It answers an address the document does not carry with
     /// nothing, and the element keeps the placeholder it already paints.
     RequestMedia {
-        hashes: Vec<ambre_core::ContentHash>,
+        hashes: Vec<ambre_core::Validated<ambre_core::ContentHash>>,
     },
     RestyleElements {
         ids: Vec<Id<Element>>,
@@ -2622,7 +2622,7 @@ pub enum ToileEvent {
     /// picture reaches the screen at thumbnail resolution -- readable, not
     /// printable (`TOILE-IO-100`).
     MediaDecoded {
-        hash: ambre_core::ContentHash,
+        hash: ambre_core::Validated<ambre_core::ContentHash>,
         size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
         pixels: ambre_core::Payload<ambre_core::RgbaPixels>,
     },
@@ -2953,7 +2953,7 @@ pub enum DisplayGeom {
     /// Media blob hash (`toile-media` resolves the pixels). `None` when the
     /// stored text spells no address: a peer may write any text, and the
     /// image then paints its placeholder.
-    Image(Option<ambre_core::ContentHash>),
+    Image(Option<ambre_core::Validated<ambre_core::ContentHash>>),
     /// Logic-smoothed polyline (`toile-freehand`).
     Stroke(Vec<Point>),
     /// Background + border, and the frame's title (`TOILE-253`). Children are

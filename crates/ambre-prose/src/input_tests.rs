@@ -453,7 +453,8 @@ fn the_draft_is_dropped_only_with_its_block() {
         },
     );
     rig.ui.apply_event(&ProseEvent::MediaArrived {
-        content_hash: ambre_core::ContentHash::parse(&"a".repeat(64)).expect("a hash"),
+        content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse("a".repeat(64))
+            .expect("a hash"),
         blocks: Vec::new(),
     });
     rig.ui.apply_event(&ProseEvent::RemoteCursors {

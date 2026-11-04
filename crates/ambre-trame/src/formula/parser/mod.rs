@@ -4,6 +4,7 @@
 //! Uses nom 8.0 with the `Parser::parse` trait method.
 
 use ambre_core::Count;
+use ambre_core::Validated;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
 use nom::Parser;
@@ -314,7 +315,10 @@ fn identifier(input: &str) -> nom::IResult<&str, &str> {
 }
 
 fn function_call(input: &str) -> nom::IResult<&str, Expr> {
-    let (input, name) = map_opt(identifier, FunctionName::parse).parse(input)?;
+    let (input, name) = map_opt(identifier, |name: &str| {
+        Validated::<FunctionName>::parse(name).ok()
+    })
+    .parse(input)?;
     let (input, _) = char('(').parse(input)?;
     let (input, args) = separated_list0(ws(char(',')), expr).parse(input)?;
     let (input, _) = ws(char(')')).parse(input)?;

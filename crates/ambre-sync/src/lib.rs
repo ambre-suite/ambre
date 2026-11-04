@@ -605,13 +605,13 @@ enum SyncEvent {
     MediaUploaded {
         id: Seq<Request>,
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     },
     /// The relay holds no upload of this user's for the blob any more.
     MediaErased {
         id: Seq<Request>,
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     },
     /// Snapshot upload completed: the sealed blob was PUT to S3 and the server
     /// confirmed the insertion (and broadcast `SnapshotAvailable`). The returned
@@ -635,7 +635,7 @@ enum SyncEvent {
     MediaDownloaded {
         id: Seq<Request>,
         document_id: Id<Document>,
-        content_hash: ambre_core::ContentHash,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
 }

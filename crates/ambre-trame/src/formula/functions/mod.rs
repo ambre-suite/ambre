@@ -6,6 +6,7 @@
 //! single argument containing 10 values).
 
 use ambre_bus::{Col, Row};
+use ambre_core::Validated;
 use ambre_core::index::Pos;
 
 use super::types::{CellValue, FormulaError, FunctionName, finite_number, nearly_equal};
@@ -60,7 +61,7 @@ impl FnCtx {
 /// operator (`TRAME-244`). One guard here holds every function.
 /// It covers a total past the largest number, a product, an exponential, and
 /// a function handed a number that is not finite.
-pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue {
+pub fn call_builtin(name: &Validated<FunctionName>, args: &[CellValue], ctx: FnCtx) -> CellValue {
     match dispatch(name, args, ctx) {
         CellValue::Number(n) if !n.is_finite() => CellValue::Error(FormulaError::NumError),
         value => value,
@@ -68,7 +69,7 @@ pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> Cell
 }
 
 /// The function `name` names, applied to `args`.
-fn dispatch(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue {
+fn dispatch(name: &Validated<FunctionName>, args: &[CellValue], ctx: FnCtx) -> CellValue {
     let now_serial = ctx.now_serial;
     match name.as_str() {
         // Math

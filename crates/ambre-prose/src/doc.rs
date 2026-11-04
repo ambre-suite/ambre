@@ -14,7 +14,7 @@
 
 use ambre_core::crdt::FieldKey;
 use ambre_core::index::{Pos, Span};
-use ambre_core::{FontSize, LangTag, Mm, Pt};
+use ambre_core::{FontSize, LangTag, Mm, Pt, Validated};
 use ambre_core::{PrintLength, StoredAsI64};
 use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
@@ -1632,10 +1632,10 @@ pub fn read_title(doc: &LoroDoc) -> String {
 /// well-formed tag. A peer may have written any string there; a malformed one
 /// reads as no language rather than as a fixed one.
 #[must_use]
-pub fn read_locale(doc: &LoroDoc) -> Option<LangTag> {
+pub fn read_locale(doc: &LoroDoc) -> Option<Validated<LangTag>> {
     meta_read(doc)
         .and_then(|meta| read_string(&meta, MetaKey::Locale))
-        .and_then(|text| LangTag::parse(&text))
+        .and_then(|text| Validated::parse(text).ok())
 }
 
 // -----------------------------------------------------------------------------

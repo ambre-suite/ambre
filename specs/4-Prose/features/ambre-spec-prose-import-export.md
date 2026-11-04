@@ -198,7 +198,7 @@ pub enum IrBlock {
     ListItem  { style: IrListStyle, runs: Vec<IrRun>, children: Vec<IrBlock> },
     /// `merged`: two or more cells are merged into one.
     Table     { merged: Merging, rows: Vec<IrTableRow> },
-    CodeBlock { lang: Option<CodeLang>, text: String },
+    CodeBlock { lang: Option<Validated<CodeLang>>, text: String },
     Image     { alt: String },
     PageBreak,
     HRule,
@@ -267,7 +267,7 @@ pub struct ProseIr {
 pub struct IrMeta {
     // ...
     /// BCP 47, as the document's `meta.locale` stores it.
-    pub lang:         Option<LangTag>,
+    pub lang:         Option<Validated<LangTag>>,
     /// Replaces `paged`.
     pub page:         Option<IrPage>,
     /// Replace `bands`. The `first` pair is set only when the document uses a distinct first
@@ -297,7 +297,7 @@ pub enum IrBlock {
     Heading   { level: StoredLevel, numbered: bool, runs: Vec<IrRun> },
     /// `col_widths` and `style` join `rows`; a cell's spans replace `merged`.
     Table     { col_widths: Vec<PrintLength<Pt>>, style: IrTableStyle, rows: Vec<IrTableRow> },
-    Image     { content_hash: Option<ContentHash>, src_url: Option<LinkUrl>, alt: String,
+    Image     { content_hash: Option<Validated<ContentHash>>, src_url: Option<LinkUrl>, alt: String,
                 width: Option<Px<Image>>, height: Option<Px<Image>>,
                 align: Option<IrImageAlign>, caption: Option<String> },
     Toc       { max_level: HeadingLevel, numbered: bool },
@@ -500,7 +500,7 @@ pub struct ExportOptions {
     pub html_inline_css:       bool,
     pub pdf_include_toc_links: bool,
     /// Absent falls back to the document's own language, then to none.
-    pub pdf_language:          Option<LangTag>,
+    pub pdf_language:          Option<Validated<LangTag>>,
 }
 ```
 

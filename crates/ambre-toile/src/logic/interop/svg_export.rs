@@ -443,8 +443,10 @@ mod tests {
     #[test]
     fn a_picture_leaves_with_its_pixels() {
         let mut el = ExportElement::new(ElementKind::Image, Rect::new(0.0, 0.0, 8.0, 8.0));
-        el.media_hash =
-            Some(ambre_core::ContentHash::parse(&"b2b0ffee".repeat(8)).expect("a hash"));
+        el.media_hash = Some(
+            ambre_core::Validated::<ambre_core::ContentHash>::parse("b2b0ffee".repeat(8))
+                .expect("a hash"),
+        );
         el.image_png = Some(ambre_core::Payload::<ambre_core::ThumbnailPng>::new(vec![
             0x89, 0x50, 0x4E, 0x47,
         ]));
@@ -467,8 +469,10 @@ mod tests {
     #[test]
     fn a_picture_without_pixels_is_reported() {
         let mut el = ExportElement::new(ElementKind::Image, Rect::new(0.0, 0.0, 8.0, 8.0));
-        el.media_hash =
-            Some(ambre_core::ContentHash::parse(&"b2b0ffee".repeat(8)).expect("a hash"));
+        el.media_hash = Some(
+            ambre_core::Validated::<ambre_core::ContentHash>::parse("b2b0ffee".repeat(8))
+                .expect("a hash"),
+        );
         let export = export_svg(&[el]);
         assert!(!export.document.contains("<image"));
         assert_eq!(export.skipped.len(), 1, "{:?}", export.skipped);

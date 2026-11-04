@@ -48,9 +48,9 @@ pub(crate) use super::walk::{paint_label_plate, rotate_about};
 pub fn missing_media(
     nodes: &[DisplayNode],
     images: &ImageStore,
-    requested: &std::collections::HashSet<ambre_core::ContentHash>,
-) -> Vec<ambre_core::ContentHash> {
-    let mut out: Vec<ambre_core::ContentHash> = Vec::new();
+    requested: &std::collections::HashSet<ambre_core::Validated<ambre_core::ContentHash>>,
+) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
+    let mut out: Vec<ambre_core::Validated<ambre_core::ContentHash>> = Vec::new();
     for node in nodes {
         let DisplayNode::Element(de) = node else {
             continue;
@@ -636,8 +636,9 @@ mod tests {
     use super::*;
 
     /// The address that repeats the hex `digit` sixty-four times.
-    fn hh(digit: char) -> ambre_core::ContentHash {
-        ambre_core::ContentHash::parse(&digit.to_string().repeat(64)).expect("a hex digit")
+    fn hh(digit: char) -> ambre_core::Validated<ambre_core::ContentHash> {
+        ambre_core::Validated::<ambre_core::ContentHash>::parse(digit.to_string().repeat(64))
+            .expect("a hex digit")
     }
     use crate::ui::walk::{
         STICKY_INK, STICKY_SHADOW, TextHost, anim_transform, contrast, resolved_text_ink,
