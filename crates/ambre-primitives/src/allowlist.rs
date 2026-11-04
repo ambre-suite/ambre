@@ -106,7 +106,14 @@ enum Line {
 
 /// The 1-based number of a line in the file, for the error messages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LineNo(pub(crate) usize);
+pub struct LineNo(usize);
+
+impl LineNo {
+    /// The line numbered `number`, counted from one as an editor shows it.
+    pub fn new(number: usize) -> Self {
+        Self(number)
+    }
+}
 
 impl fmt::Display for LineNo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -198,7 +205,7 @@ impl Allowlist {
         let mut errors = Vec::new();
         let mut header = false;
         for (i, text) in text.lines().enumerate() {
-            let line = LineNo(i + 1);
+            let line = LineNo::new(i + 1);
             if text.starts_with('#') || text.trim().is_empty() {
                 lines.push(Line::Text(text.to_owned()));
                 continue;

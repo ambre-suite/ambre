@@ -2322,7 +2322,7 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
                 .collect();
             for arg in &c.args {
                 if let Some(unwrap) = self.unwrap_of(arg) {
-                    let line = LineNo(arg.span().start().line);
+                    let line = LineNo::new(arg.span().start().line);
                     self.record(unwrap, callee, shown.join("::"), line);
                 }
             }
@@ -2355,7 +2355,7 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
             .unwrap_or_default();
         for (index, arg) in m.args.iter().enumerate() {
             if let Some(unwrap) = self.unwrap_of(arg) {
-                let line = LineNo(arg.span().start().line);
+                let line = LineNo::new(arg.span().start().line);
                 let callee = if boundaries.contains(&index) {
                     Callee::Foreign
                 } else {
@@ -2383,7 +2383,7 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
             } else {
                 Callee::Foreign
             };
-            let line = LineNo(m.method.span().start().line);
+            let line = LineNo::new(m.method.span().start().line);
             self.record(unwrap, callee, format!(".{method}"), line);
         }
         self.visit_expr(&m.receiver);
@@ -2539,7 +2539,7 @@ pub fn parse_allowlist(text: &str) -> Result<BTreeMap<String, Row>, Vec<String>>
     let mut errors = Vec::new();
     let mut header = false;
     for (index, line) in text.lines().enumerate() {
-        let number = LineNo(index + 1);
+        let number = LineNo::new(index + 1);
         if line.trim().is_empty() || line.starts_with('#') {
             continue;
         }

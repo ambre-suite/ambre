@@ -2315,7 +2315,7 @@ fn literal_of(arg: &syn::Expr) -> Option<LineNo> {
         syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Bool(literal),
             ..
-        }) => Some(LineNo(literal.span.start().line)),
+        }) => Some(LineNo::new(literal.span.start().line)),
         syn::Expr::Paren(inner) => literal_of(&inner.expr),
         syn::Expr::Group(inner) => literal_of(&inner.expr),
         syn::Expr::Reference(inner) => literal_of(&inner.expr),

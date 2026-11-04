@@ -213,7 +213,7 @@ fn parse(text: &str) -> (BTreeMap<String, LineNo>, Vec<String>) {
     let mut problems = Vec::new();
     let mut header = false;
     for (i, line) in text.lines().enumerate() {
-        let number = LineNo(i + 1);
+        let number = LineNo::new(i + 1);
         if line.starts_with('#') || line.trim().is_empty() {
             continue;
         }

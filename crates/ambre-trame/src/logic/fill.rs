@@ -20,7 +20,7 @@ use ambre_core::index::{Delta, Len};
 /// A cell's or a tile's place in its fill line's series, counted from the
 /// source origin. Signed: a fill runs either way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Term(pub(super) i64);
+pub(super) struct Term(i64);
 
 impl Term {
     /// The item of `items` this term copies, cycling through them.

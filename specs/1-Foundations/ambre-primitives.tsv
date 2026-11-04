@@ -1554,6 +1554,7 @@ ambre-primitives | src/allowlist.rs | crate::allowlist | Category::parse(word) |
 ambre-primitives | src/allowlist.rs | crate::allowlist | HEADER | const | &str	free-text	a fixed line or path of the allowlist file
 ambre-primitives | src/allowlist.rs | crate::allowlist | Line::Text.0 | field | String	free-text	a comment or header line, kept byte for byte
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo.0 | field | usize	newtype-inner	the inside of SiteKey or LineNo, or its constructor
+ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo::new(number) | param | usize	newtype-inner	the inside of SiteKey or LineNo, or its constructor
 ambre-primitives | src/allowlist.rs | crate::allowlist | Verdict.counts | field | BTreeMap<Category,usize>	math	a count per category, printed and never stored
 ambre-primitives | src/allowlist.rs | crate::allowlist | Verdict::is_clean() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/allowlist.rs | crate::allowlist | Refuted.reason | field | String	free-text	error messages printed to the terminal

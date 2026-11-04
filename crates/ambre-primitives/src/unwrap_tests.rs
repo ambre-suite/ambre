@@ -504,7 +504,7 @@ fn the_allowlist_names_each_defect_of_its_lines() {
     assert_eq!(
         rows.get("k"),
         Some(&Row {
-            line: LineNo(3),
+            line: LineNo::new(3),
             count: SiteCount::new(2)
         })
     );
