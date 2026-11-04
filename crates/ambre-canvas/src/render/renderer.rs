@@ -125,10 +125,15 @@ pub struct QuadRenderer {
     active_layer: Layer,
 
     // -- Ping-pong offscreen pair for the cells layer --
+    // The format, the layout and the sampler serve `resize_offscreens` alone,
+    // so they exist only where the wasm host has a surface to size.
+    #[cfg(target_arch = "wasm32")]
     offscreen_format: wgpu::TextureFormat,
     offscreens: [OffscreenTarget; 2],
     blit_bind_groups: [wgpu::BindGroup; 2],
+    #[cfg(target_arch = "wasm32")]
     blit_bgl: wgpu::BindGroupLayout,
+    #[cfg(target_arch = "wasm32")]
     blit_sampler: wgpu::Sampler,
     /// Index of the offscreen that holds the latest valid CELLS pixels.
     /// After a Full/Scroll repaint, we render into the OTHER index and flip.
@@ -667,10 +672,13 @@ impl QuadRenderer {
             cells,
             overlay,
             active_layer: Layer::Content,
+            #[cfg(target_arch = "wasm32")]
             offscreen_format,
             offscreens,
             blit_bind_groups,
+            #[cfg(target_arch = "wasm32")]
             blit_bgl,
+            #[cfg(target_arch = "wasm32")]
             blit_sampler,
             current_offscreen_idx: 0,
             width: 1.0,
@@ -691,7 +699,7 @@ impl QuadRenderer {
     /// canvas size changes. Both offscreens get a fresh allocation and lose
     /// their content, so the next frame must use `ContentRepaint::Full`. Only
     /// the wasm host has a surface to size.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg(target_arch = "wasm32")]
     pub(crate) fn resize_offscreens(&mut self, device: &wgpu::Device, size: SurfaceSize) {
         let physical = size.physical();
         self.offscreens = [
@@ -987,7 +995,6 @@ impl QuadRenderer {
     }
 
     // -- Glyph geometry -------------------------------------------------------
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn push_glyph(&mut self, quad: GlyphQuad, color: Color) {
         let GlyphQuad {
             x,
@@ -1035,7 +1042,6 @@ impl QuadRenderer {
     /// Append a color-glyph quad (color emoji) to the active layer's color
     /// batch. Same geometry as `push_glyph`; the color pipeline samples the
     /// RGBA atlas and ignores the tint, so `color` is a placeholder here.
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn push_color_glyph(&mut self, quad: GlyphQuad) {
         let GlyphQuad {
             x,

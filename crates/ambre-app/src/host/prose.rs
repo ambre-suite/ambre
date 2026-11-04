@@ -122,7 +122,10 @@ fn view_size(size: Size<Px<CanvasCss>>) -> (Px<View>, Px<View>) {
 }
 
 impl ProseView {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the host wires each channel and signal of the page apart, and the view keeps each"
+    )]
     pub fn new(
         document_id: Id<Document>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,

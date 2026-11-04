@@ -11,7 +11,7 @@
 //! Run with no operation named, as `cargo bench` does, every operation runs
 //! once: a smoke test.
 
-#![allow(clippy::panic, reason = "a bench aborts on a fixture it cannot run")]
+#![expect(clippy::panic, reason = "a bench aborts on a fixture it cannot run")]
 
 use ambre_core::index::Len;
 use std::hint::black_box;

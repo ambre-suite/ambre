@@ -389,7 +389,10 @@ impl TextCache {
     /// `weight` and `slant` select the matching real face of the family, not
     /// faux bold or oblique. They are part of the cache key, so each style combination
     /// of the same string is stored separately.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "each argument is one axis of the cached look, and Trame and Toile pass each apart"
+    )]
     pub fn get_or_build<L: TextLength>(
         &mut self,
         font_cx: &mut FontContext,
@@ -417,7 +420,10 @@ impl TextCache {
     /// (`None` = the grid default). The family resolves to a bundled face
     /// through [`registered_family_name`], and a family no face is named for
     /// falls back to the default one.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "each argument is one axis of the cached look, and Trame and Toile pass each apart"
+    )]
     pub fn get_or_build_font<L: TextLength>(
         &mut self,
         font_cx: &mut FontContext,

@@ -35,7 +35,10 @@ pub(crate) type Relays = (
 /// (which owns the `<canvas>`) plus the landing overlay shown on `/`. All
 /// reactive state is created here (the mount owner) and published via the slots
 /// so the imperative engine wiring in `main` can read it back.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the mount hands each channel, slot and signal to the one widget that reads it"
+)]
 pub(crate) fn mount_shell(
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,

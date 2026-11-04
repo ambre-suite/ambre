@@ -4,7 +4,7 @@
 //! row: 500 KB under 100 ms on the Logic thread. Each fixture is repeated to
 //! 500 KB, so the figure covers the parse, the walk and the Loro writes.
 
-#![allow(clippy::panic, reason = "a bench aborts on a fixture it cannot run")]
+#![expect(clippy::panic, reason = "a bench aborts on a fixture it cannot run")]
 
 use ambre_core::index::Pos;
 use std::hint::black_box;

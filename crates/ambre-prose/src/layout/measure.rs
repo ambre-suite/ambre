@@ -867,18 +867,24 @@ mod tests {
     const LONG: &str = "The quick brown fox jumps over the lazy dog, and then \
                         it jumps over another one, and over a third after that.";
 
+    /// What `picture` reads of a run, compared whole between two runs.
+    #[derive(Debug, PartialEq)]
+    struct Picture {
+        /// Where each line starts.
+        starts: Vec<usize>,
+        /// The top of each line.
+        tops: Vec<f32>,
+        /// The baseline of each line, in the run.
+        baselines: Vec<f32>,
+        /// Each caret offset, its rounded box, and the offset its center hits.
+        carets: Vec<(u32, [i64; 4], u32)>,
+        /// The rounded boxes of an inner range.
+        boxes: Vec<[i64; 4]>,
+    }
+
     /// Every line of `run`: where it starts, its top, its baseline in the
     /// run, and every caret box.
-    #[allow(clippy::type_complexity)]
-    fn picture(
-        run: &ShapedRun,
-    ) -> (
-        Vec<usize>,
-        Vec<f32>,
-        Vec<f32>,
-        Vec<(u32, [i64; 4], u32)>,
-        Vec<[i64; 4]>,
-    ) {
+    fn picture(run: &ShapedRun) -> Picture {
         let data = run.data();
         let starts = (0..data.line_count().get())
             .filter_map(|line| data.line_start(Pos::<crate::layout::run::RunLine>::new(line)))
@@ -914,7 +920,13 @@ mod tests {
             .map(rounded)
             .collect();
         let tops = data.line_tops().into_iter().map(Px::<Doc>::get).collect();
-        (starts, tops, baselines, carets, boxes)
+        Picture {
+            starts,
+            tops,
+            baselines,
+            carets,
+            boxes,
+        }
     }
 
     fn rounded(rect: BoundingBox) -> [i64; 4] {

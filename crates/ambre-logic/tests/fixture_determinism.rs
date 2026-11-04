@@ -13,11 +13,8 @@
 // feature and has its own belt in `fixtures_corpus.rs`.
 // ============================================================================
 
-#![allow(
-    clippy::unwrap_used,
+#![expect(
     clippy::expect_used,
-    clippy::panic,
-    clippy::indexing_slicing,
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
