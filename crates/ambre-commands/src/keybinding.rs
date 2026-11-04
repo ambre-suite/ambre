@@ -26,15 +26,16 @@ pub enum ModifierKeys {}
 impl FlagsKind for ModifierKeys {
     type Repr = u8;
     const NAME: &'static str = "Modifiers";
+    const ALL: u8 = 0b111;
 }
 
 impl ModifierKeys {
     /// No modifier held.
     pub const NONE: Flags<Self> = Flags::EMPTY;
     /// The primary accelerator: Ctrl on Windows and Linux, Cmd on macOS.
-    pub const PRIMARY: Flags<Self> = Flags::new(1);
-    pub const ALT: Flags<Self> = Flags::new(1 << 1);
-    pub const SHIFT: Flags<Self> = Flags::new(1 << 2);
+    pub const PRIMARY: Flags<Self> = Flags::of::<1>();
+    pub const ALT: Flags<Self> = Flags::of::<{ 1 << 1 }>();
+    pub const SHIFT: Flags<Self> = Flags::of::<{ 1 << 2 }>();
     pub const PRIMARY_SHIFT: Flags<Self> = Self::PRIMARY.with(Self::SHIFT);
     pub const PRIMARY_ALT: Flags<Self> = Self::PRIMARY.with(Self::ALT);
     pub const ALT_SHIFT: Flags<Self> = Self::ALT.with(Self::SHIFT);

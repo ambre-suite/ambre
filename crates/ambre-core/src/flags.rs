@@ -13,12 +13,14 @@
 //! impl FlagsKind for Keys {
 //!     type Repr = u8;
 //!     const NAME: &'static str = "Modifiers";
+//!     const ALL: u8 = 0b111;
 //! }
 //! #[derive(PartialEq, Eq)]
 //! enum Scripts {}
 //! impl FlagsKind for Scripts {
 //!     type Repr = u8;
 //!     const NAME: &'static str = "ScriptSet";
+//!     const ALL: u8 = 0b1111;
 //! }
 //! let _ = Flags::<Keys>::EMPTY.with(Flags::<Scripts>::EMPTY);
 //! ```
@@ -55,6 +57,10 @@ pub trait FlagsKind: 'static {
 
     /// The name `Debug` prints, as the hand-written type printed its own.
     const NAME: &'static str;
+
+    /// Every bit that names a member. A set holds no bit outside it: the
+    /// doors refuse one, and no set operation makes one.
+    const ALL: Self::Repr;
 }
 
 /// A set of the bits `K` names.
@@ -72,12 +78,66 @@ pub struct Flags<K: FlagsKind> {
 
 impl<K: FlagsKind<Repr = u8>> Flags<K> {
     /// The set that holds no member.
-    pub const EMPTY: Self = Self::new(0);
+    pub const EMPTY: Self = Self::admitted(0);
 
-    /// The set whose bits are `bits`. The marker's crate names each member
-    /// through this door, one constant per bit.
+    /// The set that holds every member, [`FlagsKind::ALL`].
+    pub const ALL: Self = Self::admitted(K::ALL);
+
+    /// The set whose bits are `BITS`, checked against [`FlagsKind::ALL`]
+    /// when the program is compiled. The marker's crate names each member
+    /// through this door, one constant per bit:
+    ///
+    /// ```
+    /// use ambre_core::{Flags, FlagsKind};
+    /// #[derive(PartialEq, Eq)]
+    /// enum Keys {}
+    /// impl FlagsKind for Keys {
+    ///     type Repr = u8;
+    ///     const NAME: &'static str = "Modifiers";
+    ///     const ALL: u8 = 0b11;
+    /// }
+    /// const SHIFT: Flags<Keys> = Flags::of::<0b10>();
+    /// assert_eq!(SHIFT.get(), 2);
+    /// ```
+    ///
+    /// A bit outside the set does not compile:
+    ///
+    /// ```compile_fail,E0080
+    /// use ambre_core::{Flags, FlagsKind};
+    /// #[derive(PartialEq, Eq)]
+    /// enum Keys {}
+    /// impl FlagsKind for Keys {
+    ///     type Repr = u8;
+    ///     const NAME: &'static str = "Modifiers";
+    ///     const ALL: u8 = 0b11;
+    /// }
+    /// const META: Flags<Keys> = Flags::of::<0b100>();
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Never at run time. The check is a `const` assertion, so a bit outside
+    /// the set is a compile error.
     #[must_use]
-    pub const fn new(bits: u8) -> Self {
+    pub const fn of<const BITS: u8>() -> Self {
+        const { assert!(BITS & !K::ALL == 0, "a bit outside FlagsKind::ALL") };
+        Self::admitted(BITS)
+    }
+
+    /// The set whose bits are `bits`, or `None` when one lies outside
+    /// [`FlagsKind::ALL`]: the door for bits read at run time.
+    #[must_use]
+    pub const fn new(bits: u8) -> Option<Self> {
+        if bits & !K::ALL == 0 {
+            Some(Self::admitted(bits))
+        } else {
+            None
+        }
+    }
+
+    /// The set of `bits`, which a caller has checked against
+    /// [`FlagsKind::ALL`] or built from two sets that hold.
+    const fn admitted(bits: u8) -> Self {
         Self {
             bits,
             kind: PhantomData,
@@ -99,13 +159,13 @@ impl<K: FlagsKind<Repr = u8>> Flags<K> {
     /// The union of two sets.
     #[must_use]
     pub const fn with(self, other: Self) -> Self {
-        Self::new(self.bits | other.bits)
+        Self::admitted(self.bits | other.bits)
     }
 
     /// The set with each member of `other` removed.
     #[must_use]
     pub const fn without(self, other: Self) -> Self {
-        Self::new(self.bits & !other.bits)
+        Self::admitted(self.bits & !other.bits)
     }
 
     /// Whether the set holds every member of `other`.
@@ -171,11 +231,20 @@ mod tests {
     impl FlagsKind for Keys {
         type Repr = u8;
         const NAME: &'static str = "Modifiers";
+        const ALL: u8 = 0b11;
     }
 
-    const A: Flags<Keys> = Flags::new(1);
-    const B: Flags<Keys> = Flags::new(1 << 1);
+    const A: Flags<Keys> = Flags::of::<1>();
+    const B: Flags<Keys> = Flags::of::<{ 1 << 1 }>();
     const AB: Flags<Keys> = A.with(B);
+
+    #[test]
+    fn the_run_time_door_refuses_a_bit_outside_all() {
+        assert_eq!(Flags::<Keys>::new(0b11), Some(AB));
+        assert_eq!(Flags::<Keys>::new(0b100), None);
+        assert_eq!(Flags::<Keys>::ALL, AB);
+        assert_eq!(Flags::<Keys>::ALL.without(A), B);
+    }
 
     #[test]
     fn the_set_operations_hold_in_a_const_table() {

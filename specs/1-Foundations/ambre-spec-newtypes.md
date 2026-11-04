@@ -65,7 +65,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A text a rule checked once, at the door | `Validated<V>` | `Rule` | -- |
 | A text of one kind that crosses or is stored, read by no code that carries it, and that a log never prints | `Opaque<K>` | `OpaqueKind`, with its `LENGTH` | `WireOpaque`, `SealedAtRest` |
 | Text a log never prints | `Redacted<T>` | -- | -- |
-| A small set of named bits, built in a `const` table | `Flags<K>` | `FlagsKind`, with its `Repr` of `u8` | -- |
+| A small set of named bits, built in a `const` table | `Flags<K>` | `FlagsKind`, with its `Repr` of `u8` and its `ALL`, the mask a const door checks at compile time | -- |
 
 ---
 

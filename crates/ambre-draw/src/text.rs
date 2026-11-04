@@ -162,12 +162,12 @@ impl LazyFont {
     /// [`LazyScripts`].
     #[must_use]
     pub const fn as_set(self) -> Flags<LazyScripts> {
-        Flags::new(match self {
-            LazyFont::Cjk => 1,
-            LazyFont::Arabic => 2,
-            LazyFont::Devanagari => 4,
-            LazyFont::Emoji => 8,
-        })
+        match self {
+            LazyFont::Cjk => Flags::of::<1>(),
+            LazyFont::Arabic => Flags::of::<2>(),
+            LazyFont::Devanagari => Flags::of::<4>(),
+            LazyFont::Emoji => Flags::of::<8>(),
+        }
     }
 }
 
@@ -185,6 +185,7 @@ pub enum LazyScripts {}
 impl FlagsKind for LazyScripts {
     type Repr = u8;
     const NAME: &'static str = "ScriptSet";
+    const ALL: u8 = 0b1111;
 }
 
 impl LazyScripts {

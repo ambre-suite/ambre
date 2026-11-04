@@ -1095,6 +1095,7 @@ ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static 
 ambre-draw | src/text.rs | crate::text | LazyFont::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
 ambre-draw | src/text.rs | crate::text | LazyFont::for_char(c) | param | char	generic	generic parser/reader/formatter over text
 ambre-draw | src/text.rs | crate::text | <LazyScripts as FlagsKind>::NAME | const | &'static str	free-text	the name a set of lazy scripts prints through Debug, for a log line
+ambre-draw | src/text.rs | crate::text | <LazyScripts as FlagsKind>::ALL | const | u8	generic	the four bits that name a lazy script, the mask every set of them lies in
 ambre-draw | src/text.rs | crate::text | <LazyScripts as FlagsKind>::Repr | assoc | u8	newtype-inner	the integer a set of lazy scripts holds its bits in, the inside of Flags
 ambre-draw | src/text.rs | crate::text | LazyScripts::of_text(text) | param | &str	generic	generic parser/reader/formatter over text
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::is_step() | ret | bool	generic	predicate result
@@ -3582,6 +3583,7 @@ ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar.0 | field | cha
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::get() | ret | char	newtype-inner	the one way out of the character of a key, to a label or a menu initial
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::new(c) | param | char	newtype-inner	the constructor of the character of a key; it lowercases an ASCII letter
 ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::NAME | const | &'static str	free-text	the name a modifier set prints through Debug, for a log line
+ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::ALL | const | u8	generic	the three bits that name a modifier, the mask every modifier set lies in
 ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::Repr | assoc | u8	newtype-inner	the integer a modifier set holds its three bits in, the inside of Flags
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason.0 | field | String	newtype-inner	the inside of a skip reason: the line the user reads
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::as_str() | ret | &str	newtype-inner	the one way out of a skip reason, to a toast or a log line
@@ -4062,7 +4064,8 @@ ambre-core | src/count.rs | crate::count | CountRepr::saturating_from_usize(len)
 ambre-core | src/flags.rs | crate::flags | Flags<K>::contains() | ret | bool	generic	predicate result
 ambre-core | src/flags.rs | crate::flags | Flags<K>::get() | ret | u8	newtype-inner	Flags newtype, the bits of the set
 ambre-core | src/flags.rs | crate::flags | Flags<K>::is_empty() | ret | bool	generic	predicate result
-ambre-core | src/flags.rs | crate::flags | Flags<K>::new(bits) | param | u8	newtype-inner	Flags newtype, the bits a member constant of the marker's crate names
+ambre-core | src/flags.rs | crate::flags | Flags<K>::admitted(bits) | param | u8	newtype-inner	Flags newtype, bits already checked against FlagsKind::ALL or built from two sets that hold
+ambre-core | src/flags.rs | crate::flags | Flags<K>::new(bits) | param | u8	newtype-inner	Flags newtype, bits read at run time, refused when one lies outside FlagsKind::ALL
 ambre-core | src/opaque.rs | crate::opaque | <Opaque<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/opaque.rs | crate::opaque | Opaque.text | field | String	newtype-inner	Opaque newtype, a text the code carries and reads none of
 ambre-core | src/opaque.rs | crate::opaque | Opaque<K>::as_str() | ret | &str	newtype-inner	Opaque newtype, its text lent to the one site that reads it
