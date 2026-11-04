@@ -925,6 +925,8 @@ ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as Rule>::admit()
 ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as Rule>::admit() | ret | Result<String,InvalidDefinedName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as ambre_core::Rule>::admit() | ret | Result<String,InvalidOrgName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as ambre_core::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/name.rs | crate::name | <DisplayName as Rule>::admit() | ret | Result<String,InvalidDisplayName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/name.rs | crate::name | <DisplayName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/name.rs | crate::name | <Name as Rule>::admit() | ret | Result<String,NameTooLong>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
@@ -2128,8 +2130,6 @@ ambre-server | src/db/mod.rs | crate::db | id_to_uuid() | ret | uuid::Uuid	gener
 ambre-server | src/db/mod.rs | crate::db | uuid_row_to_id(u) | param | uuid::Uuid	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | uuid_to_core() | ret | ambre_core::Uuid	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | uuid_to_core(u) | param | uuid::Uuid	generic	generic codec/parser/bytes API
-ambre-server | src/db/orgs.rs | crate::db::orgs | OrgName::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of OrgName validates, as a request body carries it
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrganizationRow.name | field | String	free-text	row keeps legacy name text by design; OrgName validates at the request seam (SRV-233)
 ambre-server | src/db/orgs.rs | crate::db::orgs | delete_organization() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | param | Option<&str>	free-text	recovery reason text
@@ -3933,8 +3933,6 @@ ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::MIN | const | u8
 ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
 ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <HtmlNode as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgNameRule as ambre_core::Rule>::admit() | ret | Result<String,InvalidOrgName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgNameRule as ambre_core::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | <ImportElement as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | <ImportGroupRank as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <EngineSheet as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line

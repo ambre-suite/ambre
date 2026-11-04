@@ -17,7 +17,7 @@ use crate::state::AppState;
 #[derive(serde::Deserialize)]
 pub struct CreateOrgRequest {
     /// A name blank or past the cap does not decode (`SRV-233`).
-    pub name: db::OrgName,
+    pub name: ambre_core::Validated<db::OrgName>,
     /// X25519 organization public key (hex encoded). Any other text refuses
     /// the body when it is read (`SRV-242`).
     pub org_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
@@ -107,7 +107,7 @@ fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
 #[derive(serde::Deserialize)]
 pub struct UpdateOrgRequest {
     /// A name blank or past the cap does not decode (`SRV-233`).
-    pub name: db::OrgName,
+    pub name: ambre_core::Validated<db::OrgName>,
 }
 
 /// Validates that a role is allowed in an organization context.
