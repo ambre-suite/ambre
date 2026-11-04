@@ -1672,9 +1672,7 @@ pub(crate) async fn upload_snapshot(
     // The presigned link is its own credential: no session token goes there.
     http::put_sealed_via(transport, &link.upload_url, &blob).await?;
     let metadata = http::CreateSnapshotRequest {
-        snapshot_id: Id::<Snapshot>::mint(),
         author_pubkey,
-        update_clocks: serde_json::json!({}),
         s3_key: link.s3_key,
         covered_seq,
     };
@@ -3284,7 +3282,8 @@ mod tests {
 
     /// `AUTHOR-021`: a snapshot its author uploads is confirmed by that
     /// author, under the id the relay gave it, once the relay holds its
-    /// metadata. A step that fails confirms nothing.
+    /// metadata. A step that fails confirms nothing. `SYNC-182`: the metadata
+    /// names no id of the client's own.
     #[tokio::test]
     async fn an_uploaded_snapshot_is_confirmed_by_its_author_once_stored() {
         let base = "https://relay.test";
@@ -3357,6 +3356,16 @@ mod tests {
                 sent[1].bearer.is_none(),
                 "the presigned link carries no session token"
             );
+            // `SYNC-182`: the metadata names no snapshot id and no clocks.
+            let metadata: serde_json::Value =
+                serde_json::from_slice(sent[2].body.as_ref().unwrap().1.as_bytes()).unwrap();
+            let fields: Vec<&str> = metadata
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect();
+            assert_eq!(fields, ["author_pubkey", "covered_seq", "s3_key"]);
         }
     }
 

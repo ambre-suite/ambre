@@ -513,12 +513,10 @@ mod db_tests {
             [older.as_str().to_owned(), newer.as_str().to_owned()]
         );
 
-        let clocks = serde_json::json!({});
         let snap = crate::db::create_snapshot(
             &state.db,
             &doc,
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
-            &clocks,
             &ambre_core::ObjectKey::from("snap"),
             ambre_core::Seq::<ambre_core::Relay>::new(7),
         )

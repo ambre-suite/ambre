@@ -322,12 +322,10 @@ mod tests {
         let document_id = doc.id;
 
         let author = [5u8; 32];
-        let clocks = serde_json::json!({});
         let sid = create_snapshot(
             &pool,
             &document_id,
             &FixedBytes::<ambre_core::PublicKey>::from_array(author),
-            &clocks,
             &ambre_core::ObjectKey::from("s3/key/snap"),
             ambre_core::Seq::<ambre_core::Relay>::new(1500),
         )
@@ -421,7 +419,6 @@ mod tests {
             &pool,
             &document_id,
             &FixedBytes::<ambre_core::PublicKey>::from_array(author),
-            &serde_json::json!({}),
             &ambre_core::ObjectKey::from("s3/snap"),
             ambre_core::Seq::<ambre_core::Relay>::new(6),
         )
@@ -503,7 +500,6 @@ mod tests {
                 &pool,
                 &document_id,
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
-                &serde_json::json!({}),
                 &ambre_core::ObjectKey::new(format!("s3/snap-{covered}")),
                 ambre_core::Seq::<ambre_core::Relay>::try_from(covered).expect("a relay number"),
             )

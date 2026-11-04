@@ -201,20 +201,14 @@ pub async fn report_snapshot(
 }
 
 /// Request to confirm a snapshot upload. The server inserts metadata and
-/// broadcasts `SnapshotAvailable` to all subscribers.
+/// broadcasts `SnapshotAvailable` to all subscribers. It names no snapshot
+/// id: the relay mints one (`SRV-247`).
 #[derive(serde::Deserialize)]
 pub struct CreateSnapshotRequest {
-    #[expect(
-        dead_code,
-        reason = "the body keeps its wire shape: one without a valid snapshot id stays refused"
-    )]
-    #[serde(with = "ambre_core::serde_id::text")]
-    pub snapshot_id: Id<Snapshot>,
     pub author_pubkey: FixedBytes<PublicKey>,
     /// No client builds a parent proof yet, so one that arrives is refused
     /// rather than stored unread (`SRV-228`). `null` reads as none.
     pub parent_snapshot_proof: Option<serde::de::IgnoredAny>,
-    pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` the snapshot author had applied at upload time.
     /// Defaults to 0 for older clients (full replay preserved).
@@ -272,15 +266,8 @@ pub async fn create_snapshot(
         ));
     }
 
-    let sid = db::create_snapshot(
-        &state.db,
-        &doc_id,
-        &s.signing_pubkey,
-        &req.update_clocks,
-        &req.s3_key,
-        covered,
-    )
-    .await?;
+    let sid =
+        db::create_snapshot(&state.db, &doc_id, &s.signing_pubkey, &req.s3_key, covered).await?;
     let msg = crate::payload::StoredPayload::server_msg(
         &ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
             document_id: doc_id,

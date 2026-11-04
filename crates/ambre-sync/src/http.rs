@@ -1758,13 +1758,11 @@ pub(crate) struct SnapshotUploadUrlResponse {
 }
 
 /// Body of `POST /api/documents/{id}/snapshot` (confirm upload + insert metadata).
-/// Mirrors the server's `CreateSnapshotRequest`.
+/// Mirrors the server's `CreateSnapshotRequest`. It names no snapshot id: the
+/// client learns the one the relay mints from the response (`SYNC-182`).
 #[derive(Serialize)]
 pub(crate) struct CreateSnapshotRequest {
-    #[serde(with = "ambre_core::serde_id::text")]
-    pub snapshot_id: Id<Snapshot>,
     pub author_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
-    pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` this client had applied when it took the snapshot.
     pub covered_seq: Seq<Relay>,

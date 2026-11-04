@@ -3100,9 +3100,7 @@ mod handler_tests {
 
         // Forged author key (not the session's [3u8; 32]) -> 403.
         let forged = serde_json::json!({
-            "snapshot_id": snap_uuid.to_string(),
             "author_pubkey": hex::encode([9u8; 32]),
-            "update_clocks": {},
             "s3_key": s3_key,
         });
         let resp = app
@@ -3120,9 +3118,7 @@ mod handler_tests {
 
         // The author key matching the session identity is accepted.
         let genuine = serde_json::json!({
-            "snapshot_id": snap_uuid.to_string(),
             "author_pubkey": hex::encode([3u8; 32]),
-            "update_clocks": {},
             "s3_key": s3_key,
         });
         let resp = app
@@ -3151,10 +3147,8 @@ mod handler_tests {
         let snap_uuid = uuid::Uuid::new_v4();
         let confirm = |proof: serde_json::Value| {
             let body = serde_json::json!({
-                "snapshot_id": snap_uuid.to_string(),
                 "author_pubkey": hex::encode([3u8; 32]),
                 "parent_snapshot_proof": proof,
-                "update_clocks": {},
                 "s3_key": format!("dev-ambre/documents/{doc_id}/snapshots/{snap_uuid}"),
             });
             Request::post(format!("/api/documents/{doc_id}/snapshot"))
@@ -3278,9 +3272,7 @@ mod handler_tests {
     /// and gets its id back.
     async fn upload_snapshot(app: &Router, owner: &str, doc_id: &str, covered: i64) -> String {
         let body = serde_json::json!({
-            "snapshot_id": uuid::Uuid::new_v4().to_string(),
             "author_pubkey": hex::encode([3u8; 32]),
-            "update_clocks": {},
             "s3_key": format!("dev-ambre/documents/{doc_id}/snapshots/{}", uuid::Uuid::new_v4()),
             "covered_seq": covered,
         });
@@ -3324,6 +3316,8 @@ mod handler_tests {
     /// document's members, with the horizon it claims. Nobody is served it until
     /// it is confirmed. Its author's confirmation makes it `self`, served beside
     /// no reference yet, and another member's makes it `confirmed`.
+    /// `SRV-247`: the upload names no snapshot id, and the id the relay answers
+    /// is the one it announces, confirms and serves.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_snapshot_is_served_once_confirmed(pool: sqlx::PgPool) {

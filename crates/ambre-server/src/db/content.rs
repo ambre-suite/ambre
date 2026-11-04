@@ -119,24 +119,23 @@ pub struct Trim {
     pub batch_keys: Vec<ambre_core::ObjectKey>,
 }
 
-/// Inserts snapshot metadata and returns the assigned `Id<Snapshot>`.
+/// Inserts snapshot metadata and returns the `Id<Snapshot>` the relay mints
+/// for it (`SRV-247`).
 pub async fn create_snapshot(
     pool: &PgPool,
     document_id: &Id<Document>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
-    update_clocks: &serde_json::Value,
     s3_key: &ambre_core::ObjectKey,
     covered_seq: ambre_core::Seq<ambre_core::Relay>,
 ) -> Result<Id<Snapshot>, AppError> {
     let did = id_to_uuid(*document_id);
     let snapshot_id = uuid::Uuid::now_v7();
     sqlx::query(
-        "INSERT INTO snapshots (id, document_id, author_pubkey, update_clocks, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5, $6)"
+        "INSERT INTO snapshots (id, document_id, author_pubkey, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5)"
     )
     .bind(snapshot_id)
     .bind(did)
     .bind(author_pubkey.as_slice())
-    .bind(update_clocks)
     .bind(s3_key.as_str())
     .bind(covered_seq.to_i64_saturating())
     .execute(pool)

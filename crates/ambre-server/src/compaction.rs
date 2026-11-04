@@ -211,7 +211,6 @@ mod db_tests {
         author: &[u8; 32],
         covered: i64,
     ) -> Id<Snapshot> {
-        let json = serde_json::json!({});
         let key = format!("s3/{covered}");
         let key = ambre_core::ObjectKey::new(key);
         let covered =
@@ -220,7 +219,6 @@ mod db_tests {
             &state.db,
             doc,
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(*author),
-            &json,
             &key,
             covered,
         )
