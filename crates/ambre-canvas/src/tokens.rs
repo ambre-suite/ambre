@@ -21,6 +21,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use ambre_core::{Rule, Validated};
 use ambre_draw::Color;
 use peniko::color::Rgba8;
 use serde::Deserialize;
@@ -83,7 +84,7 @@ struct Tokens {
     effects: ThemePair<Effects>,
     photo: Photo,
     canvas: ThemePair<CanvasColors>,
-    scale: Vec<(ScaleName, TokenPx)>,
+    scale: Vec<(Validated<ScaleName>, TokenPx)>,
 }
 
 #[derive(Deserialize)]
@@ -181,36 +182,29 @@ impl From<OpaqueColour> for Color {
     }
 }
 
-/// The name of a scale step: snake_case that starts with a lowercase ASCII
-/// letter, refused at deserialization otherwise. The Rust module writes it
-/// upper case as the name of a constant, which a digit or a `_` cannot
-/// start. The stylesheet writes it with hyphens. A name declared twice is
-/// refused by [`check_scale`].
-#[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(try_from = "String")]
-struct ScaleName(String);
+/// The rule of the name of a scale step: snake_case that starts with a
+/// lowercase ASCII letter, refused at deserialization otherwise. A
+/// `Validated<ScaleName>` holds one. The Rust module writes it upper case as
+/// the name of a constant, which a digit or a `_` cannot start. The
+/// stylesheet writes it with hyphens. A name declared twice is refused by
+/// [`check_scale`].
+enum ScaleName {}
 
-impl TryFrom<String> for ScaleName {
+impl Rule for ScaleName {
     type Error = String;
 
-    fn try_from(text: String) -> Result<Self, Self::Error> {
+    fn admit(text: String) -> Result<String, Self::Error> {
         let snake = text.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
             && text
                 .bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
         if snake {
-            Ok(Self(text))
+            Ok(text)
         } else {
             Err(format!(
                 "scale name must be snake_case and start with a lowercase letter: {text}"
             ))
         }
-    }
-}
-
-impl fmt::Display for ScaleName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
     }
 }
 
@@ -369,13 +363,13 @@ impl fmt::Display for RustColour {
 }
 
 /// Refuse a scale name declared twice. Each name is snake_case by its type.
-fn check_scale(scale: &[(ScaleName, TokenPx)]) -> Result<(), String> {
+fn check_scale(scale: &[(Validated<ScaleName>, TokenPx)]) -> Result<(), String> {
     let mut seen = BTreeSet::new();
     scale.iter().try_for_each(|(name, _)| {
         if seen.insert(name) {
             Ok(())
         } else {
-            Err(format!("scale name declared twice: {name}"))
+            Err(format!("scale name declared twice: {}", name.as_str()))
         }
     })
 }
@@ -412,7 +406,10 @@ fn rust_module(tokens: &Tokens) -> String {
          // `crates/ambre-canvas/src/tokens.rs`. Do not edit: `just tokens-check` fails\n\
          // when this file is not what the generator writes.\n",
     );
-    rs.push_str("use ambre_draw::Color;\n\n");
+    rs.push_str(
+        "use ambre_core::{Rule, Validated};
+use ambre_draw::Color;\n\n",
+    );
     rs.push_str("/// Canvas content colours for one theme. Generated from `tokens.ron`.\n");
     rs.push_str("pub struct Palette {\n");
     for (name, _) in tokens.canvas.light.fields() {
@@ -456,7 +453,7 @@ fn rust_module(tokens: &Tokens) -> String {
     }
 
     for (name, value) in &tokens.scale {
-        let rust_name = name.to_string().to_ascii_uppercase();
+        let rust_name = name.as_str().to_ascii_uppercase();
         // A scale step is a length on the canvas's view (`CANVAS-032`): a
         // spacing, a radius or a font size the canvas draws at.
         rs.push_str(&format!(
@@ -484,7 +481,7 @@ fn stylesheet(tokens: &Tokens) -> String {
         css.push_str(&format!("    --{var}: {colour};\n"));
     }
     for (name, value) in &tokens.scale {
-        let var = name.to_string().replace('_', "-");
+        let var = name.as_str().replace('_', "-");
         css.push_str(&format!("    --{var}: {value}px;\n"));
     }
     css.push_str("}\n\n");

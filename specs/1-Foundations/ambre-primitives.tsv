@@ -563,8 +563,9 @@ ambre-canvas | src/theme.rs | crate::theme | Theme::as_u8() | ret | u8	newtype-i
 ambre-canvas | src/theme.rs | crate::theme | Theme::data_attr() | ret | &'static str	newtype-inner	the enum's own word on the data-theme attribute, which the stylesheet matches
 ambre-canvas | src/theme.rs | crate::theme | Theme::from_u8(v) | param | u8	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/tokens.rs | crate::tokens | <OpaqueColour as TryFrom<TokenColour>>::Error | assoc | String	generic	an error that echoes the refused colour
-ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused scale name
-ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ScaleName validates as snake_case
+ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::Error | assoc | String	generic	an error that echoes the refused scale name
+ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused colour text
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
 ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	free-text	the Palette field name of each typed colour, written into the generated Rust module
@@ -573,7 +574,6 @@ ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'stati
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.rust | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Photo::vars() | ret | [(&'static str,TokenColour);7]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated stylesheet
-ambre-canvas | src/tokens.rs | crate::tokens | ScaleName.0 | field | String	newtype-inner	newtype inner, a scale name its constructor checked
 ambre-canvas | src/tokens.rs | crate::tokens | TokenError::Refused.0 | field | String	generic	the refusal message of the source
 ambre-canvas | src/tokens.rs | crate::tokens | check_scale() | ret | Result<(),String>	generic	an error that echoes the refused scale name
 ambre-canvas | src/tokens.rs | crate::tokens | generate() | ret | Result<Generated,String>	generic	an error that echoes the refused token
