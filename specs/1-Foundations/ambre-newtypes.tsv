@@ -12,7 +12,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed w
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount | i64	a signed count of months that may run past December or below January, as DATE and EDATE read it
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber | f64	a finite f64, checked where it is built: a NaN or an infinity the engine yields is refused
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority | i64	the evaluation order of conditional-format rules: it orders and counts nothing
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
 ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty: draw mints one from a random draw alone, a total door Validated does not keep

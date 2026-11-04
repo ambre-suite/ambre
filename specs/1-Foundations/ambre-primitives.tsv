@@ -249,9 +249,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.raw | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber.0 | field | f64	newtype-inner	the value of a finite cell number
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber::get() | ret | f64	newtype-inner	the value of a finite cell number
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber::new(value) | param | f64	newtype-inner	the value of a finite cell number, checked by its fallible constructor
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Error.message | field | String	free-text	user-facing message
@@ -270,8 +267,10 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent a
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Ranks as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <TabStrip as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Refuses>::Raw | assoc | f64	generic	the refused value the error echoes
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::MAX | const | f64	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::MIN | const | f64	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::Repr | assoc | f64	newtype-inner	the number a value of this quantity holds
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.high | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.low | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Contains.0 | field | String	free-text	user-entered rule operand, pattern or formula text

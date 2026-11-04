@@ -206,7 +206,7 @@ keyed by the two corners of the range it covers:
 pub enum ValidationKind {
     List(Vec<String>),                                   // a fixed value set
     ListRange { sheet: Id<Sheet>, range: CellRect },      // the values of a range, resolved at input
-    NumberRange { limits: NumberBounds, bounds: RangeBounds }, // two `CellNumber`s, `min` at most `max`
+    NumberRange { limits: NumberBounds, bounds: RangeBounds }, // two `Bounded<CellFloat>`, `min` at most `max`
     NumberInteger,
     DateRange { min: Option<Instant<SheetDateTime>>, max: Option<Instant<SheetDateTime>> },
     TextLength { min: Option<Len<Char>>, max: Option<Len<Char>> },

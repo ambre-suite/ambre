@@ -126,13 +126,14 @@ impl TrameState {
     /// as such a number.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
         use crate::formula::functions::exact_sum;
-        use ambre_bus::app::trame::{CellNumber, Cells, NumericStats};
+        use ambre_bus::app::trame::{CellFloat, Cells, NumericStats};
+        use ambre_core::Bounded;
         // Make sure evaluated values are current before reading them.
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
 
         let mut count = ambre_core::Count::<Cells>::ZERO;
-        let mut numbers: Vec<CellNumber> = Vec::new();
+        let mut numbers: Vec<Bounded<CellFloat>> = Vec::new();
         // The whole selection, deduplicated across every rectangle (`TRAME-UI-104`).
         for at in self.selected_cells() {
             let v = self
@@ -143,7 +144,7 @@ impl TrameState {
                 CellValue::Empty => {}
                 CellValue::Number(n) => {
                     count = count.incremented();
-                    if let Ok(n) = CellNumber::new(n) {
+                    if let Some(n) = Bounded::<CellFloat>::new(n) {
                         numbers.push(n);
                     }
                 }
@@ -152,7 +153,7 @@ impl TrameState {
         }
         // The exact sum `SUM` takes, so the band reads the total a formula
         // over the same cells reads, overflow included (`TRAME-UI-179`).
-        let sum = CellNumber::new(exact_sum(numbers.iter().map(|n| n.get()))).ok();
+        let sum = Bounded::<CellFloat>::new(exact_sum(numbers.iter().map(|n| n.get())));
         let numbers = NumericStats::of_all(&numbers, sum);
         TrameOutcome::display_only(vec![TrameEvent::SelectionStats { count, numbers }])
     }

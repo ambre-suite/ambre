@@ -3,7 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
-use ambre_bus::app::trame::CellNumber;
+use ambre_core::Bounded;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
 
@@ -621,8 +621,8 @@ fn selection_stats_aggregate_numeric_cells() {
             let numbers = numbers.expect("three numbers are selected");
             assert_eq!(count.get(), 4, "10/20/30/apple are non-empty");
             assert_eq!(numbers.count().get(), 3, "only 10/20/30 are numeric");
-            assert_eq!(numbers.sum().map(CellNumber::get), Some(60.0));
-            assert_eq!(numbers.avg().map(CellNumber::get), Some(20.0));
+            assert_eq!(numbers.sum().map(Bounded::get), Some(60.0));
+            assert_eq!(numbers.avg().map(Bounded::get), Some(20.0));
             assert_eq!(numbers.min().get(), 10.0);
             assert_eq!(numbers.max().get(), 30.0);
         }
@@ -653,7 +653,7 @@ fn selection_stats_leaves_a_value_that_is_not_finite_out_of_the_totals() {
             let numbers = numbers.expect("two finite numbers are selected");
             assert_eq!(count.get(), 6, "every cell is non-empty");
             assert_eq!(numbers.count().get(), 2, "only 10 and 20 are totalled");
-            assert_eq!(numbers.sum().map(CellNumber::get), Some(30.0));
+            assert_eq!(numbers.sum().map(Bounded::get), Some(30.0));
             assert_eq!(numbers.min().get(), 10.0);
             assert_eq!(numbers.max().get(), 20.0);
         }
@@ -681,7 +681,7 @@ fn band_and_formula_sums(values: &[&str]) -> (Option<f64>, String) {
     let band = numbers
         .expect("the column holds numbers")
         .sum()
-        .map(CellNumber::get);
+        .map(Bounded::get);
     state.handle_command(TrameCommand::SetCellText {
         row: Pos::<Row>::new(0),
         col: Pos::<Col>::new(1),
@@ -783,7 +783,7 @@ fn selection_stats_covers_the_whole_band() {
             let numbers = numbers.expect("two numbers are selected");
             assert_eq!(count.get(), 2, "the off-screen row is counted");
             assert_eq!(numbers.count().get(), 2);
-            assert_eq!(numbers.sum().map(CellNumber::get), Some(30.0));
+            assert_eq!(numbers.sum().map(Bounded::get), Some(30.0));
         }
         other => panic!("expected SelectionStats, got {other:?}"),
     }
@@ -823,7 +823,7 @@ fn selection_stats_totals_a_disjoint_selection() {
             let numbers = numbers.expect("two numbers are selected");
             assert_eq!(count.get(), 2, "both rectangles are counted");
             assert_eq!(numbers.count().get(), 2);
-            assert_eq!(numbers.sum().map(CellNumber::get), Some(30.0));
+            assert_eq!(numbers.sum().map(Bounded::get), Some(30.0));
         }
         other => panic!("expected SelectionStats, got {other:?}"),
     }

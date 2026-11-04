@@ -402,9 +402,7 @@ fn status_bar_total_matches_sum_under_a_filter() {
     });
     assert_eq!(read_cell(&mut state, 0, 3), "3");
     assert_eq!(
-        numbers
-            .and_then(|n| n.sum())
-            .map(ambre_bus::app::trame::CellNumber::get),
+        numbers.and_then(|n| n.sum()).map(ambre_core::Bounded::get),
         Some(3.0)
     );
     assert_eq!(count.get(), 3);

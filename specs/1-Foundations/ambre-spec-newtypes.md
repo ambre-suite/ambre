@@ -21,7 +21,7 @@
 
 | Reason | Example |
 | :--- | :--- |
-| An invariant no family checks | `CellNumber` is finite; `LineSpacingMultiple` lies above zero |
+| An invariant no family checks | `LineSpacingMultiple` lies above zero; `FontSize` reads a value past its cap as the cap |
 | An operation no sibling shares | `Rgba` reads its channels; `StackDepth` refuses a pop below zero |
 | A width or a meaning a foreign definition fixes | `PeerId` is a Loro PeerID; `HttpStatus` is HTTP's |
 | A door no family keeps closed | `SealedBlob` is built by the seal alone, while `Payload::new` is public |

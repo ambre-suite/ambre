@@ -38,8 +38,8 @@
   These cases keep the primitive, each under one category:
   * A scalar multiplier is `math`, on a public API too: a factor, a ratio or a zoom scale. A
     length, a position, a count, an index or a size is never a multiplier.
-  * A formula number is `math` inside the formula engine. It is a `CellNumber` once it crosses a
-    public struct or the bus.
+  * A formula number is `math` inside the formula engine. It is a `Bounded<CellFloat>` once it
+    crosses a public struct or the bus.
   * A closed set stays an `enum` on every path up to its display label. A site that spells an
     `enum`, or a struct that is no newtype, as a primitive takes the one category its reader
     sets (`ARCH-035`):
