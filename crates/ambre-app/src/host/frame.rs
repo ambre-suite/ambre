@@ -923,8 +923,9 @@ mod tests {
     /// rather than wait.
     #[wasm_bindgen_test]
     fn a_late_face_reaches_the_logic_thread_as_a_base_face_does() {
-        let (to_logic, from_ui) =
-            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(1));
+        let (to_logic, from_ui) = ambre_bus::conduit::local(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<1>());
         assert!(send_faces(
             &to_logic,
             vec![ambre_core::Payload::<ambre_core::FontBytes>::new(vec![

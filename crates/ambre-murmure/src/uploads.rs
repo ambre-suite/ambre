@@ -10,7 +10,8 @@ use ambre_core::Validated;
 use ambre_core::index::{Axis, Len, Pos};
 use std::collections::HashMap;
 
-use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType, Request};
+use ambre_bus::{Attachment, ContentHash, MediaType, Octets, Request};
+use ambre_core::Count;
 use ambre_core::Seq;
 use ambre_core::{Byte, ExportFilename, KnownMediaType};
 
@@ -48,13 +49,13 @@ impl std::fmt::Debug for PickedFile {
 }
 
 /// A size as a reader reads it: "512 B", "2 KB", "3.4 MB".
-pub fn size_label(size: ByteSize) -> String {
-    const KB: ByteSize = ByteSize::new(1024);
-    const MB: ByteSize = ByteSize::new(1024 * 1024);
+pub fn size_label(size: Count<Octets>) -> String {
+    const KB: Count<Octets> = Count::<Octets>::new(1024);
+    const MB: Count<Octets> = Count::<Octets>::new(1024 * 1024);
     // Kilobytes round up, so the unit follows the rounded size: a size short
     // of a megabyte by less than a kilobyte reads in megabytes.
     let kilobytes = size.get().div_ceil(KB.get());
-    let rounded = ByteSize::new(kilobytes.saturating_mul(KB.get()));
+    let rounded = Count::<Octets>::new(kilobytes.saturating_mul(KB.get()));
     match size {
         size if size < KB => format!("{} B", size.get()),
         _ if rounded < MB => format!("{kilobytes} KB"),
@@ -111,7 +112,7 @@ struct Pending {
     of: DraftOf,
     name: String,
     media_type: MediaType,
-    size: ByteSize,
+    size: Count<Octets>,
 }
 
 impl std::fmt::Debug for Pending {
@@ -178,7 +179,7 @@ impl Uploads {
         of: DraftOf,
         name: String,
         media_type: MediaType,
-        size: ByteSize,
+        size: Count<Octets>,
     ) -> bool {
         if matches!(of, DraftOf::Thread(..)) || name.trim().is_empty() {
             return false;
@@ -285,13 +286,13 @@ mod tests {
     /// size just short of a megabyte reads "1.0 MB", never "1024 KB".
     #[test]
     fn a_size_label_never_reads_1024_kb() {
-        assert_eq!(size_label(ByteSize::new(512)), "512 B");
-        assert_eq!(size_label(ByteSize::new(1024)), "1 KB");
-        assert_eq!(size_label(ByteSize::new(1025)), "2 KB");
-        assert_eq!(size_label(ByteSize::new(1023 * 1024)), "1023 KB");
-        assert_eq!(size_label(ByteSize::new(1023 * 1024 + 1)), "1.0 MB");
-        assert_eq!(size_label(ByteSize::new(1024 * 1024 - 1)), "1.0 MB");
-        assert_eq!(size_label(ByteSize::new(3_565_158)), "3.4 MB");
+        assert_eq!(size_label(Count::<Octets>::new(512)), "512 B");
+        assert_eq!(size_label(Count::<Octets>::new(1024)), "1 KB");
+        assert_eq!(size_label(Count::<Octets>::new(1025)), "2 KB");
+        assert_eq!(size_label(Count::<Octets>::new(1023 * 1024)), "1023 KB");
+        assert_eq!(size_label(Count::<Octets>::new(1023 * 1024 + 1)), "1.0 MB");
+        assert_eq!(size_label(Count::<Octets>::new(1024 * 1024 - 1)), "1.0 MB");
+        assert_eq!(size_label(Count::<Octets>::new(3_565_158)), "3.4 MB");
     }
 
     fn begin(uploads: &mut Uploads, id: u64, of: DraftOf, name: &str) -> bool {
@@ -300,7 +301,7 @@ mod tests {
             of,
             name.to_owned(),
             MediaType::new("image/png".to_owned()),
-            ByteSize::new(10),
+            Count::<Octets>::new(10),
         )
     }
 
@@ -345,7 +346,7 @@ mod tests {
             media_ref: Validated::<ContentHash>::parse(HASH).expect("an address"),
             name: name.to_owned(),
             media_type: MediaType::new("application/pdf".to_owned()),
-            size: ByteSize::new(10),
+            size: Count::<Octets>::new(10),
         }
     }
 

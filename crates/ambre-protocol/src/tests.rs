@@ -645,7 +645,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     };
     let entry = MembershipEntry {
         document,
-        position: LogPosition::new(1),
+        position: ambre_core::Seq::<crate::LogPlaces>::new(1),
         member: Id::<User>::from_bytes([2; 16]),
         member_key: FixedBytes::from_array([3; 32]),
         act: MembershipAct::Invite,

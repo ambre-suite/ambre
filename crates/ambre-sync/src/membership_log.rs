@@ -11,10 +11,12 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{DocumentRank, FixedBytes, KeyId, PublicKey, Role};
+use ambre_core::{DocumentRank, FixedBytes, KeyId, PublicKey, Role, Seq};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
-use ambre_protocol::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, Signature};
+use ambre_protocol::{
+    EntryDigest, LogPlaces, MembershipAct, MembershipEntry, Signature, place_after,
+};
 use ed25519_dalek::SigningKey;
 
 /// The rule of the owning application that accepts a member's own entry
@@ -104,7 +106,7 @@ pub(crate) fn digest(entry: &MembershipEntry) -> Option<FixedBytes<EntryDigest>>
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LogHead {
     /// The place the next entry is signed for.
-    pub position: LogPosition,
+    pub position: Seq<LogPlaces>,
     /// The digest of the last entry, absent on an empty log.
     pub previous: Option<FixedBytes<EntryDigest>>,
 }
@@ -112,13 +114,13 @@ pub(crate) struct LogHead {
 impl LogHead {
     /// The head of an empty log: the next entry creates it.
     pub(crate) const EMPTY: Self = Self {
-        position: LogPosition::FIRST,
+        position: Seq::<LogPlaces>::ZERO,
         previous: None,
     };
 
     /// Whether the log holds no entry yet.
-    pub(crate) const fn is_empty(self) -> bool {
-        self.position.is_first()
+    pub(crate) fn is_empty(self) -> bool {
+        self.position == Seq::ZERO
     }
 
     /// The head after an entry with `digest` lands at this one.
@@ -155,14 +157,14 @@ impl Log {
             signers: HashSet::new(),
             anchored: anchor.is_some(),
             next: LogHead {
-                position: LogPosition::after(entries.len()),
+                position: place_after(entries.len()),
                 previous: entries.last().and_then(digest),
             },
         };
         let mut previous = None;
         for (place, entry) in entries.iter().enumerate() {
             let fits = entry.document == document
-                && LogPosition::after(place) == entry.position
+                && place_after(place) == entry.position
                 && entry.well_formed()
                 && entry.previous == previous;
             let this = digest(entry);
@@ -418,7 +420,7 @@ pub(crate) mod tests {
         role: Role,
     ) {
         let next = LogHead {
-            position: LogPosition::after(log.len()),
+            position: place_after(log.len()),
             previous: log.last().and_then(digest),
         };
         let draft = Draft {
@@ -601,7 +603,7 @@ pub(crate) mod tests {
         assert_eq!(
             view.next(),
             LogHead {
-                position: LogPosition::new(3),
+                position: Seq::<LogPlaces>::new(3),
                 previous: log.last().and_then(digest),
             }
         );

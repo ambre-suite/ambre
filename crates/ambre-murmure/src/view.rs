@@ -1905,8 +1905,9 @@ impl MurmureView {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::{Byte, ByteSize, Char};
+    use ambre_bus::{Byte, Char, Octets};
     use ambre_commands::ModifierFold;
+    use ambre_core::Count;
     use ambre_core::index::Span;
     use ambre_core::{Flags, Validated};
     use std::cell::Cell;
@@ -2028,8 +2029,10 @@ mod tests {
     type Listed = (Region, Option<MentionList>);
 
     fn page() -> Page {
-        let (events, from_logic) = local(ambre_bus::conduit::ChannelCapacity::new(64));
-        let (to_logic, commands) = local(ambre_bus::conduit::ChannelCapacity::new(64));
+        let (events, from_logic) =
+            local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>());
+        let (to_logic, commands) =
+            local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>());
         let pane = Rc::new(Cell::new(MurmurePane::default()));
         let shown = Rc::clone(&pane);
         let back = Rc::clone(&pane);
@@ -3865,7 +3868,10 @@ mod tests {
         let [file] = sent[0].as_slice() else {
             panic!("one file, got {:?}", sent[0]);
         };
-        assert_eq!((file.name.as_str(), file.size), ("a.png", ByteSize::new(3)));
+        assert_eq!(
+            (file.name.as_str(), file.size),
+            ("a.png", Count::<Octets>::new(3))
+        );
         assert_eq!(file.media_type.as_str(), "application/octet-stream");
         assert_eq!(file.media_ref.as_str(), HASH);
     }
@@ -3955,7 +3961,7 @@ mod tests {
             media_ref: Validated::<ContentHash>::parse(HASH).expect("an address"),
             name: "a.png".to_owned(),
             media_type: MediaType::new("image/png".to_owned()),
-            size: ByteSize::new(3),
+            size: Count::<Octets>::new(3),
         };
         let pane = MurmurePane::Channel { channel, at: None };
         while page.commands.try_recv().is_ok() {}
@@ -4001,7 +4007,7 @@ mod tests {
             media_ref: Validated::<ContentHash>::parse(HASH).expect("an address"),
             name: "a.gif".to_owned(),
             media_type: MediaType::new("image/gif".to_owned()),
-            size: ByteSize::new(3),
+            size: Count::<Octets>::new(3),
         };
         let ada = Id::<User>::mint();
         let mut messages: Vec<_> = texts

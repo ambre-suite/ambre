@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent, StyleMark, TextStyle};
 use ambre_core::id::{Channel, Id, Lease, Segment, User};
-use ambre_core::{ByteSize, DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
+use ambre_core::{Count, DeltaBytes, Octets, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 
 use crate::channel::live_segments;
 use crate::session::next_peer;
@@ -135,7 +135,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
 /// snapshot past the byte bound, far below its message count.
 #[test]
 fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
-    const BYTES: ByteSize = ByteSize::new(16 * 1024);
+    const BYTES: Count<Octets> = Count::<Octets>::new(16 * 1024);
     let mut alice = channel(10_000).with_segment_snapshot_size(BYTES);
     let author = Id::<User>::mint();
     let mut sent = 0;

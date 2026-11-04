@@ -49,7 +49,8 @@ pub async fn ws_upgrade(
     let max_frame = state
         .config
         .delta_max_size
-        .as_len()
+        .saturating_len()
+        .to_usize()
         .saturating_add(64 * 1024);
     let ws = ws.max_message_size(max_frame).max_frame_size(max_frame);
     ws.on_upgrade(move |socket| handle_ws(socket, state))

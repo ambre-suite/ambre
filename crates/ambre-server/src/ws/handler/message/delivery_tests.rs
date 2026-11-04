@@ -167,7 +167,10 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
         .await
         .unwrap();
     let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
-    let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE.as_len() + 1024;
+    let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
+        .saturating_len()
+        .to_usize()
+        + 1024;
     let update = signed_update(&key, doc_id, 1, large);
 
     handle_update(&state, &mut conn, update.clone(), &tx).await;
@@ -283,7 +286,10 @@ async fn a_page_read_out_of_order_is_sent_in_order(pool: sqlx::PgPool) {
     let key = ed25519_dalek::SigningKey::from_bytes(&[55u8; 32]);
     let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
     let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
-    let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE.as_len() + 1024;
+    let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
+        .saturating_len()
+        .to_usize()
+        + 1024;
     for clock in 1..=3 {
         handle_update(
             &state,

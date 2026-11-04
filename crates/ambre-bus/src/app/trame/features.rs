@@ -11,7 +11,7 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{CellNumber, CellRect, Col, SourceForm};
+use super::{CellFloat, CellRect, Col, SourceForm};
 use crate::app::trame::CellText;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Len;
@@ -192,20 +192,20 @@ pub enum RangeBounds {
 }
 
 /// A pair of number limits refused: `min` exceeds `max`. A limit that is not
-/// finite is no [`CellNumber`], so it is refused before.
+/// finite is no cell number, a `Bounded<CellFloat>`, so it is refused before.
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 #[error("{min} to {max} is not a range lowest first")]
 pub struct InvalidNumberBounds {
-    pub min: CellNumber,
-    pub max: CellNumber,
+    pub min: Bounded<CellFloat>,
+    pub max: Bounded<CellFloat>,
 }
 
 /// The two limits of a number range: two cell numbers, `min` at most `max`
 /// (`trame-cell-editing`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NumberBounds {
-    min: CellNumber,
-    max: CellNumber,
+    min: Bounded<CellFloat>,
+    max: Bounded<CellFloat>,
 }
 
 impl NumberBounds {
@@ -214,7 +214,10 @@ impl NumberBounds {
     /// # Errors
     ///
     /// [`InvalidNumberBounds`] when `min` exceeds `max`.
-    pub fn new(min: CellNumber, max: CellNumber) -> Result<Self, InvalidNumberBounds> {
+    pub fn new(
+        min: Bounded<CellFloat>,
+        max: Bounded<CellFloat>,
+    ) -> Result<Self, InvalidNumberBounds> {
         if min <= max {
             Ok(Self { min, max })
         } else {
@@ -223,12 +226,12 @@ impl NumberBounds {
     }
 
     /// The lower limit.
-    pub const fn min(self) -> CellNumber {
+    pub const fn min(self) -> Bounded<CellFloat> {
         self.min
     }
 
     /// The upper limit.
-    pub const fn max(self) -> CellNumber {
+    pub const fn max(self) -> Bounded<CellFloat> {
         self.max
     }
 }
@@ -326,14 +329,14 @@ pub enum ValidationOnInvalid {
 
 #[cfg(test)]
 mod tests {
-    use super::{CellNumber, InvalidNumberBounds, NumberBounds, Percent};
+    use super::{CellFloat, InvalidNumberBounds, NumberBounds, Percent};
     use ambre_core::Bounded;
 
     /// The range from `min` to `max`, each limit refused first when it is
     /// no cell number.
     fn range(min: f64, max: f64) -> Option<Result<NumberBounds, InvalidNumberBounds>> {
-        let min = CellNumber::new(min).ok()?;
-        let max = CellNumber::new(max).ok()?;
+        let min = Bounded::<CellFloat>::new(min)?;
+        let max = Bounded::<CellFloat>::new(max)?;
         Some(NumberBounds::new(min, max))
     }
 

@@ -277,7 +277,7 @@ impl LocalStore {
     fn refused(&self, id: Id<Document>, write: SealedWrite, attempt: Attempt) {
         let need = match &write {
             PersistWrite::Snapshot(bytes) | PersistWrite::Delta(bytes) => bytes.len(),
-            _ => ambre_core::ByteSize::new(0),
+            _ => ambre_core::Count::<ambre_core::Octets>::new(0),
         };
         let decision = self.inner.ledger.borrow_mut().refused(
             id,
@@ -389,8 +389,10 @@ mod tests {
     #[wasm_bindgen_test]
     async fn a_copy_lands_sealed_and_one_that_does_not_open_leaves() {
         let store = PersistenceStore::open().await.unwrap().unwrap();
-        let (logic_tx, logic_rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
-        let (vault_tx, vault_rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
+        let (logic_tx, logic_rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
+        let (vault_tx, vault_rx) =
+            conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
         let local =
             LocalStore::open(store.clone(), logic_tx, Vault::new(vault_tx.clone()), None).await;
         // The answers reach the vault as the per-frame relay hands them.

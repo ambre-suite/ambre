@@ -14,7 +14,7 @@ use super::*;
 use ambre_bus::{
     ContentHash, Ms, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent, TimeSpan,
 };
-use ambre_core::{ByteSize, MediaBytes, Payload};
+use ambre_core::{Count, MediaBytes, Octets, Payload};
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
@@ -27,10 +27,10 @@ const PREVIEW_EDGE: Size<Px<Image>> = Size::new(Px::new(480), Px::new(320));
 /// this first.
 const MAX_SIZE: Size<Px<Image>> = Size::new(Px::new(4096), Px::new(4096));
 /// The most a decoder may allocate for one image.
-const MAX_ALLOC: ByteSize = ByteSize::new(128 * 1024 * 1024);
+const MAX_ALLOC: Count<Octets> = Count::<Octets>::new(128 * 1024 * 1024);
 /// The bytes the frames of one preview may hold. An animation past it plays
 /// the frames that fit (`ambre-spec-budgets.md section 6`).
-pub(crate) const PICTURE_MAX_SIZE: ByteSize = ByteSize::new(8 * 1024 * 1024);
+pub(crate) const PICTURE_MAX_SIZE: Count<Octets> = Count::<Octets>::new(8 * 1024 * 1024);
 /// A frame delay at or under this plays at [`SLOW_DELAY`], as browsers do:
 /// a file that asks for none would otherwise spin.
 const FAST_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(10);
@@ -114,13 +114,13 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
             let (width, height) = decoder.dimensions();
             let size = fit(Size::new(Px::new(width), Px::new(height)));
             let mut frames = Vec::new();
-            let mut held = ByteSize::new(0);
+            let mut held = Count::<Octets>::new(0);
             for frame in decoder.into_frames() {
                 // A broken frame ends the animation; the frames before it play.
                 let Ok(frame) = frame else { break };
                 let (numer, denom) = frame.delay().numer_denom_ms();
                 let pixels = scale(frame.into_buffer(), size);
-                let after = held.saturating_add(pixels.len());
+                let after = held.plus(pixels.len());
                 if !frames.is_empty() && after > PICTURE_MAX_SIZE {
                     break;
                 }
@@ -232,7 +232,8 @@ mod tests {
             picture
                 .frames
                 .iter()
-                .all(|f| f.pixels.len() == ambre_bus::ByteSize::new(480 * 160 * 4))
+                .all(|f| f.pixels.len()
+                    == ambre_core::Count::<ambre_core::Octets>::new(480 * 160 * 4))
         );
         assert_ne!(picture.frames[0].pixels, picture.frames[1].pixels);
         let spinning = decode(&Payload::new(gif(2, (8, 8), 0))).expect("a GIF");
@@ -263,7 +264,7 @@ mod tests {
     #[test]
     fn an_animation_past_the_bound_keeps_the_frames_that_fit() {
         let frame = 480 * 320 * 4;
-        let fit = PICTURE_MAX_SIZE.as_len() / frame;
+        let fit = PICTURE_MAX_SIZE.saturating_len().to_usize() / frame;
         let picture = decode(&Payload::new(gif(fit + 3, (480, 320), 50))).expect("a GIF");
         assert_eq!(picture.frames.len(), fit);
         assert!(picture.bytes() <= PICTURE_MAX_SIZE);

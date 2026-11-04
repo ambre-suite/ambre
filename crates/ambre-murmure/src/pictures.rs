@@ -13,7 +13,7 @@ use ambre_core::index::Pos;
 use std::collections::HashMap;
 
 use ambre_bus::{ContentHash, MediaType, Picture};
-use ambre_core::{ByteSize, KnownMediaType, Seq, SeqKind};
+use ambre_core::{Count, KnownMediaType, Octets, Seq, SeqKind};
 use ambre_draw::ImageKey;
 
 use crate::Region;
@@ -21,7 +21,7 @@ use ambre_core::{Instant, Ms, PageLoad, TimeSpan};
 
 /// The bytes the page holds decoded (`ambre-spec-budgets.md section 6`).
 /// Past it, the pictures painted longest ago go, never one on screen.
-pub const PICTURES_MAX_SIZE: ByteSize = ByteSize::new(16 * 1024 * 1024);
+pub const PICTURES_MAX_SIZE: Count<Octets> = Count::<Octets>::new(16 * 1024 * 1024);
 
 /// The types the Logic thread decodes for a preview. Any other file shows
 /// as its chip alone.
@@ -82,8 +82,8 @@ impl Screens {
 /// The pictures of the page, by the file they decode.
 pub struct Pictures {
     held: HashMap<Validated<ContentHash>, Held>,
-    bytes: ByteSize,
-    cap: ByteSize,
+    bytes: Count<Octets>,
+    cap: Count<Octets>,
     /// The latest paint, which orders the pictures by their last one.
     paint: Seq<PaintNumber>,
     screens: Screens,
@@ -97,10 +97,10 @@ impl Default for Pictures {
 
 impl Pictures {
     /// A shelf that holds `cap` bytes, past the pictures on screen.
-    pub fn new(cap: ByteSize) -> Self {
+    pub fn new(cap: Count<Octets>) -> Self {
         Self {
             held: HashMap::new(),
-            bytes: ByteSize::new(0),
+            bytes: Count::<Octets>::new(0),
             cap,
             paint: Seq::ZERO,
             screens: Screens::default(),
@@ -141,7 +141,7 @@ impl Pictures {
         }
         let held = match picture {
             Some(picture) => {
-                self.bytes = self.bytes.saturating_add(picture.bytes());
+                self.bytes = self.bytes.plus(picture.bytes());
                 Held::Shown {
                     picture,
                     painted: self.paint,
@@ -168,7 +168,7 @@ impl Pictures {
     }
 
     /// The bytes the shelf holds decoded.
-    pub fn bytes(&self) -> ByteSize {
+    pub fn bytes(&self) -> Count<Octets> {
         self.bytes
     }
 
@@ -190,7 +190,7 @@ impl Pictures {
                 .map(|(_, media_ref)| media_ref.clone());
             let Some(coldest) = coldest else { return };
             if let Some(Held::Shown { picture, .. }) = self.held.remove(&coldest) {
-                self.bytes = self.bytes.saturating_sub(picture.bytes());
+                self.bytes = self.bytes.minus(picture.bytes());
             }
         }
     }
@@ -335,7 +335,7 @@ mod tests {
     /// is held, so it is not asked again.
     #[test]
     fn a_picture_is_asked_once_and_lands_once() {
-        let mut shelf = Pictures::new(ByteSize::new(1024));
+        let mut shelf = Pictures::new(Count::<Octets>::new(1024));
         shelf.begin_paint(Region::Channel);
         let (a, b) = (file('a'), file('b'));
         assert!(shelf.want(&a));
@@ -356,7 +356,7 @@ mod tests {
     /// one the last paint of a screen drew.
     #[test]
     fn past_the_cap_the_coldest_picture_goes_and_none_on_screen() {
-        let mut shelf = Pictures::new(ByteSize::new(10));
+        let mut shelf = Pictures::new(Count::<Octets>::new(10));
         let (a, b, c, d) = (file('a'), file('b'), file('c'), file('d'));
         shelf.begin_paint(Region::Channel);
         shelf.want(&a);
@@ -365,7 +365,7 @@ mod tests {
         shelf.want(&b);
         shelf.land(b.clone(), Some(picture(&[0], 6)));
         assert!(shelf.get(&a).is_none(), "the coldest went");
-        assert_eq!(shelf.bytes(), ByteSize::new(6));
+        assert_eq!(shelf.bytes(), Count::<Octets>::new(6));
         shelf.want(&c);
         shelf.land(c.clone(), Some(picture(&[0], 6)));
         assert!(

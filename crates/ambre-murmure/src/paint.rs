@@ -1479,13 +1479,14 @@ pub(crate) mod tests {
     /// ink of a link. A click on one names its file.
     #[test]
     fn the_files_paint_as_chips_a_click_names() {
-        use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType};
+        use ambre_bus::{Attachment, ContentHash, MediaType, Octets};
+        use ambre_core::Count;
         let ada = Id::<User>::mint();
         let file = Attachment {
             media_ref: Validated::<ContentHash>::parse("0".repeat(64)).expect("an address"),
             name: "a.png".to_owned(),
             media_type: MediaType::new("image/png".to_owned()),
-            size: ByteSize::new(2048),
+            size: Count::<Octets>::new(2048),
         };
         let mut carrying = message(ada, Instant::<Authored>::new(0), "hello");
         carrying.attachments = vec![file.clone()];
@@ -1531,13 +1532,14 @@ pub(crate) mod tests {
     /// due.
     #[test]
     fn an_image_previews_in_a_box_that_keeps_its_height_and_plays() {
-        use ambre_bus::{Attachment, ByteSize, MediaType, Picture, PictureFrame};
+        use ambre_bus::{Attachment, MediaType, Octets, Picture, PictureFrame};
+        use ambre_core::Count;
         let ada = Id::<User>::mint();
         let file = Attachment {
             media_ref: Validated::<ContentHash>::parse("a".repeat(64)).expect("an address"),
             name: "a.gif".to_owned(),
             media_type: MediaType::new("image/gif".to_owned()),
-            size: ByteSize::new(2048),
+            size: Count::<Octets>::new(2048),
         };
         let mut carrying = message(ada, Instant::<Authored>::new(0), "hello");
         carrying.attachments = vec![file.clone()];

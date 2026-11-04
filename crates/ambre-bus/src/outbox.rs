@@ -174,7 +174,8 @@ mod tests {
 
     #[test]
     fn an_open_channel_takes_the_command_and_the_outbox_stays_idle() {
-        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(2));
+        let (tx, rx) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<2>());
         let mut outbox = Outbox::new(tx);
         assert_eq!(outbox.send(cmd(1)), SendOutcome::Sent);
         assert!(!outbox.is_busy());
@@ -183,7 +184,8 @@ mod tests {
 
     #[test]
     fn a_full_channel_holds_the_command_instead_of_dropping_it() {
-        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
+        let (tx, rx) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
         let mut outbox = Outbox::new(tx);
         assert_eq!(outbox.send(cmd(1)), SendOutcome::Sent);
         assert_eq!(outbox.send(cmd(2)), SendOutcome::Held);
@@ -195,7 +197,8 @@ mod tests {
 
     #[test]
     fn a_flush_after_the_reader_drains_sends_the_held_command() {
-        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
+        let (tx, rx) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
         let mut outbox = Outbox::new(tx);
         outbox.send(cmd(1));
         outbox.send(cmd(2));
@@ -207,7 +210,8 @@ mod tests {
 
     #[test]
     fn a_held_queue_keeps_the_order_the_user_typed() {
-        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
+        let (tx, rx) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
         let mut outbox = Outbox::with_capacity(tx, 4);
         outbox.send(cmd(1));
         outbox.send(cmd(2));
@@ -222,7 +226,8 @@ mod tests {
 
     #[test]
     fn a_send_while_busy_never_overtakes_a_held_command() {
-        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(2));
+        let (tx, rx) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<2>());
         let mut outbox = Outbox::with_capacity(tx, 4);
         outbox.send(cmd(1));
         outbox.send(cmd(2));
@@ -239,7 +244,8 @@ mod tests {
 
     #[test]
     fn the_hold_bound_refuses_rather_than_grows() {
-        let (tx, _rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
+        let (tx, _rx) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
         let mut outbox = Outbox::with_capacity(tx, 2);
         outbox.send(cmd(1));
         assert_eq!(outbox.send(cmd(2)), SendOutcome::Held);
@@ -251,7 +257,8 @@ mod tests {
 
     #[test]
     fn a_gone_logic_thread_is_reported_not_held() {
-        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
+        let (tx, rx) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
         drop(rx);
         let mut outbox = Outbox::new(tx);
         assert_eq!(outbox.send(cmd(1)), SendOutcome::Disconnected);

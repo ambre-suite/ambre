@@ -15,8 +15,8 @@ use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::SessionNonce;
 use ambre_core::id::{Document, Id};
 use ambre_core::{
-    Aad, ByteSize, Confidential, EphemeralBytes, FixedBytes, KeyId, MediaBytes, Payload, Plaintext,
-    PublicKey, SnapshotBytes,
+    Aad, Confidential, Count, EphemeralBytes, FixedBytes, KeyId, MediaBytes, Octets, Payload,
+    Plaintext, PublicKey, SnapshotBytes,
 };
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
@@ -45,11 +45,11 @@ const MAX_DECOMPRESS_RATIO: usize = 200;
 /// Floor for the per-message decompression ceiling. Tiny legitimate messages (a
 /// few compressed bytes expanding to a normal delta) are never rejected by
 /// the ratio bound alone.
-const MIN_DECOMPRESS_CEILING: ByteSize = ByteSize::new(1 << 20); // 1 MiB
+const MIN_DECOMPRESS_CEILING: Count<Octets> = Count::<Octets>::new(1 << 20); // 1 MiB
 
 /// Hard upper bound on any single decompressed message, regardless of the
 /// ratio-derived ceiling. Matches the client-memory pillar (< 100 MB per doc).
-const ABSOLUTE_DECOMPRESS_CAP: ByteSize = ByteSize::new(64 << 20); // 64 MiB
+const ABSOLUTE_DECOMPRESS_CAP: Count<Octets> = Count::<Octets>::new(64 << 20); // 64 MiB
 
 /// Compression scheme of a sealed plaintext, encoded as the first plaintext byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,7 +221,8 @@ pub fn update_body(
     // bound, and saturating states it.
     let mut body = Vec::with_capacity(
         FixedBytes::<SessionNonce>::SIZE
-            .as_len()
+            .saturating_len()
+            .to_usize()
             .saturating_add(1)
             .saturating_add(summary_len)
             .saturating_add(delta.as_bytes().len()),
@@ -313,7 +314,7 @@ fn decompress(version: CompressionVersion, body: &[u8]) -> Result<Vec<u8>, Pipel
 fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     // MIN_DECOMPRESS_CEILING < ABSOLUTE_DECOMPRESS_CAP by construction, so clamp
     // never panics.
-    let ceiling = ByteSize::of(body.len().saturating_mul(MAX_DECOMPRESS_RATIO))
+    let ceiling = Count::<Octets>::of(body.len().saturating_mul(MAX_DECOMPRESS_RATIO))
         .clamp(MIN_DECOMPRESS_CEILING, ABSOLUTE_DECOMPRESS_CAP);
 
     let mut decoder =
@@ -334,7 +335,7 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
         .read_to_end(&mut out)
     {
         Err(_) => PipelineError::Decompress,
-        Ok(read) if ByteSize::of(read) > ceiling => PipelineError::DecompressTooLarge,
+        Ok(read) if Count::<Octets>::of(read) > ceiling => PipelineError::DecompressTooLarge,
         Ok(_) => return Ok(out),
     };
     ambre_core::Secret::wipe(out);
@@ -801,12 +802,12 @@ ambre_core::define_layout_version! {
 
 /// Bytes before the ciphertext of a standalone object, each part at the size
 /// its own type states.
-const OBJECT_HEADER: ByteSize = ObjectLayout::SIZE
-    .saturating_add(FixedBytes::<KeyId>::SIZE)
-    .saturating_add(FixedBytes::<PublicKey>::SIZE)
-    .saturating_add(FixedBytes::<Signature>::SIZE)
-    .saturating_add(FixedBytes::<CommitmentTag>::SIZE)
-    .saturating_add(FixedBytes::<Nonce>::SIZE);
+const OBJECT_HEADER: Count<Octets> = ObjectLayout::SIZE
+    .plus(FixedBytes::<KeyId>::SIZE)
+    .plus(FixedBytes::<PublicKey>::SIZE)
+    .plus(FixedBytes::<Signature>::SIZE)
+    .plus(FixedBytes::<CommitmentTag>::SIZE)
+    .plus(FixedBytes::<Nonce>::SIZE);
 
 /// Domain of a sealed document name. The document id follows it in the
 /// additional data, so a name opens under its own document only (`SYNC-068`).
@@ -881,8 +882,9 @@ fn object_bytes(
 ) -> SealedBlob {
     let mut out = Vec::with_capacity(
         OBJECT_HEADER
-            .saturating_add(sealed.ciphertext.len())
-            .as_len(),
+            .plus(sealed.ciphertext.len())
+            .saturating_len()
+            .to_usize(),
     );
     out.push(ObjectLayout::CURRENT.byte());
     out.extend_from_slice(key_id.as_array());
@@ -1277,14 +1279,16 @@ mod tests {
         )
         .unwrap()
         .into_bytes();
-        if let Some(marker) = body.get_mut(FixedBytes::<SessionNonce>::SIZE.as_len()) {
+        if let Some(marker) =
+            body.get_mut(FixedBytes::<SessionNonce>::SIZE.saturating_len().to_usize())
+        {
             *marker = 2;
         }
         assert!(matches!(
             split_update_body(UpdateFrame::from_bytes(body)),
             Err(PipelineError::UnknownSummary)
         ));
-        let mut cut = vec![1; FixedBytes::<SessionNonce>::SIZE.as_len()];
+        let mut cut = vec![1; FixedBytes::<SessionNonce>::SIZE.saturating_len().to_usize()];
         cut.extend_from_slice(&[SummaryMarker::Present.byte(), 0, 0]);
         assert!(matches!(
             split_update_body(UpdateFrame::from_bytes(cut)),
@@ -1408,8 +1412,8 @@ mod tests {
         )
         .unwrap()
         .into_bytes();
-        let key_at = ObjectLayout::SIZE.as_len();
-        renamed[key_at..key_at + FixedBytes::<KeyId>::SIZE.as_len()]
+        let key_at = ObjectLayout::SIZE.saturating_len().to_usize();
+        renamed[key_at..key_at + FixedBytes::<KeyId>::SIZE.saturating_len().to_usize()]
             .copy_from_slice(doc_key.id().as_array());
         assert!(open_object(&fetched(&renamed), &ambre_core::Aad::of(b"aad"), &doc_key).is_err());
     }
@@ -1536,9 +1540,10 @@ mod tests {
 
         // The signature: one flipped byte, and the author no longer signed it.
         let signature_at = ObjectLayout::SIZE
-            .saturating_add(FixedBytes::<KeyId>::SIZE)
-            .saturating_add(FixedBytes::<PublicKey>::SIZE)
-            .as_len();
+            .plus(FixedBytes::<KeyId>::SIZE)
+            .plus(FixedBytes::<PublicKey>::SIZE)
+            .saturating_len()
+            .to_usize();
         let mut forged = sealed.clone();
         forged[signature_at] ^= 1;
         assert!(matches!(
@@ -1547,9 +1552,12 @@ mod tests {
         ));
 
         // The tag: a wrong one, re-signed so the signature passes, still fails.
-        let tag_at = signature_at + FixedBytes::<Signature>::SIZE.as_len();
-        let nonce_at = tag_at + FixedBytes::<CommitmentTag>::SIZE.as_len();
-        let header_len = OBJECT_HEADER.as_len();
+        let tag_at = signature_at + FixedBytes::<Signature>::SIZE.saturating_len().to_usize();
+        let nonce_at = tag_at
+            + FixedBytes::<CommitmentTag>::SIZE
+                .saturating_len()
+                .to_usize();
+        let header_len = OBJECT_HEADER.saturating_len().to_usize();
         let mut moved = sealed.clone();
         moved[tag_at] ^= 1;
         let tag = FixedBytes::<CommitmentTag>::from_slice(&moved[tag_at..nonce_at]).unwrap();

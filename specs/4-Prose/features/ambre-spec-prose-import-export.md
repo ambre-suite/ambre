@@ -431,7 +431,7 @@ pub enum InteropError {
     /// The bytes do not read as the format named.
     ParseFailed(String),
     /// The file is larger than a conversion accepts.
-    TooLarge(ByteSize),
+    TooLarge(Count<Octets>),
 }
 ```
 

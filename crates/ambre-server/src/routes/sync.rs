@@ -295,7 +295,7 @@ pub async fn create_snapshot(
 #[derive(serde::Deserialize)]
 pub struct SnapshotUploadUrlRequest {
     #[serde(rename = "size_bytes")]
-    pub size: ambre_core::ByteSize,
+    pub size: ambre_core::Count<ambre_core::Octets>,
 }
 
 /// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot.
@@ -321,7 +321,9 @@ pub async fn snapshot_upload_url(
     // Reject an oversized snapshot before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size == ambre_core::ByteSize::new(0) || req.size > state.config.snapshot_max_size {
+    if req.size == ambre_core::Count::<ambre_core::Octets>::new(0)
+        || req.size > state.config.snapshot_max_size
+    {
         return Err(AppError::PayloadTooLarge(format!(
             "snapshot size {} bytes outside 1..={}",
             req.size.get(),

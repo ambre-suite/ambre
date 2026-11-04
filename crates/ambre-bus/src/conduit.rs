@@ -35,6 +35,7 @@ use std::sync::{Arc, OnceLock};
 use std::task::Poll;
 use std::thread::{self, Thread};
 
+use ambre_core::{Bounded, Bounds, Count, CountKind, Refusal};
 use atomic_waker::AtomicWaker;
 use crossbeam_queue::{ArrayQueue, SegQueue};
 
@@ -206,13 +207,15 @@ struct Shared<T> {
 
 impl<T> Shared<T> {
     fn new(
-        capacity: Option<ChannelCapacity>,
+        capacity: Option<Bounded<ChannelSlots>>,
         receiver_bell: Option<Doorbell>,
         sender_bell: Option<Doorbell>,
     ) -> Self {
         Self {
             queue: match capacity {
-                Some(capacity) => Queue::Bounded(ArrayQueue::new(capacity.get())),
+                Some(capacity) => Queue::Bounded(ArrayQueue::new(
+                    usize::try_from(capacity.get()).unwrap_or(usize::MAX),
+                )),
                 None => Queue::Unbounded(SegQueue::new()),
             },
             waker: AtomicWaker::new(),
@@ -489,17 +492,18 @@ pub struct Backlog<T> {
 /// gap between them keeps one burst from flapping the source on and off.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Marks {
-    high: BacklogLength,
-    low: BacklogLength,
+    high: Count<Backlogged>,
+    low: Count<Backlogged>,
 }
 
 impl Marks {
     /// Stop the source at `high` values held, and start it again at `low`.
     /// `None` unless `low` sits below `high`: the source would never be
-    /// released.
+    /// released. A `const fn`, so a pair checks at compile time, where `<`
+    /// is not yet callable.
     #[must_use]
-    pub const fn new(high: BacklogLength, low: BacklogLength) -> Option<Self> {
-        if low.is_below(high) {
+    pub const fn new(high: Count<Backlogged>, low: Count<Backlogged>) -> Option<Self> {
+        if low.get() < high.get() {
             Some(Self { high, low })
         } else {
             None
@@ -508,61 +512,56 @@ impl Marks {
 
     /// The length at which the source is asked to stop.
     #[must_use]
-    pub const fn high(self) -> BacklogLength {
+    pub const fn high(self) -> Count<Backlogged> {
         self.high
     }
 
     /// The length at which the source is asked to send again.
     #[must_use]
-    pub const fn low(self) -> BacklogLength {
+    pub const fn low(self) -> Count<Backlogged> {
         self.low
     }
 }
 
-/// How many values a [`Backlog`] holds, as a [`Marks`] pair names a length.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BacklogLength(usize);
+/// The values a [`Backlog`] holds, as a [`Marks`] pair names a length:
+/// `Count<Backlogged>`. `Debug` keeps the name of the hand-written type.
+pub enum Backlogged {}
 
-impl BacklogLength {
-    /// A length of `values` held.
-    #[must_use]
-    pub const fn new(values: usize) -> Self {
-        Self(values)
-    }
-
-    /// Whether this length sits below `other`. A `const fn`, so a pair of
-    /// [`Marks`] checks at compile time, where `<` is not yet callable.
-    #[must_use]
-    pub const fn is_below(self, other: Self) -> bool {
-        self.0 < other.0
-    }
+impl CountKind for Backlogged {
+    type Repr = u32;
+    const NAME: &'static str = "BacklogLength";
 }
 
-/// How many values a bounded channel holds before a send finds it full.
+/// The values a bounded channel holds before a send finds it full:
+/// `Bounded<ChannelSlots>`.
 ///
-/// A queue holds at least one value, so a capacity of zero holds one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChannelCapacity(usize);
+/// A queue holds at least one value, so the lowest capacity is one. The
+/// queue allocates every slot when it is built, so the highest is 65 536.
+/// That is 16 times the widest channel today, 4096 slots, and it bounds
+/// the heap one channel takes. Every capacity is a constant, so it enters
+/// through the `const` door, which refuses zero at compile time:
+///
+/// ```compile_fail
+/// use ambre_bus::conduit::ChannelSlots;
+/// use ambre_core::Bounded;
+/// const NONE: Bounded<ChannelSlots> = Bounded::<ChannelSlots>::of::<0>();
+/// ```
+pub enum ChannelSlots {}
 
-impl ChannelCapacity {
-    /// A capacity of `values`, one when `values` is zero.
-    #[must_use]
-    pub const fn new(values: usize) -> Self {
-        Self(if values == 0 { 1 } else { values })
-    }
+impl Bounds for ChannelSlots {
+    type Repr = u32;
+    const MIN: u32 = 1;
+    const MAX: u32 = 1 << 16;
+    const NAME: &'static str = "ChannelCapacity";
+    const REFUSAL: Refusal = Refusal::new("a channel holds 1 to 65536 values, not ", "");
+}
 
-    /// The number of values, never zero.
-    #[must_use]
-    pub const fn get(self) -> usize {
-        self.0
-    }
-
-    /// The backlog length of `factor` full channels of this capacity,
-    /// saturating at `usize::MAX`.
-    #[must_use]
-    pub const fn backlog(self, factor: usize) -> BacklogLength {
-        BacklogLength(self.0.saturating_mul(factor))
-    }
+/// The backlog length of `factor` full channels of `capacity`, held at the
+/// top of the count. A `const fn`, so a pair of [`Marks`] built from it
+/// checks at compile time.
+#[must_use]
+pub const fn backlog(capacity: Bounded<ChannelSlots>, factor: u32) -> Count<Backlogged> {
+    Count::new(capacity.get().saturating_mul(factor))
 }
 
 /// What a [`Backlog`] asks of the source that feeds it (`SYNC-059`).
@@ -597,7 +596,7 @@ impl<T> Backlog<T> {
     /// nothing changed since the last call, or when the backlog has no marks.
     pub fn pressure(&mut self) -> Option<Pressure> {
         let marks = self.marks?;
-        let len = BacklogLength::new(self.held.len());
+        let len = Count::<Backlogged>::of(self.held.len());
         let next = match self.asked {
             Pressure::Release if len >= marks.high => Pressure::Hold,
             Pressure::Hold if len <= marks.low => Pressure::Release,
@@ -681,7 +680,7 @@ impl<T> Drop for UnboundedSender<T> {
 }
 
 /// A channel from the main thread to the worker bound to `bell`.
-pub fn to_worker<T>(capacity: ChannelCapacity, bell: &Doorbell) -> (Sender<T>, Receiver<T>) {
+pub fn to_worker<T>(capacity: Bounded<ChannelSlots>, bell: &Doorbell) -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(Some(capacity), Some(bell.clone()), None));
     (
         Sender {
@@ -692,7 +691,10 @@ pub fn to_worker<T>(capacity: ChannelCapacity, bell: &Doorbell) -> (Sender<T>, R
 }
 
 /// A channel from the worker bound to `bell` to the main thread.
-pub fn to_main<T>(capacity: ChannelCapacity, bell: &Doorbell) -> (WorkerSender<T>, Receiver<T>) {
+pub fn to_main<T>(
+    capacity: Bounded<ChannelSlots>,
+    bell: &Doorbell,
+) -> (WorkerSender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(Some(capacity), None, Some(bell.clone())));
     (
         WorkerSender {
@@ -703,7 +705,7 @@ pub fn to_main<T>(capacity: ChannelCapacity, bell: &Doorbell) -> (WorkerSender<T
 }
 
 /// A channel between two parts of the main thread.
-pub fn local<T>(capacity: ChannelCapacity) -> (Sender<T>, Receiver<T>) {
+pub fn local<T>(capacity: Bounded<ChannelSlots>) -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(Some(capacity), None, None));
     (
         Sender {
@@ -738,7 +740,7 @@ mod tests {
 
     #[test]
     fn messages_arrive_in_order() {
-        let (tx, rx) = local(ChannelCapacity::new(4));
+        let (tx, rx) = local(Bounded::<ChannelSlots>::of::<4>());
         for n in 0..4 {
             tx.try_send(n).expect("room");
         }
@@ -748,32 +750,42 @@ mod tests {
 
     #[test]
     fn a_full_channel_hands_the_value_back() {
-        let (tx, rx) = local(ChannelCapacity::new(1));
+        let (tx, rx) = local(Bounded::<ChannelSlots>::of::<1>());
         tx.try_send(1).expect("room");
         assert_eq!(tx.try_send(2), Err(TrySendError::Full(2)));
         assert_eq!(rx.try_recv(), Ok(1));
     }
 
+    /// The lowest capacity holds one value, and no capacity holds none: a
+    /// run-time zero is refused, as the `const` door refuses it at compile
+    /// time.
     #[test]
-    fn a_capacity_of_zero_holds_one() {
-        assert_eq!(ChannelCapacity::new(0).get(), 1);
-        let (tx, _rx) = local(ChannelCapacity::new(0));
+    fn the_lowest_capacity_holds_one_and_zero_is_refused() {
+        let (tx, _rx) = local(Bounded::<ChannelSlots>::MIN);
         assert_eq!(tx.try_send(1), Ok(()));
+        assert_eq!(tx.try_send(2), Err(TrySendError::Full(2)));
+        assert_eq!(Bounded::<ChannelSlots>::of::<1>(), Bounded::MIN);
+        assert_eq!(Bounded::<ChannelSlots>::new(0), None);
+        assert_eq!(Bounded::<ChannelSlots>::new(1 << 16), Some(Bounded::MAX));
+        assert_eq!(Bounded::<ChannelSlots>::new((1 << 16) + 1), None);
+        assert_eq!(
+            format!("{:?}", Bounded::<ChannelSlots>::of::<8>()),
+            "ChannelCapacity(8)"
+        );
     }
 
     #[test]
     fn a_backlog_counts_full_channels_and_holds_at_the_top() {
+        let capacity = Bounded::<ChannelSlots>::of::<1024>();
+        assert_eq!(backlog(capacity, 4), Count::<Backlogged>::new(4096));
+        assert_eq!(backlog(capacity, 1), Count::<Backlogged>::new(1024));
         assert_eq!(
-            ChannelCapacity::new(1024).backlog(4),
-            BacklogLength::new(4096)
+            backlog(Bounded::<ChannelSlots>::MAX, u32::MAX),
+            Count::<Backlogged>::new(u32::MAX)
         );
         assert_eq!(
-            ChannelCapacity::new(1024).backlog(1),
-            BacklogLength::new(1024)
-        );
-        assert_eq!(
-            ChannelCapacity::new(usize::MAX).backlog(2),
-            BacklogLength::new(usize::MAX)
+            format!("{:?}", Count::<Backlogged>::new(3)),
+            "BacklogLength(3)"
         );
     }
 
@@ -782,18 +794,18 @@ mod tests {
     #[test]
     fn a_low_mark_must_sit_below_the_high_one() {
         assert_eq!(
-            Marks::new(BacklogLength::new(3), BacklogLength::new(3)),
+            Marks::new(Count::<Backlogged>::new(3), Count::<Backlogged>::new(3)),
             None
         );
         assert_eq!(
-            Marks::new(BacklogLength::new(1), BacklogLength::new(3)),
+            Marks::new(Count::<Backlogged>::new(1), Count::<Backlogged>::new(3)),
             None
         );
-        let marks =
-            Marks::new(BacklogLength::new(3), BacklogLength::new(1)).expect("1 sits below 3");
+        let marks = Marks::new(Count::<Backlogged>::new(3), Count::<Backlogged>::new(1))
+            .expect("1 sits below 3");
         assert_eq!(
             (marks.high(), marks.low()),
-            (BacklogLength::new(3), BacklogLength::new(1))
+            (Count::<Backlogged>::new(3), Count::<Backlogged>::new(1))
         );
     }
 
@@ -801,7 +813,7 @@ mod tests {
     /// messages it queued are taken.
     #[test]
     fn the_last_sender_dropped_disconnects_after_its_messages() {
-        let (tx, rx) = local(ChannelCapacity::new(4));
+        let (tx, rx) = local(Bounded::<ChannelSlots>::of::<4>());
         let second = tx.clone();
         tx.try_send(1).expect("room");
         drop(tx);
@@ -813,7 +825,7 @@ mod tests {
 
     #[test]
     fn a_dropped_receiver_refuses_the_send() {
-        let (tx, rx) = local(ChannelCapacity::new(4));
+        let (tx, rx) = local(Bounded::<ChannelSlots>::of::<4>());
         drop(rx);
         assert!(tx.is_disconnected());
         assert_eq!(tx.try_send(1), Err(TrySendError::Disconnected(1)));
@@ -834,7 +846,7 @@ mod tests {
     /// arrival order once the receiver takes room. Nothing is dropped.
     #[test]
     fn a_backlog_holds_past_a_full_channel_and_keeps_the_order() {
-        let (tx, rx) = local(ChannelCapacity::new(2));
+        let (tx, rx) = local(Bounded::<ChannelSlots>::of::<2>());
         let mut backlog = Backlog::new(tx);
         for n in 0..5 {
             backlog.push(n);
@@ -853,7 +865,7 @@ mod tests {
     /// channel has room by then.
     #[test]
     fn a_backlog_never_lets_a_new_value_overtake_a_held_one() {
-        let (tx, rx) = local(ChannelCapacity::new(1));
+        let (tx, rx) = local(Bounded::<ChannelSlots>::of::<1>());
         let mut backlog = Backlog::new(tx);
         backlog.push(1);
         backlog.push(2);
@@ -868,10 +880,11 @@ mod tests {
     /// again once at the low mark, never in between (`SYNC-059`).
     #[test]
     fn a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low() {
-        let (tx, rx) = local(ChannelCapacity::new(1));
+        let (tx, rx) = local(Bounded::<ChannelSlots>::of::<1>());
         let mut backlog = Backlog::with_marks(
             tx,
-            Marks::new(BacklogLength::new(3), BacklogLength::new(1)).expect("1 sits below 3"),
+            Marks::new(Count::<Backlogged>::new(3), Count::<Backlogged>::new(1))
+                .expect("1 sits below 3"),
         );
         let mut asked = Vec::new();
         for n in 0..5 {
@@ -892,7 +905,7 @@ mod tests {
 
     #[test]
     fn a_backlog_drops_what_a_gone_receiver_will_never_take() {
-        let (tx, rx) = local(ChannelCapacity::new(1));
+        let (tx, rx) = local(Bounded::<ChannelSlots>::of::<1>());
         let mut backlog = Backlog::new(tx);
         backlog.push(1);
         backlog.push(2);
@@ -932,7 +945,7 @@ mod tests {
     #[test]
     fn a_send_wakes_the_parked_worker() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_worker(ChannelCapacity::new(4), &bell);
+        let (tx, rx) = to_worker(Bounded::<ChannelSlots>::of::<4>(), &bell);
         let (bound, read) = parked_reader(bell, rx);
         bound.recv_timeout(PATIENCE).expect("bound");
         thread::sleep(Duration::from_millis(20));
@@ -945,7 +958,7 @@ mod tests {
     #[test]
     fn the_last_sender_dropped_wakes_the_parked_worker() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_worker::<u32>(ChannelCapacity::new(4), &bell);
+        let (tx, rx) = to_worker::<u32>(Bounded::<ChannelSlots>::of::<4>(), &bell);
         let (bound, read) = parked_reader(bell, rx);
         bound.recv_timeout(PATIENCE).expect("bound");
         thread::sleep(Duration::from_millis(20));
@@ -961,7 +974,7 @@ mod tests {
     #[test]
     fn a_full_send_resumes_when_the_receiver_takes_one() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_main(ChannelCapacity::new(2), &bell);
+        let (tx, rx) = to_main(Bounded::<ChannelSlots>::of::<2>(), &bell);
         let (done_tx, done_rx) = mpsc::channel();
         thread::spawn(move || {
             let _waiter = bell.bind().expect("bind");
@@ -986,7 +999,7 @@ mod tests {
     #[test]
     fn a_dropped_receiver_wakes_a_parked_sender() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_main(ChannelCapacity::new(1), &bell);
+        let (tx, rx) = to_main(Bounded::<ChannelSlots>::of::<1>(), &bell);
         let (parked_tx, parked_rx) = mpsc::channel();
         let (done_tx, done_rx) = mpsc::channel();
         thread::spawn(move || {
@@ -1009,7 +1022,7 @@ mod tests {
     #[test]
     fn a_full_send_off_the_bound_thread_hands_the_value_back() {
         let bell = Doorbell::new();
-        let (tx, _rx) = to_main(ChannelCapacity::new(1), &bell);
+        let (tx, _rx) = to_main(Bounded::<ChannelSlots>::of::<1>(), &bell);
         tx.send(1).expect("room");
         assert_eq!(tx.send(2), Err(SendError::Unbound(2)));
     }

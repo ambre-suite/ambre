@@ -76,7 +76,7 @@ pub struct MemberWithUserRow {
 #[derive(Debug)]
 pub struct LogEntry {
     /// The place the entry was signed for.
-    pub position: ambre_protocol::LogPosition,
+    pub position: ambre_core::Seq<ambre_protocol::LogPlaces>,
     pub bytes: ambre_core::Encoded<ambre_core::EncodedLogEntry>,
 }
 

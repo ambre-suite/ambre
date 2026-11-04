@@ -24,7 +24,7 @@ use serde::de::{self, SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::ByteSize;
+use crate::{Count, Octets};
 
 mod sealed {
     /// Closes [`super::ByteArray`] to the byte arrays.
@@ -123,7 +123,7 @@ pub enum FixedBytesError {
 
 impl<R: FixedRole> FixedBytes<R> {
     /// Bytes of one value where a layout frames it.
-    pub const SIZE: ByteSize = ByteSize::new(R::Array::LEN as u64);
+    pub const SIZE: Count<Octets> = Count::new(R::Array::LEN as u64);
 
     /// Wraps the bytes.
     #[must_use]
@@ -297,7 +297,7 @@ impl<'de, R: FixedRole> Deserialize<'de> for FixedBytes<R> {
 #[cfg(test)]
 mod tests {
     use super::{DebugForm, FixedBytes, FixedRole};
-    use crate::ByteSize;
+    use crate::{Count, Octets};
 
     /// A role wider than the 32 bytes serde derives an array for.
     enum Wide {}
@@ -371,7 +371,7 @@ mod tests {
 
     #[test]
     fn a_value_reads_from_its_width_alone() {
-        assert_eq!(FixedBytes::<Short>::SIZE, ByteSize::new(3));
+        assert_eq!(FixedBytes::<Short>::SIZE, Count::<Octets>::new(3));
         assert!(FixedBytes::<Short>::from_slice(&[1, 2]).is_err());
         assert!(FixedBytes::<Short>::from_slice(&[1, 2, 3, 4]).is_err());
         let value = FixedBytes::<Short>::from_slice(&[1, 2, 3]).unwrap();

@@ -206,12 +206,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         access_ttl: TimeSpan::<Sec>::new(env_ttl("ACCESS_TTL_SECS", 900)),
         refresh_ttl: TimeSpan::<Sec>::new(env_ttl("REFRESH_TTL_SECS", 30 * 24 * 3600)),
-        media_max_size: ambre_core::ByteSize::new(env_ttl("MEDIA_MAX_BYTES", 100 * 1024 * 1024)),
-        snapshot_max_size: ambre_core::ByteSize::new(env_ttl(
+        media_max_size: ambre_core::Count::<ambre_core::Octets>::new(env_ttl(
+            "MEDIA_MAX_BYTES",
+            100 * 1024 * 1024,
+        )),
+        snapshot_max_size: ambre_core::Count::<ambre_core::Octets>::new(env_ttl(
             "SNAPSHOT_MAX_BYTES",
             50 * 1024 * 1024,
         )),
-        delta_max_size: ambre_core::ByteSize::new(env_ttl("DELTA_MAX_BYTES", 4 * 1024 * 1024)),
+        delta_max_size: ambre_core::Count::<ambre_core::Octets>::new(env_ttl(
+            "DELTA_MAX_BYTES",
+            4 * 1024 * 1024,
+        )),
         ws_msg_rate_per_sec: state::limit_from_env::<state::RatePerSec>(env_ttl(
             "WS_MSG_RATE_PER_SEC",
             u64::from(ambre_core::Bounded::<state::RatePerSec>::default().get()),
@@ -222,7 +228,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             u64::from(ambre_core::Bounded::<state::Burst>::default().get()),
         ))
         .map_err(|e| format!("WS_MSG_BURST: {e}"))?,
-        ephemeral_max_size: ambre_core::ByteSize::new(env_ttl("EPHEMERAL_MAX_BYTES", 64 * 1024)),
+        ephemeral_max_size: ambre_core::Count::<ambre_core::Octets>::new(env_ttl(
+            "EPHEMERAL_MAX_BYTES",
+            64 * 1024,
+        )),
         ..Default::default()
     };
 

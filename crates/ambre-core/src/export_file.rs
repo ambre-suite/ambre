@@ -6,8 +6,9 @@
 //! folder. So the name is a validated type (`DOCFILE-019`, `DOCFILE-020`).
 
 use crate::Redacted;
+use crate::count::Count;
 use crate::index::Len;
-use crate::media::ByteSize;
+use crate::media::Octets;
 use crate::payload::{Payload, PayloadKind};
 use crate::text_offset::Byte;
 
@@ -259,7 +260,7 @@ impl PayloadKind for FileBytes {
 impl Payload<FileBytes> {
     /// The size of the file.
     #[must_use]
-    pub fn size(&self) -> ByteSize {
+    pub fn size(&self) -> Count<Octets> {
         self.len()
     }
 }
@@ -508,7 +509,7 @@ mod tests {
     fn file_bytes_print_their_length_alone() {
         let bytes = Payload::<FileBytes>::new(b"secret".to_vec());
         assert_eq!(format!("{bytes:?}"), "FileBytes(6 bytes)");
-        assert_eq!(bytes.size(), ByteSize::new(6));
+        assert_eq!(bytes.size(), Count::<Octets>::new(6));
     }
 
     /// A name holds the document's title: its `Debug` form prints the length

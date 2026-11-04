@@ -11,8 +11,9 @@
 use super::*;
 use crate::formula::shift::shift_formula;
 use crate::formula::text::CellText;
-use ambre_bus::app::trame::CellNumber;
+use ambre_bus::app::trame::CellFloat;
 use ambre_bus::{Col, FillMode, Row};
+use ambre_core::Bounded;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Delta, Len};
 
@@ -44,7 +45,7 @@ impl Term {
 /// origin, finite, and the difference between two neighbours.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Series {
-    start: CellNumber,
+    start: Bounded<CellFloat>,
     /// The step, held as given: `1` for a lone number, so it survives where
     /// one is below the spacing of the floats. The difference of two finite
     /// sources may pass the largest number, and every term but the start then
@@ -55,8 +56,8 @@ struct Series {
 impl Series {
     /// The value at `term`, `None` past the largest number: the series stops
     /// there (`TRAME-UI-180`).
-    fn at(self, term: Term) -> Option<CellNumber> {
-        CellNumber::new(self.start.get() + term.0 as f64 * self.step).ok()
+    fn at(self, term: Term) -> Option<Bounded<CellFloat>> {
+        Bounded::<CellFloat>::new(self.start.get() + term.0 as f64 * self.step)
     }
 }
 
@@ -475,7 +476,7 @@ fn series_params(mode: FillMode, sources: &[CellText<SourceForm>]) -> Option<Ser
     }
     // Every source cell must be a plain numeric literal (a formula or text breaks
     // the series and the line falls back to copy/reindex).
-    let nums: Vec<CellNumber> = sources.iter().map(parse_num).collect::<Option<_>>()?;
+    let nums: Vec<Bounded<CellFloat>> = sources.iter().map(parse_num).collect::<Option<_>>()?;
     match nums.as_slice() {
         [] => None,
         [only] if mode == FillMode::Series => Some(Series {
@@ -499,17 +500,17 @@ fn series_params(mode: FillMode, sources: &[CellText<SourceForm>]) -> Option<Ser
 
 /// Parse a plain numeric literal, or `None` for empty / non-numeric / formula
 /// cells (which cannot participate in a numeric series).
-fn parse_num(raw: &CellText<SourceForm>) -> Option<CellNumber> {
+fn parse_num(raw: &CellText<SourceForm>) -> Option<Bounded<CellFloat>> {
     let t = raw.as_str().trim();
     if t.is_empty() || t.starts_with('=') {
         return None;
     }
-    crate::formula::types::finite_number(t).and_then(|n| CellNumber::new(n).ok())
+    crate::formula::types::finite_number(t).and_then(Bounded::<CellFloat>::new)
 }
 
 /// Render an extrapolated series value as cell text: an integral value drops the
 /// decimals (`3.0 -> "3"`), otherwise Rust's shortest round-trip form is used.
-fn format_number(value: CellNumber) -> CellText<SourceForm> {
+fn format_number(value: Bounded<CellFloat>) -> CellText<SourceForm> {
     let v = value.get();
     CellText::<SourceForm>::new(if v.fract() == 0.0 && v.abs() < 1e15 {
         format!("{}", v as i64)

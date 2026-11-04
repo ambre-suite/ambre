@@ -224,7 +224,7 @@ pub async fn generate_presigned_upload_url(
     bucket: &StoreText<BucketName>,
     key: &ambre_core::ObjectKey,
     ttl: TimeSpan<Sec>,
-    content_length: ambre_core::ByteSize,
+    content_length: ambre_core::Count<ambre_core::Octets>,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
@@ -899,7 +899,7 @@ mod tests {
             &StoreText::<BucketName>::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
             TimeSpan::<Sec>::new(900),
-            ambre_core::ByteSize::new(4096),
+            ambre_core::Count::<ambre_core::Octets>::new(4096),
         )
         .await
         .expect("presign")
@@ -930,7 +930,7 @@ mod tests {
             &StoreText::<BucketName>::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             TimeSpan::<Sec>::new(day),
-            ambre_core::ByteSize::new(1),
+            ambre_core::Count::<ambre_core::Octets>::new(1),
         )
         .await
         .expect("presign")

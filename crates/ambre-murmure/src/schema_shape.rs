@@ -30,9 +30,10 @@ use ambre_core::index::Span;
 use std::collections::BTreeSet;
 
 use ambre_bus::{
-    Attachment, Authored, ByteSize, ChannelTopic, ContentHash, Instant, MediaType, Mention,
-    MentionTarget, MessageDraft, SealedChannelKey, StyleMark, TextStyle,
+    Attachment, Authored, ChannelTopic, ContentHash, Instant, MediaType, Mention, MentionTarget,
+    MessageDraft, Octets, SealedChannelKey, StyleMark, TextStyle,
 };
+use ambre_core::Count;
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN};
 use ambre_core::id::{Category, Channel, Document, Id, Message, Segment, Space, User};
 use ambre_core::schema::{migration_peer, step_fingerprint};
@@ -222,7 +223,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         media_ref: Validated::<ContentHash>::parse("ab".repeat(32)).expect("an address"),
         name: "plan.pdf".to_owned(),
         media_type: MediaType::new("application/pdf".to_owned()),
-        size: ByteSize::new(2_048),
+        size: Count::<Octets>::new(2_048),
     };
     state
         .send_attached(

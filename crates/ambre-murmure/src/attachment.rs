@@ -7,7 +7,8 @@
 //! The list is written with the message and never changes after, so two
 //! peers never race on it.
 
-use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType};
+use ambre_bus::{Attachment, ContentHash, MediaType, Octets};
+use ambre_core::Count;
 use ambre_core::Validated;
 use loro::{Container, LoroList, LoroMap, ValueOrContainer};
 
@@ -73,6 +74,6 @@ fn read_entry(entry: &Fields<AttachmentKey>) -> Option<Attachment> {
             .ok()?,
         name: schema::string(entry, AttachmentKey::Name)?,
         media_type: MediaType::new(schema::string(entry, AttachmentKey::Type)?),
-        size: ByteSize::new(schema::unsigned(entry, AttachmentKey::Size)?),
+        size: Count::<Octets>::new(schema::unsigned(entry, AttachmentKey::Size)?),
     })
 }

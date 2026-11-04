@@ -118,7 +118,7 @@ pub fn seal_row(
     key: &StoreKey,
 ) -> Result<ambre_core::Payload<SealedRowBytes>, CryptoError> {
     let (nonce, ciphertext) = seal_under(plaintext.secret().expose(), context, key.as_bytes())?;
-    let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len().as_len());
+    let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len().saturating_len().to_usize());
     row.push(RowLayout::CURRENT.byte());
     row.extend_from_slice(nonce.as_slice());
     row.extend_from_slice(ciphertext.as_bytes());

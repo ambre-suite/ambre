@@ -57,8 +57,9 @@ fn entry_transcript(
     peer: PeerId,
     nonce: &FixedBytes<SessionNonce>,
 ) -> Vec<u8> {
-    let mut msg =
-        Vec::with_capacity(ENTRY_DOMAIN.len() + 16 + 8 + FixedBytes::<SessionNonce>::SIZE.as_len());
+    let mut msg = Vec::with_capacity(
+        ENTRY_DOMAIN.len() + 16 + 8 + FixedBytes::<SessionNonce>::SIZE.saturating_len().to_usize(),
+    );
     msg.extend_from_slice(ENTRY_DOMAIN);
     msg.extend_from_slice(document.as_bytes());
     msg.extend_from_slice(&peer.get().to_le_bytes());

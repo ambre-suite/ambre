@@ -21,7 +21,7 @@
 
 | Reason | Example |
 | :--- | :--- |
-| An invariant no family checks | `CellNumber` is finite; `LineSpacingMultiple` lies above zero |
+| An invariant no family checks | `LineSpacingMultiple` lies above zero; `FontSize` reads a value past its cap as the cap |
 | An operation no sibling shares | `Rgba` reads its channels; `StackDepth` refuses a pop below zero |
 | A width or a meaning a foreign definition fixes | `PeerId` is a Loro PeerID; `HttpStatus` is HTTP's |
 | A door no family keeps closed | `SealedBlob` is built by the seal alone, while `Payload::new` is public |
@@ -56,7 +56,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A span of time in a unit | `TimeSpan<U>` | `TimeUnit`, sealed | `ClockUnit` |
 | An instant on a time base | `Instant<C>` | `TimeBase`, sealed | -- |
 | A position, a length, a difference and a range in an index space | `Pos<A>`, `Len<A>`, `Delta<A>`, `Span<A>`, `IdxVec<A, T>` | `Axis` | `Numbered`, `Shown`, `Circular`, `MeasuresAs<B>`, `MapsTo<B>` |
-| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `CountColumn` |
+| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `CountColumn`, `IndexedAs` |
 | A number one issuer hands out going up, each once | `Seq<K>` | `SeqKind`, with its `IssueRight` | `Wire`, `Before`, `CountsSince`, `SeqColumn` |
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
 | A format or a schema version | `Version<K>` | `VersionKind`, with its `Repr` | `Current`, `OpenRange` |

@@ -120,7 +120,9 @@ pub use bounded::{
 pub use calendar::{Month, Year};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
-pub use count::{Cells, Count, CountColumn, CountKind, CountRepr, Divisor, Elements, Recounts};
+pub use count::{
+    Cells, Count, CountColumn, CountKind, CountRepr, Divisor, Elements, IndexedAs, Recounts,
+};
 pub use credential::ProviderUrls;
 pub use doc_type::DocType;
 pub use docfile::{
@@ -156,8 +158,8 @@ pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::{LangTag, NotALangTag, primary_subtag};
 pub use link::LinkUrl;
 pub use media::{
-    ByteSize, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress,
-    MediaType,
+    ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress, MediaType,
+    Octets,
 };
 pub use member_count::Members;
 pub use mode::{

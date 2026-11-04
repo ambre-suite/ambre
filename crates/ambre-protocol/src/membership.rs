@@ -8,7 +8,9 @@
 //! the signature, and computes no digest.
 
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{Encoded, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role};
+use ambre_core::{
+    Encoded, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role, Seq, SeqKind, Wire,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
@@ -71,55 +73,26 @@ pub fn ownerless_log(
         )))
 }
 
-/// The place of an entry in a document's membership log, from zero. It is
-/// signed with the entry, and the relay appends an entry at its own place
-/// alone. It encodes as the bare `u64` it replaced, so a stored entry and its
-/// digest keep their bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct LogPosition(u64);
+/// The places of the entries of a document's membership log, from zero:
+/// `Seq<LogPlaces>`. A place is signed with the entry, and the relay appends
+/// an entry at its own place alone. It encodes as the bare `u64` of the
+/// hand-written `LogPosition`, so a stored entry and its digest keep their
+/// bytes, and `Debug` keeps that name.
+pub enum LogPlaces {}
 
-impl LogPosition {
-    /// The place of the entry that creates the log.
-    pub const FIRST: Self = Self(0);
-
-    /// The place `raw`, as the wire and the relay's rows carry it.
-    #[must_use]
-    pub const fn new(raw: u64) -> Self {
-        Self(raw)
-    }
-
-    /// The place a log of `length` entries gives its next entry. A length
-    /// past `u64::MAX` saturates, which no log reaches.
-    #[must_use]
-    pub fn after(length: usize) -> Self {
-        Self(u64::try_from(length).unwrap_or(u64::MAX))
-    }
-
-    /// The number the wire and the relay's rows carry.
-    #[must_use]
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-
-    /// The place of the entry after this one. It saturates at `u64::MAX`,
-    /// which no log reaches.
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
-
-    /// Whether this is the place of the entry that creates the log.
-    #[must_use]
-    pub const fn is_first(self) -> bool {
-        self.0 == 0
-    }
+impl SeqKind for LogPlaces {
+    type IssueRight = ();
+    const NAME: &'static str = "LogPosition";
 }
 
-impl std::fmt::Display for LogPosition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
+/// A place crosses the wire and the relay's rows.
+impl Wire for LogPlaces {}
+
+/// The place a log of `length` entries gives its next entry. A length past
+/// `u64::MAX` saturates, which no log reaches.
+#[must_use]
+pub fn place_after(length: usize) -> Seq<LogPlaces> {
+    Seq::new(u64::try_from(length).unwrap_or(u64::MAX))
 }
 
 /// One signed change of membership.
@@ -129,7 +102,7 @@ pub struct MembershipEntry {
     pub document: Id<Document>,
     /// The place of this entry in the log, from zero. The relay appends an
     /// entry at its own place alone, so two racing writers never fork the log.
-    pub position: LogPosition,
+    pub position: Seq<LogPlaces>,
     /// The member the entry adds, removes or changes.
     pub member: Id<User>,
     /// The member's signing key, so an entry that member signs later checks
@@ -155,7 +128,7 @@ pub struct MembershipEntry {
 #[derive(Serialize)]
 struct Signed<'a> {
     document: &'a Id<Document>,
-    position: LogPosition,
+    position: Seq<LogPlaces>,
     member: &'a Id<User>,
     member_key: &'a FixedBytes<PublicKey>,
     act: MembershipAct,
@@ -194,7 +167,7 @@ impl MembershipEntry {
     /// decode.
     #[must_use]
     pub fn well_formed(&self) -> bool {
-        self.position.is_first() == self.previous.is_none()
+        (self.position == Seq::ZERO) == self.previous.is_none()
     }
 
     /// The bytes a request carries and the relay stores.
@@ -232,7 +205,7 @@ mod tests {
     fn entry() -> MembershipEntry {
         MembershipEntry {
             document: Id::<Document>::from_bytes([1; 16]),
-            position: LogPosition::new(1),
+            position: Seq::<LogPlaces>::new(1),
             member: Id::<User>::from_bytes([2; 16]),
             member_key: FixedBytes::from_array([3; 32]),
             act: MembershipAct::Invite,
@@ -254,7 +227,7 @@ mod tests {
         assert!(signed.as_bytes().starts_with(ENTRY_DOMAIN));
         let changes: [fn(&mut MembershipEntry); 9] = [
             |e| e.document = Id::<Document>::from_bytes([9; 16]),
-            |e| e.position = LogPosition::new(2),
+            |e| e.position = Seq::<LogPlaces>::new(2),
             |e| e.member = Id::<User>::from_bytes([9; 16]),
             |e| e.member_key = FixedBytes::from_array([9; 32]),
             |e| e.act = MembershipAct::Revoke,
@@ -273,13 +246,61 @@ mod tests {
         assert_eq!(resigned.signed_bytes().unwrap(), signed);
     }
 
+    /// The signed fields as the hand-written `LogPosition` wrote them: a
+    /// transparent `u64` in the place of the position.
+    #[derive(Serialize)]
+    struct OldSigned<'a> {
+        document: &'a Id<Document>,
+        position: u64,
+        member: &'a Id<User>,
+        member_key: &'a FixedBytes<PublicKey>,
+        act: MembershipAct,
+        role: Role,
+        key: &'a Option<FixedBytes<KeyId>>,
+        previous: &'a Option<FixedBytes<EntryDigest>>,
+        author: &'a Id<User>,
+    }
+
+    /// A place writes the bytes the hand-written `LogPosition` wrote, so the
+    /// signed transcript, and the digest the next entry names, keep theirs.
+    #[test]
+    fn a_place_keeps_the_signed_bytes_of_the_type_it_replaced() {
+        for raw in [0, 1, 300, u64::MAX] {
+            let mut sent = entry();
+            sent.position = Seq::<LogPlaces>::new(raw);
+            let old = OldSigned {
+                document: &sent.document,
+                position: raw,
+                member: &sent.member,
+                member_key: &sent.member_key,
+                act: sent.act,
+                role: sent.role,
+                key: &sent.key,
+                previous: &sent.previous,
+                author: &sent.author,
+            };
+            let mut bytes = ENTRY_DOMAIN.to_vec();
+            bytes.extend(postcard::to_allocvec(&old).unwrap());
+            assert_eq!(sent.signed_bytes().unwrap().as_bytes(), bytes.as_slice());
+            let place = Seq::<LogPlaces>::new(raw);
+            assert_eq!(
+                postcard::to_allocvec(&place).unwrap(),
+                postcard::to_allocvec(&raw).unwrap()
+            );
+        }
+        assert_eq!(format!("{:?}", Seq::<LogPlaces>::new(3)), "LogPosition(3)");
+        assert_eq!(place_after(0), Seq::ZERO);
+        assert_eq!(place_after(2), Seq::<LogPlaces>::new(2));
+        assert_eq!(place_after(2).next(), Seq::<LogPlaces>::new(3));
+    }
+
     /// The first entry alone has no previous digest, and an entry travels
     /// whole through its encoding.
     #[test]
     fn an_entry_names_a_previous_digest_unless_it_is_the_first() {
         let mut first = entry();
         assert!(first.well_formed());
-        first.position = LogPosition::FIRST;
+        first.position = Seq::<LogPlaces>::ZERO;
         assert!(!first.well_formed());
         first.previous = None;
         assert!(first.well_formed());

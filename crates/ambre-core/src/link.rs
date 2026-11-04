@@ -28,8 +28,8 @@ impl LinkUrl {
     /// The size of the target, in UTF-8 bytes, for the cap a writer holds
     /// it to.
     #[must_use]
-    pub fn size(&self) -> crate::ByteSize {
-        crate::ByteSize::of(self.0.as_str().len())
+    pub fn size(&self) -> crate::Count<crate::Octets> {
+        crate::Count::of(self.0.as_str().len())
     }
 }
 

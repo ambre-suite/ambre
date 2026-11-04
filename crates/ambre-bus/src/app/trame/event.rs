@@ -5,72 +5,35 @@
 //! value types it reuses (`CellStyle`, `HAlign`, `VAlign`, `Borders`, ...) arrive
 //! by glob from the sibling command modules of `crate::app::trame`.
 
+use std::cmp::Ordering;
+
 use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
 use crate::token::Token;
 use ambre_core::id::{FilterView, Id, Sheet, User};
 use ambre_core::index::{Axis, Len, Pos};
-use ambre_core::{Count, Doc, Px, Refused, Refuses, Rgb};
+use ambre_core::{Bounded, Bounds, Count, Doc, Px, Refusal, Rgb};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- events (Logic -> UI)
 // -----------------------------------------------------------------------------
 
-/// A number a cell holds, as it crosses a public struct or the bus: always
-/// finite. The formula engine computes in `f64`, and a NaN or an infinity it
-/// yields, or a literal it parses, is no cell number (`trame-status-bar`).
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub struct CellNumber(f64);
-
-/// A value refused as a [`CellNumber`], NaN or an infinity: the marker of
-/// its [`Refused<CellFloat>`], which echoes the value.
+/// A number a cell holds, as it crosses a public struct or the bus:
+/// `Bounded<CellFloat>`, always finite. The formula engine computes in
+/// `f64`, and a NaN or an infinity it yields, or a literal it parses, is no
+/// cell number (`trame-status-bar`).
+///
+/// The bounds are the lowest and the highest finite `f64`. `Bounded::new`
+/// refuses a NaN, which compares false with both, and each infinity, which
+/// lies past one. So the bounds check is the finite check. `Debug` keeps the
+/// name of the hand-written `CellNumber`, and a refusal keeps its message.
 pub enum CellFloat {}
 
-impl Refuses for CellFloat {
-    type Raw = f64;
-    const NAME: &'static str = "NotACellNumber";
-
-    fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{raw} is not a finite number")
-    }
-}
-
-impl CellNumber {
-    /// The cell number `value`.
-    ///
-    /// # Errors
-    ///
-    /// [`Refused<CellFloat>`] when `value` is NaN or infinite.
-    pub fn new(value: f64) -> Result<Self, Refused<CellFloat>> {
-        if value.is_finite() {
-            Ok(Self(value))
-        } else {
-            Err(Refused::new(value))
-        }
-    }
-
-    /// The number, for the arithmetic and the formatting that read it.
-    #[must_use]
-    pub const fn get(self) -> f64 {
-        self.0
-    }
-
-    /// The lower of the two numbers.
-    #[must_use]
-    pub fn min(self, other: Self) -> Self {
-        Self(self.0.min(other.0))
-    }
-
-    /// The higher of the two numbers.
-    #[must_use]
-    pub fn max(self, other: Self) -> Self {
-        Self(self.0.max(other.0))
-    }
-}
-
-impl std::fmt::Display for CellNumber {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
+impl Bounds for CellFloat {
+    type Repr = f64;
+    const MIN: f64 = f64::MIN;
+    const MAX: f64 = f64::MAX;
+    const NAME: &'static str = "CellNumber";
+    const REFUSAL: Refusal = Refusal::new("", " is not a finite number");
 }
 
 /// The totals of the numeric cells of a selection (`trame-status-bar`). There
@@ -81,9 +44,9 @@ pub struct NumericStats {
     count: Count<Cells>,
     /// The total `of_all` was handed. Its caller passes the exact total of
     /// the numbers, `None` when it is past the largest finite number.
-    sum: Option<CellNumber>,
-    min: CellNumber,
-    max: CellNumber,
+    sum: Option<Bounded<CellFloat>>,
+    min: Bounded<CellFloat>,
+    max: Bounded<CellFloat>,
 }
 
 impl NumericStats {
@@ -95,11 +58,23 @@ impl NumericStats {
     /// one total (`TRAME-FEAT-029`). This crate cannot see that sum, so the
     /// type does not check it: `of_all` keeps the `sum` it is handed.
     #[must_use]
-    pub fn of_all(numbers: &[CellNumber], sum: Option<CellNumber>) -> Option<Self> {
+    pub fn of_all(numbers: &[Bounded<CellFloat>], sum: Option<Bounded<CellFloat>>) -> Option<Self> {
         let (&first, rest) = numbers.split_first()?;
-        let (min, max) = rest
-            .iter()
-            .fold((first, first), |(min, max), &n| (min.min(n), max.max(n)));
+        // A cell number is never NaN, so `partial_cmp` always orders two.
+        let (min, max) = rest.iter().fold((first, first), |(min, max), &n| {
+            (
+                if n.partial_cmp(&min) == Some(Ordering::Less) {
+                    n
+                } else {
+                    min
+                },
+                if n.partial_cmp(&max) == Some(Ordering::Greater) {
+                    n
+                } else {
+                    max
+                },
+            )
+        });
         Some(Self {
             count: Count::<Cells>::of(numbers.len()),
             sum,
@@ -116,25 +91,25 @@ impl NumericStats {
 
     /// The sum, `None` when it overflows past the largest finite number.
     #[must_use]
-    pub const fn sum(&self) -> Option<CellNumber> {
+    pub const fn sum(&self) -> Option<Bounded<CellFloat>> {
         self.sum
     }
 
     /// The sum over the count, `None` when the sum overflows. A finite sum
     /// over a count of at least one stays finite.
     #[must_use]
-    pub fn avg(&self) -> Option<CellNumber> {
+    pub fn avg(&self) -> Option<Bounded<CellFloat>> {
         self.sum
-            .and_then(|sum| CellNumber::new(sum.get() / self.count.as_f64()).ok())
+            .and_then(|sum| Bounded::new(sum.get() / self.count.as_f64()))
     }
 
     #[must_use]
-    pub const fn min(&self) -> CellNumber {
+    pub const fn min(&self) -> Bounded<CellFloat> {
         self.min
     }
 
     #[must_use]
-    pub const fn max(&self) -> CellNumber {
+    pub const fn max(&self) -> Bounded<CellFloat> {
         self.max
     }
 }
@@ -763,15 +738,12 @@ mod tests {
     use super::*;
     use crate::app::trame::CellText;
 
-    fn numbers(values: &[f64]) -> Vec<CellNumber> {
-        values
-            .iter()
-            .map(|&v| CellNumber::new(v).expect("a finite number"))
-            .collect()
+    fn numbers(values: &[f64]) -> Vec<Bounded<CellFloat>> {
+        values.iter().map(|&v| number(v)).collect()
     }
 
-    fn number(value: f64) -> CellNumber {
-        CellNumber::new(value).expect("a finite number")
+    fn number(value: f64) -> Bounded<CellFloat> {
+        Bounded::new(value).expect("a finite number")
     }
 
     /// A display cell's `Debug` form holds the length of its text and of its
@@ -897,24 +869,31 @@ mod tests {
         let totals = NumericStats::of_all(&numbers(&[10.0, -4.0, 6.0]), Some(number(12.0)))
             .expect("three numbers");
         assert_eq!(totals.count().get(), 3);
-        assert_eq!(totals.sum().map(CellNumber::get), Some(12.0));
-        assert_eq!(totals.avg().map(CellNumber::get), Some(4.0));
+        assert_eq!(totals.sum().map(Bounded::get), Some(12.0));
+        assert_eq!(totals.avg().map(Bounded::get), Some(4.0));
         assert_eq!((totals.min().get(), totals.max().get()), (-4.0, 10.0));
     }
 
-    /// A cell number is finite: NaN and both infinities are refused, and the
-    /// refusal echoes the value.
+    /// A cell number is finite: NaN and both infinities are refused, the
+    /// refusal echoes the value, and both finite extremes are admitted.
     #[test]
     fn a_cell_number_refuses_a_value_that_is_not_finite() {
-        assert_eq!(CellNumber::new(-0.5).map(CellNumber::get), Ok(-0.5));
-        assert_eq!(CellNumber::new(f64::MAX).map(CellNumber::get), Ok(f64::MAX));
+        let get = |v: f64| Bounded::<CellFloat>::try_new(v).map(Bounded::get);
+        assert_eq!(get(-0.5), Ok(-0.5));
+        assert_eq!(get(f64::MAX), Ok(f64::MAX));
+        assert_eq!(get(f64::MIN), Ok(f64::MIN));
+        assert_eq!(get(f64::MIN_POSITIVE), Ok(f64::MIN_POSITIVE));
         for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            let refused = CellNumber::new(value).expect_err("not finite");
-            assert_eq!(refused.get().to_bits(), value.to_bits());
+            assert_eq!(Bounded::<CellFloat>::new(value), None);
+            let refused = Bounded::<CellFloat>::try_new(value).expect_err("not finite");
+            assert_eq!(refused.refused().to_bits(), value.to_bits());
         }
-        let refused = CellNumber::new(f64::INFINITY).expect_err("not finite");
+        let refused = Bounded::<CellFloat>::try_new(f64::INFINITY).expect_err("not finite");
         assert_eq!(refused.to_string(), "inf is not a finite number");
-        assert_eq!(format!("{refused:?}"), "NotACellNumber(inf)");
+        let refused = Bounded::<CellFloat>::try_new(f64::NEG_INFINITY).expect_err("not finite");
+        assert_eq!(refused.to_string(), "-inf is not a finite number");
+        assert_eq!(format!("{:?}", number(1.5)), "CellNumber(1.5)");
+        assert_eq!(number(1.5).to_string(), "1.5");
     }
 
     /// A sum past the largest finite number is an overflow, never an

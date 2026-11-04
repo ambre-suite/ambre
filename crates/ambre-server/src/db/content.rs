@@ -87,7 +87,7 @@ use ambre_core::{Sec, StoredAsI64, TimeSpan};
 #[derive(Debug, Clone, Copy)]
 pub struct InlineCap {
     pub deltas: Count<Deltas>,
-    pub bytes: ambre_core::ByteSize,
+    pub bytes: ambre_core::Count<ambre_core::Octets>,
 }
 
 impl InlineCap {
@@ -97,7 +97,9 @@ impl InlineCap {
     pub const fn three_quarters(self) -> Self {
         Self {
             deltas: Count::<Deltas>::new(self.deltas.get().saturating_mul(3).div_ceil(4)),
-            bytes: ambre_core::ByteSize::new(self.bytes.get().saturating_mul(3).div_ceil(4)),
+            bytes: ambre_core::Count::<ambre_core::Octets>::new(
+                self.bytes.get().saturating_mul(3).div_ceil(4),
+            ),
         }
     }
 
@@ -107,7 +109,7 @@ impl InlineCap {
     pub const fn quarter(self) -> Self {
         Self {
             deltas: Count::<Deltas>::new(self.deltas.get() / 4),
-            bytes: ambre_core::ByteSize::new(self.bytes.get() / 4),
+            bytes: ambre_core::Count::<ambre_core::Octets>::new(self.bytes.get() / 4),
         }
     }
 }
@@ -119,7 +121,7 @@ pub enum InlineInsert {
     /// bytes, counting this one.
     Stored {
         deltas: Count<Deltas>,
-        bytes: ambre_core::ByteSize,
+        bytes: ambre_core::Count<ambre_core::Octets>,
     },
     /// The tail is at its cap, and nothing was written.
     Full,
@@ -405,8 +407,8 @@ pub async fn insert_inline_update(
     }
     Ok(InlineInsert::Stored {
         deltas: Count::<Deltas>::from_i64(deltas).incremented(),
-        bytes: ambre_core::ByteSize::from_i64(bytes)
-            .saturating_add(ambre_core::ByteSize::of(wire.len())),
+        bytes: Count::<ambre_core::Octets>::from_i64(bytes)
+            .plus(ambre_core::Count::<ambre_core::Octets>::of(wire.len())),
     })
 }
 
@@ -675,7 +677,7 @@ pub async fn insert_media(
     document_id: &Id<Document>,
     uploaded_by: &Id<User>,
     content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
-    size: ambre_core::ByteSize,
+    size: ambre_core::Count<ambre_core::Octets>,
     s3_key: &ambre_core::ObjectKey,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);

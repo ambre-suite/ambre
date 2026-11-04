@@ -97,7 +97,7 @@ impl FixedRole for EntryDigest {
 mod tests {
     use super::{Ciphertext, CommitmentTag, Nonce, Signature};
     use crate::authorship::SessionNonce;
-    use crate::{ByteSize, FixedBytes, KeyId, Payload, PublicKey};
+    use crate::{Count, FixedBytes, KeyId, Octets, Payload, PublicKey};
 
     /// A ciphertext prints its length and none of its bytes (`ZK-006`).
     #[test]
@@ -129,12 +129,12 @@ mod tests {
     /// array.
     #[test]
     fn a_fixed_size_type_states_the_length_of_its_array() {
-        assert_eq!(FixedBytes::<Nonce>::SIZE, ByteSize::new(24));
-        assert_eq!(FixedBytes::<CommitmentTag>::SIZE, ByteSize::new(32));
-        assert_eq!(FixedBytes::<Signature>::SIZE, ByteSize::new(64));
-        assert_eq!(FixedBytes::<KeyId>::SIZE, ByteSize::new(16));
-        assert_eq!(FixedBytes::<SessionNonce>::SIZE, ByteSize::new(16));
-        assert_eq!(FixedBytes::<PublicKey>::SIZE, ByteSize::new(32));
+        assert_eq!(FixedBytes::<Nonce>::SIZE, Count::<Octets>::new(24));
+        assert_eq!(FixedBytes::<CommitmentTag>::SIZE, Count::<Octets>::new(32));
+        assert_eq!(FixedBytes::<Signature>::SIZE, Count::<Octets>::new(64));
+        assert_eq!(FixedBytes::<KeyId>::SIZE, Count::<Octets>::new(16));
+        assert_eq!(FixedBytes::<SessionNonce>::SIZE, Count::<Octets>::new(16));
+        assert_eq!(FixedBytes::<PublicKey>::SIZE, Count::<Octets>::new(32));
     }
 
     /// A split reads one value from the front and hands back the bytes after

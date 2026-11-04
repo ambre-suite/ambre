@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Id, Message, User};
-use ambre_core::{ByteSize, Ms, TimeSpan};
+use ambre_core::{Count, Ms, Octets, TimeSpan};
 
 use crate::{PRESENCE_EXPIRY, REFRESH_PERIOD};
 
@@ -71,7 +71,7 @@ impl SampleState {
 
 /// The length of every sample: a tag, the state, and a root or zeros. One
 /// length for all, so the sealed size never tells a thread from its channel.
-const SAMPLE_LEN: ByteSize = ByteSize::new(18);
+const SAMPLE_LEN: Count<Octets> = Count::<Octets>::new(18);
 
 /// What a sample on the `meta` document of a channel says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,7 +101,7 @@ impl Sample {
             Self::Typing => (SampleTag::Typing, [0; 16]),
             Self::TypingIn(root) => (SampleTag::TypingIn, *root.as_bytes()),
         };
-        let mut bytes = Vec::with_capacity(SAMPLE_LEN.as_len());
+        let mut bytes = Vec::with_capacity(SAMPLE_LEN.saturating_len().to_usize());
         bytes.extend([tag.byte(), SampleState::On.byte()]);
         bytes.extend(root);
         ambre_core::Payload::<ambre_core::EphemeralBytes>::new(bytes)
@@ -341,7 +341,8 @@ mod tests {
         zero_root[0] = SampleTag::TypingIn.byte();
         let mut rooted_watch = Sample::TypingIn(root).bytes().into_bytes();
         rooted_watch[0] = SampleTag::Watching.byte();
-        let short = &Sample::Typing.bytes().into_bytes()[..SAMPLE_LEN.as_len() - 1];
+        let short =
+            &Sample::Typing.bytes().into_bytes()[..SAMPLE_LEN.saturating_len().to_usize() - 1];
         let mut unknown_tag = Sample::Typing.bytes().into_bytes();
         unknown_tag[0] = 0x55;
         let mut off = Sample::Typing.bytes().into_bytes();

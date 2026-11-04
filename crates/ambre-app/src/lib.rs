@@ -39,7 +39,7 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
-use ambre_bus::conduit::{self, ChannelCapacity, Marks};
+use ambre_bus::conduit::{self, ChannelSlots, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, LogicCommand, LogicEvent, MemberInfo, RestCommand, Role, SheetTab, SyncCommand,
@@ -97,18 +97,21 @@ use tofu::TofuPrompt;
 /// it. The hot viewport path is coalesced to <=1 send/frame on the UI side
 /// (see `TrameView`). It exists purely as a safety bound so a momentarily-slow
 /// consumer cannot grow an unbounded queue in the shared heap.
-const CHANNEL_CAPACITY: ChannelCapacity = ChannelCapacity::new(1024);
+const CHANNEL_CAPACITY: ambre_core::Bounded<ChannelSlots> =
+    ambre_core::Bounded::<ChannelSlots>::of::<1024>();
 
 /// Sync events held past a full channel. At the high mark, four channels'
 /// worth, the worker stops reading the relay. At the low mark, one channel's
 /// worth, it starts again (`ambre-spec-budgets.md section 6`, `SYNC-059`).
 /// The match runs at compile time. A low mark that is not below the high one
 /// is thus a build error.
-const SYNC_INBOX_MARKS: Marks =
-    match Marks::new(CHANNEL_CAPACITY.backlog(4), CHANNEL_CAPACITY.backlog(1)) {
-        Some(marks) => marks,
-        None => panic!("the inbox marks are a pair"),
-    };
+const SYNC_INBOX_MARKS: Marks = match Marks::new(
+    conduit::backlog(CHANNEL_CAPACITY, 4),
+    conduit::backlog(CHANNEL_CAPACITY, 1),
+) {
+    Some(marks) => marks,
+    None => panic!("the inbox marks are a pair"),
+};
 
 /// The child fan-out registry: every live view of a nested document, by
 /// document. A list rather than a slot -- two embeds of one document are two
@@ -129,7 +132,8 @@ type Slot<T> = Rc<RefCell<Option<T>>>;
 /// amount of memory fixes it. The real answer is the busy signal `BUS-016`
 /// prescribes, which lands with its own Story. Until then the bound is what
 /// keeps a stalled child from growing without limit, and it says so out loud.
-const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY.get();
+// A `u32` widens into a `usize` on every target the workspace builds.
+const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY.get() as usize;
 
 /// Hand `ev` to every live view of `id`, deferring what a full queue refuses
 /// (`TOILE-UI-340`).
@@ -2058,7 +2062,9 @@ mod fan_out_tests {
     fn a_refused_event_waits_and_arrives_in_order() {
         let (routes, backlog) = fan_out();
         let doc = Id::<Document>::mint();
-        let (tx, rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(1));
+        let (tx, rx) = conduit::local::<UiEvent>(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<1>());
         routes.borrow_mut().entry(doc).or_default().push(tx);
 
         send_to_child(&routes, &backlog, doc, status(doc, LinkState::Connected));
@@ -2092,7 +2098,9 @@ mod fan_out_tests {
     fn an_overflowing_backlog_says_what_it_dropped() {
         let (routes, backlog) = fan_out();
         let doc = Id::<Document>::mint();
-        let (tx, _rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(1));
+        let (tx, _rx) = conduit::local::<UiEvent>(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<1>());
         routes.borrow_mut().entry(doc).or_default().push(tx);
         let errors = Arc::new(AtomicUsize::new(0));
         let subscriber = tracing_subscriber::layer::SubscriberExt::with(
@@ -2121,7 +2129,9 @@ mod fan_out_tests {
         let (routes, backlog) = fan_out();
         let child = Id::<Document>::mint();
         let board = Id::<Document>::mint();
-        let (tx, rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(4));
+        let (tx, rx) = conduit::local::<UiEvent>(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<4>());
         routes.borrow_mut().entry(child).or_default().push(tx);
         assert_eq!(
             child_of(&routes, &status(child, LinkState::Connected)),

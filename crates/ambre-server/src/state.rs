@@ -49,10 +49,10 @@ pub struct Config {
     /// The declared size is validated against this cap, and then bound into the
     /// presigned PUT URL (`Content-Length`). A member cannot upload an
     /// arbitrarily large object to the bucket.
-    pub media_max_size: ambre_core::ByteSize,
+    pub media_max_size: ambre_core::Count<ambre_core::Octets>,
     /// Maximum size in bytes of a single encrypted snapshot blob (default 50 MiB).
     /// Bound into the presigned PUT URL exactly like `media_max_size`.
-    pub snapshot_max_size: ambre_core::ByteSize,
+    pub snapshot_max_size: ambre_core::Count<ambre_core::Octets>,
     /// Maximum size in bytes of a single encrypted delta (`Update`) ciphertext
     /// carried inline over the WebSocket (default 4 MiB). A CRDT delta is small;
     /// a large blob belongs on the media path. Bounding this stops an authorized
@@ -60,7 +60,7 @@ pub struct Config {
     /// (S3 + Redis pending) and fanned out to every subscriber. That is the same
     /// storage/cost abuse the media and snapshot caps close, on the hot write
     /// path.
-    pub delta_max_size: ambre_core::ByteSize,
+    pub delta_max_size: ambre_core::Count<ambre_core::Octets>,
     /// Prefix for S3 object keys (for example "dev-ambre").
     pub s3_env_prefix: crate::s3::StoreText<crate::s3::EnvPrefix>,
     /// The registration with the `google` provider, `None` when provider
@@ -93,7 +93,7 @@ pub struct Config {
     /// cursor position and a display name. This bounds the fire-and-forget
     /// broadcast + Redis presence-hash write, mirroring `delta_max_size` for the
     /// durable `Update` path.
-    pub ephemeral_max_size: ambre_core::ByteSize,
+    pub ephemeral_max_size: ambre_core::Count<ambre_core::Octets>,
 }
 
 /// Whether the server runs in development mode, read from `DEV_MODE`.
@@ -198,9 +198,9 @@ impl Default for Config {
             access_ttl: TimeSpan::<Sec>::new(900),
             refresh_ttl: TimeSpan::<Sec>::new(30 * 24 * 3600),
             presigned_url_ttl: TimeSpan::<Sec>::new(900),
-            media_max_size: ambre_core::ByteSize::new(100 * 1024 * 1024),
-            snapshot_max_size: ambre_core::ByteSize::new(50 * 1024 * 1024),
-            delta_max_size: ambre_core::ByteSize::new(4 * 1024 * 1024),
+            media_max_size: ambre_core::Count::<ambre_core::Octets>::new(100 * 1024 * 1024),
+            snapshot_max_size: ambre_core::Count::<ambre_core::Octets>::new(50 * 1024 * 1024),
+            delta_max_size: ambre_core::Count::<ambre_core::Octets>::new(4 * 1024 * 1024),
             s3_env_prefix: crate::s3::StoreText::<crate::s3::EnvPrefix>::new(
                 "dev-ambre".to_owned(),
             ),
@@ -209,7 +209,7 @@ impl Default for Config {
             trust_proxy_headers: ProxyTrust::Direct,
             ws_msg_rate_per_sec: Bounded::default(),
             ws_msg_burst: Bounded::default(),
-            ephemeral_max_size: ambre_core::ByteSize::new(64 * 1024),
+            ephemeral_max_size: ambre_core::Count::<ambre_core::Octets>::new(64 * 1024),
         }
     }
 }

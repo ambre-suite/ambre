@@ -567,7 +567,9 @@ async fn store_index_row(
     let author = &update.public_data.pub_key;
     let snapshot_id = &update.public_data.snapshot_id;
     let clock = update.public_data.clock;
-    if ambre_core::ByteSize::of(wire.len()) < crate::hot_tail::INLINE_DELTA_MAX_SIZE {
+    if ambre_core::Count::<ambre_core::Octets>::of(wire.len())
+        < crate::hot_tail::INLINE_DELTA_MAX_SIZE
+    {
         let inline = db::insert_inline_update(
             &state.db,
             &doc_id,
@@ -1340,7 +1342,7 @@ mod ephemeral_binding_tests {
         };
         // Tighten the cap so the test payload is unambiguously oversized.
         Arc::get_mut(&mut state).unwrap().config = Arc::new(crate::state::Config {
-            ephemeral_max_size: ambre_core::ByteSize::new(8),
+            ephemeral_max_size: ambre_core::Count::<ambre_core::Octets>::new(8),
             ..Default::default()
         });
         let doc_id = Id::<Document>::mint();
@@ -1462,7 +1464,7 @@ mod delta_size_cap_tests {
             .connect_lazy("postgres://localhost/ambre")
             .ok()?;
         let config = crate::state::Config {
-            delta_max_size: ambre_core::ByteSize::new(delta_max_bytes),
+            delta_max_size: ambre_core::Count::<ambre_core::Octets>::new(delta_max_bytes),
             ..Default::default()
         };
         Some(Arc::new(AppState {
@@ -2605,7 +2607,10 @@ mod hot_tail_tests {
         let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
         assert_eq!(pending, 0, "an inline delta takes no pending entry");
 
-        let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE.as_len() + 1024;
+        let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
+            .saturating_len()
+            .to_usize()
+            + 1024;
         handle_update(
             &state,
             &mut conn,

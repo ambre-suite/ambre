@@ -316,7 +316,7 @@ fn a_large_document_is_deterministic() {
     };
     let first = build(());
     assert!(
-        first.len() > ambre_bus::ByteSize::new(10_000),
+        first.len() > ambre_core::Count::<ambre_core::Octets>::new(10_000),
         "a 5k-cell document, not an empty one"
     );
     assert_eq!(first, build(()));

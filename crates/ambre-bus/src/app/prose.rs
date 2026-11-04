@@ -2322,7 +2322,7 @@ pub enum InteropError {
     ParseFailed(String),
     /// The file is larger than a conversion accepts.
     #[error("the file is too large to import ({} bytes)", .0.get())]
-    TooLarge(ambre_core::ByteSize),
+    TooLarge(ambre_core::Count<ambre_core::Octets>),
 }
 
 impl std::fmt::Debug for InteropError {
@@ -3012,10 +3012,13 @@ mod tests {
     fn a_parse_failure_prints_the_length_of_its_reason_alone() {
         let failed = InteropError::ParseFailed("near 'Q3 layoffs'".to_owned());
         assert_eq!(format!("{failed:?}"), "ParseFailed(17 chars)");
-        let large = InteropError::TooLarge(ambre_core::ByteSize::new(9));
+        let large = InteropError::TooLarge(ambre_core::Count::<ambre_core::Octets>::new(9));
         assert_eq!(
             format!("{large:?}"),
-            format!("TooLarge({:?})", ambre_core::ByteSize::new(9))
+            format!(
+                "TooLarge({:?})",
+                ambre_core::Count::<ambre_core::Octets>::new(9)
+            )
         );
     }
 

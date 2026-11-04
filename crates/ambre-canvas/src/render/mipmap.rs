@@ -16,7 +16,7 @@
 //   stays on screen. So the CPU pays once and no frame pays.
 // ============================================================================
 
-use ambre_core::{ByteSize, Image, Payload, Px, RgbaPixels, Size};
+use ambre_core::{Count, Image, Octets, Payload, Px, RgbaPixels, Size};
 
 /// One level of a mip chain: RGBA8 samples and the dimensions they describe.
 pub struct MipLevel {
@@ -26,10 +26,10 @@ pub struct MipLevel {
 }
 
 /// The bytes level 0 of an image of `size` holds: four per pixel, RGBA8.
-pub fn level0_size(size: Size<Px<Image>>) -> ByteSize {
+pub fn level0_size(size: Size<Px<Image>>) -> Count<Octets> {
     // In `u64` and saturating: a `usize` product wraps on wasm32 for a large
     // declared size, and a wrapped size would admit a short buffer.
-    ByteSize::new(
+    Count::<Octets>::new(
         u64::from(size.width.get())
             .saturating_mul(u64::from(size.height.get()))
             .saturating_mul(4),

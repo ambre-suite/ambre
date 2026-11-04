@@ -343,7 +343,10 @@ mod tests {
     #[test]
     fn the_sample_holds_the_state_alone() {
         let sample = presence_sample();
-        assert_eq!(sample.len(), ambre_bus::ByteSize::new(2));
+        assert_eq!(
+            sample.len(),
+            ambre_core::Count::<ambre_core::Octets>::new(2)
+        );
         assert!(is_presence_sample(&sample));
         let sample_of =
             |bytes: &[u8]| ambre_core::Payload::<ambre_core::EphemeralBytes>::new(bytes.to_vec());

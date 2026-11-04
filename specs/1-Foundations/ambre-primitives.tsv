@@ -249,9 +249,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.raw | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber.0 | field | f64	newtype-inner	the value of a finite cell number
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber::get() | ret | f64	newtype-inner	the value of a finite cell number
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellNumber::new(value) | param | f64	newtype-inner	the value of a finite cell number, checked by its fallible constructor
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Error.message | field | String	free-text	user-facing message
@@ -270,8 +267,10 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent a
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Ranks as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <TabStrip as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Refuses>::Raw | assoc | f64	generic	the refused value the error echoes
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::MAX | const | f64	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::MIN | const | f64	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::Repr | assoc | f64	newtype-inner	the number a value of this quantity holds
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.high | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.low | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Contains.0 | field | String	free-text	user-entered rule operand, pattern or formula text
@@ -298,12 +297,6 @@ ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep.0 |
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it
-ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::new(values) | param | usize	newtype-inner	the number of values a backlog holds, as a mark names it
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity.0 | field | usize	newtype-inner	the number of values a bounded channel holds
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::backlog(factor) | param | usize	math	a multiplier of the capacity, not a length
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::get() | ret | usize	newtype-inner	the number of values a bounded channel holds
-ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::new(values) | param | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | Doorbell::is_current() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
@@ -314,6 +307,13 @@ ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::is_disconnected() | ret
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | UnboundedSender<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
+ambre-bus | src/conduit.rs | crate::conduit | <Backlogged as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-bus | src/conduit.rs | crate::conduit | <Backlogged as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::Repr | assoc | u32	newtype-inner	the number a value of this quantity holds
+ambre-bus | src/conduit.rs | crate::conduit | backlog(factor) | param | u32	math	a multiplier of the capacity, not a length
 ambre-bus | src/event.rs | crate::event | ApiRequest::as_str() | ret | &'static str	newtype-inner	the wire word of the ApiRequest enum
 ambre-bus | src/event.rs | crate::event | LogicEvent::AmendmentsLinkFailed.message | field | String	free-text	user-facing or log message
 ambre-bus | src/event.rs | crate::event | LogicEvent::ApiError.message | field | String	free-text	user-facing or log message
@@ -890,17 +890,10 @@ ambre-core | src/link.rs | crate::link | LinkUrl::as_str() | ret | &str	newtype-
 ambre-core | src/link.rs | crate::link | LinkUrl::new(text) | param | String	newtype-inner	LinkUrl newtype
 ambre-core | src/media.rs | crate::media | <MediaType as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MediaType copies into its text
 ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of MediaType wraps
-ambre-core | src/media.rs | crate::media | ByteSize.0 | field | u64	newtype-inner	ContentHash/MediaType/ByteSize newtype
-ambre-core | src/media.rs | crate::media | ByteSize::as_len() | ret | usize	newtype-inner	ByteSize constructor or accessor
-ambre-core | src/media.rs | crate::media | ByteSize::from_i64(stored) | param | i64	newtype-inner	ByteSize storage conversion
-ambre-core | src/media.rs | crate::media | ByteSize::of(len) | param | usize	newtype-inner	ByteSize constructor or accessor
-ambre-core | src/media.rs | crate::media | ByteSize::to_i64_saturating() | ret | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | KnownMediaType::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/media.rs | crate::media | MEDIA_ADDRESS_LEN | const | usize	generic	length constant
 ambre-core | src/media.rs | crate::media | MediaType.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
-ambre-core | src/media.rs | crate::media | ByteSize::get() | ret | u64	newtype-inner	the ByteSize newtype unwrapped, for a caller outside its module
-ambre-core | src/media.rs | crate::media | ByteSize::new(value) | param | u64	newtype-inner	the constructor of the ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::new(value) | param | String	newtype-inner	the constructor of the MediaType newtype
 ambre-core | src/name.rs | crate::name | NAME_MAX_CHARS | const | usize	generic	name cap and its predicate
 ambre-core | src/name.rs | crate::name | NAME_TOO_LONG | const | &str	free-text	user-facing message
@@ -2071,11 +2064,8 @@ ambre-protocol | src/membership.rs | crate::membership | DIRECT_MESSAGE_MAX_MEMB
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_SIGNATURE_LEN | const | usize	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::well_formed() | ret | bool	generic	predicate
-ambre-protocol | src/membership.rs | crate::membership | LogPosition.0 | field | u64	newtype-inner	LogPosition field or accessor
-ambre-protocol | src/membership.rs | crate::membership | LogPosition::after(length) | param | usize	newtype-inner	the entry count of a log, read as the next place
-ambre-protocol | src/membership.rs | crate::membership | LogPosition::get() | ret | u64	newtype-inner	LogPosition field or accessor
-ambre-protocol | src/membership.rs | crate::membership | LogPosition::is_first() | ret | bool	newtype-inner	LogPosition predicate
-ambre-protocol | src/membership.rs | crate::membership | LogPosition::new(raw) | param | u64	newtype-inner	the raw place the wire and the relay rows carry
+ambre-protocol | src/membership.rs | crate::membership | <LogPlaces as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-protocol | src/membership.rs | crate::membership | place_after(length) | param | usize	generic	the entry count of a log, a std length, read as the place of its next entry
 ambre-protocol | src/snapshot_report.rs | crate::snapshot_report | REPORT_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::UnsupportedVersion.0 | field | u8	generic	raw unparsed wire version byte, may lie outside Version's range
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::is_from_newer_peer() | ret | bool	generic	raw unparsed wire version byte, may lie outside Version's range
@@ -3408,7 +3398,6 @@ ambre-primitives | src/scan.rs | crate::scan | ends_on_metavariable() | ret | bo
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript.0 | field | Vec<u8>	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::as_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::new(bytes) | param | Vec<u8>	newtype-inner	the bytes one signature covers
-ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::is_below() | ret | bool	generic	predicate result: a const comparison, which Marks::new runs at compile time
 ambre-sync | src/pipeline.rs | crate::pipeline | <SealedBlob as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedBlob's own accessor, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::Encoded<ambre_core::SealedName> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed name's own bytes, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<ambre_core::SealedPreviousKey> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed previous key's own bytes, through the object trait
@@ -4058,6 +4047,8 @@ ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::LOGGED_AS | const | 
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit() | ret | Result<String,ContentHashError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-core | src/media.rs | crate::media | <Octets as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-core | src/media.rs | crate::media | <Octets as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count, u64 wide on the wire and in the store
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit() | ret | Result<String,Refused<CommitHash>>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line

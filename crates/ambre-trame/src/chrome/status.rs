@@ -16,9 +16,10 @@
 // FormatBar, Find&Replace) -- not a canvas `DrawSurface` band.
 // ============================================================================
 
-use ambre_bus::app::trame::CellNumber;
+use ambre_bus::app::trame::CellFloat;
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
+use ambre_core::Bounded;
 use ambre_core::{Doc, Scale, View};
 use leptos::prelude::*;
 
@@ -38,8 +39,8 @@ pub struct SelStats {
 /// decimals (trailing zeros kept for stable width). A total past the largest
 /// finite number is `None` and reads `#NUM!`, as a formula whose arithmetic
 /// overflows does (`TRAME-UI-179`).
-fn fmt_num(v: Option<CellNumber>) -> String {
-    let Some(v) = v.map(CellNumber::get) else {
+fn fmt_num(v: Option<Bounded<CellFloat>>) -> String {
+    let Some(v) = v.map(Bounded::get) else {
         return "#NUM!".to_owned();
     };
     if v.fract() == 0.0 && v.abs() < 1e15 {
