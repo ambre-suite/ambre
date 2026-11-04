@@ -166,7 +166,7 @@ pub struct MemberChannelRow {
     pub wrapper_exchange_pubkey: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
     /// For a direct message, the display names of its other members, by
     /// name then id. Empty for a channel of a space (`SRV-220`).
-    pub peers: Vec<ambre_core::DisplayName>,
+    pub peers: Vec<ambre_core::Validated<ambre_core::DisplayName>>,
     /// The highest sequence number the register holds for `meta`. The
     /// ephemeral store may hold a higher one not yet flushed.
     pub meta_durable_last: ambre_core::Seq<ambre_core::Relay>,

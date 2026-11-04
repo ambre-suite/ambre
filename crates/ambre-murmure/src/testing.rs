@@ -38,7 +38,7 @@ pub fn channel_of(
             channel: channel_id,
             at: None,
         }),
-        name_of: Rc::new(|_| ambre_core::DisplayName::new("Ada").ok()),
+        name_of: Rc::new(|_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok()),
         time_of: Rc::new(|_| "t".to_owned()),
         now: Rc::new(|| Instant::<PageLoad>::new(0.0)),
         wall_clock: Rc::new(|| Instant::<Authored>::new(0)),

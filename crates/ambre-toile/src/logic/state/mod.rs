@@ -158,7 +158,7 @@ pub struct ToileState {
     /// `Id<User>` and stamped on every outbound presence sample
     /// (`TOILE-UI-076`). Cosmetic: it decides neither identity nor colour
     /// (`PRESENCE-004`).
-    my_name: Option<ambre_core::DisplayName>,
+    my_name: Option<ambre_core::Validated<ambre_core::DisplayName>>,
     /// Remote peers' latest presence (cursors, live strokes, lasers, selections)
     /// and the local clock each was last seen at, keyed by canonical `Id<User>`.
     /// Ephemeral: never in Loro, never persisted, rebuilt from inbound samples.
@@ -451,7 +451,7 @@ impl ToileState {
     /// carries the `Id<User>`. It rides every outbound presence sample so a
     /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`), and
     /// it decides nothing (`PRESENCE-004`).
-    pub fn set_display_name(&mut self, name: ambre_core::DisplayName) {
+    pub fn set_display_name(&mut self, name: ambre_core::Validated<ambre_core::DisplayName>) {
         self.my_name = Some(name);
     }
 

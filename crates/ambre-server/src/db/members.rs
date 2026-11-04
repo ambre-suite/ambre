@@ -57,7 +57,7 @@ pub struct MemberWithUserRow {
     /// `/auth/setup` (#3). Lets the member list flag an unverified peer for the
     /// TOFU out-of-band key check.
     pub email_verified: super::EmailProof,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub role: ambre_core::Role,
     pub signing_pubkey: FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,

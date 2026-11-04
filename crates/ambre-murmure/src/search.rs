@@ -25,7 +25,7 @@ impl std::fmt::Debug for Query {
 
 impl Query {
     /// The words of `query`, or `None` when it holds no word.
-    pub fn parse(query: &ambre_core::SearchQuery) -> Option<Self> {
+    pub fn parse(query: &ambre_core::Validated<ambre_core::SearchQuery>) -> Option<Self> {
         // The text leaves the newtype at the foreign word cutter, not at a
         // workspace helper, so the unwrap report has nothing to refuse.
         let words: Vec<String> = query.as_str().unicode_words().map(fold).collect();
@@ -204,7 +204,10 @@ mod tests {
 
     /// The query `text` parses to, typed as a member types a search.
     fn parse(text: &str) -> Option<Query> {
-        Query::parse(&ambre_core::SearchQuery::new(text.to_owned()).expect("not blank"))
+        Query::parse(
+            &ambre_core::Validated::<ambre_core::SearchQuery>::parse(text.to_owned())
+                .expect("not blank"),
+        )
     }
 
     /// The debug form of a query counts its words, never a char of them.

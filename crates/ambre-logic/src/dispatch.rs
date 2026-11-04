@@ -1288,7 +1288,7 @@ mod tests {
         let (mut state, _ui, sync_rx) = harness();
         state.handle_logic_command(rest(RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: ambre_core::Name::new("Budget").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("Budget").unwrap(),
         }));
         match sync_rx.try_recv() {
             Ok(SyncCommand::Rest {
@@ -1356,7 +1356,8 @@ mod tests {
             id: Some(ambre_bus::next_request()),
             evt: RestEvent::SessionReady {
                 user_id: me,
-                display_name: ambre_core::DisplayName::new("Ada").unwrap(),
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada")
+                    .unwrap(),
                 email: "ada@example.com".into(),
             },
         });
@@ -1997,10 +1998,10 @@ mod tests {
             RestCommand::SetupAccount {
                 passphrase: typed(),
                 email: ambre_core::Email::from("a@b.c"),
-                display_name: ambre_core::DisplayName::new("A").unwrap(),
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("A").unwrap(),
             },
             RestCommand::DevLogin {
-                username: ambre_core::DisplayName::new("a").unwrap(),
+                username: ambre_core::Validated::<ambre_core::DisplayName>::parse("a").unwrap(),
             },
             RestCommand::ChangePassphrase {
                 current_passphrase: typed(),
@@ -2013,11 +2014,11 @@ mod tests {
             RestCommand::ListDocuments,
             RestCommand::CreateDocument {
                 doc_type: DocType::Trame,
-                name: ambre_core::Name::new("n").unwrap(),
+                name: ambre_core::Validated::<ambre_core::Name>::parse("n").unwrap(),
             },
             RestCommand::RenameDocument {
                 document_id: doc,
-                name: ambre_core::Name::new("n").unwrap(),
+                name: ambre_core::Validated::<ambre_core::Name>::parse("n").unwrap(),
             },
             RestCommand::FetchInviteeKey {
                 document_id: doc,
@@ -2044,7 +2045,8 @@ mod tests {
                 role: Role::Viewer,
             },
             RestCommand::SearchUsers {
-                query: ambre_core::UserSearch::new("ab").expect("two characters"),
+                query: ambre_core::Validated::<ambre_core::UserSearch>::parse("ab")
+                    .expect("two characters"),
             },
             RestCommand::UploadMedia {
                 document_id: doc,
@@ -2077,7 +2079,7 @@ mod tests {
                 }],
             },
             RestCommand::CreateMeeting {
-                name: ambre_core::Name::new("m").unwrap(),
+                name: ambre_core::Validated::<ambre_core::Name>::parse("m").unwrap(),
             },
             RestCommand::JoinMeeting {
                 meeting_id: meeting,

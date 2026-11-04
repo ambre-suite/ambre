@@ -156,7 +156,10 @@ fn a_mention_shows_the_current_name_of_its_member() {
         .expect("send");
     let message = &messages(&state)[0];
     let named = |name: &'static str| {
-        move |user: Id<User>| (user == bob).then(|| ambre_core::DisplayName::new(name).unwrap())
+        move |user: Id<User>| {
+            (user == bob)
+                .then(|| ambre_core::Validated::<ambre_core::DisplayName>::parse(name).unwrap())
+        }
     };
     assert_eq!(message.shown(named("Bob")), "hi @Bob");
     assert_eq!(message.shown(named("Robert")), "hi @Robert");

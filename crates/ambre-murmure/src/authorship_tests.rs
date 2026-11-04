@@ -650,7 +650,7 @@ fn a_meta_delta_under_another_peer_is_refused() {
         .apply_signed(meta, Seq::<Relay>::new(2), &named.delta, by)
         .expect("accepted");
     assert_eq!(
-        bob.state.name().as_ref().map(ambre_core::Name::as_str),
+        bob.state.name().as_ref().map(ambre_core::Validated::as_str),
         Some("us")
     );
 }

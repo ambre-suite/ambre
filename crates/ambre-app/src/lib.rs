@@ -243,7 +243,7 @@ struct Wiring {
     /// Transient notifications (ARIA live region).
     toasts: Toasts,
     /// Signed-in user's display name; `None` = signed out.
-    username: RwSignal<Option<ambre_core::DisplayName>>,
+    username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     /// The user's documents (landing list).
     docs: RwSignal<Vec<DocItem>>,
     /// Members of the active document (share dialog). Populated by the per-frame
@@ -838,9 +838,9 @@ pub fn main() {
         });
     } else if let Some(username) = dev_user_from_url()
         .or_else(stored_dev_user)
-        .and_then(|name| ambre_core::DisplayName::new(&name).ok())
+        .and_then(|name| ambre_core::Validated::<ambre_core::DisplayName>::parse(&name).ok())
     {
-        tracing::info!("Dev login requested for user '{username}'");
+        tracing::info!("Dev login requested for user {username:?}");
         remember_dev_user(&username);
         let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
             id: ambre_bus::next_request(),
@@ -873,7 +873,8 @@ pub fn main() {
     let anchor_slot: Slot<RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>>> =
         Rc::new(RefCell::new(None));
     let toasts_slot: Slot<Toasts> = Rc::new(RefCell::new(None));
-    let user_slot: Slot<RwSignal<Option<ambre_core::DisplayName>>> = Rc::new(RefCell::new(None));
+    let user_slot: Slot<RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>> =
+        Rc::new(RefCell::new(None));
     let docs_slot: Slot<RwSignal<Vec<DocItem>>> = Rc::new(RefCell::new(None));
     let members_slot: Slot<RwSignal<Vec<MemberInfo>>> = Rc::new(RefCell::new(None));
     let devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>> = Rc::new(RefCell::new(None));
@@ -1512,7 +1513,7 @@ pub fn main() {
                         },
                     ..
                 } => {
-                    toasts.success(format!("Invited {display_name}"));
+                    toasts.success(format!("Invited {}", display_name.as_str()));
                     let _ = relay_tx.try_send(LogicCommand::Rest {
                         id: ambre_bus::next_request(),
                         cmd: RestCommand::ListDocumentMembers {

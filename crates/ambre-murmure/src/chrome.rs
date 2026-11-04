@@ -38,7 +38,7 @@ use ambre_chrome::{
     Pressed, ShellAction, ShellRegion, Toasts,
 };
 use ambre_core::id::{Channel, Id, Space, User};
-use ambre_core::{Css, Name, Point, Px, StepDirection};
+use ambre_core::{Css, Name, Point, Px, StepDirection, Validated};
 use leptos::prelude::*;
 
 pub use crate::notices::{
@@ -93,7 +93,7 @@ pub fn ChannelHeader(
     pane: RwSignal<MurmurePane>,
     /// The name of the current channel, once its engine has read it.
     #[prop(into)]
-    name: Signal<Option<Name>>,
+    name: Signal<Option<Validated<Name>>>,
     /// Whether the current channel shows the members of its space.
     #[prop(into)]
     has_members: Signal<bool>,
@@ -121,7 +121,7 @@ pub fn ChannelHeader(
                     "\u{2039}"
                 </button>
             </Show>
-            <span class="murmure-channel-name">{move || name.get().map(Name::into_string).unwrap_or_default()}</span>
+            <span class="murmure-channel-name">{move || name.get().map(Validated::into_string).unwrap_or_default()}</span>
             <Show when=move || has_members.get()>
                 <button
                     class="murmure-members-toggle"
@@ -366,7 +366,9 @@ pub struct MurmureRelay {
         clippy::type_complexity,
         reason = "each `Id<_>` names its kind, and no alias may hide it"
     )]
-    channel_members: RwSignal<HashMap<Id<Channel>, HashMap<Id<User>, ambre_core::DisplayName>>>,
+    channel_members: RwSignal<
+        HashMap<Id<Channel>, HashMap<Id<User>, ambre_core::Validated<ambre_core::DisplayName>>>,
+    >,
     /// The `@` list a region of the page shows, `None` while none is open
     /// (`MURMURE-555`).
     pub mentions: RwSignal<Option<MentionList>>,
@@ -448,7 +450,7 @@ pub struct SearchGroup {
     pub channel_id: Id<Channel>,
     /// The name the sidebar shows, `None` for a channel with no name read
     /// yet.
-    pub name: Option<Name>,
+    pub name: Option<Validated<Name>>,
     /// Each matching message, where a click opens it, and its text, in
     /// channel order.
     pub matches: Vec<(MessageRef, String)>,
@@ -711,7 +713,7 @@ impl MurmureRelay {
     /// A query with no word asks nothing. The last answer shows until the
     /// new one arrives.
     pub fn search_for(&self, query: String) -> Option<LogicCommand> {
-        let wanted = ambre_core::SearchQuery::new(query.clone());
+        let wanted = ambre_core::Validated::<ambre_core::SearchQuery>::parse(query.clone()).ok();
         let changed = self
             .search
             .try_update(|s| {
@@ -800,10 +802,10 @@ impl MurmureRelay {
             let direct = s.is_direct(channel_id);
             let name = s.name_of(channel_id);
             let title = match (direct, mention, name) {
-                (true, _, Some(name)) => format!("New message from {name}"),
+                (true, _, Some(name)) => format!("New message from {}", name.as_str()),
                 (true, _, None) => "New direct message".to_owned(),
                 (false, MentionState::Mentioned, Some(name)) => {
-                    format!("You were mentioned in {name}")
+                    format!("You were mentioned in {}", name.as_str())
                 }
                 (false, MentionState::Mentioned, None) => "You were mentioned".to_owned(),
                 (false, MentionState::Unmentioned, _) => return None,
@@ -893,7 +895,7 @@ impl MurmureRelay {
     }
 
     /// The name of the channel the pane shows, once known.
-    pub fn channel_name(&self) -> Signal<Option<Name>> {
+    pub fn channel_name(&self) -> Signal<Option<Validated<Name>>> {
         let (sidebar, pane) = (self.sidebar, self.pane);
         Signal::derive(move || {
             let channel = pane.get().shown_channel()?;
@@ -1151,7 +1153,7 @@ impl MurmureRelay {
                             key: PaletteKey::Channel(entry.channel),
                             label: entry
                                 .name
-                                .map_or_else(|| words.unnamed.to_owned(), Name::into_string),
+                                .map_or_else(|| words.unnamed.to_owned(), Validated::into_string),
                             hint: Some(words.hint),
                         })
                     })
@@ -1197,7 +1199,10 @@ impl MurmureRelay {
     }
 
     /// The display name of `user` in an open space, if they are a member.
-    pub fn member_name(&self, user: Id<User>) -> Option<ambre_core::DisplayName> {
+    pub fn member_name(
+        &self,
+        user: Id<User>,
+    ) -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
         self.members.with_untracked(|spaces| {
             spaces
                 .values()
@@ -1264,7 +1269,10 @@ impl MurmureRelay {
 
     /// The members of `channel` by name, as the Logic thread last listed
     /// them. The `@` list offers them (`MURMURE-551`).
-    pub fn members_of(&self, channel: Id<Channel>) -> Vec<(Id<User>, ambre_core::DisplayName)> {
+    pub fn members_of(
+        &self,
+        channel: Id<Channel>,
+    ) -> Vec<(Id<User>, ambre_core::Validated<ambre_core::DisplayName>)> {
         self.channel_members.with_untracked(|m| {
             m.get(&channel)
                 .map(|listed| listed.iter().map(|(u, n)| (*u, n.clone())).collect())
@@ -1891,7 +1899,7 @@ fn search_group_view(
     view! {
         <section class="murmure-search-group">
             <h3 class="murmure-search-channel">
-                {group.name.map_or_else(|| UNNAMED_CHANNEL.to_owned(), Name::into_string)}
+                {group.name.map_or_else(|| UNNAMED_CHANNEL.to_owned(), Validated::into_string)}
                 <span class="murmure-search-segments">{group.coverage}</span>
             </h3>
             <ul>
@@ -1968,7 +1976,7 @@ fn section_view(
     } = GroupWords::of(section.group);
     let title = section
         .title
-        .map_or_else(|| fallback.to_owned(), Name::into_string);
+        .map_or_else(|| fallback.to_owned(), Validated::into_string);
     view! {
         <section class="murmure-section" data-group=word>
             <h3 class="murmure-section-title">{title}</h3>
@@ -2020,7 +2028,7 @@ fn entry_view(
                 }
             >
                 <span class="murmure-entry-name">
-                    {entry.name.map_or_else(|| unnamed.to_owned(), Name::into_string)}
+                    {entry.name.map_or_else(|| unnamed.to_owned(), Validated::into_string)}
                 </span>
                 {badge}
             </button>

@@ -63,7 +63,7 @@ pub struct PageReads {
     /// The pane the shell shows now.
     pub pane: Rc<dyn Fn() -> MurmurePane>,
     /// The name of a member, `None` when the page knows none.
-    pub name_of: Rc<dyn Fn(Id<User>) -> Option<ambre_core::DisplayName>>,
+    pub name_of: Rc<dyn Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     /// A time, in the reader's language and zone (`MURMURE-418`).
     pub time_of: Rc<dyn Fn(Instant<Authored>) -> String>,
     /// The page's monotonic clock: the wheel and the pictures read it.
@@ -101,7 +101,8 @@ pub struct PageReads {
         clippy::type_complexity,
         reason = "each `Id<_>` names its kind, and no alias may hide it"
     )]
-    pub members_of: Rc<dyn Fn(Id<Channel>) -> Vec<(Id<User>, ambre_core::DisplayName)>>,
+    pub members_of:
+        Rc<dyn Fn(Id<Channel>) -> Vec<(Id<User>, ambre_core::Validated<ambre_core::DisplayName>)>>,
     /// Hand the page the `@` list to draw, or `None` to close it. The flag
     /// names the thread's region (`MURMURE-555`).
     pub show_mentions: Rc<dyn Fn(Region, Option<MentionList>)>,
@@ -1388,7 +1389,7 @@ impl MurmureView {
         self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, list_size, palette));
         // Who types where this region writes, by name: the channel, or the
         // thread (`MURMURE-517`, `MURMURE-537`).
-        let names: Vec<Option<ambre_core::DisplayName>> = match writes_in {
+        let names: Vec<Option<ambre_core::Validated<ambre_core::DisplayName>>> = match writes_in {
             Some(DraftOf::Channel(channel)) => lists.conversations.typing(channel, None),
             Some(DraftOf::Thread(channel, root)) => lists.conversations.typing(channel, Some(root)),
             None => &[],
@@ -1986,7 +1987,7 @@ mod tests {
             clippy::type_complexity,
             reason = "each `Id<_>` names its kind, and no alias may hide it"
         )]
-        members: Rc<RefCell<Vec<(Id<User>, ambre_core::DisplayName)>>>,
+        members: Rc<RefCell<Vec<(Id<User>, ambre_core::Validated<ambre_core::DisplayName>)>>>,
         /// Each `@` list the view handed the page, oldest first.
         lists: Rc<RefCell<Vec<Listed>>>,
         /// The entry a click picked, for the region it names.
@@ -2073,7 +2074,9 @@ mod tests {
         let warns = Rc::clone(&warned);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
-            name_of: Rc::new(|_| ambre_core::DisplayName::new("Ada").ok()),
+            name_of: Rc::new(|_| {
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok()
+            }),
             time_of: Rc::new(|_| "t".to_owned()),
             now: Rc::new(move || now.get()),
             // The wall clock follows the page's unless a test sets it, so a
@@ -5647,9 +5650,18 @@ mod tests {
         let (ada, bob, carol) = (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
         page.me.set(Some(ada));
         *page.members.borrow_mut() = vec![
-            (carol, ambre_core::DisplayName::new("Carol").unwrap()),
-            (ada, ambre_core::DisplayName::new("Ada").unwrap()),
-            (bob, ambre_core::DisplayName::new("Bob").unwrap()),
+            (
+                carol,
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Carol").unwrap(),
+            ),
+            (
+                ada,
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
+            ),
+            (
+                bob,
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap(),
+            ),
         ];
         assert!(press_composer(&mut page));
         (page, bob, carol)

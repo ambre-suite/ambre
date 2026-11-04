@@ -1152,7 +1152,7 @@ pub(crate) async fn fetch_bytes(
 #[allow(dead_code)]
 pub(crate) struct SetupAccountRequest {
     pub email: ambre_core::Email,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
@@ -1171,7 +1171,7 @@ pub(crate) struct SetupAccountResponse {
 
 #[derive(Serialize)]
 pub(crate) struct DevLoginRequest {
-    pub username: ambre_core::DisplayName,
+    pub username: ambre_core::Validated<ambre_core::DisplayName>,
     pub signing_pub_key: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
 }
@@ -1180,7 +1180,7 @@ pub(crate) struct DevLoginRequest {
 pub(crate) struct DevLoginResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub access_token: Credential<AccessToken>,
     pub refresh_token: Credential<RefreshToken>,
     pub access_expires_in: TimeSpan<Sec>,
@@ -1206,7 +1206,7 @@ pub(crate) struct ProviderCallbackResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub access_token: Credential<AccessToken>,
     pub refresh_token: Credential<RefreshToken>,
     pub access_expires_in: TimeSpan<Sec>,
@@ -1248,7 +1248,7 @@ pub(crate) struct StoreMasterKeysResponse {
 pub(crate) struct AuthMeResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub email: ambre_core::Email,
 }
 
@@ -1335,7 +1335,7 @@ pub(crate) struct MemberChannelEntry {
     pub wrapper_exchange_pub_key: Option<ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     /// The display names of a direct message's other members (`SRV-220`).
     #[serde(default)]
-    pub peers: Vec<ambre_core::DisplayName>,
+    pub peers: Vec<ambre_core::Validated<ambre_core::DisplayName>>,
     /// The last number the relay gave in the meta (`SRV-223`), none from a
     /// relay that lists none.
     #[serde(default)]
@@ -1796,7 +1796,7 @@ pub(crate) struct UserInfoEntry {
     #[serde(with = "ambre_core::serde_id::text")]
     pub id: Id<User>,
     pub email: ambre_core::Email,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// The key an invitation's entry names for the invitee (`SYNC-132`).
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
@@ -1851,7 +1851,7 @@ pub(crate) struct RoleChangeRequest {
 pub(crate) struct InviteResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
 }
 
 #[derive(Serialize)]
@@ -2008,7 +2008,7 @@ impl<'de, R: FixedRole> Deserialize<'de> for ServedKey<R> {
 pub(crate) struct DocumentMemberEntry {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub email: ambre_core::Email,
     /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).
     pub signing_pub_key: ServedKey<ambre_core::PublicKey>,

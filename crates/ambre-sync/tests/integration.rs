@@ -92,7 +92,7 @@ fn setup_account_returns_created_with_recovery_words() {
                 "secret".to_owned(),
             ),
             email: "alice@example.com".into(),
-            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
         },
     );
 
@@ -145,7 +145,7 @@ fn create_document_returns_created() {
         id,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: ambre_core::Name::new("My Sheet").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("My Sheet").unwrap(),
         },
     );
 
@@ -170,7 +170,7 @@ fn list_documents_includes_created() {
         create_id,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: ambre_core::Name::new("My Sheet").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("My Sheet").unwrap(),
         },
     );
     let created_doc_id = match drain_rest(&rx, create_id) {
@@ -186,7 +186,10 @@ fn list_documents_includes_created() {
             assert_eq!(documents.len(), 1);
             assert_eq!(documents[0].document_id, created_doc_id);
             assert_eq!(
-                documents[0].name.as_ref().map(ambre_core::Name::as_str),
+                documents[0]
+                    .name
+                    .as_ref()
+                    .map(ambre_core::Validated::as_str),
                 Some("My Sheet")
             );
         }
@@ -204,7 +207,7 @@ fn delete_document_removes_from_list() {
         create_id,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: ambre_core::Name::new("Temp").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("Temp").unwrap(),
         },
     );
     let doc_id = match drain_rest(&rx, create_id) {
@@ -247,7 +250,7 @@ fn rename_document_updates_name() {
         create_id,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: ambre_core::Name::new("Old").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("Old").unwrap(),
         },
     );
     let doc_id = match drain_rest(&rx, create_id) {
@@ -261,7 +264,7 @@ fn rename_document_updates_name() {
         rename_id,
         RestCommand::RenameDocument {
             document_id: doc_id,
-            name: ambre_core::Name::new("New").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("New").unwrap(),
         },
     );
 
@@ -279,7 +282,10 @@ fn rename_document_updates_name() {
         RestEvent::DocumentList { documents } => {
             assert_eq!(documents.len(), 1);
             assert_eq!(
-                documents[0].name.as_ref().map(ambre_core::Name::as_str),
+                documents[0]
+                    .name
+                    .as_ref()
+                    .map(ambre_core::Validated::as_str),
                 Some("New")
             );
         }
@@ -443,7 +449,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
         id2,
         RestCommand::CreateDocument {
             doc_type: DocType::Trame,
-            name: ambre_core::Name::new("Budget").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("Budget").unwrap(),
         },
     );
     let doc_id = match drain_rest(&rx, id2) {

@@ -40,7 +40,7 @@ use ambre_bus::{Authored, Instant};
 pub struct DocItem {
     pub document_id: Id<Document>,
     pub doc_type: DocType,
-    pub name: Option<ambre_core::Name>,
+    pub name: Option<ambre_core::Validated<ambre_core::Name>>,
     /// Epoch milliseconds of the last modification (routing metadata, plaintext).
     pub updated_at: Instant<Authored>,
     /// Total member count; `> 1` => shared.
@@ -75,7 +75,7 @@ pub struct LandingSignals {
     /// Documents to list (only meaningful once signed in).
     pub docs: RwSignal<Vec<DocItem>>,
     /// Current user's display name once `SessionReady` arrives; `None` = signed out.
-    pub username: RwSignal<Option<ambre_core::DisplayName>>,
+    pub username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
     pub dev_mode: RwSignal<Option<SignInMode>>,
     /// The app kind this page booted with (`lib.rs`, fixed per page load): drives
@@ -178,7 +178,7 @@ pub fn landing_view(
                 <Show when=move || username.get().is_some()>
                     <div class="ambre-landing-actions">
                         <span class="ambre-landing-user">
-                            {move || username.get().map(ambre_core::DisplayName::into_string).unwrap_or_default()}
+                            {move || username.get().map(ambre_core::Validated::into_string).unwrap_or_default()}
                         </span>
                         {sign_out_control(to_logic_signout.clone())}
                         <NewDocPicker on_pick=on_pick />
@@ -377,12 +377,14 @@ fn doc_card(
             // A name past its budget makes no `Name`. It is refused here, with
             // the field left open to shorten it, rather than cut or sent to
             // fail (`SYNC-178`).
-            let Ok(name) = ambre_core::Name::new(edit_value.get().trim()) else {
+            let Ok(name) =
+                ambre_core::Validated::<ambre_core::Name>::parse(edit_value.get().trim())
+            else {
                 toasts.warning(ambre_core::NAME_TOO_LONG);
                 return;
             };
             editing.set(false);
-            if !name.is_empty() {
+            if !ambre_core::name_is_empty(&name) {
                 let _ = to_logic.try_send(LogicCommand::Rest {
                     id: ambre_bus::next_request(),
                     cmd: RestCommand::RenameDocument {
@@ -482,7 +484,7 @@ fn doc_card(
 /// It takes the name alone, so no fallback can reach for the identifier or
 /// the kind (`CHROME-079`). The text is a [`ComposedName`], which no rename
 /// can take back (`CHROME-080`).
-fn card_name(name: Option<ambre_core::Name>) -> impl IntoView {
+fn card_name(name: Option<ambre_core::Validated<ambre_core::Name>>) -> impl IntoView {
     let named = name.as_ref().is_some_and(|n| !n.as_str().trim().is_empty());
     let class = if named {
         "ambre-doc-name"
@@ -604,7 +606,9 @@ fn sign_in_panel(
             let go = move || {
                 // A name the account rule refuses, a blank one among them,
                 // sends nothing: the relay would refuse it (`SRV-234`).
-                if let Ok(name) = ambre_core::DisplayName::new(&value.get()) {
+                if let Ok(name) =
+                    ambre_core::Validated::<ambre_core::DisplayName>::parse(&value.get())
+                {
                     // Remember the dev identity so a later refresh re-establishes
                     // the session without `?user=` in the URL.
                     crate::remember_dev_user(&name);
@@ -923,8 +927,11 @@ mod tests {
     /// kind word (`CHROME-079`).
     #[wasm_bindgen_test]
     fn a_card_shows_the_name_or_the_placeholder() {
-        let named =
-            mount_in_container(|| card_name(Some(ambre_core::Name::new("Budget 2026").unwrap())));
+        let named = mount_in_container(|| {
+            card_name(Some(
+                ambre_core::Validated::<ambre_core::Name>::parse("Budget 2026").unwrap(),
+            ))
+        });
         let span = named.query_selector(".ambre-doc-name").unwrap().unwrap();
         assert_eq!(span.text_content().as_deref(), Some("Budget 2026"));
         assert_eq!(span.class_name(), "ambre-doc-name");
@@ -969,8 +976,11 @@ mod tests {
         };
 
         let id = Id::<Document>::mint();
-        let payroll =
-            || ComposedName::or_placeholder(Some(&ambre_core::Name::new("Payroll").unwrap()));
+        let payroll = || {
+            ComposedName::or_placeholder(Some(
+                &ambre_core::Validated::<ambre_core::Name>::parse("Payroll").unwrap(),
+            ))
+        };
         pending.set(Some((id, payroll())));
         leptos::task::tick().await;
         assert!(dialog.open(), "a delete opens the confirmation");
@@ -1064,7 +1074,7 @@ mod tests {
         let item = DocItem {
             document_id: Id::<Document>::mint(),
             doc_type: DocType::Prose,
-            name: Some(ambre_core::Name::new("Plan").unwrap()),
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Plan").unwrap()),
             updated_at: Instant::<Authored>::new(0),
             member_count: ambre_core::Count::<ambre_core::Members>::ONE,
         };
@@ -1118,7 +1128,7 @@ mod tests {
             docs.get_untracked()[0]
                 .name
                 .as_ref()
-                .map(ambre_core::Name::as_str),
+                .map(ambre_core::Validated::as_str),
             Some("Plan")
         );
 

@@ -438,8 +438,8 @@ pub(crate) fn string<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> 
 pub(crate) fn name<K: ambre_core::crdt::FieldKey>(
     map: &Fields<K>,
     key: K,
-) -> Option<ambre_core::Name> {
-    string(map, key).and_then(|text| ambre_core::Name::new(text).ok())
+) -> Option<ambre_core::Validated<ambre_core::Name>> {
+    string(map, key).and_then(|text| ambre_core::Validated::<ambre_core::Name>::parse(text).ok())
 }
 
 /// The string a read found, or `None` when it found nothing or no string.

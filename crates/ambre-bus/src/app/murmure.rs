@@ -139,7 +139,7 @@ pub struct ChannelMeta {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelName {
     pub channel_id: Id<Channel>,
-    pub name: ambre_core::Name,
+    pub name: ambre_core::Validated<ambre_core::Name>,
 }
 
 /// The display names of a direct message's other members, as the relay
@@ -148,7 +148,7 @@ pub struct ChannelName {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectPeers {
     pub channel_id: Id<Channel>,
-    pub names: Vec<ambre_core::DisplayName>,
+    pub names: Vec<ambre_core::Validated<ambre_core::DisplayName>>,
 }
 
 /// How many messages of a channel are past the reader's cursor. A marker of
@@ -400,7 +400,9 @@ pub enum MurmureCommand {
     /// Name a direct message, or clear its name with `None` (`MURMURE-054`,
     /// `MURMURE-055`). A name of blanks alone clears it too. Any member may,
     /// and every member reads it.
-    Name { name: Option<ambre_core::Name> },
+    Name {
+        name: Option<ambre_core::Validated<ambre_core::Name>>,
+    },
     /// React to `message` with `emoji`, under this session's user
     /// (`MURMURE-092`). A reaction already there writes nothing. A reply
     /// takes it in its thread (`MURMURE-485`).
@@ -636,7 +638,10 @@ impl MessageView {
     /// The body as the view shows it: each mention of a member reads as
     /// `@` and that member's current name (`MURMURE-098`). A name `name_of`
     /// does not know keeps the text the author typed.
-    pub fn shown(&self, name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>) -> String {
+    pub fn shown(
+        &self,
+        name_of: impl Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>,
+    ) -> String {
         self.shown_at(name_of).0
     }
 
@@ -645,7 +650,7 @@ impl MessageView {
     /// char a name took the place of starts past that name (`MURMURE-565`).
     pub fn shown_at(
         &self,
-        name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
+        name_of: impl Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>,
     ) -> (String, IdxVec<Char, Pos<Byte>>) {
         let mut shown = String::with_capacity(self.text.len());
         let mut bytes = IdxVec::<Char, _>::new();
@@ -751,7 +756,9 @@ pub enum MurmureEvent {
     /// The name the channel's `meta` holds, at the open and after any change
     /// to it. `None` for an unnamed channel: the view composes what it shows
     /// from the members, and stores nothing (`MURMURE-016`).
-    Named { name: Option<ambre_core::Name> },
+    Named {
+        name: Option<ambre_core::Validated<ambre_core::Name>>,
+    },
     /// This user is no member of the channel any more. They left it from
     /// another client, or the relay refused its open. Nothing of it is held
     /// any more (`MURMURE-468`, `MURMURE-469`).
@@ -968,7 +975,7 @@ impl std::fmt::Display for CatalogPosition {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategoryView {
     pub id: Id<Category>,
-    pub name: ambre_core::Name,
+    pub name: ambre_core::Validated<ambre_core::Name>,
     /// The rank among the categories: lower first, ties by identifier.
     pub position: CatalogPosition,
 }
@@ -980,7 +987,7 @@ pub struct CategoryView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogueEntry {
     pub channel_id: Id<Channel>,
-    pub name: ambre_core::Name,
+    pub name: ambre_core::Validated<ambre_core::Name>,
     pub topic: Option<ChannelTopic>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
@@ -993,7 +1000,7 @@ pub struct CatalogueEntry {
 pub struct PublicChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
     pub channel_id: Id<Channel>,
-    pub name: ambre_core::Name,
+    pub name: ambre_core::Validated<ambre_core::Name>,
     pub topic: Option<ChannelTopic>,
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
@@ -1016,7 +1023,7 @@ pub enum Presence {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemberView {
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     pub presence: Presence,
 }
 
@@ -1026,7 +1033,7 @@ pub struct MemberView {
 pub struct PrivateChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
     pub channel_id: Id<Channel>,
-    pub name: ambre_core::Name,
+    pub name: ambre_core::Validated<ambre_core::Name>,
 }
 
 /// A member of a direct message, other than this user, with the exchange key
@@ -1073,7 +1080,7 @@ pub enum SpaceCommand {
     /// Add a category to the catalogue.
     AddCategory {
         category_id: Id<Category>,
-        name: ambre_core::Name,
+        name: ambre_core::Validated<ambre_core::Name>,
         /// The rank among the categories: lower first, ties by identifier.
         position: CatalogPosition,
     },
@@ -1122,7 +1129,7 @@ pub enum SpaceEvent {
     /// The space and its catalogue, whole, after an open or any change.
     Catalogue {
         /// Absent when the space has no name.
-        name: Option<ambre_core::Name>,
+        name: Option<ambre_core::Validated<ambre_core::Name>>,
         categories: Vec<CategoryView>,
         channels: Vec<CatalogueEntry>,
     },

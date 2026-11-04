@@ -28,8 +28,8 @@ use std::collections::VecDeque;
 
 use ambre_bus::app::toile::{DisplayNode, DisplayViewport, PresencePayload, PresenceUpdate};
 use ambre_canvas::TextCache;
-use ambre_core::DisplayName;
 use ambre_core::id::{Element, Id, User};
+use ambre_core::{DisplayName, Validated};
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, Point,
     PositionedLayoutItem, Rect, Stroke, peer_color,
@@ -289,16 +289,19 @@ pub fn laser_alpha(
 /// handle derived from the id when it carried none (`TOILE-UI-076`). A blank
 /// name is no name: the sample's decode drops it, as it would paint an empty
 /// chip.
-pub fn peer_label(user_id: &Id<User>, name: Option<&DisplayName>) -> DisplayName {
+pub fn peer_label(
+    user_id: &Id<User>,
+    name: Option<&Validated<DisplayName>>,
+) -> Validated<DisplayName> {
     name.cloned()
-        .unwrap_or_else(|| DisplayName::handle_of(user_id))
+        .unwrap_or_else(|| ambre_core::display_handle(user_id))
 }
 
 /// Draw the pointer arrow and a name chip next to it, both in the peer colour.
 fn paint_cursor<S: DrawSurface>(
     surface: &mut S,
     at: Point,
-    label: &DisplayName,
+    label: &Validated<DisplayName>,
     color: &Color,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
@@ -735,10 +738,10 @@ mod tests {
     #[test]
     fn the_label_is_the_name_the_sample_carried() {
         let id = user(42);
-        let ada = DisplayName::new("Ada").unwrap();
+        let ada = Validated::<DisplayName>::parse("Ada").unwrap();
         assert_eq!(peer_label(&id, Some(&ada)).as_str(), "Ada");
-        assert_eq!(peer_label(&id, None), DisplayName::handle_of(&id));
-        assert_eq!(DisplayName::handle_of(&id).as_str().len(), 8);
+        assert_eq!(peer_label(&id, None), ambre_core::display_handle(&id));
+        assert_eq!(ambre_core::display_handle(&id).as_str().len(), 8);
     }
 
     /// TOILE-UI-073: a sample goes out when it changed, and otherwise only on
@@ -792,7 +795,7 @@ mod tests {
         let sample = |seed: u8, name: &str| PresenceUpdate {
             user_id: user(seed),
             presence: PresencePayload {
-                name: ambre_core::DisplayName::new(name).ok(),
+                name: ambre_core::Validated::<ambre_core::DisplayName>::parse(name).ok(),
                 cursor: Some(Point::new(f64::from(seed), 0.0)),
                 ..Default::default()
             },

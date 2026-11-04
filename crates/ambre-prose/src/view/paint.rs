@@ -939,7 +939,7 @@ mod tests {
             id,
             vec![RemoteCursor {
                 user_id: user,
-                display_name: ambre_core::DisplayName::new("Bob").ok(),
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").ok(),
                 position: CursorPosition {
                     block_id: id,
                     offset: Pos::<DocChar>::new(3),
@@ -969,7 +969,7 @@ mod tests {
             id,
             vec![RemoteCursor {
                 user_id: user,
-                display_name: ambre_core::DisplayName::new("Eve").ok(),
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Eve").ok(),
                 position: CursorPosition {
                     block_id: id,
                     offset: Pos::<DocChar>::new(8),

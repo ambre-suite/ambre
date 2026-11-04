@@ -392,7 +392,7 @@ impl<'a> Row<'a> {
     /// time in the reader's language and zone (`MURMURE-418`).
     pub fn words(
         &self,
-        name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
+        name_of: impl Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>,
         time_of: impl Fn(Instant<Authored>) -> String,
     ) -> RowWords {
         let (message, header) = match *self {
@@ -401,7 +401,7 @@ impl<'a> Row<'a> {
         };
         let name = |user| {
             name_of(user)
-                .map(ambre_core::DisplayName::into_string)
+                .map(ambre_core::Validated::into_string)
                 .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned())
         };
         let header = (header == Header::Opens).then(|| HeaderWords {
@@ -459,14 +459,14 @@ impl<'a> Row<'a> {
     /// its words.
     pub fn announcement(
         &self,
-        name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
+        name_of: impl Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>,
         time_of: impl Fn(Instant<Authored>) -> String,
     ) -> String {
         let Some(message) = self.message() else {
             return self.words(name_of, time_of).body;
         };
         let author = name_of(message.author)
-            .map(ambre_core::DisplayName::into_string)
+            .map(ambre_core::Validated::into_string)
             .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
         let time = time_of(message.ts);
         let words = self.words(&name_of, &time_of);
@@ -944,7 +944,7 @@ pub(crate) mod tests {
             header: Header::from_bool(opens),
         };
         row.words(
-            |_| ambre_core::DisplayName::new("Ada").ok(),
+            |_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
             |ts| format!("t{}", ts.get()),
         )
     }
@@ -1191,7 +1191,7 @@ pub(crate) mod tests {
     /// (`MURMURE-207`).
     #[test]
     fn a_message_is_announced_with_its_author_its_time_and_its_text() {
-        let name_of = |_| ambre_core::DisplayName::new("Ada").ok();
+        let name_of = |_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok();
         let time_of = |ts: Instant<Authored>| format!("t{}", ts.get());
         let mut grouped = message(Id::<User>::mint(), Instant::<Authored>::new(7), "hello");
         let row = Row::Message {
@@ -1279,7 +1279,7 @@ pub(crate) mod tests {
             header: Header::Joined,
         };
         let heard = row.announcement(
-            |_| ambre_core::DisplayName::new("Ada").ok(),
+            |_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
             |_| "t".to_owned(),
         );
         assert_eq!(heard, format!("Ada, t: ok. {FROM_THREAD}"));

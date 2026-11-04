@@ -36,7 +36,7 @@ pub fn avatar_initials(name: &str) -> String {
 pub fn Avatar(
     /// The display name the initials come from.
     #[prop(into)]
-    name: Signal<ambre_core::DisplayName>,
+    name: Signal<ambre_core::Validated<ambre_core::DisplayName>>,
     /// The colour of the user's identity.
     #[prop(into)]
     color: Signal<Rgb>,

@@ -109,7 +109,7 @@ has not changed:
 ```rust
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresencePayload {
-    pub name:          Option<DisplayName>,  // the sender's display name, cosmetic (`PRESENCE-004`)
+    pub name:          Option<Validated<DisplayName>>,  // the sender's display name, cosmetic (`PRESENCE-004`)
     pub cursor:        Option<Point>,        // world space; None = the pointer left the board
     pub selection:     Vec<Id<Element>>,       // the peer's selection, drawn as ghosts
     pub live_stroke:   Option<Vec<StrokePoint>>, // an in-flight stroke, before it commits

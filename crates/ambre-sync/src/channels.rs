@@ -167,7 +167,7 @@ impl SyncState {
         space_id: Id<Space>,
         (meta, segment): (Id<Meta>, Id<Segment>),
         visibility: ambre_core::Visibility,
-        name: Option<ambre_core::Name>,
+        name: Option<ambre_core::Validated<ambre_core::Name>>,
     ) {
         let prepared = self
             .event_tx
@@ -269,7 +269,11 @@ impl SyncState {
     /// Seal the name just written into `meta` beside it on the relay, under
     /// the key meta holds now (`SYNC-171`). No name seals an empty one. A
     /// failure is logged: the hint stays stale until the next name.
-    pub(crate) fn handle_name_channel(&self, meta: Id<Meta>, name: Option<ambre_core::Name>) {
+    pub(crate) fn handle_name_channel(
+        &self,
+        meta: Id<Meta>,
+        name: Option<ambre_core::Validated<ambre_core::Name>>,
+    ) {
         let held = self.documents.get(&meta.document_id());
         let sealed = held.ok_or(SyncError::NotOpen).and_then(|held| {
             self.seal_channel_name(meta, &held.doc_key, &name.unwrap_or_default())
@@ -301,7 +305,7 @@ impl SyncState {
         &self,
         meta: Id<Meta>,
         key: &DocumentKey,
-        name: &ambre_core::Name,
+        name: &ambre_core::Validated<ambre_core::Name>,
     ) -> Result<ambre_core::Encoded<ambre_core::SealedName>, SyncError> {
         let signing_key = self.signing_key.as_ref().ok_or(SyncError::SessionLocked)?;
         Ok(Self::seal_document_name(
@@ -938,7 +942,7 @@ async fn open_channel_names(
             name_enc,
         };
         match listed.open(exchange_key, url_scheme, api_base, auth).await {
-            Some(name) if !name.is_empty() => names.push(ChannelName {
+            Some(name) if !ambre_core::name_is_empty(&name) => names.push(ChannelName {
                 channel_id: entry.channel_id,
                 name,
             }),
@@ -1744,7 +1748,7 @@ pub(crate) mod tests {
         );
         let named = vec![ChannelName {
             channel_id: private,
-            name: ambre_core::Name::new("Design").unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse("Design").unwrap(),
         }];
         let listed = ambre_bus::ChannelMeta {
             channel_id: private,
@@ -1795,8 +1799,8 @@ pub(crate) mod tests {
         let peers = vec![ambre_bus::DirectPeers {
             channel_id: direct,
             names: vec![
-                ambre_core::DisplayName::new("Bob").unwrap(),
-                ambre_core::DisplayName::new("Carol").unwrap(),
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap(),
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Carol").unwrap(),
             ],
         }];
         let expected = vec![
@@ -1861,7 +1865,11 @@ pub(crate) mod tests {
         let seal = |meta, name: &str| {
             Some(
                 state
-                    .seal_channel_name(meta, &key, &ambre_core::Name::new(name).unwrap())
+                    .seal_channel_name(
+                        meta,
+                        &key,
+                        &ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
+                    )
                     .unwrap(),
             )
         };
@@ -1887,7 +1895,7 @@ pub(crate) mod tests {
             names,
             vec![ChannelName {
                 channel_id: answer.channels[0].channel_id,
-                name: ambre_core::Name::new("Design").unwrap(),
+                name: ambre_core::Validated::<ambre_core::Name>::parse("Design").unwrap(),
             }]
         );
         // Each key opens, and one that does not is left out.
@@ -1917,7 +1925,7 @@ pub(crate) mod tests {
             crate::http::Url::<crate::RelayHost>::new(String::new()),
         );
         let (meta, key) = (Id::<Meta>::mint(), DocumentKey::generate());
-        let design = ambre_core::Name::new("Design").unwrap();
+        let design = ambre_core::Validated::<ambre_core::Name>::parse("Design").unwrap();
         assert!(
             state.seal_channel_name(meta, &key, &design).is_err(),
             "locked"
@@ -1932,7 +1940,7 @@ pub(crate) mod tests {
         assert_eq!(
             open(meta.document_id())
                 .as_ref()
-                .map(ambre_core::Name::as_str),
+                .map(ambre_core::Validated::as_str),
             Some("Design")
         );
         assert_eq!(open(Id::<Document>::mint()), None);

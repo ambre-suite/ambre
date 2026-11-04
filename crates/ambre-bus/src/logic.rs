@@ -183,7 +183,7 @@ pub enum LogicCommand {
     /// only member (the Murmure spaces spec). The space opens at once.
     CreateSpace {
         space_id: Id<Space>,
-        name: ambre_core::Name,
+        name: ambre_core::Validated<ambre_core::Name>,
         /// The instant of the creation, stamped by the view.
         now: Instant<Authored>,
     },
@@ -211,7 +211,9 @@ pub enum LogicCommand {
     /// Search the open channels for `query`, in the segments the client
     /// holds (the Murmure search spec). Nothing leaves the client, and
     /// nothing is loaded: answered by [`crate::UiEvent::MessageSearch`].
-    SearchMessages { query: ambre_core::SearchQuery },
+    SearchMessages {
+        query: ambre_core::Validated<ambre_core::SearchQuery>,
+    },
 
     // -- Local -- Logic-thread resource seeding (no Sync involvement) ------------
     /// Hand the Logic thread font faces the UI thread has fetched

@@ -93,7 +93,7 @@ pub fn find_members<'a>(members: &'a [MemberView], query: &str) -> Vec<&'a Membe
 #[derive(Default)]
 pub struct Roster {
     /// The relay's member rows: each member and their display name.
-    members: Vec<(Id<User>, ambre_core::DisplayName)>,
+    members: Vec<(Id<User>, ambre_core::Validated<ambre_core::DisplayName>)>,
     /// The members heard from, with the tick that dates their last sample.
     /// `None` for a sample heard before the first tick: the next tick dates
     /// it.
@@ -128,7 +128,7 @@ impl Roster {
     /// shows nowhere, whatever sample came from them (`MURMURE-440`).
     pub fn set_members(
         &mut self,
-        members: impl IntoIterator<Item = (Id<User>, ambre_core::DisplayName)>,
+        members: impl IntoIterator<Item = (Id<User>, ambre_core::Validated<ambre_core::DisplayName>)>,
     ) {
         self.members = members.into_iter().collect();
     }
@@ -207,7 +207,8 @@ mod tests {
     #[test]
     fn a_roster_debugs_its_member_count_alone() {
         let mut roster = Roster::new(None);
-        let name = ambre_core::DisplayName::new("Secretary").expect("a name");
+        let name =
+            ambre_core::Validated::<ambre_core::DisplayName>::parse("Secretary").expect("a name");
         roster.set_members([(Id::<User>::mint(), name)]);
         let shown = format!("{roster:?}");
         assert!(!shown.contains("Secretary"), "{shown}");
@@ -226,11 +227,12 @@ mod tests {
 
     fn roster(members: &[(Id<User>, &str)]) -> Roster {
         let mut roster = Roster::new(None);
-        roster.set_members(
-            members
-                .iter()
-                .map(|(id, name)| (*id, ambre_core::DisplayName::new(name).unwrap())),
-        );
+        roster.set_members(members.iter().map(|(id, name)| {
+            (
+                *id,
+                ambre_core::Validated::<ambre_core::DisplayName>::parse(*name).unwrap(),
+            )
+        }));
         roster.tick(T0);
         roster
     }
@@ -284,7 +286,10 @@ mod tests {
     fn a_sample_before_the_first_tick_is_dated_by_it() {
         let bob = Id::<User>::mint();
         let mut roster = Roster::new(None);
-        roster.set_members([(bob, ambre_core::DisplayName::new("Bob").unwrap())]);
+        roster.set_members([(
+            bob,
+            ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap(),
+        )]);
         roster.heard(bob);
         assert!(!roster.tick(T0));
         assert_eq!(roster.presence(bob), Presence::Online);

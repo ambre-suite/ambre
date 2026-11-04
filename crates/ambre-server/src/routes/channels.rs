@@ -98,7 +98,7 @@ pub struct MemberChannelJson {
     pub wrapper_exchange_pub_key: Option<ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     /// For a direct message, the display names of its other members, which
     /// the client composes a name from (`SRV-220`). Empty otherwise.
-    pub peers: Vec<ambre_core::DisplayName>,
+    pub peers: Vec<ambre_core::Validated<ambre_core::DisplayName>>,
     /// The last number the relay gave in the channel's `meta`, zero for a
     /// `meta` that holds nothing (`SRV-223`).
     pub meta_last: ambre_core::Seq<ambre_core::Relay>,
@@ -1112,7 +1112,7 @@ mod tests {
         let row = db::create_user(
             &state.db,
             &ambre_core::Email::from(email),
-            &ambre_core::DisplayName::new(display_name).unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse(display_name).unwrap(),
             &ambre_core::Encoded::new([1; 32].to_vec()),
             &ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2; 32]),
             &signing,

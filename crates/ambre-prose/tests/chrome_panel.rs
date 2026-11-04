@@ -61,7 +61,7 @@ fn thread(id: Id<Comment>, replies: &[&str]) -> CommentThread {
             .iter()
             .map(|text| CommentReply {
                 reply_id: Id::<Reply>::mint(),
-                author: ambre_core::DisplayName::new("Bob").ok(),
+                author: ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").ok(),
                 user_id: Id::<User>::from_bytes([2; 16]),
                 created_at: Instant::<Authored>::new(0),
                 text: (*text).to_owned(),

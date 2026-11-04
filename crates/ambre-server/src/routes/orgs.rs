@@ -72,7 +72,7 @@ pub struct OrgMemberResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// Serialized as its lowercase word.
     pub role: Role,
     /// Whether the store holds a recovery share for the member.
@@ -592,7 +592,8 @@ mod tests {
         let member = db::OrgMemberRow {
             user_id: Id::<User>::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             email: "user@test.com".into(),
-            display_name: ambre_core::DisplayName::new("Test User").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Test User")
+                .unwrap(),
             role: Role::Admin,
             shamir_share_enc: Some(ambre_core::Encoded::new(vec![1, 2, 3])),
             created_at: chrono::Utc::now(),
@@ -618,7 +619,8 @@ mod tests {
         let member = db::OrgMemberRow {
             user_id: Id::<User>::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
             email: "other@test.com".into(),
-            display_name: ambre_core::DisplayName::new("Other User").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Other User")
+                .unwrap(),
             role: Role::Member,
             shamir_share_enc: None,
             created_at: chrono::Utc::now(),

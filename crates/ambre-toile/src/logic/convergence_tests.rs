@@ -1496,7 +1496,8 @@ fn the_outbound_sample_carries_the_session_display_name() {
     // so a collaborator reads a name and not a hex prefix. It is cosmetic
     // (`PRESENCE-004`): it travels beside the sample and decides nothing.
     let mut sender = ToileState::new();
-    sender.set_display_name(ambre_core::DisplayName::new("Ada").unwrap());
+    sender
+        .set_display_name(ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap());
     let frame = presence_frame(
         &mut sender,
         sample_at(1.0, 2.0),

@@ -1062,12 +1062,12 @@ fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
         DocChoice {
             document_id: here,
             doc_type: DocType::Toile,
-            name: Some(ambre_core::Name::new("This board").unwrap()),
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("This board").unwrap()),
         },
         DocChoice {
             document_id: other,
             doc_type: DocType::Trame,
-            name: Some(ambre_core::Name::new("Budget").unwrap()),
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Budget").unwrap()),
         },
     ];
     let (root, dialogs, placed) = mount_choosers(docs, here);

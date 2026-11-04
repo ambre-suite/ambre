@@ -253,8 +253,8 @@ fn colour(rgba: Rgba) -> String {
 
 /// An author as it was stored: its text, or empty when the annotation carries
 /// none. The frozen reading of an author stays the stored text.
-fn author_text(author: Option<&ambre_core::DisplayName>) -> &str {
-    author.map_or("", ambre_core::DisplayName::as_str)
+fn author_text(author: Option<&ambre_core::Validated<ambre_core::DisplayName>>) -> &str {
+    author.map_or("", ambre_core::Validated::as_str)
 }
 
 /// What `reader` reads a stored value as, or `None` when no reader of this

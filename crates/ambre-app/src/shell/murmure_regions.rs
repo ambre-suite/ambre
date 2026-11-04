@@ -56,9 +56,12 @@ impl Frame {
         let relay = MurmureRelay::new();
         relay.pane.set(pane);
         if let Some(channel) = pane.shown_channel() {
-            relay
-                .sidebar
-                .update(|s| s.set_name(channel, Some(ambre_core::Name::new("general").unwrap())));
+            relay.sidebar.update(|s| {
+                s.set_name(
+                    channel,
+                    Some(ambre_core::Validated::<ambre_core::Name>::parse("general").unwrap()),
+                )
+            });
         }
         Self::with(width, relay).await
     }
@@ -200,7 +203,7 @@ impl Acme {
         let team = Id::<Category>::mint();
         let entry = |channel_id, name: &str, category, position: u32| CatalogueEntry {
             channel_id,
-            name: ambre_core::Name::new(name).unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
             topic: None,
             category,
             position: ambre_bus::CatalogPosition::new(position),
@@ -208,10 +211,10 @@ impl Acme {
         UiEvent::Space {
             space_id: self.space,
             event: SpaceEvent::Catalogue {
-                name: Some(ambre_core::Name::new("Acme").unwrap()),
+                name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Acme").unwrap()),
                 categories: vec![CategoryView {
                     id: team,
-                    name: ambre_core::Name::new("Team").unwrap(),
+                    name: ambre_core::Validated::<ambre_core::Name>::parse("Team").unwrap(),
                     position: ambre_bus::CatalogPosition::FIRST,
                 }],
                 channels: vec![
@@ -541,7 +544,7 @@ async fn a_named_channel_not_open_shows_its_name() {
     if let UiEvent::MemberChannels { names, .. } = &mut listing {
         let named = |channel_id, name: &str| ChannelName {
             channel_id,
-            name: ambre_core::Name::new(name).unwrap(),
+            name: ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
         };
         *names = vec![named(acme.board, "board"), named(acme.direct, "trip")];
     }
@@ -563,8 +566,8 @@ async fn an_unnamed_direct_message_shows_its_other_members() {
         *peers = vec![DirectPeers {
             channel_id: acme.direct,
             names: vec![
-                ambre_core::DisplayName::new("Bob").unwrap(),
-                ambre_core::DisplayName::new("Carol").unwrap(),
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Bob").unwrap(),
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Carol").unwrap(),
             ],
         }];
     }
@@ -801,7 +804,7 @@ fn alice_and_bob(acme: &Acme) -> (Id<User>, UiEvent) {
     let alice = Id::<User>::mint();
     let member = |user_id, name: &str, presence| MemberView {
         user_id,
-        display_name: ambre_core::DisplayName::new(name).unwrap(),
+        display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse(name).unwrap(),
         presence,
     };
     let event = UiEvent::Space {
@@ -932,7 +935,8 @@ async fn a_click_on_another_member_fetches_their_key() {
         id: Some(ambre_bus::next_request()),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
-            display_name: ambre_core::DisplayName::new("Alice Martin").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice Martin")
+                .unwrap(),
             email: ambre_core::Email::from("alice@test.local"),
         },
     };
@@ -969,7 +973,8 @@ async fn the_invite_control_offers_the_other_members_and_fetches_a_key() {
         id: Some(ambre_bus::next_request()),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
-            display_name: ambre_core::DisplayName::new("Alice Martin").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice Martin")
+                .unwrap(),
             email: ambre_core::Email::from("alice@test.local"),
         },
     };
@@ -1050,14 +1055,14 @@ async fn the_member_list_marks_who_watches_the_channel() {
     let (alice, bob, carol) = (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
     let member = |user_id, name: &str| MemberView {
         user_id,
-        display_name: ambre_core::DisplayName::new(name).unwrap(),
+        display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse(name).unwrap(),
         presence: Presence::Offline,
     };
     let session = UiEvent::Rest {
         id: Some(ambre_bus::next_request()),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
-            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
             email: ambre_core::Email::from("alice@test.local"),
         },
     };
@@ -1141,7 +1146,7 @@ async fn the_mark_of_the_channel_differs_in_shape_from_the_others() {
     let mut rows = rows.clone();
     rows.push(MemberView {
         user_id: carol,
-        display_name: ambre_core::DisplayName::new("Carol").unwrap(),
+        display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Carol").unwrap(),
         presence: Presence::Online,
     });
     let members = UiEvent::Space {
@@ -1290,7 +1295,8 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         also_in_thread: None,
     };
     let answer = UiEvent::MessageSearch {
-        query: ambre_core::SearchQuery::new("budget".to_owned()).expect("a word"),
+        query: ambre_core::Validated::<ambre_core::SearchQuery>::parse("budget".to_owned())
+            .expect("a word"),
         channels: vec![ChannelMatches {
             channel_id: acme.general,
             covered: vec![segment],

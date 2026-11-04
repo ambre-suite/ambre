@@ -218,11 +218,11 @@ pub struct ProseState {
     last_exported_vv: VersionVector,
     peer:             PeerId,
     my_user_id:       Option<Id<User>>,
-    my_name:          Option<DisplayName>,
+    my_name:          Option<Validated<DisplayName>>,
     orphans:          HashSet<Id<Comment>>,
     edit_mode:        EditMode,
     burst:            Option<suggestions::Burst>,
-    presence:         HashMap<Id<User>, (CursorPosition, Option<DisplayName>)>,
+    presence:         HashMap<Id<User>, (CursorPosition, Option<Validated<DisplayName>>)>,
     live:             HashSet<Id<User>>,
     last_frame:       Option<EphemeralBytes>,
     owe_greeting:     bool,
@@ -696,7 +696,7 @@ pub struct PresencePayload {
     pub block_id:     BlockId,
     pub cursor:       EncodedCursor,          // the bytes `Cursor::encode` wrote
     pub anchor:       Option<(BlockId, EncodedCursor)>,
-    pub display_name: Option<DisplayName>,
+    pub display_name: Option<Validated<DisplayName>>,
 }
 
 /// What the view is handed. No serde: it moves by value. No colour either: the view derives
@@ -705,7 +705,7 @@ pub struct PresencePayload {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteCursor {
     pub user_id:      Id<User>,
-    pub display_name: Option<DisplayName>,
+    pub display_name: Option<Validated<DisplayName>>,
     pub position:     CursorPosition,
 }
 ```

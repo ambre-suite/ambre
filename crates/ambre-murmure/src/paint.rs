@@ -224,7 +224,7 @@ pub fn paint_list<S: DrawSurface>(
     shown: Shown<'_>,
     size: Size<Px<View>>,
     palette: &Palette,
-    name_of: &dyn Fn(Id<User>) -> Option<ambre_core::DisplayName>,
+    name_of: &dyn Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>,
     time_of: &dyn Fn(Instant<Authored>) -> String,
 ) -> Painted {
     let (width, height) = (size.width, size.height);
@@ -1195,7 +1195,7 @@ pub(crate) mod tests {
             shown,
             Size::new(Px::<View>::new(400.0), Px::<View>::new(height)),
             &LIGHT,
-            &|_| ambre_core::DisplayName::new("Ada").ok(),
+            &|_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
             &|_| "t".to_owned(),
         );
         (surface, painted)
@@ -1629,7 +1629,7 @@ pub(crate) mod tests {
                 shown,
                 Size::new(Px::<View>::new(400.0), Px::<View>::new(600.0)),
                 palette,
-                &|_| ambre_core::DisplayName::new("Ada").ok(),
+                &|_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
                 &|_| "t".to_owned(),
             );
             cache.lazy_fonts_requested()
@@ -1689,7 +1689,7 @@ pub(crate) mod tests {
         let rows = list.rows();
         let first = rows.iter().next().expect("one row");
         let row = first.words(
-            |_| ambre_core::DisplayName::new("Ada").ok(),
+            |_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
             |_| "t".to_owned(),
         );
         assert_eq!(row.body, "@Ada hi bold c d");

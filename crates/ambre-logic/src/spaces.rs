@@ -12,7 +12,7 @@ use ambre_bus::{
     Authored, Instant, MemberInfo, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey,
     SpaceCommand, SpaceEvent,
 };
-use ambre_core::Name;
+use ambre_core::{Name, Validated};
 use ambre_murmure::{
     ChannelState, ChannelType, Listing, Roster, SpaceState, is_presence_sample, presence_sample,
 };
@@ -45,7 +45,7 @@ pub(crate) struct Opening {
 /// private one its name.
 enum NewChannel {
     Public(PublicChannelDraft),
-    Private(Name),
+    Private(Validated<Name>),
 }
 
 /// A channel the relay is creating, until it answers.
@@ -65,7 +65,7 @@ impl LogicState {
     pub(crate) fn create_space(
         &mut self,
         space_id: Id<Space>,
-        name: &Name,
+        name: &Validated<Name>,
         now: Instant<Authored>,
     ) {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
@@ -948,8 +948,8 @@ mod tests {
     const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
     /// The name `text` is, within the cap.
-    fn fit_name(text: &str) -> Name {
-        Name::new(text).expect("a name within the cap")
+    fn fit_name(text: &str) -> Validated<Name> {
+        Validated::<Name>::parse(text).expect("a name within the cap")
     }
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
@@ -972,8 +972,8 @@ mod tests {
         SealedChannelKey::from_bytes(vec![byte; 72])
     }
 
-    fn named(text: &str) -> Name {
-        Name::new(text).unwrap()
+    fn named(text: &str) -> Validated<Name> {
+        Validated::<Name>::parse(text).unwrap()
     }
 
     fn draft(name: &str) -> PublicChannelDraft {
@@ -987,7 +987,9 @@ mod tests {
     }
 
     /// The catalogue of the last catalogue event the view got.
-    fn last_catalogue(shown: &[UiEvent]) -> Option<(Option<Name>, Vec<ambre_bus::CatalogueEntry>)> {
+    fn last_catalogue(
+        shown: &[UiEvent],
+    ) -> Option<(Option<Validated<Name>>, Vec<ambre_bus::CatalogueEntry>)> {
         shown.iter().rev().find_map(|e| match e {
             UiEvent::Space {
                 event: SpaceEvent::Catalogue { name, channels, .. },
@@ -1012,7 +1014,7 @@ mod tests {
         let space_id = Id::<Space>::mint();
         state.handle_logic_command(LogicCommand::CreateSpace {
             space_id,
-            name: Name::new("Acme").unwrap(),
+            name: Validated::<Name>::parse("Acme").unwrap(),
             now: NOW,
         });
         state.grant_identity(space_id.document_id());
@@ -1069,7 +1071,7 @@ mod tests {
         let space_id = Id::<Space>::mint();
         state.handle_logic_command(LogicCommand::CreateSpace {
             space_id,
-            name: Name::new("Acme").unwrap(),
+            name: Validated::<Name>::parse("Acme").unwrap(),
             now: NOW,
         });
         let sent = drain(&sync);
@@ -1111,7 +1113,7 @@ mod tests {
         let reopened =
             SpaceState::open(space_id, &[payload.into()]).expect("the upload is the space");
         assert_eq!(
-            reopened.name().as_ref().map(ambre_core::Name::as_str),
+            reopened.name().as_ref().map(ambre_core::Validated::as_str),
             Some("Acme")
         );
         assert!(
@@ -1275,7 +1277,7 @@ mod tests {
             space_id,
             command: SpaceCommand::AddCategory {
                 category_id: Id::<Category>::mint(),
-                name: Name::new("Teams").unwrap(),
+                name: Validated::<Name>::parse("Teams").unwrap(),
                 position: ambre_bus::CatalogPosition::FIRST,
             },
         });
@@ -1338,7 +1340,7 @@ mod tests {
             command: SpaceCommand::CreatePrivateChannel {
                 draft: PrivateChannelDraft {
                     channel_id,
-                    name: Name::new("board").unwrap(),
+                    name: Validated::<Name>::parse("board").unwrap(),
                 },
                 now: NOW,
             },
@@ -1359,7 +1361,7 @@ mod tests {
         };
         assert_eq!((*asked, *of), (channel_id, space_id));
         assert_eq!(
-            name.as_ref().map(Name::as_str),
+            name.as_ref().map(Validated::as_str),
             Some("board"),
             "sealed beside meta"
         );
@@ -1384,7 +1386,7 @@ mod tests {
         let channel = &state.channels[&channel_id];
         assert_eq!(channel.channel_type(), Some(ChannelType::Private));
         assert_eq!(
-            channel.name().as_ref().map(ambre_core::Name::as_str),
+            channel.name().as_ref().map(ambre_core::Validated::as_str),
             Some("board")
         );
         assert!(state.spaces[&space_id].state.catalogue().is_empty());
@@ -2098,7 +2100,7 @@ mod tests {
     fn member(user_id: Id<User>, name: &str) -> MemberInfo {
         MemberInfo {
             user_id,
-            display_name: ambre_core::DisplayName::new(name).unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse(name).unwrap(),
             email: ambre_core::Email::new(format!("{name}@example.org")),
             role: Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,

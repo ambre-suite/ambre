@@ -1029,7 +1029,7 @@ fn the_dev_seed_keeps_its_bytes() {
         .try_into()
         .unwrap();
     assert_eq!(
-        hash::dev_seed(&ambre_core::DisplayName::new("alice").unwrap())
+        hash::dev_seed(&ambre_core::Validated::<ambre_core::DisplayName>::parse("alice").unwrap())
             .derive_signing_key()
             .verifying_key(),
         MasterSeed::from_array(seed)

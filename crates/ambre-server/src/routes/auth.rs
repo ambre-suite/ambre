@@ -55,7 +55,7 @@ pub async fn auth_config(
 /// before any row is written (`SRV-232`).
 #[derive(serde::Deserialize)]
 pub struct DevLoginRequest {
-    pub username: ambre_core::DisplayName,
+    pub username: ambre_core::Validated<ambre_core::DisplayName>,
     pub signing_pub_key: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
 }
@@ -65,7 +65,7 @@ pub struct DevLoginRequest {
 pub struct DevLoginResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub display_name: ambre_core::DisplayName,
+    pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
     pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
@@ -270,11 +270,11 @@ fn provider_display_name(
     given_name: Option<&str>,
     email: &ambre_core::Email,
     subject: &str,
-) -> Option<ambre_core::DisplayName> {
+) -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
     [name, given_name, Some(email.as_str()), Some(subject)]
         .into_iter()
         .flatten()
-        .find_map(ambre_core::DisplayName::cut_to_fit)
+        .find_map(ambre_core::cut_display_name_to_fit)
 }
 
 #[cfg(test)]
@@ -320,7 +320,7 @@ mod tests {
             oidc_subject: Some(openidconnect::SubjectIdentifier::new("subject".into())),
             email: "a@example.com".into(),
             email_verified: db::EmailProof::Verified,
-            display_name: ambre_core::DisplayName::new("A").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("A").unwrap(),
             master_key_enc: signing_pubkey
                 .as_ref()
                 .map(|_| ambre_core::Encoded::new(vec![1u8; 56])),

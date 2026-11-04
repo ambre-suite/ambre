@@ -66,13 +66,13 @@ ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | DEV_USER_KEY | const | &str	free-text	single storage key literal
-ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before DisplayName::new reads it
+ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before the rule of a DisplayName reads it
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
-ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before DisplayName::new reads it
+ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before the rule of a DisplayName reads it
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	free-text	worker URL
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
@@ -922,24 +922,24 @@ ambre-core | src/media.rs | crate::media | MediaType::as_str() | ret | &str	newt
 ambre-core | src/media.rs | crate::media | ByteSize::get() | ret | u64	newtype-inner	the ByteSize newtype unwrapped, for a caller outside its module
 ambre-core | src/media.rs | crate::media | ByteSize::new(value) | param | u64	newtype-inner	the constructor of the ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::new(value) | param | String	newtype-inner	the constructor of the MediaType newtype
-ambre-core | src/name.rs | crate::name | <DisplayName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of DisplayName validates
-ambre-core | src/name.rs | crate::name | <DisplayNameRule as Rule>::admit() | ret | Result<String,InvalidDisplayName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/name.rs | crate::name | <DisplayNameRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/name.rs | crate::name | <NameLength as Rule>::admit() | ret | Result<String,NameTooLong>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/name.rs | crate::name | <NameLength as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/name.rs | crate::name | DisplayName::as_str() | ret | &str	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | DisplayName::cut_to_fit(text) | param | &str	newtype-inner	DisplayName constructor input
-ambre-core | src/name.rs | crate::name | DisplayName::into_string() | ret | String	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | DisplayName::new(text) | param | &str	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | NAME_MAX_CHARS | const | usize	generic	name cap and its predicate
 ambre-core | src/name.rs | crate::name | NAME_TOO_LONG | const | &str	free-text	user-facing message
-ambre-core | src/name.rs | crate::name | Name::as_str() | ret | &str	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | Name::cut_to_fit(text) | param | &str	newtype-inner	Name constructor, the text it cuts to the cap
-ambre-core | src/name.rs | crate::name | Name::into_string() | ret | String	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | Name::is_empty() | ret | bool	newtype-inner	Name/DisplayName newtype
-ambre-core | src/name.rs | crate::name | Name::new(text) | param | impl Into<String>	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | name_fits() | ret | bool	generic	name cap and its predicate
 ambre-core | src/name.rs | crate::name | name_fits(name) | param | &str	generic	name cap and its predicate
+ambre-core | src/name.rs | crate::name | <DisplayName as Rule>::admit() | ret | Result<String,InvalidDisplayName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <DisplayName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <Name as Rule>::admit() | ret | Result<String,NameTooLong>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <Name as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/name.rs | crate::name | <Validated<DisplayName> as TryFrom<String>>::try_from(text) | param | String	generic	the stored text a relay row read checks through the rule of a display name
+ambre-core | src/name.rs | crate::name | cut_display_name_to_fit(text) | param | &str	generic	the raw text a total door trims and cuts to the cap of a display name, such as an identity provider's
+ambre-core | src/name.rs | crate::name | cut_name_to_fit(text) | param | &str	generic	the raw text a total door cuts to the cap of a name, a name composed from other names
+ambre-core | src/name.rs | crate::name | name_is_empty() | ret | bool	generic	whether a name is the empty name, a fact that selects no mode
+ambre-core | src/search.rs | crate::search | <SearchQuery as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-core | src/search.rs | crate::search | <SearchQuery as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/search.rs | crate::search | <SearchQuery as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/search.rs | crate::search | <UserSearch as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-core | src/search.rs | crate::search | <UserSearch as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/search.rs | crate::search | <UserSearch as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of ObjectKey copies into its text
 ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of ObjectKey wraps
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey.0 | field | String	newtype-inner	ObjectKey newtype
@@ -978,14 +978,6 @@ ambre-core | src/schema.rs | crate::schema | SchemaMigration.apply | field | fn(
 ambre-core | src/schema.rs | crate::schema | scaffold_peer(scaffold) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes: the Loro update a step exports, opaque to the hash as scaffold_peer's input is
 ambre-core | src/schema.rs | crate::schema | StepFingerprint.0 | field | u64	newtype-inner	the FNV-1a hash a migration step fingerprint holds
-ambre-core | src/search.rs | crate::search | <SearchQuery as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of SearchQuery gives a caller, and serde's try_from hands its deserialisation error
-ambre-core | src/search.rs | crate::search | <SearchQuery as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of SearchQuery validates
-ambre-core | src/search.rs | crate::search | <UserSearch as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of UserSearch gives a caller, and serde's try_from hands its deserialisation error
-ambre-core | src/search.rs | crate::search | <UserSearch as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of UserSearch trims and checks
-ambre-core | src/search.rs | crate::search | SearchQuery::as_str() | ret | &str	newtype-inner	the message search text, as typed, never blank
-ambre-core | src/search.rs | crate::search | SearchQuery::new(text) | param | String	newtype-inner	the query text the fallible constructor of SearchQuery checks
-ambre-core | src/search.rs | crate::search | UserSearch::as_str() | ret | &str	newtype-inner	the trimmed search text of UserSearch
-ambre-core | src/search.rs | crate::search | UserSearch::new(text) | param | &str	newtype-inner	the query text the fallible constructor of UserSearch trims and checks
 ambre-core | src/serde_enums.rs | crate::serde_enums | read_word(parse) | param | impl FnOnce(&str)->Option<T>	generic	generic serde helper
 ambre-core | src/serde_enums.rs | crate::serde_enums | read_word(words) | param | &'static[&'static str]	generic	generic serde helper
 ambre-core | src/serde_enums.rs | crate::serde_enums::channel_document_kind | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
@@ -3938,12 +3930,6 @@ ambre-core | src/id.rs | crate::id | <Sheet as Entity>::Repr | assoc | String	ne
 ambre-core | src/member_count.rs | crate::member_count | <Members as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-core | src/member_count.rs | crate::member_count | <Count<Members> as TryFrom<i64>>::try_from(n) | param | i64	newtype-inner	the i64 the fallible constructor of a member count validates
 ambre-core | src/member_count.rs | crate::member_count | Count<Members>::is_shared() | ret | bool	generic	predicate result
-ambre-core | src/search.rs | crate::search | <SearchQueryRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
-ambre-core | src/search.rs | crate::search | <SearchQueryRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/search.rs | crate::search | <SearchQueryRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/search.rs | crate::search | <UserSearchRule as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
-ambre-core | src/search.rs | crate::search | <UserSearchRule as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-core | src/search.rs | crate::search | <UserSearchRule as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/static_key.rs | crate::static_key | <Canvases as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Categories as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Commands as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line

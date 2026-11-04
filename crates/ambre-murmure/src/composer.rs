@@ -121,12 +121,14 @@ pub fn also_said(echo: ReplyEcho) -> String {
 /// The line that names the members typing, `None` when nobody types. Past
 /// two names it counts no one, so the line stays one short line. A member
 /// with no name known reads as "Someone".
-pub fn typing_line(names: &[Option<ambre_core::DisplayName>]) -> Option<String> {
+pub fn typing_line(
+    names: &[Option<ambre_core::Validated<ambre_core::DisplayName>>],
+) -> Option<String> {
     let names: Vec<&str> = names
         .iter()
         .map(|name| {
             name.as_ref()
-                .map_or("Someone", ambre_core::DisplayName::as_str)
+                .map_or("Someone", ambre_core::Validated::as_str)
         })
         .collect();
     match names.as_slice() {
@@ -1062,7 +1064,11 @@ impl Composer {
 
     /// Hand the `@` list the members of its channel, and keep the choice on
     /// the list. `me` is never offered (`MURMURE-551`).
-    pub fn offer(&mut self, members: &[(Id<User>, ambre_core::DisplayName)], me: Option<Id<User>>) {
+    pub fn offer(
+        &mut self,
+        members: &[(Id<User>, ambre_core::Validated<ambre_core::DisplayName>)],
+        me: Option<Id<User>>,
+    ) {
         if let Some(asking) = &mut self.asking {
             asking.offers = IdxVec::<MentionEntry, _>::from(offers(&asking.query, members, me));
             asking.chosen = asking.chosen.within(asking.offers.len());
@@ -1826,7 +1832,7 @@ mod tests {
     fn the_typing_line_names_one_or_two_and_counts_no_more() {
         let names = |list: &[&str]| {
             list.iter()
-                .map(|n| ambre_core::DisplayName::new(n).ok())
+                .map(|n| ambre_core::Validated::<ambre_core::DisplayName>::parse(*n).ok())
                 .collect::<Vec<_>>()
         };
         assert_eq!(typing_line(&[]), None);

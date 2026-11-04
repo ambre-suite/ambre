@@ -139,8 +139,8 @@ impl SyncState {
                 id,
                 RestEvent::SessionReady {
                     user_id,
-                    display_name: ambre_core::DisplayName::cut_to_fit("offline")
-                        .unwrap_or_else(|| ambre_core::DisplayName::handle_of(&user_id)),
+                    display_name: ambre_core::cut_display_name_to_fit("offline")
+                        .unwrap_or_else(|| ambre_core::display_handle(&user_id)),
                     email: "offline@localhost".into(),
                 },
             );
@@ -157,9 +157,9 @@ impl SyncState {
     pub(crate) fn handle_dev_login(
         &mut self,
         id: Option<Seq<Request>>,
-        username: ambre_core::DisplayName,
+        username: ambre_core::Validated<ambre_core::DisplayName>,
     ) {
-        tracing::info!("Sync: DevLogin (username={username})");
+        tracing::info!("Sync: DevLogin (username={username:?})");
         // Remember it so a WS auth rejection (close 4401) whose refresh also fails
         // can silently re-login with the same deterministic identity.
         self.dev_username = Some(username.clone());
@@ -337,7 +337,7 @@ impl SyncState {
         id: Seq<Request>,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
         email: ambre_core::Email,
-        display_name: ambre_core::DisplayName,
+        display_name: ambre_core::Validated<ambre_core::DisplayName>,
     ) {
         tracing::info!("Sync: SetupAccount");
 
@@ -582,7 +582,7 @@ mod provider_tests {
         SyncEvent::ProviderSignedIn {
             id: ambre_bus::next_request(),
             user_id: Id::<User>::mint(),
-            display_name: ambre_core::DisplayName::new("Ada").unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
             email: "ada@example.org".into(),
             keys_stored,
             tokens: TokenPair {

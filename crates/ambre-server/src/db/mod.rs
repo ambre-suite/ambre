@@ -52,13 +52,18 @@ fn decode_doc_type(word: &str) -> Result<ambre_core::DocType, sqlx::Error> {
 /// A stored display name. One that breaks the rule is a decode error: every
 /// write path builds a [`DisplayName`](ambre_core::DisplayName) first
 /// (`SRV-234`).
-fn decode_display_name(text: String) -> Result<ambre_core::DisplayName, sqlx::Error> {
-    ambre_core::DisplayName::try_from(text).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+fn decode_display_name(
+    text: String,
+) -> Result<ambre_core::Validated<ambre_core::DisplayName>, sqlx::Error> {
+    ambre_core::Validated::<ambre_core::DisplayName>::parse(text)
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
 /// A stored list of display names, each read as [`decode_display_name`]
 /// reads one.
-fn decode_display_names(texts: Vec<String>) -> Result<Vec<ambre_core::DisplayName>, sqlx::Error> {
+fn decode_display_names(
+    texts: Vec<String>,
+) -> Result<Vec<ambre_core::Validated<ambre_core::DisplayName>>, sqlx::Error> {
     texts.into_iter().map(decode_display_name).collect()
 }
 
@@ -300,7 +305,7 @@ mod tests {
         let user = create_user(
             &pool,
             &ambre_core::Email::from("snap@test.dev"),
-            &ambre_core::DisplayName::new("Snap").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Snap").unwrap(),
             &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
@@ -378,7 +383,7 @@ mod tests {
         let user = create_user(
             &pool,
             &ambre_core::Email::from("purge@test.dev"),
-            &ambre_core::DisplayName::new("Purge").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Purge").unwrap(),
             &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
@@ -461,7 +466,7 @@ mod tests {
         let user = create_user(
             &pool,
             &ambre_core::Email::from("horizon@test.dev"),
-            &ambre_core::DisplayName::new("Horizon").unwrap(),
+            &ambre_core::Validated::<ambre_core::DisplayName>::parse("Horizon").unwrap(),
             &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),

@@ -2460,9 +2460,9 @@ impl ToileCommand {
 /// display-name rule. A forged name never drops the cursor it labels.
 fn lenient_name<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
-) -> Result<Option<ambre_core::DisplayName>, D::Error> {
+) -> Result<Option<ambre_core::Validated<ambre_core::DisplayName>>, D::Error> {
     let name = Option::<String>::deserialize(deserializer)?;
-    Ok(name.and_then(|text| ambre_core::DisplayName::new(&text).ok()))
+    Ok(name.and_then(|text| ambre_core::Validated::<ambre_core::DisplayName>::parse(&text).ok()))
 }
 
 /// One ephemeral presence sample the local peer broadcasts
@@ -2482,7 +2482,7 @@ pub struct PresencePayload {
     /// short handle derived from that id. So does a name that breaks the
     /// display-name rule: the sample stays, the name is dropped.
     #[serde(deserialize_with = "lenient_name")]
-    pub name: Option<ambre_core::DisplayName>,
+    pub name: Option<ambre_core::Validated<ambre_core::DisplayName>>,
     /// World-space pointer; `None` means the pointer left the board.
     pub cursor: Option<Point>,
     /// The peer's current selection, drawn as halos. Empty = nothing selected.
@@ -3311,7 +3311,7 @@ mod tests {
         let read: PresencePayload = postcard::from_bytes(&forged).unwrap();
         assert_eq!(read, plain);
         let named = PresencePayload {
-            name: ambre_core::DisplayName::new("Ada").ok(),
+            name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
             ..plain
         };
         let bytes = postcard::to_allocvec(&named).unwrap();

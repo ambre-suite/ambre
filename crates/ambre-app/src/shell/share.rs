@@ -159,7 +159,10 @@ mod tests {
     fn member(byte: u8, role: Role) -> MemberInfo {
         MemberInfo {
             user_id: Id::from_bytes([byte; 16]),
-            display_name: ambre_core::DisplayName::new(&format!("member {byte}")).unwrap(),
+            display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse(format!(
+                "member {byte}"
+            ))
+            .unwrap(),
             email: ambre_bus::Email::new(format!("m{byte}@example.com")),
             role,
             standing: MemberStanding::Verified,

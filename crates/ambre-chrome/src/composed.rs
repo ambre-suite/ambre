@@ -50,7 +50,7 @@ pub struct ComposedName(String);
 
 impl ComposedName {
     /// A document's name, or the placeholder when it has none or only blanks.
-    pub fn or_placeholder(name: Option<&ambre_core::Name>) -> Self {
+    pub fn or_placeholder(name: Option<&ambre_core::Validated<ambre_core::Name>>) -> Self {
         match name.map(|n| n.as_str().trim()) {
             Some(n) if !n.is_empty() => Self(n.to_owned()),
             _ => Self(UNTITLED.to_owned()),
@@ -60,7 +60,12 @@ impl ComposedName {
     /// The browser tab's title. A tab carries no kind icon, so the name is
     /// joined to the generic label of its kind (`CHROME-043`). `None` is a
     /// page with no document open.
-    pub fn tab_title(doc: Option<(ambre_core::DocType, Option<&ambre_core::Name>)>) -> Self {
+    pub fn tab_title(
+        doc: Option<(
+            ambre_core::DocType,
+            Option<&ambre_core::Validated<ambre_core::Name>>,
+        )>,
+    ) -> Self {
         match doc {
             Some((kind, name)) => {
                 let Self(name) = Self::or_placeholder(name);
@@ -84,10 +89,10 @@ impl ComposedName {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{DocType, Name};
+    use ambre_core::{DocType, Name, Validated};
 
-    fn name(text: &str) -> Name {
-        Name::new(text).unwrap()
+    fn name(text: &str) -> Validated<Name> {
+        Validated::<Name>::parse(text).unwrap()
     }
 
     /// A tab joins the name to the kind label, and a blank name reads as the
@@ -116,7 +121,7 @@ mod tests {
     /// placeholder.
     #[test]
     fn only_a_missing_or_blank_name_is_the_placeholder() {
-        let shown = |name: Option<&Name>| ComposedName::or_placeholder(name).0;
+        let shown = |name: Option<&Validated<Name>>| ComposedName::or_placeholder(name).0;
         assert_eq!(shown(Some(&name(" Budget "))), "Budget");
         assert_eq!(shown(Some(&name(" "))), UNTITLED);
         assert_eq!(shown(None), UNTITLED);

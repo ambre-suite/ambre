@@ -121,8 +121,8 @@ pub enum MurmurePane {
     Members { channel: Id<Channel> },
 }
 pub struct MessageRef { pub segment: Id<Segment>, pub message: Id<Message> }
-pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<Name>, pub entries: Vec<SidebarEntry> }
-pub struct SidebarEntry { pub channel: Id<Channel>, pub name: Option<Name>, pub activity: Activity }
+pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<Validated<Name>>, pub entries: Vec<SidebarEntry> }
+pub struct SidebarEntry { pub channel: Id<Channel>, pub name: Option<Validated<Name>>, pub activity: Activity }
 pub enum SidebarGroup { Category { space: Id<Space>, category: Option<Id<Category>> }, Private, Direct, ToJoin }
 pub enum Activity { None, Some, Count { messages: Count<Unread>, mentions: Count<Mentions> } }
 ```

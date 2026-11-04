@@ -30,7 +30,7 @@ pub struct DocChoice {
     /// Its kind, which decides how an embed of it renders.
     pub doc_type: DocType,
     /// Its name, if it has one.
-    pub name: Option<ambre_core::Name>,
+    pub name: Option<ambre_core::Validated<ambre_core::Name>>,
 }
 
 /// The web embed, document embed and link dialogs (`TOILE-087`, `TOILE-086`,

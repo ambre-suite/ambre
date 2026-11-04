@@ -770,7 +770,7 @@ pub struct PresencePayload {
     pub block_id: BlockId,
     pub cursor: ambre_core::Payload<EncodedCursor>,
     pub anchor: Option<(BlockId, ambre_core::Payload<EncodedCursor>)>,
-    pub display_name: Option<ambre_core::DisplayName>,
+    pub display_name: Option<ambre_core::Validated<ambre_core::DisplayName>>,
 }
 
 /// The role of a `loro::Cursor` as `Cursor::encode` writes it (`PROSE-004`):
@@ -794,7 +794,7 @@ impl ambre_core::PayloadKind for EncodedCursor {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteCursor {
     pub user_id: Id<User>,
-    pub display_name: Option<ambre_core::DisplayName>,
+    pub display_name: Option<ambre_core::Validated<ambre_core::DisplayName>>,
     pub position: CursorPosition,
 }
 
@@ -1088,7 +1088,7 @@ impl fmt::Debug for FootnoteEntry {
 #[derive(Clone, PartialEq, Eq)]
 pub struct CommentReply {
     pub reply_id: Id<Reply>,
-    pub author: Option<ambre_core::DisplayName>,
+    pub author: Option<ambre_core::Validated<ambre_core::DisplayName>>,
     pub user_id: Id<User>,
     pub created_at: Instant<Authored>,
     pub text: String,
@@ -1227,7 +1227,7 @@ pub struct LinkSpan {
 pub struct Suggestion {
     pub suggestion_id: Id<id::Suggestion>,
     pub kind: SuggestionKind,
-    pub author: Option<ambre_core::DisplayName>,
+    pub author: Option<ambre_core::Validated<ambre_core::DisplayName>>,
     pub user_id: Id<User>,
     pub spans: Vec<SuggestionSpan>,
 }
