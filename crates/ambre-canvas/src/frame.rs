@@ -233,17 +233,26 @@ pub fn paint_fatal(
         (message, body, title_y + title_h + gap, BODY),
     ];
     for (text, size, y, color) in lines {
-        draw_centered(
-            surface,
-            font_cx,
-            cache,
-            text,
+        let place = Centered {
             size,
             column,
-            Point::new(x, y),
+            origin: Point::new(x, y),
             color,
-        );
+        };
+        draw_centered(surface, font_cx, cache, text, place);
     }
+}
+
+/// Where and how `draw_centered` paints one text.
+struct Centered {
+    /// The font size.
+    size: Px<View>,
+    /// The width of the column the text centers in.
+    column: Px<View>,
+    /// The top-left of the column.
+    origin: Point,
+    /// The text color.
+    color: Color,
 }
 
 /// The height `text` lays out to over a `width` column.
@@ -266,18 +275,20 @@ fn text_height(
     f64::from(layout.height())
 }
 
-/// Draw `text` as centered glyph runs over a `width` column at `origin`.
-#[allow(clippy::too_many_arguments)]
+/// Draw `text` as centered glyph runs over the column of `place`.
 fn draw_centered(
     surface: &mut impl DrawSurface,
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     text: &str,
-    size: Px<View>,
-    width: Px<View>,
-    origin: Point,
-    color: Color,
+    place: Centered,
 ) {
+    let Centered {
+        size,
+        column,
+        origin,
+        color,
+    } = place;
     if text.is_empty() {
         return;
     }
@@ -285,7 +296,7 @@ fn draw_centered(
         font_cx,
         text,
         size,
-        width,
+        column,
         Alignment::Center,
         crate::Weight::Regular,
         crate::Slant::Upright,

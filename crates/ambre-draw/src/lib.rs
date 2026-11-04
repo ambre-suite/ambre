@@ -189,13 +189,15 @@ pub trait DrawSurface {
 
     /// Fill an arbitrary path with a solid color. Default no-op; overridden by
     /// `WgpuSurface` (lyon tessellation) and `KrillaSurface` (PDF paths).
-    #[allow(unused_variables)]
-    fn fill_path(&mut self, path: &BezPath, brush: &Brush) {}
+    fn fill_path(&mut self, path: &BezPath, brush: &Brush) {
+        let _ = (path, brush);
+    }
 
     /// Stroke an arbitrary path. Default no-op; overridden by `WgpuSurface`
     /// (lyon tessellation) and `KrillaSurface` (PDF paths).
-    #[allow(unused_variables)]
-    fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {}
+    fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {
+        let _ = (path, brush, stroke);
+    }
 
     // -------------------------------------------------------------------------
     // Raster images (default no-op until a surface supports raster)
@@ -220,8 +222,9 @@ pub trait DrawSurface {
     /// (via `fill_rect`) until its pixels arrive from the media cache. It is
     /// repainted through this method once the pixels are known. The trait carries
     /// no placeholder logic itself.
-    #[allow(unused_variables)]
-    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}
+    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
+        let _ = (image, dest);
+    }
 
     // -------------------------------------------------------------------------
     // Transform stack (default no-ops until Toile needs it)
@@ -232,8 +235,9 @@ pub trait DrawSurface {
     ///
     /// Used by Toile (infinite canvas pan/zoom) and Prose (page margins).
     /// Default no-op -- override when transform support is implemented.
-    #[allow(unused_variables)]
-    fn push_transform(&mut self, transform: Affine) {}
+    fn push_transform(&mut self, transform: Affine) {
+        let _ = transform;
+    }
 
     /// Pop the most recently pushed transform. Default no-op.
     fn pop_transform(&mut self) {}

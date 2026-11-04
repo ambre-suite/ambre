@@ -35,7 +35,7 @@ impl SurfaceSize {
 
     /// The CSS box `logical` at `density`, or `None` when the drawing buffer
     /// has no area.
-    #[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
+    #[cfg(any(target_arch = "wasm32", test))]
     pub(crate) fn new(logical: Size<Px<CanvasCss>>, density: Scale<Css, Device>) -> Option<Self> {
         let scale =
             |side: Px<CanvasCss>| Px::new((f64::from(side.get()) * density.get()).round() as u32);
