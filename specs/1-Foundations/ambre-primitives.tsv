@@ -1511,6 +1511,52 @@ ambre-murmure | src/watchers.rs | crate::watchers | owed() | ret | bool	generic	
 ambre-pdf | src/lib.rs | crate | degenerate_clip_path::EPS | const | f32	math	geometry tolerance local to the algorithm
 ambre-pdf | src/lib.rs | crate | to_u8() | ret | u8	math	geometry, layout, count or size local to the algorithm
 ambre-pdf | src/lib.rs | crate | to_u8(c) | param | f32	math	geometry, layout, count or size local to the algorithm
+ambre-primitives | src/aliases.rs | crate::aliases | Alias.file | field | usize	generic	the index of a file among the files of a crate the alias check reads
+ambre-primitives | src/aliases.rs | crate::aliases | Alias.name | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Alias.params | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Alias.shown | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Alias.target | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | CORE | const | &str	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/aliases.rs | crate::aliases | CORE_ROOT | const | &str	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/aliases.rs | crate::aliases | Crate.generic | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Crate.imports | field | BTreeMap<String,Vec<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Crate.items | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Crate::items(file) | param | usize	generic	the index of a file among the files of a crate the alias check reads
+ambre-primitives | src/aliases.rs | crate::aliases | Crate::items(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Crate::read(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | FAMILIES | const | &str	generic	the heading of the families table the alias check reads
+ambre-primitives | src/aliases.rs | crate::aliases | Found.family | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Found.through | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | LOCAL_ROOTS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/aliases.rs | crate::aliases | Names.imports | field | BTreeMap<String,Vec<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Names.items | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver.crates | field | &'a BTreeMap<String,Crate>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver.families | field | &'a BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::alias(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::glob(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::glob(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::imported(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::imported(path) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::named(home) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::named(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::path(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::path(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::through(home) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::ty(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | SPEC | const | &str	free-text	a fixed path of the spec the alias check reads
+ambre-primitives | src/aliases.rs | crate::aliases | Source.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Source.shown | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | Source.text | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | WALKED | const | &[&str]	generic	the directories, relative to the workspace root, whose Rust files the alias check reads
+ambre-primitives | src/aliases.rs | crate::aliases | check() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/aliases.rs | crate::aliases | families() | ret | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | families(spec) | param | &str	generic	the text of the newtypes spec, whose families table the alias check reads
+ambre-primitives | src/aliases.rs | crate::aliases | judge() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/aliases.rs | crate::aliases | judge(spec) | param | Option<&str>	generic	the text of the newtypes spec, whose families table the alias check reads
+ambre-primitives | src/aliases.rs | crate::aliases | refusal() | ret | String	free-text	error messages printed to the terminal
+ambre-primitives | src/aliases.rs | crate::aliases | uses(found) | param | &mut Vec<(String,Vec<String>)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/aliases.rs | crate::aliases | uses(prefix) | param | &mut Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/main.rs | crate | check(aliases) | param | &[String]	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | Allowlist.raw | field | BTreeMap<SiteKey,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/allowlist.rs | crate::allowlist | Allowlist::parse() | ret | Result<Self,Vec<String>>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | Allowlist::parse(text) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name

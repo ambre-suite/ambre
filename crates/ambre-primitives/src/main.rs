@@ -8,7 +8,7 @@
 //!
 //! Three modes, one per recipe:
 //!
-//!   * `check`, the default, fails on eight defects, then prints the lines
+//!   * `check`, the default, fails on nine defects, then prints the lines
 //!     per category. Two defects compare the file with the sites: a site no
 //!     line names, and a line that names no site. Three read the site: a
 //!     claimed shape the site lacks, a privacy refusal, and a `Deref` of a
@@ -24,7 +24,10 @@
 //!
 //!     The eighth is the newtype census (`ARCH-062`, `newtypes.rs`). It
 //!     refuses a hand-written newtype over a primitive that no exception line
-//!     names, and a line that names none;
+//!     names, and a line that names none.
+//!
+//!     The ninth refuses an alias that stands for a family of `ambre-core`
+//!     alone (`ARCH-975`, `aliases.rs`). It reads test code too;
 //!   * `files` runs the seventh check alone, so a red allowlist hides no
 //!     file the walk misses;
 //!   * `--prune` removes the lines that name no site, and the exception
@@ -36,6 +39,7 @@
 //!     line names, and on a line whose count differs from its sites.
 //!     `--ambiguous` prints the ambiguous sites too.
 
+mod aliases;
 mod allowlist;
 mod depinfo;
 mod newtypes;
@@ -144,7 +148,8 @@ fn main() -> ExitCode {
     match mode {
         Mode::Check | Mode::Files | Mode::Unwrap(..) => {
             let refused = newtypes::judge(exceptions.as_deref(), &scan.newtypes);
-            check(&list, &scan, &unread, &refused)
+            let bare = aliases::check(&disk, &root);
+            check(&list, &scan, &unread, &refused, &bare)
         }
         Mode::Prune => {
             if let Some(text) = exceptions
@@ -272,7 +277,13 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn check(list: &Allowlist, scan: &Scan, unread: &[String], newtypes: &[String]) -> ExitCode {
+fn check(
+    list: &Allowlist,
+    scan: &Scan,
+    unread: &[String],
+    newtypes: &[String],
+    aliases: &[String],
+) -> ExitCode {
     let sites = &scan.sites;
     let verdict = list.compare(sites);
     for key in &verdict.missing {
@@ -357,6 +368,15 @@ fn check(list: &Allowlist, scan: &Scan, unread: &[String], newtypes: &[String]) 
             newtypes.len()
         );
     }
+    for refusal in aliases {
+        eprintln!("primitives: {refusal}");
+    }
+    if !aliases.is_empty() {
+        eprintln!(
+            "primitives: {} refusals of the bare-alias check (ambre-spec-newtypes.md section 3).",
+            aliases.len()
+        );
+    }
     let counts: Vec<String> = Category::ALL
         .iter()
         .map(|category| {
@@ -373,6 +393,7 @@ fn check(list: &Allowlist, scan: &Scan, unread: &[String], newtypes: &[String]) 
         && scan.secrets.is_empty()
         && unread.is_empty()
         && newtypes.is_empty()
+        && aliases.is_empty()
     {
         ExitCode::SUCCESS
     } else {

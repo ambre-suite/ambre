@@ -32,6 +32,7 @@
 | The rule | `ambre-spec-architecture.md` section 1.1, `ARCH-062` | the primitive gate, `crates/ambre-primitives/src/newtypes.rs` |
 | The exceptions | `specs/1-Foundations/ambre-newtypes.tsv`: a key, then a reason | the gate refuses a newtype no line names, a line that names none, and an empty reason. A reviewer reads each reason a change adds, `ARCH-063` |
 | The census | every struct of the walk outside a test, with no generic parameter and one field once `PhantomData` is set apart, over an integer, a float, a `String` or a `Vec<u8>` | the gate reads the type as the source writes it: an alias or a macro hides it, and a reviewer holds both |
+| A name | an alias that stands for a family alone, section 3 | the gate refuses it, `ARCH-975`. It reads the families from section 2, and refuses one that `ambre-core` declares as no generic struct. A reviewer and `clippy::type_complexity` hold an alias of a compound type, `ARCH-976` |
 | A stale line | a line whose newtype was folded or removed | `cargo run -p ambre-primitives -- --prune` removes it, and nothing else |
 
 ---

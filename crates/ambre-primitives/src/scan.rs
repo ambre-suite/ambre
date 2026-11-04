@@ -55,7 +55,7 @@ pub(crate) const META: &str = "__ambre_meta_";
 /// How deep one alias may lead to another. A cycle fails to compile, so the
 /// bound keeps a broken tree from looping. Reaching it fails the scan, since
 /// the type past it stays unread.
-const ALIAS_DEPTH: Hops = Hops(32);
+pub(crate) const ALIAS_DEPTH: Hops = Hops(32);
 
 /// How many aliases one type may open, nested ones included. An alias that
 /// names another twice doubles the walk at each level, so the bound keeps
@@ -70,11 +70,11 @@ const RESOLVE_HOPS: Hops = Hops(16);
 /// How many `use` items, modules or aliases one walk has led through,
 /// checked against [`RESOLVE_HOPS`] or [`ALIAS_DEPTH`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-struct Hops(usize);
+pub(crate) struct Hops(usize);
 
 impl Hops {
     /// One step further.
-    fn next(self) -> Self {
+    pub(crate) fn next(self) -> Self {
         Self(self.0.saturating_add(1))
     }
 }
