@@ -31,7 +31,7 @@ const FINGERPRINT_LEN: usize = 20;
 ///
 pub fn fingerprint(
     pub_key: &FixedBytes<ambre_core::ExchangePublicKey>,
-) -> ambre_core::KeyFingerprint {
+) -> ambre_core::Opaque<ambre_core::KeyFingerprints> {
     let mut hasher = Blake2b512::new();
     hasher.update(FINGERPRINT_DOMAIN);
     hasher.update(pub_key.as_array());
@@ -45,7 +45,7 @@ pub fn fingerprint(
         }
         out.push(c);
     }
-    ambre_core::KeyFingerprint::new(out)
+    ambre_core::Opaque::<ambre_core::KeyFingerprints>::new(out)
 }
 
 /// The first `N` bytes of `digest`, zero-filled past its end. Every caller

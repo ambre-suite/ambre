@@ -6,8 +6,9 @@
 // than discovered at a drop.
 // ============================================================================
 
-use ambre_bus::app::toile::{Elements, SkipReason};
+use ambre_bus::app::toile::{Elements, SkipReasons};
 use ambre_core::Count;
+use ambre_core::Opaque;
 use ambre_draw::Point;
 
 /// The `accept` attribute of the import picker: the formats a converter reads
@@ -36,7 +37,7 @@ pub struct DroppedFile {
 /// user who dropped a drawing wants to know it arrived. A lossy import says so
 /// in the same breath, naming the first few constructs it dropped. A list nobody
 /// reads at the corner of a screen is the rejected alternative.
-pub fn import_message(imported: Count<Elements>, skipped: &[SkipReason]) -> String {
+pub fn import_message(imported: Count<Elements>, skipped: &[Opaque<SkipReasons>]) -> String {
     let head = match imported.get() {
         1 => "Imported 1 element".to_owned(),
         n => format!("Imported {n} elements"),
@@ -47,7 +48,7 @@ pub fn import_message(imported: Count<Elements>, skipped: &[SkipReason]) -> Stri
     let named: Vec<&str> = skipped
         .iter()
         .take(SKIPPED_NAMED)
-        .map(SkipReason::as_str)
+        .map(Opaque::as_str)
         .collect();
     let rest = skipped.len() - named.len();
     let tail = if rest == 0 {
@@ -100,8 +101,9 @@ mod tests {
 #[cfg(test)]
 mod message_tests {
     use super::import_message;
-    use ambre_bus::app::toile::{Elements, SkipReason};
+    use ambre_bus::app::toile::{Elements, SkipReasons};
     use ambre_core::Count;
+    use ambre_core::Opaque;
 
     #[test]
     fn a_clean_import_reports_its_count() {
@@ -117,7 +119,10 @@ mod message_tests {
 
     #[test]
     fn a_lossy_import_names_what_it_dropped() {
-        let skipped = vec![SkipReason::new("gradient"), SkipReason::new("filter")];
+        let skipped = vec![
+            Opaque::<SkipReasons>::new("gradient"),
+            Opaque::<SkipReasons>::new("filter"),
+        ];
         assert_eq!(
             import_message(Count::<Elements>::new(3), &skipped),
             "Imported 3 elements; dropped gradient, filter"
@@ -128,7 +133,9 @@ mod message_tests {
     /// construct dropped in silence by another means.
     #[test]
     fn a_long_list_of_dropped_constructs_is_counted() {
-        let skipped: Vec<SkipReason> = (0..7).map(|i| SkipReason::new(format!("c{i}"))).collect();
+        let skipped: Vec<Opaque<SkipReasons>> = (0..7)
+            .map(|i| Opaque::<SkipReasons>::new(format!("c{i}")))
+            .collect();
         assert_eq!(
             import_message(Count::<Elements>::new(1), &skipped),
             "Imported 1 element; dropped c0, c1, c2, and 4 more"

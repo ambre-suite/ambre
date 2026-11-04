@@ -754,9 +754,6 @@ ambre-core | src/error.rs | crate::error | RoleError::InvalidDiscriminant.0 | fi
 ambre-core | src/error.rs | crate::error | RoleError::InvalidString.0 | field | String	generic	the refused value the error echoes
 ambre-core | src/error.rs | crate::error | UuidError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
 ambre-core | src/error.rs | crate::error | VersionError::OutOfRange.0 | field | u8	generic	the refused value the error echoes
-ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint.0 | field | String	newtype-inner	KeyFingerprint newtype
-ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint::as_str() | ret | &str	newtype-inner	KeyFingerprint newtype
-ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint::new(value) | param | String	newtype-inner	the constructor of the KeyFingerprint newtype
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytes<R> as AsRef<[u8]>>::as_ref() | ret | &[u8]	newtype-inner	FixedBytes newtype, its bytes borrowed for a call that takes any bytes
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytes<R> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytesVisitor<R> as Visitor<'de>>::visit_str(text) | param | &str	trait	signature fixed by foreign trait: serde hands the hexadecimal text of a readable format
@@ -3260,9 +3257,6 @@ ambre-primitives | src/secrets.rs | crate::secrets | refusals(krate) | param | &
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(renamed) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-core | src/credential.rs | crate::credential | ProviderUrl.0 | field | String	newtype-inner	the provider address, which the browser shows in clear
-ambre-core | src/credential.rs | crate::credential | ProviderUrl::as_str() | ret | &str	newtype-inner	the provider address, which the browser shows in clear
-ambre-core | src/credential.rs | crate::credential | ProviderUrl::new(text) | param | String	newtype-inner	the provider address, which the browser shows in clear
 ambre-draw | src/testing.rs | crate::testing | <Glyphs as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-draw | src/testing.rs | crate::testing | <Ops as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | param | impl Fn(&DrawOp)->bool	generic	a predicate over the recorded operations
@@ -3545,9 +3539,6 @@ ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::new(c) | param
 ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::NAME | const | &'static str	free-text	the name a modifier set prints through Debug, for a log line
 ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::ALL | const | u8	generic	the three bits that name a modifier, the mask every modifier set lies in
 ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::Repr | assoc | u8	newtype-inner	the integer a modifier set holds its three bits in, the inside of Flags
-ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason.0 | field | String	newtype-inner	the inside of a skip reason: the line the user reads
-ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::as_str() | ret | &str	newtype-inner	the one way out of a skip reason, to a toast or a log line
-ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::new(reason) | param | impl Into<String>	newtype-inner	the constructor of a skip reason, from the line an importer writes
 ambre-bus | src/app/trame/text.rs | crate::app::trame::text | <CellText<F> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-bus | src/app/trame/text.rs | crate::app::trame::text | <DisplayForm as TextForm>::NAME | const | &'static str	free-text	the name a cell text prints through Debug, for a log line
 ambre-bus | src/app/trame/text.rs | crate::app::trame::text | <SourceForm as TextForm>::NAME | const | &'static str	free-text	the name a cell text prints through Debug, for a log line
@@ -4076,3 +4067,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | stored_code_lang() | ret | &s
 ambre-core | src/lang.rs | crate::lang | is_lang_tag() | ret | bool	generic	whether a text has the shape of RFC 5646, the check of the LangTag rule
 ambre-core | src/lang.rs | crate::lang | is_lang_tag(text) | param | &str	generic	the raw text the LangTag rule checks
 ambre-core | src/lang.rs | crate::lang | primary_subtag() | ret | String	generic	the primary subtag of a tag, lowercased, which a caller matches against language codes
+ambre-bus | src/app/toile.rs | crate::app::toile | <SkipReasons as ambre_core::OpaqueKind>::NAME | const | &'static str	free-text	the name a skip reason prints through Debug, for a log line
+ambre-core | src/credential.rs | crate::credential | <ProviderUrls as OpaqueKind>::NAME | const | &'static str	free-text	the name a provider address prints through Debug, for a log line
+ambre-core | src/fingerprint.rs | crate::fingerprint | <KeyFingerprints as OpaqueKind>::NAME | const | &'static str	free-text	the name a key fingerprint prints through Debug, for a log line

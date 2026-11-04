@@ -463,14 +463,14 @@ pub enum RestEvent {
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
         email: ambre_core::Email,
         exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-        fingerprint: ambre_core::KeyFingerprint,
+        fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },
     /// The answer to `FetchMemberKey`: the key the relay serves for that
     /// user, and its fingerprint, for the same comparison with the pin.
     MemberKey {
         user_id: Id<User>,
         exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-        fingerprint: ambre_core::KeyFingerprint,
+        fingerprint: ambre_core::Opaque<ambre_core::KeyFingerprints>,
     },
     InviteSent {
         document_id: Id<Document>,
@@ -567,7 +567,7 @@ pub enum RestEvent {
     // -- Provider sign-in ----------------------------------------------------------
     /// The provider's authorization address, and the `state` the relay bound to it.
     ProviderAddress {
-        url: ambre_core::ProviderUrl,
+        url: ambre_core::Opaque<ambre_core::ProviderUrls>,
         state: ambre_core::Credential<ambre_core::OidcState>,
     },
     /// The provider return was exchanged. The tokens stayed on the Sync worker;

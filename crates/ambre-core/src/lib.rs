@@ -121,7 +121,7 @@ pub use calendar::{Month, Year};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
 pub use count::{Cells, Count, CountColumn, CountKind, CountRepr, Divisor, Elements, Recounts};
-pub use credential::ProviderUrl;
+pub use credential::ProviderUrls;
 pub use doc_type::DocType;
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, Container, ContainerFile,
@@ -138,7 +138,7 @@ pub use encoded::{
 pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
 pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, FileBytes};
-pub use fingerprint::KeyFingerprint;
+pub use fingerprint::KeyFingerprints;
 pub use fixed_bytes::{ByteArray, DebugForm, FixedBytes, FixedBytesError, FixedRole};
 #[cfg(feature = "fixtures")]
 pub use fixtures::{

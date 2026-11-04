@@ -1223,28 +1223,15 @@ impl std::fmt::Display for VoteTotal {
 
 pub use ambre_core::Elements;
 
-/// Why an import or an export left a construct behind, as the user reads it:
-/// "path fill: non-solid paint dropped".
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SkipReason(String);
+/// The kind of the reason an import or an export left a construct behind, as
+/// the user reads it: "path fill: non-solid paint dropped". The text is
+/// `Opaque<SkipReasons>`: only the UI reads it, through `as_str`. It has no
+/// serde form, since it never leaves the page.
+pub enum SkipReasons {}
 
-impl SkipReason {
-    /// The reason `reason` spells.
-    pub fn new(reason: impl Into<String>) -> Self {
-        Self(reason.into())
-    }
-
-    /// The reason, for a toast or a log line.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SkipReason {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
+impl ambre_core::OpaqueKind for SkipReasons {
+    const NAME: &'static str = "SkipReason";
+    const LENGTH: ambre_core::OpaqueLength = ambre_core::OpaqueLength::Chars;
 }
 
 /// How many votes were cast on one target.
@@ -2691,7 +2678,7 @@ pub enum ToileEvent {
     /// (`toile-import-export`).
     ImportReport {
         imported: Count<Elements>,
-        skipped: Vec<SkipReason>,
+        skipped: Vec<ambre_core::Opaque<SkipReasons>>,
     },
     /// A foreign-file import aborted before touching the board (a parse error, a
     /// safety-limit breach, or a media upload failure). The board still holds
