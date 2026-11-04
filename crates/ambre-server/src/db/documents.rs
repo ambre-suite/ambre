@@ -3,7 +3,7 @@
 
 use super::*;
 use ambre_core::StoredAsI64;
-use ambre_core::{Instant, UnixSec};
+use ambre_core::{Instant, Relayed, UnixSec};
 
 /// Row returned by `SELECT * FROM documents`.
 #[derive(Debug)]
@@ -12,8 +12,6 @@ pub struct DocumentRow {
     pub owner_id: Id<User>,
     pub doc_type: ambre_core::DocType,
     pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Document joined with the caller's membership row.
@@ -23,7 +21,8 @@ pub struct DocumentSummaryRow {
     pub owner_id: Id<User>,
     pub doc_type: ambre_core::DocType,
     pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// The relay's clock when it last wrote the row (`SRV-975`).
+    pub updated_at: Instant<Relayed>,
     pub role: ambre_core::Role,
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
@@ -41,12 +40,10 @@ pub async fn get_document(
     document_id: &Id<Document>,
 ) -> Result<Option<DocumentRow>, AppError> {
     let did = id_to_uuid(*document_id);
-    let row = sqlx::query(
-        "SELECT id, owner_id, doc_type, name_enc, created_at, updated_at FROM documents WHERE id = $1"
-    )
-    .bind(did)
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query("SELECT id, owner_id, doc_type, name_enc FROM documents WHERE id = $1")
+        .bind(did)
+        .fetch_optional(pool)
+        .await?;
 
     match row {
         Some(r) => Ok(Some(DocumentRow {
@@ -56,11 +53,22 @@ pub async fn get_document(
             name_enc: r
                 .try_get::<Option<Vec<u8>>, _>("name_enc")?
                 .map(ambre_core::Encoded::new),
-            created_at: r.try_get("created_at")?,
-            updated_at: r.try_get("updated_at")?,
         })),
         None => Ok(None),
     }
+}
+
+/// The instant the relay stamped on a row, in Unix milliseconds. The one
+/// place a Postgres time becomes a relay instant, so `chrono` stays in `db/`.
+///
+/// # Errors
+/// [`AppError::Internal`] for a time before the Unix epoch. Postgres writes
+/// the column with `now()` alone, so such a time is a corrupt row. The
+/// caller answers 500 and the log names the time (`SRV-976`).
+fn relayed_at(time: chrono::DateTime<chrono::Utc>) -> Result<Instant<Relayed>, AppError> {
+    u64::try_from(time.timestamp_millis())
+        .map(Instant::new)
+        .map_err(|_| AppError::Internal(format!("a relay time before the Unix epoch: {time}")))
 }
 
 /// Lists all documents the user is a member of, with role and doc_key_enc.
@@ -94,7 +102,7 @@ pub async fn list_documents_for_user(
                 name_enc: r
                     .try_get::<Option<Vec<u8>>, _>("name_enc")?
                     .map(ambre_core::Encoded::new),
-                updated_at: r.try_get("updated_at")?,
+                updated_at: relayed_at(r.try_get("updated_at")?)?,
                 role: decode_role(r.try_get("role")?)?,
                 doc_key_enc: ambre_core::Encoded::new(r.try_get("doc_key_enc")?),
                 wrapper_exchange_pubkey: decode_opt_exchange_key(
@@ -143,8 +151,6 @@ pub async fn create_document(
             name_enc: row
                 .try_get::<Option<Vec<u8>>, _>("name_enc")?
                 .map(ambre_core::Encoded::new),
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
         })
     };
 
@@ -153,7 +159,7 @@ pub async fn create_document(
             let did = id_to_uuid(*did);
             // Idempotent insert: DO NOTHING returns no row on conflict.
             let inserted = sqlx::query(
-                "INSERT INTO documents (id, owner_id, doc_type, name_enc) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING RETURNING id, owner_id, doc_type, name_enc, created_at, updated_at"
+                "INSERT INTO documents (id, owner_id, doc_type, name_enc) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING RETURNING id, owner_id, doc_type, name_enc"
             )
             .bind(did)
             .bind(owner_uid)
@@ -167,7 +173,7 @@ pub async fn create_document(
                 None => {
                     // Already existed: return it untouched (owner preserved).
                     let row = sqlx::query(
-                        "SELECT id, owner_id, doc_type, name_enc, created_at, updated_at FROM documents WHERE id = $1"
+                        "SELECT id, owner_id, doc_type, name_enc FROM documents WHERE id = $1",
                     )
                     .bind(did)
                     .fetch_one(pool)
@@ -178,7 +184,7 @@ pub async fn create_document(
         }
         None => {
             let row = sqlx::query(
-                "INSERT INTO documents (owner_id, doc_type, name_enc) VALUES ($1, $2, $3) RETURNING id, owner_id, doc_type, name_enc, created_at, updated_at"
+                "INSERT INTO documents (owner_id, doc_type, name_enc) VALUES ($1, $2, $3) RETURNING id, owner_id, doc_type, name_enc"
             )
             .bind(owner_uid)
             .bind(doc_type)
@@ -320,4 +326,30 @@ pub async fn delete_document(pool: &PgPool, document_id: &Id<Document>) -> Resul
         .execute(pool)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod relayed_at_tests {
+    use super::relayed_at;
+    use ambre_core::{Instant, Relayed};
+
+    #[test]
+    fn a_relay_time_converts_to_its_unix_milliseconds() {
+        let time = chrono::DateTime::from_timestamp_millis(1_767_312_245_123).unwrap();
+        assert_eq!(
+            relayed_at(time).unwrap(),
+            Instant::<Relayed>::new(1_767_312_245_123)
+        );
+        let epoch = chrono::DateTime::from_timestamp_millis(0).unwrap();
+        assert_eq!(relayed_at(epoch).unwrap(), Instant::<Relayed>::EPOCH);
+    }
+
+    #[test]
+    fn a_relay_time_before_the_epoch_is_refused() {
+        let before = chrono::DateTime::from_timestamp_millis(-1).unwrap();
+        assert!(matches!(
+            relayed_at(before),
+            Err(crate::error::AppError::Internal(_))
+        ));
+    }
 }

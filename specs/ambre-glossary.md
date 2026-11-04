@@ -86,6 +86,7 @@
 | count | how many things of one kind, addressing nothing, as `Count<K>` | tally | `1-Foundations/ambre-spec-architecture.md` |
 | len | an extent in the index space of one axis, as `Len<A>` | | `1-Foundations/ambre-spec-architecture.md` |
 | `Instant<Authored>` | the author's wall clock in Unix milliseconds, shown and never trusted | | `5-Murmure/ambre-spec-murmure-schema.md` |
+| `Instant<Relayed>` | the relay's wall clock in Unix milliseconds, as it stamps a row | | `1-Foundations/ambre-spec-architecture.md` |
 | page clock | the page's monotonic milliseconds, restarted on every load | | `1-Foundations/ambre-spec-frame.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |
 | presence sample | one peer's presence, as last sent | presence frame | `1-Foundations/ambre-spec-presence.md` |

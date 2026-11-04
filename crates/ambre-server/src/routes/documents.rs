@@ -183,7 +183,9 @@ pub struct DocumentSummaryJson {
     pub wrapper_exchange_pub_key: Option<FixedBytes<ExchangePublicKey>>,
     /// Total member count (routing metadata). `> 1` => shared.
     pub member_count: ambre_core::Count<ambre_core::Members>,
-    pub updated_at: ambre_core::Rfc3339,
+    /// The relay's clock when it last wrote the row, as a bare number of Unix
+    /// milliseconds (`SRV-975`).
+    pub updated_at: ambre_core::Instant<ambre_core::Relayed>,
 }
 /// Response wrapper for the document listing.
 #[derive(serde::Serialize)]
@@ -211,7 +213,7 @@ pub async fn list_documents(
                 doc_key_enc: d.doc_key_enc.clone(),
                 wrapper_exchange_pub_key: d.wrapper_exchange_pubkey,
                 member_count: d.member_count,
-                updated_at: ambre_core::Rfc3339::formatted(d.updated_at.to_rfc3339()),
+                updated_at: d.updated_at,
             }
         })
         .collect();
@@ -325,7 +327,8 @@ pub async fn create_document(
 
 // -- Get Document --------------------------------------------------
 
-/// Full document details including the calling user's membership info.
+/// Full document details including the calling user's membership info. It
+/// carries no time of the document: no client reads one (`SRV-977`).
 #[derive(serde::Serialize)]
 pub struct GetDocumentResponse {
     #[serde(with = "ambre_core::serde_id::text")]
@@ -338,8 +341,6 @@ pub struct GetDocumentResponse {
     /// Serialized as its lowercase word.
     pub role: Option<Role>,
     pub doc_key_enc: Option<ambre_core::Encoded<ambre_core::WrappedDocKey>>,
-    pub created_at: ambre_core::Rfc3339,
-    pub updated_at: ambre_core::Rfc3339,
 }
 
 pub async fn get_document(
@@ -372,8 +373,6 @@ pub async fn get_document(
         name_enc: doc.name_enc,
         role: mem.as_ref().map(|m| m.role),
         doc_key_enc: mem.map(|m| m.doc_key_enc.clone()),
-        created_at: ambre_core::Rfc3339::formatted(doc.created_at.to_rfc3339()),
-        updated_at: ambre_core::Rfc3339::formatted(doc.updated_at.to_rfc3339()),
     }))
 }
 

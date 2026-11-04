@@ -243,7 +243,7 @@ mod handler_tests {
         let d = &docs[0];
         assert!(d["doc_key_enc"].as_str().is_some_and(|s| !s.is_empty()));
         assert_eq!(d["member_count"].as_u64(), Some(1));
-        assert!(d["updated_at"].as_str().is_some());
+        assert!(d["updated_at"].as_u64().is_some());
         // The owner wrapped their own key at creation (invited_by = self), so the
         // wrapper exchange pubkey resolves to a non-empty hex string.
         assert!(
@@ -291,6 +291,45 @@ mod handler_tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        // `SRV-977`: the single-document response carries no time.
+        assert_eq!(json["id"].as_str(), Some(doc_id.as_str()));
+        assert!(json.get("created_at").is_none());
+        assert!(json.get("updated_at").is_none());
+    }
+
+    /// `SRV-975`: the listing sends the update time the row holds, as a bare
+    /// number of Unix milliseconds. `ambre_sync::http::tests` decodes the same
+    /// number into the client's list entry.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_listed_document_sends_its_update_time_as_relay_milliseconds(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let _doc_id = create_test_doc(&app, &auth).await;
+        sqlx::query("UPDATE documents SET updated_at = '2026-01-02T00:04:05.123Z'::timestamptz")
+            .execute(&state.db)
+            .await
+            .unwrap();
+
+        let resp = app
+            .oneshot(
+                Request::get("/api/documents")
+                    .header("authorization", &auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(
+            json["documents"][0]["updated_at"],
+            serde_json::json!(1_767_312_245_123_u64)
+        );
     }
 
     async fn get_document_status(app: &Router, auth: Option<&str>, doc_id: &str) -> StatusCode {

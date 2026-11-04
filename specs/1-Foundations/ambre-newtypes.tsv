@@ -46,7 +46,6 @@ ambre-core | src/schema.rs | crate::schema | Fnv | u64	the running state of an F
 ambre-core | src/schema.rs | crate::schema | StepFingerprint | u64	a migration step fingerprint, only compared and printed as sixteen hex digits
 ambre-core | src/span.rs | crate::span | FrameRate | f32	frames per second of the page clock, measured and shown, never stored or sent
 ambre-core | src/span.rs | crate::span | LamportStamp | u64	a Lamport stamp: many peers issue stamps and two may share a value, so it is no Seq
-ambre-core | src/span.rs | crate::span | Rfc3339 | String	a timestamp text the relay formats, which a client reads through a lenient parser
 ambre-core | src/status.rs | crate::status | HttpStatus | u16	an HTTP status the relay answered, a u16 the HTTP standard defines
 ambre-core | src/unit.rs | crate::unit | Radians | f64	the one angle unit of the workspace, with to_degrees for a format that takes degrees
 ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millisecond: Px::per writes it and ViewSpeed::over turns it back into a move
