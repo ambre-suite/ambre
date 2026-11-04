@@ -13,7 +13,7 @@
 //! The sizes are printed once per corpus, on standard error, because `criterion`
 //! measures time and not bytes.
 
-#![allow(
+#![expect(
     clippy::expect_used,
     clippy::indexing_slicing,
     reason = "a bench aborts on a fixture it cannot build"

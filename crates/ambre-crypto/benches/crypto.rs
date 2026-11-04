@@ -3,7 +3,7 @@
 //! Targets (desktop; mobile measured later) from `architecture`:
 //!   seal 1 KB  < 200 us (P95), open 1 KB < 350 us (P95).
 
-#![allow(
+#![expect(
     clippy::unwrap_used,
     reason = "a bench stops on a broken step rather than measure it"
 )]

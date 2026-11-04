@@ -1577,7 +1577,10 @@ impl Composer {
     /// `size`, over any row that reached it. The line of who types sits above
     /// the field. Answers the caret, its top-left and its height, while the
     /// composer holds the focus.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the paint context comes in four parts, as for every painter of the crate"
+    )]
     pub fn paint<S: DrawSurface>(
         &mut self,
         surface: &mut S,
@@ -1758,7 +1761,10 @@ impl Composer {
     /// Paint the files of the draft `shown` as a row of chips from `top`.
     /// The uploaded files come first, a press takes one off, and those that
     /// still upload follow (`MURMURE-132`). A chip past the width is left out.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the paint context comes in four parts, as for every painter of the crate"
+    )]
     fn paint_files<S: DrawSurface>(
         &mut self,
         surface: &mut S,

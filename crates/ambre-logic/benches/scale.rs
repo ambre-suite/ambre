@@ -16,11 +16,9 @@
 //! GPU-bound and stays validated visually. What these measure is the CPU half of
 //! the frame: the import, the recompute, the cull and the derivation.
 
-#![allow(
-    clippy::unwrap_used,
+#![expect(
     clippy::expect_used,
     clippy::panic,
-    clippy::indexing_slicing,
     reason = "a bench aborts on a corpus it cannot read"
 )]
 

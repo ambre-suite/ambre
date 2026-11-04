@@ -28,7 +28,6 @@ use ambre_chrome::commands::ModifierFold;
 /// `to_logic` carries the one command this driver sends itself. A font face
 /// fetched on demand is forwarded to the Logic thread (`CANVAS-068`). That
 /// thread measures Prose pages on a context of its own, and cannot fetch.
-#[allow(clippy::too_many_arguments)]
 #[expect(
     clippy::expect_used,
     clippy::panic,

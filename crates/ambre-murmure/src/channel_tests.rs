@@ -471,7 +471,6 @@ fn a_document_a_newer_client_wrote_is_refused_whole() {
 
 /// The step of a test registry: it reads the document as it is
 /// (`MURMURE-566`).
-#[allow(clippy::unnecessary_wraps)]
 fn read_as_it_is(_: &LoroDoc) -> Result<(), String> {
     Ok(())
 }

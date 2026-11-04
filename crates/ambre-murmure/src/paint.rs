@@ -217,7 +217,10 @@ pub struct Shown<'a> {
 ///
 /// `name_of` names a member, and `time_of` writes a time in the reader's
 /// language and zone (`MURMURE-418`).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the paint context comes in four parts, as for every painter of the crate"
+)]
 pub fn paint_list<S: DrawSurface>(
     surface: &mut S,
     font_cx: &mut FontContext,
@@ -480,7 +483,10 @@ fn chip_boxes(
 
 /// Paint the reaction chips of a row, their top-left at `at`. A chip
 /// that holds `me` takes the accent (`MURMURE-137`).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the paint context comes in four parts, as for every painter of the crate"
+)]
 fn draw_chips<S: DrawSurface>(
     surface: &mut S,
     font_cx: &mut FontContext,
@@ -989,7 +995,10 @@ fn measure(
 }
 
 /// Paint one row whose top is at `top`.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the paint context comes in four parts, as for every painter of the crate"
+)]
 fn draw_row<S: DrawSurface>(
     surface: &mut S,
     font_cx: &mut FontContext,
