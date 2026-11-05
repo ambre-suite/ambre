@@ -2457,6 +2457,38 @@ mod tests {
             .collect()
     }
 
+    /// An edit buffered before the session waits, for a relay document, until
+    /// the replay brought its clock up: the open sends nothing of it.
+    #[test]
+    fn an_edit_buffered_before_the_session_waits_for_the_replay() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"early".to_vec());
+        state.signing_key = Some(sk);
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key,
+            snapshot_payload: None,
+            snapshot_id: Id::<Snapshot>::mint(),
+            covered_seq: Seq::<Relay>::new(0),
+            held_snapshot: None,
+            doc_type: DocType::Trame,
+            existence: crate::Existence::OnRelay,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: Vec::new(),
+        });
+        assert!(
+            !drain_ws(&ws_rx)
+                .iter()
+                .any(|m| matches!(m, WsClientMsg::Update(_))),
+            "the edit left before the replay"
+        );
+        assert_eq!(state.pending_pre_session_updates.len(), 1);
+    }
+
     /// A downloaded snapshot covering up to seq N must make the post-open
     /// `RequestMissing` start AFTER N. Only the deltas the snapshot does not
     /// already contain are replayed, not the whole history since genesis.
@@ -3394,6 +3426,86 @@ mod tests {
         assert!(!state.documents[&doc].known_snapshots.contains(&announced));
     }
 
+    /// `SYNC-031`: a gap that stays past the threshold once one snapshot
+    /// arrives asks no second time.
+    #[test]
+    fn a_gap_still_past_the_threshold_asks_once() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (first, second) = (Id::<Snapshot>::mint(), Id::<Snapshot>::mint());
+        let mut seq = 0;
+        let mut arrive = |state: &mut SyncState, parent, clock| {
+            seq += 1;
+            let update = make_update(doc, parent, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
+            state.receive_update(Seq::<Relay>::new(seq), update);
+        };
+        arrive(&mut state, first, 1);
+        for clock in 2..=(QUARANTINE_ALERT as u64 + 1) {
+            arrive(&mut state, second, clock);
+        }
+        state.snapshot_known(doc, first);
+        assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_ALERT);
+        arrive(&mut state, second, QUARANTINE_ALERT as u64 + 2);
+        let asks = drain_ws(&ws_rx)
+            .iter()
+            .filter(|m| matches!(m, WsClientMsg::RequestMissing { .. }))
+            .count();
+        assert_eq!(asks, 1, "the gap was asked for again");
+    }
+
+    /// `SYNC-128`: a payment that cannot start leaves the debt owed, so the
+    /// next edit pays it.
+    #[test]
+    fn a_payment_that_cannot_start_leaves_the_debt_owed() {
+        let (mut state, _rx, doc, _key, _sk, _snap) = setup();
+        let rekey = &mut state.documents.get_mut(&doc).expect("open").rekey;
+        rekey.found_debt();
+        assert!(rekey.pay_now());
+        state.start_settle(doc);
+        let rekey = &mut state.documents.get_mut(&doc).expect("open").rekey;
+        assert!(
+            rekey.pay_now(),
+            "the debt waits on a payment that never left"
+        );
+    }
+
+    /// `SYNC-033`, `SYNC-086`: a reconnect subscribes the document again and
+    /// asks for what came after the last number it holds.
+    #[test]
+    fn a_reconnect_subscribes_again_and_asks_after_the_last_number() {
+        let (mut state, _rx, doc, _key, _sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.documents.get_mut(&doc).expect("open").last_seq = Seq::<Relay>::new(7);
+        state.handle_reconnect(doc);
+        let sent = drain_ws(&ws_rx);
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    WsClientMsg::Subscribe { document_id: a },
+                    WsClientMsg::RequestMissing { document_id: b, after_seq },
+                ] if *a == doc && *b == doc && after_seq.get() == 7
+            ),
+            "{sent:?}"
+        );
+    }
+
+    /// The cause a held document warns with names the refusal, or the
+    /// failures counted.
+    #[test]
+    fn a_hold_cause_prints_what_the_warning_reads() {
+        let refused = HoldCause::Refused(ambre_core::RefusalCode::LogMoved);
+        assert_eq!(
+            refused.to_string(),
+            ambre_core::RefusalCode::LogMoved.to_string()
+        );
+        assert!(!refused.to_string().is_empty());
+        let failed = HoldCause::Failed(ambre_core::Count::<ambre_core::Failures>::new(5));
+        assert_eq!(failed.to_string(), "sequencing failed 5 times");
+    }
+
     /// The quarantine asks for the missing history once per gap, however many
     /// arrivals follow past the threshold (`SYNC-031`).
     #[test]
@@ -3402,18 +3514,21 @@ mod tests {
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let parent = Id::<Snapshot>::mint();
-        for clock in 1..=(QUARANTINE_ALERT as u64 + 50) {
-            state.receive_update(
-                Seq::<Relay>::new(clock),
-                make_update(doc, parent, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk),
-            );
-        }
         let asks = |rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>| {
             drain_ws(rx)
                 .iter()
                 .filter(|m| matches!(m, WsClientMsg::RequestMissing { .. }))
                 .count()
         };
+        for clock in 1..=(QUARANTINE_ALERT as u64 + 50) {
+            if clock == QUARANTINE_ALERT as u64 {
+                assert_eq!(asks(&ws_rx), 0, "nothing asked below the threshold");
+            }
+            state.receive_update(
+                Seq::<Relay>::new(clock),
+                make_update(doc, parent, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk),
+            );
+        }
         assert_eq!(asks(&ws_rx), 1, "one request for the gap");
         // The gap closes; the next one asks again.
         state.snapshot_known(doc, parent);
@@ -3625,13 +3740,28 @@ mod tests {
                 .collect()
         };
 
+        let messages = |events: &[LogicEvent]| -> Vec<String> {
+            events
+                .iter()
+                .filter_map(|e| match e {
+                    LogicEvent::SegmentFinalizeFailed { message, .. } => Some(message.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        // A settled copy seals its snapshot, and stops only for want of a
+        // relay on this transport.
+        let _ = drain(&rx);
+        finalize(&state);
+        assert_eq!(messages(&drain(&rx)), ["no relay on this transport"]);
+
         state.handle_send_update(doc, b"a".to_vec());
         let sent = signatures(&drain_ws(&ws_rx));
         let _ = drain(&rx);
         finalize(&state);
         assert_eq!(
-            ends(&drain(&rx)),
-            vec![ambre_core::FinalizeEnd::Failed],
+            messages(&drain(&rx)),
+            ["an edit is unanswered"],
             "it waits for the echo"
         );
 

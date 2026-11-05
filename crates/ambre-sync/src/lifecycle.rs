@@ -163,6 +163,24 @@ impl Lifecycle {
 mod tests {
     use super::*;
 
+    /// The native clock reads the system's wall clock, in milliseconds.
+    #[test]
+    fn the_native_clock_reads_the_wall_clock() {
+        let wall = || {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |since| {
+                    u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+                })
+        };
+        let before = wall();
+        let read = system_clock()().get();
+        assert!(
+            (before..=wall()).contains(&read),
+            "{read} outside the wall clock"
+        );
+    }
+
     /// `SYNC-064`: each close with no frame between lengthens the wait, up to
     /// the cap. The reconnect opens only once the clock reaches it.
     #[test]

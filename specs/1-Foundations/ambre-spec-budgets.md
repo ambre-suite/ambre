@@ -42,6 +42,7 @@
 | Trame `SetCellText` to viewport (P2) | < 5 ms | -- | Logic | recompiles the bytecode and updates the DAG -- **none exists** |
 | Trame batch of 50 cells (P4) | < 1 ms | -- | Logic | **none exists** |
 | Trame `SheetIndex` rebuild, 10k rows | < 10 ms | -- | Logic | at load time -- **none exists** |
+| Trame structural edit on the Logic thread, 10k formula cells: the re-anchor walk and the engine reseed | < 10 ms | -- | Logic | the 15 ms of a content update, the Scroll viewport response row above, less the < 5 ms frame total of section 2. Measured by callgrind on 2026-11-05, `just instructions` (`ambre-trame` bench `instructions`), native release build in an Intel Xeon 2.30 GHz cloud container: the walk 276 366 349 instructions, about 345 ms on the target phone at the rate `scripts/instructions.py` assumes; the whole delete, engine reseed included, 11 285 464 200. **Over its target**: the `A structural edit within its budget on a large sheet` Story (`ambre-roadmap.md` E6) brings it under. The CI ceiling guards the walk at today's measure meanwhile |
 | Trame `range_index` scan, 1k range formulas | < 1 ms | -- | Logic | linear scan at the MVP, an interval tree later -- **none exists** |
 | Toile visible-set query, 50 000 elements | < 1 ms | -- | Logic | must fit inside a frame with margin for tessellation -- **none exists** |
 | Toile index update, one element | < 50 us | -- | Logic | a drag mutates one element per input event -- criterion `ambre-toile` `index_update_one_of_50000`: 1.3 us on a desktop in native code (`TOILE-091`) |
@@ -278,6 +279,7 @@
 | Prose run cache, 500 runs | < 1 MB | The drawing state of the runs painted lately, about 50 pages: an index into runs the Logic thread already holds (`features/ambre-spec-prose-page-rendering.md`) |
 | Prose view state, excluding the run cache | < 1 MB | |
 | Prose decoded pictures, per session | < 64 MiB | A bounded cache in the Logic thread, evicted least recently painted; it holds the pictures of a few pages and stays well inside the < 100 MB total (`features/ambre-spec-prose-images.md`) |
+| Trame hidden line elements, per sheet | < 1 000, about 51 KB | Only two peers writing at once into one new line create one: each such race leaves one hidden element per line it adds (`2-Trame/features/ambre-spec-trame-rows-and-columns.md section 3`). None is removed, since a reference may name it. **None exists** to count them |
 | Prose vertex buffers and atlases, 3 pages | < 50 MB VRAM | Stated by the Prose design and larger than the shared wgpu row above, which is the arithmetic the two rows now make visible. Reconciled by the `The memory budgets add up` Story (`ambre-roadmap.md` E7) |
 | Trame DAG plus cache | < 50 MB, per 100k formula cells | |
 | Toile board plus index, 50 000 elements | proportional to the element count, inside the < 100 MB total | The R-tree adds a small multiple of its leaf count over the bounds map it mirrors |

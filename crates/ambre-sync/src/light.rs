@@ -595,6 +595,94 @@ mod tests {
         assert!(released(drain(&rx)));
     }
 
+    /// A state holding one open document the relay holds as `existence`.
+    fn open_one(
+        existence: crate::Existence,
+    ) -> (
+        SyncState,
+        ambre_bus::conduit::Receiver<LogicEvent>,
+        Id<Document>,
+    ) {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let document_id = Id::<Document>::mint();
+        let doc = SyncDocumentState::new(
+            document_id,
+            DocumentKey::generate(),
+            DocType::Trame,
+            existence,
+        );
+        state.documents.insert(document_id, doc);
+        (state, rx, document_id)
+    }
+
+    fn release(state: &mut SyncState, document_id: Id<Document>) {
+        state.handle_command(SyncCommand::ReleaseDocument {
+            document_id,
+            applied_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(0),
+        });
+    }
+
+    /// Holds `RESID-009`: a release waits on each frame not yet sent: an
+    /// update queued before the session, a creation in flight, or a frame
+    /// pending. An update queued for another document holds nothing.
+    #[test]
+    fn a_release_waits_on_every_frame_not_yet_sent() {
+        let blockers: [fn(&mut SyncState, Id<Document>); 3] = [
+            |state, document_id| {
+                state.pending_pre_session_updates.push((
+                    document_id,
+                    ambre_core::Payload::new(b"edit".to_vec()),
+                    None,
+                ));
+            },
+            |state, document_id| {
+                if let Some(doc) = state.documents.get_mut(&document_id) {
+                    doc.creating = true;
+                }
+            },
+            |state, document_id| {
+                if let Some(doc) = state.documents.get_mut(&document_id) {
+                    doc.pending_updates
+                        .push(crate::pipeline::UpdateFrame::from_bytes(b"edit".to_vec()));
+                }
+            },
+        ];
+        for block in blockers {
+            let (mut state, _rx, document_id) = open_one(crate::Existence::OnRelay);
+            block(&mut state, document_id);
+            release(&mut state, document_id);
+            assert_eq!(state.documents_len(), 1, "a frame not yet sent was dropped");
+        }
+        let (mut state, _rx, document_id) = open_one(crate::Existence::OnRelay);
+        state.pending_pre_session_updates.push((
+            Id::<Document>::mint(),
+            ambre_core::Payload::new(b"edit".to_vec()),
+            None,
+        ));
+        release(&mut state, document_id);
+        assert_eq!(
+            state.documents_len(),
+            0,
+            "another document held the release"
+        );
+    }
+
+    /// `RESID-028`: a document released before the relay holds it keeps a
+    /// light subscription the socket never subscribes.
+    #[test]
+    fn a_local_document_released_is_never_subscribed() {
+        let (mut state, _rx, document_id) = open_one(crate::Existence::LocalOnly);
+        release(&mut state, document_id);
+        assert_eq!(state.light_doc_type(document_id), Some(DocType::Trame));
+        assert_eq!(state.light_cursor(document_id), None);
+        assert!(state.light_cursors().is_empty());
+        assert!(state.light_heads().is_empty());
+    }
+
     /// Holds `RESID-010` on the Sync side: a reopen resumes after the
     /// horizon when the relay's snapshot folds in nothing past it.
     #[test]

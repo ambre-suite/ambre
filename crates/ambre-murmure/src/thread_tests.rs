@@ -191,6 +191,10 @@ fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
     let ThreadTarget::Create(own) = state.reply_target(other, NOW).expect("target") else {
         panic!("created");
     };
+    assert!(
+        !state.thread_failed(other, Id::<Document>::mint()),
+        "another thread keeps this one"
+    );
     assert!(state.thread_failed(other, own));
     assert!(!state.thread_failed(other, own), "already dropped");
     let segment = state.active_id();
@@ -379,6 +383,36 @@ fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
         ("also here", Some(thread))
     );
     assert_eq!(message_at(&state, 0).also_in_thread, None);
+}
+
+/// Before the PeerID of the active segment lands, a reply to the thread
+/// alone leaves. A reply also sent to the channel waits for that PeerID
+/// (`MURMURE-109`).
+#[test]
+fn a_reply_to_its_thread_alone_needs_no_active_session() {
+    let alice = Id::<User>::mint();
+    let mut state = channel_with(&["root"], alice);
+    let root = message_at(&state, 0).id;
+    let (thread, _, _) = threaded(&mut state, root);
+    let successor = Id::<Segment>::mint();
+    state
+        .close_into(state.active_id(), successor, crate::Successor::Created, NOW)
+        .expect("close");
+    assert!(matches!(
+        state.reply(root, &draft("both"), alice, NOW, ambre_bus::ReplyEcho::AlsoInChannel),
+        Err(MurmureError::NoSession(id)) if id == successor.document_id()
+    ));
+    let replied = state
+        .reply(
+            root,
+            &draft("alone"),
+            alice,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
+        .expect("the thread has its session");
+    assert_eq!(replied.reply.document, thread);
+    assert!(replied.copy.is_none());
 }
 
 // --- MURMURE-538 ---
@@ -922,6 +956,7 @@ fn the_reply_on_a_far_copy_loads_down_to_its_root() {
     let (thread, first, _) = threaded(&mut alice, root);
     let old = alice.active_id();
     assert_eq!(alice.seek_root(thread), None, "the root is held");
+    assert!(!alice.is_probe(thread), "a held thread is no probe");
     let found = SeekStep::Found {
         thread,
         segment: old,
@@ -944,12 +979,14 @@ fn the_reply_on_a_far_copy_loads_down_to_its_root() {
     .expect("waits");
     assert_eq!(bob.probe_ready(thread), Ok(()));
     assert!(!bob.holds(thread), "the probe is dropped");
+    assert!(!bob.is_probe(thread));
     assert_eq!(bob.seek_step(), Some(SeekStep::Load(middle)));
     assert_eq!(bob.seek_step(), Some(SeekStep::Wait), "one at a time");
     load(&mut bob, middle, &empty_segment(alice.channel_id()));
     assert_eq!(bob.seek_step(), Some(SeekStep::Load(old)));
     let bytes = alice.snapshot(old.document_id()).expect("bytes");
     load(&mut bob, old, &bytes);
+    assert_eq!(bob.seek_root(thread), None, "the root is held now");
     assert_eq!(bob.seek_step(), Some(found));
     assert_eq!(bob.seek_step(), None, "a found root ends the seek");
     assert_eq!(bob.threads_to_open(), [thread], "the thread opens anew");
@@ -1010,6 +1047,23 @@ fn a_seek_ends_on_what_it_cannot_follow() {
         empty.probe_ready(thread),
         Err(MurmureError::NotHeld(thread))
     );
+}
+
+/// A probe of another thread that fails leaves the seek waiting on its own
+/// probe (`MURMURE-547`).
+#[test]
+fn a_failed_probe_of_another_thread_leaves_the_seek_waiting() {
+    let alice_user = Id::<User>::mint();
+    let mut alice = channel_with(&["root"], alice_user);
+    let root = message_at(&alice, 0).id;
+    let (thread, _, _) = threaded(&mut alice, root);
+    let old = alice.active_id();
+    let (mut bob, _) = far_copy(&alice, Some(old));
+    let other = Id::<Document>::mint();
+    assert_eq!(bob.seek_root(other), Some(other));
+    assert_eq!(bob.seek_root(thread), Some(thread));
+    assert!(bob.cancel_older(other));
+    assert_eq!(bob.seek_step(), Some(SeekStep::Wait));
 }
 
 // --- AUTHOR-026 ---
