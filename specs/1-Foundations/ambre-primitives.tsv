@@ -578,8 +578,9 @@ ambre-canvas | src/tokens.rs | crate::tokens | TokenError::Refused.0 | field | S
 ambre-canvas | src/tokens.rs | crate::tokens | check_scale() | ret | Result<(),String>	generic	an error that echoes the refused scale name
 ambre-canvas | src/tokens.rs | crate::tokens | generate() | ret | Result<Generated,String>	generic	an error that echoes the refused token
 ambre-canvas | src/tokens.rs | crate::tokens | generate(source) | param | &str	free-text	the whole token source text
+ambre-canvas | src/tokens.rs | crate::tokens | on_view() | ret | Result<Px<View>,String>	generic	an error that echoes the refused token length
 ambre-canvas | src/tokens.rs | crate::tokens | outputs() | ret | [(TokenFile,&String);2]	free-text	each generated file, paired with the whole text it must hold
-ambre-canvas | src/tokens.rs | crate::tokens | rust_module() | ret | String	free-text	a whole generated file: the Rust module
+ambre-canvas | src/tokens.rs | crate::tokens | rust_module() | ret | Result<String,String>	generic	a whole generated file, the Rust module, or an error that echoes the refused scale length
 ambre-canvas | src/tokens.rs | crate::tokens | stylesheet() | ret | String	free-text	a whole generated file: the stylesheet
 ambre-canvas | src/view.rs | crate::view | <CellsDrawn as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-canvas | src/view.rs | crate::view | <GlyphMisses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
@@ -3837,6 +3838,8 @@ ambre-canvas | src/space.rs | crate::space | <GlyphRaster as Space>::NAME | cons
 ambre-canvas | src/space.rs | crate::space | <GlyphRaster as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <Parley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-canvas | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <TokenCss as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-canvas | src/space.rs | crate::space | <TokenCss as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/span.rs | crate::span | <Authored as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
