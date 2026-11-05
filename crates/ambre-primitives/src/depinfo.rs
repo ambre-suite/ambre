@@ -6,7 +6,15 @@
 //! each crate it compiles, every file it read. A `#[path]` file, an
 //! `include!` file and the file of a `mod` a macro writes are all there. So
 //! the gate runs each compile of the workspace and holds the walk to that
-//! set:
+//! set.
+//!
+//! The compiles are the lines of the `lint` and `lint-wasm` recipes,
+//! read from the `justfile` and run as written. cargo then finds fresh every
+//! unit the lint built, so the gate reads the dep-info the lint wrote and
+//! compiles nothing again. The clippy configuration and the workspace
+//! manifest are dependencies of each unit clippy lints, read as data.
+//!
+//! The check holds that:
 //!
 //!   * a file that a shipped build of a crate reads is one the walk reads
 //!     from the same crate root. Or a walked file names it as data, with a
@@ -43,67 +51,262 @@ use std::process::Command;
 
 use crate::scan::{NESTED_WORKSPACES, SQLX, Scan, Tree, canonical};
 
-/// Where one compile builds.
+/// The cargo subcommand of one compile line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Target {
-    /// The host, under the flags of `lint`.
-    Host,
-    /// `wasm32-unknown-unknown`, under the flags of `lint-wasm`.
-    Wasm,
+pub(crate) enum Subcommand {
+    Clippy,
+    Check,
 }
 
-/// One `cargo check` of the workspace: its target, and the arguments that
-/// select its packages and its targets.
+impl Subcommand {
+    /// The word cargo takes.
+    fn word(self) -> &'static str {
+        match self {
+            Self::Clippy => "clippy",
+            Self::Check => "check",
+        }
+    }
+}
+
+/// One compile line of a lint recipe, as the `justfile` writes it. The gate
+/// runs it with its flags, its arguments and its tool arguments. cargo then
+/// deems fresh each unit the lint built, and rebuilds none. cargo fingerprints `RUSTFLAGS` and the clippy arguments: a line
+/// that differs in either compiles the workspace a second time.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Compile {
-    pub(crate) target: Target,
-    pub(crate) args: &'static [&'static str],
+    /// The value of the `RUSTFLAGS="..."` prefix, if the line sets one.
+    rustflags: Option<String>,
+    subcommand: Subcommand,
+    /// The arguments before `--`: packages, targets, features, the triple.
+    args: Vec<String>,
+    /// The arguments after `--`, which cargo hands to clippy.
+    tool_args: Vec<String>,
 }
 
-/// Every compile the workspace makes. The host line is the widest one: every
-/// package, every target, every feature. The wasm lines are those of the
-/// `lint-wasm` recipe, which compile the code under `cfg(target_arch)` that
-/// no host build reads. A test holds the two lists equal.
-pub(crate) const COMPILES: &[Compile] = &[
-    Compile {
-        target: Target::Host,
-        args: &["--workspace", "--all-targets", "--all-features"],
-    },
-    Compile {
-        target: Target::Wasm,
-        args: &["--workspace", "--exclude", "ambre-server", "--lib"],
-    },
-    Compile {
-        target: Target::Wasm,
-        args: &["-p", "ambre-trame", "-p", "ambre-toile", "--tests"],
-    },
-    Compile {
-        target: Target::Wasm,
-        args: &["-p", "ambre-prose", "--test", "chrome_panel"],
-    },
-    Compile {
-        target: Target::Wasm,
-        args: &["-p", "ambre-murmure", "--test", "chrome_relay"],
-    },
-    Compile {
-        target: Target::Wasm,
-        args: &["-p", "ambre-logic", "--tests"],
-    },
-    Compile {
-        target: Target::Wasm,
-        args: &["-p", "ambre-app", "--tests"],
-    },
-    Compile {
-        target: Target::Wasm,
-        args: &["-p", "ambre-chrome", "--tests"],
-    },
+impl Compile {
+    pub(crate) fn new(
+        rustflags: Option<String>,
+        subcommand: Subcommand,
+        args: Vec<String>,
+        tool_args: Vec<String>,
+    ) -> Self {
+        Self {
+            rustflags,
+            subcommand,
+            args,
+            tool_args,
+        }
+    }
+
+    /// The line as a refusal prints it, without its flags.
+    fn shown(&self) -> String {
+        let mut words = vec!["cargo", self.subcommand.word()];
+        words.extend(self.args.iter().map(String::as_str));
+        if !self.tool_args.is_empty() {
+            words.push("--");
+            words.extend(self.tool_args.iter().map(String::as_str));
+        }
+        words.join(" ")
+    }
+}
+
+/// The `justfile`, relative to the workspace root.
+pub(crate) const JUSTFILE: &str = "justfile";
+
+/// The recipes whose compile lines the gate runs. `lint` holds the host
+/// line, the widest one: every package and every target. `lint-wasm` holds
+/// the wasm lines, which compile the code under `cfg(target_arch)` that no
+/// host build reads. The gate runs their lines as written, so it reads the
+/// dep-info the lint wrote and compiles nothing the lint compiled.
+pub(crate) const LINT_RECIPES: &[&str] = &["lint", "lint-wasm"];
+
+/// The arguments a compile line may not carry, since each one changes what
+/// the gate reads or how cargo reports it. They name another workspace,
+/// another output directory, a config override that can carry flags, an
+/// unstable option, or a message format the gate sets itself.
+const BANNED_ARGS: &[&str] = &[
+    "--manifest-path",
+    "--target-dir",
+    "--config",
+    "--message-format",
+    "-Z",
 ];
 
-/// The target triple of the wasm compiles.
-const WASM_TRIPLE: &str = "wasm32-unknown-unknown";
+/// The characters a word of a compile line may not hold. Each one asks the
+/// shell or `just` for an expansion, a quote or a redirect. The gate
+/// performs none, so it cannot show it runs the line the lint runs.
+const SHELL_CHARS: &[char] = &[
+    '"', '\'', '`', '$', '\\', ';', '&', '|', '<', '>', '(', ')', '{', '}', '[', ']', '*', '?',
+    '~', '!', '#',
+];
 
-/// The flags of every wasm line of `lint-wasm`, so the check shares their
-/// build.
-const WASM_FLAGS: &str = "-D warnings -C debuginfo=0";
+/// The compile lines of the lint recipes, read from the `justfile` under
+/// `root`. The `justfile` is the one source of the lines: the gate runs
+/// what the lint runs, and no second copy can drift from it.
+pub(crate) fn lint_compiles(tree: &impl Tree, root: &Path) -> Result<Vec<Compile>, Vec<String>> {
+    let Some(text) = tree.read(&root.join(JUSTFILE)) else {
+        return Err(vec![format!(
+            "{JUSTFILE}: the check cannot read it, so it cannot run the compiles of the lint, \
+             and fails closed"
+        )]);
+    };
+    compiles(&text, LINT_RECIPES)
+}
+
+/// The compile lines of each recipe of `names` in the `justfile` text, in
+/// order. The parser reads a narrow grammar and fails closed on any other
+/// line, since the gate must run each line as `just` runs it:
+///
+///   * the recipe header is the name and a colon alone, once at the start of
+///     a line. A parameter or a dependency would run something the gate
+///     does not;
+///   * a body line is indented. It is a `#` comment, a `cargo fmt` line,
+///     which compiles nothing, or a compile line
+///     `[RUSTFLAGS="<flags>"] cargo <clippy|check> <args> [-- <tool args>]`;
+///   * a word of a compile line holds no shell character, and no argument of
+///     `BANNED_ARGS`;
+///   * each recipe holds at least one compile line.
+pub(crate) fn compiles(justfile: &str, names: &[&str]) -> Result<Vec<Compile>, Vec<String>> {
+    let lines: Vec<&str> = justfile.lines().collect();
+    let mut found = Vec::new();
+    let mut errors = Vec::new();
+    for name in names {
+        let header = format!("{name}:");
+        let starts: Vec<usize> = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| {
+                line.split_once(':')
+                    .is_some_and(|(head, _)| head.split_whitespace().next() == Some(*name))
+                    && !line.starts_with(char::is_whitespace)
+            })
+            .map(|(at, _)| at)
+            .collect();
+        let [start] = starts.as_slice() else {
+            errors.push(format!(
+                "{JUSTFILE}: the recipe `{name}` is declared {} times, where the gate reads \
+                 it once, so the check fails closed",
+                starts.len()
+            ));
+            continue;
+        };
+        if lines.get(*start).map(|line| line.trim_end()) != Some(header.as_str()) {
+            errors.push(format!(
+                "{JUSTFILE}:{}: the recipe `{name}` takes a parameter or a dependency, which \
+                 the gate does not run, so the check fails closed: write `{header}` alone",
+                start + 1
+            ));
+            continue;
+        }
+        let before = found.len();
+        let body = lines
+            .iter()
+            .enumerate()
+            .skip(start + 1)
+            .take_while(|(_, line)| line.is_empty() || line.starts_with(char::is_whitespace));
+        for (at, line) in body {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            match compile_line(line) {
+                Ok(Some(compile)) => found.push(compile),
+                Ok(None) => {}
+                Err(why) => errors.push(format!(
+                    "{JUSTFILE}:{}: {why}, so the gate cannot show it runs the line the lint \
+                     runs, and fails closed",
+                    at + 1
+                )),
+            }
+        }
+        if found.len() == before {
+            errors.push(format!(
+                "{JUSTFILE}: the recipe `{name}` holds no compile line, so the check reads \
+                 nothing of it, and fails closed"
+            ));
+        }
+    }
+    if errors.is_empty() {
+        Ok(found)
+    } else {
+        Err(errors)
+    }
+}
+
+/// One body line of a lint recipe, comments set aside. `None` for a
+/// `cargo fmt` line, which compiles nothing.
+fn compile_line(line: &str) -> Result<Option<Compile>, String> {
+    let (rustflags, rest) = match line.strip_prefix("RUSTFLAGS=\"") {
+        Some(quoted) => {
+            let Some((flags, rest)) = quoted.split_once('"') else {
+                return Err("the RUSTFLAGS value has no closing quote".to_owned());
+            };
+            if flags.contains(['$', '\\', '`']) {
+                return Err("the RUSTFLAGS value asks the shell for an expansion".to_owned());
+            }
+            if !rest.starts_with(' ') {
+                return Err("the RUSTFLAGS value runs into the command".to_owned());
+            }
+            (Some(flags.to_owned()), rest)
+        }
+        None => (None, line),
+    };
+    let words: Vec<&str> = rest.split_whitespace().collect();
+    if let Some(word) = words.iter().find(|word| word.contains(SHELL_CHARS)) {
+        return Err(format!(
+            "the word {word:?} holds a character the shell or just would read"
+        ));
+    }
+    let subcommand = match words.as_slice() {
+        ["cargo", "fmt", ..] if rustflags.is_none() => return Ok(None),
+        ["cargo", "clippy", ..] => Subcommand::Clippy,
+        ["cargo", "check", ..] => Subcommand::Check,
+        _ => {
+            return Err(
+                "the line is no `cargo clippy`, `cargo check` or `cargo fmt` line".to_owned(),
+            );
+        }
+    };
+    let rest = words.get(2..).unwrap_or_default();
+    let (args, tool_args) = match rest.iter().position(|word| *word == "--") {
+        Some(at) => (
+            rest.get(..at).unwrap_or_default(),
+            rest.get(at + 1..).unwrap_or_default(),
+        ),
+        None => (rest, &[][..]),
+    };
+    if let Some(word) = args
+        .iter()
+        .find(|word| BANNED_ARGS.iter().any(|banned| word.starts_with(banned)))
+    {
+        return Err(format!(
+            "the argument {word:?} changes what the gate reads, or how cargo reports it"
+        ));
+    }
+    let owned = |words: &[&str]| words.iter().map(|word| (*word).to_owned()).collect();
+    Ok(Some(Compile::new(
+        rustflags,
+        subcommand,
+        owned(args),
+        owned(tool_args),
+    )))
+}
+
+/// The variables `cargo run` sets for the binary it runs, beside each
+/// `CARGO_PKG_*` one. The gate runs the lint lines without them, as `just`
+/// does.
+const RUN_VARS: &[&str] = &[
+    "CARGO_MANIFEST_DIR",
+    "CARGO_MANIFEST_PATH",
+    "CARGO_CRATE_NAME",
+    "CARGO_BIN_NAME",
+    "CARGO_PRIMARY_PACKAGE",
+];
+
+/// The names of the files clippy reads beside the sources: its
+/// configuration, and the manifest of the workspace. Clippy lists them in
+/// the dep-info of each unit it lints.
+const CLIPPY_READS: &[&str] = &["clippy.toml", ".clippy.toml", "Cargo.toml"];
 
 /// Which build of a crate a unit is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -148,39 +351,54 @@ pub(crate) fn collect(
         let mut command = Command::new(cargo);
         command
             .current_dir(&root)
-            .arg("check")
-            .args(compile.args)
+            .arg(compile.subcommand.word())
+            .args(&compile.args)
+            // Neither flag enters a fingerprint, so the units stay fresh.
             .arg("--message-format=json")
             .arg("--quiet")
-            // It overrides `RUSTFLAGS`, so a wasm compile would drop the
-            // flags of `lint-wasm`.
+            // It overrides `RUSTFLAGS`, so a line would drop its own flags.
             .env_remove("CARGO_ENCODED_RUSTFLAGS");
-        if compile.target == Target::Wasm {
-            command
-                .arg("--target")
-                .arg(WASM_TRIPLE)
-                .env("RUSTFLAGS", WASM_FLAGS);
+        // `cargo run` sets these for the gate, and `just lint` runs with none
+        // of them. An inherited `CARGO_MANIFEST_DIR` makes cargo rebuild
+        // units the lint left fresh.
+        for (name, _) in std::env::vars_os() {
+            if name
+                .to_str()
+                .is_some_and(|name| RUN_VARS.contains(&name) || name.starts_with("CARGO_PKG_"))
+            {
+                command.env_remove(name);
+            }
+        }
+        if !compile.tool_args.is_empty() {
+            command.arg("--").args(&compile.tool_args);
+        }
+        if let Some(flags) = &compile.rustflags {
+            command.env("RUSTFLAGS", flags);
         }
         configure(&mut command);
-        let line = compile.args.join(" ");
+        let line = compile.shown();
         let output = match command.output() {
             Ok(output) => output,
             Err(e) => {
-                errors.push(format!("cargo check {line}: cannot run cargo: {e}"));
+                errors.push(format!("{line}: cannot run cargo: {e}"));
                 continue;
             }
         };
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // A lint the line denies fails it as a compile error does: either
+        // way no dep-info is whole, and the gate never passes on it.
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let diagnostics: Vec<String> = stdout.lines().filter_map(error_text).collect();
             let tail: Vec<&str> = stderr.lines().rev().take(20).collect();
             let tail: Vec<&str> = tail.into_iter().rev().collect();
             errors.push(format!(
-                "cargo check {line} fails, so the check cannot read what rustc compiles:\n{}",
+                "{line} fails, so the check cannot read what rustc compiles:\n{}{}",
+                diagnostics.join(""),
                 tail.join("\n")
             ));
             continue;
         }
-        let stdout = String::from_utf8_lossy(&output.stdout);
         let mut named = 0_usize;
         let before = errors.len();
         for message in stdout.lines() {
@@ -193,13 +411,13 @@ pub(crate) fn collect(
                         .extend(unit.reads);
                 }
                 Ok(None) => {}
-                Err(error) => errors.push(format!("cargo check {line}: {error}")),
+                Err(error) => errors.push(format!("{line}: {error}")),
             }
         }
         if named == 0 && errors.len() == before {
             errors.push(format!(
-                "cargo check {line} names no unit of the workspace, so the check reads nothing \
-                 and fails closed"
+                "{line} names no unit of the workspace, so the check reads nothing and fails \
+                 closed"
             ));
         }
     }
@@ -212,6 +430,23 @@ pub(crate) fn collect(
     } else {
         Err(errors)
     }
+}
+
+/// The rendered text of one compiler error that a message of cargo carries,
+/// so a failed line names what failed. `None` for any other message.
+fn error_text(message: &str) -> Option<String> {
+    let value = serde_json::from_str::<serde_json::Value>(message).ok()?;
+    if value.get("reason").and_then(serde_json::Value::as_str) != Some("compiler-message") {
+        return None;
+    }
+    let inner = value.get("message")?;
+    if inner.get("level").and_then(serde_json::Value::as_str) != Some("error") {
+        return None;
+    }
+    inner
+        .get("rendered")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
 }
 
 /// The unit one message of cargo describes, and the `.rs` files it read.
@@ -359,7 +594,12 @@ fn dep_info(output: &Path, writer: Writer) -> Option<PathBuf> {
 /// Every dependency a dep-info file lists, in the order its first rule
 /// lists them. The parser fails closed on any text it cannot read whole:
 ///
-///   * a line is empty, a `#` comment, or a rule `target: dep dep ...`;
+///   * a line is empty, a `#` comment, or a rule `target: dep dep ...`. A
+///     comment names no file: rustc writes `# env-dep:NAME=value` for each
+///     variable a crate reads, and clippy adds its own, `CLIPPY_ARGS` and
+///     `CLIPPY_CONF_DIR`. The files clippy reads, its configuration and the
+///     workspace manifest, are dependencies, which `cross_check` reads as
+///     data;
 ///   * a path holds no `:`, and a backslash only before a space, since
 ///     rustc escapes a space and nothing else. A path that holds a newline
 ///     or a backslash cannot be read back, so its fragments fail here;
@@ -493,7 +733,17 @@ pub(crate) fn cross_check(
         };
         let data = scan.data.get(&unit.root).unwrap_or(&none);
         for file in unit.reads.difference(walked) {
-            if !data.contains(file) {
+            if clippy_config(file, root) {
+                if parses_as_items(tree, file) {
+                    errors.push(format!(
+                        "{}: clippy reads it for the crate root {}, and \
+                         it parses as Rust items. The dep-info does not tell a module from \
+                         data, so the gate cannot show that no `mod` compiles it",
+                        shown(file),
+                        shown(&unit.root)
+                    ));
+                }
+            } else if !data.contains(file) {
                 errors.push(format!(
                     "{}: rustc reads it for the crate root {}, and the walk neither reads it as \
                      a module nor finds a string literal that names it as data, so the gate \
@@ -519,6 +769,17 @@ pub(crate) fn cross_check(
         ));
     }
     errors
+}
+
+/// Whether a file a unit read is one clippy reads: a file of
+/// `CLIPPY_READS` under the workspace root. Clippy lists it in the dep-info
+/// of each unit it lints, so the gate reads it as data, under the parse
+/// guard.
+fn clippy_config(file: &Path, root: &Path) -> bool {
+    file.starts_with(root)
+        && file
+            .file_name()
+            .is_some_and(|name| CLIPPY_READS.iter().any(|read| name == *read))
 }
 
 /// Whether the file is Rust that declares at least one item: the parse
@@ -629,7 +890,7 @@ const UNSTABLE: &[Unstable] = &[Unstable {
 
 /// The recipe files whose command lines set the flags of a build: the
 /// `justfile` and the CI workflow, relative to the workspace root.
-const RECIPES: &[&str] = &["justfile", ".github/workflows/ci.yml"];
+const RECIPES: &[&str] = &[JUSTFILE, ".github/workflows/ci.yml"];
 
 /// The keys whose value cargo passes to rustc or rustdoc as flags.
 const FLAG_KEYS: &[&str] = &["rustflags", "rustdocflags"];

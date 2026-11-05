@@ -3298,9 +3298,30 @@ ambre-primitives | src/secrets.rs | crate::secrets | Seek.krate | field | String
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/depinfo.rs | crate::depinfo | Compile.args | field | &'static[&'static str]	foreign-api	the arguments of the one cargo call a compile runs
-ambre-primitives | src/depinfo.rs | crate::depinfo | WASM_FLAGS | const | &str	foreign-api	the RUSTFLAGS of the one cargo call of each wasm compile
-ambre-primitives | src/depinfo.rs | crate::depinfo | WASM_TRIPLE | const | &str	foreign-api	the target triple of the one cargo call of each wasm compile
+ambre-primitives | src/depinfo.rs | crate::depinfo | BANNED_ARGS | const | &[&str]	generic	the cargo arguments a lint line may not carry, matched against its words
+ambre-primitives | src/depinfo.rs | crate::depinfo | CLIPPY_READS | const | &[&str]	generic	the file names clippy lists in a dep-info beside the sources, matched against each path read
+ambre-primitives | src/depinfo.rs | crate::depinfo | Compile.args | field | Vec<String>	foreign-api	the arguments of the one cargo call a compile runs
+ambre-primitives | src/depinfo.rs | crate::depinfo | Compile.rustflags | field | Option<String>	foreign-api	the RUSTFLAGS of the one cargo call a compile runs
+ambre-primitives | src/depinfo.rs | crate::depinfo | Compile.tool_args | field | Vec<String>	foreign-api	the clippy arguments of the one cargo call a compile runs
+ambre-primitives | src/depinfo.rs | crate::depinfo | Compile::new(args) | param | Vec<String>	foreign-api	the arguments of the one cargo call a compile runs
+ambre-primitives | src/depinfo.rs | crate::depinfo | Compile::new(rustflags) | param | Option<String>	foreign-api	the RUSTFLAGS of the one cargo call a compile runs
+ambre-primitives | src/depinfo.rs | crate::depinfo | Compile::new(tool_args) | param | Vec<String>	foreign-api	the clippy arguments of the one cargo call a compile runs
+ambre-primitives | src/depinfo.rs | crate::depinfo | Compile::shown() | ret | String	free-text	a command line printed in an error message
+ambre-primitives | src/depinfo.rs | crate::depinfo | JUSTFILE | const | &str	generic	the recipe file, relative to the workspace root, whose lint lines the gate runs
+ambre-primitives | src/depinfo.rs | crate::depinfo | LINT_RECIPES | const | &[&str]	generic	the recipe names whose compile lines the gate runs, matched against the justfile
+ambre-primitives | src/depinfo.rs | crate::depinfo | RUN_VARS | const | &[&str]	generic	the environment variables cargo run sets, removed from each compile
+ambre-primitives | src/depinfo.rs | crate::depinfo | SHELL_CHARS | const | &[char]	generic	the characters a lint line may not hold, matched against its words
+ambre-primitives | src/depinfo.rs | crate::depinfo | Subcommand::word() | ret | &'static str	newtype-inner	the word of a closed enum, as cargo takes it
+ambre-primitives | src/depinfo.rs | crate::depinfo | clippy_config() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/depinfo.rs | crate::depinfo | compile_line() | ret | Result<Option<Compile>,String>	free-text	the parsed line, or an error message printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | compile_line(line) | param | &str	generic	a line of the justfile, parsed at once
+ambre-primitives | src/depinfo.rs | crate::depinfo | compiles() | ret | Result<Vec<Compile>,Vec<String>>	free-text	the parsed lines, or error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | compiles(justfile) | param | &str	generic	the text of the justfile, parsed at once
+ambre-primitives | src/depinfo.rs | crate::depinfo | compiles(names) | param | &[&str]	generic	the recipe names to read, matched against the justfile
+ambre-primitives | src/depinfo.rs | crate::depinfo | error_text() | ret | Option<String>	free-text	a compiler error printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | error_text(message) | param | &str	generic	a line of JSON cargo prints, parsed at once
+ambre-primitives | src/depinfo.rs | crate::depinfo | lint_compiles() | ret | Result<Vec<Compile>,Vec<String>>	free-text	the parsed lines, or error messages printed to the terminal
+ambre-primitives | src/main.rs | crate | Verdict::word() | ret | &'static str	free-text	a word of the summary line printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | artifact() | ret | Result<Option<Unit>,String>	free-text	error messages printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | artifact(message) | param | &str	generic	a line of JSON cargo prints, parsed at once
 ambre-primitives | src/depinfo.rs | crate::depinfo | collect() | ret | Result<Compiled,Vec<String>>	free-text	error messages printed to the terminal
