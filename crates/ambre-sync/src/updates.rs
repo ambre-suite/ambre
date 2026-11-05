@@ -3625,13 +3625,28 @@ mod tests {
                 .collect()
         };
 
+        let messages = |events: &[LogicEvent]| -> Vec<String> {
+            events
+                .iter()
+                .filter_map(|e| match e {
+                    LogicEvent::SegmentFinalizeFailed { message, .. } => Some(message.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        // A settled copy seals its snapshot, and stops only for want of a
+        // relay on this transport.
+        let _ = drain(&rx);
+        finalize(&state);
+        assert_eq!(messages(&drain(&rx)), ["no relay on this transport"]);
+
         state.handle_send_update(doc, b"a".to_vec());
         let sent = signatures(&drain_ws(&ws_rx));
         let _ = drain(&rx);
         finalize(&state);
         assert_eq!(
-            ends(&drain(&rx)),
-            vec![ambre_core::FinalizeEnd::Failed],
+            messages(&drain(&rx)),
+            ["an edit is unanswered"],
             "it waits for the echo"
         );
 

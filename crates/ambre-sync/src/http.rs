@@ -2137,6 +2137,14 @@ mod tests {
     use super::scripted::{Scripted, renewed, session};
     use super::*;
 
+    /// A URL prints its kind and its text, and a failure its text alone.
+    #[test]
+    fn a_url_and_a_failure_print_what_a_log_reads() {
+        let url = Url::<RelayHost>::new("https://relay.test".to_owned());
+        assert_eq!(format!("{url:?}"), r#"RelayHost("https://relay.test")"#);
+        assert_eq!(Failed::local("down".to_owned()).to_string(), "down");
+    }
+
     /// The refusal of a `GET` or a `POST`, as the relay's answer builds it.
     fn refusal(method: &str, url: &str, status: u16, code: Option<RefusalCode>) -> HttpError {
         let method = if method == "GET" {
@@ -2483,6 +2491,58 @@ mod tests {
             2,
             "no replay without a token"
         );
+    }
+
+    /// The links of a chain read in order, and one that does not decode is
+    /// dropped: the walk stops before it.
+    #[test]
+    fn the_links_of_a_chain_read_in_order_and_drop_an_unreadable_one() {
+        let document_id = Id::<Document>::mint();
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[7; 32]);
+        let keys: Vec<_> = (0..3)
+            .map(|_| ambre_crypto::DocumentKey::generate())
+            .collect();
+        let links: Vec<_> = keys
+            .windows(2)
+            .map(|pair| {
+                crate::pipeline::seal_link(document_id, &pair[0], &pair[1], &signing_key)
+                    .expect("seal")
+            })
+            .collect();
+        let mut texts: Vec<_> = links
+            .iter()
+            .map(|l| encode_link(l).expect("encode"))
+            .collect();
+        texts.insert(1, ambre_core::Encoded::new(b"not a link".to_vec()));
+        let read = decode_links(KeyLinksResponse { links: texts });
+        assert_eq!(read, links);
+    }
+
+    /// An upload to a presigned link carries the sealed bytes whole, as
+    /// octets, and nothing else (`SYNC-049`).
+    #[tokio::test]
+    async fn an_upload_carries_the_sealed_blob_as_its_body() {
+        let link = ambre_core::Credential::<ambre_core::PresignedUrl>::new(
+            "https://store.test/bucket/object".to_owned(),
+        );
+        let blob = crate::pipeline::object_blob(
+            &ambre_core::Payload::new(b"media".to_vec()),
+            &ambre_core::Aad::of(b"aad"),
+            &ambre_crypto::DocumentKey::generate(),
+            &ed25519_dalek::SigningKey::from_bytes(&[7; 32]),
+        )
+        .expect("seal");
+        let store = Scripted::new([Ok((200, serde_json::json!({})))]);
+        put_sealed_via(&store, &link, &blob).await.expect("stored");
+        let sent = store.sent.borrow();
+        let [request] = sent.as_slice() else {
+            panic!("one request");
+        };
+        assert_eq!(request.method, Method::Put);
+        assert!(request.bearer.is_none(), "the link is its own credential");
+        let (kind, body) = request.body.as_ref().expect("a body");
+        assert_eq!(*kind, ContentType::Octets);
+        assert_eq!(body.as_bytes(), blob.to_body().as_bytes());
     }
 
     /// A presigned link is its own credential. A failed upload or download

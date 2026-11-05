@@ -86,5 +86,11 @@ exclude_re = [
     '<impl MediaHttp for GlooHttp>',
     '<impl ShareHttp for GlooHttp>',
     '<impl Transport for Fetch>',
+    # The renewal and the revoke over `Fetch`: their `_via` twins hold the
+    # logic, and host tests drive those through the scripted transport.
+    'replace AuthContext::(refresh|revoke) -> Result<\(\), HttpError> with Ok\(\(\)\)',
+    # The request helpers bound to `Fetch`: each hands its request to a
+    # `_via` twin, or to `exchange`, that host tests drive in its place.
+    'http\.rs:.*replace (get_json_opt_auth|download_snapshot|delete_auth|put_sealed|patch_json_auth|delete_json_auth|put_json_auth|post_json_auth_ok|fetch_bytes|fetch_key_links) -> ',
     'Method::gloo',
 ]

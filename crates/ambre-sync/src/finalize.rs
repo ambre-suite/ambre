@@ -183,6 +183,24 @@ mod tests {
     use crate::http::scripted::{Scripted, session};
     use ambre_core::{Ms, TimeSpan};
 
+    /// `SYNC-183`: with no relay, a finalize lease request answers its
+    /// failure at once.
+    #[test]
+    fn a_finalize_lease_with_no_relay_answers_its_failure_at_once() {
+        let (sink, rx) = crate::LogicSink::channel();
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let (channel_id, segment) = (Id::<Channel>::mint(), Id::<Segment>::mint());
+        state.handle_take_finalize_lease(channel_id, segment);
+        assert!(matches!(
+            rx.try_iter().collect::<Vec<_>>().as_slice(),
+            [LogicEvent::SegmentFinalizeFailed { segment: failed, end: ambre_core::FinalizeEnd::Failed, .. }]
+                if *failed == segment
+        ));
+    }
+
     const BASE: &str = "https://relay.test";
 
     /// The root the calls under test reach, under [`BASE`].

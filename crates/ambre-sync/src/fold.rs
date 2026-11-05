@@ -145,6 +145,35 @@ mod tests {
     use crate::updates::{Vouch, send_vouch};
     use ambre_core::{Ms, TimeSpan};
 
+    /// `SYNC-183`: with no relay, a fold lease request and a fold of a
+    /// segment not open each answer the fold's failure at once.
+    #[test]
+    fn a_fold_with_no_relay_answers_its_failure_at_once() {
+        let (sink, rx) = crate::LogicSink::channel();
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let (channel_id, segment) = (Id::<Channel>::mint(), Id::<Segment>::mint());
+        state.handle_take_fold_lease(channel_id, segment);
+        let reach = FoldReach {
+            lease: Id::<Lease>::mint(),
+            amendments_seq: Seq::<Relay>::new(1),
+        };
+        let payload = ambre_core::Payload::new(b"s".to_vec());
+        state.handle_fold_segment(channel_id, segment, reach, Seq::<Relay>::new(1), &payload);
+        let failed: Vec<_> = rx
+            .try_iter()
+            .filter_map(|event| match event {
+                LogicEvent::SegmentFoldFailed {
+                    segment: failed, ..
+                } => Some(failed),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(failed, [segment, segment]);
+    }
+
     const BASE: &str = "https://relay.test";
 
     /// The root the calls under test reach, under [`BASE`].
