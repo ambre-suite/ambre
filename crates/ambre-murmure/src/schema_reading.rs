@@ -29,6 +29,7 @@
 //! not reach fails [`every_declared_key_has_a_reading`]. The scenario is the
 //! shape belt's, so the two belts read the same documents.
 
+use ambre_core::crdt::CrdtName;
 use std::collections::{BTreeSet, HashMap};
 
 use ambre_bus::{MentionTarget, Notice, StyleMark, TextStyle};

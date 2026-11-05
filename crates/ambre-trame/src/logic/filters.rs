@@ -277,7 +277,7 @@ impl TrameState {
             kind: kind.clone(),
         };
         let bytes = postcard::to_allocvec(&record).unwrap_or_default();
-        let _ = Fields::<FilterKey>::of(filters).insert(FilterKey::Active, bytes);
+        let _ = Fields::<FilterKey>::new(filters).insert(FilterKey::Active, bytes);
     }
 
     /// The active filter: the stored definition, when its column still exists
@@ -300,7 +300,7 @@ impl TrameState {
             return None;
         };
         let Some(LoroValue::Binary(bytes)) =
-            FieldValues::<FilterKey>::of(&filters).get(FilterKey::Active)
+            FieldValues::<FilterKey>::new(&filters).get(FilterKey::Active)
         else {
             return None;
         };

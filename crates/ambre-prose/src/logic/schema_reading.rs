@@ -29,6 +29,7 @@
 
 use ambre_bus::app::prose::{DocChar, FootnoteCall};
 use ambre_core::Rgba;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Ordinal, PrintLength, Pt};
 use std::collections::BTreeSet;
@@ -815,7 +816,7 @@ fn a_reader_moving_moves_the_reading() {
     // rewriting what it reads, on the reader's copy alone.
     let misread = reopened(&state);
     let page = doc::map_read(&doc::meta(&misread.doc), doc::MetaKey::Page)
-        .map(doc::Fields::of)
+        .map(doc::Fields::new)
         .expect("the document carries a page");
     page.insert(doc::PageKey::WidthMm, 210.0 * 25.4)
         .expect("the register takes a value");

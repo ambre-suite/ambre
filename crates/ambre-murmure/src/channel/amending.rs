@@ -419,7 +419,7 @@ impl ChannelState {
         let (doc, session) = held.session()?;
         let root = crate::schema::root_map(doc, Root::Amendments);
         let key = message.to_string();
-        let entry = Fields::<AmendmentKey>::of(match root.get(&key) {
+        let entry = Fields::<AmendmentKey>::new(match root.get(&key) {
             Some(ValueOrContainer::Container(Container::Map(entry))) => entry,
             _ => root.insert_container(&key, LoroMap::new())?,
         });

@@ -291,7 +291,7 @@ mod tests {
         let doc = LoroDoc::new();
         let elements = doc.get_map(Root::Elements.as_str());
         for i in 0..24 {
-            let em = Fields::<ElementKey>::of(
+            let em = Fields::<ElementKey>::new(
                 elements
                     .insert_container(&format!("e{i}"), loro::LoroMap::new())
                     .expect("seed"),
