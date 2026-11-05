@@ -441,10 +441,8 @@ impl ChannelState {
             asked: None,
             trail: Trail::Open,
         });
-        if self.root_naming(thread).is_some()
-            || self.is_thread(thread)
-            || self.threads_pending.contains_key(&thread)
-        {
+        // `is_thread` counts a thread still arriving, a probe among them.
+        if self.root_naming(thread).is_some() || self.is_thread(thread) {
             return None;
         }
         self.threads_pending.insert(thread, Pending::probe());
