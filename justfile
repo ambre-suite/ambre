@@ -191,6 +191,16 @@ test-browser:
     cargo build -p ambre-server
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt --features browser -- --test-threads=1
 
+# The browser tier on Firefox: the same belt, driven by headless Firefox
+# through geckodriver (`GECKODRIVER`, `BELT_FIREFOX`). A test that pauses a
+# worker through the DevTools Protocol is ignored there. Headless Firefox on
+# Linux makes its WebGL2 context through an X display, so without `DISPLAY`
+# the run takes a virtual one from `xvfb-run`.
+test-browser-firefox:
+    trunk build
+    cargo build -p ambre-server
+    if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1
+
 # `cargo test` runs each wasm test module through `wasm-bindgen-test-runner`,
 # named as the target's runner; the pinned nightly + rust-src
 # (rust-toolchain.toml) supply `-Z build-std`. The runner must be the version of

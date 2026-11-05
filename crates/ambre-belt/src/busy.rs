@@ -54,6 +54,10 @@ mod tests {
         not(feature = "browser"),
         ignore = "needs a build and chromedriver; run just test-browser"
     )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "pauses a worker through the DevTools Protocol, which Firefox does not speak"
+    )]
     async fn a_full_queue_reaches_the_user_as_a_busy_notice() {
         let page = Page::new_document("trame").await;
         // A running Logic thread drains as fast as the keys come.
