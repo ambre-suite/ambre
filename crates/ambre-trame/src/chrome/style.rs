@@ -160,7 +160,10 @@ impl StyleState {
 
 /// Mirror a [`TrameEvent::StyleApplied`] into the toolbar's [`StyleState`]. A
 /// no-op for any other event; the launcher calls it for every event it relays.
-pub fn apply_style_event<S: Embed<TrameEvent>>(s: &StyleState, ev: &UiEvent<S>) {
+pub fn apply_style_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
+    s: &StyleState,
+    ev: &UiEvent<S, P>,
+) {
     if let Some(TrameEvent::StyleApplied {
         style,
         bold,

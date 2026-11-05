@@ -79,7 +79,7 @@ impl ToileRelay {
     }
 
     /// Fill the chrome from `ev`. Any event not Toile's is a no-op.
-    pub fn absorb<S: Embed<ToileEvent>>(&self, ev: &UiEvent<S>) {
+    pub fn absorb<S: Embed<ToileEvent>, P: ambre_bus::ChannelPlane>(&self, ev: &UiEvent<S, P>) {
         let Some(te) = ev.viewport_event::<ToileEvent>() else {
             return;
         };

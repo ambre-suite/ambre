@@ -15,6 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
+| `architecture` | How the client is split, and why. | implemented | 69 | 9 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
@@ -25,6 +26,7 @@
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 18 |  |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 35 |  |
+| `message-bus` | The contract the three threads talk over. | implemented | 32 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 27 |  |
@@ -35,7 +37,6 @@
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 |  |
-| `architecture` | How the client is split, and why. | partial | 69 | 9 |
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 28 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 27 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 19 |  |
@@ -44,7 +45,6 @@
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 21 | 1 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 29 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 27 |  |
-| `message-bus` | The contract the three threads talk over. | partial | 32 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 18 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 14 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 17 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 18 implemented, 23 partial, 5 design-only. 1158 contract rows, 11 loose.**
+**46 features: 20 implemented, 21 partial, 5 design-only. 1158 contract rows, 11 loose.**

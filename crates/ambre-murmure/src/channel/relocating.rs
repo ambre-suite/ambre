@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Deletion, Mention, MessageDraft, MessageView, MurmureEvent, Notice};
+use crate::message::{Deletion, Mention, MessageDraft, MessageView, MurmureEvent, Notice};
 use ambre_core::id::{Channel, Document, Id, Message, Segment};
 use loro::{LoroDoc, LoroMap, LoroText, VersionVector};
 

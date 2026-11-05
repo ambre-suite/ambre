@@ -8,7 +8,8 @@
 //! for messages of its own segment, each written by their author
 //! (`MURMURE-013`, `MURMURE-253`).
 
-use ambre_bus::{Authored, Deletion, Instant, MessageDraft, MessageView, MurmureEvent, ThreadHead};
+use crate::message::{Deletion, MessageDraft, MessageView, MurmureEvent, ThreadHead};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq};
 use loro::{
@@ -501,12 +502,12 @@ pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channe
             view.mentions.clear();
             view.styles.clear();
             view.attachments.clear();
-            view.deleted = ambre_bus::Deletion::Deleted;
+            view.deleted = crate::message::Deletion::Deleted;
         } else if let Some(content) = entry_content(&entry) {
             view.text = content.to_string();
             view.mentions = mention::read(&content, channel);
             view.styles = style::read(&content);
-            view.edited = ambre_bus::Revision::Edited;
+            view.edited = crate::message::Revision::Edited;
         }
     }
 }
@@ -521,7 +522,7 @@ fn overlay_named_threads(amendments: &LoroDoc, messages: &mut [MessageView]) {
     for view in messages.iter_mut().filter(|view| view.thread.is_none()) {
         view.thread = recorded_thread(amendments, view.id).map(|document| ThreadHead {
             document,
-            replies: ambre_core::Count::<ambre_bus::Replies>::ZERO,
+            replies: ambre_core::Count::<crate::message::Replies>::ZERO,
             last_replier: None,
         });
     }

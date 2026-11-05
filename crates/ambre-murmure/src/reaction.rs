@@ -7,7 +7,8 @@
 //! reacting with one emoji at once write two keys, and both stay
 //! (`MURMURE-007`).
 
-use ambre_bus::{Emoji, Reaction};
+use crate::message::Reaction;
+use ambre_bus::Emoji;
 use ambre_core::Byte;
 use ambre_core::id::{Id, User};
 use ambre_core::index::Len;

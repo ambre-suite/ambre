@@ -233,6 +233,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_signal_types(errors)
             cb.check_bus_ids(errors)
             cb.check_message_crdt(errors)
+            cb.check_bus_vocabulary(errors)
             cb.check_wire_ids(errors)
             cb.check_typed_answers(errors)
             cb.check_bench_frame_rate(errors)
@@ -1026,6 +1027,18 @@ class CrateBoundaries(unittest.TestCase):
             (root / cb.BUS / "lib.rs").unlink()
             errors = self.run_checks(root)
         self.assertTrue(any("identifier boundary reads nothing" in e for e in errors), errors)
+
+    def test_an_application_message_declared_in_the_bus_is_refused(self):
+        text = "pub enum TrameCommand {\n    Undo,\n}\n"
+        errors = self.breach(f"{cb.BUS}/app/trame.rs", text)
+        self.assertTrue(any("declares an application's message" in e for e in errors), errors)
+
+    def test_an_envelope_or_a_test_enum_in_the_bus_stays_free(self):
+        text = (
+            "pub enum LogicCommand<A> {\n    App(A),\n}\npub enum RestEvent {\n    Done,\n}\n"
+            "#[cfg(test)]\nmod tests {\n    pub enum ProbeCommand {\n        Go,\n    }\n}\n"
+        )
+        self.assertEqual(self.breach(f"{cb.BUS}/logic.rs", text), [])
 
     def test_a_message_naming_a_crdt_handle_is_refused(self):
         for text in (

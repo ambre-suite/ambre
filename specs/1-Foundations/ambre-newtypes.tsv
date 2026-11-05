@@ -2,7 +2,7 @@
 # One line per hand-written single-field newtype over an integer, a float, a String or a Vec<u8>,
 # with the reason no generic family of ambre-core fits it. Add a line by hand only; a reviewer reads it.
 key	reason
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition | u32	a rank in a space's catalogue: it orders, ties broken by id, and counts and addresses nothing. Zero is a rank, so it is no Ordinal, and no issuer hands it out, so it is no Seq
+ambre-murmure | src/message/mod.rs | crate::message | CatalogPosition | u32	a rank in a space's catalogue: it orders, ties broken by id, and counts and addresses nothing. Zero is a rank, so it is no Ordinal, and no issuer hands it out, so it is no Seq
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, and they would have to move into core. Its serde is the derived Vec<u8>, which the base64 of Encoded would change
 ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple | f32	a ratio that is finite and above zero, checked where it is built
 ambre-prose | src/message/mod.rs | crate::message | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root

@@ -34,7 +34,7 @@ fn listing(key: SealedChannelKey) -> Listing<'static> {
     Listing {
         topic: None,
         category: None,
-        position: ambre_bus::CatalogPosition::new(3),
+        position: crate::message::CatalogPosition::new(3),
         key,
     }
 }
@@ -144,7 +144,7 @@ fn a_listed_channel_carries_its_name_topic_category_position_and_key() {
         .put_category(
             category,
             &crate::fit_name("Teams"),
-            ambre_bus::CatalogPosition::new(1),
+            crate::message::CatalogPosition::new(1),
         )
         .expect("category");
     let public = channel(ChannelType::Public, "budget");
@@ -155,7 +155,7 @@ fn a_listed_channel_carries_its_name_topic_category_position_and_key() {
             &Listing {
                 topic: Some(&figures),
                 category: Some(category),
-                position: ambre_bus::CatalogPosition::new(2),
+                position: crate::message::CatalogPosition::new(2),
                 key: sealed(7),
             },
         )
@@ -166,7 +166,7 @@ fn a_listed_channel_carries_its_name_topic_category_position_and_key() {
     assert_eq!(entry.name.as_str(), "budget");
     assert_eq!(entry.topic, Some(figures));
     assert_eq!(entry.category, Some(category));
-    assert_eq!(entry.position, ambre_bus::CatalogPosition::new(2));
+    assert_eq!(entry.position, crate::message::CatalogPosition::new(2));
     assert_eq!(space.sealed_key(public.channel_id()), Ok(sealed(7)));
     let [category_view] = space.categories().try_into().expect("one category");
     assert_eq!(category_view.name.as_str(), "Teams");
@@ -184,7 +184,7 @@ fn an_unset_topic_and_category_are_absent_keys() {
             &Listing {
                 topic: None,
                 category: None,
-                position: ambre_bus::CatalogPosition::new(0),
+                position: crate::message::CatalogPosition::new(0),
                 key: sealed(1),
             },
         )
@@ -208,7 +208,7 @@ fn an_unnamed_channel_lists_with_no_name_key() {
             &Listing {
                 topic: None,
                 category: None,
-                position: ambre_bus::CatalogPosition::new(0),
+                position: crate::message::CatalogPosition::new(0),
                 key: sealed(1),
             },
         )
@@ -262,7 +262,7 @@ fn a_reseal_replaces_the_key_and_nothing_else() {
         .put_category(
             category,
             &crate::fit_name("Teams"),
-            ambre_bus::CatalogPosition::new(1),
+            crate::message::CatalogPosition::new(1),
         )
         .expect("category");
     let (budget, general) = (
@@ -277,7 +277,7 @@ fn a_reseal_replaces_the_key_and_nothing_else() {
                 &Listing {
                     topic: Some(&figures),
                     category: Some(category),
-                    position: ambre_bus::CatalogPosition::new(2),
+                    position: crate::message::CatalogPosition::new(2),
                     key: sealed(1),
                 },
             )

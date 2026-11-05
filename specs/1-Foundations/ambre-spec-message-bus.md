@@ -26,9 +26,9 @@ prefix is `BUS`.
 | `BUS-006` | `INV` | The document registry MUST stay flat: an embedded child MUST be addressed by its own identity, in one lookup. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-084` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` -- each seeds a parent and a child side by side and asserts the child's role decides, which only holds if the child is its own entry | none | verified |
 | `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_bus::host::the_ui_to_logic_path_carries_nothing_an_encoder_takes` -- `LogicCommand` and `UiEvent` implement no `Serialize`, whatever they carry; `ambre_logic::app::tests::the_sums_on_the_ui_to_logic_path_carry_nothing_an_encoder_takes` -- nor do the two sums they carry | none | verified |
 | `BUS-029` | `INV` | A message field that carries an identifier MUST carry a type of its own, never a bare string or integer. | this spec section 2; `ai/ambre-rust-style.md`; `UI-THREAD-060`, the same rule for a shell signal | ci-gate -- `scripts/crate_boundaries.py` refuses an `id`, `*_id` or `*_ids` field of a bare primitive type in `ambre-bus` above its tests; type-level -- the sheet, filter view, conditional format and paragraph style ids each carry a newtype, so a swapped name and id fail to compile | none | verified |
-| `BUS-032` | `INV` | An application's content commands and events MUST be declared in that application's crate, never in the crate that carries the envelopes. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-018` | not built | unbuilt -- lands with the `Each application owns its message vocabulary` Story (`ambre-roadmap.md` E8). Trame's vocabulary lives in `ambre-trame`, Toile's in `ambre-toile` and Prose's in `ambre-prose`, behind the generic envelopes. The command and event enums of Murmure, and their value types, still sit under `ambre-bus/src/app/` | unimplemented |
-| `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | exhaustive-match -- `LogicCommand::Channel` carries a `MurmureCommand`, a closed enum matched in `ambre_logic::channels::handle_channel_command`, so a new command does not build until its arm is written; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` | none | verified |
-| `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | type-level -- `LogicCommand::Channel` and `UiEvent::Channel` hold a typed `MurmureCommand` and `MurmureEvent`, and no `SyncCommand` or `LogicEvent` variant names a channel message: a channel delta is the `SendUpdate` of its document | none | verified |
+| `BUS-032` | `INV` | An application's content commands and events MUST be declared in that application's crate, never in the crate that carries the envelopes. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-018` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a command or event enum of `ambre-bus` other than the four envelopes and the service family, above its tests; type-level -- `LogicCommand` and `UiEvent` take the document command and event as a parameter and the channel types through a `ChannelPlane`, so the bus names none of an application's | none | verified |
+| `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | exhaustive-match -- `LogicCommand::Channel` carries the `Murmure` plane's `MurmureCommand`, a closed enum matched in `ambre_logic::channels::handle_channel_command`, so a new command does not build until its arm is written; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` | none | verified |
+| `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | type-level -- `LogicCommand::Channel` and `UiEvent::Channel` hold the typed `MurmureCommand` and `MurmureEvent` of the `Murmure` plane, and no `SyncCommand` or `LogicEvent` variant names a channel message: a channel delta is the `SendUpdate` of its document | none | verified |
 
 ### 1.2 The interface sends a command
 
@@ -76,18 +76,17 @@ is what a full queue means.
 | `BUS-031` | `POST` | A fixed-width byte value -- a key, a nonce, a signature, a digest -- MUST cross the worker hop as its bytes in order, with no length prefix. | this spec section 2; `BUS-003` | `ambre_core::fixed_bytes::tests::a_binary_format_writes_the_bytes_with_no_length_prefix` -- a 64-byte value between two bytes of a frame encodes as those 64 bytes alone, reads back, and a frame one byte short is refused; type-level -- every fixed-width value is a `FixedBytes<R>`, whose one hand-written serde writes that form | none | verified |
 | `BUS-025` | `POST` | An event from the Sync worker MUST reach the Logic thread in arrival order. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order`; `::a_backlog_never_lets_a_new_value_overtake_a_held_one` | none | verified |
 | `BUS-026` | `POST` | An event from the Sync worker MUST NOT be dropped on a full queue. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order` | none | verified |
-| `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path into the application module of `ambre-bus`, or an app command or event, in `ambre-sync` above its tests; cargo-deny -- `deny.toml` grants `loro` to the application crates, and the CI `deny` job fails a worker that takes it; `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- the bytes come back identical | none | verified |
+| `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path into the application module of `ambre-bus`, or an app command or event, in `ambre-sync` above its tests, and the worker depends on no crate that declares an application message (`ARCH-069`); cargo-deny -- `deny.toml` grants `loro` to the application crates, and the CI `deny` job fails a worker that takes it; `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- the bytes come back identical | none | verified |
 
 * **Budget.** two rows of `ambre-spec-budgets.md section 1`: the queue send and receive at
   < 1 us, and the Logic to Sync `postMessage` hop at < 1 ms. Neither is measured.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 31 `verified`, 1 `unimplemented`. Host tests drive the Logic dispatcher: an
-  unknown document, a viewer's edit, a child's role. They also drive a service round trip, a late
-  response, the lossy gate and a full queue. Native views drive the input gate, the re-offer and the
-  refused commit. A gate refuses a handler that sends on a queue, and the browser tier reads the
-  busy notice.
+* **Verification.** 32 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
+  viewer's edit, a child's role. They also drive a service round trip, a late response, the lossy
+  gate and a full queue. Native views drive the input gate, the re-offer and the refused commit. A
+  gate refuses a handler that sends on a queue, and the browser tier reads the busy notice.
 ---
 
 ## 2. MODEL
@@ -115,9 +114,9 @@ travels towards the downstream worker and an `Event` always flows back.
 | shared service plane | `RestCommand` / `RestEvent` / `Request` | `rest.rs` | 31 / 34 |
 
 ```rust
-pub enum LogicCommand<A = Infallible> {
+pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
     App { document_id: Id<Document>, command: A },   // content, the view's own command
-    Channel { channel_id: Id<Channel>, command: MurmureCommand }, // content, a channel
+    Channel { channel_id: Id<Channel>, command: P::Command }, // content, a channel
     Rest { id: Seq<Request>, cmd: RestCommand },     // service, relayed
     OpenDocument { document_id: Id<Document>, doc_type: DocType },
     // control and local restore variants, one per fire-and-forget operation
@@ -126,6 +125,7 @@ pub enum Request {}  // a family of `ambre_core::Seq`; `None` answers no request
 // in `ambre-logic`, downstream of every application:
 pub enum AppCommand { Trame(TrameCommand), Toile(ToileCommand), Prose(ProseCommand) }
 pub enum AppEvent { Trame(TrameEvent), Toile(ToileEvent), Prose(ProseEvent) }
+pub type LogicCommand = ambre_bus::LogicCommand<AppCommand, Murmure>;
 ```
 
 The four envelopes and the service family are the contract. The variant lists are not restated
@@ -156,9 +156,15 @@ application.
 
 A view holds a `Port` and an `Inbox` typed by its own vocabulary. The launcher builds them over the
 shared queues: `Embed` wraps a view's command into the sum, and unwraps its events. So the Sync
-worker builds against no application's vocabulary (`ARCH-069`). Trame's vocabulary
-has moved to `ambre-trame`, Toile's to `ambre-toile` and Prose's to `ambre-prose`. Murmure's content
-types still sit in the `app/` module of `ambre-bus`, re-exported flat at its root.
+worker builds against no application's vocabulary (`ARCH-069`).
+
+**Murmure's content rides a channel plane.** Its commands and events are addressed to a channel or
+a space, never to a document (`BUS-027`), so they keep variants of their own. The envelopes take
+their types through a second parameter, a `ChannelPlane` whose associated types the `Murmure`
+marker fixes. Every other sender carries `NoChannels`, whose types are uninhabited. `PlaneOf`
+embeds a view's plane into the launcher's, as `Embed` does for the document command. What stays
+in `ambre-bus` is shared by nature: the grid, the find query, and the channel types of the service
+plane, which the worker reads.
 
 **The role gate.** Each open document carries this client's role on **that** document. The
 dispatcher drops a mutating command when the role is not writable (`BUS-007`). A freshly opened
@@ -229,6 +235,8 @@ The bus has no control of its own. What a user meets is what it does under load.
 | The registry is flat and nesting is a view concern | a tree of documents, with a child reached through its parent | it needs a depth bound, an unwrapping path and a rule for a cycle. A flat map needs one lookup, and the nesting the user sees is the view owning a child view |
 | The role gate is comfort, and the relay stays the authority | trusting the client gate | the client is the attacker's own machine, so a gate there proves nothing |
 | The role gate is comfort, and the relay stays the authority | offering every edit and letting the relay refuse | the interface would offer an edit the relay rejects, and the user learns it after the act rather than before |
+| Murmure's content rides a second parameter, a channel plane | folding the channel and space variants into the document parameter `A` | `App` is addressed to a document, and a channel is several (`BUS-027`). The role gate and the lossy class reason per document, so every channel site and both gates would be rewritten |
+| Murmure's content rides a second parameter, a channel plane | a Murmure sum in the Logic runtime, carried by the existing variants | the envelope would still need a parameter to name it, and every channel site would wrap and unwrap a sum of one application |
 | A view's own command is embedded into the sum on the one UI to Logic queue | one queue per application into the Logic thread, each typed by that application's command | the launcher's own commands and a view's commands would travel on two queues, and nothing would order them. A close sent after an edit could overtake it, which is the loss `ARCH-019` forbids |
 | Nothing is encoded between the UI and the Logic threads | one encoding for every hop, so that all four queues look alike | that path carries scroll and typing, where latency is the whole budget, and the two threads share one heap. Encoding it would buy isolation the crate graph already gives |
 | The envelopes group by direction, the content plane by application | grouping every type by direction, including the per-application value types | a document type's command and its event share the whole value vocabulary, so splitting them by direction scatters each application over two modules. An envelope belongs to one hop, which is why direction is the right axis for it and the wrong one below it |
@@ -250,7 +258,8 @@ The bus has no control of its own. What a user meets is what it does under load.
   first held command, so reaching the bound takes a saturation no test has produced.
 * **A channel is not a document, so it has its own content variant.** `AppCommand` is addressed to
   one document, and a channel is several (`MURMURE-021`). `LogicCommand::Channel` carries its
-  commands, and a channel delta leaves as the `SendUpdate` of the document it names.
+  commands through the `Murmure` plane, and a channel delta leaves as the `SendUpdate` of the
+  document it names.
 * **Nothing bounds how long a service request may stay outstanding.** A request whose answer never
   arrives leaves its route recorded, and nothing times it out.
 

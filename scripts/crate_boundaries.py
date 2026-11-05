@@ -584,7 +584,13 @@ APP_MESSAGES = (
     "crates/ambre-trame/src/message",
     "crates/ambre-toile/src/message",
     "crates/ambre-prose/src/message",
+    "crates/ambre-murmure/src/message",
 )
+# The command and event enums ambre-bus may declare: the four envelopes and the
+# service family they carry. An application's own lives in its crate
+# (`BUS-032`), so the Sync worker builds against none (`ARCH-069`).
+BUS_ENVELOPES = {"LogicCommand", "UiEvent", "SyncCommand", "LogicEvent", "RestCommand", "RestEvent"}
+BUS_MESSAGE_ENUM = re.compile(r"\bpub\s+enum\s+(\w*(?:Command|Event))\b")
 # A document handle of the CRDT engine, by path or by name. A message carries
 # bytes, so the payload newtype `LoroPayload` is no handle (`PROSE-001`).
 MESSAGE_CRDT = re.compile(r"\bloro\s*::|\bLoro(?!Payload\b)\w+")
@@ -1839,6 +1845,24 @@ def typed_fields(line: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def check_bus_vocabulary(errors: list[str]) -> int:
+    """`BUS-032`, `ARCH-069`: ambre-bus declares no application's commands or
+    events.
+
+    Above its tests, every command or event enum of the bus is an envelope or
+    the service family. An application's enum declared there would reach the
+    Sync worker, which depends on the bus.
+    """
+    files = sorted((ROOT / BUS).rglob("*.rs"))
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            found = BUS_MESSAGE_ENUM.search(line)
+            if found and found.group(1) not in BUS_ENVELOPES:
+                errors.append(f"{rel}:{number}: the bus declares an application's message `{found.group(1)}`")
+    return len(files)
+
+
 def check_message_crdt(errors: list[str]) -> int:
     """`PROSE-001`: an application's message vocabulary names no CRDT handle.
 
@@ -2098,6 +2122,7 @@ def main() -> int:
     signal_types = check_signal_types(errors)
     bus_ids = check_bus_ids(errors)
     message_crdt = check_message_crdt(errors)
+    bus_vocabulary = check_bus_vocabulary(errors)
     wire_ids = check_wire_ids(errors)
     answers = check_typed_answers(errors)
     benches = check_bench_frame_rate(errors)
@@ -2140,6 +2165,7 @@ def main() -> int:
         f"{signal_types} shell signals read for a bare primitive payload, "
         f"{bus_ids} bus and message files read for an identifier field of a primitive type, "
         f"{message_crdt} message files read for a CRDT handle, "
+        f"{bus_vocabulary} bus files read for an application's message, "
         f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes or a closed set held as text, "
         f"{answers} relay files read for an answer built with `json!`, "
         f"{benches} fixture benchmarks read for a frame rate, "

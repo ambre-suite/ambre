@@ -6,10 +6,8 @@ use ambre_bus::Char;
 use ambre_core::index::Span;
 use std::collections::HashMap;
 
-use ambre_bus::{
-    ActivityKind, Authored, Instant, Mention, MentionTarget, Mentions, MessageAt, MessageDraft,
-    MessageView, MurmureEvent,
-};
+use crate::message::{Mention, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent};
+use ambre_bus::{ActivityKind, Authored, Instant, Mentions};
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::json::{JsonOpContent, MapOp};
@@ -127,12 +125,12 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
         Ok(ThreadTarget::Write(thread))
     );
     assert!(matches!(
-        state.reply(root, &draft("early"), alice, NOW, ambre_bus::ReplyEcho::ThreadOnly),
+        state.reply(root, &draft("early"), alice, NOW, crate::message::ReplyEcho::ThreadOnly),
         Err(MurmureError::NoSession(id)) if id == thread
     ));
     let other = message_at(&state, 1).id;
     assert!(matches!(
-        state.reply(other, &draft("lost"), alice, NOW, ambre_bus::ReplyEcho::ThreadOnly),
+        state.reply(other, &draft("lost"), alice, NOW, crate::message::ReplyEcho::ThreadOnly),
         Err(MurmureError::NoThread(id)) if id == other
     ));
     assert!(matches!(
@@ -161,7 +159,7 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
                 &draft(text),
                 alice,
                 NOW,
-                ambre_bus::ReplyEcho::ThreadOnly,
+                crate::message::ReplyEcho::ThreadOnly,
             )
             .expect("reply");
         assert_eq!(replied.reply.document, thread);
@@ -230,7 +228,7 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
             &draft("first"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let replied = state
@@ -239,7 +237,7 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
             &draft("second"),
             bob,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let MurmureEvent::Messages { messages, .. } = &replied.head else {
@@ -367,7 +365,7 @@ fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
             &draft("also here"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::AlsoInChannel,
+            crate::message::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
     let copy = replied.copy.expect("a copy");
@@ -396,7 +394,7 @@ fn a_copy_is_found_from_its_reply() {
             &draft("also here"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::AlsoInChannel,
+            crate::message::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
     state
@@ -405,7 +403,7 @@ fn a_copy_is_found_from_its_reply() {
             &draft("here alone"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let Some(MurmureEvent::ThreadMessages { messages, .. }) = state.thread_view(thread) else {
@@ -499,7 +497,7 @@ fn a_reply_takes_no_thread_field_from_another_member() {
             &draft("reply"),
             alice_user,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let mut bob = peer_of(&alice);
@@ -603,7 +601,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
             &draft("hi"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let reply = replies_of(&state, thread)[0].id;
@@ -621,7 +619,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     let read = &replies_of(&state, thread)[0];
     assert_eq!(
         (read.text.as_str(), read.edited),
-        ("hello", ambre_bus::Revision::Edited)
+        ("hello", crate::message::Revision::Edited)
     );
     let reacted = state
         .react(at, reply, &ambre_bus::Emoji::from("\u{1F44D}"), alice, NOW)
@@ -640,7 +638,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     assert!(in_thread(&deleted));
     assert_eq!(
         replies_of(&state, thread)[0].deleted,
-        ambre_bus::Deletion::Deleted
+        crate::message::Deletion::Deleted
     );
     let Some(MurmureEvent::Messages { messages, .. }) = state.root_view(root) else {
         panic!("the root's segment");
@@ -686,7 +684,7 @@ fn another_member_reacts_to_a_reply_and_never_edits_it() {
             &draft("hi"),
             alice_user,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let mut bob = peer_with_thread(&alice, thread, &[&first, &replied.reply.delta], alice_user);
@@ -755,7 +753,7 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
             &draft("hi"),
             alice_user,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let events = bob
@@ -825,7 +823,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
             &mentioning,
             bob,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     state
@@ -834,7 +832,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
             &draft("plain"),
             bob,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     // The relay numbers the mention with its echo.

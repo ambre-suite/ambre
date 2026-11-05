@@ -9,7 +9,8 @@ use ambre_core::Validated;
 use ambre_core::index::{IdxVec, Len, Pos, Span};
 use std::collections::HashMap;
 
-use ambre_bus::{Attachment, Authored, ContentHash, Emoji, Instant, TextStyle};
+use crate::message::{Attachment, TextStyle};
+use ambre_bus::{Authored, ContentHash, Emoji, Instant};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_core::id::{Id, Message, User};
@@ -1140,8 +1141,8 @@ fn draw_body<S: DrawSurface>(
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::message::{Mention, MentionTarget, StyleMark, TextStyle, ThreadHead};
     use ambre_bus::Char;
-    use ambre_bus::{Mention, MentionTarget, StyleMark, TextStyle, ThreadHead};
     use ambre_canvas::fonts::font_context_from_bytes;
     use ambre_canvas::theme::LIGHT;
     use ambre_core::id::{Document, Segment};
@@ -1387,10 +1388,10 @@ pub(crate) mod tests {
     #[test]
     fn a_deleted_body_paints_muted_and_a_reply_count_in_the_accent() {
         let mut gone = message(Id::<User>::mint(), Instant::<Authored>::new(0), "");
-        gone.deleted = ambre_bus::Deletion::Deleted;
+        gone.deleted = crate::message::Deletion::Deleted;
         gone.thread = Some(ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_core::Count::<ambre_bus::Replies>::new(2),
+            replies: ambre_core::Count::<crate::message::Replies>::new(2),
             last_replier: None,
         });
         let mut list = MessageList::default();
@@ -1408,7 +1409,7 @@ pub(crate) mod tests {
     /// on a chip names it; a deleted message shows none.
     #[test]
     fn the_reactions_paint_as_chips_under_the_body() {
-        use ambre_bus::Reaction;
+        use crate::message::Reaction;
         let (me, ada) = (Id::<User>::mint(), Id::<User>::mint());
         let mut reacted = message(ada, Instant::<Authored>::new(0), "hello");
         reacted.reactions = vec![
@@ -1472,7 +1473,7 @@ pub(crate) mod tests {
         assert_eq!(theirs.y0, mine.y0, "on one line");
         assert!(mine.y1 <= f64::from(bottom));
 
-        reacted.deleted = ambre_bus::Deletion::Deleted;
+        reacted.deleted = crate::message::Deletion::Deleted;
         let mut gone = MessageList::default();
         gone.absorb(Id::<Segment>::mint(), vec![reacted]);
         let (surface, _) = paint(&gone, 600.0);
@@ -1488,7 +1489,8 @@ pub(crate) mod tests {
     /// ink of a link. A click on one names its file.
     #[test]
     fn the_files_paint_as_chips_a_click_names() {
-        use ambre_bus::{Attachment, ContentHash, MediaType, Octets};
+        use crate::message::Attachment;
+        use ambre_bus::{ContentHash, MediaType, Octets};
         use ambre_core::Count;
         let ada = Id::<User>::mint();
         let file = Attachment {
@@ -1541,7 +1543,8 @@ pub(crate) mod tests {
     /// due.
     #[test]
     fn an_image_previews_in_a_box_that_keeps_its_height_and_plays() {
-        use ambre_bus::{Attachment, MediaType, Octets, Picture, PictureFrame};
+        use crate::message::{Attachment, Picture, PictureFrame};
+        use ambre_bus::{MediaType, Octets};
         use ambre_core::Count;
         let ada = Id::<User>::mint();
         let file = Attachment {
@@ -1664,7 +1667,7 @@ pub(crate) mod tests {
         );
         assert_eq!(requested(&said), 1);
         let mut reacted = message(ada, Instant::<Authored>::new(0), "ship it");
-        reacted.reactions = vec![ambre_bus::Reaction {
+        reacted.reactions = vec![crate::message::Reaction {
             emoji: ambre_bus::Emoji::from("\u{1F389}"),
             users: vec![ada],
         }];
@@ -1879,7 +1882,7 @@ pub(crate) mod tests {
             vec![message(ada, Instant::<Authored>::new(30), "abcd")],
         );
         let band = crate::list::Band {
-            cause: ambre_bus::Unreadable::Damaged,
+            cause: crate::message::Unreadable::Damaged,
             from: Instant::<Authored>::new(10),
             to: Some(Instant::<Authored>::new(30)),
         };

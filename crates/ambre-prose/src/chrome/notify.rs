@@ -15,7 +15,10 @@ use crate::view::annotate::LostReply;
 /// Surface what a conversion lost, and a file that produced nothing, as a
 /// toast (`PROSE-IO-053`). A reply refused for its thread is told too
 /// (`PROSE-UI-232`). A no-op for every other event.
-pub fn notify_event<S: Embed<ProseEvent>>(toasts: &Toasts, ev: &UiEvent<S>) {
+pub fn notify_event<S: Embed<ProseEvent>, P: ambre_bus::ChannelPlane>(
+    toasts: &Toasts,
+    ev: &UiEvent<S, P>,
+) {
     let Some(event) = ev.viewport_event::<ProseEvent>() else {
         return;
     };

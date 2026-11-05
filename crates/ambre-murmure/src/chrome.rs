@@ -24,16 +24,17 @@ use crate::drafts::DraftShelf;
 use crate::emoji;
 use crate::markers::{Cover, MarkBar};
 use crate::mention_list::{MentionEntry, MentionList};
+use crate::message::{
+    ChannelMatches, DirectMessageEvent, MemberView, MessageAt, MurmureCommand, MurmureEvent,
+    Presence, SpaceCommand, SpaceEvent, TextStyle,
+};
+use crate::message::{LogicCommand, UiEvent};
 use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
 };
 use ambre_bus::MentionState;
-use ambre_bus::{
-    Authored, ChannelMatches, ChannelPlace, DirectMessageEvent, Instant, LogicCommand, MemberView,
-    MessageAt, MurmureCommand, MurmureEvent, Presence, RestCommand, RestEvent, SpaceCommand,
-    SpaceEvent, TextStyle, UiEvent,
-};
+use ambre_bus::{Authored, ChannelPlace, Instant, RestCommand, RestEvent};
 use ambre_chrome::{
     CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, PaletteKey,
     Pressed, ShellAction, ShellRegion, Toasts,
@@ -51,7 +52,9 @@ pub use crate::notices::{
 /// (`MURMURE-549`, `MURMURE-550`). So is a channel change or a direct message
 /// that failed (`MURMURE-580`, `MURMURE-581`). The launcher names no Murmure
 /// variant. A no-op for every other event.
-pub fn notify_event<S>(toasts: &Toasts, ev: &UiEvent<S>) {
+pub fn notify_event<S>(toasts: &Toasts, ev: &ambre_bus::UiEvent<S, crate::message::Murmure>) {
+    // The relayed event carries the launcher's sum, which Murmure never reads.
+    use ambre_bus::UiEvent;
     if let Some(text) = crate::notices::warning_of(ev) {
         toasts.warning(text);
     }
@@ -471,7 +474,7 @@ impl std::fmt::Debug for SearchGroup {
 }
 
 /// "1 segment", or "2 segments": the coverage line counts in segments.
-fn segments(count: ambre_core::Count<ambre_bus::Segments>) -> String {
+fn segments(count: ambre_core::Count<crate::message::Segments>) -> String {
     match count.get() {
         1 => "1 segment".to_owned(),
         n => format!("{n} segments"),
@@ -482,11 +485,10 @@ fn segments(count: ambre_core::Count<ambre_bus::Segments>) -> String {
 /// A result list states its coverage, matches or not (`MURMURE-149`).
 pub fn coverage(channels: &[ChannelMatches]) -> String {
     let covered: usize = channels.iter().map(|c| c.covered.len()).sum();
-    let listed = channels
-        .iter()
-        .fold(ambre_core::Count::<ambre_bus::Segments>::ZERO, |all, c| {
-            all.plus(c.listed)
-        });
+    let listed = channels.iter().fold(
+        ambre_core::Count::<crate::message::Segments>::ZERO,
+        |all, c| all.plus(c.listed),
+    );
     let open = match channels.len() {
         1 => "1 open channel".to_owned(),
         n => format!("{n} open channels"),
@@ -784,7 +786,13 @@ impl MurmureRelay {
     /// message that names the user notifies, and so does any message of a
     /// direct message. The channel the user is reading notifies nothing
     /// (`MURMURE-146`). A hidden page shows none to read.
-    pub fn notice<S>(&self, ev: &UiEvent<S>, page: PageVisibility) -> Option<Notice> {
+    pub fn notice<S>(
+        &self,
+        ev: &ambre_bus::UiEvent<S, crate::message::Murmure>,
+        page: PageVisibility,
+    ) -> Option<Notice> {
+        // The relayed event carries the launcher's sum, which Murmure never reads.
+        use ambre_bus::UiEvent;
         let UiEvent::NewMessage {
             channel_id,
             mention,
@@ -906,7 +914,12 @@ impl MurmureRelay {
 
     /// Take one event, and return the commands it calls for: a space to
     /// open for its catalogue, the channels to list again after a join.
-    pub fn absorb<S>(&self, ev: &UiEvent<S>) -> Vec<LogicCommand> {
+    pub fn absorb<S>(
+        &self,
+        ev: &ambre_bus::UiEvent<S, crate::message::Murmure>,
+    ) -> Vec<LogicCommand> {
+        // The relayed event carries the launcher's sum, which Murmure never reads.
+        use ambre_bus::UiEvent;
         match ev {
             UiEvent::Rest {
                 evt: RestEvent::SessionReady { user_id, .. },

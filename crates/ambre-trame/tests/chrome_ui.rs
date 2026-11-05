@@ -47,6 +47,9 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
+/// The events the chrome reads in these tests: TrameEvent documents, no channel.
+type Event = UiEvent<TrameEvent>;
+
 // Every test touches the DOM (or at least the leptos reactive graph backed by
 // the browser), so run them inside headless Chrome rather than Node.
 wasm_bindgen_test_configure!(run_in_browser);
@@ -60,7 +63,7 @@ fn style_applied(
     merged: ambre_trame::message::Merge,
     numeric: ambre_trame::message::CellValueKind,
 ) -> UiEvent<TrameEvent> {
-    UiEvent::Viewport {
+    Event::Viewport {
         document_id: Id::<Document>::mint(),
         event: TrameEvent::StyleApplied {
             style,
@@ -150,7 +153,7 @@ fn style_state_ignores_unrelated_events() {
 
     let state = StyleState::new();
     state.bold.set(ambre_core::Weight::Bold);
-    let ev = UiEvent::Viewport {
+    let ev = Event::Viewport {
         document_id: Id::<Document>::mint(),
         event: TrameEvent::DataReset,
     };
@@ -181,7 +184,7 @@ fn undo_state_mirrors_into_command_store() {
         ambre_chrome::Availability::Disabled
     );
 
-    let ev = UiEvent::Viewport {
+    let ev = Event::Viewport {
         document_id: Id::<Document>::mint(),
         event: TrameEvent::UndoState {
             undo: ambre_core::Availability::Enabled,
@@ -736,7 +739,7 @@ fn a_lost_edit_reaches_the_user() {
     let toasts = ambre_chrome::Toasts::new();
     chrome::notify_event(
         &toasts,
-        &UiEvent::Viewport {
+        &Event::Viewport {
             document_id: Id::<Document>::mint(),
             event: TrameEvent::EditTargetGone {
                 session: ambre_bus::Token::FIRST,
@@ -852,7 +855,7 @@ fn a_refusal_reaches_the_user_as_a_toast() {
     ] {
         chrome::notify_event(
             &toasts,
-            &UiEvent::Viewport {
+            &Event::Viewport {
                 document_id: Id::<Document>::mint(),
                 event: event,
             },
@@ -918,7 +921,7 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
     let toasts = ambre_chrome::Toasts::new();
     chrome::notify_event(
         &toasts,
-        &UiEvent::Viewport {
+        &Event::Viewport {
             document_id: Id::<Document>::mint(),
             event: TrameEvent::FilterApplied {
                 hidden_row_count: Len::<Row>::new(37),
@@ -942,7 +945,7 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
 fn the_sort_reply_opens_the_dialog_over_its_columns() {
     let _owner = OwnerScope::new();
     let relay = relay();
-    relay.absorb(&UiEvent::Viewport {
+    relay.absorb(&Event::Viewport {
         document_id: Id::<Document>::mint(),
         event: TrameEvent::SortRange {
             r1: Pos::<Row>::new(2),

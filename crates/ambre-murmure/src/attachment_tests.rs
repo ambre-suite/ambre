@@ -2,9 +2,8 @@
 //! (`features/ambre-spec-murmure-attachments.md`).
 
 use crate::Receipt;
-use ambre_bus::{
-    Attachment, Authored, ContentHash, Instant, MediaType, MessageDraft, MurmureEvent, Octets,
-};
+use crate::message::{Attachment, MessageDraft, MurmureEvent};
+use ambre_bus::{Authored, ContentHash, Instant, MediaType, Octets};
 use ambre_core::Count;
 use ambre_core::Validated;
 use ambre_core::id::{Channel, Id, User};
@@ -101,7 +100,7 @@ fn a_deleted_message_carries_no_file() {
     let id = state.messages(segment).expect("held")[0].id;
     state.delete(segment, id, alice).expect("delete");
     let read = &state.messages(segment).expect("held")[0];
-    assert_eq!(read.deleted, ambre_bus::Deletion::Deleted);
+    assert_eq!(read.deleted, crate::message::Deletion::Deleted);
     assert!(read.attachments.is_empty());
 }
 

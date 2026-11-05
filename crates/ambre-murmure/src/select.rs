@@ -6,7 +6,8 @@
 //! above, where an index does not. The paint resolves a pointer into an end,
 //! since only the layout knows which byte lies under it.
 
-use ambre_bus::{Authored, Deletion, Instant};
+use crate::message::Deletion;
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Id, User};
 use ambre_core::index::{IdxVec, Len, Pos, Span};
 use ambre_core::{Byte, Point, Px, View};
@@ -243,9 +244,9 @@ mod tests {
             Instant::<Authored>::new(200_000),
             "again",
         );
-        edited.edited = ambre_bus::Revision::Edited;
+        edited.edited = crate::message::Revision::Edited;
         let mut gone = message(Id::<User>::mint(), Instant::<Authored>::new(100_000), "");
-        gone.deleted = ambre_bus::Deletion::Deleted;
+        gone.deleted = crate::message::Deletion::Deleted;
         let segment = Id::<Segment>::mint();
         list.absorb(segment, vec![gone, edited]);
         let rows = list.keys().len().get();

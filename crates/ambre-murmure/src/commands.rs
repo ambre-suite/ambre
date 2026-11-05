@@ -8,10 +8,9 @@
 //! The actions of a message are commands of the same table, with no chord
 //! (`MURMURE-419`). The menu of a message offers the ones its target allows.
 
-use ambre_bus::{
-    Authored, Emoji, HeldReply, HeldSend, Instant, LogicCommand, Mention, MessageAt,
-    MurmureCommand, StyleMark,
-};
+use crate::message::LogicCommand;
+use crate::message::{HeldReply, HeldSend, Mention, MessageAt, MurmureCommand, StyleMark};
+use ambre_bus::{Authored, Emoji, Instant};
 use ambre_commands::{
     Command, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale, ModifierKeys,
 };
@@ -246,7 +245,7 @@ pub struct MessageTarget {
     /// Who wrote the message: a member, or the channel as a notice.
     pub writer: Writer,
     /// Whether the message reads deleted already.
-    pub deleted: ambre_bus::Deletion,
+    pub deleted: crate::message::Deletion,
     /// Where a long press held, in the pixels of the region's canvas. `None`
     /// for a right-click, whose event places the menu itself.
     pub pressed: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
@@ -445,7 +444,7 @@ impl AskedAll {
                 draft,
                 attachments,
                 now,
-                confirmed: ambre_bus::Confirmation::Confirmed,
+                confirmed: crate::message::Confirmation::Confirmed,
             },
             Some(HeldReply {
                 root,
@@ -455,7 +454,7 @@ impl AskedAll {
                 draft,
                 also_in_channel,
                 now,
-                confirmed: ambre_bus::Confirmation::Confirmed,
+                confirmed: crate::message::Confirmation::Confirmed,
             },
         };
         LogicCommand::Channel {
@@ -490,7 +489,7 @@ pub fn message_actions(target: &MessageTarget, me: Option<Id<User>>) -> Vec<Stat
     if in_channel && by_member {
         ids.push(REPLY);
     }
-    if by_member && target.deleted == ambre_bus::Deletion::Live {
+    if by_member && target.deleted == crate::message::Deletion::Live {
         ids.push(REACT);
     }
     if in_channel {
@@ -499,7 +498,8 @@ pub fn message_actions(target: &MessageTarget, me: Option<Id<User>>) -> Vec<Stat
     if !target.text.is_empty() {
         ids.push(COPY_TEXT);
     }
-    let own = me == Some(target.author) && by_member && target.deleted == ambre_bus::Deletion::Live;
+    let own =
+        me == Some(target.author) && by_member && target.deleted == crate::message::Deletion::Live;
     if own {
         ids.extend([EDIT, DELETE]);
     }
@@ -713,7 +713,7 @@ pub fn key_list(locale: &Locale) -> Vec<KeyRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::ReplyEcho;
+    use crate::message::ReplyEcho;
     use ambre_commands::shared;
     use ambre_core::id::Segment;
 
@@ -727,7 +727,7 @@ mod tests {
             mentions: Vec::new(),
             styles: Vec::new(),
             writer: Writer::from_bool(notice),
-            deleted: ambre_bus::Deletion::from_bool(text.is_empty()),
+            deleted: crate::message::Deletion::from_bool(text.is_empty()),
             pressed: None,
             canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
             from_thread: None,
@@ -756,7 +756,7 @@ mod tests {
             command: MurmureCommand::EditMessage {
                 at: target.at,
                 message: target.message,
-                draft: ambre_bus::MessageDraft {
+                draft: crate::message::MessageDraft {
                     text: target.text.clone(),
                     mentions: Vec::new(),
                     styles: Vec::new(),
@@ -784,7 +784,7 @@ mod tests {
     #[test]
     fn a_confirmed_at_channel_sends_the_held_draft_again() {
         let channel = Id::<Channel>::mint();
-        let draft = ambre_bus::MessageDraft {
+        let draft = crate::message::MessageDraft {
             text: "@channel hi".to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),
@@ -803,7 +803,7 @@ mod tests {
             asked.clone().command(Instant::<Authored>::new(7)),
             LogicCommand::Channel {
                 channel_id,
-                command: MurmureCommand::SendMessage { draft: d, now, confirmed: ambre_bus::Confirmation::Confirmed, .. },
+                command: MurmureCommand::SendMessage { draft: d, now, confirmed: crate::message::Confirmation::Confirmed, .. },
             } if channel_id == channel && d == draft && now.get() == 7
         ));
         let root = Id::<Message>::mint();
@@ -828,7 +828,7 @@ mod tests {
                     draft: d,
                     also_in_channel: ReplyEcho::AlsoInChannel,
                     now,
-                    confirmed: ambre_bus::Confirmation::Confirmed,
+                    confirmed: crate::message::Confirmation::Confirmed,
                 },
             } if channel_id == channel && r == root && d == draft && now.get() == 8
         ));

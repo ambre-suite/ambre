@@ -5,13 +5,16 @@
 
 use super::app_root::MurmureShell;
 use ambre_bus::{
-    Authored, CatalogueEntry, CategoryView, ChannelActivity, ChannelMatches, ChannelName,
-    ChannelPlace, DirectPeers, Instant, MemberChannel, MemberView, Mentions, MessageView, Presence,
-    SearchMatch, SpaceCommand, SpaceEvent, Unread,
+    Authored, ChannelActivity, ChannelName, ChannelPlace, DirectPeers, Instant, MemberChannel,
+    Mentions, Unread,
 };
-use ambre_bus::{LogicCommand, UiEvent};
 use ambre_core::id::{Category, Channel, Id, Message, Segment, Space, User};
 use ambre_murmure::chrome::MurmureRelay;
+use ambre_murmure::message::{
+    CatalogueEntry, CategoryView, ChannelMatches, MemberView, MessageView, Presence, SearchMatch,
+    SpaceCommand, SpaceEvent,
+};
+use ambre_murmure::message::{LogicCommand, UiEvent};
 use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -207,7 +210,7 @@ impl Acme {
             name: ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
             topic: None,
             category,
-            position: ambre_bus::CatalogPosition::new(position),
+            position: ambre_murmure::message::CatalogPosition::new(position),
         };
         UiEvent::Space {
             space_id: self.space,
@@ -216,7 +219,7 @@ impl Acme {
                 categories: vec![CategoryView {
                     id: team,
                     name: ambre_core::Validated::<ambre_core::Name>::parse("Team").unwrap(),
-                    position: ambre_bus::CatalogPosition::FIRST,
+                    position: ambre_murmure::message::CatalogPosition::FIRST,
                 }],
                 channels: vec![
                     entry(self.random, "random", None, 1),
@@ -1290,8 +1293,8 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         attachments: Vec::new(),
         reactions: Vec::new(),
         notice: None,
-        edited: ambre_bus::Revision::Original,
-        deleted: ambre_bus::Deletion::Live,
+        edited: ambre_murmure::message::Revision::Original,
+        deleted: ambre_murmure::message::Deletion::Live,
         thread: None,
         also_in_thread: None,
     };
@@ -1301,7 +1304,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         channels: vec![ChannelMatches {
             channel_id: acme.general,
             covered: vec![segment],
-            listed: ambre_core::Count::<ambre_bus::Segments>::new(1),
+            listed: ambre_core::Count::<ambre_murmure::message::Segments>::new(1),
             matches: vec![SearchMatch { segment, message }],
         }],
     };
@@ -1382,8 +1385,8 @@ async fn the_canvas_reads_the_desktop_width_as_the_stylesheet_does() {
 /// so a hand learns one chord per mark (`MURMURE-431`).
 #[wasm_bindgen_test]
 fn a_style_takes_the_chord_prose_binds_to_its_mark() {
-    use ambre_bus::TextStyle;
     use ambre_chrome::commands::KeyBinding;
+    use ambre_murmure::message::TextStyle;
     use ambre_prose::commands::{BOLD, CODE, COMMANDS, ITALIC};
 
     for (key, style) in ambre_murmure::markers::MARK_CHORDS {
@@ -1409,7 +1412,7 @@ fn a_style_takes_the_chord_prose_binds_to_its_mark() {
 /// (`MURMURE-432`).
 #[wasm_bindgen_test]
 fn the_format_bar_shows_the_prose_controls_of_the_murmure_marks() {
-    use ambre_bus::TextStyle;
+    use ambre_murmure::message::TextStyle;
     use ambre_prose::commands::{BOLD, CODE, COMMANDS, FORMAT_BAR, ITALIC};
 
     let prose: Vec<_> = FORMAT_BAR.iter().map(|(id, _)| *id).collect();

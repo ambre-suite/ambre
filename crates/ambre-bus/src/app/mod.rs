@@ -1,23 +1,11 @@
-//! Per-application data planes carried by the IPC envelopes, for the
-//! applications whose vocabulary has not moved into their own crate yet
-//! (`BUS-032`). Trame's lives in `ambre-trame`, Toile's in `ambre-toile` and
-//! Prose's in `ambre-prose`;
-//! `grid` and `find` stay here, shared by more than one application.
+//! The value types more than one application, or the Sync worker, shares.
 //!
-//! One module per document type, each holding **that app's whole typed data
-//! plane together**, regardless of direction. A module holds its command enum,
-//! its event enum, and the shared value / display types. `AppCommand` /
-//! `AppEvent` (the closed sums in [`crate::logic`] / [`crate::ui`]) are thin
-//! dispatch enums that reference these modules.
-//!
-//! Rationale (`ambre-spec-message-bus.md`): the four transport **envelopes**
-//! (`LogicCommand` / `UiEvent` / `SyncCommand` / `LogicEvent`) are still split
-//! by direction. Each is bound to one queue hop. But the per-app **content
-//! plane** is grouped by app. A document type's command and event share its
-//! whole value-type vocabulary (identity, styles, geometry). Co-locating them
-//! keeps one app in one place, and stops the event side reaching across into the
-//! command side for shared types. The `Command` / `Event` suffix on the type
-//! names still carries the direction.
+//! Each application declares its own command, event and value types in its
+//! crate (`BUS-032`). What stays here is shared by nature:
+//! - `grid`, the cell coordinates Trame and Prose both carry;
+//! - `find`, the query every editor's search takes;
+//! - `murmure`, Murmure's channel types of the service plane, which the Sync
+//!   worker reads, with the `Emoji` Toile shares.
 
 pub mod find;
 pub mod grid;

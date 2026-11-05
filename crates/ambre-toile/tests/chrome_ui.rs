@@ -55,6 +55,9 @@ use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
+/// The events the chrome reads in these tests: ToileEvent documents, no channel.
+type Event = UiEvent<ToileEvent>;
+
 /// The page point at `(x, y)`, in CSS px.
 fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
     ambre_core::Point::new(
@@ -410,7 +413,7 @@ fn undo_state_mirrors_into_command_store() {
         ambre_chrome::Availability::Disabled
     );
 
-    let ev = UiEvent::Viewport {
+    let ev = Event::Viewport {
         document_id: Id::<Document>::mint(),
         event: ToileEvent::UndoState {
             undo: ambre_core::Availability::Enabled,
@@ -873,7 +876,7 @@ fn mount_notified(event: ToileEvent) -> web_sys::Element {
     let toasts = Toasts::new();
     ambre_toile::chrome::notify_event(
         &toasts,
-        &UiEvent::Viewport {
+        &Event::Viewport {
             document_id: Id::<Document>::mint(),
             event: event,
         },
@@ -1249,8 +1252,8 @@ fn relay() -> ToileRelay {
 }
 
 /// `ev` as the launcher hands it to the relay.
-fn board_event(ev: ToileEvent) -> UiEvent<ToileEvent> {
-    UiEvent::Viewport {
+fn board_event(ev: ToileEvent) -> Event {
+    Event::Viewport {
         document_id: Id::<Document>::mint(),
         event: ev,
     }

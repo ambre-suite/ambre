@@ -31,7 +31,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use ambre_bus::{MentionTarget, Notice, StyleMark, TextStyle};
+use crate::message::{MentionTarget, Notice, StyleMark, TextStyle};
 use ambre_core::Uuid;
 use ambre_core::authorship::PeerEntry;
 use ambre_core::id::{Category, Channel, Id};

@@ -34,6 +34,7 @@ pub mod event;
 pub mod logic;
 pub mod lossy;
 pub mod outbox;
+pub mod plane;
 pub mod port;
 pub mod rest;
 pub mod sink;
@@ -43,17 +44,11 @@ pub mod ui;
 
 // Re-export the main types for convenient use.
 pub use activity::{Activity, ActivityAnchor, ActivityKind, ActivitySummary, MentionScope};
-// The Murmure data plane, addressed to a channel rather than a document.
+// The channel types of the service plane, which the Sync worker reads.
 pub use app::murmure::{
-    Attachment, Authored, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
-    ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, ChannelTopic,
-    Confirmation, ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent,
-    DirectPeers, DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel,
-    MemberView, Mention, MentionTarget, Mentions, MessageAt, MessageDraft, MessageView, Messages,
-    MurmureCommand, MurmureEvent, Notice, Octets, Picture, PictureFrame, Presence,
-    PrivateChannelDraft, PublicChannelDraft, Reaction, Replies, ReplyEcho, Revision,
-    SealedChannelKey, SearchMatch, Segments, SpaceCommand, SpaceEvent, StyleMark, TextStyle,
-    ThreadHead, Unread, Unreadable,
+    Authored, ChannelActivity, ChannelDocument, ChannelMeta, ChannelName, ChannelPlace,
+    ChannelTopic, ContentHash, DirectMember, DirectPeers, DocumentActivity, Emoji, MediaType,
+    MemberChannel, Mentions, Messages, Octets, SealedChannelKey, Unread,
 };
 // The grid coordinates Trame and Prose share.
 pub use app::grid::{CellPos, CellRect, Col, MergeSpan, Row};
@@ -66,6 +61,7 @@ pub use event::{
 pub use logic::{LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Load, Outbox, SendOutcome};
+pub use plane::{ChannelPlane, NoChannels, PlaneOf};
 pub use port::{Delivery, Inbox, Port};
 pub use rest::{
     Confidential, DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, Plaintext,

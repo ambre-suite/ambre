@@ -26,6 +26,9 @@ use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
+/// The events the chrome reads in these tests: ProseEvent documents, no channel.
+type Event = UiEvent<ProseEvent>;
+
 /// The page point at `(x, y)`, in CSS px.
 fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
     ambre_core::Point::new(
@@ -191,7 +194,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     };
     chrome::notify_event(
         &toasts,
-        &UiEvent::Viewport {
+        &Event::Viewport {
             document_id: Id::<Document>::mint(),
             event: ProseEvent::Error(ProseError::new(
                 ambre_prose::message::RefusedAction::Command(reply.name()),
@@ -321,7 +324,7 @@ async fn the_history_rows_follow_the_reported_state() {
         view! { <ambre_chrome::ContextMenu pos=pos entries=entries on_command=Callback::new(|_| ()) /> }
     });
     let report = |event: ProseEvent| {
-        signals.mirror_event(&UiEvent::Viewport {
+        signals.mirror_event(&Event::Viewport {
             document_id: Id::<Document>::mint(),
             event: event,
         });

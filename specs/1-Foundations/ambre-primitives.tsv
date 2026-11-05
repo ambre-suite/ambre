@@ -97,28 +97,28 @@ ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	g
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Replies as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Segments as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/murmure.rs | crate::app::murmure | Attachment.name | field | String	free-text	file name as the author's file system gave it
-ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
+ambre-murmure | src/message/mod.rs | crate::message | <Replies as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-murmure | src/message/mod.rs | crate::message | <Segments as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-murmure | src/message/mod.rs | crate::message | Attachment.name | field | String	free-text	file name as the author's file system gave it
+ambre-murmure | src/message/mod.rs | crate::message | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | std::borrow::Cow<'static,str>	newtype-inner	Emoji newtype, borrowed for a static table and owned otherwise
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::as_str() | ret | &str	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::from_static(glyph) | param | &'static str	newtype-inner	Emoji newtype, its const constructor for a static table
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageDraft.text | field | String	free-text	message body
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView.text | field | String	free-text	message body
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown() | ret | String	free-text	rendered message body
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown_at() | ret | (String,IdxVec<Char,Pos<Byte>>)	free-text	the text shown, beside its typed byte offsets
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::is_mutating() | ret | bool	generic	predicate
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureEvent::OpenFailed.message | field | String	free-text	user-facing message
+ambre-murmure | src/message/mod.rs | crate::message | MessageDraft.text | field | String	free-text	message body
+ambre-murmure | src/message/mod.rs | crate::message | MessageView.text | field | String	free-text	message body
+ambre-murmure | src/message/mod.rs | crate::message | MessageView::shown() | ret | String	free-text	rendered message body
+ambre-murmure | src/message/mod.rs | crate::message | MessageView::shown_at() | ret | (String,IdxVec<Char,Pos<Byte>>)	free-text	the text shown, beside its typed byte offsets
+ambre-murmure | src/message/mod.rs | crate::message | MurmureCommand::is_mutating() | ret | bool	generic	predicate
+ambre-murmure | src/message/mod.rs | crate::message | MurmureEvent::OpenFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey.0 | field | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_bytes() | ret | &[u8]	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field | u32	newtype-inner	the inside of the CatalogPosition newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::to_stored() | ret | i64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
+ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
+ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
+ambre-murmure | src/message/mod.rs | crate::message | CatalogPosition.0 | field | u32	newtype-inner	the inside of the CatalogPosition newtype
+ambre-murmure | src/message/mod.rs | crate::message | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
+ambre-murmure | src/message/mod.rs | crate::message | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
+ambre-murmure | src/message/mod.rs | crate::message | CatalogPosition::to_stored() | ret | i64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
 ambre-prose | src/message/mod.rs | crate::message | <ConversionLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-prose | src/message/mod.rs | crate::message | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
 ambre-prose | src/message/mod.rs | crate::message | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
@@ -367,7 +367,7 @@ ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::SeqKind>::NAME 
 ambre-bus | src/content.rs | crate::content | Mutation::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/content.rs | crate::content | <Infallible as Mutation>::is_mutating() | ret | bool	generic	predicate, never called: no value of the type exists
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
-ambre-bus | src/port.rs | crate::port | Delivery<A>::sent() | ret | bool	generic	predicate
+ambre-bus | src/port.rs | crate::port | Delivery<A,P>::sent() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | is_lossy_class() | ret | bool	generic	predicate
 ambre-bus | src/outbox.rs | crate::outbox | HOLD_CAPACITY | const | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | Outbox.capacity | field | usize	math	channel capacity / queue length / watermark, local to the conduit
@@ -3995,8 +3995,8 @@ ambre-server | src/s3.rs | crate::s3 | StoreText<K>::new(text) | param | String	
 ambre-server | src/state.rs | crate::state | limit_from_env(value) | param | u64	generic	the 64-bit value an environment variable parses to, refused past 32 bits
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Mentions as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Replies as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Segments as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-murmure | src/message/mod.rs | crate::message | <Replies as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-murmure | src/message/mod.rs | crate::message | <Segments as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/message/mod.rs | crate::message | <ConversionLosses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/message/mod.rs | crate::message | <Graphemes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire

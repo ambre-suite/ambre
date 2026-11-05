@@ -29,10 +29,11 @@ use ambre_core::Count;
 use ambre_core::index::{Delta, IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet};
 
-use ambre_bus::{
-    Attachment, Authored, Instant, LogicCommand, Mention, MessageAt, MessageDraft, MurmureCommand,
-    ReplyEcho, StyleMark, TextStyle,
+use crate::message::LogicCommand;
+use crate::message::{
+    Attachment, Mention, MessageAt, MessageDraft, MurmureCommand, ReplyEcho, StyleMark, TextStyle,
 };
+use ambre_bus::{Authored, Instant};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::{Key, KeyBinding, KeyChar, ModifierKeys};
@@ -401,14 +402,14 @@ impl Sent {
                         draft,
                         attachments,
                         now,
-                        confirmed: ambre_bus::Confirmation::Unconfirmed,
+                        confirmed: crate::message::Confirmation::Unconfirmed,
                     },
                     DraftOf::Thread(_, root) => MurmureCommand::Reply {
                         root,
                         draft,
                         also_in_channel,
                         now,
-                        confirmed: ambre_bus::Confirmation::Unconfirmed,
+                        confirmed: crate::message::Confirmation::Unconfirmed,
                     },
                 },
             },
@@ -1857,7 +1858,7 @@ mod tests {
     #[test]
     fn an_edit_keeps_the_mentions_it_leaves_whole() {
         let at = |range: std::ops::Range<usize>| Mention {
-            target: ambre_bus::MentionTarget::Channel,
+            target: crate::message::MentionTarget::Channel,
             range: Span::<Char>::from_usize_range(range),
         };
         // "@a hi @b": "hi" becomes "hello".

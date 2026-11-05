@@ -110,7 +110,7 @@ impl TrameRelay {
     }
 
     /// Fill the chrome from `ev`. Any event not Trame's is a no-op.
-    pub fn absorb<S: Embed<TrameEvent>>(&self, ev: &UiEvent<S>) {
+    pub fn absorb<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(&self, ev: &UiEvent<S, P>) {
         let Some(te) = ev.viewport_event::<TrameEvent>() else {
             return;
         };

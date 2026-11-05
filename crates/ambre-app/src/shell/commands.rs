@@ -34,8 +34,8 @@ pub(crate) enum AppHandler {
 /// not the routed document, so they go to the Logic thread unchanged.
 pub(crate) fn murmure_send(
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-) -> Callback<ambre_bus::LogicCommand> {
-    Callback::new(move |command: ambre_bus::LogicCommand| {
+) -> Callback<ambre_murmure::message::LogicCommand> {
+    Callback::new(move |command: ambre_murmure::message::LogicCommand| {
         // A Murmure command carries no document command, so it retypes as any.
         if let Err(e) = to_logic.try_send(command.map(|never| match never {})) {
             tracing::warn!("Murmure command dropped, Logic channel full ({e:?})");

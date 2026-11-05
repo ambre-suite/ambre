@@ -29,9 +29,9 @@ use ambre_core::Validated;
 use ambre_core::index::Span;
 use std::collections::BTreeSet;
 
+use crate::message::{Attachment, Mention, MentionTarget, MessageDraft, StyleMark, TextStyle};
 use ambre_bus::{
-    Attachment, Authored, ChannelTopic, ContentHash, Instant, MediaType, Mention, MentionTarget,
-    MessageDraft, Octets, SealedChannelKey, StyleMark, TextStyle,
+    Authored, ChannelTopic, ContentHash, Instant, MediaType, Octets, SealedChannelKey,
 };
 use ambre_core::Count;
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN};
@@ -310,7 +310,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
             &reply,
             AUTHOR,
             Instant::<Authored>::new(1_700_000_000_005),
-            ambre_bus::ReplyEcho::AlsoInChannel,
+            crate::message::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
 }
@@ -446,7 +446,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
         .put_category(
             category,
             &crate::fit_name("Teams"),
-            ambre_bus::CatalogPosition::new(0),
+            crate::message::CatalogPosition::new(0),
         )
         .expect("category");
     let topic = ambre_core::Validated::<ChannelTopic>::parse("everything").expect("a topic");
@@ -456,7 +456,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
             &Listing {
                 topic: Some(&topic),
                 category: Some(category),
-                position: ambre_bus::CatalogPosition::new(0),
+                position: crate::message::CatalogPosition::new(0),
                 key: SealedChannelKey::from_bytes(vec![1; 72]),
             },
         )

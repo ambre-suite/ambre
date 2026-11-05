@@ -584,7 +584,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             closing: segment,
             active: Id::<Segment>::from_document(Id::<Document>::mint()),
-            successor: ambre_bus::app::murmure::Successor::Fetched,
+            successor: ambre_bus::Successor::Fetched,
         },
         LogicEvent::SegmentCloseFailed {
             channel_id: chan,

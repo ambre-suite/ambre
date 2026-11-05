@@ -5,7 +5,8 @@ use ambre_bus::Char;
 use ambre_core::index::Span;
 use std::collections::HashMap;
 
-use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent, StyleMark, TextStyle};
+use crate::message::{MessageDraft, MurmureEvent, StyleMark, TextStyle};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Channel, Id, Lease, Segment, User};
 use ambre_core::{Count, DeltaBytes, Octets, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 

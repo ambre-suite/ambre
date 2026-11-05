@@ -6,9 +6,8 @@ use ambre_bus::Char;
 use ambre_core::index::Span;
 use std::collections::{HashMap, HashSet};
 
-use ambre_bus::{
-    Authored, Instant, Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Unreadable,
-};
+use crate::message::{Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Unreadable};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Channel, Document, Id, Meta, Segment, User};
 use ambre_core::schema::SchemaError;
 use ambre_core::{DeltaBytes, Payload, Relay, Seq, SnapshotBytes};

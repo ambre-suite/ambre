@@ -8,7 +8,8 @@ use crate::Receipt;
 use ambre_core::Version;
 use std::collections::HashMap;
 
-use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent};
+use crate::message::{MessageDraft, MurmureEvent};
+use ambre_bus::{Authored, Instant};
 use ambre_core::authorship::PeerEntry;
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{DeltaBytes, FixedBytes, Payload, PeerEntryBytes, Relay, Seq};

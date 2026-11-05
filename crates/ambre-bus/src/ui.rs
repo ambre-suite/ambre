@@ -21,8 +21,8 @@
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelActivity, ChannelMatches, DirectMessageEvent, DocType, MemberChannel, MurmureEvent,
-    Request, RestEvent, Role, SpaceEvent,
+    ChannelActivity, ChannelPlane, DocType, Embed, MemberChannel, NoChannels, PlaneOf, Request,
+    RestEvent, Role,
 };
 use ambre_core::id::{Channel, Document, Id, Meeting, Message, Segment, Space, User};
 use std::convert::Infallible;
@@ -47,7 +47,7 @@ ambre_core::define_flag! {
 /// `E` is the document event `Viewport` and `Presence` carry. A receiver that
 /// takes none leaves it at [`Infallible`].
 #[derive(Debug, Clone)]
-pub enum UiEvent<E = Infallible> {
+pub enum UiEvent<E = Infallible, P: ChannelPlane = NoChannels> {
     // -- Content plane ---------------------------------------------------------
     /// Display event produced in response to a document command
     /// (for example a viewport scroll) or a spontaneous refresh after a remote CRDT
@@ -118,7 +118,7 @@ pub enum UiEvent<E = Infallible> {
     /// an opaque payload (`BUS-028`).
     Channel {
         channel_id: Id<Channel>,
-        event: MurmureEvent,
+        event: P::Event,
     },
 
     /// Which channels hold something new: the relay's answer at start, or a
@@ -154,21 +154,21 @@ pub enum UiEvent<E = Infallible> {
     /// word answers no channel.
     MessageSearch {
         query: ambre_core::Validated<ambre_core::SearchQuery>,
-        channels: Vec<ChannelMatches>,
+        channels: Vec<P::Matches>,
     },
 
     /// What an open space tells its view: its catalogue, and the outcome of
     /// a creation or a join.
     Space {
         space_id: Id<Space>,
-        event: SpaceEvent,
+        event: P::SpaceEvent,
     },
 
     /// The outcome of a direct message request, under the channel id the
     /// request minted.
     DirectMessage {
         requested: Id<Channel>,
-        event: DirectMessageEvent,
+        event: P::DirectEvent,
     },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
@@ -231,7 +231,7 @@ pub enum UiEvent<E = Infallible> {
     UpdateRequired,
 }
 
-impl<E> UiEvent<E> {
+impl<E, P: ChannelPlane> UiEvent<E, P> {
     /// The `Id<Document>` this event is addressed to, for the per-document fan-out a nested
     /// `doc_embed` needs (`architecture` / `toile-embeds`). A Toile embedding another
     /// document owns a child view, whose Logic->UI stream must be demultiplexed out of the
@@ -252,13 +252,13 @@ impl<E> UiEvent<E> {
     }
 }
 
-impl<S> UiEvent<S> {
+impl<S, P: ChannelPlane> UiEvent<S, P> {
     /// The document event of application `E` a `Viewport` carries, when the
     /// sum `S` holds one. An application's chrome reads its own events out of
     /// the relayed stream with it, and names no other application.
     pub fn viewport_event<E>(&self) -> Option<&E>
     where
-        S: crate::Embed<E>,
+        S: Embed<E>,
     {
         match self {
             Self::Viewport { event, .. } => event.peek(),
@@ -267,21 +267,44 @@ impl<S> UiEvent<S> {
     }
 }
 
-/// A [`UiEvent`] split on whether it carries a document event.
-enum Split<E, F> {
-    Viewport(Id<Document>, E),
-    Presence(Id<Document>, E),
-    Other(UiEvent<F>),
+/// The functions one retyping of a [`UiEvent`] applies to its channel
+/// types, each from the plane `P` to the plane `Q`, or a refusal.
+struct PlaneFns<C, S, D, M> {
+    channel: C,
+    space: S,
+    direct: D,
+    matches: M,
 }
 
-impl<E> UiEvent<E> {
-    /// The document event of a `Viewport` or `Presence` variant, or every
-    /// other variant retyped, since none of them carries an `E`. The one
-    /// exhaustive list of variants the two maps below share.
-    fn split<F>(self) -> Split<E, F> {
-        Split::Other(match self {
-            Self::Viewport { document_id, event } => return Split::Viewport(document_id, event),
-            Self::Presence { document_id, event } => return Split::Presence(document_id, event),
+impl<E, P: ChannelPlane> UiEvent<E, P> {
+    /// The same event with its document event passed through `app` and each
+    /// channel type through its own function, or the first refusal. The one
+    /// exhaustive list of variants every retyping below shares.
+    fn retype<F, Q: ChannelPlane, X>(
+        self,
+        app: impl FnOnce(E) -> Result<F, X>,
+        plane: PlaneFns<
+            impl FnOnce(P::Event) -> Result<Q::Event, X>,
+            impl FnOnce(P::SpaceEvent) -> Result<Q::SpaceEvent, X>,
+            impl FnOnce(P::DirectEvent) -> Result<Q::DirectEvent, X>,
+            impl FnMut(P::Matches) -> Result<Q::Matches, X>,
+        >,
+    ) -> Result<UiEvent<F, Q>, X> {
+        let PlaneFns {
+            channel,
+            space,
+            direct,
+            matches,
+        } = plane;
+        Ok(match self {
+            Self::Viewport { document_id, event } => UiEvent::Viewport {
+                document_id,
+                event: app(event)?,
+            },
+            Self::Presence { document_id, event } => UiEvent::Presence {
+                document_id,
+                event: app(event)?,
+            },
             Self::Rest { id, evt } => UiEvent::Rest { id, evt },
             Self::ConnectionStatus {
                 document_id,
@@ -323,7 +346,10 @@ impl<E> UiEvent<E> {
                 document_id,
                 doc_type,
             },
-            Self::Channel { channel_id, event } => UiEvent::Channel { channel_id, event },
+            Self::Channel { channel_id, event } => UiEvent::Channel {
+                channel_id,
+                event: channel(event)?,
+            },
             Self::ChannelActivity { channels } => UiEvent::ChannelActivity { channels },
             Self::NewMessage {
                 channel_id,
@@ -345,9 +371,21 @@ impl<E> UiEvent<E> {
                 names,
                 peers,
             },
-            Self::MessageSearch { query, channels } => UiEvent::MessageSearch { query, channels },
-            Self::Space { space_id, event } => UiEvent::Space { space_id, event },
-            Self::DirectMessage { requested, event } => UiEvent::DirectMessage { requested, event },
+            Self::MessageSearch { query, channels } => UiEvent::MessageSearch {
+                query,
+                channels: channels
+                    .into_iter()
+                    .map(matches)
+                    .collect::<Result<_, _>>()?,
+            },
+            Self::Space { space_id, event } => UiEvent::Space {
+                space_id,
+                event: space(event)?,
+            },
+            Self::DirectMessage { requested, event } => UiEvent::DirectMessage {
+                requested,
+                event: direct(event)?,
+            },
             Self::MeetingParticipantJoined {
                 meeting_id,
                 user_id,
@@ -388,37 +426,35 @@ impl<E> UiEvent<E> {
     }
 
     /// The same event, its document event passed through `f`.
-    pub fn map<F>(self, f: impl FnOnce(E) -> F) -> UiEvent<F> {
-        match self.split() {
-            Split::Viewport(document_id, event) => UiEvent::Viewport {
-                document_id,
-                event: f(event),
-            },
-            Split::Presence(document_id, event) => UiEvent::Presence {
-                document_id,
-                event: f(event),
-            },
-            Split::Other(other) => other,
+    pub fn map<F>(self, f: impl FnOnce(E) -> F) -> UiEvent<F, P> {
+        let plane = PlaneFns {
+            channel: Ok,
+            space: Ok,
+            direct: Ok,
+            matches: Ok,
+        };
+        match self.retype(|event| Ok::<_, Infallible>(f(event)), plane) {
+            Ok(event) => event,
+            Err(never) => match never {},
         }
     }
 
-    /// The same event with its document event projected out of the sum `E`,
-    /// or `None` when the sum holds another application's. The launcher
-    /// hands a view its own events with it.
-    pub fn project<F>(self) -> Option<UiEvent<F>>
+    /// The same event with its document event projected out of the sum `E`
+    /// and its channel types out of the plane `P`. `None` when either holds
+    /// another application's. The launcher hands a view its own events with
+    /// it.
+    pub fn project<F, Q: ChannelPlane>(self) -> Option<UiEvent<F, Q>>
     where
-        E: crate::Embed<F>,
+        E: Embed<F>,
+        P: PlaneOf<Q>,
     {
-        match self.split() {
-            Split::Viewport(document_id, event) => event
-                .project()
-                .ok()
-                .map(|event| UiEvent::Viewport { document_id, event }),
-            Split::Presence(document_id, event) => event
-                .project()
-                .ok()
-                .map(|event| UiEvent::Presence { document_id, event }),
-            Split::Other(other) => Some(other),
-        }
+        let plane = PlaneFns {
+            channel: |event| P::project_event(event).ok_or(()),
+            space: |event| P::project_space_event(event).ok_or(()),
+            direct: |event| P::project_direct_event(event).ok_or(()),
+            matches: |found| P::project_matches(found).ok_or(()),
+        };
+        self.retype(|event| event.project().map_err(drop), plane)
+            .ok()
     }
 }

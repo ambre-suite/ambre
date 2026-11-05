@@ -7,7 +7,8 @@
 //! The list is written with the message and never changes after, so two
 //! peers never race on it.
 
-use ambre_bus::{Attachment, ContentHash, MediaType, Octets};
+use crate::message::Attachment;
+use ambre_bus::{ContentHash, MediaType, Octets};
 use ambre_core::Count;
 use ambre_core::Validated;
 use loro::{Container, LoroList, LoroMap, ValueOrContainer};

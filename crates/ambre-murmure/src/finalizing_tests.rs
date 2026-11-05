@@ -4,7 +4,8 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent, SnapshotVerdict};
+use crate::message::{MessageDraft, MurmureEvent};
+use ambre_bus::{Authored, Instant, SnapshotVerdict};
 use ambre_core::id::{Channel, Id, Lease, Segment, User};
 use ambre_core::{Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};

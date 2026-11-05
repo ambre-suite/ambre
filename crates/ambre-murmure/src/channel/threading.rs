@@ -6,9 +6,8 @@
 //! (`MURMURE-107`), the one field of it another member may write
 //! (`MURMURE-255`).
 
-use ambre_bus::{
-    Authored, Deletion, Instant, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead,
-};
+use crate::message::{Deletion, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes};
 use loro::LoroDoc;
@@ -745,7 +744,7 @@ fn thread_head(document: Id<Document>, thread: &LoroDoc, channel: Id<Channel>) -
         .collect();
     ThreadHead {
         document,
-        replies: ambre_core::Count::<ambre_bus::Replies>::of(replies.len()),
+        replies: ambre_core::Count::<crate::message::Replies>::of(replies.len()),
         last_replier: replies.last().map(|reply| reply.author),
     }
 }

@@ -12,10 +12,8 @@
 )]
 
 use ambre_bus::{
-    Authored, CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace,
-    DirectMessageEvent, HeldReply, HeldSend, Instant, LogicCommand, MemberChannel, MemberInfo,
-    MemberStanding, MemberView, MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent,
-    Presence, RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, UiEvent,
+    Authored, ChannelActivity, ChannelName, ChannelPlace, Instant, MemberChannel, MemberInfo,
+    MemberStanding, RestCommand, RestEvent, Role,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteKey, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, KeyChar, Locale};
@@ -30,6 +28,11 @@ use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
     NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, Writer, key_list,
 };
+use ambre_murmure::message::{
+    CatalogueEntry, ChannelMatches, DirectMessageEvent, HeldReply, HeldSend, MemberView, MessageAt,
+    MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, SearchMatch, SpaceEvent,
+};
+use ambre_murmure::message::{LogicCommand, UiEvent};
 use ambre_murmure::{MessageRef, MurmurePane, Region};
 use leptos::prelude::*;
 use wasm_bindgen_test::*;
@@ -486,7 +489,7 @@ fn a_space_with(
                 name: ambre_core::Validated::<ambre_core::Name>::parse("general").unwrap(),
                 topic: None,
                 category: None,
-                position: ambre_bus::CatalogPosition::FIRST,
+                position: ambre_murmure::message::CatalogPosition::FIRST,
             }],
         },
     });
@@ -899,7 +902,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         mentions: Vec::new(),
         styles: Vec::new(),
         writer: Writer::Member,
-        deleted: ambre_bus::Deletion::Live,
+        deleted: ambre_murmure::message::Deletion::Live,
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
@@ -969,7 +972,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         mentions: Vec::new(),
         styles: Vec::new(),
         writer: Writer::Member,
-        deleted: ambre_bus::Deletion::Live,
+        deleted: ambre_murmure::message::Deletion::Live,
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
@@ -1038,7 +1041,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         mentions: Vec::new(),
         styles: Vec::new(),
         writer: Writer::Member,
-        deleted: ambre_bus::Deletion::Live,
+        deleted: ambre_murmure::message::Deletion::Live,
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
@@ -1185,7 +1188,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         mentions: Vec::new(),
         styles: Vec::new(),
         writer: Writer::Member,
-        deleted: ambre_bus::Deletion::Live,
+        deleted: ambre_murmure::message::Deletion::Live,
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
@@ -1288,8 +1291,8 @@ fn found(query: &str, budget: Id<Channel>, zeta: Id<Channel>) -> UiEvent {
         attachments: Vec::new(),
         reactions: Vec::new(),
         notice: None,
-        edited: ambre_bus::Revision::Original,
-        deleted: ambre_bus::Deletion::Live,
+        edited: ambre_murmure::message::Revision::Original,
+        deleted: ambre_murmure::message::Deletion::Live,
         thread: None,
         also_in_thread: None,
     };
@@ -1300,13 +1303,13 @@ fn found(query: &str, budget: Id<Channel>, zeta: Id<Channel>) -> UiEvent {
             ChannelMatches {
                 channel_id: budget,
                 covered: vec![segment],
-                listed: ambre_core::Count::<ambre_bus::Segments>::new(2),
+                listed: ambre_core::Count::<ambre_murmure::message::Segments>::new(2),
                 matches: vec![SearchMatch { segment, message }],
             },
             ChannelMatches {
                 channel_id: zeta,
                 covered: vec![Id::<Segment>::mint()],
-                listed: ambre_core::Count::<ambre_bus::Segments>::new(1),
+                listed: ambre_core::Count::<ambre_murmure::message::Segments>::new(1),
                 matches: Vec::new(),
             },
         ],
@@ -1669,8 +1672,8 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
 /// that region closes the bar (`MURMURE-432`).
 #[wasm_bindgen_test]
 async fn the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one() {
-    use ambre_bus::TextStyle;
     use ambre_murmure::markers::{Cover, MarkBar};
+    use ambre_murmure::message::TextStyle;
     use wasm_bindgen::JsCast;
 
     let (_owner, relay, _) = shown_direct();
@@ -1780,7 +1783,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     let root_id = Id::<Message>::mint();
     relay.absorb(&ask(Some(HeldReply {
         root: root_id,
-        also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,
+        also_in_channel: ambre_murmure::message::ReplyEcho::AlsoInChannel,
     })));
     settle().await;
     assert!(dialog.open(), "the question opens");
@@ -1818,7 +1821,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         &sent.get_untracked()[..],
         [LogicCommand::Channel {
             channel_id,
-            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: ambre_bus::Confirmation::Confirmed, .. },
+            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: ambre_murmure::message::Confirmation::Confirmed, .. },
         }] if *channel_id == direct && *d == draft && *t == now
     ));
     assert_eq!(

@@ -49,7 +49,10 @@ impl Toggles {
 /// into the command store, so the menu entries' `disabled` state reflects the
 /// Logic thread. A no-op for every event that is not a Toile `UndoState`; the
 /// launcher calls this for every event it relays, naming no Toile variant.
-pub fn mirror_event<S: Embed<ToileEvent>>(store: &CommandStates, ev: &UiEvent<S>) {
+pub fn mirror_event<S: Embed<ToileEvent>, P: ambre_bus::ChannelPlane>(
+    store: &CommandStates,
+    ev: &UiEvent<S, P>,
+) {
     if let Some(ToileEvent::UndoState { undo, redo }) = ev.viewport_event() {
         store.set_enabled(UNDO, *undo);
         store.set_enabled(REDO, *redo);

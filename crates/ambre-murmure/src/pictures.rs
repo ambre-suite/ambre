@@ -12,7 +12,8 @@ use ambre_core::index::Axis;
 use ambre_core::index::Pos;
 use std::collections::HashMap;
 
-use ambre_bus::{ContentHash, MediaType, Picture};
+use crate::message::Picture;
+use ambre_bus::{ContentHash, MediaType};
 use ambre_core::{Count, KnownMediaType, Octets, Seq, SeqKind};
 use ambre_draw::ImageKey;
 
@@ -230,7 +231,10 @@ pub fn frame_at(
 }
 
 /// The frame `index` of `picture`, `None` past its last.
-pub fn frame(picture: &Picture, index: Pos<AnimationFrame>) -> Option<&ambre_bus::PictureFrame> {
+pub fn frame(
+    picture: &Picture,
+    index: Pos<AnimationFrame>,
+) -> Option<&crate::message::PictureFrame> {
     picture.frames.get(index.to_index()?)
 }
 
@@ -244,7 +248,7 @@ pub fn frame_key(media_ref: &Validated<ContentHash>, index: Pos<AnimationFrame>)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::PictureFrame;
+    use crate::message::PictureFrame;
     use ambre_bus::{Instant, PageLoad};
     use ambre_core::Px;
     use ambre_core::{Ms, TimeSpan};

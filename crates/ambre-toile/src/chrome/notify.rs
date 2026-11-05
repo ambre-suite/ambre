@@ -20,7 +20,10 @@ use crate::ui::interop::import_message;
 /// It also surfaces the two schema notices: a board this build cannot open
 /// (`SCHEMA-008`) and a register it cannot decode (`SCHEMA-003`). A no-op for
 /// every other event.
-pub fn notify_event<S: Embed<ToileEvent>>(toasts: &Toasts, ev: &UiEvent<S>) {
+pub fn notify_event<S: Embed<ToileEvent>, P: ambre_bus::ChannelPlane>(
+    toasts: &Toasts,
+    ev: &UiEvent<S, P>,
+) {
     let Some(te) = ev.viewport_event::<ToileEvent>() else {
         return;
     };

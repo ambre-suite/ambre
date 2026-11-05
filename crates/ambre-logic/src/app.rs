@@ -11,15 +11,16 @@
 // ============================================================================
 
 use ambre_bus::{Embed, Mutation};
+use ambre_murmure::message::Murmure;
 use ambre_prose::message::{ProseCommand, ProseEvent};
 use ambre_toile::message::{ToileCommand, ToileEvent};
 use ambre_trame::message::{TrameCommand, TrameEvent};
-use std::convert::Infallible;
 
-/// The UI to Logic envelope as the Logic runtime receives it.
-pub type LogicCommand = ambre_bus::LogicCommand<AppCommand>;
+/// The UI to Logic envelope as the Logic runtime receives it: the document
+/// sum, and Murmure's channel plane.
+pub type LogicCommand = ambre_bus::LogicCommand<AppCommand, Murmure>;
 /// The Logic to UI envelope as the Logic runtime sends it.
-pub type UiEvent = ambre_bus::UiEvent<AppEvent>;
+pub type UiEvent = ambre_bus::UiEvent<AppEvent, Murmure>;
 
 /// Application-specific command, UI Thread -> Logic thread.
 ///
@@ -94,28 +95,9 @@ embed!(AppEvent::Trame(TrameEvent));
 embed!(AppEvent::Toile(ToileEvent));
 embed!(AppEvent::Prose(ProseEvent));
 
-/// A sender that carries no document command, such as Murmure's page. Nothing
-/// embeds into the sum from it, and nothing ever projects out to it.
-macro_rules! embed_nothing {
-    ($sum:ident) => {
-        impl Embed<Infallible> for $sum {
-            fn embed(part: Infallible) -> Self {
-                match part {}
-            }
-
-            fn project(self) -> Result<Infallible, Self> {
-                Err(self)
-            }
-
-            fn peek(&self) -> Option<&Infallible> {
-                None
-            }
-        }
-    };
-}
-
-embed_nothing!(AppCommand);
-embed_nothing!(AppEvent);
+// A sender that carries no document command, such as Murmure's page: nothing
+// embeds into the sum from it, and nothing ever projects out to it.
+ambre_bus::embed_nothing!(AppCommand, AppEvent);
 
 #[cfg(test)]
 mod tests {

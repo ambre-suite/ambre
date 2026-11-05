@@ -7,9 +7,9 @@
 
 use std::collections::HashMap;
 
+use crate::message::{CatalogPosition, CatalogueEntry, CategoryView};
 use ambre_bus::{
-    CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace,
-    DirectPeers, MemberChannel, Mentions, Unread,
+    ChannelActivity, ChannelName, ChannelPlace, DirectPeers, MemberChannel, Mentions, Unread,
 };
 use ambre_core::StepDirection;
 use ambre_core::id::{Category, Channel, Id, Space};
@@ -635,7 +635,7 @@ mod tests {
             vec![CategoryView {
                 id: team,
                 name: ambre_core::Validated::<ambre_core::Name>::parse("Team").unwrap(),
-                position: ambre_bus::CatalogPosition::new(0),
+                position: crate::message::CatalogPosition::new(0),
             }],
             vec![
                 listed(leads, "leads", Some(team), 2),

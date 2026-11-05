@@ -15,21 +15,21 @@
 //! - **Content** ([`LogicCommand::App`], [`LogicCommand::Channel`]): document
 //!   edits / viewport requests, routed by `Id<Document>` inside the Logic thread,
 //!   and channel commands, routed by `Id<Channel>`. The document command is the
-//!   type parameter, and [`MurmureCommand`] is a closed sum. No trait object,
-//!   no `Any`, no crate cycle -- this module depends only on `ambre-core`.
+//!   first type parameter, and the channel types are the second, a
+//!   [`ChannelPlane`]. No trait object, no `Any`, no crate cycle -- this module
+//!   depends only on `ambre-core`.
 //! - **Service** ([`LogicCommand::Rest`]): the correlatable request/response
 //!   family, defined once in [`crate::rest`] and forwarded verbatim to Sync.
 //! - **Control** (`OpenDocument`, `CloseDocument`, `OpenChannel`, `CloseChannel`):
 //!   fire-and-forget session commands with no single response to correlate --
 //!   kept explicit.
 
-use crate::{
-    Authored, DirectMember, DirectMessageDraft, DocType, Instant, MurmureCommand, Request,
-    RestCommand, SpaceCommand,
-};
+use crate::{Authored, DirectMember, DocType, Instant, Request, RestCommand};
 use ambre_core::id::{Channel, Document, Id, Space};
 use ambre_core::{FixedBytes, Seq, SessionNonce};
 use std::convert::Infallible;
+
+use crate::{ChannelPlane, Embed, NoChannels, PlaneOf};
 
 // The document command carried by `LogicCommand::App` is the type parameter: each
 // application declares its own, and `AppCommand` sums them in the Logic runtime.
@@ -60,9 +60,11 @@ pub enum StoreRoom {
 /// [`SyncCommand::Rest`]: crate::SyncCommand::Rest
 ///
 /// `A` is the document command `App` carries. A sender that carries none, such
-/// as the launcher's own service requests, leaves it at [`Infallible`].
+/// as the launcher's own service requests, leaves it at [`Infallible`]. `P` is
+/// the channel plane the channel and space variants carry, [`NoChannels`] for
+/// every sender but Murmure's.
 #[derive(Debug, Clone)]
-pub enum LogicCommand<A = Infallible> {
+pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
     // -- P2 -- Content plane ----------------------------------------------------
     /// Application-specific command for an open document (cell edit, viewport
     /// scroll in Trame; text insertion in Prose; element move in Toile; ...).
@@ -84,14 +86,14 @@ pub enum LogicCommand<A = Infallible> {
     /// carries a channel message as bytes (`BUS-028`).
     Channel {
         channel_id: Id<Channel>,
-        command: MurmureCommand,
+        command: P::Command,
     },
 
     /// Command for an open Murmure space: its catalogue, and the public
     /// channels it lists. Addressed to the space, which is one document.
     Space {
         space_id: Id<Space>,
-        command: SpaceCommand,
+        command: P::SpaceCommand,
     },
 
     /// Restore a document's CRDT state from a locally persisted snapshot
@@ -165,7 +167,7 @@ pub enum LogicCommand<A = Infallible> {
     /// when none holds exactly them (the Murmure channels spec). Answered by
     /// [`crate::UiEvent::DirectMessage`] under `draft.channel_id`.
     OpenDirectMessage {
-        draft: DirectMessageDraft,
+        draft: P::DirectDraft,
         /// The instant of a creation, stamped by the view.
         now: Instant<Authored>,
     },
@@ -235,30 +237,36 @@ pub enum LogicCommand<A = Infallible> {
 // Retyping the document command
 // -----------------------------------------------------------------------------
 
-/// A [`LogicCommand`] split on whether it carries a document command.
-enum Split<A, B> {
-    App(Id<Document>, A),
-    Other(LogicCommand<B>),
-}
-
-impl<A> LogicCommand<A> {
-    /// The document and command of an `App` variant, or every other variant
-    /// retyped, since none of them carries an `A`. The one exhaustive list of
-    /// variants the two maps below share.
-    fn split<B>(self) -> Split<A, B> {
-        Split::Other(match self {
+impl<A, P: ChannelPlane> LogicCommand<A, P> {
+    /// The same command with its document command passed through `app` and
+    /// each channel type through its own function, or the first refusal. The
+    /// one exhaustive list of variants every retyping below shares.
+    fn retype<B, Q: ChannelPlane, E>(
+        self,
+        app: impl FnOnce(A) -> Result<B, E>,
+        channel: impl FnOnce(P::Command) -> Result<Q::Command, E>,
+        space: impl FnOnce(P::SpaceCommand) -> Result<Q::SpaceCommand, E>,
+        direct: impl FnOnce(P::DirectDraft) -> Result<Q::DirectDraft, E>,
+    ) -> Result<LogicCommand<B, Q>, E> {
+        Ok(match self {
             Self::App {
                 document_id,
                 command,
-            } => return Split::App(document_id, command),
+            } => LogicCommand::App {
+                document_id,
+                command: app(command)?,
+            },
             Self::Channel {
                 channel_id,
                 command,
             } => LogicCommand::Channel {
                 channel_id,
-                command,
+                command: channel(command)?,
             },
-            Self::Space { space_id, command } => LogicCommand::Space { space_id, command },
+            Self::Space { space_id, command } => LogicCommand::Space {
+                space_id,
+                command: space(command)?,
+            },
             Self::RestoreLocalSnapshot {
                 document_id,
                 doc_type,
@@ -286,9 +294,10 @@ impl<A> LogicCommand<A> {
             Self::CloseDocument { document_id } => LogicCommand::CloseDocument { document_id },
             Self::OpenChannel { channel_id } => LogicCommand::OpenChannel { channel_id },
             Self::CloseChannel { channel_id } => LogicCommand::CloseChannel { channel_id },
-            Self::OpenDirectMessage { draft, now } => {
-                LogicCommand::OpenDirectMessage { draft, now }
-            }
+            Self::OpenDirectMessage { draft, now } => LogicCommand::OpenDirectMessage {
+                draft: direct(draft)?,
+                now,
+            },
             Self::InviteToChannel {
                 id,
                 channel_id,
@@ -319,32 +328,43 @@ impl<A> LogicCommand<A> {
         })
     }
 
-    /// The same command, its document command passed through `f`. The
-    /// launcher embeds a view's command into the Logic runtime's sum with it.
-    pub fn map<B>(self, f: impl FnOnce(A) -> B) -> LogicCommand<B> {
-        match self.split() {
-            Split::App(document_id, command) => LogicCommand::App {
-                document_id,
-                command: f(command),
-            },
-            Split::Other(other) => other,
+    /// The same command, its document command passed through `f`.
+    pub fn map<B>(self, f: impl FnOnce(A) -> B) -> LogicCommand<B, P> {
+        match self.retype(|command| Ok::<_, Infallible>(f(command)), Ok, Ok, Ok) {
+            Ok(command) => command,
+            Err(never) => match never {},
+        }
+    }
+
+    /// The same command embedded into the sum `S` and the plane `Q`. The
+    /// launcher puts a view's command on the Logic thread's queue with it.
+    pub fn embed_into<S: Embed<A>, Q: PlaneOf<P>>(self) -> LogicCommand<S, Q> {
+        let embedded = self.retype(
+            |command| Ok::<_, Infallible>(S::embed(command)),
+            |command| Ok(Q::embed_command(command)),
+            |command| Ok(Q::embed_space_command(command)),
+            |draft| Ok(Q::embed_draft(draft)),
+        );
+        match embedded {
+            Ok(command) => command,
+            Err(never) => match never {},
         }
     }
 
     /// The same command with its document command projected out of the sum
-    /// `A`, or `None` when the sum holds another application's.
-    pub fn project<B>(self) -> Option<LogicCommand<B>>
+    /// `A` and its channel types out of the plane `P`. `None` when either
+    /// holds another application's.
+    pub fn project<B, Q: ChannelPlane>(self) -> Option<LogicCommand<B, Q>>
     where
-        A: crate::Embed<B>,
+        A: Embed<B>,
+        P: PlaneOf<Q>,
     {
-        match self.split() {
-            Split::App(document_id, command) => {
-                command.project().ok().map(|command| LogicCommand::App {
-                    document_id,
-                    command,
-                })
-            }
-            Split::Other(other) => Some(other),
-        }
+        self.retype(
+            |command| command.project().map_err(drop),
+            |command| P::project_command(command).ok_or(()),
+            |command| P::project_space_command(command).ok_or(()),
+            |draft| P::project_draft(draft).ok_or(()),
+        )
+        .ok()
     }
 }
