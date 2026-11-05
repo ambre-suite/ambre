@@ -576,6 +576,13 @@ impl TrameView {
                 }
             }
         }
+        // What was typed behind the commit now reaches the cell the commit
+        // moved to. A committing chord among it defers the rest again.
+        if self.pending_commit.is_none() {
+            for ev in std::mem::take(&mut self.deferred_input) {
+                let _ = self.handle_input(&ev);
+            }
+        }
     }
 
     /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
@@ -620,10 +627,36 @@ impl TrameView {
         if let InputEvent::Wheel { delta, mods } = ev {
             return self.handle_wheel(*delta, *mods);
         }
+        // A commit waits for the paint flush. A text or an editing key typed
+        // before it belongs to the next cell, never to the buffer being
+        // committed (`TRAME-UI-183`).
+        if self.pending_commit.is_some() && waits_for_commit(ev) {
+            self.deferred_input.push(ev.clone());
+            return ambre_draw::Consumed::Yes;
+        }
         // An open edit session owns text, IME and the editing keys.
         if self.editor.is_some() {
             return self.handle_input_editing(ev);
         }
         self.handle_input_nav(ev)
+    }
+}
+
+/// Whether `ev` waits behind a pending commit. Three keys pass. A printable
+/// key leaves its text to the `Text` event. A chord with the primary modifier
+/// goes to the chrome keymap. The browser serves `Shift+Delete` as a cut.
+fn waits_for_commit(ev: &InputEvent) -> bool {
+    use ambre_commands::{Key, ModifierKeys};
+    match ev {
+        InputEvent::Text { .. }
+        | InputEvent::CompositionUpdate { .. }
+        | InputEvent::CompositionEnd { .. } => true,
+        InputEvent::Key { key, mods } => {
+            let passes = mods.contains(ModifierKeys::PRIMARY)
+                || matches!(key, Key::Char(_) | Key::Space)
+                || (*key == Key::Delete && mods.contains(ModifierKeys::SHIFT));
+            !passes
+        }
+        _ => false,
     }
 }

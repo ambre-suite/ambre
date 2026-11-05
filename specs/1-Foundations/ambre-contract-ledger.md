@@ -21,12 +21,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3873 rows: 3317 shipped, of which 11 loose. 556 unbuilt.**
+**3876 rows: 3320 shipped, of which 12 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 947 | 452 | 873 | 616 | 418 | 3306 |
-| `failing` |  |  |  |  |  | 0 |
+| `verified` | 947 | 454 | 873 | 616 | 418 | 3308 |
+| `failing` |  | 1 |  |  |  | 1 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
@@ -81,7 +81,7 @@
 | `ambre-spec-zero-knowledge.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-trame-schema.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
-| `ambre-spec-trame-cell-editing.md` | 41 | 29 | 29 |  | 12 |
+| `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 37 |  | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 13 | 10 | 10 |  | 3 |
 | `ambre-spec-trame-cell-styles.md` | 26 | 22 | 22 |  | 4 |
@@ -98,8 +98,8 @@
 | `ambre-spec-trame-number-formats.md` | 14 | 11 | 11 |  | 3 |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  | 3 |
 | `ambre-spec-trame-resize.md` | 11 | 11 | 11 |  |  |
-| `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-trame-selection.md` | 11 | 10 | 10 |  | 1 |
+| `ambre-spec-trame-rows-and-columns.md` | 21 | 21 | 20 | 1 |  |
+| `ambre-spec-trame-selection.md` | 12 | 11 | 11 |  | 1 |
 | `ambre-spec-trame-shared-filter.md` | 37 | 34 | 34 |  | 3 |
 | `ambre-spec-trame-sheets.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-trame-sort.md` | 25 | 25 | 25 |  |  |
@@ -319,7 +319,7 @@
 | `ambre-spec-toile-viewport.md` | TOILE-UI-002..004,010,025..030,278..298,360,378..380,421 |
 | `ambre-spec-toile-z-order.md` | TOILE-057..061,119..129 |
 | `ambre-spec-trame-autofill.md` | TRAME-UI-067..074,133..134,180 |
-| `ambre-spec-trame-cell-editing.md` | TRAME-FEAT-020..024,047..050; TRAME-UI-010..011,015,050..058,091..092,155..171,176 |
+| `ambre-spec-trame-cell-editing.md` | TRAME-FEAT-020..024,047..050; TRAME-UI-010..011,015,050..058,091..092,155..171,176,183 |
 | `ambre-spec-trame-cell-merges.md` | TRAME-019..020,027..031,125..128,130..133,135..138,140..150; TRAME-IO-016; TRAME-UI-009,111..116 |
 | `ambre-spec-trame-cell-rendering.md` | TRAME-UI-020..021,093..100,139..140,177 |
 | `ambre-spec-trame-cell-styles.md` | TRAME-092..101,186..193,239..240,259..260; TRAME-FEAT-017..019,028 |
@@ -336,9 +336,9 @@
 | `ambre-spec-trame-number-formats.md` | TRAME-102..110,157..158,223,237..238 |
 | `ambre-spec-trame-pdf-export.md` | TRAME-IO-021..023,031 |
 | `ambre-spec-trame-resize.md` | TRAME-UI-036..042,126..128,181 |
-| `ambre-spec-trame-rows-and-columns.md` | TRAME-080..091,170..177 |
+| `ambre-spec-trame-rows-and-columns.md` | TRAME-080..091,170..177,261 |
 | `ambre-spec-trame-schema.md` | TRAME-003,010,016,025,221..222,242 |
-| `ambre-spec-trame-selection.md` | TRAME-UI-019,030..035,129..132 |
+| `ambre-spec-trame-selection.md` | TRAME-UI-019,030..035,129..132,182 |
 | `ambre-spec-trame-shared-filter.md` | TRAME-256..257; TRAME-FEAT-002..009,014..016,025..027,029..046; TRAME-UI-008,154,173 |
 | `ambre-spec-trame-sheets.md` | TRAME-022,070..079,159..165,232,234..236,241 |
 | `ambre-spec-trame-sort.md` | TRAME-004,111..115,178..185,255; TRAME-FEAT-010..013; TRAME-UI-101..102,150..153 |
