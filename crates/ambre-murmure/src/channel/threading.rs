@@ -778,3 +778,28 @@ fn named_threads(doc: &LoroDoc) -> Vec<(Id<Message>, Id<Document>)> {
     });
     named
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod copy_id_tests {
+    use ambre_core::id::{Id, Message};
+    use proptest::prelude::*;
+
+    use super::copy_id;
+
+    proptest! {
+        /// A copy never takes the identifier of its reply, and the turn is its
+        /// own inverse, so two replies never share a copy (`MURMURE-538`).
+        #[test]
+        fn a_copy_differs_from_its_reply_and_from_every_other_copy(
+            bytes in any::<[u8; 16]>(),
+            other in any::<[u8; 16]>(),
+        ) {
+            let reply = Id::<Message>::from_bytes(bytes);
+            let copy = copy_id(reply);
+            prop_assert_ne!(copy, reply);
+            prop_assert_eq!(copy_id(copy), reply);
+            let other = Id::<Message>::from_bytes(other);
+            prop_assert_eq!(copy == copy_id(other), reply == other);
+        }
+    }
+}

@@ -458,7 +458,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         [(moved, "meanwhile")]
     );
     assert_eq!(messages[0].reactions[0].users, [bob_user]);
-    assert_eq!(messages[0].styles, [code]);
+    assert_eq!(messages[0].styles, std::slice::from_ref(&code));
     assert_eq!(
         bob.messages(old).expect("old"),
         alice.messages(old).expect("old"),
@@ -477,10 +477,15 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
             signer,
         )
         .expect("the check accepts the moved message");
-    assert_eq!(
-        alice.messages(successor).expect("successor"),
-        bob.messages(successor).expect("successor")
-    );
+    let held = alice.messages(successor).expect("successor");
+    assert_eq!(held, bob.messages(successor).expect("successor"));
+    let written = held
+        .iter()
+        .find(|m| m.id == moved)
+        .expect("the active segment holds the moved message");
+    assert_eq!(written.text, "meanwhile");
+    assert_eq!(written.styles, [code]);
+    assert_eq!(written.reactions[0].users, [bob_user]);
 }
 
 /// A refusal that created no message moves nothing, and the active segment

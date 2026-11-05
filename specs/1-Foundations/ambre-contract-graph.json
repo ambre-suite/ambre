@@ -11089,6 +11089,7 @@
   {"edge": "cites-rule", "from": "MURMURE-538", "to": "MURMURE-084"},
   {"edge": "verified-by", "from": "MURMURE-538", "to": "ambre_logic::channels::tests::a_copy_follows_the_edit_and_the_delete_of_its_reply"},
   {"edge": "verified-by", "from": "MURMURE-538", "to": "ambre_murmure::thread_tests::a_copy_is_found_from_its_reply"},
+  {"edge": "verified-by", "from": "MURMURE-538", "to": "ambre_murmure::channel::threading::copy_id_tests::a_copy_differs_from_its_reply_and_from_every_other_copy"},
   {"edge": "cites-section", "from": "MURMURE-539", "section": "3", "to": "5-Murmure/features/ambre-spec-murmure-threads.md"},
   {"edge": "cites-rule", "from": "MURMURE-539", "to": "MURMURE-109"},
   {"edge": "cites-rule", "from": "MURMURE-539", "to": "MURMURE-087"},
