@@ -82,9 +82,17 @@ exclude_re = [
     'replace SyncState::(handle_mark_read|handle_move_read_cursors|handle_mark_thread_read|move_cursors|handle_mark_all_read|handle_fetch_activity|fetch_activity|handle_list_space_channels) with \(\)',
     'replace put_cursors with \(\)',
     'delete ! in SyncState::handle_mark_read',
-    # The same host path for snapshots: with no relay the fetch and the
-    # vouch only log.
-    'replace SyncState::(fetch_announced_snapshot|post_snapshot_vouch) with \(\)',
+    # The same host path for snapshots and the lazy create: with no relay
+    # each only seals or logs, and changes no state a test reads.
+    'replace SyncState::(fetch_announced_snapshot|post_snapshot_vouch|handle_send_snapshot|trigger_lazy_create) with \(\)',
+    # The open of a document past its first lines runs in the `spawn_local`
+    # task of the browser path, which no host test reaches.
+    'updates\.rs:6[0-9][0-9]:.* in SyncState::handle_open_document',
+    # Equivalent: without a session key each update drained is buffered
+    # again in its order, and with nothing buffered nothing drains.
+    'replace \|\| with && in SyncState::flush_pre_session_updates',
+    # Log only.
+    'delete ! in SyncState::flush_pre_session_updates',
     # Host-unreachable: with no relay a space step ends in a payment that
     # fails or a key that stays, which leaves the state as it was. With a
     # relay the step spawns a browser task.

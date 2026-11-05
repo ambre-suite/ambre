@@ -3394,6 +3394,72 @@ mod tests {
         assert!(!state.documents[&doc].known_snapshots.contains(&announced));
     }
 
+    /// `SYNC-031`: a gap that stays past the threshold once one snapshot
+    /// arrives asks no second time.
+    #[test]
+    fn a_gap_still_past_the_threshold_asks_once() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (first, second) = (Id::<Snapshot>::mint(), Id::<Snapshot>::mint());
+        let mut seq = 0;
+        let mut arrive = |state: &mut SyncState, parent, clock| {
+            seq += 1;
+            let update = make_update(doc, parent, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
+            state.receive_update(Seq::<Relay>::new(seq), update);
+        };
+        arrive(&mut state, first, 1);
+        for clock in 2..=(QUARANTINE_ALERT as u64 + 1) {
+            arrive(&mut state, second, clock);
+        }
+        state.snapshot_known(doc, first);
+        assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_ALERT);
+        arrive(&mut state, second, QUARANTINE_ALERT as u64 + 2);
+        let asks = drain_ws(&ws_rx)
+            .iter()
+            .filter(|m| matches!(m, WsClientMsg::RequestMissing { .. }))
+            .count();
+        assert_eq!(asks, 1, "the gap was asked for again");
+    }
+
+    /// `SYNC-128`: a payment that cannot start leaves the debt owed, so the
+    /// next edit pays it.
+    #[test]
+    fn a_payment_that_cannot_start_leaves_the_debt_owed() {
+        let (mut state, _rx, doc, _key, _sk, _snap) = setup();
+        let rekey = &mut state.documents.get_mut(&doc).expect("open").rekey;
+        rekey.found_debt();
+        assert!(rekey.pay_now());
+        state.start_settle(doc);
+        let rekey = &mut state.documents.get_mut(&doc).expect("open").rekey;
+        assert!(
+            rekey.pay_now(),
+            "the debt waits on a payment that never left"
+        );
+    }
+
+    /// `SYNC-185`: a reconnect subscribes the document again and asks for
+    /// what came after the last number it holds.
+    #[test]
+    fn a_reconnect_subscribes_again_and_asks_after_the_last_number() {
+        let (mut state, _rx, doc, _key, _sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.documents.get_mut(&doc).expect("open").last_seq = Seq::<Relay>::new(7);
+        state.handle_reconnect(doc);
+        let sent = drain_ws(&ws_rx);
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    WsClientMsg::Subscribe { document_id: a },
+                    WsClientMsg::RequestMissing { document_id: b, after_seq },
+                ] if *a == doc && *b == doc && after_seq.get() == 7
+            ),
+            "{sent:?}"
+        );
+    }
+
     /// The cause a held document warns with names the refusal, or the
     /// failures counted.
     #[test]
