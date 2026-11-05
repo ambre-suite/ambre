@@ -61,6 +61,10 @@ mod authorship_tests;
 mod channel_tests;
 #[cfg(test)]
 mod closing_tests;
+// Host only: proptest does not build on wasm32.
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod convergence_tests;
 #[cfg(test)]
 mod edit_tests;
 #[cfg(test)]
