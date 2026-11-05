@@ -104,7 +104,7 @@ pub struct ToolbarState {
     pub active: Option<ActiveMarks>,
 }
 
-// ambre-bus/src/app/prose.rs -- read by `ProseCommand::ReadMarks`,
+// ambre-prose/src/message/mod.rs -- read by `ProseCommand::ReadMarks`,
 // answered by `ProseEvent::SelectionMarks` with the selection it describes
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

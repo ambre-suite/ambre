@@ -29,6 +29,8 @@ ambre-commands = { path = "../ambre-commands" }
 ambre-draw = { path = "../ambre-draw" }
 serde = { workspace = true }
 tracing = { workspace = true }
+# The refusals of the message vocabulary (`message`) derive `thiserror::Error`.
+thiserror = { workspace = true }
 
 # CRDT: `LoroMovableTree` for the block hierarchy, `LoroText` for a body,
 # `LoroMap` for the registers, `UndoManager` for the local history

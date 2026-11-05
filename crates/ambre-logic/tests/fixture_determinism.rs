@@ -404,7 +404,7 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
     let block = prose.root_blocks()[0];
     prose.handle_command(ProseCommand::InsertText {
         block_id: block,
-        pos: Pos::<ambre_bus::app::prose::DocChar>::ZERO,
+        pos: Pos::<ambre_prose::message::DocChar>::ZERO,
         text: "a paragraph".to_owned(),
     });
     assert_round_trip(&DocState::Prose(Box::new(prose)), DocType::Prose);

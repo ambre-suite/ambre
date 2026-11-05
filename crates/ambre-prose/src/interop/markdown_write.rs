@@ -8,9 +8,7 @@
 //! document writes the same bytes (`PROSE-IO-003`).
 use std::fmt::Write as _;
 
-use ambre_bus::app::prose::{
-    ConversionFormat, ConversionReport, MarkdownFlavor, UnsupportedFeature,
-};
+use crate::message::{ConversionFormat, ConversionReport, MarkdownFlavor, UnsupportedFeature};
 
 use crate::numbering::ListItem;
 
@@ -131,7 +129,7 @@ impl Writer {
             }
             IrBlock::CodeBlock { lang, text } => {
                 let fence = fence_for(text);
-                let info = ambre_bus::app::prose::stored_code_lang(lang.as_ref());
+                let info = crate::message::stored_code_lang(lang.as_ref());
                 self.line(indent, &format!("{fence}{info}"));
                 for line in text.split('\n') {
                     self.line(indent, line);
@@ -516,7 +514,7 @@ fn longest_run(text: &str, c: char) -> usize {
 mod tests {
     use super::*;
     use crate::interop::{IrFootnote, IrMeta, IrTableCell};
-    use ambre_bus::app::prose::{ConversionWarning, FootnoteCall};
+    use crate::message::{ConversionWarning, FootnoteCall};
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
@@ -646,12 +644,12 @@ mod tests {
         };
         let doc = ir(vec![
             IrBlock::Heading {
-                level: crate::doc::StoredLevel::of(ambre_bus::app::prose::HeadingLevel::H2),
+                level: crate::doc::StoredLevel::of(crate::message::HeadingLevel::H2),
                 runs: vec![IrRun::plain("Title")],
             },
             para(vec![bold, both, IrRun::plain(" and "), link]),
             IrBlock::CodeBlock {
-                lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
+                lang: ambre_core::Validated::<crate::message::CodeLang>::parse("rust").ok(),
                 text: "fn main() {}".to_owned(),
             },
         ]);

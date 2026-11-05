@@ -8,7 +8,7 @@
 // the block says nothing, or each arrow press would read the paragraph again.
 // ============================================================================
 
-use ambre_bus::app::prose::BlockType;
+use crate::message::BlockType;
 
 use crate::events::BlockId;
 use crate::ui::ProseUiState;
@@ -58,8 +58,8 @@ impl ProseUiState {
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use crate::events::HeadingLevel;
-    use ambre_bus::app::prose::DocChar;
-    use ambre_bus::app::prose::{BlockInit, CursorPosition};
+    use crate::message::DocChar;
+    use crate::message::{BlockInit, CursorPosition};
     use ambre_core::index::Pos;
     use ambre_core::{Px, View};
 

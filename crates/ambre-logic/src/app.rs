@@ -10,9 +10,9 @@
 // it, at the launcher.
 // ============================================================================
 
-use ambre_bus::app::prose::{ProseCommand, ProseEvent};
 use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 use ambre_bus::{Embed, Mutation};
+use ambre_prose::message::{ProseCommand, ProseEvent};
 use ambre_trame::message::{TrameCommand, TrameEvent};
 use std::convert::Infallible;
 

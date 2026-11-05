@@ -27,7 +27,7 @@
 //! shape belt's, so the two belts read the same document. Its values are
 //! frozen here, so a command added to it lands with a raised version.
 
-use ambre_bus::app::prose::{DocChar, FootnoteCall};
+use crate::message::{DocChar, FootnoteCall};
 use ambre_core::Rgba;
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Ordinal, PrintLength, Pt};
@@ -450,7 +450,7 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
         doc::AttrKey::Marker | doc::AttrKey::Spelling | doc::AttrKey::Ticked => {
             // The frozen reading prints the checkbox as its stored bool.
             match doc::list_style_of(&tree, id)? {
-                ambre_bus::app::prose::ListStyle::Todo(mark) => {
+                crate::message::ListStyle::Todo(mark) => {
                     format!("marked Todo({})", mark.is_done())
                 }
                 style => format!("marked {style:?}"),

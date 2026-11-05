@@ -97,7 +97,7 @@ it, and a slow pass costs a late underline rather than a late character.
 compiled into the binary (`PROSE-FEAT-042`). The binary is capped at two megabytes compressed
 (`README.md`, initial load), which one dictionary would spend on readers who never see it.
 
-**The three commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The three commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

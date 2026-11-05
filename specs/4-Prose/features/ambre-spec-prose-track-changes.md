@@ -180,7 +180,7 @@ three back (`PROSE-FEAT-302`).
 Its text goes when the insertion is rejected or the deletion accepted (`PROSE-FEAT-303`). An
 accept racing a reject of one suggestion therefore converges on the removal (`PROSE-FEAT-011`).
 
-**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

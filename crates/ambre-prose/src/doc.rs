@@ -20,7 +20,7 @@ use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
 };
 
-use ambre_bus::app::prose::{
+use crate::message::{
     Align, BandState, BlockType, DocChar, FirstPage, HeadingLevel, KeepTogether, KeepWithNext,
     LineHeight, LineHeightMode, LineSpacingMultiple, ListStyle, OrderedStyle, ParagraphStyle,
     StyleId, TocNumbering,
@@ -161,7 +161,7 @@ impl std::fmt::Display for WriteError {
 impl std::error::Error for WriteError {}
 
 /// The refusal a command whose write did not land answers with.
-impl From<WriteError> for ambre_bus::app::prose::ProseRefusal {
+impl From<WriteError> for crate::message::ProseRefusal {
     fn from(error: WriteError) -> Self {
         match error {
             WriteError::NoIdentity => Self::NoIdentity,
@@ -1778,10 +1778,8 @@ mod tests {
         ));
         assert_eq!(error.to_string(), "the table carries no width list");
         assert_eq!(
-            ambre_bus::app::prose::ProseRefusal::from(WriteError::Refused(
-                RefusalCause::TreeRefusedRow
-            )),
-            ambre_bus::app::prose::ProseRefusal::WriteFailed("the tree refused a row".to_owned())
+            crate::message::ProseRefusal::from(WriteError::Refused(RefusalCause::TreeRefusedRow)),
+            crate::message::ProseRefusal::WriteFailed("the tree refused a row".to_owned())
         );
     }
 
@@ -1970,13 +1968,9 @@ mod tests {
             assert!(node.get(NodeKey::LineHeight).is_none());
         }
         // The author is told the input is refused, not that the engine failed.
-        let refusal = ambre_bus::app::prose::ProseRefusal::from(WriteError::Refused(
-            RefusalCause::NonFiniteLength,
-        ));
-        assert_eq!(
-            refusal,
-            ambre_bus::app::prose::ProseRefusal::NonFiniteLength
-        );
+        let refusal =
+            crate::message::ProseRefusal::from(WriteError::Refused(RefusalCause::NonFiniteLength));
+        assert_eq!(refusal, crate::message::ProseRefusal::NonFiniteLength);
         assert!(!refusal.to_string().contains("engine"), "{refusal}");
     }
 
@@ -2041,7 +2035,7 @@ mod tests {
 
     #[test]
     fn the_nine_built_in_style_names_are_not_user_styles() {
-        let style = |name: &str| ambre_bus::app::prose::StyleId::new(name.to_owned());
+        let style = |name: &str| crate::message::StyleId::new(name.to_owned());
         assert!(is_built_in_style(&style("quote")));
         assert!(is_built_in_style(&style("heading-6")));
         assert!(!is_built_in_style(&style("my-style")));

@@ -7,7 +7,7 @@
 //! kept where it has any (`PROSE-IO-005`). A file that is not text, or is too
 //! large, fails as a typed error and yields no form at all (`PROSE-IO-010`).
 
-use ambre_bus::app::prose::{
+use crate::message::{
     CodeLang, ConversionFormat, ConversionReport, DroppedElement, HeadingLevel, InteropError,
 };
 use ambre_core::Validated;
@@ -479,7 +479,7 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {
 mod tests {
     use super::*;
     use crate::interop::markdown_write;
-    use ambre_bus::app::prose::{ConversionWarning, MarkdownFlavor};
+    use crate::message::{ConversionWarning, MarkdownFlavor};
 
     /// [`read`] over a file of `bytes`.
     fn read_bytes(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {

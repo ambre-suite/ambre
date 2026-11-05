@@ -227,9 +227,9 @@ mod tests {
     use super::{RulerDrag, RulerHandle, RulerHandles, RulerRelease, RulerState};
     use crate::events::{BlockInit, CursorPosition, ParagraphStyle, ProseCommand};
     use crate::logic::ProseState;
+    use crate::message::DocChar;
     use crate::ui::ProseUiState;
     use crate::view::tests::{append, laid_out};
-    use ambre_bus::app::prose::DocChar;
     use ambre_core::index::Pos;
     use ambre_core::{PrintLength, Pt};
     use ambre_core::{Px, View};

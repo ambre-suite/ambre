@@ -9,8 +9,8 @@
 use ambre_core::index::Pos;
 use std::hint::black_box;
 
-use ambre_bus::app::prose::{DocChar, ProseCommand};
 use ambre_prose::logic::ProseState;
+use ambre_prose::message::{DocChar, ProseCommand};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 const SIZE: usize = 500 * 1024;

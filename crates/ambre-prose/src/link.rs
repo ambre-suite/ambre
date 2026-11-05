@@ -5,7 +5,7 @@
 //! reads the list to show the link cursor and to follow a target; nothing in
 //! it writes to the document.
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::index::Pos;
 use loro::{LoroDoc, LoroValue, TextDelta};
 
@@ -125,8 +125,8 @@ pub fn openable(url: &ambre_core::LinkUrl) -> bool {
 mod tests {
     use crate::events::{BlockInit, LinkSpan, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
+    use crate::message::DocChar;
     use crate::view::tests::append;
-    use ambre_bus::app::prose::DocChar;
     use ambre_core::index::{Pos, Span};
 
     fn mark(

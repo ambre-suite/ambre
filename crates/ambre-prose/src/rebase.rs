@@ -11,7 +11,7 @@
 //! deletion of `-delta` code points when it is negative. A list of edits is
 //! sequential: each one counts positions in the text the previous one left.
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::index::{Delta, Len, Pos};
 
 use crate::events::{BlockId, TextEdit};

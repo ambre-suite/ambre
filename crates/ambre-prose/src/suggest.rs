@@ -7,7 +7,7 @@
 //! never share a value. A span can carry an insertion and a deletion at once
 //! (`PROSE-FEAT-258`). Nothing in this module writes.
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::id::{self, Id, User};
 use ambre_core::index::{Pos, Span};
 use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
@@ -15,7 +15,7 @@ use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 use crate::doc;
 use crate::events::{Suggestion, SuggestionKind, SuggestionSpan, block_id};
 use crate::mark::MarkRoot;
-use ambre_bus::app::prose::MarkKey;
+use crate::message::MarkKey;
 
 /// The mark key of suggestion `id`.
 #[must_use]

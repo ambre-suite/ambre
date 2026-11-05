@@ -17,14 +17,14 @@ use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::app::prose::{BlockInit, CodeLang, DocChar, HeadingLevel, ListStyle, OrderedStyle};
+use crate::message::{BlockInit, CodeLang, DocChar, HeadingLevel, ListStyle, OrderedStyle};
 
 use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
 use crate::doc::{self, StoredLevel};
 use crate::events::{BlockId, ProseEvent, ProseOutcome, block_id, tree_id};
 use crate::mark::{self, FORMATTING_KEYS, MarkRoot};
-use ambre_bus::app::prose::{BlockType, MarkKey};
+use crate::message::{BlockType, MarkKey};
 
 /// What opens the bytes, so a payload another Ambre application wrote under
 /// the same clipboard type never decodes as this one.
@@ -62,7 +62,7 @@ enum ClipKind {
 /// The code language as the payload spells it: the stored text, so the bytes
 /// stay those a payload of a bare string wrote.
 mod stored_lang {
-    use ambre_bus::app::prose::CodeLang;
+    use crate::message::CodeLang;
     use ambre_core::Validated;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -74,7 +74,7 @@ mod stored_lang {
         lang: &Option<Validated<CodeLang>>,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        ambre_bus::app::prose::stored_code_lang(lang.as_ref()).serialize(serializer)
+        crate::message::stored_code_lang(lang.as_ref()).serialize(serializer)
     }
 
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
@@ -482,9 +482,9 @@ mod tests {
     use super::*;
     use crate::events::{BlockInit, ProseCommand};
     use crate::link::HREF_MAX;
+    use crate::message::DocChar;
+    use crate::message::OrderedStyle;
     use crate::view::tests::append;
-    use ambre_bus::app::prose::DocChar;
-    use ambre_bus::app::prose::OrderedStyle;
 
     #[test]
     fn a_copied_run_prints_its_text_by_length_alone() {
@@ -862,7 +862,7 @@ mod tests {
         let code = append(
             &mut state,
             BlockInit::CodeBlock {
-                lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
+                lang: ambre_core::Validated::<crate::message::CodeLang>::parse("rust").ok(),
             },
             "a < b && c",
         );

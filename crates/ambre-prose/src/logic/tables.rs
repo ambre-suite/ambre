@@ -800,7 +800,7 @@ impl ProseState {
 pub(crate) mod tests {
     use super::*;
     use crate::events::{ProseCommand, tree_id};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
 
     /// The first table at the root of the document.
     pub(crate) fn the_table(state: &ProseState) -> TreeID {

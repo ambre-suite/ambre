@@ -12,7 +12,7 @@ use parley::{
     LayoutContext, LineHeight, StyleProperty,
 };
 
-use ambre_bus::app::prose::{
+use crate::message::{
     Align, DocChar, KeepTogether, KeepWithNext, LineHeight as StoredLineHeight, ParagraphStyle,
 };
 use ambre_core::{Byte, PrintLength, Pt, Weight, char_to_byte};

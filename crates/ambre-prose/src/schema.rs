@@ -167,7 +167,7 @@ mod tests {
     use super::*;
     use crate::events::ProseCommand;
     use crate::logic::ProseState;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::Pos;
 
     /// A snapshot carrying `version` in its register. A `None` version writes no

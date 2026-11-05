@@ -89,7 +89,7 @@ mod tests {
     use super::*;
     use crate::events::{BlockInit, ProseCommand, block_id};
     use crate::logic::ProseState;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::{Len, Pos};
 
     /// A document of one paragraph per string, in order.

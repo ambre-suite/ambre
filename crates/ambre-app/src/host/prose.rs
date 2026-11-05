@@ -23,7 +23,6 @@
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
-use ambre_bus::app::prose::{ProseCommand, ProseEvent, WordCount};
 use ambre_bus::{Inbox, LogicCommand, Outbox, PasteSource, Port, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
@@ -38,6 +37,7 @@ use ambre_draw::{Consumed, DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
+use ambre_prose::message::{ProseCommand, ProseEvent, WordCount};
 use ambre_prose::probe::{Answer, Dispatch, KeyProbe, Measure, ProbeName};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::paint::PagePalette;
@@ -781,10 +781,10 @@ fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::{Graphemes, Page, Paragraphs, Words};
     use ambre_core::Count;
     use ambre_core::index::Len;
     use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
+    use ambre_prose::message::{Graphemes, Page, Paragraphs, Words};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.

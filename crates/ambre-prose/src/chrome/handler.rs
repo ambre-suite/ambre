@@ -8,7 +8,7 @@
 // drains both the same way (`PROSE-UI-056`).
 // ============================================================================
 
-use ambre_bus::app::prose::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand};
+use crate::message::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
 use ambre_commands::{ClipboardWrite, PasteForm};
 use ambre_core::{Commands, StaticKey};

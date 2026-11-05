@@ -6,8 +6,8 @@
 //! function in. Every mutation leaves through that function (`PROSE-UI-004`);
 //! the view writes its draft and its caret, and nothing else.
 
+use crate::message::DocChar;
 use ambre_bus::PasteSource;
-use ambre_bus::app::prose::DocChar;
 use ambre_commands::{ClipboardWrite, Key, KeyChar, ModifierKeys, SelectionMode};
 use ambre_core::Flags;
 use ambre_core::StepDirection;

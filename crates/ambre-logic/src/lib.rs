@@ -248,7 +248,7 @@ impl DocState {
                 ambre_bus::app::toile::ToileEvent::DocumentRefused(error.to_string()),
             ),
             DocState::Prose(_) => {
-                AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocumentRefused {
+                AppEvent::Prose(ambre_prose::message::ProseEvent::DocumentRefused {
                     reason: error.to_string(),
                 })
             }
@@ -323,12 +323,12 @@ impl DocState {
                     skipped: Vec::new(),
                 })
             }
-            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady {
+            DocState::Prose(_) => AppEvent::Prose(ambre_prose::message::ProseEvent::ExportReady {
                 filename,
-                media_type: ambre_bus::app::prose::ExportFormat::Ambre.media_type(),
+                media_type: ambre_prose::message::ExportFormat::Ambre.media_type(),
                 data,
-                report: ambre_bus::app::prose::ConversionReport::clean(
-                    ambre_bus::app::prose::ConversionFormat::Ambre,
+                report: ambre_prose::message::ConversionReport::clean(
+                    ambre_prose::message::ConversionFormat::Ambre,
                 ),
             }),
         }
@@ -345,10 +345,10 @@ impl DocState {
             DocState::Toile(_) => {
                 AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(reason))
             }
-            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error(
-                ambre_bus::app::prose::ProseError::new(
-                    ambre_bus::app::prose::RefusedAction::Exporting,
-                    ambre_bus::app::prose::ProseRefusal::WriteFailed(reason),
+            DocState::Prose(_) => AppEvent::Prose(ambre_prose::message::ProseEvent::Error(
+                ambre_prose::message::ProseError::new(
+                    ambre_prose::message::RefusedAction::Exporting,
+                    ambre_prose::message::ProseRefusal::WriteFailed(reason),
                 ),
             )),
         }
@@ -1298,8 +1298,8 @@ mod pass_tests {
     use super::*;
     use crate::app::{AppCommand, AppEvent};
     use ambre_bus::DocType;
-    use ambre_bus::app::prose::{ProseCommand, ProseEvent};
     use ambre_core::index::Pos;
+    use ambre_prose::message::{ProseCommand, ProseEvent};
 
     /// A state with every outbound receiver kept, and one open Prose document
     /// whose opening answers are already drained.
@@ -1311,7 +1311,7 @@ mod pass_tests {
         saved: Vec<PersistWrite>,
         _sync: Receiver<SyncCommand>,
         document_id: Id<Document>,
-        block: ambre_bus::app::prose::BlockId,
+        block: ambre_prose::message::BlockId,
     }
 
     /// A rig whose first save already went, so the next ones are deltas.
@@ -1370,7 +1370,7 @@ mod pass_tests {
             document_id: rig.document_id,
             command: AppCommand::Prose(ProseCommand::InsertText {
                 block_id: rig.block,
-                pos: Pos::<ambre_bus::app::prose::DocChar>::new(pos),
+                pos: Pos::<ambre_prose::message::DocChar>::new(pos),
                 text: "a".to_owned(),
             }),
         }

@@ -17,7 +17,7 @@ kurbo = { workspace = true }
 # Compact LWW encoding of the Toile per-element `ElementStyle` register (§2.E),
 # and the host round-trip of the Logic <-> Sync envelopes below.
 postcard = { workspace = true }
-# `ToileError` and `ProseError` derive `thiserror::Error`.
+# `ToileError` derives `thiserror::Error`.
 thiserror = { workspace = true }
 # The queues under the `conduit` channels, every client thread's. They take no
 # lock: flume's `std::sync::Mutex`, once contended on the page's main thread,

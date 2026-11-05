@@ -4,7 +4,7 @@
 //! Driven through the engine: a note is written by its command, and the
 //! layout read back is the one the view is handed.
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::id::{Footnote, Id};
 use ambre_core::index::Pos;
 use ambre_core::{Doc, Px};

@@ -30,7 +30,9 @@
 //!   was confirmed and was drawn (`ambre-spec-budgets.md`).
 //! * [`logic`] -- the engine: the command entry point, the remote and snapshot
 //!   paths, presence, and the picture cache.
-//! * [`events`] -- the IPC contract, re-exported from `ambre-bus`, plus the
+//! * [`message`] -- the IPC message types: the command and event families and
+//!   their value types (`BUS-032`).
+//! * [`events`] -- the IPC contract, re-exported from [`message`], plus the
 //!   outcome one command answers with.
 //! * [`ui`] -- the UI thread's own state and its send path. It holds no
 //!   document data (`PROSE-UI-001`).
@@ -62,6 +64,7 @@ pub mod layout;
 pub mod link;
 pub mod logic;
 pub mod mark;
+pub mod message;
 pub mod note;
 pub mod numbering;
 pub mod probe;

@@ -7,11 +7,11 @@
 //! from it. A call site cannot pick a different policy for the same key,
 //! because it never states one.
 
-use ambre_bus::app::prose::MarkKey;
+use crate::message::MarkKey;
 use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
 
 // The value grammar lives on the bus, so a command carries a checked value.
-pub use ambre_bus::app::prose::mark::{
+pub use crate::message::mark::{
     FONT_SIZE_MAX, MarkRoot, MarkValue, MarkValueError, canonical_color, canonical_number,
     canonical_value, parse_color, parse_font_size, read_font_size, validate_value,
 };

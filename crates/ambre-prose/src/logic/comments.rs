@@ -10,7 +10,7 @@ use ambre_core::StoredAsI64;
 use ambre_core::index::{self, Pos};
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::id::{Comment, Id, Reply};
 use loro::{LoroList, LoroMap, LoroText, TreeID, UpdateOptions};
 
@@ -351,7 +351,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, CommentThread, ProseCommand};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::id::User;
     use ambre_core::{Authored, Instant};
     use proptest::prelude::*;

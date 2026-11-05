@@ -5,7 +5,7 @@
 // the mapping from event to toast lives here, as Trame's and Toile's do.
 // ============================================================================
 
-use ambre_bus::app::prose::{CommandName, ProseError, ProseEvent, ProseRefusal, RefusedAction};
+use crate::message::{CommandName, ProseError, ProseEvent, ProseRefusal, RefusedAction};
 use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::Toasts;
 

@@ -283,7 +283,7 @@ fn bench_prose_paragraph_shape(c: &mut Criterion) {
     let mut layout_cx = parley::LayoutContext::new();
     let style = measure::EffectiveStyle::from_parts(
         &ambre_prose::doc::DocDefaults::default(),
-        &ambre_bus::app::prose::ParagraphStyle::default(),
+        &ambre_prose::message::ParagraphStyle::default(),
         ambre_core::Weight::Regular,
     );
     let width = style.text_width(ambre_core::Px::<ambre_core::Doc>::new(600.0));

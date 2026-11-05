@@ -127,7 +127,7 @@ pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Count<ListDepth>;
 fn ordered_style_of(tree: &LoroTree, id: &TreeID) -> Option<OrderedStyle>;
 ```
 
-**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`). An
+**The commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`). An
 item is created by the one insertion command every block type goes through, carrying the
 initializer its type needs. Three commands of its own follow:
 

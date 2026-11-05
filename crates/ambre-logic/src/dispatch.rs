@@ -755,13 +755,13 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::DocChar;
     use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{Authored, Instant};
     use ambre_bus::{Col, Row};
     use ambre_bus::{Request, RestCommand, RestEvent};
     use ambre_core::Seq;
     use ambre_core::index::Pos;
+    use ambre_prose::message::DocChar;
     use ambre_trame::message::TrameCommand;
     use std::io::Cursor;
 
@@ -790,8 +790,8 @@ mod tests {
             DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFile),
             DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFile),
             DocType::Prose => {
-                AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ExportDocument {
-                    format: ambre_bus::app::prose::ExportFormat::Ambre,
+                AppCommand::Prose(ambre_prose::message::ProseCommand::ExportDocument {
+                    format: ambre_prose::message::ExportFormat::Ambre,
                 })
             }
             other => panic!("no engine for {other:?}"),
@@ -805,7 +805,10 @@ mod tests {
         std::iter::from_fn(|| ui.try_recv().ok())
             .find_map(|evt| match evt {
                 UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. }),
+                    event:
+                        AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete {
+                            data, ..
+                        }),
                     ..
                 }
                 | UiEvent::Viewport {
@@ -817,9 +820,7 @@ mod tests {
                 }
                 | UiEvent::Viewport {
                     event:
-                        AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady {
-                            data, ..
-                        }),
+                        AppEvent::Prose(ambre_prose::message::ProseEvent::ExportReady { data, .. }),
                     ..
                 } => Some(data.into_bytes()),
                 _ => None,
@@ -835,7 +836,7 @@ mod tests {
         match doc.state.ambre_file_event(document_id) {
             AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. })
             | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. })
-            | AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady { data, .. }) => {
+            | AppEvent::Prose(ambre_prose::message::ProseEvent::ExportReady { data, .. }) => {
                 data.into_bytes()
             }
             other => panic!("the export answered with {other:?}"),
@@ -876,7 +877,7 @@ mod tests {
         };
         state.handle_logic_command(LogicCommand::App {
             document_id,
-            command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::InsertText {
+            command: AppCommand::Prose(ambre_prose::message::ProseCommand::InsertText {
                 block_id: block,
                 pos: Pos::<DocChar>::ZERO,
                 text: "typed".to_owned(),
@@ -887,7 +888,7 @@ mod tests {
             .find_map(|evt| match evt {
                 UiEvent::Viewport {
                     event:
-                        AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocUpdated { payload }),
+                        AppEvent::Prose(ambre_prose::message::ProseEvent::DocUpdated { payload }),
                     document_id: id,
                 } if id == document_id => Some(payload),
                 _ => None,
@@ -913,7 +914,7 @@ mod tests {
     /// text out. A caret move writes nothing, so it sends no layout.
     #[test]
     fn the_view_draws_a_layout_the_logic_thread_computed() {
-        use ambre_bus::app::prose::ProseEvent;
+        use ambre_prose::message::ProseEvent;
         let (mut state, ui, _sync) = harness();
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
@@ -926,7 +927,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(command),
         };
-        state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::InsertText {
+        state.handle_logic_command(prose(ambre_prose::message::ProseCommand::InsertText {
             block_id: block,
             pos: Pos::<DocChar>::ZERO,
             text: "typed".to_owned(),
@@ -965,8 +966,8 @@ mod tests {
             "the runs arrive shaped with the layout"
         );
 
-        state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
-            pos: ambre_bus::app::prose::CursorPosition {
+        state.handle_logic_command(prose(ambre_prose::message::ProseCommand::UpdateCursor {
+            pos: ambre_prose::message::CursorPosition {
                 block_id: block,
                 offset: Pos::<DocChar>::new(1),
                 anchor: None,
@@ -993,8 +994,8 @@ mod tests {
         };
         state.handle_logic_command(LogicCommand::App {
             document_id,
-            command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
-                pos: ambre_bus::app::prose::CursorPosition {
+            command: AppCommand::Prose(ambre_prose::message::ProseCommand::UpdateCursor {
+                pos: ambre_prose::message::CursorPosition {
                     block_id: block,
                     offset: Pos::<DocChar>::ZERO,
                     anchor: None,
