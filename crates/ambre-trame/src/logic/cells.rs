@@ -14,6 +14,7 @@ use std::cell::OnceCell;
 use super::*;
 use crate::formula::SheetQualifier;
 use crate::formula::identity;
+use crate::model::{Axes, Element};
 
 impl TrameState {
     /// Display text for a cell. The formula evaluation result if it's a formula
@@ -245,23 +246,22 @@ impl TrameState {
             return Err(Unmaterialized::IdsExhausted);
         }
         let grew = !row_uids.is_empty() || !col_uids.is_empty();
-        let rows = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
+        let axes = Axes::of(&self.doc, &self.active_sheet);
         for uid in row_uids {
-            if rows.push(uid.to_key_part().as_str()).is_err() {
+            if axes
+                .push::<Row>(&mut self.index, Element::minted(uid))
+                .is_none()
+            {
                 break;
             }
-            self.index.push_row(uid);
         }
-        let cols = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
         for uid in col_uids {
-            if cols.push(uid.to_key_part().as_str()).is_err() {
+            if axes
+                .push::<Col>(&mut self.index, Element::minted(uid))
+                .is_none()
+            {
                 break;
             }
-            self.index.push_col(uid);
         }
         // Commit the implicit scaffolding under the excluded origin so it stays
         // OUT of the undo stack (see `CommitOrigin::Materialize`). A cell edit's intent
@@ -282,13 +282,7 @@ impl TrameState {
     /// Called after any import, where peers' (or our own persisted) structural
     /// ops may have added rows/columns the cache does not yet know about.
     pub(super) fn rebuild_index(&mut self) {
-        let rows = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
-        let cols = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
-        self.index = SheetIndex::build(&rows, &cols);
+        self.index = self.axes().index();
         self.note_index_read(&self.index);
     }
 

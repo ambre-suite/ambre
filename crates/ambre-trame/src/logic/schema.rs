@@ -26,7 +26,7 @@ use ambre_core::schema::{
 };
 
 use crate::formula::identity::{AxisEdit, LineEdit};
-use crate::model::{Line, Uid};
+use crate::model::{AxisOrder, Uid};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -209,7 +209,7 @@ pub(crate) enum Axis {
 
 /// A line of the active sheet, by its position type: where its list lives and
 /// how a structural edit of it is named.
-pub(crate) trait SheetLine: Line {
+pub(crate) trait SheetLine: AxisOrder {
     /// The axis the position type names.
     const AXIS: Axis;
 

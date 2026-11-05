@@ -8,7 +8,7 @@
 use super::*;
 use crate::formula::SheetQualifier;
 use crate::formula::identity::{self, AxisEdit, LineEdit};
-use crate::model::{delete_line, insert_line, move_line};
+use crate::model::Axes;
 use ambre_core::index::{Len, Pos};
 
 impl TrameState {
@@ -79,7 +79,7 @@ impl TrameState {
         let Some(uid) = self.mint_uid() else {
             return TrameOutcome::display_only(vec![super::cells::ids_exhausted()]);
         };
-        if insert_line(&self.line_list::<L>(), at, &uid).is_none() {
+        if self.axes().insert(at, uid).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
         self.reanchor_formulas(L::edit(LineEdit::Insert { at, n: Len::ONE }));
@@ -112,14 +112,9 @@ impl TrameState {
         outcome
     }
 
-    /// The list that orders the lines of axis `P` on the active sheet.
-    fn line_list<L: SheetLine>(&self) -> loro::LoroMovableList {
-        let root = match L::AXIS {
-            Axis::Row => SheetRoot::Rows,
-            Axis::Col => SheetRoot::Cols,
-        };
-        self.doc
-            .get_movable_list(SheetContainer::of(root, &self.active_sheet).as_str())
+    /// The axes of the active sheet, the one door to its line order.
+    pub(super) fn axes(&self) -> Axes<'_> {
+        Axes::of(&self.doc, &self.active_sheet)
     }
 
     /// Remove the row/column at grid position `at` and purge what it carried,
@@ -127,9 +122,9 @@ impl TrameState {
     /// virtual and nothing was removed, else whether the active filter went
     /// with it.
     fn remove_line<L: SheetLine>(&mut self, at: Pos<L>) -> Option<bool> {
-        // A virtual line has nothing materialized to remove.
-        let removed = L::uid(&self.index, at)?;
-        delete_line(&self.line_list::<L>(), at)?;
+        // A virtual line has nothing materialized to remove. Every element of
+        // the line goes, the hidden ones too (`TRAME-269`).
+        let removed = self.axes().delete(at)?;
         Some(self.purge_axis(removed, L::AXIS))
     }
 
@@ -145,7 +140,7 @@ impl TrameState {
         if from == to || from >= end || to >= end {
             return TrameOutcome::display_only(vec![]);
         }
-        if move_line(&self.line_list::<L>(), from, to).is_none() {
+        if self.axes().move_line(from, to).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
         let rewritten = self.reanchor_formulas(L::edit(LineEdit::Reorder));

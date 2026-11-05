@@ -2921,10 +2921,15 @@ ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_di
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/model/axis.rs | crate::model::axis | <Slot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-trame | src/model/axis.rs | crate::model::axis | AxisView<L>::is_empty() | ret | bool	generic	predicate
+ambre-trame | src/model/axis.rs | crate::model::axis | Element::is_minted() | ret | bool	generic	predicate
+ambre-trame | src/model/axis.rs | crate::model::axis | Element::parse(value) | param | &str	generic	the value a line element stores, read back into a uid and an element id from its canonical spelling alone: the codec of a struct of two fields
+ambre-trame | src/model/axis.rs | crate::model::axis | Element::spell() | ret | String	generic	the value a line element stores for a uid and an element id: the codec of a struct of two fields
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 | field | String	newtype-inner	the stored cell key CellKey types
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	newtype-inner	the stored cell key CellKey holds, which the Loro call into the map reads
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element or a cell key stores, read back into a uid from its canonical spelling alone: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse_hex(s) | param | &str	generic	the compact uid a stored formula writes, read back into a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	generic	the key part a list element stores for a uid: the codec of a struct of two fields

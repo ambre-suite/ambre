@@ -193,13 +193,7 @@ impl TrameState {
     /// Build a fresh [`SheetIndex`] for an arbitrary sheet id (the cross-sheet
     /// reseed needs each sheet's position<->id map, not just the active one).
     pub(super) fn build_sheet_index(&self, sheet_id: &Id<Sheet>) -> SheetIndex {
-        let rows = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Rows, sheet_id).as_str());
-        let cols = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Cols, sheet_id).as_str());
-        let index = SheetIndex::build(&rows, &cols);
+        let index = crate::model::Axes::of(&self.doc, sheet_id).index();
         self.note_index_read(&index);
         index
     }
@@ -784,12 +778,7 @@ impl TrameState {
                 }
             }
         }
-        for root in [SheetRoot::Rows, SheetRoot::Cols] {
-            let _ = self
-                .doc
-                .get_movable_list(SheetContainer::of(root, sheet_id).as_str())
-                .clear();
-        }
+        crate::model::Axes::of(&self.doc, sheet_id).clear();
     }
 }
 

@@ -96,14 +96,7 @@ impl TrameState {
             out.push_str(&format!("sheet {sheet} {name}\n"));
             // One index per sheet: `self.index` tracks only the active sheet, and
             // a dump quantifies over all of them.
-            let index = SheetIndex::build(
-                &self
-                    .doc
-                    .get_movable_list(SheetContainer::of(SheetRoot::Rows, &sheet).as_str()),
-                &self
-                    .doc
-                    .get_movable_list(SheetContainer::of(SheetRoot::Cols, &sheet).as_str()),
-            );
+            let index = crate::model::Axes::of(&self.doc, &sheet).index();
             let engine_sheet = self.engine_sheet_by_id.get(&sheet).copied();
             // Keyed by grid position, not by stored key. The stored key carries
             // peer ids and mint counters, exactly what two documents "agreeing by

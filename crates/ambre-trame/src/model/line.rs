@@ -10,7 +10,6 @@ use std::fmt::Debug;
 
 use ambre_bus::{Col, Row};
 use ambre_core::index::{Axis, Len, Pos};
-use loro::LoroMovableList;
 
 use super::{SheetIndex, Uid};
 
@@ -51,21 +50,4 @@ impl Line for Col {
     fn len(index: &SheetIndex) -> Len<Col> {
         index.col_len()
     }
-}
-
-/// Insert the line `uid` at `at` of `list`, the list that orders an axis.
-/// `None` when the list refuses it, or `at` lies past the indices the list
-/// takes.
-pub(crate) fn insert_line<A: Axis>(list: &LoroMovableList, at: Pos<A>, uid: &Uid) -> Option<()> {
-    list.insert(at.to_index()?, uid.to_key_part().as_str()).ok()
-}
-
-/// Delete the line at `at` of `list`. `None` as for [`insert_line`].
-pub(crate) fn delete_line<A: Axis>(list: &LoroMovableList, at: Pos<A>) -> Option<()> {
-    list.delete(at.to_index()?, 1).ok()
-}
-
-/// Move the line at `from` of `list` to `to`. `None` as for [`insert_line`].
-pub(crate) fn move_line<A: Axis>(list: &LoroMovableList, from: Pos<A>, to: Pos<A>) -> Option<()> {
-    list.mov(from.to_index()?, to.to_index()?).ok()
 }

@@ -48,17 +48,17 @@ and status values are normative in `ambre-spec-template.md`.
 | `TRAME-270` | `INV` | A uid that one axis list holds twice MUST read as one line, at the position of its element with the smallest element id. | this spec section 2; `features/ambre-spec-trame-rows-and-columns.md section 3` (`TRAME-261`) | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7). Its planned mechanism is the four-peer proptest of `features/ambre-spec-trame-rows-and-columns.md section 3`, driven through `TrameState` and the formula engine, not through raw Loro documents alone | unimplemented |
 | `TRAME-271` | `INV` | A derived uid MUST NOT repeat a uid derived after the same line in the history the deriving peer holds. | this spec section 2; `features/ambre-spec-trame-rows-and-columns.md section 3` (`TRAME-267`) | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `TRAME-272` | `IO` | A document of schema version 1 MUST read under version 2 with every line at its position and every cell on its line. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-018`) | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `TRAME-275` | `INV` | Trame code outside the axis module MUST NOT reach an axis list except through the deduplicated axis view. | this spec section 5; `TRAME-270`; `features/ambre-spec-trame-rows-and-columns.md section 3` | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `TRAME-275` | `INV` | Trame code outside the axis module MUST NOT reach an axis list except through the deduplicated axis view. | this spec section 5; `TRAME-270`; `features/ambre-spec-trame-rows-and-columns.md section 3` | type-level -- `ambre_trame::model::AxisView` keeps its fields and its reader private to `model/axis.rs`, and two `compile_fail` doctests of that module show a read of a list and a struct literal refused outside it; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses an axis family path, a raw list call and an axis container name as a literal in any Trame file outside `model/axis.rs`, above its tests; `ambre_trame::model::axis::tests::a_delete_drops_every_element_and_a_move_moves_the_visible_one` | none | verified |
 | `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7; `ambre-spec-schema-version.md`, the protocol it obeys | `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- `schema::stamp` writes the key inside the scaffolding commit of `from_doc`, alongside the implicit sheet, so a workbook carries it before any user edit | none | verified |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 7 `verified`, 4 `unimplemented`. What holds is the shape a merge reads back.
-  The identity a cell keeps, and the single register a style lives in. The key set a build writes,
-  which a CI gate holds append-only. A computed value is looked for in the whole document, beside
-  the raw text too.
+* **Verification.** 8 `verified`, 3 `unimplemented`. What holds is the shape a merge reads back. The
+  identity a cell keeps, and the single register a style lives in. The key set a build writes, which
+  a CI gate holds append-only. A computed value is looked for in the whole document, beside the raw
+  text too.
 
 ---
 

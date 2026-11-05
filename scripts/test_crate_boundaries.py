@@ -150,6 +150,7 @@ def scratch(tmp: str) -> Path:
     write(root, cb.PIPE, 'fn create() {\n    for (k, v) in [("tabindex", "0")] {}\n}\n')
     write(root, f"{cb.RELAY}/ws.rs", 'fn put() {\n    tracing::info!(seq, len = payload.len(), "update {doc_id}");\n}\n')
     write(root, cb.KINETIC_MODEL, "pub const DECAY_MS: f64 = 325.0;\n")
+    write(root, cb.AXIS_MODULE, "fn list() -> SheetRoot { SheetRoot::Rows }\n")
     write(root, cb.DRAW_TRAIT, "pub trait DrawSurface {\n    fn fill_rect(&mut self, rect: Rect, color: Color);\n}\n")
     write(root, cb.COMPOSED_NAME, 'const UNTITLED: &str = "Untitled";\n')
     for rel, setter in zip(
@@ -223,6 +224,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_accessibility(errors)
             cb.check_payload_logs(errors)
             cb.check_kinetic_copy(errors)
+            cb.check_axis_lists(errors)
             cb.check_primitives(errors)
             cb.check_scroll_sources(errors)
             cb.check_composed_names(errors)
@@ -882,6 +884,28 @@ class CrateBoundaries(unittest.TestCase):
         for line in ("const FRICTION: f64 = 0.95;\n", "fn step(velocity_x: f64) {}\n"):
             errors = self.breach("crates/ambre-toile/src/ui/pan.rs", line)
             self.assertTrue(any("kinetic model outside" in e for e in errors), (line, errors))
+
+    def test_an_axis_list_reached_outside_the_axis_module_is_refused(self):
+        for line in (
+            "fn rows(s: &S) -> SheetContainer { SheetContainer::of(SheetRoot::Rows, &s.sheet) }\n",
+            "fn cols(d: &LoroDoc) { d.get_movable_list(\"cols_s0\"); }\n",
+            "const GEN: &str = \"line_gen_\";\n",
+            "fn back(d: &LoroDoc) { d.get_movable_list(name); }\n",
+        ):
+            errors = self.breach("crates/ambre-trame/src/logic/sort.rs", line)
+            self.assertTrue(any("axis list reached outside" in e for e in errors), (line, errors))
+
+    def test_the_axis_names_declared_once_and_the_tab_strip_stay_free(self):
+        for rel, text in (
+            (cb.AXIS_REGISTRY, "enum SheetRoot {\n    Rows = \"rows\",\n    Cols = \"cols\",\n}\n"),
+            ("crates/ambre-trame/src/logic/sheets.rs", "fn tabs(d: &LoroDoc) { d.get_movable_list(Root::SheetOrder.as_str()); }\n"),
+            ("crates/ambre-trame/src/logic/sort.rs", "fn s() {}\n\n#[cfg(test)]\nmod tests {\n    fn r() { SheetRoot::Rows; }\n}\n"),
+        ):
+            self.assertEqual(self.breach(rel, text), [], rel)
+
+    def test_an_axis_module_naming_no_list_holds_nothing(self):
+        errors = self.breach(cb.AXIS_MODULE, "fn nothing() {}\n")
+        self.assertTrue(any("holds nothing" in e for e in errors), errors)
 
     def test_the_kinetic_model_named_from_a_view_stays_free(self):
         text = "// A flick decays through `Kinetic`.\nfn fling(k: &mut Kinetic) { k.step(dt); }\n"

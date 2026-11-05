@@ -1,36 +1,25 @@
 // ambre-trame/src/model/sheet_index.rs
 // ============================================================================
-// SheetIndex -- bidirectional grid-position <-> stable-uid cache for one sheet.
+// The identity of a line, and the key of a cell.
 //
 // Rows and columns of a sheet live in two `LoroMovableList`s. Each element
-// carries an own, move-invariant `Uid` that *we* mint, stored as the element's
-// *value* (a string), NOT a Loro cursor id. Cells are keyed in `cells_{sheet}`
-// by the *pair* of uids `"{row_uid}:{col_uid}"`. A row insert is then one Loro
-// op and never rewrites a cell key. A reorder (`mov`) leaves every key intact,
-// because the uid travels with the value (`trame-rows-and-columns`).
+// carries a move-invariant `Uid` as its *value* (a string), never a Loro cursor
+// id. Cells are keyed in `cells_{sheet}` by the *pair* of uids
+// `"{row_uid}:{col_uid}"`. A row insert is then one Loro op and never rewrites
+// a cell key. A reorder (`mov`) leaves every key intact, because the uid
+// travels with the value (`trame-rows-and-columns`).
 //
-// The lists are **dense over the used range** `[0..hwm]`: list index == grid
-// position. There is exactly one element per row/column up to the high-water
-// mark; rows/columns beyond it are virtual (no element). This keeps `resolve`
-// an O(1) index lookup and keeps concurrent inserts convergent and
-// intent-preserving (each insert mints an independent uid, no shared counter).
-// See `trame-rows-and-columns`, and the rejected "sparse run-length" / "Loro
-// slot id as key" entries in `trame-schema`.
-//
-// `SheetIndex` is the *only* translation layer between grid positions and uids.
+// The lists are dense over the used range: one line per row or column up to
+// the high-water mark, and virtual lines past it. The axis module reads them
+// into a `SheetIndex`, the one translation layer between grid positions and
+// uids (`TRAME-275`).
 // ============================================================================
-
-use ambre_core::index::{IdxVec, Len, Pos};
-use std::collections::HashMap;
-
-use ambre_bus::{CellPos, CellRect, Col, Row};
-use loro::{LoroMovableList, LoroValue};
 
 /// Our own, move-invariant row/column identity (`trame-rows-and-columns`).
 /// Minted as
 /// `{peer = document PeerID, counter = per-session monotonic}` and stored as the
 /// value of an element in a `rows_/cols_` `LoroMovableList`. `Copy + Eq + Hash`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Uid {
     pub peer: ambre_core::PeerId,
     pub counter: ambre_core::IdCounter,
@@ -110,16 +99,6 @@ pub fn parse_cell_key(key: &str) -> Option<(Uid, Uid)> {
     Some((Uid::parse(row)?, Uid::parse(col)?))
 }
 
-/// Bidirectional position <-> uid cache for one sheet's rows and columns.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct SheetIndex {
-    row_by_pos: IdxVec<Row, Uid>,
-    col_by_pos: IdxVec<Col, Uid>,
-    row_to_pos: HashMap<Uid, Pos<Row>>,
-    col_to_pos: HashMap<Uid, Pos<Col>>,
-    read: LineRead,
-}
-
 ambre_core::define_flag! {
     /// Whether building an index skipped a line element it could not read.
     pub enum LineRead {
@@ -130,217 +109,13 @@ ambre_core::define_flag! {
     }
 }
 
-impl SheetIndex {
-    /// O(N_used) reconstruction from the two `LoroMovableList`s at load time
-    /// (N_used = materialized rows + columns, never the 100k virtual grid). Reads
-    /// each element's uid *value* in list order (`trame-engine`).
-    pub fn build(rows: &LoroMovableList, cols: &LoroMovableList) -> Self {
-        let (rows, rows_read) = collect_ids(rows);
-        let (cols, cols_read) = collect_ids(cols);
-        let row_by_pos: IdxVec<Row, Uid> = rows.into();
-        let col_by_pos: IdxVec<Col, Uid> = cols.into();
-        let row_to_pos = row_by_pos
-            .iter_enumerated()
-            .map(|(p, id)| (*id, p))
-            .collect();
-        let col_to_pos = col_by_pos
-            .iter_enumerated()
-            .map(|(p, id)| (*id, p))
-            .collect();
-        Self {
-            row_by_pos,
-            col_by_pos,
-            row_to_pos,
-            col_to_pos,
-            read: rows_read.max(cols_read),
-        }
-    }
-
-    /// Whether the build skipped a line element it could not read
-    /// (`SCHEMA-003`).
-    pub fn read(&self) -> LineRead {
-        self.read
-    }
-
-    /// Number of materialized rows / columns (the used-range high-water mark).
-    pub fn row_len(&self) -> Len<Row> {
-        self.row_by_pos.len()
-    }
-    pub fn col_len(&self) -> Len<Col> {
-        self.col_by_pos.len()
-    }
-
-    /// The rectangle of materialized cells, or `None` while an axis is empty.
-    pub fn used_range(&self) -> Option<CellRect> {
-        let last_row = self.row_len().last()?;
-        let last_col = self.col_len().last()?;
-        Some(CellRect::spanning(
-            CellPos::ORIGIN,
-            CellPos::new(last_row, last_col),
-        ))
-    }
-
-    /// Resolve a grid position to its `(row_lid, col_lid)` pair. Returns `None`
-    /// if either coordinate is beyond the used range (a virtual, never-written
-    /// cell -- the caller renders its generated label).
-    pub fn resolve(&self, at: CellPos) -> Option<(Uid, Uid)> {
-        Some((self.row_id(at.row)?, self.col_id(at.col)?))
-    }
-
-    /// Record a newly materialized row id appended at the end of the list
-    /// (used by the write path when extending the used range). The caller must
-    /// have just pushed the matching element onto the Loro `rows_{sheet}` list.
-    pub fn push_row(&mut self, id: Uid) {
-        let at = self.row_by_pos.push(id);
-        self.row_to_pos.insert(id, at);
-    }
-    pub fn push_col(&mut self, id: Uid) {
-        let at = self.col_by_pos.push(id);
-        self.col_to_pos.insert(id, at);
-    }
-
-    /// Stable id of the row/column at grid position `pos`, if materialized.
-    /// Unlike [`resolve`](Self::resolve) this needs only one axis. So it works
-    /// even when the other axis has zero materialized elements, as in the
-    /// structural delete path that identifies the row/column being removed.
-    pub fn row_id(&self, pos: Pos<Row>) -> Option<Uid> {
-        self.row_by_pos.get(pos).copied()
-    }
-    pub fn col_id(&self, pos: Pos<Col>) -> Option<Uid> {
-        self.col_by_pos.get(pos).copied()
-    }
-
-    /// The full materialized row order, position 0..hwm. Used by the sort path
-    /// to compute a row permutation and replay it as `LoroMovableList` moves.
-    pub fn row_ids(&self) -> &IdxVec<Row, Uid> {
-        &self.row_by_pos
-    }
-
-    /// Grid position of a row/column id, if it is materialized. Inverse of
-    /// [`resolve`](Self::resolve), used to map a stored cell key back to its
-    /// `(row, col)` grid position when reseeding the formula engine.
-    pub fn row_pos(&self, id: &Uid) -> Option<Pos<Row>> {
-        self.row_to_pos.get(id).copied()
-    }
-    pub fn col_pos(&self, id: &Uid) -> Option<Pos<Col>> {
-        self.col_to_pos.get(id).copied()
-    }
-
-    /// Grid position of a cell keyed by its `(row, col)` uid pair, if both of
-    /// its lines are materialized.
-    pub fn pos_of(&self, row: &Uid, col: &Uid) -> Option<CellPos> {
-        Some(CellPos::new(self.row_pos(row)?, self.col_pos(col)?))
-    }
-
-    /// Whether `id` still exists in this sheet (used for `#REF!` detection: a
-    /// formula referencing a deleted row/column resolves to a missing id).
-    pub fn contains_row(&self, id: &Uid) -> bool {
-        self.row_to_pos.contains_key(id)
-    }
-    pub fn contains_col(&self, id: &Uid) -> bool {
-        self.col_to_pos.contains_key(id)
-    }
-
-    /// Incremental update mirroring a `rows_{sheet}.insert(pos, _)` structural
-    /// op: shift every row at position `>= pos` down by one. O(N_used) in RAM;
-    /// the CRDT side stays a single Loro op. A position past the end inserts
-    /// nothing, as the list refuses it too.
-    pub fn apply_insert_row(&mut self, pos: Pos<Row>, id: Uid) {
-        if self.row_by_pos.insert(pos, id).is_ok() {
-            self.reindex_rows_from(pos);
-        }
-    }
-    pub fn apply_insert_col(&mut self, pos: Pos<Col>, id: Uid) {
-        if self.col_by_pos.insert(pos, id).is_ok() {
-            self.reindex_cols_from(pos);
-        }
-    }
-
-    /// Incremental update mirroring a `rows_{sheet}.delete(pos, 1)` structural
-    /// op. Returns the removed id so the caller can drop its cells / detect
-    /// `#REF!`, and `None` for a position past the end.
-    pub fn apply_delete_row(&mut self, pos: Pos<Row>) -> Option<Uid> {
-        let removed = self.row_by_pos.remove(pos)?;
-        self.row_to_pos.remove(&removed);
-        self.reindex_rows_from(pos);
-        Some(removed)
-    }
-    pub fn apply_delete_col(&mut self, pos: Pos<Col>) -> Option<Uid> {
-        let removed = self.col_by_pos.remove(pos)?;
-        self.col_to_pos.remove(&removed);
-        self.reindex_cols_from(pos);
-        Some(removed)
-    }
-
-    /// Permute the row order to mirror a `rows_{sheet}.mov(from, to)` (sort,
-    /// reorder). The uid is move-invariant, so cells keyed by it follow for
-    /// free; only the position mapping shifts. No-op if either index is out of
-    /// range. See `trame-rows-and-columns` and `trame-formula-engine`.
-    pub fn apply_move_row(&mut self, from: Pos<Row>, to: Pos<Row>) {
-        let len = self.row_by_pos.len().as_end();
-        if from >= len || to >= len {
-            return;
-        }
-        if let Some(uid) = self.row_by_pos.remove(from)
-            && self.row_by_pos.insert(to, uid).is_ok()
-        {
-            self.reindex_rows_from(from.min(to));
-        }
-    }
-
-    fn reindex_rows_from(&mut self, from: Pos<Row>) {
-        for (at, id) in self
-            .row_by_pos
-            .iter_enumerated()
-            .skip_while(|(at, _)| *at < from)
-        {
-            self.row_to_pos.insert(*id, at);
-        }
-    }
-    fn reindex_cols_from(&mut self, from: Pos<Col>) {
-        for (at, id) in self
-            .col_by_pos
-            .iter_enumerated()
-            .skip_while(|(at, _)| *at < from)
-        {
-            self.col_to_pos.insert(*id, at);
-        }
-    }
-}
-
-/// Read a movable list in order and parse each element's uid *value*
-/// (`trame-rows-and-columns`). Each element holds a
-/// `"{peer:016x}_{counter:08x}"` string. A missing or malformed value
-/// would be a corruption, logged and skipped. It must not desync the dense
-/// list, so we never push a gap.
-fn collect_ids(list: &LoroMovableList) -> (Vec<Uid>, LineRead) {
-    let LoroValue::List(items) = list.get_value() else {
-        return (Vec::new(), LineRead::Clean);
-    };
-    let mut ids = Vec::with_capacity(items.len());
-    let mut read = LineRead::Clean;
-    for (pos, item) in items.iter().enumerate() {
-        match item {
-            LoroValue::String(s) => match Uid::parse(s) {
-                Some(uid) => ids.push(uid),
-                None => {
-                    tracing::error!("[SheetIndex] unparsable uid value at pos {pos}");
-                    read = LineRead::Skipped;
-                }
-            },
-            _ => {
-                tracing::error!("[SheetIndex] non-string list element at pos {pos}");
-                read = LineRead::Skipped;
-            }
-        }
-    }
-    (ids, read)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::logic::{SheetContainer, SheetRoot, default_sheet};
+    use crate::model::SheetIndex;
+    use ambre_bus::{CellPos, Col, Row};
+    use ambre_core::index::{Len, Pos};
     use loro::LoroDoc;
 
     /// The order list of one axis of the default sheet, as a workbook names it.
@@ -377,7 +152,7 @@ mod tests {
             .unwrap();
         }
         doc.commit();
-        let idx = SheetIndex::build(&rows, &cols);
+        let idx = crate::model::axis::Axes::of(&doc, &default_sheet()).index();
         (doc, idx)
     }
 
@@ -631,7 +406,7 @@ mod tests {
                         Op::DeleteRow(_) | Op::DeleteCol(_) | Op::MoveRow(..) => {}
                     }
                     doc.commit();
-                    prop_assert_eq!(&idx, &SheetIndex::build(&rows, &cols));
+                    prop_assert_eq!(&idx, &crate::model::axis::Axes::of(&doc, &default_sheet()).index());
                 }
             }
         }
