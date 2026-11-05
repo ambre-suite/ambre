@@ -333,6 +333,20 @@ pub(crate) struct Unit {
 #[derive(Debug, Default)]
 pub(crate) struct Compiled {
     pub(crate) units: Vec<Unit>,
+    /// The features cargo turned on for a shipped build of each package, by
+    /// its canonical manifest, the union over the compiles. A test build
+    /// adds none.
+    pub(crate) features: BTreeMap<PathBuf, BTreeSet<String>>,
+}
+
+/// One unit of the workspace that a message of cargo names, with the
+/// package it builds and the features cargo turned on for it.
+#[derive(Debug)]
+struct Artifact {
+    unit: Unit,
+    /// The manifest of the package, canonical.
+    manifest: PathBuf,
+    features: BTreeSet<String>,
 }
 
 /// Runs each compile in `root` and reads what rustc read. `configure` sets
@@ -345,6 +359,7 @@ pub(crate) fn collect(
 ) -> Result<Compiled, Vec<String>> {
     let root = canonical(root);
     let mut units: BTreeMap<(PathBuf, Build), BTreeSet<PathBuf>> = BTreeMap::new();
+    let mut features: BTreeMap<PathBuf, BTreeSet<String>> = BTreeMap::new();
     let mut errors = Vec::new();
     for compile in compiles {
         let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
@@ -403,8 +418,16 @@ pub(crate) fn collect(
         let before = errors.len();
         for message in stdout.lines() {
             match artifact(&root, message) {
-                Ok(Some(unit)) => {
+                Ok(Some(Artifact {
+                    unit,
+                    manifest,
+                    features: on,
+                })) => {
                     named += 1;
+                    let turned = features.entry(manifest).or_default();
+                    if unit.build == Build::Product {
+                        turned.extend(on);
+                    }
                     units
                         .entry((unit.root, unit.build))
                         .or_default()
@@ -426,7 +449,7 @@ pub(crate) fn collect(
             .into_iter()
             .map(|((root, build), reads)| Unit { root, build, reads })
             .collect();
-        Ok(Compiled { units })
+        Ok(Compiled { units, features })
     } else {
         Err(errors)
     }
@@ -449,10 +472,10 @@ fn error_text(message: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The unit one message of cargo describes, and the `.rs` files it read.
-/// `None` for another message, and for a unit of a package outside the
-/// workspace.
-fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
+/// The unit one message of cargo describes, the `.rs` files it read and the
+/// features cargo turned on for it. `None` for another message, and for a
+/// unit of a package outside the workspace.
+fn artifact(root: &Path, message: &str) -> Result<Option<Artifact>, String> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(message) else {
         return Ok(None);
     };
@@ -465,14 +488,18 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
     else {
         return Err("an artifact message names no manifest".to_owned());
     };
-    if !canonical(Path::new(manifest)).starts_with(root) {
+    let manifest = canonical(Path::new(manifest));
+    if !manifest.starts_with(root) {
         return Ok(None);
     }
     let Some(source) = value
         .pointer("/target/src_path")
         .and_then(serde_json::Value::as_str)
     else {
-        return Err(format!("{manifest}: an artifact names no crate root"));
+        return Err(format!(
+            "{}: an artifact names no crate root",
+            manifest.display()
+        ));
     };
     let kinds: Vec<&str> = value
         .pointer("/target/kind")
@@ -488,6 +515,24 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
         return Err(format!(
             "{source}: an artifact names no test flag in its profile, so the check cannot tell \
              a test build from a shipped one, and fails closed"
+        ));
+    };
+    // A unit with no feature list fails closed. Read as one that turns on
+    // nothing, it would refuse a feature the lint turns on, with no cause.
+    let Some(on) = value
+        .get("features")
+        .and_then(serde_json::Value::as_array)
+        .map(|names| {
+            names
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+    else {
+        return Err(format!(
+            "{source}: an artifact names no feature list, so the check cannot show which \
+             features cargo turned on, and fails closed"
         ));
     };
     let build = if test
@@ -536,10 +581,14 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
         .into_iter()
         .map(|path| canonical(&root.join(path)))
         .collect();
-    Ok(Some(Unit {
-        root: canonical(Path::new(source)),
-        build,
-        reads,
+    Ok(Some(Artifact {
+        unit: Unit {
+            root: canonical(Path::new(source)),
+            build,
+            reads,
+        },
+        manifest,
+        features: on,
     }))
 }
 
