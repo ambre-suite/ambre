@@ -315,8 +315,8 @@ The five tests that are the whole
 Eight `ambre-toile` PDF tests sat behind `--features pdf`. Both features are in `just test-db` and
 `just test-native` now, which is where local and CI parity is defined.
 
-`just test-wasm` covers `ambre-trame`, `ambre-chrome`, `ambre-toile`, `ambre-logic`, `ambre-prose`
-and `ambre-app`.
+`just test-wasm` covers `ambre-trame`, `ambre-chrome`, `ambre-toile`, `ambre-logic`, `ambre-prose`,
+`ambre-murmure` and `ambre-app`.
 
 ---
 
@@ -421,7 +421,7 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel is mounted in Chrome |
 | `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user |
 | `ambre-primitives` | yes | -- | `Tree`, a source tree held in memory | the primitive gate itself: every kind of site read, a module resolved where rustc finds it, test code and macro output never read, a file rustc reads and the walk misses failing the gate, and a file no compile reads, the allowlist failing on a missing site, a stale line and a word outside the set, and a secret read or wiped outside the code that may |
-| `ambre-murmure` | -- | -- | -- | none yet: a stub. The belt it lands with: CRDT convergence of a channel across its documents, a forged delta refused by the authorship check, a false final snapshot caught by the second client, and eviction held to its byte budget |
+| `ambre-murmure` | yes (`proptest`, `criterion`) | yes (`tests/chrome_relay.rs`) | a `ChannelState` peer forked from another, a `MurmureRelay` fed by hand | CRDT convergence of a channel across its `meta`, segment and thread documents over generated interleavings, a forged delta refused by the authorship check, and a false final snapshot caught by the second client. Eviction is the shared residency's belt, and the decoded pictures hold their own cap. The browser tier drives two users through the relay |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
 verify a rule are named in that rule's `Mechanism` cell and nowhere else. A list of intended
@@ -466,7 +466,7 @@ whether it blocks the current MVP.
 | `#![forbid(unsafe_code)]` | **wired** | `unsafe_code = "forbid"` in the workspace lint table, so all 18 crates refuse an `unsafe` block |
 | `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc`, `missing_panics_doc` and the panic lints (`ARCH-028`); no `pedantic`. Clippy reads the wasm-only code in the `test-wasm` job |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
-| `proptest` | wired | `ambre-crypto`, the Trame formula engine, 2-peer convergence on Trame and Toile, and the Toile index against rebuild |
+| `proptest` | wired | `ambre-crypto`, the Trame formula engine, convergence on Trame, Toile and Murmure, and the Toile index against rebuild |
 | `cargo-fuzz` | wired | seven targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser, the Markdown reader, the sealed open path, and the Trame and Toile file readers, one minute each in the CI `fuzz` job. The sealed target opens under a fixed key, so a key-holding peer's plaintext reaches the decompression |
 | `cargo-mutants` | absent | the whole suite, never adversarially checked |
 | `cargo-llvm-cov` | wired, non-blocking | an `lcov` baseline only. No diff-mode gate on added lines |
