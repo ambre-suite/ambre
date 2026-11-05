@@ -1287,8 +1287,9 @@ impl ToileState {
 
     /// Overwrite one raw string field of an element's map, behind the engine's
     /// back. Test helper: it exists to forge the state a newer or broken peer
-    /// could merge into us, which no command of ours can produce.
-    #[cfg(test)]
+    /// could merge into us, which no command of ours can produce. Its one
+    /// caller, `convergence_tests`, is host-only, so the helper is too.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn debug_set_element_field(
         &mut self,
         id: &Id<Element>,

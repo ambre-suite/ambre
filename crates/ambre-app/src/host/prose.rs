@@ -808,7 +808,7 @@ mod tests {
     use ambre_bus::app::prose::{Graphemes, Page, Paragraphs, Words};
     use ambre_core::Count;
     use ambre_core::index::Len;
-    use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
+    use ambre_core::{Px, Size};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.

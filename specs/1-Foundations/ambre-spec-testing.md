@@ -438,13 +438,14 @@ run the same command.
 | `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, and the primitive gate |
 | `test-native` | the host tier, plus `ambre-server` on the native target |
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
-| `test-wasm` | `just lint-wasm`, the denied lints on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
+| `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
 | `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 
 The wasm `-A warnings` rustflag is scoped to `[target.wasm32-unknown-unknown]`, so host clippy keeps
-every warning. Every native job installs `libfontconfig1-dev`: the font stack links system fontconfig.
+every warning. `lint-wasm` sets its own `RUSTFLAGS`, which replace that rustflag. Every native job
+installs `libfontconfig1-dev`: the font stack links system fontconfig.
 
 ---
 

@@ -1313,7 +1313,7 @@ fn a_note_edit_with_no_frame_on_screen_is_refused() {
         "an edit with no frame left"
     );
     let frame = Id::<Frame>::from_text("f".to_owned());
-    relay.presenter_frame.set(Some(frame.clone().into()));
+    relay.presenter_frame.set(Some(frame.clone()));
     assert!(matches!(
         relay.command(edit()),
         Some(AppCommand::Toile(ToileCommand::EditNotes { frame: f, .. })) if f == frame

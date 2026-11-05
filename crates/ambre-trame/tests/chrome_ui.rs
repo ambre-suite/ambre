@@ -35,7 +35,6 @@ use ambre_commands::Locale;
 use ambre_core::id::Sheet;
 use ambre_core::id::{Document, Id};
 use ambre_core::index::{Len, Pos};
-use ambre_core::{Commands, StaticKey};
 use ambre_trame::chrome::{
     self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindReplace, FindReplaceState, FormatBar,
     IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE, SelStats,
