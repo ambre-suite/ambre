@@ -103,7 +103,7 @@ const WASM_TRIPLE: &str = "wasm32-unknown-unknown";
 
 /// The flags of every wasm line of `lint-wasm`, so the check shares their
 /// build.
-const WASM_FLAGS: &str = "-Awarnings -C debuginfo=0";
+const WASM_FLAGS: &str = "-D warnings -C debuginfo=0";
 
 /// Which build of a crate a unit is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

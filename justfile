@@ -29,22 +29,23 @@ lint:
     cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens -- -D warnings
 
 # Lint (wasm): the code only the browser compiles -- the application chrome, the
-# canvas host, the workers -- which host clippy never reads. The flags are those
-# of `test-wasm`, so the two share one build. `-Awarnings` silences what is only a
-# warning, so this holds the denied lints alone: the panic lints (`ARCH-028`)
-# and the documentation lints. The Prose and Murmure unit tests are host-only,
-# so their wasm test files are linted alone.
+# canvas host, the workers -- which host clippy never reads. `RUSTFLAGS` drops
+# the threading flags of `.cargo/config.toml`, as `test-wasm` does, and with
+# them the `-A warnings` there. `-D warnings` makes every warning fatal, so a
+# warning on wasm-only code fails here as one on the host fails `lint`. The
+# Prose and Murmure unit tests are host-only, so their wasm test files are
+# linted alone.
 lint-wasm:
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --lib
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
-    # `test-wasm` builds the Logic, app and chrome test targets with these
-    # flags, and no other wasm line compiles them, so a broken wasm test build
-    # fails here.
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo check --target wasm32-unknown-unknown -p ambre-logic --tests
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo check --target wasm32-unknown-unknown -p ambre-app --tests
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo check --target wasm32-unknown-unknown -p ambre-chrome --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
+    # `test-wasm` builds the Logic, app and chrome test targets, and no other
+    # wasm line compiles them, so these three lines lint them. A broken wasm
+    # test build, or a warning in one, fails here.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over

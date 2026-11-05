@@ -1192,7 +1192,7 @@ fn a_lever_in_a_flag_variable_of_the_environment_is_refused() {
         ]
     );
     // The flags of `lint-wasm` are no lever.
-    let plain = environment(&[("RUSTFLAGS", "-Awarnings -C debuginfo=0")]);
+    let plain = environment(&[("RUSTFLAGS", "-D warnings -C debuginfo=0")]);
     assert_eq!(env_levers(plain), Vec::<String>::new());
 }
 
@@ -1268,7 +1268,7 @@ fn a_lever_on_a_line_of_the_justfile_is_refused() {
         (
             "justfile",
             "# RUSTFLAGS=\"-Zx\" in a comment\n\
-             lint-wasm:\n    RUSTFLAGS=\"-Awarnings -C debuginfo=0\" cargo clippy\n\
+             lint-wasm:\n    RUSTFLAGS=\"-D warnings -C debuginfo=0\" cargo clippy\n\
              \x20   RUSTFLAGS=\"-Awarnings -Zcrate-attr=feature(yeet_expr)\" cargo check\n\
              \x20   grep '[A-Z]' x\n\
              \x20   cargo +nightly build -Z build-std\n",
