@@ -70,6 +70,7 @@ mod sealed {
     impl Sealed for super::FracMs {}
     impl Sealed for super::Day {}
     impl Sealed for super::FracDay {}
+    impl Sealed for super::Months {}
     impl Sealed for super::Authored {}
     impl Sealed for super::Relayed {}
     impl Sealed for super::UnixMs {}
@@ -248,6 +249,25 @@ impl TimeUnit for Day {
 impl TimeUnit for FracDay {
     type Repr = f64;
     const NAME: &'static str = "FracDays";
+}
+
+/// Whole months of a spreadsheet calendar, as `DATE` and `EDATE` count them
+/// from January of some year. A count of them is signed, and it may run past
+/// December or below January. A month has no fixed length, so a span of months
+/// converts into no other unit.
+pub enum Months {}
+
+impl TimeUnit for Months {
+    type Repr = i64;
+    const NAME: &'static str = "MonthCount";
+}
+
+impl TimeSpan<Months> {
+    /// The two spans together, held at either end of `i64`.
+    #[must_use]
+    pub const fn plus(self, other: Self) -> Self {
+        Self::new(self.ticks.saturating_add(other.ticks))
+    }
 }
 
 /// A wall clock in Unix milliseconds, as an author's clock reads it. A
