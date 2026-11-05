@@ -30,7 +30,7 @@ use crate::error::MurmureError;
 /// new section to `schema/shapes.txt`.
 pub const SCHEMA_VERSION: Version<Schema> = Version::new(1);
 
-ambre_core::loro_fields!(pub(crate));
+pub(crate) use ambre_crdt::Fields;
 
 ambre_core::crdt_names! {
     /// The root containers of the Murmure documents. A document of each kind
@@ -229,17 +229,17 @@ pub(crate) fn root_list(doc: &LoroDoc, root: Root) -> LoroList {
 
 /// The `header` of `doc`.
 pub(crate) fn header(doc: &LoroDoc) -> Fields<HeaderKey> {
-    Fields::of(root_map(doc, Root::Header))
+    Fields::new(root_map(doc, Root::Header))
 }
 
 /// The `channel` root of a `meta` document.
 pub(crate) fn channel(doc: &LoroDoc) -> Fields<ChannelKey> {
-    Fields::of(root_map(doc, Root::Channel))
+    Fields::new(root_map(doc, Root::Channel))
 }
 
 /// The `space` root of a space document.
 pub(crate) fn space(doc: &LoroDoc) -> Fields<SpaceKey> {
-    Fields::of(root_map(doc, Root::Space))
+    Fields::new(root_map(doc, Root::Space))
 }
 
 /// The map `item` holds, read through the keys of the schema `K`, or `None`
@@ -248,7 +248,7 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
     item: ValueOrContainer,
 ) -> Option<Fields<K>> {
     match item {
-        ValueOrContainer::Container(loro::Container::Map(map)) => Some(Fields::of(map)),
+        ValueOrContainer::Container(loro::Container::Map(map)) => Some(Fields::new(map)),
         _ => None,
     }
 }

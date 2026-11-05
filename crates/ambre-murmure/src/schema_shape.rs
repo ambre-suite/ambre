@@ -26,6 +26,7 @@
 
 use ambre_bus::Char;
 use ambre_core::Validated;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::Span;
 use std::collections::BTreeSet;
 

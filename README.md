@@ -99,6 +99,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-crypto` | Cryptographic primitives (AEAD, signatures, KDF) |
 | `ambre-protocol` | Wire format, WebSocket messages, signaling |
 | `ambre-bus` | Inter-worker communication |
+| `ambre-crdt` | The Loro map handles typed by the keys of one schema, shared by the four applications |
 | `ambre-draw` | `DrawSurface` trait + shared primitives (kurbo, peniko, parley types) |
 | `ambre-canvas` | Content rendering runtime for the UI thread (wgpu) |
 | `ambre-pdf` | `DrawSurface` implementation backed by krilla, for PDF export |

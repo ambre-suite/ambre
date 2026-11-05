@@ -250,7 +250,7 @@ impl ProseState {
         let annots = doc::annots(&self.doc);
         let entry = annots
             .insert_container(&id.to_hyphenated(), LoroMap::new())
-            .map(doc::Fields::of)?;
+            .map(doc::Fields::new)?;
         entry.insert(doc::AnnotKey::Kind, doc::AnnotKind::Comment.as_str())?;
         entry.insert(doc::AnnotKey::Resolved, false)?;
         Self::write_anchor(&entry, span)?;
@@ -277,7 +277,7 @@ impl ProseState {
         let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
         let reply = list
             .push_container(LoroMap::new())
-            .map(doc::Fields::<doc::ReplyKey>::of)?;
+            .map(doc::Fields::<doc::ReplyKey>::new)?;
         reply.insert(
             doc::ReplyKey::Id,
             self.ids.mint::<Id<Reply>>().to_hyphenated(),

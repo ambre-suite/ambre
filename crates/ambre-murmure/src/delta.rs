@@ -8,6 +8,7 @@
 //! learn which user a PeerID stands for (`ambre-spec-op-authorship.md`).
 
 use ambre_core::authorship::PeerEntry;
+use ambre_core::crdt::CrdtName;
 use ambre_core::id::{Document, Id, Message, User};
 use ambre_core::version::{Current, OpenRange, Version, VersionKind};
 use ambre_core::{DeltaBytes, LoroPayload, Payload};
@@ -475,7 +476,7 @@ pub(crate) fn thread_field(doc: &LoroDoc, id: &ContainerID) -> Option<ThreadFiel
         return None;
     };
     Some(ThreadField::read(schema::string(
-        &Fields::of(map),
+        &Fields::new(map),
         MessageKey::Thread,
     )))
 }

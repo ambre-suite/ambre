@@ -29,6 +29,8 @@ unicode-segmentation = { workspace = true }
 
 # CRDT
 loro = { workspace = true }
+# The map handles typed by the schema keys.
+ambre-crdt = { path = "../ambre-crdt" }
 
 # Murmure-specific chrome (the `chrome` module): the channel header and the
 # regions of the layout. Wasm-only -- leptos CSR + DOM, like ambre-chrome --

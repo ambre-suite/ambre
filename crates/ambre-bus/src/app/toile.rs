@@ -12,6 +12,7 @@
 //!   `DisplayViewport`, and the command / event enums.
 //! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 
+use ambre_core::crdt::CrdtName;
 use std::collections::BTreeMap;
 use std::fmt;
 

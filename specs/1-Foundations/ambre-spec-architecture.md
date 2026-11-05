@@ -247,7 +247,8 @@ separation is carried by what each crate is allowed to declare.
 | `ambre-commands` | `ambre-core` | the command identities, a leaf every application and the toolkit depend on |
 | `ambre-canvas` | `ambre-draw` plus the graphics stack, and `ambre-commands` for the keys an input event carries | the content runtime of the UI thread. It names no application |
 | `ambre-chrome` | the page framework, plus `ambre-commands` and `ambre-core` | the interface toolkit. It names no application either |
-| each application crate | `ambre-bus`, `ambre-draw`, `ambre-canvas`, `ambre-chrome`, `ambre-commands` | one crate per application, holding its state, its view and its own interface. It knows neither the Logic runtime nor the worker |
+| `ambre-crdt` | `ambre-core` and the CRDT engine | the map handles typed by the keys of one schema, written once for every application. It joins the two crates no other shared crate may join, since `ambre-core` reaches the relay and the Sync worker (`ZK-004`, `SYNC-011`) |
+| each application crate | `ambre-bus`, `ambre-draw`, `ambre-canvas`, `ambre-chrome`, `ambre-commands`, `ambre-crdt` | one crate per application, holding its state, its view and its own interface. It knows neither the Logic runtime nor the worker |
 | `ambre-logic` | `ambre-bus` plus the application crates | the Logic runtime, pure Rust with no browser glue (`ARCH-003`) |
 | `ambre-sync` | `ambre-bus`, `ambre-protocol`, `ambre-crypto`, the transport crates | the Sync worker, and its own entry point |
 | `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the queues, spawns both workers and relays between them. It integrates the applications and holds none of their logic (`ARCH-018`) |

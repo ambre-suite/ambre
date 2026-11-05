@@ -700,9 +700,8 @@ ambre-core | src/color.rs | crate::color | Rgba::from_channels(b) | param | u8	n
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(g) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(r) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/crdt.rs | crate::crdt | CommitOrigin::as_str() | ret | &'static str	newtype-inner	the spelling of a typed commit origin, for the Loro call that sets or excludes it
-ambre-core | src/crdt.rs | crate::crdt | ContainerFamily::as_str() | ret | &'static str	foreign-api	the stored spelling of a typed container family, which the application joins to an id for the Loro call that takes &str
-ambre-core | src/crdt.rs | crate::crdt | ContainerName::as_str() | ret | &'static str	foreign-api	the stored spelling of a typed root name, which the Loro call that opens the container takes as &str
-ambre-core | src/crdt.rs | crate::crdt | FieldKey::as_str() | ret | &'static str	foreign-api	the stored spelling of a typed map key, which the Loro map call takes as &str
+ambre-core | src/crdt.rs | crate::crdt | CrdtName::as_str() | ret | &'static str	foreign-api	the stored spelling of a typed root name, family or map key, which the Loro call takes as &str
+ambre-core | src/crdt.rs | crate::crdt | CrdtName::parse(word) | param | &str	foreign-api	the stored word a Loro read hands back, matched against the spellings of the set
 ambre-core | src/doc_type.rs | crate::doc_type | <DocType as FromStr>::from_str(word) | param | &str	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/doc_type.rs | crate::doc_type | <DocType as TryFrom<String>>::try_from(word) | param | String	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/doc_type.rs | crate::doc_type | DocType::as_str() | ret | &'static str	newtype-inner	DocType codec
@@ -4125,3 +4124,4 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CondFormatPrior
 ambre-core | src/rank.rs | crate::rank | <Rank<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/rank.rs | crate::rank | Rank<K>::from_stored(stored) | param | u64	newtype-inner	the inside of a Rank from zero, as the Loro map stores it; the Loro call is at the caller
 ambre-core | src/rank.rs | crate::rank | Rank<K>::to_stored() | ret | i64	newtype-inner	the inside of a Rank from zero, as the Loro map stores it; the Loro call is at the caller
+ambre-crdt | src/lib.rs | crate | Fields<K>::contains() | ret | bool	generic	predicate result

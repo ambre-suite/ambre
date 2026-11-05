@@ -197,7 +197,7 @@ fn every_document_carries_a_header_and_the_foundation_version() {
         );
         assert_eq!(
             schema::unsigned(
-                &crate::schema::Fields::of(
+                &crate::schema::Fields::new(
                     doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 ),
                 ambre_core::schema::MetaKey::SchemaVersion
@@ -319,7 +319,7 @@ fn a_remote_delta_reaches_the_document_it_names_and_no_other() {
         )
         .expect("import");
     let before = remote.oplog_vv();
-    let map = crate::schema::Fields::<MessageKey>::of(
+    let map = crate::schema::Fields::<MessageKey>::new(
         remote
             .get_list(Root::Messages.as_str())
             .push_container(loro::LoroMap::new())
@@ -497,7 +497,7 @@ fn an_older_document_opens_and_the_walk_writes_nothing() {
     assert_eq!(opened.oplog_vv(), before, "the walk wrote an operation");
     assert_eq!(
         schema::unsigned(
-            &crate::schema::Fields::of(
+            &crate::schema::Fields::new(
                 opened.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
             ),
             ambre_core::schema::MetaKey::SchemaVersion

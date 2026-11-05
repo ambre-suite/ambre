@@ -122,7 +122,7 @@ impl ToileState {
             .doc
             .get_map(Root::Comments.as_str())
             .insert_container(thread.as_str(), LoroMap::new())
-            .map(Fields::<ThreadKey>::of)
+            .map(Fields::<ThreadKey>::new)
             .ok()?;
         map.insert(ThreadKey::Anchor, anchor).ok()?;
         map.insert(ThreadKey::Resolved, false).ok()?;
@@ -255,7 +255,7 @@ impl ToileState {
         let LoroValue::Map(fields) = self.thread_map(id)?.map().get_deep_value() else {
             return None;
         };
-        let fields = FieldValues::<ThreadKey>::of(&fields);
+        let fields = FieldValues::<ThreadKey>::new(&fields);
         let Some(LoroValue::Binary(bytes)) = fields.get(ThreadKey::Anchor) else {
             return None;
         };
@@ -395,7 +395,7 @@ impl ToileState {
             .ok()?
             .into_map()
             .ok()
-            .map(Fields::of)
+            .map(Fields::new)
     }
 }
 
@@ -408,7 +408,7 @@ fn push_message(
     ts: Instant<Authored>,
     body: &str,
 ) -> Option<()> {
-    let map = Fields::<MessageKey>::of(messages.push_container(LoroMap::new()).ok()?);
+    let map = Fields::<MessageKey>::new(messages.push_container(LoroMap::new()).ok()?);
     map.insert(MessageKey::Author, author.to_string()).ok()?;
     map.insert(MessageKey::Ts, ts.to_i64_saturating()).ok()?;
     let text = map
@@ -443,7 +443,7 @@ fn read_message(value: &LoroValue) -> Option<CommentMessage> {
     let LoroValue::Map(fields) = value else {
         return None;
     };
-    let fields = FieldValues::<MessageKey>::of(fields);
+    let fields = FieldValues::<MessageKey>::new(fields);
     let Some(LoroValue::String(author)) = fields.get(MessageKey::Author) else {
         return None;
     };

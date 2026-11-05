@@ -854,7 +854,7 @@ mod tests {
         let marker = tree
             .get_meta(id)
             .ok()
-            .and_then(|node| crate::doc::Fields::of(node).value(crate::doc::NodeKey::Hidden))
+            .and_then(|node| crate::doc::Fields::new(node).value(crate::doc::NodeKey::Hidden))
             .and_then(|value| value.into_string().ok())
             .map(|value| value.to_string());
         assert_eq!(marker.as_deref(), Some("7"), "the marker names the session");

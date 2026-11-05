@@ -29,6 +29,7 @@
 //! here, so a command added to it lands with a raised version, like a new key.
 
 use ambre_core::Rgba;
+use ambre_core::crdt::CrdtName;
 use std::collections::BTreeSet;
 
 use ambre_core::schema::verdict;

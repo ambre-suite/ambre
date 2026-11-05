@@ -281,6 +281,7 @@ struct RowStyle {
 /// A style name kept as the word of its mark. An older or a newer build may
 /// write a word this one does not know. That word must not refuse the row.
 mod mark_name {
+    use ambre_core::crdt::CrdtName;
     use serde::{Deserialize, Deserializer, Serializer};
 
     use crate::schema::Mark;

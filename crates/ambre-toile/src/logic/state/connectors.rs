@@ -78,7 +78,7 @@ impl ToileState {
         let conns = self.doc.get_map(Root::Connectors.as_str());
         let Ok(cm) = conns
             .insert_container(id.as_str(), LoroMap::new())
-            .map(Fields::<ConnectorKey>::of)
+            .map(Fields::<ConnectorKey>::new)
         else {
             // Unreachable in practice: a container insert of a freshly minted,
             // unique id never collides. Reported defensively as a failed
@@ -279,7 +279,7 @@ impl ToileState {
         if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             for (key, v) in m.iter() {
                 if let LoroValue::Map(f) = v {
-                    let f = FieldValues::<ConnectorKey>::of(f);
+                    let f = FieldValues::<ConnectorKey>::new(f);
                     let touches = |key| {
                         map_str(f, key)
                             .map(Id::<Element>::from_text)
