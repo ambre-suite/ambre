@@ -3145,7 +3145,7 @@ ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_titl
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::FALLBACK_STEM | const | &'static str	free-text	a stem the suite names itself
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(name) | param | &str	free-text	the name another user sent, which the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(fallback) | param | &'static str	free-text	a stem the suite names itself
-ambre-core | src/export_file.rs | crate::export_file | is_kept_extension(extension) | param | &str	free-text	the extension a received name ends with
+ambre-core | src/export_file.rs | crate::export_file | is_kept_extension(extension) | param | &str	local	the extension a received name ends with, which this private function tests against the kept list alone
 ambre-core | src/export_file.rs | crate::export_file | is_kept_extension() | ret | bool	generic	predicate
 ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character(c) | param | char	free-text	a character of the title or the received name the stem is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character() | ret | bool	generic	predicate
