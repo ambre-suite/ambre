@@ -297,15 +297,19 @@ index-write:
 # that names no site fails too (`ARCH-034`). It prints the lines per category.
 #
 # The gate finds the files with a syn walk, and rustc is the source of truth
-# for them. So it runs `cargo check` itself, the host line with every target
-# and every feature and the wasm lines of `lint-wasm`, and reads the dep-info
-# of each unit. A file a shipped build reads fails, whatever its name, unless
-# the walk reads it or a string literal of a walked file names it as data. A
-# `.rs` file under the root that no compile reads fails too. A test holds its
-# wasm lines to those of `lint-wasm`. This half runs first, and CI runs this
-# recipe alone, since it holds both halves.
+# for them. So it reads the compile lines of `lint` and `lint-wasm` from this
+# file and runs each as written, with its flags and its clippy arguments, and
+# reads the dep-info of each unit. cargo fingerprints both, so after `just
+# lint` and `just lint-wasm` every unit is fresh and the gate compiles nothing.
+# A file a shipped build reads fails, whatever its name, unless the walk reads
+# it or a string literal of a walked file names it as data. A `.rs` file under
+# the root that no compile reads fails too. This half runs first.
+#
+# `--unwrap-strict` runs the strict unwrap report on the same scan, so one
+# walk of the sources serves both, and prints both verdicts whatever the first
+# says. CI runs this recipe alone, since it holds all three.
 primitives:
-    cargo run -q -p ambre-primitives -- check
+    cargo run -q -p ambre-primitives -- check --unwrap-strict
 
 # The dep-info half of the gate alone, as `fixtures-check` is the drift half of
 # the fixtures. The allowlist half is red while the workspace is typed, so a
@@ -319,7 +323,8 @@ primitives-files:
 # `specs/1-Foundations/ambre-unwrap.tsv` names its key with a count and a
 # reason.
 # In strict mode, an unlisted key, a line over its count and a stale line all
-# fail. The report walks the syntax and compiles nothing. CI runs this recipe.
+# fail. The report walks the syntax and compiles nothing. CI runs it through
+# `primitives`, on the scan of the gate; this recipe runs it alone.
 unwrap:
     cargo run -q -p ambre-primitives -- unwrap --strict
 

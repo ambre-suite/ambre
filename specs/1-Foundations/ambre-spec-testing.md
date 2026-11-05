@@ -78,9 +78,13 @@ mark none, since a release build can compile either. A site is a field, a parame
 return, a constant, a static or an alias whose type holds a primitive. Its key names the crate, the
 file, the module, the item, the kind and the type, and no line number.
 
-* **rustc holds the files the walk reads** (`ARCH-033`). The gate runs `cargo check` on the host
-  with every package, target and feature, and on each wasm line of `lint-wasm`. It reads the
-  dep-info of each unit of the workspace. A file that a shipped build reads fails, whatever its
+* **rustc holds the files the walk reads** (`ARCH-033`). The gate reads the compile lines of the
+  `lint` and `lint-wasm` recipes from the `justfile`, and runs each as written. cargo then deems
+  fresh each unit the lint built, so the gate compiles nothing the lint compiled. It reads the
+  dep-info of each unit of the workspace, where clippy lists its configuration as data.
+
+  A line the gate cannot run as `just` runs it fails closed. That is a prefix, a shell expansion,
+  or an argument that changes what the gate reads. A file that a shipped build reads fails, whatever its
   name, unless the walk reads it or a walked file names it as data. Data is the string literal of
   an `include_str!` or an `include_bytes!`, or the directory a `sqlx::migrate!` names. A bare
   `migrate!` counts only where a `use` imports `sqlx::migrate`.
@@ -126,8 +130,9 @@ file, the module, the item, the kind and the type, and no line number.
   manifest declares one. Any other manifest with a top-level `workspace` key in its TOML fails. The
   listing follows no link to a directory.
 
-  A failed compile, a missing dep-info file, a unit with no test flag and a dep-info line the
-  parser cannot read whole fail closed. `just primitives-files` runs this half alone. A build none
+  A failed compile and a lint the line denies fail closed. So do a missing dep-info file, a unit
+  with no test flag and a dep-info line the parser cannot read whole. `just primitives-files` runs this half
+  alone. `just primitives` runs the strict unwrap report on the same scan. A build none
   of these compiles makes, under another target, `cfg`, feature set or profile, is a reviewer's
   (`ARCH-050`).
 
@@ -228,7 +233,7 @@ file, the module, the item, the kind and the type, and no line number.
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
-  `serde_json` reads the messages of `cargo check`, which name the dep-info file of each unit.
+  `serde_json` reads the messages of each compile, which name the dep-info file of each unit.
 
   `toml` parses each manifest and each cargo config as cargo reads them. The lockfile already
   holds it under `leptos`. The tree walk uses `std` rather than a crate.

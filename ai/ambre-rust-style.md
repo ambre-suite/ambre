@@ -250,7 +250,7 @@
   exits 0. Each line carries the count of sites its key allows. With `--strict`, the report also
   fails on a refusal key no line names, and on a key with more sites than its line allows. A line
   with fewer sites is stale, and fails a strict report too. CI runs the report with `--strict`,
-  through `just unwrap`.
+  through `just primitives`, on the scan of the primitive gate.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
   Rust is preferred. The workspace lint table forbids `unsafe_code`, and every crate inherits it.

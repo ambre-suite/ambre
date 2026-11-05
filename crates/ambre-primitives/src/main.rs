@@ -16,9 +16,11 @@
 //!     the `zeroize` crate outside the Secret module (`ARCH-045`,
 //!     `ARCH-046`).
 //!
-//!     The seventh holds the walk to rustc. It refuses a file a compile
-//!     reads that the walk neither reads nor names as data, and a `.rs` file
-//!     no compile reads. It refuses a build lever that enables an
+//!     The seventh holds the walk to rustc. It runs the compile lines of
+//!     the lint recipes as the `justfile` writes them, so it reads the
+//!     dep-info the lint wrote. It refuses a file a compile reads that the
+//!     walk neither reads nor names as data, and a `.rs` file no compile
+//!     reads. It refuses a build lever that enables an
 //!     unstable feature too, in the build configuration or in the gate's
 //!     own environment (`ARCH-033`).
 //!
@@ -28,6 +30,9 @@
 //!
 //!     The ninth refuses an alias that stands for a family of `ambre-core`
 //!     alone (`ARCH-066`, `aliases.rs`). It reads test code too;
+//!   * `check --unwrap-strict` runs `check`, then the strict unwrap report
+//!     on the same scan, and prints both verdicts. It fails when either
+//!     fails. One walk of the sources serves both;
 //!   * `files` runs the seventh check alone, so a red allowlist hides no
 //!     file the walk misses;
 //!   * `--prune` removes the lines that name no site, and the exception
@@ -63,10 +68,52 @@ const UNWRAP_ALLOWLIST: &str = "specs/1-Foundations/ambre-unwrap.tsv";
 
 /// What one run does.
 enum Mode {
-    Check,
+    Check(Report),
     Files,
     Prune,
     Unwrap(Strictness, Shown),
+}
+
+/// What `check` reports.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Report {
+    /// The primitive gate alone.
+    Primitives,
+    /// The primitive gate, then the strict unwrap report on the same scan:
+    /// one walk of the sources serves both verdicts.
+    WithStrictUnwrap,
+}
+
+/// The verdict of one report.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    Pass,
+    Fail,
+}
+
+impl Verdict {
+    /// Fails when either verdict fails.
+    fn and(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Pass, Self::Pass) => Self::Pass,
+            _ => Self::Fail,
+        }
+    }
+
+    /// The word the summary line prints.
+    fn word(self) -> &'static str {
+        match self {
+            Self::Pass => "passes",
+            Self::Fail => "fails",
+        }
+    }
+
+    fn exit(self) -> ExitCode {
+        match self {
+            Self::Pass => ExitCode::SUCCESS,
+            Self::Fail => ExitCode::FAILURE,
+        }
+    }
 }
 
 /// Which sites the unwrap report prints.
@@ -76,13 +123,16 @@ enum Shown {
     WithAmbiguous,
 }
 
-const USAGE: &str = "usage: ambre-primitives [check | files | --prune | unwrap [--strict] \
-                     [--ambiguous]]";
+const USAGE: &str = "usage: ambre-primitives [check [--unwrap-strict] | files | --prune | unwrap \
+                     [--strict] [--ambiguous]]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mode = match args.first().map(String::as_str) {
-        None | Some("check") if args.len() <= 1 => Mode::Check,
+        None | Some("check") if args.len() <= 1 => Mode::Check(Report::Primitives),
+        Some("check") if args.get(1..) == Some(&["--unwrap-strict".to_owned()][..]) => {
+            Mode::Check(Report::WithStrictUnwrap)
+        }
         Some("files") if args.len() == 1 => Mode::Files,
         Some("--prune") if args.len() == 1 => Mode::Prune,
         Some("unwrap") => {
@@ -115,24 +165,45 @@ fn main() -> ExitCode {
         }
         return ExitCode::FAILURE;
     }
-    let unread = match mode {
-        Mode::Prune => Vec::new(),
-        Mode::Unwrap(strictness, shown) => {
-            return unwraps(&scan, &disk, &root, strictness, shown);
+    let verdict = match mode {
+        Mode::Unwrap(strictness, shown) => unwraps(&scan, &disk, &root, strictness, shown),
+        Mode::Check(Report::WithStrictUnwrap) => {
+            // Both reports read the one scan, and the second runs whatever
+            // the first says, so a red gate hides no unwrap verdict.
+            let primitives = gate(&mode, &scan, &disk, &root);
+            let unwrap = unwraps(&scan, &disk, &root, Strictness::Strict, Shown::Refusals);
+            println!(
+                "primitives: the primitive gate {}, the strict unwrap report {}",
+                primitives.word(),
+                unwrap.word()
+            );
+            primitives.and(unwrap)
         }
-        Mode::Check | Mode::Files => files(&scan, &disk, &root),
+        Mode::Check(Report::Primitives) | Mode::Files | Mode::Prune => {
+            gate(&mode, &scan, &disk, &root)
+        }
+    };
+    verdict.exit()
+}
+
+/// The primitive gate on one scan: the dep-info half, then the allowlist
+/// half. Or the prune, which compiles nothing.
+fn gate(mode: &Mode, scan: &Scan, disk: &scan::Disk, root: &Path) -> Verdict {
+    let unread = match mode {
+        Mode::Prune | Mode::Unwrap(..) => Vec::new(),
+        Mode::Check(_) | Mode::Files => files(scan, disk, root),
     };
     if let Mode::Files = mode {
         return if unread.is_empty() {
-            ExitCode::SUCCESS
+            Verdict::Pass
         } else {
-            ExitCode::FAILURE
+            Verdict::Fail
         };
     }
     let path = root.join(ALLOWLIST);
     let Ok(text) = std::fs::read_to_string(&path) else {
         eprintln!("primitives: cannot read {ALLOWLIST}");
-        return ExitCode::FAILURE;
+        return Verdict::Fail;
     };
     let list = match Allowlist::parse(&text) {
         Ok(list) => list,
@@ -140,23 +211,23 @@ fn main() -> ExitCode {
             for error in errors {
                 eprintln!("primitives: {ALLOWLIST}: {error}");
             }
-            return ExitCode::FAILURE;
+            return Verdict::Fail;
         }
     };
     let census = root.join(newtypes::NEWTYPES);
     let exceptions = std::fs::read_to_string(&census).ok();
     match mode {
-        Mode::Check | Mode::Files | Mode::Unwrap(..) => {
+        Mode::Check(_) | Mode::Files | Mode::Unwrap(..) => {
             let refused = newtypes::judge(exceptions.as_deref(), &scan.newtypes);
-            let bare = aliases::check(&disk, &root);
-            check(&list, &scan, &unread, &refused, &bare)
+            let bare = aliases::check(disk, root);
+            check(&list, scan, &unread, &refused, &bare)
         }
         Mode::Prune => {
             if let Some(text) = exceptions
                 && let Err(e) = std::fs::write(&census, newtypes::pruned(&text, &scan.newtypes))
             {
                 eprintln!("primitives: cannot write {}: {e}", newtypes::NEWTYPES);
-                return ExitCode::FAILURE;
+                return Verdict::Fail;
             }
             prune(&list, &scan.sites, &path)
         }
@@ -172,7 +243,7 @@ fn unwraps(
     root: &Path,
     strictness: Strictness,
     shown: Shown,
-) -> ExitCode {
+) -> Verdict {
     let report = unwrap::report(disk, scan);
     for error in &report.errors {
         eprintln!("primitives: {error}");
@@ -203,7 +274,7 @@ fn unwraps(
             for error in errors {
                 eprintln!("primitives: {UNWRAP_ALLOWLIST}: {error}");
             }
-            return ExitCode::FAILURE;
+            return Verdict::Fail;
         }
     };
     for problem in &judgement.problems {
@@ -215,8 +286,8 @@ fn unwraps(
         judgement.unlisted, judgement.over, judgement.stale
     );
     match judgement.outcome {
-        unwrap::Outcome::Pass => ExitCode::SUCCESS,
-        unwrap::Outcome::Fail => ExitCode::FAILURE,
+        unwrap::Outcome::Pass => Verdict::Pass,
+        unwrap::Outcome::Fail => Verdict::Fail,
     }
 }
 
@@ -238,7 +309,9 @@ fn files(scan: &Scan, disk: &scan::Disk, root: &Path) -> Vec<String> {
     ));
     refusals.append(&mut depinfo::stray_workspaces(disk, root));
     if compile {
-        match depinfo::collect(root, depinfo::COMPILES, &|_| {}) {
+        let compiled = depinfo::lint_compiles(disk, root)
+            .and_then(|compiles| depinfo::collect(root, &compiles, &|_| {}));
+        match compiled {
             Ok(compiled) => {
                 let sources = depinfo::sources(disk, root);
                 let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
@@ -283,7 +356,7 @@ fn check(
     unread: &[String],
     newtypes: &[String],
     aliases: &[String],
-) -> ExitCode {
+) -> Verdict {
     let sites = &scan.sites;
     let verdict = list.compare(sites);
     for key in &verdict.missing {
@@ -395,9 +468,9 @@ fn check(
         && newtypes.is_empty()
         && aliases.is_empty()
     {
-        ExitCode::SUCCESS
+        Verdict::Pass
     } else {
-        ExitCode::FAILURE
+        Verdict::Fail
     }
 }
 
@@ -405,12 +478,12 @@ fn prune(
     list: &Allowlist,
     sites: &std::collections::BTreeSet<scan::SiteKey>,
     path: &Path,
-) -> ExitCode {
+) -> Verdict {
     let stale = list.compare(sites).stale.len();
     if let Err(e) = std::fs::write(path, list.pruned(sites)) {
         eprintln!("primitives: cannot write {ALLOWLIST}: {e}");
-        return ExitCode::FAILURE;
+        return Verdict::Fail;
     }
     println!("primitives: removed {stale} lines that named no site");
-    ExitCode::SUCCESS
+    Verdict::Pass
 }
