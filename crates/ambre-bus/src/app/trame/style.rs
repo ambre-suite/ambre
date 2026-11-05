@@ -256,6 +256,21 @@ pub enum BorderStyle {
     Double,
 }
 
+impl BorderStyle {
+    /// The word the stylesheet selects the preview of this style by, as the
+    /// class `line-preview <word>`.
+    pub const fn css_word(self) -> &'static str {
+        match self {
+            Self::Solid => "solid",
+            Self::Dashed => "dashed",
+            Self::Dotted => "dotted",
+            Self::Medium => "medium",
+            Self::Thick => "thick",
+            Self::Double => "double",
+        }
+    }
+}
+
 /// A single cell edge's border: its stroke style and colour. The edge's
 /// presence is carried by the enclosing `Option<CellBorder>` in [`Borders`]
 /// (`None` = no border on that edge).

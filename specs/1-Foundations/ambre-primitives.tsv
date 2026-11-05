@@ -271,6 +271,7 @@ ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::is_single_cell() | re
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::overlaps() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | <Col as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-bus | src/app/grid.rs | crate::app::grid | <Row as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BorderStyle::css_word() | ret | &'static str	newtype-inner	the spelling of a fieldless enum that the stylesheet matches back, as the class of the preview of each border style
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
@@ -2697,7 +2698,7 @@ ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | 
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopover(values) | param | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | col_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_BUTTONS | const | &[(BorderPreset,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_STYLES | const | &[(BorderStyle,&str,&str)]	free-text	free text: user content, label, message or display string
+ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_STYLES | const | &[(BorderStyle,&str)]	free-text	the label a person reads beside each border style of the picker
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | H_ALIGNS | const | &[(HAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NUMBER_FORMATS | const | &[(CellFormat,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
