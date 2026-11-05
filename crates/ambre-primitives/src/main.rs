@@ -22,7 +22,9 @@
 //!     walk neither reads nor names as data, and a `.rs` file no compile
 //!     reads. It refuses a build lever that enables an
 //!     unstable feature too, in the build configuration or in the gate's
-//!     own environment (`ARCH-033`).
+//!     own environment. It refuses a feature a manifest declares that no
+//!     compile turns on and no line of the feature exclusions names
+//!     (`ARCH-033`, `features.rs`).
 //!
 //!     The eighth is the newtype census (`ARCH-062`, `newtypes.rs`). It
 //!     refuses a hand-written newtype over a primitive that no exception line
@@ -47,6 +49,7 @@
 mod aliases;
 mod allowlist;
 mod depinfo;
+mod features;
 mod newtypes;
 mod scan;
 mod secrets;
@@ -313,6 +316,7 @@ fn files(scan: &Scan, disk: &scan::Disk, root: &Path) -> Vec<String> {
             .and_then(|compiles| depinfo::collect(root, &compiles, &|_| {}));
         match compiled {
             Ok(compiled) => {
+                refusals.append(&mut features::check(disk, root, &compiled.features));
                 let sources = depinfo::sources(disk, root);
                 let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
                 refusals.append(&mut depinfo::cross_check(

@@ -130,11 +130,16 @@ file, the module, the item, the kind and the type, and no line number.
   manifest declares one. Any other manifest with a top-level `workspace` key in its TOML fails. The
   listing follows no link to a directory.
 
+  Each feature a workspace manifest declares is on in a shipped build of these compiles, as cargo
+  reports it. Otherwise a line of `specs/1-Foundations/ambre-features.tsv` excludes it with its
+  reason. A feature no compile turns on fails. So does a line that names no declared feature, or one a
+  compile turns on.
+
   A failed compile and a lint the line denies fail closed. So do a missing dep-info file, a unit
-  with no test flag and a dep-info line the parser cannot read whole. `just primitives-files` runs this half
-  alone. `just primitives` runs the strict unwrap report on the same scan. A build none
-  of these compiles makes, under another target, `cfg`, feature set or profile, is a reviewer's
-  (`ARCH-050`).
+  with no test flag or no feature list, and a dep-info line the parser cannot read whole.
+  `just primitives-files` runs this half alone. `just primitives` runs the strict unwrap report on
+  the same scan. A build none of these compiles makes, under another target, `cfg`, feature set or
+  profile, is a reviewer's (`ARCH-050`).
 
 * **The primitive allowlist is `specs/1-Foundations/ambre-primitives.tsv`.** One line per site:
   the key, a category and a note. The categories are a closed set: `free-text`, `foreign-api`,

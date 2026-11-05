@@ -1,0 +1,5 @@
+# The feature exclusions of the primitive gate (ARCH-033, ambre-spec-testing.md section 2).
+# Each feature a workspace manifest declares is turned on by a compile of `lint` or `lint-wasm`, or one line here names it as package/feature,
+# with the reason no compile of the lint turns it on. A line that names no declared feature, or one a compile turns on, fails the gate.
+# Add a line by hand only; a reviewer reads it.
+feature	reason
