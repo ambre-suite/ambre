@@ -184,28 +184,10 @@ impl TrameState {
         // Move each desired
         // uid into place left-to-right over the sortable region; `cur` mirrors the
         // list's evolving order so the `mov` indices stay correct.
-        let list = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
-        let mut cur: Vec<Uid> = self.index.row_ids().as_slice().to_vec();
-        let Some(base) = sort_start.to_index() else {
+        // Each step moves the visible element of one line, through the axis
+        // module (`TRAME-275`).
+        if self.axes().reorder_rows(sort_start, &target).is_none() {
             return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);
-        };
-        for (offset, want) in target.into_iter().enumerate() {
-            let dst = base + offset;
-            if cur.get(dst) == Some(&want) {
-                continue;
-            }
-            // The wanted uid is always at or after `dst` (earlier slots are fixed).
-            let src = cur
-                .iter()
-                .skip(dst)
-                .position(|u| *u == want)
-                .map(|p| p + dst);
-            let Some(src) = src else { continue };
-            let _ = list.mov(src, dst);
-            let u = cur.remove(src);
-            cur.insert(dst, u);
         }
         let rewritten = self.reanchor_formulas(AxisEdit::Rows(LineEdit::Reorder));
         self.doc.commit();

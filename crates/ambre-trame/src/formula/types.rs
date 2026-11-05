@@ -6,7 +6,7 @@ use std::fmt;
 use crate::message::{DefinedName, SheetName};
 use ambre_bus::{CellPos, Col, Row};
 
-use crate::model::{Line, SheetIndex, Uid};
+use crate::model::{Element, Line, SheetIndex, Uid};
 
 // -----------------------------------------------------------------------------
 // EngineSheet -- the engine's local sheet index
@@ -733,8 +733,10 @@ pub struct CellBytecode {
 /// and reads empty (`TRAME-006`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StoredAxis<P> {
-    /// The line with this identity, wherever it now sits. `#REF!` once deleted.
-    Line(Uid),
+    /// The line of this element, wherever it now sits. `#REF!` once the
+    /// element is gone, even when another element carries the uid again
+    /// (`TRAME-278`).
+    Line(Element),
     /// A zero-based position with no line behind it when the formula was stored.
     At(P),
     /// Every line of the axis, written `*`: the far axis of a whole-column or

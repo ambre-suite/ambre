@@ -27,7 +27,7 @@ use ambre_core::schema::{
 };
 
 use crate::formula::identity::{AxisEdit, LineEdit};
-use crate::model::{Line, Uid};
+use crate::model::{AxisOrder, Uid};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -94,6 +94,10 @@ ambre_core::crdt_names! {
         Rows = "rows",
         /// The column order, a `LoroMovableList` of `col_uid`s.
         Cols = "cols",
+        /// The generation record of both axes: `{"{uid}:{generation:08x}" ->
+        /// true}`, the highest generation of each line a write derived a line
+        /// after (`TRAME-271`). A grow-only set the axis module alone writes.
+        LineGen = "line_gen",
         /// The merge map: a LWW `LoroMap` keyed by the master (top-left)
         /// cell's stable id pair, with the bottom-right corner's id pair as
         /// value (`trame-cell-merges`). Keyed by stable ids so a merge follows
@@ -210,7 +214,7 @@ pub(crate) enum Axis {
 
 /// A line of the active sheet, by its position type: where its list lives and
 /// how a structural edit of it is named.
-pub(crate) trait SheetLine: Line {
+pub(crate) trait SheetLine: AxisOrder {
     /// The axis the position type names.
     const AXIS: Axis;
 
@@ -253,7 +257,7 @@ impl SheetLine for Col {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(1);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(2);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -305,11 +309,27 @@ pub fn read_version(doc: &LoroDoc) -> Result<Version<Schema>, SchemaError> {
 
 /// Trame's registry: one row per version bump, appended never rewritten.
 ///
-/// Version 1 is the first layout, and no build before it shipped, so the list
-/// is empty. A workbook with no version reads as 0 (`SCHEMA-005`), and the walk
-/// finds no step from 0 and refuses it. The first layout change after the
-/// release adds its row here.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
+/// Version 1 is the first layout. A workbook with no version reads as 0
+/// (`SCHEMA-005`), and the walk finds no step from 0 and refuses it.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
+    from: Version::new(1),
+    to: Version::new(2),
+    apply: line_elements_v2,
+}];
+
+/// Version 1 to 2: a line a write adds takes a derived uid
+/// (`ambre-spec-trame-schema.md section 7`).
+///
+/// The step rewrites nothing but the register. A version-1 element is a bare
+/// minted uid, and its element id is that uid. A version-1 reference carries
+/// no element id, so it binds to that element, which no derived uid can equal.
+/// `line_gen_{sheet}` starts empty: no line of a version-1 workbook was derived
+/// (`TRAME-272`).
+fn line_elements_v2(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
 
 /// The full-state read rule, applied before the caller touches a single
 /// container (`SCHEMA-006`).

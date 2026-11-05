@@ -19,7 +19,7 @@ use super::types::{
 };
 use crate::columns::row_label;
 use crate::message::SheetName;
-use crate::model::Uid;
+use crate::model::{Element, Uid};
 use ambre_core::id::{Id, Sheet};
 
 // -----------------------------------------------------------------------------
@@ -244,12 +244,12 @@ fn render_stored(c: &StoredCell) -> String {
         return render_cell(&at);
     }
     let row = match c.row {
-        StoredAxis::Line(uid) => render_uid(uid),
+        StoredAxis::Line(element) => render_element(element),
         StoredAxis::At(row) => row_label(row),
         StoredAxis::Whole => "*".to_owned(),
     };
     let col = match c.col {
-        StoredAxis::Line(uid) => render_uid(uid),
+        StoredAxis::Line(element) => render_element(element),
         StoredAxis::At(col) => col_to_alpha(col),
         StoredAxis::Whole => "*".to_owned(),
     };
@@ -259,6 +259,20 @@ fn render_stored(c: &StoredCell) -> String {
 /// A line uid in its shortest form, lowercase hex with no leading zero.
 fn render_uid(uid: Uid) -> String {
     format!("{:x}_{:x}", uid.peer, uid.counter.get())
+}
+
+/// A line reference: its uid, then `#` and the element id for a derived line.
+/// A minted line's element is its uid, so it carries no suffix.
+fn render_element(element: Element) -> String {
+    if element.is_minted() {
+        render_uid(element.uid)
+    } else {
+        format!(
+            "{}#{}",
+            render_uid(element.uid),
+            render_uid(element.id.spelled())
+        )
+    }
 }
 
 fn render_qualifier(q: &SheetQualifier) -> String {

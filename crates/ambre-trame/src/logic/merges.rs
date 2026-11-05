@@ -47,18 +47,17 @@ impl TrameState {
     /// Refused, writing no entry, when the rectangle gets no lines.
     pub(super) fn insert_merge_entry(&mut self, rect: CellRect) -> Result<(), Unmaterialized> {
         // Materialize the bottom-right corner so the whole rectangle has ids.
-        let extent = self.materialize(rect.bottom_right)?;
-        let master = self
-            .index
-            .resolve(rect.top_left)
-            .ok_or(Unmaterialized::Unwritten)?;
+        self.materialize(rect.bottom_right)?;
+        let (Some(master), Some(extent)) = (
+            self.index.key_at(rect.top_left),
+            self.index.key_at(rect.bottom_right),
+        ) else {
+            return Err(Unmaterialized::Unwritten);
+        };
         let _ = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Merges, &self.active_sheet).as_str())
-            .insert(
-                CellKey::of(master.0, master.1).as_str(),
-                CellKey::of(extent.0, extent.1).as_str(),
-            );
+            .insert(master.as_str(), extent.as_str());
         Ok(())
     }
 
@@ -118,13 +117,17 @@ impl TrameState {
         }) else {
             return false;
         };
-        let Some((rl, cl)) = self.index.resolve(master) else {
-            return false;
-        };
-        self.doc
-            .get_map(SheetContainer::of(SheetRoot::Merges, &self.active_sheet).as_str())
-            .delete(CellKey::of(rl, cl).as_str())
-            .is_ok()
+        // The entry may sit under any live element of the master's lines.
+        let map = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Merges, &self.active_sheet).as_str());
+        let mut deleted = false;
+        for key in self.index.keys_at(master) {
+            if map.get(key.as_str()).is_some() {
+                deleted |= map.delete(key.as_str()).is_ok();
+            }
+        }
+        deleted
     }
 
     /// Shared tail of merge/unmerge. It rebuilds the derived merge cache (which
@@ -147,12 +150,13 @@ impl TrameState {
     /// Whether the grid cell `at` holds a non-empty string value in the CRDT.
     /// Resolves the position to its stable id pair; a virtual cell has no value.
     pub(super) fn cell_has_raw(&self, at: CellPos) -> bool {
-        has_raw_value(self.index.resolve(at).and_then(|(rl, cl)| {
-            self.doc
-                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())
-                .get(CellKey::of(rl, cl).as_str())
-                .map(|v| v.get_deep_value())
-        }))
+        has_raw_value(super::cells::cell_value(
+            &self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str()),
+            &self.index,
+            at,
+        ))
     }
 
     /// Rebuild the derived merge caches ([`Self::merges`], [`Self::covered`],
@@ -181,9 +185,7 @@ impl TrameState {
                 // Mask a covered cell that still holds a value (concurrent
                 // conflict): keep the data, exclude it from the engine.
                 if self.cell_has_raw(at) {
-                    if let Some((rl, cl)) = self.index.resolve(at) {
-                        self.masked_cells.insert(CellKey::of(rl, cl));
-                    }
+                    self.masked_cells.insert(at);
                     events.push(TrameEvent::MergeConflictDetected {
                         master_row: master.row,
                         master_col: master.col,
@@ -231,13 +233,12 @@ impl TrameState {
                 };
                 // A key no build writes is said, never read in silence
                 // (`TRAME-248`).
-                let (Some((mr, mc)), Some((er, ec))) =
-                    (parse_cell_key(master_key), parse_cell_key(extent_key))
-                else {
+                if parse_cell_key(master_key).is_none() || parse_cell_key(extent_key).is_none() {
                     self.note_unreadable_key();
                     return None;
-                };
-                let rect = CellRect::spanning(index.pos_of(&mr, &mc)?, index.pos_of(&er, &ec)?);
+                }
+                let rect =
+                    CellRect::spanning(index.place(master_key)?.0, index.place(extent_key)?.0);
                 // A peer may write an entry of one cell. It is no merge
                 // (`TRAME-128`), so it masks nothing and draws no block.
                 (!rect.is_single_cell()).then(|| (master_key.to_string(), rect))
@@ -270,7 +271,7 @@ impl TrameState {
         &self,
         sheet_id: &Id<Sheet>,
         index: &SheetIndex,
-    ) -> HashSet<CellKey> {
+    ) -> HashSet<CellPos> {
         let cells = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str());
@@ -282,11 +283,9 @@ impl TrameState {
                     // The master carries the value; only what it covers is masked.
                     .filter(move |&at| at != block.top_left)
             })
-            .filter_map(|at| index.resolve(at))
-            .map(|(rl, cl)| CellKey::of(rl, cl))
             // A covered cell that still holds a value is a concurrent conflict:
             // mask it (keep the data, exclude it from the DAG).
-            .filter(|key| has_raw_value(cells.get(key.as_str()).map(|v| v.get_deep_value())))
+            .filter(|&at| has_raw_value(super::cells::cell_value(&cells, index, at)))
             .collect()
     }
 }

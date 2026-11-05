@@ -66,36 +66,37 @@ impl TrameState {
             // and the feed order decides which cell of a cycle gets rejected. A
             // document where `A1=B1` and `B1=A1` met through a CRDT merge would
             // otherwise flag a different culprit on each reseed.
-            let mut entries: Vec<_> = cells.iter().collect();
-            entries.sort_unstable_by_key(|(key, _)| *key);
-            for (key, value) in entries {
-                // Masked cells (covered by a merge, conflicting value) stay out of
-                // the DAG.
-                let Some((rl, cl)) = parse_cell_key(key) else {
-                    // A key no build writes, a crafted peer's among them, is
-                    // said, never read in silence (`SCHEMA-003`).
-                    self.note_unreadable_key();
-                    continue;
-                };
+            // Each key reads on the cell of its elements, and of two keys on
+            // one cell the visible elements' wins (`TRAME-279`).
+            let (shown, read) = super::cells::shown_cells(index, cells.iter());
+            if read == crate::model::LineRead::Skipped {
+                // A key no build writes, a crafted peer's among them, is said,
+                // never read in silence (`SCHEMA-003`).
+                self.note_unreadable_key();
+            }
+            for (at, _, value) in shown {
                 let LoroValue::String(text) = value else {
                     continue;
                 };
-                if masked.contains(&CellKey::of(rl, cl)) {
+                // Masked cells (covered by a merge, conflicting value) stay out
+                // of the DAG.
+                if masked.contains(&at) {
                     continue;
                 }
-                if index.contains_row(&rl) && index.contains_col(&cl) {
-                    let ctx = TrameCtx {
-                        engine_sheet_by_name: &self.engine_sheet_by_name,
-                        engine_sheet_by_id: &self.engine_sheet_by_id,
-                        named: &self.named,
-                    };
-                    self.engine.on_cell_changed(
-                        CellId::bound(idx, rl, cl),
-                        CellText::<StoredForm>::new(text.as_str().to_owned()),
-                        &indices,
-                        &ctx,
-                    );
-                }
+                let Some((rl, cl)) = index.resolve(at) else {
+                    continue;
+                };
+                let ctx = TrameCtx {
+                    engine_sheet_by_name: &self.engine_sheet_by_name,
+                    engine_sheet_by_id: &self.engine_sheet_by_id,
+                    named: &self.named,
+                };
+                self.engine.on_cell_changed(
+                    CellId::bound(idx, rl, cl),
+                    CellText::<StoredForm>::new(text.as_str().to_owned()),
+                    &indices,
+                    &ctx,
+                );
             }
         }
         self.engine.compute_all_dirty(&indices);
@@ -193,13 +194,7 @@ impl TrameState {
     /// Build a fresh [`SheetIndex`] for an arbitrary sheet id (the cross-sheet
     /// reseed needs each sheet's position<->id map, not just the active one).
     pub(super) fn build_sheet_index(&self, sheet_id: &Id<Sheet>) -> SheetIndex {
-        let rows = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Rows, sheet_id).as_str());
-        let cols = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Cols, sheet_id).as_str());
-        let index = SheetIndex::build(&rows, &cols);
+        let index = crate::model::Axes::of(&self.doc, sheet_id).index();
         self.note_index_read(&index);
         index
     }
@@ -784,12 +779,7 @@ impl TrameState {
                 }
             }
         }
-        for root in [SheetRoot::Rows, SheetRoot::Cols] {
-            let _ = self
-                .doc
-                .get_movable_list(SheetContainer::of(root, sheet_id).as_str())
-                .clear();
-        }
+        crate::model::Axes::of(&self.doc, sheet_id).clear();
     }
 }
 
