@@ -152,7 +152,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() |
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.html | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
+ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	generic	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | <TextChangeSeq as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
@@ -163,15 +163,15 @@ ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue.0 | fiel
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue::as_str() | ret | &str	newtype-inner	MarkValue accessor, for the Loro mark call and the clipboard payload that carry text
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadColor.0 | field | String	generic	the refused value the error echoes
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadFontSize.0 | field | String	generic	the refused value the error echoes
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_color() | ret | String	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | String	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | read_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell() | ret | String	free-text	the canonical spelling of a number, wrapped into a MarkValue by its callers
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_color() | ret | String	generic	the canonical spelling of a colour mark value, which the constructor wraps into a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | String	generic	the canonical spelling of a numeric mark value, which the constructor wraps into a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	generic	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	generic	the raw text of a colour mark value, the input of its parse
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	generic	the raw text of a size mark value, the input of its parse
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | read_font_size(raw) | param | &str	generic	the raw text of a size mark value, the input of its parse
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell() | ret | String	generic	the canonical spelling of a number, wrapped into a MarkValue by its callers
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell(value) | param | f32	math	a typed size's points, or the number a stored or command string reads as
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	generic	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipElement.notes | field | Option<String>	free-text	user text
