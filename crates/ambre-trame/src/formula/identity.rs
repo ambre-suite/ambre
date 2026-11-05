@@ -161,11 +161,14 @@ fn broken() -> Expr {
 
 /// One axis of a stored cell, read and written by its position type.
 trait CellAxis: Line {
+    /// The axis a structural edit of this one leaves in place.
+    type Other: CellAxis;
     fn get(cell: &StoredCell) -> StoredAxis<Pos<Self>>;
     fn set(cell: &mut StoredCell, value: StoredAxis<Pos<Self>>);
 }
 
 impl CellAxis for Row {
+    type Other = Col;
     fn get(cell: &StoredCell) -> StoredAxis<Pos<Self>> {
         cell.row
     }
@@ -175,6 +178,7 @@ impl CellAxis for Row {
 }
 
 impl CellAxis for Col {
+    type Other = Row;
     fn get(cell: &StoredCell) -> StoredAxis<Pos<Self>> {
         cell.col
     }
@@ -205,6 +209,14 @@ fn place<L: Line>(index: &SheetIndex, axis: StoredAxis<Pos<L>>) -> Option<Stored
     match axis {
         StoredAxis::Line(element) => L::pos_of_element(index, &element).map(StoredAxis::At),
         other => Some(other),
+    }
+}
+
+/// Whether axis `L` of `cell` names an element `index` no longer holds.
+fn gone<L: CellAxis>(index: &SheetIndex, cell: &StoredCell) -> bool {
+    match L::get(cell) {
+        StoredAxis::Line(element) => L::pos_of_element(index, &element).is_none(),
+        StoredAxis::At(_) | StoredAxis::Whole => false,
     }
 }
 
@@ -271,6 +283,9 @@ pub fn unbind<'a>(
 /// each corner keeps its line, so lines inserted inside it widen it
 /// (`TRAME-171`). Through a delete a removed corner moves to the nearest line
 /// left inside it, and a range with none left reads `#REF!`.
+///
+/// A reference to a line the new layout lacks is frozen into a literal
+/// `#REF!`. No element of a deleted line then stays in the text (`TRAME-277`).
 pub fn reanchor(
     expr: Expr,
     edited: &impl Fn(Option<&SheetQualifier>) -> bool,
@@ -323,9 +338,18 @@ fn reanchor_on<L: CellAxis>(
         let Some((mut start, mut end)) = corners(&node) else {
             return node;
         };
+        // A reference to a line the new layout lacks freezes into a literal
+        // `#REF!`: the deleted line, or one a concurrent delete removed. A
+        // formula then holds no element of a deleted line (`TRAME-277`).
+        if [start, end].iter().any(|c| gone::<L::Other>(new, c)) {
+            return broken();
+        }
         if shape_of(&node) == NodeShape::Single {
+            if gone::<L>(new, &start) {
+                return broken();
+            }
             let next = match L::get(&start) {
-                // A line follows itself; one that is gone already reads `#REF!`.
+                // A line follows itself.
                 StoredAxis::Line(_) | StoredAxis::Whole => return node,
                 StoredAxis::At(pos) if pos < L::len(old).as_end() => bind_at(old, pos),
                 StoredAxis::At(pos) => match moved(edit, pos, Survivor::After) {
@@ -342,8 +366,8 @@ fn reanchor_on<L: CellAxis>(
         }
         let (Some(a), Some(b)) = (position(old, L::get(&start)), position(old, L::get(&end)))
         else {
-            // A corner whose line is already gone: it reads `#REF!` as it is.
-            return node;
+            // A corner whose line was gone before this edit freezes too.
+            return broken();
         };
         let (lo, hi) = (a.min(b), a.max(b));
         let (Some(lo), Some(hi)) = (
