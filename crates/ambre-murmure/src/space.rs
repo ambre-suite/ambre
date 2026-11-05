@@ -208,7 +208,7 @@ impl SpaceState {
         position: Rank<CatalogPosition>,
     ) -> Result<Payload<DeltaBytes>, MurmureError> {
         self.writable()?;
-        let entry = Fields::<CategoryKey>::of(
+        let entry = Fields::<CategoryKey>::new(
             crate::schema::root_map(&self.doc, Root::Categories)
                 .ensure_mergeable_map(&category_id.to_string())?,
         );
@@ -237,7 +237,7 @@ impl SpaceState {
             return Err(MurmureError::NotPublic(channel_id));
         }
         self.writable()?;
-        let entry = Fields::<EntryKey>::of(
+        let entry = Fields::<EntryKey>::new(
             crate::schema::root_map(&self.doc, Root::Catalogue)
                 .ensure_mergeable_map(&channel_id.to_string())?,
         );

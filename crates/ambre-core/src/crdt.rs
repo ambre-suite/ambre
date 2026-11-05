@@ -7,51 +7,64 @@
 //! [`crdt_names!`]. A root container name implements [`ContainerName`], a map
 //! key implements [`FieldKey`], and the two traits never meet.
 //!
-//! [`loro_fields!`] writes the map handle that takes those keys. It expands in
-//! an application crate, which links Loro. This crate names no Loro type
-//! itself: `ambre-server` links it, and the server never decodes a document
-//! (`ZK-001`).
+//! `ambre-crdt` holds the map handle that takes those keys. This crate names no
+//! Loro type itself: `ambre-server` links it, and the server never links a
+//! crate that reads a document (`ZK-004`).
 //!
 //! The spelling stays the one the document stores. A variant names the string
 //! and never encodes it again. A document therefore reads the same before and
 //! after its names were typed.
 
-/// The name of a root container, which a document opens by name.
-pub trait ContainerName: Copy + 'static {
+/// A closed set of words a document stores: the names of its root
+/// containers, the keys of its maps, or the words a value spells.
+///
+/// [`crdt_names!`] writes the set and its spellings. The reading back is
+/// written once, here, for every set.
+pub trait CrdtName: Copy + 'static {
+    /// Every name of the set, in declaration order. The schema belts walk it,
+    /// so a declared name with no line in the frozen shape fails there.
+    const ALL: &'static [Self];
+
     /// The name as the document stores it, for the call that opens the
-    /// container.
+    /// container or reads the key.
     fn as_str(self) -> &'static str;
+
+    /// The name a stored word spells, or `None` for a word outside the set.
+    #[must_use]
+    fn parse(word: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|name| name.as_str() == word)
+    }
 }
+
+/// The name of a root container, which a document opens by name.
+pub trait ContainerName: CrdtName {}
 
 /// The name a family of root containers shares, one container per id. The
 /// application joins the name and the id into the root name, and only its own
 /// constructor does the join.
-pub trait ContainerFamily: Copy + 'static {
-    /// The shared part of the name, as the document stores it.
-    fn as_str(self) -> &'static str;
-}
+pub trait ContainerFamily: CrdtName {}
 
 /// A key of one map schema. A handle typed by the schema takes this key and no
 /// other, so a key of another map does not compile there.
-pub trait FieldKey: Copy + 'static {
-    /// The key as the document stores it, for the call into the map.
-    fn as_str(self) -> &'static str;
-}
+pub trait FieldKey: CrdtName {}
 
-/// Declares a closed set of CRDT names as an enum, one variant per name.
+/// Declares a closed set of CRDT names as an enum, one variant per name, and
+/// implements [`CrdtName`] for it.
 ///
 /// `: ContainerName`, `: ContainerFamily` or `: FieldKey` after the enum name
-/// implements that trait.
+/// implements that trait too.
 /// With neither, the enum names words of another kind, a text mark key for
-/// example, and only the inherent items are written.
+/// example.
 ///
-/// Each enum carries `ALL`, every name in declaration order, `as_str`, the
-/// stored spelling, and `parse`, its inverse. The schema belts walk `ALL`, so a
-/// declared name with no line in the frozen shape fails there.
+/// A macro writes the set because its variants differ per set, which no
+/// generic type can hold. The calling crate owns the enum, so a set of one
+/// schema never stands for a set of another. Everything else is a method of
+/// [`CrdtName`].
 ///
-/// A spelling is any constant `&'static str` expression. A literal is the
-/// usual case. A name another module owns is spelled through that module, so
-/// the two never drift apart.
+/// The enum also carries an inherent `const fn as_str`, the stored spelling,
+/// so a spelling stays a constant expression. A spelling is any constant
+/// `&'static str` expression. A literal is the usual case. A name another
+/// module owns is spelled through that module, so the two never drift apart.
 #[macro_export]
 macro_rules! crdt_names {
     (
@@ -67,9 +80,6 @@ macro_rules! crdt_names {
         }
 
         impl $name {
-            /// Every name of the set, in declaration order.
-            $vis const ALL: &'static [Self] = &[$(Self::$variant),+];
-
             /// The name as the document stores it.
             #[must_use]
             $vis const fn as_str(self) -> &'static str {
@@ -77,197 +87,17 @@ macro_rules! crdt_names {
                     $(Self::$variant => $spelling),+
                 }
             }
+        }
 
-            /// The name a stored word spells, or `None` for a word outside
-            /// the set.
-            #[must_use]
-            $vis fn parse(word: &str) -> Option<Self> {
-                Self::ALL.iter().copied().find(|name| name.as_str() == word)
+        impl $crate::crdt::CrdtName for $name {
+            const ALL: &'static [Self] = &[$(Self::$variant),+];
+
+            fn as_str(self) -> &'static str {
+                $name::as_str(self)
             }
         }
 
-        // A schema whose belt never walks `ALL`, or whose reader never parses
-        // a stored word, leaves one of the two unused. The set is whole in
-        // every schema, so this constant names each item once.
-        const _: () = {
-            let _ = $name::ALL;
-            let _ = $name::as_str;
-            let _ = $name::parse;
-        };
-
-        $(
-            impl $crate::crdt::$role for $name {
-                fn as_str(self) -> &'static str {
-                    $name::as_str(self)
-                }
-            }
-        )?
-    };
-}
-
-/// Writes `Fields<K>` and `FieldValues<K>`, the two map handles typed by a
-/// schema, into the calling crate.
-///
-/// `Fields<K>` wraps a live `loro::LoroMap`, and `FieldValues<'_, K>` a map
-/// read whole as a deep value. Each takes a key of the schema `K` and no other
-/// type. The string reaches Loro inside the handle and nowhere else.
-///
-/// The handle is written by a macro because no crate every application shares
-/// links Loro. One definition, expanded in each application, keeps the copies
-/// from drifting. An application that calls only part of the handle leaves the
-/// rest unused, so an anonymous constant names every method.
-#[macro_export]
-macro_rules! loro_fields {
-    ($vis:vis) => {
-        /// A live Loro map, read and written through the keys of the schema
-        /// `K` alone.
-        #[derive(Clone, Debug)]
-        $vis struct Fields<K> {
-            map: ::loro::LoroMap,
-            schema: ::core::marker::PhantomData<fn() -> K>,
-        }
-
-        impl<K: $crate::crdt::FieldKey> Fields<K> {
-            /// Reads `map` as a map of the schema `K`. The caller names the
-            /// schema the container holds.
-            #[must_use]
-            $vis fn of(map: ::loro::LoroMap) -> Self {
-                Self {
-                    map,
-                    schema: ::core::marker::PhantomData,
-                }
-            }
-
-            /// The map, for a call that takes no key: its id, its length, a
-            /// whole read.
-            #[must_use]
-            $vis fn map(&self) -> &::loro::LoroMap {
-                &self.map
-            }
-
-            /// The value or the container under `key`.
-            #[must_use]
-            $vis fn get(&self, key: K) -> Option<::loro::ValueOrContainer> {
-                self.map.get(key.as_str())
-            }
-
-            /// The plain value under `key`, or `None` when the key is absent
-            /// or holds a container.
-            #[must_use]
-            $vis fn value(&self, key: K) -> Option<::loro::LoroValue> {
-                match self.get(key)? {
-                    ::loro::ValueOrContainer::Value(value) => Some(value),
-                    ::loro::ValueOrContainer::Container(_) => None,
-                }
-            }
-
-            /// Whether the map holds `key`.
-            #[must_use]
-            $vis fn contains(&self, key: K) -> bool {
-                self.get(key).is_some()
-            }
-
-            /// Writes `value` under `key`.
-            ///
-            /// # Errors
-            /// Loro's refusal of the write.
-            $vis fn insert(
-                &self,
-                key: K,
-                value: impl Into<::loro::LoroValue>,
-            ) -> ::loro::LoroResult<()> {
-                self.map.insert(key.as_str(), value)
-            }
-
-            /// Writes the new container `child` under `key`, replacing what
-            /// the key held.
-            ///
-            /// # Errors
-            /// Loro's refusal of the write.
-            $vis fn insert_container<C: ::loro::ContainerTrait>(
-                &self,
-                key: K,
-                child: C,
-            ) -> ::loro::LoroResult<C> {
-                self.map.insert_container(key.as_str(), child)
-            }
-
-            /// The map under `key`, created when the key holds none. Two
-            /// peers creating it at once merge into one map.
-            ///
-            /// # Errors
-            /// Loro's refusal of the write, or a key holding another kind.
-            $vis fn ensure_mergeable_map(&self, key: K) -> ::loro::LoroResult<::loro::LoroMap> {
-                self.map.ensure_mergeable_map(key.as_str())
-            }
-
-            /// Removes `key`. Absence is a value, so this is how a property
-            /// is cleared.
-            ///
-            /// # Errors
-            /// Loro's refusal of the write.
-            $vis fn delete(&self, key: K) -> ::loro::LoroResult<()> {
-                self.map.delete(key.as_str())
-            }
-        }
-
-        /// A map read whole as a deep value, read through the keys of the
-        /// schema `K` alone.
-        #[derive(Clone, Copy, Debug)]
-        $vis struct FieldValues<'a, K> {
-            map: &'a ::loro::LoroMapValue,
-            schema: ::core::marker::PhantomData<fn() -> K>,
-        }
-
-        impl<'a, K: $crate::crdt::FieldKey> FieldValues<'a, K> {
-            /// Reads `map` as a deep value of the schema `K`.
-            #[must_use]
-            $vis fn of(map: &'a ::loro::LoroMapValue) -> Self {
-                Self {
-                    map,
-                    schema: ::core::marker::PhantomData,
-                }
-            }
-
-            /// The deep value, for a read that takes no key.
-            #[must_use]
-            $vis fn map(&self) -> &'a ::loro::LoroMapValue {
-                self.map
-            }
-
-            /// The value under `key`.
-            #[must_use]
-            $vis fn get(&self, key: K) -> Option<&'a ::loro::LoroValue> {
-                self.map.get(key.as_str())
-            }
-        }
-
-        // An application that calls only part of a handle leaves the rest
-        // unused. The handle is whole in every application, so this constant
-        // names each method once, through a key type that has no value.
-        const _: () = {
-            #[derive(Clone, Copy)]
-            enum Unread {}
-
-            impl $crate::crdt::FieldKey for Unread {
-                fn as_str(self) -> &'static str {
-                    match self {}
-                }
-            }
-
-            let _ = Fields::<Unread>::of;
-            let _ = Fields::<Unread>::map;
-            let _ = Fields::<Unread>::get;
-            let _ = Fields::<Unread>::value;
-            let _ = Fields::<Unread>::contains;
-            let _ = |fields: &Fields<Unread>, key| fields.insert(key, ::loro::LoroValue::Null);
-            let _ = Fields::<Unread>::insert_container::<::loro::LoroMap>;
-            let _ = Fields::<Unread>::ensure_mergeable_map;
-            let _ = Fields::<Unread>::delete;
-            let _ = FieldValues::<'static, Unread>::of;
-            let _ = FieldValues::<'static, Unread>::map;
-            let _ = FieldValues::<'static, Unread>::get;
-        };
+        $(impl $crate::crdt::$role for $name {})?
     };
 }
 
@@ -336,6 +166,8 @@ impl CommitOrigin {
 
 #[cfg(test)]
 mod tests {
+    use super::CrdtName;
+
     crate::crdt_names! {
         /// Two roots of a test schema.
         enum Root: ContainerName {
@@ -375,10 +207,17 @@ mod tests {
         assert_eq!(Key::parse("board"), Some(Key::Board));
         assert_eq!(Key::Width.as_str(), "w");
         assert_eq!(Root::parse("w"), None);
-        assert_eq!(<Key as crate::crdt::FieldKey>::as_str(Key::Width), "w");
-        assert_eq!(
-            <Root as crate::crdt::ContainerName>::as_str(Root::Layers),
-            "layers"
-        );
+        assert_eq!(<Key as CrdtName>::as_str(Key::Width), "w");
+        assert_eq!(<Root as CrdtName>::as_str(Root::Layers), "layers");
+    }
+
+    /// A generic reader names the set by its role trait alone, and reads the
+    /// spelling and the set through it.
+    #[test]
+    fn a_role_trait_reads_the_set_it_bounds() {
+        fn first<K: super::FieldKey>() -> Option<&'static str> {
+            K::ALL.first().map(|key| key.as_str())
+        }
+        assert_eq!(first::<Key>(), Some("board"));
     }
 }

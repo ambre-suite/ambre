@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-002` | `INV` | The document key and the private signing key MUST NOT appear in any outbound message; only the public half travels. | `ZK-002`; this spec section 2 | crate-graph -- `deny.toml` refuses the exchange, the cipher and `ambre-crypto` itself outside this worker, so no other crate holds a type either key could travel in | none | verified |
 | `SYNC-095` | `INV` | A key MUST be wiped from memory when it goes out of scope. | `ZK-002`; this spec section 2 | type-level -- both key types hold an `ambre_core::Secret` (`ZK-019`), and so does the X25519 `SharedSecret` a wrapping key derives from (`a_shared_secret_is_wiped_and_never_printed`), so the wipe is the destructor and cannot be forgotten at a call site. It is what makes a sign-out mean anything on a machine the attacker may later read | none | verified |
-| `SYNC-011` | `INV` | The Sync worker MUST compile no CRDT code. | this spec section 2 | crate-graph -- `deny.toml` grants `loro` to the four application crates alone, so this worker fails the `deny` job on the line that would add it | none | verified |
+| `SYNC-011` | `INV` | The Sync worker MUST compile no CRDT code. | this spec section 2 | crate-graph -- `deny.toml` grants `loro` to the four application crates and `ambre-crdt` alone, and `ambre-crdt` to the four application crates alone, so this worker fails the `deny` job on the line that would add either | none | verified |
 | `SYNC-096` | `INV` | The Sync worker MUST compile no rendering code. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-057` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path dependency that brings `ambre-canvas`, `ambre-draw` or `wgpu` into the closure of `ambre-sync`; cargo-deny -- `deny.toml` grants `wgpu` to `ambre-canvas` and `ambre-app`, and the CI `deny` job fails any other crate that takes it | none | verified |
 | `SYNC-056` | `INV` | The Sync worker MUST run in its own instance, with a linear memory the rest of the client cannot address. | `ambre-spec-architecture.md section 2` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses an `ambre-sync` that builds no `cdylib`, a crate that depends on it, and a page that does not load it as a worker | none | verified |
 | `SYNC-060` | `INV` | A token MUST live in this worker's memory alone: never in browser storage, never in a cookie. | `ambre-spec-session.md`, `SRV-031` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-sync` that names browser storage, the browser database, the cache or a cookie | none | verified |
@@ -69,6 +69,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-071` | `FAIL` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | `ambre_sync::http::tests::a_request_with_no_answer_is_abandoned_at_its_deadline` -- a transport that never answers ends the request with an error at its thirty-second deadline, sent once | none | verified |
 | `SYNC-152` | `POST` | An answer naming a word of a closed set this build does not know MUST reach the rest of the client as an update to install, never as a generic error. | this spec section 2; `ambre-spec-server.md`, `SRV-180` | `ambre_core::serde_enums::tests::an_unknown_word_reads_as_an_unknown_variant_in_every_set` -- each adapter refuses the word as a derived enum does; `ambre_sync::http::tests::only_an_unknown_word_reads_as_one` -- a role or a status no member carries reads as one, a malformed identifier or a missing field does not; `ambre_sync::setup_tests::an_answer_with_an_unknown_word_reaches_logic_as_an_update` -- the sink turns it into the update, under either error variant; `ambre_logic::dispatch::tests::a_newer_relay_reaches_the_ui_as_an_update` -- the logic thread relays it | none | verified |
 | `SYNC-179` | `POST` | A request MUST carry each value of its query string percent-encoded whole, so the relay reads the text it was. | this spec section 2 | `ambre_sync::http::tests::a_query_value_is_percent_encoded_whole` -- an ampersand, an equals sign, a hash, a plus, a percent sign, a space, an at sign and a non-ASCII letter each reach the address encoded | none | verified |
+| `SYNC-183` | `POST` | The worker MUST renew the token pair before the lifetime the relay announced for its access token runs out, by the margin of `ambre-spec-budgets.md section 8`. | this spec section 2; `ambre-spec-session.md`, `SRV-025` | `ambre_sync::renewal::tests::the_renewal_falls_due_the_margin_before_the_announced_expiry` -- the renewal falls due the margin before the lifetime, on the injected clock, and runs once; `ambre_sync::renewal::tests::a_stored_pair_is_renewed_ahead_of_its_announced_expiry` -- the worker reads the lifetime from the relay's pair, renews it at the due instant and not before, and the renewed pair arms the next renewal; `ambre_sync::http::tests::a_renewal_ahead_of_the_expiry_spares_the_refusal` -- the renewal stores the new pair and its lifetime, and the next request carries the new token with no refusal | none | verified |
+| `SYNC-184` | `FRAME` | A renewal MUST NOT run while another renewal of the same pair is in flight, nor after that renewal replaced the pair. | this spec section 2; `ambre-spec-session.md`, `SRV-009` | `ambre_sync::http::tests::two_refusals_of_one_token_renew_the_pair_once` -- two requests refused for one token over a transport that interleaves them send one renewal, and both replay under the new token; `ambre_sync::renewal::tests::only_the_timer_of_the_latest_pair_renews` -- the timer of a replaced pair renews nothing | none | verified |
+| `SYNC-185` | `FAIL` | A renewal ahead of the expiry that fails MUST leave the pair in place, so the refusal of `SYNC-062` and `SYNC-063` renews it. | this spec section 2; `SYNC-062`; `SYNC-063` | `ambre_sync::http::tests::a_failed_renewal_ahead_falls_back_to_the_refusal` -- a refused renewal keeps the pair, and the refusal that follows renews it and replays the request; `ambre_sync::renewal::tests::a_short_lifetime_or_a_cancel_arms_nothing` -- a lifetime no longer than the margin, or a sign-out, arms no renewal | none | verified |
 | `SYNC-099` | `FRAME` | A renewal MUST NOT replay a request refused for anything but an expired token. | `ambre-spec-session.md`, `SRV-025` | `ambre_sync::http::tests::each_answer_maps_to_its_error` -- a 403, a 409, a 500, a 404 and no answer each send one request, with no renewal | none | verified |
 | `SYNC-181` | `POST` | A listed document MUST reach the rest of the client with the update time the relay sent, unchanged and on the relay's clock. | this spec section 2; `ambre-spec-server.md`, `SRV-243` | `ambre_sync::http::tests::a_listed_document_reads_its_update_time_unchanged` -- the number the relay test pins reads as the same instant, and a time sent as text is refused; type-level -- the list entry and the summary hold an `Instant<Relayed>` | none | verified |
 | `SYNC-186` | `FAIL` | Given a request and no relay to take it, the worker MUST answer the Logic thread at once, so no view waits on it. | this spec section 2 | `ambre_sync::channels::tests::a_channel_document_request_with_no_relay_answers_its_failure_at_once` -- a segment close, an amendments link and a thread link each answer their own failure, naming the missing relay; `::with_no_relay_the_open_fails_at_once` -- an open answers its failure; `::with_no_relay_a_direct_message_fails_at_once` -- a direct message answers its failure; `ambre_sync::fold::tests::a_fold_with_no_relay_answers_its_failure_at_once` -- a fold lease request and a fold each answer the fold's failure; `ambre_sync::finalize::tests::a_finalize_lease_with_no_relay_answers_its_failure_at_once` -- a finalize lease request answers its failure; `ambre_sync::members::tests::a_member_request_with_no_relay_answers_at_once` -- each member request answers once; `ambre_sync::media::tests::a_media_request_with_no_relay_answers_at_once` -- a download and an erase each answer once | none | verified |
@@ -112,7 +115,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 55 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 58 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
@@ -190,7 +193,25 @@ is kept and sent after the reopen (`SYNC-059`). The two marks are a row of
 `ambre-spec-budgets.md section 6`.
 
 **Requests.** Every one carries the access token. A refusal for an expired token is renewed once and
-replayed; a second refusal reaches the screen as an authentication error (`SYNC-062`). A refusal
+replayed; a second refusal reaches the screen as an authentication error (`SYNC-062`).
+
+**The renewal ahead of the expiry.** The relay announces how long each access token lives. The
+worker keeps that lifetime with the pair, and arms one timer on its own clock. The timer falls due
+a margin before the expiry, a row of `ambre-spec-budgets.md section 8` (`SYNC-183`). The worker
+reads the announced lifetime and never decodes the token: the token stays opaque to the client.
+
+| Event | Response |
+|---|---|
+| a pair is stored, or a renewal replaces it | arm the renewal of that pair; the timer of the pair before goes stale |
+| an unlock hands back the pair the store holds | keep the renewal armed: the lifetime did not start again |
+| the timer falls due | renew the pair once, then arm the renewal of the new pair |
+| a second renewal is asked while one is in flight | wait for it, then send nothing if it replaced the pair (`SYNC-184`) |
+| the renewal fails | keep the pair: the next refusal renews it (`SYNC-185`) |
+| the session ends | disarm, and drop an answer that lands after it (`SYNC-100`) |
+
+**Why one renewal per pair.** The relay honours each refresh token once (`SRV-009`). A second
+renewal of one pair would carry a spent token, and its refusal would fail a request that a single
+renewal serves. A refusal
 for a key setup still owed reaches it as the setup to complete. So does an unlock that finds no
 master material (`SYNC-134`).
 

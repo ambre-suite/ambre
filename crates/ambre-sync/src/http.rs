@@ -12,12 +12,50 @@ use serde::{Deserialize, Serialize};
 /// (`SYNC-100`, `SYNC-061`). Their roles keep them apart: only the access
 /// token presents itself as a bearer.
 pub(crate) use ambre_core::{AccessToken, Credential, RefreshToken};
-use ambre_core::{Ms, TimeSpan};
+use ambre_core::{Ms, Sec, TimeSpan};
 
+/// The session's two tokens, with the lifetime the relay announced for the
+/// access token. The worker renews the pair ahead of that lifetime
+/// (`SYNC-183`).
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct TokenPair {
-    pub access_token: Credential<AccessToken>,
-    pub refresh_token: Credential<RefreshToken>,
+    access_token: Credential<AccessToken>,
+    refresh_token: Credential<RefreshToken>,
+    access_expires_in: TimeSpan<Sec>,
+}
+
+impl TokenPair {
+    /// The pair of `access_token` and `refresh_token`, the access token
+    /// living `lifetime` from the instant the worker stores it. The relay's
+    /// answer builds every pair the worker holds, so a test alone builds one
+    /// by hand.
+    #[cfg(test)]
+    pub(crate) fn new(
+        access_token: Credential<AccessToken>,
+        refresh_token: Credential<RefreshToken>,
+        lifetime: TimeSpan<Sec>,
+    ) -> Self {
+        Self {
+            access_token,
+            refresh_token,
+            access_expires_in: lifetime,
+        }
+    }
+
+    /// The token a request presents as its bearer.
+    pub(crate) fn access_token(&self) -> &Credential<AccessToken> {
+        &self.access_token
+    }
+
+    /// The token a renewal and a sign-out send.
+    pub(crate) fn refresh_token(&self) -> &Credential<RefreshToken> {
+        &self.refresh_token
+    }
+
+    /// How long the access token lives, as the relay announced it.
+    pub(crate) fn lifetime(&self) -> TimeSpan<Sec> {
+        self.access_expires_in
+    }
 }
 
 pub(crate) type TokenStore = Rc<RefCell<Option<TokenPair>>>;
@@ -350,6 +388,13 @@ pub(crate) struct AuthContext {
     pub api_base: crate::http::Url<crate::http::RelayHost>,
     pub url_scheme: crate::http::UrlScheme,
     pub tokens: TokenStore,
+    /// The gate every renewal of `tokens` passes, so two never run at once
+    /// (`SYNC-184`). Each context over one store shares it.
+    pub renewing: Rc<futures_util::lock::Mutex<()>>,
+    /// Where a renewal reports that it replaced the pair, so the worker arms
+    /// the next renewal ahead of the expiry. `None` for a context whose
+    /// store is not the worker's yet.
+    pub renewed: Option<ambre_bus::conduit::UnboundedSender<crate::SyncEvent>>,
 }
 
 #[derive(Serialize)]
@@ -367,7 +412,7 @@ impl AuthContext {
         self.tokens
             .borrow()
             .as_ref()
-            .map(|t| t.access_token.clone())
+            .map(|t| t.access_token().clone())
             .ok_or_else(|| HttpError::Local("auth required: no access token".to_owned()))
     }
 
@@ -375,32 +420,64 @@ impl AuthContext {
         self.tokens
             .borrow()
             .as_ref()
-            .map(|t| t.refresh_token.clone())
+            .map(|t| t.refresh_token().clone())
             .ok_or_else(|| HttpError::Local("auth required: no refresh token".to_owned()))
     }
 
-    /// Renews the token pair over the browser's `fetch`. The socket calls it
-    /// on its own refusal, which only the wasm build reaches.
+    /// Whether the store still holds the pair of `access`.
+    fn holds(&self, access: &Credential<AccessToken>) -> bool {
+        self.tokens
+            .borrow()
+            .as_ref()
+            .is_some_and(|t| t.access_token().matches(access))
+    }
+
+    /// Renews the pair that holds `stale` over the browser's `fetch`. The
+    /// socket calls it on its own refusal, and the worker ahead of the
+    /// expiry. Only the wasm build reaches either.
     #[cfg_attr(
         not(target_arch = "wasm32"),
         expect(
             dead_code,
-            reason = "only the wasm socket renews the token pair over fetch"
+            reason = "only the wasm socket and timer renew the token pair over fetch"
         )
     )]
-    pub(crate) async fn refresh(&self) -> Result<(), HttpError> {
-        self.refresh_via(&Fetch).await
+    pub(crate) async fn renew(&self, stale: &Credential<AccessToken>) -> Result<(), HttpError> {
+        self.renew_via(&Fetch, stale).await
     }
 
-    /// Renews the token pair through `transport`. The refresh token is the
-    /// one credential the request carries.
-    async fn refresh_via(&self, transport: &impl Transport) -> Result<(), HttpError> {
+    /// Renews the pair that holds `stale` through `transport`. The refresh
+    /// token is the one credential the request carries. Each access token
+    /// is renewed once (`SYNC-184`):
+    /// * the gate makes a second caller wait for the renewal in flight;
+    /// * a caller whose token is no longer stored sends nothing, since the
+    ///   renewal it waited for already replaced it.
+    ///
+    /// The relay honours each refresh token once (`SRV-009`), so a second
+    /// renewal of one pair would be refused and fail its caller. An answer
+    /// that lands after a sign-out is dropped, so the sign-out leaves no
+    /// token (`SYNC-100`).
+    async fn renew_via(
+        &self,
+        transport: &impl Transport,
+        stale: &Credential<AccessToken>,
+    ) -> Result<(), HttpError> {
+        let _turn = self.renewing.lock().await;
+        if !self.holds(stale) {
+            return Ok(());
+        }
         let url = self.api_root().route("/auth/refresh");
         let body = RefreshRequest {
             refresh_token: self.refresh_token()?,
         };
         let next = post_json_via::<_, TokenPair>(transport, &url, &body).await?;
+        if !self.holds(stale) {
+            return Ok(());
+        }
         *self.tokens.borrow_mut() = Some(next);
+        if let Some(renewed) = &self.renewed {
+            let _ = renewed.send(crate::SyncEvent::TokensRenewed);
+        }
         Ok(())
     }
 
@@ -422,14 +499,15 @@ impl AuthContext {
                 refresh_token: self.refresh_token()?,
             };
             let mut request = Outgoing::json(Method::Post, (&url).into(), &body)?;
-            request.bearer = Some(self.access_token()?);
+            let access = self.access_token()?;
+            request.bearer = Some(access.clone());
             let resp = exchange(transport, &request).await?;
-            Ok::<_, HttpError>((request, resp))
+            Ok::<_, HttpError>((request, resp, access))
         };
-        let (mut request, mut resp) = send().await?;
+        let (mut request, mut resp, sent) = send().await?;
         if resp.status == HttpStatus::new(401) {
-            self.refresh_via(transport).await?;
-            (request, resp) = send().await?;
+            self.renew_via(transport, &sent).await?;
+            (request, resp, _) = send().await?;
         }
         expect_ok(&request, &resp)
     }
@@ -934,12 +1012,13 @@ async fn exchange_auth(
     auth: &AuthContext,
     request: &mut Outgoing,
 ) -> Result<Incoming, HttpError> {
-    request.bearer = Some(auth.access_token()?);
+    let sent = auth.access_token()?;
+    request.bearer = Some(sent.clone());
     let resp = exchange(transport, request).await?;
     if resp.status != HttpStatus::new(401) {
         return Ok(resp);
     }
-    auth.refresh_via(transport).await?;
+    auth.renew_via(transport, &sent).await?;
     request.bearer = Some(auth.access_token()?);
     exchange(transport, request).await
 }
@@ -1166,8 +1245,9 @@ pub(crate) struct SetupAccountRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct SetupAccountResponse {
-    pub access_token: Credential<AccessToken>,
-    pub refresh_token: Credential<RefreshToken>,
+    /// The pair, with the lifetime of its access token.
+    #[serde(flatten)]
+    pub tokens: TokenPair,
 }
 
 #[derive(Serialize)]
@@ -1182,8 +1262,9 @@ pub(crate) struct DevLoginResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
-    pub access_token: Credential<AccessToken>,
-    pub refresh_token: Credential<RefreshToken>,
+    /// The pair, with the lifetime of its access token.
+    #[serde(flatten)]
+    pub tokens: TokenPair,
 }
 
 /// The relay's answer to `GET /api/auth/{provider}/login`.
@@ -1207,8 +1288,9 @@ pub(crate) struct ProviderCallbackResponse {
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
     pub display_name: ambre_core::Validated<ambre_core::DisplayName>,
-    pub access_token: Credential<AccessToken>,
-    pub refresh_token: Credential<RefreshToken>,
+    /// The pair, with the lifetime of its access token.
+    #[serde(flatten)]
+    pub tokens: TokenPair,
 }
 
 #[derive(Deserialize)]
@@ -2115,10 +2197,13 @@ pub(crate) mod scripted {
         AuthContext {
             api_base: crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
             url_scheme: UrlScheme::Https,
-            tokens: Rc::new(RefCell::new(Some(TokenPair {
-                access_token: Credential::new(access.to_owned()),
-                refresh_token: Credential::new(refresh.to_owned()),
-            }))),
+            tokens: Rc::new(RefCell::new(Some(TokenPair::new(
+                Credential::new(access.to_owned()),
+                Credential::new(refresh.to_owned()),
+                TimeSpan::<ambre_core::Sec>::new(900),
+            )))),
+            renewing: Rc::new(futures_util::lock::Mutex::new(())),
+            renewed: None,
         }
     }
 
@@ -2543,6 +2628,144 @@ mod tests {
         let (kind, body) = request.body.as_ref().expect("a body");
         assert_eq!(*kind, ContentType::Octets);
         assert_eq!(body.as_bytes(), blob.as_bytes());
+    }
+
+    /// A transport that yields once before each answer, as a network does,
+    /// so two requests in flight interleave.
+    struct Yielding(Scripted);
+
+    impl Transport for Yielding {
+        async fn send(&self, request: &Outgoing) -> Result<Incoming, TransportError> {
+            tokio::task::yield_now().await;
+            self.0.send(request).await
+        }
+
+        async fn elapse(&self, span: TimeSpan<Ms>) {
+            self.0.elapse(span).await;
+        }
+    }
+
+    /// The bodies of the renewals `transport` sent, in order.
+    fn renewals(transport: &Scripted) -> Vec<serde_json::Value> {
+        transport
+            .sent
+            .borrow()
+            .iter()
+            .filter(|r| r.url.reveal().ends_with("/api/auth/refresh"))
+            .map(|r| serde_json::from_slice(r.body.as_ref().unwrap().1.as_bytes()).unwrap())
+            .collect()
+    }
+
+    /// `SYNC-184`: two requests refused for one expired token renew the pair
+    /// once. The second waits for the renewal in flight and replays under its
+    /// token, where a renewal of its own would reuse a spent refresh token.
+    #[tokio::test]
+    async fn two_refusals_of_one_token_renew_the_pair_once() {
+        let transport = Yielding(Scripted::new([
+            Ok((401, serde_json::json!({}))),
+            Ok((401, serde_json::json!({}))),
+            Ok((200, renewed("access-2"))),
+            Ok((200, serde_json::json!({ "ok": 1 }))),
+            Ok((200, serde_json::json!({ "ok": 2 }))),
+        ]));
+        let auth = session("access-1", "refresh-1");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents");
+
+        let (first, second) = futures_util::future::join(
+            get_json_auth_via::<serde_json::Value>(&transport, url, &auth),
+            get_json_auth_via::<serde_json::Value>(&transport, url, &auth),
+        )
+        .await;
+
+        assert!(first.is_ok() && second.is_ok(), "{first:?} {second:?}");
+        assert_eq!(
+            renewals(&transport.0),
+            [serde_json::json!({ "refresh_token": "refresh-1" })]
+        );
+        let sent = transport.0.sent.borrow();
+        let replays: Vec<_> = sent.iter().skip(3).filter_map(bearer_of).collect();
+        assert_eq!(replays, ["Bearer access-2", "Bearer access-2"]);
+    }
+
+    /// `SYNC-183`: a renewal ahead of the expiry replaces the pair with the
+    /// relay's answer and its announced lifetime. A request after it carries
+    /// the new token and meets no refusal.
+    #[tokio::test]
+    async fn a_renewal_ahead_of_the_expiry_spares_the_refusal() {
+        let transport = Scripted::new([
+            Ok((
+                200,
+                serde_json::json!({
+                    "access_token": "access-2",
+                    "refresh_token": "refresh-2",
+                    "access_expires_in": 600,
+                }),
+            )),
+            Ok((200, serde_json::json!({ "ok": 1 }))),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents");
+
+        let stale = auth.access_token().unwrap();
+        auth.renew_via(&transport, &stale).await.unwrap();
+        assert_eq!(
+            auth.tokens.borrow().as_ref().map(TokenPair::lifetime),
+            Some(TimeSpan::<Sec>::new(600))
+        );
+        // The pair is renewed already: a late caller with the old token
+        // sends nothing.
+        auth.renew_via(&transport, &stale).await.unwrap();
+        get_json_auth_via::<serde_json::Value>(&transport, url, &auth)
+            .await
+            .unwrap();
+
+        let sent = transport.sent.borrow();
+        let [renewal, request] = sent.as_slice() else {
+            panic!("expected two requests, got {}", sent.len());
+        };
+        assert!(renewal.url.reveal().ends_with("/api/auth/refresh"));
+        assert_eq!(bearer_of(request).as_deref(), Some("Bearer access-2"));
+    }
+
+    /// `SYNC-185`: a renewal ahead of the expiry that fails leaves the pair in
+    /// place. The refusal that follows renews it, and the request is
+    /// replayed.
+    #[tokio::test]
+    async fn a_failed_renewal_ahead_falls_back_to_the_refusal() {
+        let transport = Scripted::new([
+            Ok((500, serde_json::json!({}))),
+            Ok((401, serde_json::json!({}))),
+            Ok((200, renewed("access-2"))),
+            Ok((200, serde_json::json!({ "ok": 1 }))),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let url = &Url::<ApiRoot>::of(
+            UrlScheme::Https,
+            &Url::<RelayHost>::new("relay.test".to_owned()),
+        )
+        .route("/documents");
+
+        let stale = auth.access_token().unwrap();
+        assert!(auth.renew_via(&transport, &stale).await.is_err());
+        assert!(auth.holds(&stale), "the pair stays");
+        get_json_auth_via::<serde_json::Value>(&transport, url, &auth)
+            .await
+            .unwrap();
+        assert_eq!(
+            renewals(&transport),
+            [
+                serde_json::json!({ "refresh_token": "refresh-1" }),
+                serde_json::json!({ "refresh_token": "refresh-1" }),
+            ]
+        );
     }
 
     /// A presigned link is its own credential. A failed upload or download

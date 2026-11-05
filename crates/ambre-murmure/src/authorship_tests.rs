@@ -270,7 +270,7 @@ fn a_message_carries_the_author_who_signed_it_and_no_other() {
 
     // A message with no author names nobody, so it is no signer's either.
     let before = alice.doc().oplog_vv();
-    let bare = crate::schema::Fields::<MessageKey>::of(
+    let bare = crate::schema::Fields::<MessageKey>::new(
         alice
             .doc()
             .get_list(Root::Messages.as_str())

@@ -418,7 +418,8 @@ FRAME_CREATE = re.compile(r'create_element\(\s*"iframe"\s*\)')
 LOGIC_MANIFEST = "crates/ambre-logic/Cargo.toml"
 RENDER_OR_TOOLKIT = ("ambre-canvas", "ambre-chrome", "ambre-app", "wgpu", "vello", "leptos")
 SYNC_UNREACHABLE = RENDER_OR_TOOLKIT + (
-    "ambre-draw", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure", "ambre-logic",
+    "ambre-draw", "ambre-crdt", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure",
+    "ambre-logic",
 )
 PATH_DEP = re.compile(r'^([\w-]+)\s*=\s*\{[^}]*\bpath\s*=\s*"\.\./([\w-]+)"', re.MULTILINE)
 

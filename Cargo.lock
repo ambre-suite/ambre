@@ -175,6 +175,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-crdt"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "loro",
+]
+
+[[package]]
 name = "ambre-crypto"
 version = "0.1.0"
 dependencies = [
@@ -244,6 +252,7 @@ dependencies = [
  "ambre-chrome",
  "ambre-commands",
  "ambre-core",
+ "ambre-crdt",
  "ambre-draw",
  "criterion",
  "js-sys",
@@ -291,6 +300,7 @@ dependencies = [
  "ambre-chrome",
  "ambre-commands",
  "ambre-core",
+ "ambre-crdt",
  "ambre-draw",
  "criterion",
  "html5ever",
@@ -400,6 +410,7 @@ dependencies = [
  "ambre-chrome",
  "ambre-commands",
  "ambre-core",
+ "ambre-crdt",
  "ambre-draw",
  "ambre-pdf",
  "base64 0.22.1",
@@ -436,6 +447,7 @@ dependencies = [
  "ambre-chrome",
  "ambre-commands",
  "ambre-core",
+ "ambre-crdt",
  "ambre-draw",
  "csv",
  "icondata",

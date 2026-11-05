@@ -43,7 +43,7 @@ impl SyncState {
             .tokens
             .borrow()
             .as_ref()
-            .map(|t| t.access_token.clone())
+            .map(|t| t.access_token().clone())
         else {
             tracing::warn!("Sync: socket opened before the access token is ready");
             return;
@@ -394,8 +394,19 @@ impl SyncState {
             return;
         };
         let auth = self.auth_context();
+        let stale = self
+            .tokens
+            .borrow()
+            .as_ref()
+            .map(|t| t.access_token().clone());
         wasm_bindgen_futures::spawn_local(async move {
-            let ok = match auth.refresh().await {
+            let renewed = match stale {
+                Some(stale) => auth.renew(&stale).await,
+                None => Err(crate::http::HttpError::Local(
+                    "auth required: no access token".to_owned(),
+                )),
+            };
+            let ok = match renewed {
                 Ok(()) => true,
                 Err(e) => {
                     tracing::warn!("Sync: token refresh failed: {e}");
@@ -542,6 +553,8 @@ impl SyncState {
                 self.handle_ws_disconnected(None, "ws error".to_owned());
                 self.socket_closed(None);
             }
+            SyncEvent::RenewalDue { ticket } => self.renewal_due(ticket),
+            SyncEvent::TokensRenewed => self.tokens_renewed(),
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;
                 let next = self.lifecycle.poll((self.clock)());
@@ -569,7 +582,7 @@ impl SyncState {
                 self.master_seed = Some(master_seed);
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
-                *self.tokens.borrow_mut() = Some(tokens);
+                self.hold_tokens(tokens);
                 self.setup_owed = false;
                 self.open_websocket();
                 self.flush_pending_opens();
@@ -593,7 +606,7 @@ impl SyncState {
                 // The tokens stop here (`CHROME-096`). No key is held yet, so no
                 // socket opens: the unlock or the setup opens it.
                 self.user_id = Some(user_id);
-                *self.tokens.borrow_mut() = Some(tokens);
+                self.hold_tokens(tokens);
                 self.setup_owed = keys_stored == ambre_bus::KeySetup::Absent;
                 self.reply(
                     id,
@@ -616,7 +629,7 @@ impl SyncState {
                 self.master_seed = Some(master_seed);
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
-                *self.tokens.borrow_mut() = Some(tokens);
+                self.hold_tokens(tokens);
                 self.setup_owed = false;
                 self.open_websocket();
                 self.flush_pending_opens();
@@ -1830,10 +1843,11 @@ mod tests {
         state
             .session_nonces
             .insert(id, ambre_core::FixedBytes::from_array([1; 16]));
-        *state.tokens.borrow_mut() = Some(TokenPair {
-            access_token: Credential::new("access".to_owned()),
-            refresh_token: Credential::new("refresh".to_owned()),
-        });
+        *state.tokens.borrow_mut() = Some(TokenPair::new(
+            Credential::new("access".to_owned()),
+            Credential::new("refresh".to_owned()),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+        ));
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
 
@@ -1874,10 +1888,11 @@ mod tests {
             signing_key: master_seed.derive_signing_key(),
             exchange_key: master_seed.derive_exchange_key(),
             master_seed,
-            tokens: TokenPair {
-                access_token: Credential::new("access".to_owned()),
-                refresh_token: Credential::new("refresh".to_owned()),
-            },
+            tokens: TokenPair::new(
+                Credential::new("access".to_owned()),
+                Credential::new("refresh".to_owned()),
+                ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+            ),
         });
         assert_eq!(state.socket_opens, 1);
     }
@@ -2075,10 +2090,11 @@ mod tests {
         let (mut state, _rx) = with_open_document();
         let id = *state.documents.keys().next().unwrap();
         state.documents.get_mut(&id).unwrap().existence = crate::Existence::OnRelay;
-        *state.tokens.borrow_mut() = Some(TokenPair {
-            access_token: Credential::new("acc-s3cr3t".to_owned()),
-            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
-        });
+        *state.tokens.borrow_mut() = Some(TokenPair::new(
+            Credential::new("acc-s3cr3t".to_owned()),
+            Credential::new("ref-s3cr3t".to_owned()),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+        ));
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
         state.handle_sync_event(SyncEvent::WsOpened);
@@ -2097,10 +2113,11 @@ mod tests {
     /// A token pair logged by `Debug` prints neither token (`SYNC-061`).
     #[test]
     fn a_logged_token_pair_carries_no_token() {
-        let pair = TokenPair {
-            access_token: Credential::new("acc-s3cr3t".to_owned()),
-            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
-        };
+        let pair = TokenPair::new(
+            Credential::new("acc-s3cr3t".to_owned()),
+            Credential::new("ref-s3cr3t".to_owned()),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+        );
         let shown = format!("{pair:?}");
         assert!(!shown.contains("s3cr3t"), "{shown}");
     }

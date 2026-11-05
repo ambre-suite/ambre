@@ -491,7 +491,7 @@ impl ProseState {
         let id: Id<Suggestion> = self.ids.mint();
         let entry = doc::annots(&self.doc)
             .insert_container(&id.to_hyphenated(), LoroMap::new())
-            .map(doc::Fields::<doc::AnnotKey>::of)?;
+            .map(doc::Fields::<doc::AnnotKey>::new)?;
         entry.insert(doc::AnnotKey::Kind, doc::AnnotKind::Suggestion.as_str())?;
         entry.insert(
             doc::AnnotKey::Author,

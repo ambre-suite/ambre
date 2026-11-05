@@ -8,6 +8,7 @@
 //! because it never states one.
 
 use ambre_bus::app::prose::MarkKey;
+use ambre_core::crdt::CrdtName;
 use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
 
 // The value grammar lives on the bus, so a command carries a checked value.

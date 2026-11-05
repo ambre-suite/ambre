@@ -9,6 +9,7 @@
 
 use ambre_bus::{Emoji, Reaction};
 use ambre_core::Byte;
+use ambre_core::crdt::CrdtName;
 use ambre_core::id::{Id, User};
 use ambre_core::index::Len;
 use loro::{Container, ContainerID, Index, LoroDoc, ValueOrContainer};

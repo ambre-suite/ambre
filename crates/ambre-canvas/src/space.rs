@@ -2,14 +2,15 @@
 // ============================================================================
 // The pixel spaces of this crate alone.
 //
-// Four spaces:
+// Five spaces:
 //
 //   * the units of a parley layout;
 //   * the whole units of a paragraph indent;
 //   * the size of a glyph raster;
+//   * the size of a glyph raster in whole hundredths, the key of the atlas;
 //   * the whole CSS pixels of the token source.
 //
-// `ambre_core::space` holds the spaces several crates share. These four stay
+// `ambre_core::space` holds the spaces several crates share. These five stay
 // here, as this crate alone measures in them. A length of each is an
 // `ambre_core::Px` of the marker.
 // ============================================================================
@@ -48,6 +49,17 @@ pub enum GlyphRaster {}
 impl Space for GlyphRaster {
     type Repr = f32;
     const NAME: &'static str = "GlyphRaster";
+}
+
+/// Whole hundredths of a [`GlyphRaster`] pixel: the size the glyph atlas
+/// keys a raster by. Whole, so the key keeps its `Eq` and its `Hash`. Two
+/// sizes closer than a hundredth share a raster.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RasterKey {}
+
+impl Space for RasterKey {
+    type Repr = u32;
+    const NAME: &'static str = "RasterKey";
 }
 
 /// The whole CSS pixels the design-token source writes: a spacing, a radius,

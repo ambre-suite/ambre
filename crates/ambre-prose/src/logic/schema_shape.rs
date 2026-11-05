@@ -21,6 +21,7 @@
 
 use ambre_bus::app::prose::DocChar;
 use ambre_bus::app::prose::MarkKey;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::BTreeSet;
 

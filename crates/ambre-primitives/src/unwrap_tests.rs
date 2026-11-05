@@ -745,8 +745,7 @@ fn a_two_parameter_fn_or_a_method_is_no_named_conversion() {
     );
 }
 
-/// A `macro_rules!` that writes a typed handle over a foreign map, as
-/// `loro_fields!` does.
+/// A `macro_rules!` that writes a typed handle over a foreign map.
 const FIELDS: &str = "macro_rules! fields {\n\
     ($vis:vis) => {\n\
         $vis struct Fields { map: ::loro::LoroMap }\n\

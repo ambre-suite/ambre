@@ -33,3 +33,12 @@ impl SeqKind for Listing {
     type IssueRight = ();
     const NAME: &'static str = "Listing";
 }
+
+/// The ticket of a renewal timer, armed when a token pair is stored. Only
+/// the timer of the latest pair renews (`SYNC-183`).
+pub(crate) enum RenewalTicket {}
+
+impl SeqKind for RenewalTicket {
+    type IssueRight = ();
+    const NAME: &'static str = "RenewalTicket";
+}

@@ -36,6 +36,8 @@ krilla = { workspace = true, features = ["raster-images"], optional = true }
 
 # CRDT
 loro = { workspace = true }
+# The map handles typed by the schema keys.
+ambre-crdt = { path = "../ambre-crdt" }
 
 # Spatial indexing
 rstar = { workspace = true }

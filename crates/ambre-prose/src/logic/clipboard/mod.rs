@@ -13,6 +13,7 @@ mod html_write;
 mod sink;
 
 use ambre_core::Validated;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};

@@ -564,14 +564,22 @@ fn the_lint_recipes_of_the_workspace_parse_into_a_host_line_and_wasm_lines() {
             .windows(2)
             .any(|pair| pair == ["--target", "wasm32-unknown-unknown"])
     };
+    // `lint` may hold more than one host line: a feature that swaps a
+    // behaviour, as `ambre-belt/firefox` swaps the driver, gets a line of its
+    // own. One of them reads the whole workspace.
     let host: Vec<&Compile> = compiles.iter().filter(|c| !wasm(c)).collect();
-    let [host] = host.as_slice() else {
-        panic!("`lint` holds one host compile line, where it reads {host:?}");
-    };
-    assert_eq!(host.subcommand, Subcommand::Clippy);
-    for wide in ["--workspace", "--all-targets"] {
-        assert!(host.args.iter().any(|arg| arg == wide), "{host:?}");
+    assert!(!host.is_empty(), "`lint` holds no host compile line");
+    for line in &host {
+        assert_eq!(line.subcommand, Subcommand::Clippy, "{line:?}");
     }
+    assert!(
+        host.iter().any(|line| {
+            ["--workspace", "--all-targets"]
+                .iter()
+                .all(|wide| line.args.iter().any(|arg| arg == wide))
+        }),
+        "no host line reads the whole workspace: {host:?}"
+    );
     assert!(
         compiles.iter().any(|c| wasm(&c)),
         "no wasm line in lint-wasm"

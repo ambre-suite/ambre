@@ -43,7 +43,7 @@ impl ToileState {
             return None;
         };
         let loro::LoroValue::Binary(thumb) =
-            FieldValues::<MediaKey>::of(fields).get(MediaKey::Thumb)?
+            FieldValues::<MediaKey>::new(fields).get(MediaKey::Thumb)?
         else {
             return None;
         };
@@ -70,7 +70,7 @@ impl ToileState {
             return None;
         };
         let loro::LoroValue::Binary(thumb) =
-            FieldValues::<MediaKey>::of(fields).get(MediaKey::Thumb)?
+            FieldValues::<MediaKey>::new(fields).get(MediaKey::Thumb)?
         else {
             return None;
         };
@@ -234,7 +234,7 @@ impl ToileState {
                 continue;
             };
             let Some(loro::LoroValue::Binary(thumb)) =
-                FieldValues::<MediaKey>::of(fields).get(MediaKey::Thumb)
+                FieldValues::<MediaKey>::new(fields).get(MediaKey::Thumb)
             else {
                 continue;
             };

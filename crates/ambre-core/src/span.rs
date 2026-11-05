@@ -70,6 +70,7 @@ mod sealed {
     impl Sealed for super::FracMs {}
     impl Sealed for super::Day {}
     impl Sealed for super::FracDay {}
+    impl Sealed for super::Months {}
     impl Sealed for super::Authored {}
     impl Sealed for super::Relayed {}
     impl Sealed for super::UnixMs {}
@@ -250,6 +251,25 @@ impl TimeUnit for FracDay {
     const NAME: &'static str = "FracDays";
 }
 
+/// Whole months of a spreadsheet calendar, as `DATE` and `EDATE` count them
+/// from January of some year. A count of them is signed, and it may run past
+/// December or below January. A month has no fixed length, so a span of months
+/// converts into no other unit.
+pub enum Months {}
+
+impl TimeUnit for Months {
+    type Repr = i64;
+    const NAME: &'static str = "MonthCount";
+}
+
+impl TimeSpan<Months> {
+    /// The two spans together, held at either end of `i64`.
+    #[must_use]
+    pub const fn plus(self, other: Self) -> Self {
+        Self::new(self.ticks.saturating_add(other.ticks))
+    }
+}
+
 /// A wall clock in Unix milliseconds, as an author's clock reads it. A
 /// document stores its instant: the time of a message, a comment or a reply.
 ///
@@ -402,6 +422,16 @@ impl<U: ClockUnit<Repr = u64>> TimeSpan<U> {
         // billion and fit the `u32` of `Duration::new`.
         let nanos = rest * (1_000_000_000 / U::PER_SECOND);
         Duration::new(secs, nanos as u32)
+    }
+
+    /// The span shortened by `other`, or `None` when `other` is longer: a
+    /// span is never negative.
+    #[must_use]
+    pub const fn checked_sub(self, other: Self) -> Option<Self> {
+        match self.ticks.checked_sub(other.ticks) {
+            Some(ticks) => Some(Self::new(ticks)),
+            None => None,
+        }
     }
 
     /// The span `n` times over, saturating at `u64::MAX` ticks.
@@ -1042,6 +1072,9 @@ mod tests {
         assert_eq!(at(10).plus(ms(5)), at(15));
         assert_eq!(at(10).since(at(4)), ms(6));
         assert_eq!(at(4).since(at(10)), ms(0));
+        assert_eq!(ms(900).checked_sub(ms(60)), Some(ms(840)));
+        assert_eq!(ms(60).checked_sub(ms(60)), Some(ms(0)));
+        assert_eq!(ms(59).checked_sub(ms(60)), None);
     }
 
     #[test]
