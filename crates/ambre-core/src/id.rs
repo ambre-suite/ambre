@@ -432,6 +432,15 @@ impl Entity for Org {
     type Repr = Uuid;
 }
 
+/// One boot of a relay instance. The rate limiter mixes its random id into
+/// each sorted-set member, so two instances never write the same member.
+pub enum RelayInstance {}
+impl sealed::Sealed for RelayInstance {}
+impl Entity for RelayInstance {
+    const NAME: &'static str = "InstanceId";
+    type Repr = Uuid;
+}
+
 /// A finalize lease of a segment, minted by the relay when it grants one. A
 /// commit names it.
 pub enum Lease {}

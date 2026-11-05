@@ -1,5 +1,5 @@
 use ambre_core::Count;
-use ambre_core::id::{Id, User};
+use ambre_core::id::{Id, RelayInstance, User};
 use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::Next;
@@ -51,17 +51,16 @@ static REQUEST_NONCE: AtomicU64 = AtomicU64::new(0);
 /// produce an identical member. One `ZADD` would clobber the other,
 /// undercounting the shared window. A fresh random id per boot removes that
 /// overlap.
-static INSTANCE_ID: std::sync::LazyLock<InstanceId> =
-    std::sync::LazyLock::new(|| InstanceId(uuid::Uuid::new_v4()));
+///
+/// The id is a v4 UUID, all random bits: a v7 one spends 48 of its bits on
+/// the boot time.
+static INSTANCE_ID: std::sync::LazyLock<Id<RelayInstance>> =
+    std::sync::LazyLock::new(|| Id::from_bytes(uuid::Uuid::new_v4().into_bytes()));
 
-/// The random id of one server boot. It prints as 32 hex digits, the form a
-/// sorted-set member carries.
-struct InstanceId(uuid::Uuid);
-
-impl std::fmt::Display for InstanceId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.simple().fmt(f)
-    }
+/// The instance id as a sorted-set member carries it: 32 hex digits, no
+/// hyphen. The `Display` of an `Id` writes the hyphenated form instead.
+fn member_form(instance: &Id<RelayInstance>) -> uuid::fmt::Simple {
+    uuid::Uuid::from_bytes(*instance.as_bytes()).simple()
 }
 
 /// The bucket a request counts against: its caller when it signs in, its
@@ -354,7 +353,7 @@ async fn check_sliding_window(
     let nonce = REQUEST_NONCE.fetch_add(1, Ordering::Relaxed);
     // Unique per (instance, request), so same-millisecond requests are distinct
     // sorted-set members even across pods (see `INSTANCE_ID`).
-    let member = format!("{}-{}-{nonce}", now.get(), *INSTANCE_ID);
+    let member = format!("{}-{}-{nonce}", now.get(), member_form(&INSTANCE_ID));
 
     let count: i64 = state
         .redis
@@ -380,6 +379,23 @@ async fn check_sliding_window(
 mod tests {
     use super::*;
     use ambre_core::{Sec, TimeSpan};
+
+    // -- INSTANCE_ID -------------------------------------------------------
+
+    #[test]
+    fn the_instance_id_enters_a_member_as_32_hex_digits_of_a_v4_uuid() {
+        let form = member_form(&INSTANCE_ID).to_string();
+        assert_eq!(form.len(), 32);
+        assert!(
+            form.bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        );
+        assert_eq!(form, INSTANCE_ID.to_hyphenated().replace('-', ""));
+        assert_eq!(
+            uuid::Uuid::from_bytes(*INSTANCE_ID.as_bytes()).get_version_num(),
+            4
+        );
+    }
 
     // -- client_peer -------------------------------------------------------
 

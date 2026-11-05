@@ -13,16 +13,17 @@
 pub use ambre_bus::app::grid;
 pub use ambre_bus::app::prose::{
     ActiveMarks, Align, AnchorState, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
-    ChangeOrigin, CommandName, CommentReply, CommentThread, CrossRefKind, CursorPosition,
-    DateFieldFormat, EditMode, FindMatch, FindOptions, FirstPage, FootnoteCall, FootnoteEntry,
-    Graphemes, HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether, KeepWithNext,
-    LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle,
-    Page, ParagraphStyle, Paragraphs, PatternKind, PresencePayload, ProseCommand, ProseError,
-    ProseEvent, ProseRefusal, RefusedAction, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion,
+    ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition, DateFieldFormat,
+    EditMode, FindMatch, FindOptions, FirstPage, FootnoteCall, FootnoteEntry, Graphemes,
+    HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether, KeepWithNext, LineHeight,
+    LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle, Page,
+    ParagraphStyle, Paragraphs, PatternKind, PresencePayload, ProseCommand, ProseError, ProseEvent,
+    ProseRefusal, RefusedAction, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion,
     SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering,
     TodoMark, TriState, VAlign, WordCount, Words,
 };
 
+use ambre_core::{CommandNames, StaticKey};
 use loro::TreeID;
 
 /// The CRDT id a transport block id names.
@@ -104,7 +105,7 @@ impl ProseOutcome {
     /// Name every refusal this outcome carries after the command that drew it
     /// (`PROSE-105`). An outcome that refused nothing passes through.
     #[must_use]
-    pub fn named(mut self, refused: CommandName) -> Self {
+    pub fn named(mut self, refused: StaticKey<CommandNames>) -> Self {
         for event in &mut self.display {
             if let ProseEvent::Error(error) = event {
                 error.refused = RefusedAction::Command(refused);

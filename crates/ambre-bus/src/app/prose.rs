@@ -33,7 +33,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
-use ambre_core::{Count, Pt, Rgb};
+use ambre_core::{CommandNames, Count, Pt, Rgb, StaticKey};
 
 use super::grid::{CellPos, Col, Row};
 
@@ -2374,12 +2374,19 @@ impl ProseCommand {
         )
     }
 
+    /// The name of [`ProseCommand::ReplyToComment`], for a reader that must
+    /// recognise that refusal without a command to ask.
+    pub const REPLY_TO_COMMENT_NAME: StaticKey<CommandNames> =
+        StaticKey::new("replying to the comment");
+
     /// What a refusal calls this command when it tells the author
     /// (`PROSE-105`). The match is exhaustive, so a command added to the enum
-    /// does not compile until it has a name a reader understands.
+    /// does not compile until it has a name a reader understands. Only this
+    /// method and [`Self::REPLY_TO_COMMENT_NAME`] build a command name, so a
+    /// refusal names only a command that exists.
     #[must_use]
-    pub fn name(&self) -> CommandName {
-        CommandName(match self {
+    pub fn name(&self) -> StaticKey<CommandNames> {
+        StaticKey::new(match self {
             Self::Noop => "nothing",
             Self::Sync { .. } => "catching up",
             Self::InsertText { .. } => "typing",
@@ -2435,7 +2442,7 @@ impl ProseCommand {
             Self::EditFootnote { .. } => "editing the footnote",
             Self::DeleteFootnote { .. } => "deleting the footnote",
             Self::AddComment { .. } => "adding a comment",
-            Self::ReplyToComment { .. } => CommandName::REPLY_TO_COMMENT.0,
+            Self::ReplyToComment { .. } => return Self::REPLY_TO_COMMENT_NAME,
             Self::ResolveComment { .. } => "resolving the comment",
             Self::ReopenComment { .. } => "reopening the comment",
             Self::DeleteComment { .. } => "deleting the comment",
@@ -2681,31 +2688,6 @@ impl fmt::Debug for ProseEvent {
 // Errors
 // =============================================================================
 
-/// The words a refusal uses for a command (`PROSE-105`). Only
-/// [`ProseCommand::name`] and the constants below build one, so a refusal
-/// names only a command that exists. A test that reads it compares two names,
-/// never two strings.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CommandName(&'static str);
-
-impl CommandName {
-    /// The name of [`ProseCommand::ReplyToComment`], for a reader that must
-    /// recognise that refusal without a command to ask.
-    pub const REPLY_TO_COMMENT: Self = Self("replying to the comment");
-
-    /// The words a refusal prints for this command.
-    #[must_use]
-    pub fn label(self) -> &'static str {
-        self.0
-    }
-}
-
-impl fmt::Display for CommandName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
-    }
-}
-
 /// What the engine turned down, as a refusal names it (`PROSE-105`).
 ///
 /// A command names itself through [`ProseCommand::name`]. The other variants
@@ -2717,7 +2699,7 @@ pub enum RefusedAction {
     /// where no command drives the engine, and no such path exists today.
     Unnamed,
     /// A command, under the name [`ProseCommand::name`] gives it.
-    Command(CommandName),
+    Command(StaticKey<CommandNames>),
     /// Growing a block back into a document that a command left empty.
     KeepingBlock,
     /// A collaborator's update. It enters the engine the way a command does
@@ -2733,7 +2715,7 @@ impl RefusedAction {
     pub fn label(self) -> &'static str {
         match self {
             Self::Unnamed => "that",
-            Self::Command(name) => name.label(),
+            Self::Command(name) => name.as_str(),
             Self::KeepingBlock => "keeping a block",
             Self::RemoteUpdate => "a collaborator's update",
             Self::Exporting => "exporting",
@@ -3064,8 +3046,9 @@ mod tests {
             ),
         ] {
             let name = command.name();
-            assert_eq!(name.label(), label);
+            assert_eq!(name.as_str(), label);
             assert_eq!(name.to_string(), label);
+            assert_eq!(format!("{name:?}"), format!("CommandName({label:?})"));
             assert_eq!(RefusedAction::Command(name).to_string(), label);
         }
         assert_ne!(ProseCommand::Undo.name(), ProseCommand::Redo.name());

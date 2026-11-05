@@ -5,7 +5,7 @@
 // the mapping from event to toast lives here, as Trame's and Toile's do.
 // ============================================================================
 
-use ambre_bus::app::prose::{CommandName, ProseError, ProseEvent, ProseRefusal, RefusedAction};
+use ambre_bus::app::prose::{ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction};
 use ambre_bus::{AppEvent, UiEvent};
 use ambre_chrome::Toasts;
 
@@ -49,5 +49,5 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
 /// engine puts the name of the reply command on that refusal.
 fn is_refused_reply(error: &ProseError) -> bool {
     matches!(error.reason, ProseRefusal::NoSuchComment(_))
-        && error.refused == RefusedAction::Command(CommandName::REPLY_TO_COMMENT)
+        && error.refused == RefusedAction::Command(ProseCommand::REPLY_TO_COMMENT_NAME)
 }
