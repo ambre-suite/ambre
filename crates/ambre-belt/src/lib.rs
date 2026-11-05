@@ -31,3 +31,5 @@ mod store;
 mod toile;
 #[cfg(test)]
 mod trame;
+#[cfg(test)]
+mod trame_grid;

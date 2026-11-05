@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-155` | `INV` | An edit session MUST open on a user gesture alone. | this spec section 4 | `ambre_trame::ui::view::tests::only_a_typed_text_opens_an_edit_from_the_formula_bar` -- the decision; `ambre_trame::ui::view::view_tests::only_a_text_typed_in_the_bar_opens_a_session` -- the frame sync feeding it: the focus alone opens nothing | none | verified |
 | `TRAME-FEAT-024` | `INV` | Protection MUST identify its owner by `Id<User>`, never by `pub_key`. | this spec section 3 | not built | unbuilt -- lands with the `Range protection` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-010` | `OBS` | An optimistic commit MUST NOT display the formula source as its own result. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::optimistic_commit_does_not_echo_formula_as_result` | none | verified |
-| `TRAME-UI-091` | `OBS` | The formula bar MUST show the reference of the cell the edit will reach. | this spec section 4 | `ambre_trame::ui::view::view_tests::the_bar_names_the_active_cell` | none | verified |
+| `TRAME-UI-091` | `OBS` | The formula bar MUST show the reference of the cell the edit will reach. | this spec section 4 | `ambre_trame::ui::view::view_tests::the_bar_names_the_active_cell`; `ambre_belt::trame_grid::tests::the_arrows_and_tab_move_the_active_cell` -- in the browser, the name box follows each move | none | verified |
 
 ### 1.2 Open an edit session and type
 
@@ -47,11 +47,12 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-051` | `PRE` | A commit started from the grid MUST read the buffer only after the paint flush applied the queued edits. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_grid_commit_reads_the_buffer_after_the_flush` -- at key time nothing is committed, and the commit after the paint carries both queued insertions | none | verified |
-| `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 2; section 3 | `ambre_trame::logic::tests::group9::a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above`; `::a_commit_past_the_used_range_follows_an_insert_above`; `ambre_trame::ui::grid::tests::session::a_commit_names_the_session_and_no_position`; `::only_its_own_session_moves_the_editor` | none | verified |
+| `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 2; section 3 | `ambre_trame::logic::tests::group9::a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above`; `::a_commit_past_the_used_range_follows_an_insert_above`; `ambre_trame::ui::grid::tests::session::a_commit_names_the_session_and_no_position`; `::only_its_own_session_moves_the_editor`; `ambre_belt::trame_grid::tests::a_typed_value_commits_with_enter_and_with_tab` -- in the browser, the value typed reads back in its cell | none | verified |
 | `TRAME-UI-054` | `POST` | A commit of empty text MUST clear the cell. | this spec section 3 | `ambre_trame::logic::tests::group1::edited_text_overrides_generated_label` -- it writes a value, then commits an empty `SetCellText`, and reads the cell back blank | none | verified |
-| `TRAME-UI-052` | `POST` | A commit MUST close the undo group, so one edit is one undo item. | this spec section 3 | `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; `group2::filtered_column_edit_is_one_undo_item` | none | verified |
-| `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | `ambre_trame::ui::view::view_tests::enter_moves_down_and_tab_moves_right` | none | verified |
-| `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | `ambre_trame::ui::view::view_tests::enter_moves_down_and_tab_moves_right` | none | verified |
+| `TRAME-UI-052` | `POST` | A commit MUST close the undo group, so one edit is one undo item. | this spec section 3 | `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; `group2::filtered_column_edit_is_one_undo_item`; `ambre_belt::trame_grid::tests::undo_takes_back_one_edit_and_redo_brings_it_back` -- in the browser, `Ctrl+Z` takes back the second commit alone | none | verified |
+| `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | `ambre_trame::ui::view::view_tests::enter_moves_down_and_tab_moves_right`; `ambre_belt::trame_grid::tests::a_typed_value_commits_with_enter_and_with_tab` -- in the browser, the live region names the cell below | none | verified |
+| `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | `ambre_trame::ui::view::view_tests::enter_moves_down_and_tab_moves_right`; `ambre_belt::trame_grid::tests::a_typed_value_commits_with_enter_and_with_tab` -- in the browser, the live region names the cell to the right | none | verified |
+| `TRAME-UI-183` | `FRAME` | A text or a key typed after a committing chord MUST NOT reach the buffer that chord commits. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_text_typed_before_the_commit_frame_reaches_the_next_cell`; `ambre_belt::trame_grid::tests::a_copied_range_pastes_with_its_formula_shifted` -- its setup types `21`, `Tab` and a formula in one burst | none | verified |
 | `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 2; section 3 | `ambre_trame::logic::tests::group9::a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above`; `::a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write` | none | verified |
 | `TRAME-UI-176` | `FAIL` | Given a sheet, row or column a peer deletes while a session is open on it, the session MUST close with no write and tell the user the cell is gone. | this spec section 2; `features/ambre-spec-trame-sheets.md` (`TRAME-075`) | `ambre_trame::logic::tests::group9::a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write`; `::a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another`; `::an_ended_session_writes_nothing`; `::a_commit_after_a_tab_switch_lands_on_the_session_sheet`; `ambre_trame::tests::chrome_ui::a_lost_edit_reaches_the_user` | none | verified |
 | `TRAME-UI-163` | `FAIL` | A commit the queue cannot carry MUST NOT leave the cell reading as written. | this spec section 3 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::the_hold_bound_refuses_rather_than_grows` -- the outbox; `ambre_trame::ui::view::view_tests::a_refused_commit_leaves_the_stored_value` -- a commit the Logic thread never receives leaves the cell on its stored value | none | verified |
@@ -61,7 +62,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-165` | `POST` | Escape MUST close the session and leave the cell reading as it was stored. | this spec section 4 | `ambre_trame::ui::view::view_tests::escape_closes_the_session_with_no_write` -- the cell and the bar read the stored value | none | verified |
+| `TRAME-UI-165` | `POST` | Escape MUST close the session and leave the cell reading as it was stored. | this spec section 4 | `ambre_trame::ui::view::view_tests::escape_closes_the_session_with_no_write` -- the cell and the bar read the stored value; `ambre_belt::trame_grid::tests::escape_leaves_the_cell_as_it_was_stored` -- in the browser, the live region and the formula bar | none | verified |
 | `TRAME-UI-015` | `FRAME` | Escape MUST send no write: the release of the session MUST be the only command it emits. | this spec section 4 | `ambre_trame::ui::view::view_tests::escape_closes_the_session_with_no_write` -- the release is the one command sent | none | verified |
 
 ### 1.5 Fill the selection with one value
@@ -111,7 +112,7 @@ status values are normative in `ambre-spec-template.md`.
   them reads **none exists**.
 * **Boundary.** none: the draft lives on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The committed text reaches the relay sealed (`ZK-001`).
-* **Verification.** 29 `verified`, 12 `unimplemented`. What holds is the commit path into the
+* **Verification.** 30 `verified`, 12 `unimplemented`. What holds is the commit path into the
   document, and where it lands once a peer moves or deletes the lines under it. The session holds
   too: a native test drives `TrameView` key by key, through the commit, the cancel and the fill. The
   formula bar sync runs on plain state, which the browser copies its signals into and out of, so the
@@ -273,7 +274,8 @@ session is open. The two undo chords are read before that split and reach the do
 | `Ctrl+A` | selects the whole buffer, never the grid |
 
 The four committing chords take effect just after the paint flush, because the buffer is only final
-there (`TRAME-UI-051`).
+there (`TRAME-UI-051`). A text or an editing key typed before that flush waits behind the commit, and
+reaches the next cell (`TRAME-UI-183`).
 
 **Pointer.** A press inside the edited cell starts a text selection; a press anywhere else commits
 and selects the cell under it. A right-click commits too, so the menu opens on the cell it points
