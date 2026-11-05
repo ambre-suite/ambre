@@ -87,5 +87,11 @@ ambre-bus    = { path = "../ambre-bus" }
 ambre-chrome = { path = "../ambre-chrome" }
 ambre-canvas = { path = "../ambre-canvas" }
 
+# Holds the "Trame re-anchor walk" row by a count of instructions under
+# callgrind, which `scripts/instructions.py` reads (`just instructions`).
+[[bench]]
+name = "instructions"
+harness = false
+
 [lints]
 workspace = true

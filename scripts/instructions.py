@@ -85,6 +85,16 @@ CEILINGS = [
         row="Toile board paint, 2 000 visible elements, its content walk (< 5 ms of the 16 ms)",
         ceiling=5 * PER_MS,
     ),
+    # The walk alone, counted inside the private method by its own name: the
+    # purge and the engine reseed of the same delete fall outside it.
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="reanchor_walk",
+        symbol="reanchor_formulas",
+        row="Trame re-anchor walk of one structural edit, 10k formula cells (< 400 ms)",
+        ceiling=400 * PER_MS,
+    ),
     Ceiling(
         crate="ambre-prose",
         bench="instructions",

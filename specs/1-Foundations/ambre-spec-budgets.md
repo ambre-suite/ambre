@@ -42,7 +42,7 @@
 | Trame `SetCellText` to viewport (P2) | < 5 ms | -- | Logic | recompiles the bytecode and updates the DAG -- **none exists** |
 | Trame batch of 50 cells (P4) | < 1 ms | -- | Logic | **none exists** |
 | Trame `SheetIndex` rebuild, 10k rows | < 10 ms | -- | Logic | at load time -- **none exists** |
-| Trame re-anchor walk of one structural edit, 10k formula cells | < 20 ms | -- | Logic | parses every formula of every sheet, moves range corners and freezes a reference to a deleted line into `#REF!` -- **none exists** |
+| Trame re-anchor walk of one structural edit, 10k formula cells | < 400 ms | -- | Logic | callgrind, `just instructions` (`ambre-trame` bench `instructions`): 276 366 349 instructions on 2026-11-05, native release build in an Intel Xeon 2.30 GHz cloud container, about 345 ms on the target phone at the rate `scripts/instructions.py` assumes. The target is that measure rounded up, and it is far above the 15 ms of a content update. The whole delete, engine reseed included, counted 11 285 464 200 |
 | Trame `range_index` scan, 1k range formulas | < 1 ms | -- | Logic | linear scan at the MVP, an interval tree later -- **none exists** |
 | Toile visible-set query, 50 000 elements | < 1 ms | -- | Logic | must fit inside a frame with margin for tessellation -- **none exists** |
 | Toile index update, one element | < 50 us | -- | Logic | a drag mutates one element per input event -- criterion `ambre-toile` `index_update_one_of_50000`: 1.3 us on a desktop in native code (`TOILE-091`) |

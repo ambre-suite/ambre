@@ -32,8 +32,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-265` | `CONC` | A delete of a line MUST keep a value that a peer which never received the line wrote into it at the same moment. | this spec section 3 | none | unheld -- the value holds today because it sits on a line of its own; the derived uid makes the two lines one, and no test holds the value across that change; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
 | `TRAME-266` | `CONC` | Undoing one of two concurrent first writes in one new line MUST leave the other value on that line. | this spec section 3 | none | fails -- the two writes sit on two lines, so the value that stays is one row away from where it was typed. The spike of 2026-11-05 reproduced it on host; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
 | `TRAME-273` | `CONC` | Two first writes that derive two different uids MUST each keep its value, on a line of its own. | this spec section 3 | none | unheld -- each value holds today on its own minted line; the derived uid keeps two lines only when the two writers disagree on the line before or its generation. That split is a documented limit, and the planned mechanism is a proptest over those races; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
-| `TRAME-274` | `CONC` | A `#REF!` that a delete produces MUST NOT read a value again, whatever uid a peer derives later. | this spec section 3; `TRAME-007` | none | unheld -- no uid repeats today, so no `#REF!` reads a value again; once a uid can repeat, the freeze of `TRAME-277` holds it, and no test drives a repeat after a delete; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
-| `TRAME-278` | `CONC` | A formula that cites a line deleted at the same moment MUST read `#REF!`, unless a peer that never received the line derives its uid again. | this spec section 3; `TRAME-007` | none | unheld -- the formula reads `#REF!` today through the uid lookup; no test drives the race, nor the derived uid that brings the line back; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
+| `TRAME-274` | `CONC` | A `#REF!` that a delete produces MUST NOT read a value again, whatever uid a peer derives later. | this spec section 3; `TRAME-007` | none | unheld -- no uid repeats today, so no `#REF!` reads a value again; once a uid can repeat, the element binding and the freeze of `TRAME-277` each hold it, and no test drives a repeat after a delete; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
+| `TRAME-278` | `CONC` | A formula that cites a line deleted at the same moment MUST read `#REF!`. | this spec section 3; `TRAME-007` | none | unheld -- the formula reads `#REF!` today through the uid lookup; once a uid can repeat, the element binding of section 3 holds it, and no test drives the four-peer race; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
 | `TRAME-276` | `CONC` | Dropping a generation below the highest one a line carries MUST NOT let a later write derive a uid already derived after that line. | this spec section 3 | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.2 Insert a line
@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-089` | `FAIL` | A write more than ten thousand lines past the used range MUST be refused. | this spec section 5 | `ambre_trame::logic::tests::group11::a_write_past_the_line_cap_is_refused` -- the line before the cap is written | none | verified |
-| `TRAME-267` | `FRAME` | A write past the used range MUST NOT turn a `#REF!` to a deleted line back into a value. | this spec section 3; `TRAME-007` | none | unheld -- a minted uid is never minted twice, so the reference stays broken today; the freeze of `TRAME-277` and the generation of the line before each keep the reference broken once a uid can repeat, and no test holds it across that change; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
+| `TRAME-267` | `FRAME` | A write past the used range MUST NOT turn a `#REF!` to a deleted line back into a value. | this spec section 3; `TRAME-007` | none | unheld -- a minted uid is never minted twice, so the reference stays broken today; the element binding, the freeze of `TRAME-277` and the generation of the line before each keep the reference broken once a uid can repeat, and no test holds it across that change; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
 
 * **Budget.** the `SheetIndex` rebuild of 10k rows in < 10 ms
   (`ambre-spec-budgets.md section 1`): a structural operation is what that row was written
@@ -153,7 +153,7 @@ line, and their two cells key one line (`TRAME-261`).
 | record | the write adds that generation under the line before, and drops the one below it, in the commit that pushes the line (`TRAME-276`) |
 | hash | BLAKE2b, the workspace hash, over a fixed domain string and the four inputs, cut to 96 bits |
 | spelling | 64 bits fill the `peer` half and 32 bits the `counter` half, so a reader parses it as any uid (`TRAME-248`) |
-| counter | none spent: only an insert and a new sheet spend the session counter (`TRAME-242`) |
+| counter | the uid spends none. The element that carries it spends one, as an insert does (`TRAME-242`) |
 
 **What the derivation reads.** The line before, and the record that line carries. It never reads
 the rest of the axis, and keeps no record of deleted uids. Two peers that hold the line before as
@@ -174,17 +174,30 @@ derived again revives nothing (`TRAME-274`, `TRAME-277`).
 | which walk | the re-anchor walk every structural edit already runs over every formula of every sheet: one more case, no second walk |
 | which references | each single reference to a line the new layout lacks: the deleted line, and any line a concurrent delete removed |
 | undo | the rewrite rides the delete's commit, so undoing the delete restores each uid reference |
-| a formula written against the line by a peer that has not received the delete | it cites the uid, and the reader finds no live line, so it reads `#REF!`. The next structural edit freezes it (`TRAME-278`) |
-| the hole left | a peer that never received the line derives its uid again before that freeze. The unfrozen formula then reads that peer's line, as `TRAME-278` states |
-| cost | the walk parses every formula of every sheet, unbounded today; it holds the re-anchor row of `ambre-spec-budgets.md section 1`. The dependency graph indexes each cell and range a formula reads, so it could narrow the walk to the formulas that read the edited lines. That is an optimization of the whole walk, which the budget row tracks, and the freeze does not need it |
+| a formula written against the line by a peer that has not received the delete | it cites the element, which is gone, so it reads `#REF!`. The next structural edit freezes it (`TRAME-278`) |
+| the frozen literal, now that the element binding closes the revival | kept. The formula bar shows `#REF!`, as in a spreadsheet, and an export writes it. The literal drops the element suffix from the text, and a read needs no lookup. The binding then guards the window before the freeze alone |
+| cost | the walk parses every formula of every sheet. Measured on 2026-11-05 at 10k formula cells, it takes about 345 ms on the target phone, held under the re-anchor row of `ambre-spec-budgets.md section 1`. The freeze adds one case to that walk. The dependency graph indexes each cell and range a formula reads, so it could narrow the walk to the formulas that read the edited lines. That is an optimization of the whole walk, which the budget row tracks, and the freeze does not need it |
 | `TRAME-007`, `TRAME-008` | both still hold: the freeze writes the `#REF!` the lookup already reads |
 
 
 **Two pushes of one uid.** Each peer pushes its own element, so the merged list holds the uid twice.
-The reader keeps the first element and hides the later one (`TRAME-270`). An insert, a delete, a
-move and a sort first remove every hidden element, in a commit of their own under the excluded
-origin. List index and grid position then agree again, and the undo stack holds no removal
-(`TRAME-268`, `TRAME-269`).
+The element with the smallest element id is the line, and every other element of the uid is hidden
+(`TRAME-270`). No write removes a hidden element: a reference may be bound to it. The axis view
+maps each grid position to its list index. A delete removes every element of the uid, and a move
+moves the visible one (`TRAME-268`, `TRAME-269`).
+
+**A reference binds to the element.** A formula reference to a line stores the uid and the id of
+the element it saw. Loro offers no element identity that survives a move: a cursor fails at the
+first `mov` (spike of 2026-11-05). The element id therefore rides in the value, as the uid does.
+
+| Question | Answer |
+|---|---|
+| element value | `"{uid}#{element}"` for a derived line, the element minted from the session counter. A minted line keeps the bare uid, and its element id is that uid |
+| a live element, visible or hidden | reads the visible line of its uid. The merge of two first writes reads one line |
+| a deleted element | reads `#REF!`, even when another element now carries the uid (`TRAME-278`) |
+| lookup | the view maps an element id to its uid, then the uid to a position: two hash lookups per reference |
+| reference text | the element suffix only for a derived line: up to 26 more bytes per reference. A minted line, and a frozen `#REF!`, carry none |
+| `TRAME-007`, `TRAME-008` | both hold, now through the element: a deleted element reads `#REF!` whatever uid comes back |
 
 **One type holds the repeat rule.** A deduplicated axis view is the only form in which Trame code
 reads or writes the line order (`TRAME-275`). One module builds the view and owns the raw list:
@@ -192,12 +205,14 @@ reads or writes the line order (`TRAME-275`). One module builds the view and own
 | Part | What holds it |
 |---|---|
 | the view | built only inside the axis module, from a private constructor; a `compile_fail` doctest shows a build outside it refused |
-| a position | resolved through the view alone, so a writer reaches a list index the view has swept |
+| a position | resolved through the view alone, which maps it to the list index of the visible element |
+| an element | resolved through the view alone, to its line or to `#REF!` |
 | the raw list | private to the axis module; a gate refuses an axis container name outside that module, since a string compiles anywhere |
 
 **The cases the two spikes of 2026-11-05 drove**, on host, through `TrameState` peers that exchange
 snapshots. The first salted the uid against the local axis; the second, which this section keeps,
-reads the generation alone. Each answered inside its 2-hour box.
+reads the generation alone. The third drove the element binding on raw Loro documents. Each
+answered inside its 2-hour box.
 
 | Case | Converged line | Row |
 |---|---|---|
@@ -210,6 +225,8 @@ reads the generation alone. Each answered inside its 2-hour box.
 | a write after the line was deleted, or moved away | a new uid; the reference to the deleted line stays `#REF!` | `TRAME-267` |
 | one writer received a delete, a move or a sort of the last line, or a line appended below it | two lines, each value on its own | `TRAME-273` |
 | one writer received a line derived after the last line and then deleted, the other never received it | two lines; the other writer derives the deleted uid again. Through the uid lookup the spike measured, a `#REF!` to it read a value; the freeze keeps it `#REF!` | `TRAME-273`, `TRAME-274` |
+| four peers: one derives the line, a second binds a formula to it, the first deletes it, a fourth that never had it derives the uid again | the formula reads `#REF!`: its element is gone | `TRAME-278` |
+| four peers push, delete, move, bind and sync in any order: a proptest, 512 cases | every reference to a live element reads the line, every other one `#REF!` | `TRAME-278` |
 | a document of schema version 1 | read unchanged: its lines hold minted uids, none twice | `TRAME-272` |
 
 **Code.** `logic/structural.rs` -- `insert_axis`, `delete_axis`, `move_axis`,
@@ -272,8 +289,11 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 | The line before carries a generation | a salt raised while the uid is live in the axis or recorded in a `retired_{sheet}` map of deleted uids | the salt reads the local axis and the local record, so two peers that received different inserts or deletes may derive two uids. The record also grows with every delete, and its pruning waits on every `#REF!` that names a deleted uid. The generation keeps no deleted uid at all |
 | The generation is a grow-only key per line | one last-writer-wins value per line | a concurrent write of a lower generation can win. The next derivation then repeats a uid still live after that line, and two lines become one |
 | The generation is a grow-only key per line | a Loro counter per line, under a map key | two peers creating the counter at once race on the key, and the losing counter drops its increments. A root counter per line instead fills the document root with one container per line |
-| The reader hides a repeated uid, and a positional write removes it | remove the repeat at import time | the import becomes a write: every peer writes the same removal, and a viewer may not write at all |
-| The reader hides a repeated uid, and a positional write removes it | keep the repeat, and map each grid position to its list index in every writer | the insert, the delete, the move and the sort then each carry the map. A move past a hidden repeat also makes the repeat the first element, so the line jumps back |
+| The smallest element id is the line, and no write removes a hidden element | remove the repeat at import time | the import becomes a write: every peer writes the same removal, and a viewer may not write at all |
+| The smallest element id is the line, and no write removes a hidden element | the first element is the line, and the next positional write removes the later ones | the removal deletes a live element, so a reference bound to it reads `#REF!`. A move past a hidden element would also make that element the first one |
+| The smallest element id is the line, and no write removes a hidden element | remove the later elements, and record which element each one merged into | a second map, chains of records to follow, and a race between a record and a delete. The smallest id needs no state |
+| A reference binds to the element | accept that a formula written during a delete reads a value when a fourth peer derives the uid again | a broken formula computes again in silence, in a race no user can see. The binding costs at most 26 bytes on a reference to a derived line |
+| A reference binds to the element | bind to the Loro cursor of the element | a `mov` replaces the list item the cursor names, so the cursor fails after one move. Loro keeps a stable element id inside its state, and no public call reads it |
 | An insert keeps each range corner on its line | a positional range, which counts the new line with no edit | the block's old last line then falls out of it, and the total changes for an operation that wrote no value. A corner names its line, so the range widens over what is inserted inside it (`TRAME-171`), and two concurrent inserts widen it twice, which is what both users meant |
 
 ---
