@@ -124,8 +124,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepts() | ret | 
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::has_body() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | CommandName.0 | field | &'static str	newtype-inner	newtype inner
-ambre-bus | src/app/prose.rs | crate::app::prose | CommandName::label() | ret | &'static str	free-text	the words a refusal prints for a command
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentReply.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | CrossRefKind::CustomText.0 | field | String	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | FootnoteEntry.text | field | String	free-text	user content
@@ -840,7 +838,9 @@ ambre-core | src/id.rs | crate::id | <Frame as Entity>::Repr | assoc | String	ne
 ambre-core | src/id.rs | crate::id | <Id<E> as From<Uuid>>::from(uuid) | param | Uuid	newtype-inner	the Uuid an identifier wraps
 ambre-core | src/id.rs | crate::id | <Id<E> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/id.rs | crate::id | <Lease as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <RelayInstance as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
 ambre-core | src/id.rs | crate::id | <Lease as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <RelayInstance as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
 ambre-core | src/id.rs | crate::id | <Meeting as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
 ambre-core | src/id.rs | crate::id | <Meeting as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
 ambre-core | src/id.rs | crate::id | <Message as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
@@ -3141,7 +3141,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | cons
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(Pos<Block>,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | IdxVec<SlashChoice,&'static str>	free-text	the labels of the slash menu entries
 ambre-prose | src/view/slash.rs | crate::view::slash | <SlashChoice as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | InstanceId.0 | field | uuid::Uuid	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/export_file.rs | crate::export_file | ExportExtension::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::as_str() | ret | &str	newtype-inner	the validated name the newtype wraps
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::new(text) | param | &str	newtype-inner	the text the constructor validates
@@ -3948,6 +3947,7 @@ ambre-core | src/member_count.rs | crate::member_count | <Count<Members> as TryF
 ambre-core | src/member_count.rs | crate::member_count | Count<Members>::is_shared() | ret | bool	generic	predicate result
 ambre-core | src/static_key.rs | crate::static_key | <Canvases as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Categories as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/static_key.rs | crate::static_key | <CommandNames as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Commands as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Icons as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | StaticKey.text | field | &'static str	newtype-inner	StaticKey newtype, the key text a const table names

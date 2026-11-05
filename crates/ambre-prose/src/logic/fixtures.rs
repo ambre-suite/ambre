@@ -361,7 +361,7 @@ const COMMENT_AT: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000
 enum FixtureError {
     /// The engine refused a command the fixture runs.
     Refused {
-        command: crate::events::CommandName,
+        command: ambre_core::StaticKey<ambre_core::CommandNames>,
         reason: ProseRefusal,
     },
     /// A part the fixture writes into was not there. The sentence names it.
