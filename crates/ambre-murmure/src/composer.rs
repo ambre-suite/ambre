@@ -34,7 +34,7 @@ use ambre_bus::{
     ReplyEcho, StyleMark, TextStyle,
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
-use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
+use ambre_canvas::{EditIntent, Palette, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::{Key, KeyBinding, KeyChar, ModifierKeys};
 use ambre_core::Flags;
 use ambre_core::id::{Channel, Id, Message, User};
@@ -50,7 +50,7 @@ use crate::drafts::{DraftShelf, Loss, ShelfLosses};
 use crate::look;
 use crate::markers::{self, DraftEdit, MarkBar};
 use crate::mention_list::{MentionEntry, MentionList, Offer, offers, query_at};
-use crate::paint::{RowBounds, draw, shape, surface_px, text_height, text_width, view_rect};
+use crate::paint::{Pen, RowBounds, draw, shape, surface_px, text_height, text_width, view_rect};
 use crate::read_aloud::{self, Say};
 use crate::uploads::{UploadFile, Uploads};
 use crate::view::WindowWidth;
@@ -1577,20 +1577,19 @@ impl Composer {
     /// `size`, over any row that reached it. The line of who types sits above
     /// the field. Answers the caret, its top-left and its height, while the
     /// composer holds the focus.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the paint context comes in four parts, as for every painter of the crate"
-    )]
     pub fn paint<S: DrawSurface>(
         &mut self,
-        surface: &mut S,
-        font_cx: &mut FontContext,
-        cache: &mut TextCache,
+        pen: Pen<'_, S>,
         shown: Option<DraftOf>,
         typing: Option<&str>,
         size: Size<Px<View>>,
-        palette: &Palette,
     ) -> Option<CaretBox> {
+        let Pen {
+            surface,
+            font_cx,
+            cache,
+            palette,
+        } = pen;
         let shown = shown?;
         let (width, height) = (size.width, size.height);
         let rect = view_rect;
@@ -1615,7 +1614,13 @@ impl Composer {
         // The files of the draft sit in a row over the field.
         self.file_chips.clear();
         if self.has_files(shown) {
-            self.paint_files(surface, font_cx, cache, shown, top, width, palette);
+            let pen = Pen {
+                surface: &mut *surface,
+                font_cx: &mut *font_cx,
+                cache: &mut *cache,
+                palette,
+            };
+            self.paint_files(pen, shown, top, width);
             top += FILES_HEIGHT;
         }
         // A thread's field leaves the row of its box under it.
@@ -1761,20 +1766,19 @@ impl Composer {
     /// Paint the files of the draft `shown` as a row of chips from `top`.
     /// The uploaded files come first, a press takes one off, and those that
     /// still upload follow (`MURMURE-132`). A chip past the width is left out.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the paint context comes in four parts, as for every painter of the crate"
-    )]
     fn paint_files<S: DrawSurface>(
         &mut self,
-        surface: &mut S,
-        font_cx: &mut FontContext,
-        cache: &mut TextCache,
+        pen: Pen<'_, S>,
         shown: DraftOf,
         top: Px<View>,
         width: Px<View>,
-        palette: &Palette,
     ) {
+        let Pen {
+            surface,
+            font_cx,
+            cache,
+            palette,
+        } = pen;
         let ready = self.uploads.ready(shown).iter().map(|file| {
             let size = crate::uploads::size_label(file.size);
             (format!("{} ({size}) {REMOVE_MARK}", file.name), true)

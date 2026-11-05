@@ -399,14 +399,18 @@ mod tests {
         let mut screen = RecordingSurface::new();
         crate::ui::render::paint_content(
             &mut screen,
-            &page.viewport,
             &page.camera,
-            palette,
-            &mut font_cx,
-            &mut tc,
+            crate::ui::render::Scene {
+                viewport: &page.viewport,
+                palette,
+                images: &images,
+                anim: &HashMap::new(),
+            },
+            BoardWalk {
+                font_cx: &mut font_cx,
+                text_cache: &mut tc,
+            },
             None,
-            &images,
-            &HashMap::new(),
             ambre_bus::app::toile::PresentMode::Presenting,
         );
 
@@ -468,22 +472,11 @@ mod tests {
             };
 
             let mut screen = RecordingSurface::new();
-            crate::ui::render::paint_content(
-                &mut screen,
-                &page.viewport,
-                &camera,
-                palette,
-                &mut font_cx,
-                &mut tc,
-                None,
-                &images,
-                &anim,
-                if present {
+            crate::ui::render::paint_content(&mut screen, &camera, crate::ui::render::Scene { viewport: &page.viewport, palette, images: &images, anim: &anim }, BoardWalk { font_cx: &mut font_cx, text_cache: &mut tc }, None, if present {
                     ambre_bus::app::toile::PresentMode::Presenting
                 } else {
                     ambre_bus::app::toile::PresentMode::Editing
-                },
-            );
+                });
             let view = BoardView {
                 viewport: &page.viewport,
                 palette,

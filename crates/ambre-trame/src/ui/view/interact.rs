@@ -125,7 +125,6 @@ impl TrameView {
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
     ) {
-        use ambre_draw::Alignment;
         match hit {
             // A column auto-fit measures the whole column the Logic thread
             // returns (`auto_fit_col`), never this cache.
@@ -137,16 +136,15 @@ impl TrameView {
                         continue;
                     }
                     let size = crate::render::cell_font_size(data.size);
-                    let lyt = text_cache.get_or_build_font(
+                    let lyt = text_cache.get_or_build(
                         font_cx,
                         &data.text,
-                        size,
-                        Px::<Doc>::new(f32::MAX),
-                        Alignment::Start,
-                        data.bold,
-                        data.italic,
-                        data.font.as_ref(),
-                        ambre_canvas::WordBreak::Whole,
+                        ambre_canvas::Look {
+                            weight: data.bold,
+                            slant: data.italic,
+                            family: data.font.as_ref(),
+                            ..ambre_canvas::Look::body(size, Px::<Doc>::new(f32::MAX))
+                        },
                     );
                     max_h = max_h.max(lyt.height());
                 }
@@ -891,16 +889,15 @@ pub(crate) fn fit_column_width(
         .map(|cell| {
             let size = crate::render::cell_font_size(cell.size);
             text_cache
-                .get_or_build_font(
+                .get_or_build(
                     font_cx,
                     &cell.text,
-                    size,
-                    Px::<Doc>::new(f32::MAX),
-                    ambre_draw::Alignment::Start,
-                    cell.bold,
-                    cell.italic,
-                    cell.font.as_ref(),
-                    ambre_canvas::WordBreak::Whole,
+                    ambre_canvas::Look {
+                        weight: cell.bold,
+                        slant: cell.italic,
+                        family: cell.font.as_ref(),
+                        ..ambre_canvas::Look::body(size, Px::<Doc>::new(f32::MAX))
+                    },
                 )
                 .width()
         })

@@ -44,7 +44,9 @@ pub mod viewport;
 pub mod walk;
 
 pub use tool::Tool;
-pub use view::ToileView;
+#[cfg(target_arch = "wasm32")]
+pub use view::ToileSignals;
+pub use view::{ToileView, ToileWiring};
 pub use viewport::ViewportTransform;
 
 /// Whether a side panel (comments, deck) is open. A closed panel re-reads

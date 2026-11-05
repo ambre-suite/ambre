@@ -107,11 +107,13 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
             &label,
-            HEADER_SIZE.zoomed(layout.zoom),
-            Px::<View>::new(cw as f32),
-            Alignment::Center,
-            ambre_canvas::Weight::Regular,
-            ambre_canvas::Slant::Upright,
+            ambre_canvas::Look {
+                align: Alignment::Center,
+                ..ambre_canvas::Look::body(
+                    HEADER_SIZE.zoomed(layout.zoom),
+                    Px::<View>::new(cw as f32),
+                )
+            },
         );
         let text_h = lyt.height() as f64;
         let y_off = ((hh - text_h) / 2.0).max(0.0);
@@ -257,11 +259,13 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
             &label,
-            HEADER_SIZE.zoomed(layout.zoom),
-            Px::<View>::new(max_width),
-            Alignment::End,
-            ambre_canvas::Weight::Regular,
-            ambre_canvas::Slant::Upright,
+            ambre_canvas::Look {
+                align: Alignment::End,
+                ..ambre_canvas::Look::body(
+                    HEADER_SIZE.zoomed(layout.zoom),
+                    Px::<View>::new(max_width),
+                )
+            },
         );
         let text_h = lyt.height() as f64;
         let y_off = ((rh - text_h) / 2.0).max(0.0);

@@ -72,12 +72,13 @@ use super::link::{self, LinkAction};
 use super::presence::{PeerCursors, PresenceSender};
 use super::present::Transition;
 use super::reactions;
-use super::render;
+use super::render::{self, Marks, Scene};
 use super::tool::{
     GestureCursor, Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target,
     world_rect_to_screen,
 };
 use super::viewport::ViewportTransform;
+use super::walk::BoardWalk;
 #[cfg(target_arch = "wasm32")]
 use ambre_core::Authored;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
@@ -292,6 +293,78 @@ thread_local! {
     /// Each file the host stub was handed, in order: its name and its bytes.
     pub(crate) static DOWNLOADS: std::cell::RefCell<Vec<(String, Vec<u8>)>> =
         const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The chrome signals a board view shares with the shell. The shell reads
+/// what the view publishes and writes back what the user asks for. ambre-app
+/// creates each signal once and hands the same set to the shell and the view.
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy)]
+pub struct ToileSignals {
+    /// The selection scope of a right-click, read by the context menu.
+    pub ctx_scope: RwSignal<super::menu::CtxScope>,
+    /// The command the context menu chose, for the view to resolve.
+    pub menu_cmd: RwSignal<Option<StaticKey<Commands>>>,
+    /// The active tool.
+    pub active_tool: RwSignal<Tool>,
+    /// The position-dependent cursor, `None` for the base cursor of the tool.
+    pub cursor: RwSignal<Option<super::palette::CanvasCursor>>,
+    /// The board zoom of the camera.
+    pub zoom: RwSignal<ambre_core::Scale<ambre_core::Board, ambre_core::View>>,
+    /// The aggregates of the selection.
+    pub sel_stats: RwSignal<Option<super::status::SelStats>>,
+    /// The common style of the selection, read by the inspector.
+    pub style_model: RwSignal<Option<super::style::StyleModel>>,
+    /// A whole-style edit from the inspector.
+    pub restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
+    /// The placement of the floating selection toolbar.
+    pub float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
+    /// A single-field style edit from the floating toolbar.
+    pub quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
+    /// The comments panel and the drop composer.
+    pub comments: super::comments::CommentSignals,
+    /// The deck panel.
+    pub deck: super::deck::DeckSignals,
+    /// A file the shell read, for the view to land where it was dropped.
+    pub dropped_file: RwSignal<Option<super::interop::DroppedFile>>,
+    /// An embed the shell placed, for the view to land on the board.
+    pub placed_embed: RwSignal<Option<super::embed::PlacedEmbed>>,
+    /// The answer of the link chooser.
+    pub set_link: RwSignal<Option<super::link::LinkEdit>>,
+    /// A followed link the board cannot perform, for the shell.
+    pub followed_link: RwSignal<Option<super::link::ShellNav>>,
+    /// The presentation mode the view publishes.
+    pub present_mode: RwSignal<ambre_bus::app::toile::PresentMode>,
+    /// The find counters.
+    pub find_result: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
+}
+
+/// The wiring of a board view: its channels to the Logic thread, its text
+/// pipe, its publishers and its chrome signals. ambre-app builds the parts
+/// and fills one per view.
+pub struct ToileWiring {
+    /// The queue to the Logic thread.
+    pub to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    /// The queue from the Logic thread.
+    pub from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    /// The shared text pipe.
+    pub text_input: TextInput,
+    /// When embedded as a `doc_embed` child (`toile-embeds`), the child view
+    /// must not grab the shared text pipe on construction. The top-level
+    /// document owns the caret until the user clicks into the embed. A
+    /// top-level view passes `Standalone` and focuses immediately.
+    pub embedding: ambre_canvas::Embedding,
+    /// The per-frame perf snapshot.
+    pub perf_pub: PerfPublisher,
+    /// The level a full outbox raises.
+    pub busy_pub: BusyPublisher,
+    /// What the board must tell the user and cannot show on the board.
+    pub notices: NoticePublisher,
+    /// The active theme.
+    pub theme_ctl: ThemeControl,
+    /// The chrome signals the view shares with the shell.
+    #[cfg(target_arch = "wasm32")]
+    pub signals: ToileSignals,
 }
 
 pub struct ToileView {
@@ -701,51 +774,46 @@ impl ambre_draw::HitTest for ToileView {
 }
 
 impl ToileView {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "one argument per channel, publisher and chrome signal, and the caller in ambre-app builds each one apart"
-    )]
+    /// A view of `document_id` on a canvas of `canvas`, wired by `wiring`.
     pub fn new(
         document_id: Id<Document>,
-        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        canvas_width: ambre_core::Px<ambre_core::Surface>,
-        canvas_height: ambre_core::Px<ambre_core::Surface>,
-        text_input: TextInput,
-        // When embedded as a `doc_embed` child (`toile-embeds`), the child view
-        // must not grab the shared text pipe on construction. The top-level
-        // document owns the caret until the user clicks into the embed.
-        // A top-level view passes `Standalone` and focuses immediately.
-        embedding: ambre_canvas::Embedding,
-        perf_pub: PerfPublisher,
-        busy_pub: BusyPublisher,
-        notices: NoticePublisher,
-        theme_ctl: ThemeControl,
-        #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
-        #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<StaticKey<Commands>>>,
-        #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
-        #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<super::palette::CanvasCursor>>,
-        #[cfg(target_arch = "wasm32")] zoom: RwSignal<
-            ambre_core::Scale<ambre_core::Board, ambre_core::View>,
-        >,
-        #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
-        #[cfg(target_arch = "wasm32")] style_model: RwSignal<Option<super::style::StyleModel>>,
-        #[cfg(target_arch = "wasm32")] restyle: RwSignal<
-            Option<ambre_bus::app::toile::ElementStyle>,
-        >,
-        #[cfg(target_arch = "wasm32")] float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
-        #[cfg(target_arch = "wasm32")] quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
-        #[cfg(target_arch = "wasm32")] comments: super::comments::CommentSignals,
-        #[cfg(target_arch = "wasm32")] deck: super::deck::DeckSignals,
-        #[cfg(target_arch = "wasm32")] dropped_file: RwSignal<Option<super::interop::DroppedFile>>,
-        #[cfg(target_arch = "wasm32")] placed_embed: RwSignal<Option<super::embed::PlacedEmbed>>,
-        #[cfg(target_arch = "wasm32")] set_link: RwSignal<Option<super::link::LinkEdit>>,
-        #[cfg(target_arch = "wasm32")] followed_link: RwSignal<Option<super::link::ShellNav>>,
-        #[cfg(target_arch = "wasm32")] present_mode: RwSignal<ambre_bus::app::toile::PresentMode>,
-        #[cfg(target_arch = "wasm32")] find_result: RwSignal<
-            Option<ambre_bus::app::toile::FindResults>,
-        >,
+        canvas: ambre_core::Size<ambre_core::Px<ambre_core::Surface>>,
+        wiring: ToileWiring,
     ) -> Self {
+        let ToileWiring {
+            to_logic,
+            from_logic,
+            text_input,
+            embedding,
+            perf_pub,
+            busy_pub,
+            notices,
+            theme_ctl,
+            #[cfg(target_arch = "wasm32")]
+            signals,
+        } = wiring;
+        #[cfg(target_arch = "wasm32")]
+        let ToileSignals {
+            ctx_scope,
+            menu_cmd,
+            active_tool,
+            cursor,
+            zoom,
+            sel_stats,
+            style_model,
+            restyle,
+            float_bar,
+            quick_style,
+            comments,
+            deck,
+            dropped_file,
+            placed_embed,
+            set_link,
+            followed_link,
+            present_mode,
+            find_result,
+        } = signals;
+        let (canvas_width, canvas_height) = (canvas.width, canvas.height);
         let embedded = embedding == ambre_canvas::Embedding::Embedded;
         if !embedded {
             text_input.name_content(ambre_canvas::ContentKind::Board);
@@ -3984,25 +4052,26 @@ impl ToileView {
         text_cache: &mut TextCache,
         _strip: Option<Rect>,
     ) {
-        render::paint_content(
-            surface,
-            &self.display,
-            &self.cam,
-            self.theme.palette(),
+        // A manual gesture preview and a slide transition are mutually
+        // exclusive (`toile-tools`); prefer the gesture override while one is
+        // in flight.
+        let anim = if self.gesture_overrides.is_empty() {
+            &self.anim_overrides
+        } else {
+            &self.gesture_overrides
+        };
+        let scene = Scene {
+            viewport: &self.display,
+            palette: self.theme.palette(),
+            images: &self.images,
+            anim,
+        };
+        let walk = BoardWalk {
             font_cx,
             text_cache,
-            self.editor.as_ref().map(|e| e.target()),
-            &self.images,
-            // A manual gesture preview and a slide transition are mutually
-            // exclusive (`toile-tools`); prefer the gesture override while
-            // one is in flight.
-            if self.gesture_overrides.is_empty() {
-                &self.anim_overrides
-            } else {
-                &self.gesture_overrides
-            },
-            self.present,
-        );
+        };
+        let editing = self.editor.as_ref().map(|e| e.target());
+        render::paint_content(surface, &self.cam, scene, walk, editing, self.present);
     }
 
     pub fn paint_overlay<S: ambre_draw::DrawSurface>(
@@ -4014,15 +4083,17 @@ impl ToileView {
     ) {
         render::paint_overlay(
             surface,
-            &self.selection,
             &self.display,
             &self.cam,
             self.theme.palette(),
-            self.preview.as_ref(),
-            &self.find_hits,
-            self.find_focus.as_ref(),
-            &self.gesture_overrides,
-            self.arrow.as_ref(),
+            Marks {
+                selection: &self.selection,
+                preview: self.preview.as_ref(),
+                find_hits: &self.find_hits,
+                find_focus: self.find_focus.as_ref(),
+                gesture: &self.gesture_overrides,
+                arrow: self.arrow.as_ref(),
+            },
             self.present,
         );
 

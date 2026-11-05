@@ -22,7 +22,7 @@ use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ReactionCounts, VoteTo
 use ambre_canvas::{Palette, TextCache};
 use ambre_core::Count;
 use ambre_draw::{
-    Affine, Alignment, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
+    Affine, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
 };
 use kurbo::{RoundedRect, Shape, Vec2};
 
@@ -130,11 +130,10 @@ fn paint_chip<S: DrawSurface>(
     let layout = text_cache.get_or_build(
         font_cx,
         label,
-        CHIP_FONT_SIZE,
-        ambre_core::Px::<ambre_core::View>::new(1000.0),
-        Alignment::Start,
-        ambre_canvas::Weight::Regular,
-        ambre_canvas::Slant::Upright,
+        ambre_canvas::Look::body(
+            CHIP_FONT_SIZE,
+            ambre_core::Px::<ambre_core::View>::new(1000.0),
+        ),
     );
     let text_w = layout.width() as f64;
     let text_h = layout.height() as f64;

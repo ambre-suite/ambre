@@ -44,7 +44,7 @@ use crate::list::{
 use crate::markers::MarkBar;
 use crate::mention_list::MentionEntry;
 use crate::mention_list::MentionList;
-use crate::paint::{Painted, Pictured, RowBounds, Shown, paint_jump, paint_list};
+use crate::paint::{Painted, Pen, Pictured, RowBounds, Shown, paint_jump, paint_list};
 use crate::pictures::Pictures;
 use crate::select::Selecting;
 use crate::uploads::{PickedFile, Uploaded};
@@ -1340,10 +1340,14 @@ impl MurmureView {
         self.pictures.borrow_mut().begin_paint(self.region);
         let shelf = Rc::clone(&self.pictures);
         let shelf = shelf.borrow();
+        let pen = Pen {
+            surface: &mut *surface,
+            font_cx: &mut *font_cx,
+            cache: &mut *text_cache,
+            palette: self.theme.palette(),
+        };
         let painted = paint_list(
-            surface,
-            font_cx,
-            text_cache,
+            pen,
             Shown {
                 list,
                 unread,
@@ -1358,7 +1362,6 @@ impl MurmureView {
                 }),
             },
             list_size,
-            self.theme.palette(),
             &*self.reads.name_of,
             &*self.reads.time_of,
         );
@@ -1404,15 +1407,15 @@ impl MurmureView {
             Some(of) if self.composer.editing(of) => Some(EDITING_LINE.to_owned()),
             _ => typing_line(&names),
         };
-        let caret = self.composer.paint(
+        let pen = Pen {
             surface,
             font_cx,
-            text_cache,
-            writes_in,
-            typing.as_deref(),
-            self.size,
+            cache: text_cache,
             palette,
-        );
+        };
+        let caret = self
+            .composer
+            .paint(pen, writes_in, typing.as_deref(), self.size);
         if let Some(caret) = caret {
             // The input method opens where the caret is (`MURMURE-430`).
             self.reads

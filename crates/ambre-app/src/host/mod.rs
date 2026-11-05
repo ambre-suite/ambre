@@ -70,7 +70,7 @@ pub use ambre_murmure::view::{MurmureView, THREAD_CANVAS};
 pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
 pub use murmure::{DraftKeeper, page_reads};
-pub use prose::{ProseSignals, ProseView};
+pub use prose::{ProseSignals, ProseView, ProseWiring};
 
 /// Where a finger is in its gesture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
