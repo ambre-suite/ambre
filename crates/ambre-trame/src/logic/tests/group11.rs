@@ -7,7 +7,6 @@ use crate::logic::schema::{
     COL_WIDTH, MATERIALIZE_ROWS, MAX_COL_WIDTH, MAX_ROW_HEIGHT, MIN_COL_WIDTH, MIN_ROW_HEIGHT,
     ROW_HEIGHT, SheetContainer, SheetRoot, default_sheet,
 };
-use crate::model::CellKey;
 use crate::{FillMode, SelectionKind};
 use ambre_core::Rgb;
 use ambre_core::id::{Id, Sheet};
@@ -144,13 +143,13 @@ fn a_one_cell_merge_from_a_peer_is_no_merge() {
     set(&mut base, 1, 0, "b");
     let (mut a, mut b) = two_peers(&base);
     // The peer writes the entry the local command refuses to write.
-    let (rl, cl) = b
+    let a1 = b
         .index
-        .resolve(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
+        .key_at(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
         .expect("A1 is materialized");
     b.doc
         .get_map(SheetContainer::of(SheetRoot::Merges, &default_sheet()).as_str())
-        .insert(CellKey::of(rl, cl).as_str(), CellKey::of(rl, cl).as_str())
+        .insert(a1.as_str(), a1.as_str())
         .expect("the entry");
     b.doc.commit();
     let update = b.flush_delta().expect("the entry is a delta");

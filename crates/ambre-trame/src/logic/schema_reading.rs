@@ -41,7 +41,7 @@ use super::schema_shape::{
 use crate::formula::types::NameTarget;
 use crate::logic::TrameState;
 use crate::logic::schema::{FilterKey, Root, SCHEMA_VERSION, SheetContainer, SheetRoot};
-use crate::model::{Uid, parse_cell_key};
+use crate::model::Uid;
 use crate::{CellPos, Col};
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
@@ -300,10 +300,7 @@ fn sheet_reading(
     }
     let index = &reader.index;
     let uid = || Uid::parse(key);
-    let at = || {
-        let (row, col) = parse_cell_key(key)?;
-        Some(CellPos::new(index.row_pos(&row)?, index.col_pos(&col)?))
-    };
+    let at = || index.place(key).map(|(at, _)| at);
     // A line element: a bare minted uid, or a derived uid and its element.
     let element_line = || match &stored.value {
         LoroValue::String(value) => crate::model::Element::parse(value).map(|e| e.uid),

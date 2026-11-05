@@ -15,6 +15,8 @@
 // uids (`TRAME-275`).
 // ============================================================================
 
+use super::Element;
+
 /// Our own, move-invariant row/column identity (`trame-rows-and-columns`).
 /// Minted as
 /// `{peer = document PeerID, counter = per-session monotonic}` and stored as the
@@ -73,16 +75,18 @@ impl<'de> serde::Deserialize<'de> for Uid {
 }
 
 /// The key a cell is stored under in the per-sheet cell, style and merge
-/// maps: the 51-char fixed-length `"{row_uid}:{col_uid}"`, per `trame-schema`.
-/// The one place the pair is joined.
+/// maps: `"{row_element}:{col_element}"`, per `trame-schema`. Each half is the
+/// spelling of the element that carries its line: the bare uid of a minted
+/// line, `"{uid}#{element}"` of a derived one. Two minted lines make the
+/// 51-char key of version 1. The one place the pair is joined.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CellKey(String);
 
 impl CellKey {
-    /// The key of the cell at the `(row, col)` uid pair.
+    /// The key of the cell at the `(row, col)` element pair.
     #[must_use]
-    pub fn of(row: Uid, col: Uid) -> Self {
-        Self(format!("{}:{}", row.to_key_part(), col.to_key_part()))
+    pub fn of(row: Element, col: Element) -> Self {
+        Self(format!("{}:{}", row.spell(), col.spell()))
     }
 
     /// The key, for the Loro call into the map.
@@ -92,11 +96,11 @@ impl CellKey {
     }
 }
 
-/// Inverse of [`CellKey::of`]: parse a stored key back into its `(row, col)` uid
-/// pair. Returns `None` on any malformed key.
-pub fn parse_cell_key(key: &str) -> Option<(Uid, Uid)> {
+/// Inverse of [`CellKey::of`]: parse a stored key back into its `(row, col)`
+/// element pair. Returns `None` on any malformed key.
+pub fn parse_cell_key(key: &str) -> Option<(Element, Element)> {
     let (row, col) = key.split_once(':')?;
-    Some((Uid::parse(row)?, Uid::parse(col)?))
+    Some((Element::parse(row)?, Element::parse(col)?))
 }
 
 ambre_core::define_flag! {
@@ -317,8 +321,13 @@ mod tests {
             peer: ambre_core::PeerId::new(1),
             counter: ambre_core::IdCounter::new(2),
         };
+        let (r, c) = (Element::minted(r), Element::minted(c));
         let key = CellKey::of(r, c);
-        assert_eq!(key.as_str().len(), 51);
+        assert_eq!(
+            key.as_str().len(),
+            51,
+            "two minted lines key as in version 1"
+        );
         assert_eq!(key, CellKey::of(r, c), "deterministic");
         assert_ne!(key, CellKey::of(c, r), "order matters");
         assert_eq!(
@@ -326,6 +335,10 @@ mod tests {
             Some((r, c)),
             "round-trips, full u32 counter"
         );
+        let derived = Element::derived(c.uid, crate::model::ElementId::minted(r.uid));
+        let key = CellKey::of(derived, r);
+        assert_eq!(key.as_str().len(), 77, "a derived half spells its element");
+        assert_eq!(parse_cell_key(key.as_str()), Some((derived, r)));
         assert!(parse_cell_key("garbage").is_none());
     }
 

@@ -42,8 +42,8 @@ impl TrameState {
         };
         // Styling a cell pins an identity to it, so it must be materialized just
         // like an edited value. Beyond the cap there is nothing to persist.
-        let (rl, cl) = self.materialize(pos).ok()?;
-        let key = CellKey::of(rl, cl);
+        self.materialize(pos).ok()?;
+        let key = self.index.key_at(pos)?;
         let map = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::CellStyle, &self.active_sheet).as_str());
@@ -51,7 +51,13 @@ impl TrameState {
             && record.italic == ambre_bus::Slant::Upright
             && record.style == CellStyle::default()
         {
-            let _ = map.delete(key.as_str());
+            // Back to the default under every live element, so no style a
+            // hidden element holds shows through (`TRAME-279`).
+            for key in self.index.keys_at(pos) {
+                if map.get(key.as_str()).is_some() {
+                    let _ = map.delete(key.as_str());
+                }
+            }
         } else {
             // postcard is deterministic, so both peers encode the same style to
             // the same bytes. The register is compared by CRDT metadata, not the
@@ -282,18 +288,14 @@ impl TrameState {
         else {
             return;
         };
-        for (key, value) in entries.iter() {
-            let Some((rl, cl)) = parse_cell_key(key) else {
-                // A key no build writes is said, never read in silence
-                // (`TRAME-248`).
-                self.note_unreadable_key();
-                continue;
-            };
+        let (shown, read) = super::cells::shown_cells(&self.index, entries.iter());
+        // A key no build writes is said, never read in silence (`TRAME-248`).
+        if read == crate::model::LineRead::Skipped {
+            self.note_unreadable_key();
+        }
+        for (cell, _, value) in shown {
             let LoroValue::Binary(bytes) = value else {
                 continue;
-            };
-            let Some(cell) = self.index.pos_of(&rl, &cl) else {
-                continue; // references a deleted row/column
             };
             let Ok(record) = postcard::from_bytes::<StyleRecord>(bytes) else {
                 // Skip rather than crash the reseed, but say so. A cell that
@@ -330,13 +332,16 @@ impl TrameState {
     /// The style `cellstyle_{sheet}` stores for a cell of any sheet, or `None`
     /// for the default. An undecodable record reads as the default here: the
     /// reseed of that sheet is what reports it (`SCHEMA-003`).
-    pub(super) fn stored_style(&self, sheet_id: &Id<Sheet>, rl: Uid, cl: Uid) -> Option<CellStyle> {
-        match self
+    pub(super) fn stored_style(
+        &self,
+        sheet_id: &Id<Sheet>,
+        index: &SheetIndex,
+        at: CellPos,
+    ) -> Option<CellStyle> {
+        let map = self
             .doc
-            .get_map(SheetContainer::of(SheetRoot::CellStyle, sheet_id).as_str())
-            .get(CellKey::of(rl, cl).as_str())
-            .map(|v| v.get_deep_value())
-        {
+            .get_map(SheetContainer::of(SheetRoot::CellStyle, sheet_id).as_str());
+        match super::cells::cell_value(&map, index, at) {
             Some(LoroValue::Binary(bytes)) => postcard::from_bytes::<StyleRecord>(&bytes)
                 .ok()
                 .map(|record| record.style),

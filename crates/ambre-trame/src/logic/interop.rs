@@ -256,19 +256,15 @@ impl TrameState {
         };
         let mut max_row = None;
         let mut max_col = None;
-        for (key, value) in cells.iter() {
+        let (shown, _) = super::cells::shown_cells(index, cells.iter());
+        for (at, _, value) in shown {
             // A cleared cell is deleted from the map, but guard against a stray
             // empty value so it never widens the exported rectangle.
             if matches!(value, LoroValue::String(s) if s.is_empty()) {
                 continue;
             }
-            let Some((rl, cl)) = parse_cell_key(key) else {
-                continue;
-            };
-            if let Some(at) = index.pos_of(&rl, &cl) {
-                max_row = Some(max_row.map_or(at.row, |m: Pos<Row>| m.max(at.row)));
-                max_col = Some(max_col.map_or(at.col, |m: Pos<Col>| m.max(at.col)));
-            }
+            max_row = Some(max_row.map_or(at.row, |m: Pos<Row>| m.max(at.row)));
+            max_col = Some(max_col.map_or(at.col, |m: Pos<Col>| m.max(at.col)));
         }
         Some(CellPos::new(max_row?, max_col?))
     }
@@ -289,17 +285,18 @@ impl TrameState {
         let cell = CellId::bound(idx, rl, cl);
         let text = match self.engine.evaluated_text(cell) {
             Some(text) if self.engine.is_formula_cell(cell) => text,
-            _ => match self
-                .doc
-                .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str())
-                .get(CellKey::of(rl, cl).as_str())
-                .map(|v| v.get_deep_value())
-            {
+            _ => match super::cells::cell_value(
+                &self
+                    .doc
+                    .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str()),
+                index,
+                at,
+            ) {
                 Some(LoroValue::String(s)) => s.to_string(),
                 _ => String::new(),
             },
         };
-        match self.stored_style(sheet_id, rl, cl) {
+        match self.stored_style(sheet_id, index, at) {
             Some(style) => self.format_display(at, text, &style),
             None => text,
         }

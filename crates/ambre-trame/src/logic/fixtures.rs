@@ -108,19 +108,19 @@ impl TrameState {
                 .get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
                 .get_value()
             {
-                for (key, value) in map.iter() {
+                // A cell whose row or column was deleted has no position and no
+                // user-visible existence; it is not part of the content. Of two
+                // keys on one cell, the one a reader shows (`TRAME-279`).
+                let (shown, _) = super::cells::shown_cells(&index, map.iter());
+                for (at, _, value) in shown {
                     let LoroValue::String(raw) = value else {
                         continue;
                     };
                     let raw = raw.as_str();
-                    let Some((rl, cl)) = parse_cell_key(key) else {
+                    let Some((rl, cl)) = index.resolve(at) else {
                         continue;
                     };
-                    // A cell whose row or column was deleted has no position and
-                    // no user-visible existence; it is not part of the content.
-                    let (Some(row), Some(col)) = (index.row_pos(&rl), index.col_pos(&cl)) else {
-                        continue;
-                    };
+                    let (row, col) = (at.row, at.col);
                     let label = format!(
                         "{}{}",
                         crate::columns::col_to_alpha(col),

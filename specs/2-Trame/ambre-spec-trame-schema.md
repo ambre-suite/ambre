@@ -77,7 +77,9 @@ One identity type serves rows, columns and sheets.
   reader holds to (`TRAME-248`). A minted line's element is the bare uid.
 * A session mints each counter once, and past `u32::MAX` it mints no uid, so a uid never repeats
   (`TRAME-242`). What a write answers then is `TRAME-243`, in the engine feature.
-* A cell key joins two halves with `:`: `"{row_uid}:{col_uid}"`, 51 characters, fixed length.
+* A cell key joins two halves with `:`: `"{row_element}:{col_element}"`, each half the spelling of
+  the line's element. Two minted lines make the 51-character key of version 1. A derived half
+  adds 26 characters (`features/ambre-spec-trame-rows-and-columns.md section 3`).
 * A key or a line element reads back from that spelling alone. Another spelling of one uid
   would give it a second key, so a reader refuses it and says so (`TRAME-248`, in the engine
   feature). A stored formula writes its line uids in compact hex, a separate spelling its own
@@ -104,9 +106,9 @@ race: the last writer takes that whole unit.
 | `sheets` | Map | `sheet_id` | sheet name (String) | the sheet entry | `trame-sheets` | built |
 | `rows_{sheet}` | MovableList | position | `row_uid` | list order, no LWW | `trame-rows-and-columns` | built |
 | `cols_{sheet}` | MovableList | position | `col_uid` | list order, no LWW | `trame-rows-and-columns` | built |
-| `cells_{sheet}` | Map | `"{row_uid}:{col_uid}"` | raw text (String) | the cell | `trame-cell-editing` | built |
-| `cellstyle_{sheet}` | Map | `"{row_uid}:{col_uid}"` | `Binary(postcard(StyleRecord))` | the whole cell style | `trame-cell-styles` | built |
-| `merges_{sheet}` | Map | master `"{row_uid}:{col_uid}"` | bottom-right `"{row_uid}:{col_uid}"` | the merge | `trame-cell-merges` | built |
+| `cells_{sheet}` | Map | `"{row_element}:{col_element}"` | raw text (String) | the cell | `trame-cell-editing` | built |
+| `cellstyle_{sheet}` | Map | `"{row_element}:{col_element}"` | `Binary(postcard(StyleRecord))` | the whole cell style | `trame-cell-styles` | built |
+| `merges_{sheet}` | Map | master `"{row_element}:{col_element}"` | bottom-right `"{row_element}:{col_element}"` | the merge | `trame-cell-merges` | built |
 | `col_widths_{sheet}` | Map | `col_uid` | width in px (`f64`) | the column | `trame-resize` | built |
 | `row_heights_{sheet}` | Map | `row_uid` | height in px (`f64`) | the row | `trame-resize` | built |
 | `line_gen_{sheet}` | Map | `"{uid}:{generation:08x}"`; the axis root of an empty axis spells `rows` or `cols` in place of the uid | `true` | the key | `trame-rows-and-columns` | built |
@@ -219,10 +221,10 @@ stops the eventual container being keyed positionally by whoever writes it first
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
 | Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
-| Bump to version 2 | three changes. `line_gen_{sheet}` is a new key. A uid listed twice changes its meaning: a version-1 reader would show the line twice. A derived element spells `"{uid}#{element}"`, which a version-1 reader refuses (`TRAME-248`). The migration from 1 rewrites nothing: a version-1 element is a bare minted uid, and its element id is that uid. A version-1 reference carries no element id and binds to that element, which no derived uid can equal. A version-1 fixture is frozen in the commit that bumps |
+| Bump to version 2 | four changes. A cell, style or merge key spells each line's element, so a cell follows its element through a delete (`TRAME-265`). `line_gen_{sheet}` is a new key. A uid listed twice changes its meaning: a version-1 reader would show the line twice. A derived element spells `"{uid}#{element}"`, which a version-1 reader refuses (`TRAME-248`). The migration from 1 rewrites nothing: a version-1 element is a bare minted uid, and its element id is that uid. A version-1 cell key therefore names its elements already. A version-1 reference carries no element id and binds to that element, which no derived uid can equal. A version-1 fixture is frozen in the commit that bumps |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so a `StyleRecord` written by a newer client is skipped -- no longer silently: the reseed raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, axes | the used range grows by at most 10 000 lines per write, and holds at most 1 000 columns | `features/ambre-spec-trame-rows-and-columns.md` |
-| Size, keys | a cell key is 51 bytes, a uid 25; a 100 000-row axis is 2.5 MB of element values alone. A generation key is 34 bytes, and the record keeps about one per line that has derived a line after it. A derived element is 51 bytes, and a reference to it carries up to 26 more | this spec section 2 |
+| Size, keys | a cell key is 51 bytes on two minted lines, and up to 103 on two derived ones; a uid is 25; a 100 000-row axis is 2.5 MB of element values alone. A generation key is 34 bytes, and the record keeps about one per line that has derived a line after it. A derived element is 51 bytes, and a reference to it carries up to 26 more | this spec section 2 |
 | Deltas | a remote delta carries no version and applies blind; mixed-version live editing is bounded, not solved | architecture section 2.D |
 
 ---

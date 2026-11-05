@@ -2855,6 +2855,8 @@ ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | p
 ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	an operator's result inside the formula engine
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
+ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells() | ret | (Vec<(CellPos,&'a String,&'a LoroValue)>,LineRead)	foreign-api	the stored keys and values of a Loro map, each placed on its grid cell
+ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells(entries) | param | impl IntoIterator<Item=(&'a String,&'a LoroValue)>	foreign-api	the entries of a Loro map value, as the map hands them out
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	the step of a fill series: 1 for a lone number, else the difference of two finite sources, infinite past the largest number
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
@@ -2934,6 +2936,7 @@ ambre-trame | src/model/axis.rs | crate::model::axis | <Row as AxisOrder>::ROOT_
 ambre-trame | src/model/axis.rs | crate::model::axis | <Row as AxisOrder>::TAG | const | u8	generic	the byte the derivation hashes to name the row axis: hash input, a codec of a closed set
 ambre-trame | src/model/axis.rs | crate::model::axis | Before::key() | ret | String	generic	the key half of a generation key: the codec of an enum that carries data
 ambre-trame | src/model/axis.rs | crate::model::axis | DERIVATION_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::place(key) | param | &str	generic	the key a cell map stores, read back into its element pair: the codec of a struct of two fields
 ambre-trame | src/model/axis.rs | crate::model::axis | generation_key() | ret | String	generic	the key a generation record stores: the codec of a line before and a generation
 ambre-trame | src/model/axis.rs | crate::model::axis | parse_generation_key(key) | param | &str	generic	the key a generation record stores, read back into a line before and a generation
 ambre-trame | src/model/axis.rs | crate::model::axis | <Slot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line

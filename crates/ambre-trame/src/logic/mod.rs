@@ -26,7 +26,7 @@ use crate::formula::text::{DisplayForm, SourceForm, StoredForm};
 use crate::formula::types::CellValue;
 use crate::formula::types::Expr;
 use crate::formula::{AxisId, CellId, EngineSheet, FormulaCtx, FormulaEngine, NameTarget, render};
-use crate::model::{CellKey, Line, SheetIndex, Uid, parse_cell_key};
+use crate::model::{Line, SheetIndex, Uid, parse_cell_key};
 use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
     BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, CellValueKind,
@@ -196,11 +196,11 @@ pub struct TrameState {
     /// Active-sheet row heights (logical px) per grid row position. Row analogue
     /// of [`col_widths`](Self::col_widths); derived from `row_heights_{sheet}`.
     row_heights: HashMap<Pos<Row>, Px<Doc>>,
-    /// Stable cell keys of covered cells that still hold a non-empty value -- a
+    /// Grid positions of covered cells that still hold a non-empty value -- a
     /// concurrent-edit conflict (`trame-cell-merges`). Masked: excluded from the
     /// formula engine
     /// and not displayed, but never destroyed; reappear on unmerge.
-    masked_cells: HashSet<CellKey>,
+    masked_cells: HashSet<CellPos>,
     /// CRDT sheet id per local engine index (`sheets_by_idx[i]` has index `i`).
     /// The **active sheet is always index 0**, so single-sheet code paths keep
     /// using [`CellRef::new`] (sheet 0); other sheets take 1.. in sorted-id

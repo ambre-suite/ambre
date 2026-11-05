@@ -5,7 +5,7 @@
   "doc_type": "Trame",
   "ambre_version": 1,
   "schema_version": 2,
-  "digest": "6ae2487a32c1855170e29f7074e5b85597a7fd97e9b16225cdba8f05a1b2d8fd",
+  "digest": "48ef5bce59ad106889f7b91a399d14a92c2c574ec8b114162925afa86d553850",
   "shape": {
     "peers": 1,
     "body": {

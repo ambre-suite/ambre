@@ -1,8 +1,7 @@
 # AMBRE -- FEATURE: ROWS AND COLUMNS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- inserting, deleting and reordering are built. One rule is broken
-across the wire: a value written into a cell of a line a concurrent delete removes can vanish.
+**Implementation:** partial -- inserting, deleting and reordering are built.
 
 > A user inserts a row above the one they are on, deletes the three they selected, or drags a column
 > to another position. Everything on those lines moves with them, and every formula still adds up.
@@ -29,8 +28,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-262` | `CONC` | Two peers writing at once on two different lines past the used range MUST each land on the line they wrote. | this spec section 3 | `ambre_trame::logic::tests::group14::two_first_writes_on_two_new_rows_land_on_the_rows_written` | none | verified |
 | `TRAME-263` | `CONC` | An insert above the last line MUST NOT separate two concurrent first writes into the line after it. | this spec section 3 | `ambre_trame::logic::tests::group14::an_insert_above_the_last_line_keeps_two_first_writes_on_one_line`; `ambre_trame::logic::tests::group14::races::edits_above_the_last_line_keep_two_first_writes_on_one_line` -- a proptest, 256 cases: a third peer inserts, deletes, moves and writes above the last line, and one writer receives a prefix of it, the other none | none | verified |
 | `TRAME-264` | `CONC` | A move of a new line MUST carry the value another peer wrote into that line at the same moment. | this spec section 3 | `ambre_trame::logic::tests::group14::a_move_of_a_new_line_carries_the_value_written_into_it_at_once` | none | verified |
-| `TRAME-265` | `CONC` | A delete of a line MUST keep a value that a peer which never received the line wrote into it at the same moment. | this spec section 3 | none | fails -- the delete purges each cell its line held, keyed by its uid. A peer that never received the line derives the same uid, so a value it writes into one of those cells races the purge on one key, and the cell map keeps the last writer: the value can vanish. Found on 2026-11-05 by a host test that wrote the second value into the deleted line's own cell. A value written into another cell holds, `TRAME-279`. No design yet keeps the purge from racing that write; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
-| `TRAME-279` | `CONC` | A delete of a line MUST keep a value that a peer which never received the line wrote at the same moment into a cell the deleted line did not hold. | this spec section 3 | `ambre_trame::logic::tests::group14::a_delete_keeps_the_value_a_peer_that_never_had_the_line_wrote_into_it` | none | verified |
+| `TRAME-265` | `CONC` | A delete of a line MUST keep a value that a peer which never received the line wrote into it at the same moment. | this spec section 3 | `ambre_trame::logic::tests::group14::a_delete_keeps_the_value_written_into_its_own_cell_by_a_peer_without_the_line` -- the value in the cell the deleted line held; `ambre_trame::logic::tests::group14::a_delete_keeps_the_value_a_peer_that_never_had_the_line_wrote_into_it` -- a value in another cell of the line | none | verified |
+| `TRAME-279` | `CONC` | Two values written at once into one cell of a line two peers added MUST show, on every peer, the value written under the line's visible element. | this spec section 3; `TRAME-270` | `ambre_trame::logic::tests::group14::two_values_in_one_cell_of_a_shared_line_show_the_visible_elements` -- it also reads the other value in the document, and clears the cell under both elements | none | verified |
 | `TRAME-266` | `CONC` | Undoing one of two concurrent first writes in one new line MUST leave the other value on that line. | this spec section 3 | `ambre_trame::logic::tests::group14::undoing_one_of_two_first_writes_leaves_the_other_on_the_line` | none | verified |
 | `TRAME-273` | `CONC` | Two first writes that derive two different uids MUST each keep its value, on a line of its own. | this spec section 3 | `ambre_trame::logic::tests::group14::races::two_first_writes_that_derive_two_uids_each_keep_a_line` -- a proptest, 256 cases: a third peer also deletes, moves or sorts the last line, or appends a line below it, and one writer receives a prefix of it | none | verified |
 | `TRAME-274` | `CONC` | A `#REF!` that a delete produces MUST NOT read a value again, whatever uid a peer derives later. | this spec section 3; `TRAME-007` | `ambre_trame::logic::tests::group14::a_ref_a_delete_produced_reads_no_value_when_its_uid_comes_back` -- the peer that never had the line derives its uid again, and the frozen reference stays `#REF!` | none | verified |
@@ -94,9 +93,9 @@ status values are normative in `ambre-spec-template.md`.
   and freezes formula references answers to the structural edit row of that section.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client. A derived uid hashes sealed content only.
-* **Verification.** 34 `verified`, 1 `failing`. What holds is the single-line gesture, the frame
-  conditions around it, and the summed block an insert widens. What is loose is two peers adding one
-  line at once, and the guard past the used range.
+* **Verification.** 35 `verified`. What holds is the single-line gesture, the frame conditions
+  around it, and the summed block an insert widens. What is loose is two peers adding one line at
+  once, and the guard past the used range.
 
 ---
 
@@ -107,9 +106,10 @@ status values are normative in `ambre-spec-template.md`.
 | inserts a row at 3 | inserts a row at 3 | two new rows, in a canonical order | two blank rows where one was asked for, on both screens (`TRAME-091`) | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` |
 | deletes row 3 | writes into row 3 | the row gone, and the write on whichever line the identity kept | the same grid, and B's value either lost with the row or on the line below | the same property, whose op set carries `DeleteRow` and `SetText` |
 | drags column B to the front | writes into column B | the column moved, with the write on it | both see the value in the moved column (`TRAME-083`) | the same property, whose op set carries `MoveColumn` and `SetText` |
+| writes `A2`, the first write in row 2 | writes `A2` at the same moment | one row 2, and both values in the document | the value written under the visible element of row 2, on both screens (`TRAME-279`) | `ambre_trame::logic::tests::group14::two_values_in_one_cell_of_a_shared_line_show_the_visible_elements` |
 | writes `A2`, the first write in row 2 | writes `B2` at the same moment | one row 2, carrying both values | both values on row 2 (`TRAME-261`) | `ambre_trame::logic::tests::group14::two_first_writes_in_one_new_row_land_on_one_row` |
 | inserts a row above row 1, then writes `A3` | writes `B2` at the same moment | one new line after the old last line | both values on that line, row 3 on both screens (`TRAME-263`) | `ambre_trame::logic::tests::group14::an_insert_above_the_last_line_keeps_two_first_writes_on_one_line` |
-| deletes the new row 2 | writes `C2` without having received row 2 | row 2 deleted, and the line kept for the value written into it | `C2` kept on that line, the other values gone with the delete (`TRAME-279`). A value written into a cell the deleted line held can vanish (`TRAME-265`) | `ambre_trame::logic::tests::group14::a_delete_keeps_the_value_a_peer_that_never_had_the_line_wrote_into_it` |
+| deletes the new row 2 | writes `C2` without having received row 2 | row 2 deleted, and the line kept for the value written into it | `C2` kept on that line, the other values gone with the delete (`TRAME-265`) | `ambre_trame::logic::tests::group14::a_delete_keeps_the_value_a_peer_that_never_had_the_line_wrote_into_it` |
 | inserts a row above a merge | reads the merge | the merge, over the same cells | the block unchanged, one row lower (`TRAME-085`) | `ambre_trame::logic::tests::group3::merge_follows_structural_insert`, one peer |
 
 ---
@@ -199,6 +199,21 @@ first `mov` (spike of 2026-11-05). The element id therefore rides in the value, 
 | lookup | the view maps an element id to its uid, then the uid to a position: two hash lookups per reference |
 | reference text | the element suffix only for a derived line: up to 26 more bytes per reference. A minted line, and a frozen `#REF!`, carry none |
 | `TRAME-007`, `TRAME-008` | both hold, now through the element: a deleted element reads `#REF!` whatever uid comes back |
+
+**A cell binds to the element too.** A delete removes the elements its peer holds. A peer that never
+received the line derives its uid again, and pushes an element of its own. Keyed by the uid, a cell
+that peer writes races the purge on one key, and the value can vanish. Keyed by the element, it
+survives with the element (`TRAME-265`).
+
+| Question | Answer |
+|---|---|
+| cell key | `"{row element}:{col element}"`: the spelling of each line's element. Two minted lines keep the version-1 key |
+| a write | keys the cell by the visible element of each line |
+| a delete | purges the cells keyed by the elements it removes, and no other |
+| two keys on one cell | the cells of every live element of a uid read on the visible line. Of two keys on one cell, the one with the smaller element pair shows: the visible element's (`TRAME-279`). The other value stays in the document, and no screen shows it |
+| a clear | deletes the cell under every live element of its lines, so no hidden value shows through |
+| a style, a merge | keyed as the cell it sits on |
+| a size, a filter mark | keyed by the uid: one line, one value |
 
 **One type holds the repeat rule.** A deduplicated axis view is the only form in which Trame code
 reads or writes the line order (`TRAME-275`). One module builds the view and owns the raw list:
@@ -293,6 +308,8 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 | The smallest element id is the line, and no write removes a hidden element | remove the repeat at import time | the import becomes a write: every peer writes the same removal, and a viewer may not write at all |
 | The smallest element id is the line, and no write removes a hidden element | the first element is the line, and the next positional write removes the later ones | the removal deletes a live element, so a reference bound to it reads `#REF!`. A move past a hidden element would also make that element the first one |
 | The smallest element id is the line, and no write removes a hidden element | remove the later elements, and record which element each one merged into | a second map, chains of records to follow, and a race between a record and a delete. The smallest id needs no state |
+| A cell is keyed by the element of each line | a cell keyed by the uid of each line, as in version 1 | a peer that never received a deleted line derives its uid again and writes a cell under it. The purge of the delete races that write on one key, and the map keeps the last writer: the value can vanish (`TRAME-265`) |
+| Of two keys on one cell, the visible element's shows | remove the other key at import time, or at the next write | the import becomes a write, which a viewer may not make, and the next write removes a value no user chose to clear. The smallest element pair needs no state |
 | A reference binds to the element | accept that a formula written during a delete reads a value when a fourth peer derives the uid again | a broken formula computes again in silence, in a race no user can see. The binding costs at most 26 bytes on a reference to a derived line |
 | A reference binds to the element | bind to the Loro cursor of the element | a `mov` replaces the list item the cursor names, so the cursor fails after one move. Loro keeps a stable element id inside its state, and no public call reads it |
 | An insert keeps each range corner on its line | a positional range, which counts the new line with no edit | the block's old last line then falls out of it, and the total changes for an operation that wrote no value. A corner names its line, so the range widens over what is inserted inside it (`TRAME-171`), and two concurrent inserts widen it twice, which is what both users meant |

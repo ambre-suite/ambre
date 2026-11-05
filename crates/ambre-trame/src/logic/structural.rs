@@ -8,7 +8,7 @@
 use super::*;
 use crate::formula::SheetQualifier;
 use crate::formula::identity::{self, AxisEdit, LineEdit};
-use crate::model::Axes;
+use crate::model::{Axes, Removed};
 use ambre_core::index::{Len, Pos};
 
 impl TrameState {
@@ -125,7 +125,7 @@ impl TrameState {
         // A virtual line has nothing materialized to remove. Every element of
         // the line goes, the hidden ones too (`TRAME-269`).
         let removed = self.axes().delete(at)?;
-        Some(self.purge_axis(removed, L::AXIS))
+        Some(self.purge_axis(&removed, L::AXIS))
     }
 
     /// Move the row/column at grid position `from` to grid position `to`
@@ -248,7 +248,7 @@ impl TrameState {
     /// row/column id, so a deleted line leaves no orphan entries behind.
     /// `true` when the removed column carried the active filter, which went
     /// with it.
-    pub(super) fn purge_axis(&mut self, removed: Uid, axis: Axis) -> bool {
+    pub(super) fn purge_axis(&mut self, removed: &Removed, axis: Axis) -> bool {
         for root in [SheetRoot::Cells, SheetRoot::CellStyle] {
             let map = self
                 .doc
@@ -259,9 +259,12 @@ impl TrameState {
             let stale: Vec<String> = entries
                 .keys()
                 .filter(|k| {
-                    parse_cell_key(k).is_some_and(|(rl, cl)| match axis {
-                        Axis::Row => rl == removed,
-                        Axis::Col => cl == removed,
+                    parse_cell_key(k).is_some_and(|(rl, cl)| {
+                        let element = match axis {
+                            Axis::Row => rl,
+                            Axis::Col => cl,
+                        };
+                        removed.elements.contains(&element)
                     })
                 })
                 .cloned()
@@ -274,19 +277,19 @@ impl TrameState {
         let filter_dropped = matches!(axis, Axis::Col)
             && self
                 .load_active_filter()
-                .is_some_and(|(col, _)| col == removed);
+                .is_some_and(|(col, _)| col == removed.uid);
         if filter_dropped {
             self.drop_filter();
         }
         // The generations recorded after the line go with it.
-        self.axes().purge_record(&removed);
+        self.axes().purge_record(&removed.uid);
         // The line's own formatting is keyed by its uid alone: its size, and
         // for a row its filter mark (`TRAME-082`).
         let line_maps = match axis {
             Axis::Row => vec![SheetRoot::RowHeights, SheetRoot::FilterHidden],
             Axis::Col => vec![SheetRoot::ColWidths],
         };
-        let key = removed.to_key_part();
+        let key = removed.uid.to_key_part();
         for root in line_maps {
             let map = self
                 .doc

@@ -272,11 +272,10 @@ fn overlapping_merges_resolve_to_the_lowest_master_key() {
     b.import_snapshot(&delta_a).expect("the snapshot imports");
 
     let master_key = |state: &TrameState, row: u32, col: u32| {
-        let (r, c) = state
+        state
             .index
-            .resolve(at(row, col))
-            .expect("materialized by the base");
-        crate::model::CellKey::of(r, c)
+            .key_at(at(row, col))
+            .expect("materialized by the base")
     };
     let expected = if master_key(&a, 0, 0) < master_key(&a, 1, 1) {
         (at(0, 0), at(1, 1))

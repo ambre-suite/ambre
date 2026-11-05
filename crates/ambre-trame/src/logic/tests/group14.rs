@@ -66,13 +66,11 @@ fn rows_holding(state: &mut TrameState, col: u32, text: &str) -> Vec<u32> {
 
 /// The stored text of the cell at grid `(row, col)`, as the document keeps it.
 fn stored(state: &TrameState, row: u32, col: u32) -> Option<String> {
-    let (r, c) = state
-        .index
-        .resolve(CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)))?;
     let map = state
         .doc
         .get_map(SheetContainer::of(SheetRoot::Cells, &state.active_sheet).as_str());
-    match map.get(CellKey::of(r, c).as_str())?.into_value().ok()? {
+    let at = CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
+    match crate::logic::cells::cell_value(&map, &state.index, at)? {
         LoroValue::String(text) => Some(text.to_string()),
         _ => None,
     }
@@ -152,7 +150,7 @@ fn a_move_of_a_new_line_carries_the_value_written_into_it_at_once() {
     }
 }
 
-/// `TRAME-279`: a peer that never received the new line writes into another
+/// `TRAME-265`: a peer that never received the new line writes into another
 /// cell of it while another peer deletes it. The line survives with that value
 /// only.
 #[test]
@@ -175,6 +173,70 @@ fn a_delete_keeps_the_value_a_peer_that_never_had_the_line_wrote_into_it() {
             "the other value went with the delete"
         );
     }
+}
+
+/// `TRAME-265`: one peer derives a line, writes `A2` and deletes the line.
+/// A peer that never received it writes `A2` too, so both derive one uid and
+/// write one cell. The delete purges the cell of its own element alone, and
+/// the value of the other peer stays.
+#[test]
+fn a_delete_keeps_the_value_written_into_its_own_cell_by_a_peer_without_the_line() {
+    let (mut a, mut b) = two_peers();
+    put(&mut a, 1, 0, "7");
+    a.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(1),
+    });
+    put(&mut b, 1, 0, "9");
+    exchange(&mut [&mut a, &mut b]);
+    for peer in [&mut a, &mut b] {
+        assert_eq!(rows(peer), 2, "the line kept for the value written into it");
+        assert_eq!(read_cell(peer, 1, 0), "9");
+    }
+}
+
+/// `TRAME-279`: two peers write `A2` at once, the first write of row 2 on
+/// each. Both show the value written under the visible element. The other
+/// value stays in the document, and a clear of the cell removes both.
+#[test]
+fn two_values_in_one_cell_of_a_shared_line_show_the_visible_elements() {
+    let (mut a, mut b) = two_peers();
+    put(&mut a, 1, 0, "x");
+    put(&mut b, 1, 0, "y");
+    let mine = a
+        .index
+        .rows()
+        .element(Pos::<Row>::new(1))
+        .expect("a's element");
+    let theirs = b
+        .index
+        .rows()
+        .element(Pos::<Row>::new(1))
+        .expect("b's element");
+    let shown = if mine.id < theirs.id { "x" } else { "y" };
+    exchange(&mut [&mut a, &mut b]);
+    for peer in [&mut a, &mut b] {
+        assert_eq!(rows(peer), 2);
+        assert_eq!(read_cell(peer, 1, 0), shown, "the visible element's value");
+    }
+    let cells = |state: &TrameState| match state
+        .doc
+        .get_map(SheetContainer::of(SheetRoot::Cells, &state.active_sheet).as_str())
+        .get_value()
+    {
+        LoroValue::Map(map) => map.len(),
+        _ => 0,
+    };
+    assert_eq!(cells(&a), 3, "the other value stays in the document");
+    put(&mut b, 1, 0, "");
+    exchange(&mut [&mut a, &mut b]);
+    for peer in [&mut a, &mut b] {
+        assert_eq!(read_cell(peer, 1, 0), "", "a clear shows no hidden value");
+    }
+    assert_eq!(
+        cells(&a),
+        1,
+        "the clear removed the cell under both elements"
+    );
 }
 
 /// `TRAME-266`: undoing one of two concurrent first writes leaves the other
@@ -519,7 +581,10 @@ fn a_version_1_document_reads_with_every_line_and_cell_in_place() {
     let cells = doc.get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str());
     for (row, text) in [(2, "10"), (0, "20"), (1, "={5_2|5_9}+{5_0|5_9}")] {
         cells
-            .insert(CellKey::of(uid(row), uid(9)).as_str(), text)
+            .insert(
+                CellKey::of(Element::minted(uid(row)), Element::minted(uid(9))).as_str(),
+                text,
+            )
             .expect("a cell");
     }
     doc.commit();
@@ -737,6 +802,9 @@ mod four_peers {
         Bind(u32, u32, u32),
         /// One peer receives another's whole history.
         Sync(u32, u32),
+        /// A value, or a clear, written into column A of a row: the cells a
+        /// push writes, so writes and deletes meet in one cell.
+        Write(u32, u32, u8),
     }
 
     fn act() -> impl Strategy<Value = Act> {
@@ -746,6 +814,7 @@ mod four_peers {
             1 => (0..4u32, any::<u32>(), any::<u32>()).prop_map(|(p, f, t)| Act::Move(p, f, t)),
             2 => (0..4u32, any::<u32>(), any::<u32>()).prop_map(|(p, r, t)| Act::Bind(p, r, t)),
             2 => (0..4u32, 0..4u32).prop_map(|(p, q)| Act::Sync(p, q)),
+            2 => (0..4u32, any::<u32>(), 0..9u8).prop_map(|(p, r, v)| Act::Write(p, r, v)),
         ]
     }
 
@@ -789,6 +858,19 @@ mod four_peers {
                     .expect("a snapshot this build wrote");
             }
             Act::Sync(..) => {}
+            Act::Write(p, row, value) => {
+                let peer = &mut peers[p as usize];
+                let n = rows(peer);
+                if n > 0 {
+                    // Zero clears the cell.
+                    let text = if value == 0 {
+                        String::new()
+                    } else {
+                        value.to_string()
+                    };
+                    put(peer, row % n, 0, &text);
+                }
+            }
         }
     }
 

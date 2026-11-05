@@ -39,7 +39,7 @@ use blake2::{Blake2b512, Digest};
 use loro::{LoroDoc, LoroMap, LoroMovableList, LoroValue};
 
 use super::line::Line;
-use super::sheet_index::{LineRead, Uid};
+use super::sheet_index::{CellKey, LineRead, Uid, parse_cell_key};
 use crate::logic::{SheetContainer, SheetRoot};
 
 /// The identity of one element of an axis list (`TRAME-270`).
@@ -108,7 +108,7 @@ impl Element {
 
     /// The list value: the bare uid of a minted line, `"{uid}#{element}"` for a
     /// derived one, each half in the canonical spelling (`TRAME-248`).
-    fn spell(&self) -> String {
+    pub(crate) fn spell(&self) -> String {
         if self.is_minted() {
             self.uid.to_key_part()
         } else {
@@ -150,6 +150,8 @@ pub struct AxisView<L: Axis> {
     shown: IdxVec<L, Pos<Slot>>,
     at: HashMap<Uid, Pos<L>>,
     owner: HashMap<ElementId, Uid>,
+    /// The hidden elements of each repeated uid, smallest id first.
+    hidden_of: HashMap<Uid, Vec<Element>>,
     read: LineRead,
 }
 
@@ -206,11 +208,17 @@ impl<L: Axis> AxisView<L> {
         let mut lines = IdxVec::default();
         let mut shown = IdxVec::default();
         let mut at = HashMap::with_capacity(winners.len());
+        let mut hidden_of: HashMap<Uid, Vec<Element>> = HashMap::new();
         for (slot, element) in elements.iter_enumerated() {
             if winners.get(&element.uid).map(|(_, s)| *s) == Some(slot) {
                 at.insert(element.uid, lines.push(element.uid));
                 shown.push(slot);
+            } else {
+                hidden_of.entry(element.uid).or_default().push(*element);
             }
+        }
+        for hidden in hidden_of.values_mut() {
+            hidden.sort_unstable_by_key(|e| e.id);
         }
         Self {
             elements,
@@ -218,6 +226,7 @@ impl<L: Axis> AxisView<L> {
             shown,
             at,
             owner,
+            hidden_of,
             read,
         }
     }
@@ -251,6 +260,19 @@ impl<L: Axis> AxisView<L> {
     pub fn element(&self, pos: Pos<L>) -> Option<Element> {
         let slot = *self.shown.get(pos)?;
         self.elements.get(slot).copied()
+    }
+
+    /// Every live element of the line at `pos`: the visible one first, then
+    /// the hidden ones, smallest id first. A cell of the line may sit under
+    /// any of them (`TRAME-279`).
+    pub fn elements_at(&self, pos: Pos<L>) -> impl Iterator<Item = Element> + '_ {
+        let visible = self.element(pos);
+        let hidden = visible
+            .and_then(|e| self.hidden_of.get(&e.uid))
+            .into_iter()
+            .flatten()
+            .copied();
+        visible.into_iter().chain(hidden)
     }
 
     /// Where the line of `element` sits. A live element, visible or hidden,
@@ -535,6 +557,48 @@ impl SheetIndex {
         Some(CellPos::new(self.row_pos(row)?, self.col_pos(col)?))
     }
 
+    /// The key a write at `at` stores its cell under: the visible element of
+    /// each line. `None` past the used range.
+    #[must_use]
+    pub fn key_at(&self, at: CellPos) -> Option<CellKey> {
+        Some(CellKey::of(
+            self.rows.element(at.row)?,
+            self.cols.element(at.col)?,
+        ))
+    }
+
+    /// Every key a cell at `at` may sit under, the one that wins first: each
+    /// live element pair of its two lines, by [`CellRank`]. A read takes the
+    /// first one the map holds, and a clear deletes them all.
+    #[must_use]
+    pub fn keys_at(&self, at: CellPos) -> Vec<CellKey> {
+        let mut keys = Vec::new();
+        for row in self.rows.elements_at(at.row) {
+            for col in self.cols.elements_at(at.col) {
+                keys.push(CellKey::of(row, col));
+            }
+        }
+        keys
+    }
+
+    /// Where a stored cell key reads, and its rank against another key at
+    /// the same place. `None` for a key whose element is gone.
+    #[must_use]
+    pub fn place(&self, key: &str) -> Option<(CellPos, CellRank)> {
+        let (row, col) = parse_cell_key(key)?;
+        let at = CellPos::new(
+            self.rows.pos_of_element(&row)?,
+            self.cols.pos_of_element(&col)?,
+        );
+        Some((
+            at,
+            CellRank {
+                row: row.id,
+                col: col.id,
+            },
+        ))
+    }
+
     /// Whether the row `id` still exists in this sheet (`#REF!` detection).
     #[must_use]
     pub fn contains_row(&self, id: &Uid) -> bool {
@@ -630,6 +694,15 @@ fn apply_delete<L: Axis>(view: &mut AxisView<L>, pos: Pos<L>) -> Option<Uid> {
     Some(uid)
 }
 
+/// Which of two keys at one place a reader shows: the smaller rank. The
+/// visible element of each line has the smallest id, so the cell written
+/// under both visible elements wins (`TRAME-279`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CellRank {
+    row: ElementId,
+    col: ElementId,
+}
+
 /// The list that orders one axis, named by its line marker.
 /// The line a generation key names, as the schema reading prints it: a row, a
 /// column, or the root of one axis.
@@ -704,6 +777,14 @@ impl AxisOrder for Col {
     }
 }
 
+/// What a delete removed: the line, and the elements of it this peer held. A
+/// purge drops the cells keyed by those elements alone. A cell another peer
+/// wrote at the same moment under its own element survives (`TRAME-265`).
+pub(crate) struct Removed {
+    pub(crate) uid: Uid,
+    pub(crate) elements: Vec<Element>,
+}
+
 /// The axes of one sheet of one document: every read and write of a line
 /// order goes through it.
 pub(crate) struct Axes<'a> {
@@ -741,16 +822,19 @@ impl<'a> Axes<'a> {
             .ok()
     }
 
-    /// Delete the line at `at`: every element of its uid, the hidden ones too
-    /// (`TRAME-269`). Returns the uid removed, `None` past the end.
-    pub(crate) fn delete<L: AxisOrder>(&self, at: Pos<L>) -> Option<Uid> {
+    /// Delete the line at `at`: every element of its uid this peer holds, the
+    /// hidden ones too (`TRAME-269`). Returns what it removed, `None` past the
+    /// end.
+    pub(crate) fn delete<L: AxisOrder>(&self, at: Pos<L>) -> Option<Removed> {
         let list = self.list::<L>();
         let view = AxisView::<L>::read(&list);
         let uid = view.uid(at)?;
+        let mut elements = Vec::new();
         for slot in view.slots_of(&uid) {
+            elements.extend(view.elements.get(slot).copied());
             list.delete(slot.to_index()?, 1).ok()?;
         }
-        Some(uid)
+        Some(Removed { uid, elements })
     }
 
     /// Move the line at `from` so it shows at `to`. Only the visible element
