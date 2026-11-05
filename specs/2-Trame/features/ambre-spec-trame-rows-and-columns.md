@@ -90,7 +90,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Budget.** the `SheetIndex` rebuild of 10k rows in < 10 ms
   (`ambre-spec-budgets.md section 1`): a structural operation is what that row was written
   for. No bench measures it, nor the one hash a derived uid adds per line. The walk that re-anchors
-  and freezes formula references holds the re-anchor row of that section.
+  and freezes formula references answers to the structural edit row of that section.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client. A derived uid hashes sealed content only.
 * **Verification.** 20 `verified`, 5 `failing`, 5 `untested`, 4 `unimplemented`. What holds is the
@@ -176,7 +176,7 @@ derived again revives nothing (`TRAME-274`, `TRAME-277`).
 | undo | the rewrite rides the delete's commit, so undoing the delete restores each uid reference |
 | a formula written against the line by a peer that has not received the delete | it cites the element, which is gone, so it reads `#REF!`. The next structural edit freezes it (`TRAME-278`) |
 | the frozen literal, now that the element binding closes the revival | kept. The formula bar shows `#REF!`, as in a spreadsheet, and an export writes it. The literal drops the element suffix from the text, and a read needs no lookup. The binding then guards the window before the freeze alone |
-| cost | the walk parses every formula of every sheet. Measured on 2026-11-05 at 10k formula cells, it takes about 345 ms on the target phone, held under the re-anchor row of `ambre-spec-budgets.md section 1`. The freeze adds one case to that walk. The dependency graph indexes each cell and range a formula reads, so it could narrow the walk to the formulas that read the edited lines. That is an optimization of the whole walk, which the budget row tracks, and the freeze does not need it |
+| cost | the walk parses every formula of every sheet. Measured on 2026-11-05 at 10k formula cells, it takes about 345 ms on the target phone, against the < 10 ms of the structural edit row of `ambre-spec-budgets.md section 1`. The `A structural edit within its budget on a large sheet` Story (`ambre-roadmap.md` E6) narrows it. The freeze adds one case to that walk. The dependency graph indexes each cell and range a formula reads, so it could narrow the walk to the formulas that read the edited lines. That is an optimization of the whole walk, which the budget row tracks, and the freeze does not need it |
 | `TRAME-007`, `TRAME-008` | both still hold: the freeze writes the `#REF!` the lookup already reads |
 
 

@@ -15,7 +15,7 @@ use ambre_trame::logic::TrameState;
 use ambre_trame::{ClipboardCell, ClipboardPayload, Col, Row, TrameCommand, TrameEvent};
 use std::hint::black_box;
 
-/// Formula cells in the sheet the "Trame re-anchor walk" row names.
+/// Formula cells in the sheet the "Trame structural edit" row names.
 const FORMULAS: u32 = 10_000;
 
 /// A sheet of `FORMULAS` rows: a number in column A, and in column B a

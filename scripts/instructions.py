@@ -85,15 +85,19 @@ CEILINGS = [
         row="Toile board paint, 2 000 visible elements, its content walk (< 5 ms of the 16 ms)",
         ceiling=5 * PER_MS,
     ),
-    # The walk alone, counted inside the private method by its own name: the
-    # purge and the engine reseed of the same delete fall outside it.
+    # Not a budget: a regression guard at today's measure. The walk alone, counted
+    # inside the private method by its own name, the purge and the engine reseed
+    # falling outside it. Its budget row targets < 10 ms for the whole structural
+    # edit, which the measure of 2026-11-05 (276 M instructions) far exceeds. The
+    # ceiling only stops it growing until the story that narrows the walk lands,
+    # then drops to `10 * PER_MS`.
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="reanchor_walk",
         symbol="reanchor_formulas",
-        row="Trame re-anchor walk of one structural edit, 10k formula cells (< 400 ms)",
-        ceiling=400 * PER_MS,
+        row="Trame re-anchor walk, 10k formula cells (a guard at today's measure, not the budget)",
+        ceiling=290_000_000,
     ),
     Ceiling(
         crate="ambre-prose",

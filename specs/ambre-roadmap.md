@@ -355,6 +355,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` A fill extrapolates a date series | V1 | a drag over two dates repeats them: the fill extrapolates numbers alone, and a date pattern the corpus promises is detected nowhere |
 | `[x]` Trame on the shared kinetic scroll | MVP | the grid keeps its own momentum, apart from the "One kinetic scroll" model (E8): it moves onto it, a finger pans and flicks the grid, and a range dragged past the edge of the grid scrolls and follows. Today a finger selects and nothing scrolls under a drag |
 | `[ ]` Trame answers once per pass | V1 | since `ARCH P9` the Logic thread answers each document once per pass, but the grid engine still recomputes its filters, its totals and the visible cells after every command. A burst of typing or a fast fill pays that once per command, all but the last stale. Scheduled only if the Keystroke latency probes Story (`ambre-roadmap.md` E6) shows the grid falling behind |
+| `[ ]` A structural edit within its budget on a large sheet | MVP | a row delete on a sheet of 10k formulas re-parses every formula, then reseeds the whole engine: 11 billion instructions, seconds on a phone. The re-anchor walk reads only the formulas that read the edited lines, through the dependency graph, and the reseed is incremental. Done when the Trame structural edit row of `ambre-spec-budgets.md` section 1 holds its < 10 ms under `just instructions` |
 
 ### Toile
 
