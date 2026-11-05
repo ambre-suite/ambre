@@ -1922,20 +1922,20 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations.0 | field | Vec<(CssProperty,&'a str)>	newtype-inner	each property of a pasted style with its value as the paste spells it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::hidden() | ret | bool	generic	whether a pasted style hides its element, which the reader then skips
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::names() | ret | bool	generic	whether a pasted style names a property, whatever its value
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::of(style) | param | &'a str	free-text	a pasted element's style attribute, parsed once into its declarations
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::of(style) | param | &'a str	generic	a pasted element's style attribute, parsed once into its declarations
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.pre | field | usize	local	how many preformatted elements the private reader is inside
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::ends_blank() | ret | bool	generic	whether the text read so far ends on a space, so the next collapsed white space adds none
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::flush() | ret | bool	generic	whether closing the block wrote one, which marks its parent as written
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::push_str(text) | param | &str	free-text	pasted text after white space collapsed, appended to the current run
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::text(text) | param | &str	free-text	a text node of the pasted HTML, before its white space collapses
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	free-text	an attribute value as the pasted HTML spells it
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	free-text	a colour value of a pasted style; the parse returns an Rgba
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	free-text	a font-family list of a pasted style; its first usable name becomes a MarkValue
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	free-text	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through Px<Doc>
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	generic	an attribute value as the pasted HTML spells it, before the reader parses it
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	generic	a colour value of a pasted style, the input of its parse into an Rgba
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	generic	a font-family list of a pasted style, the input of its parse; its first usable name becomes a MarkValue
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	generic	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through Px<Doc>
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	whether a pasted colour reads as the page's body ink, so it sets no mark
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	foreign-api	the type attribute of a pasted ordered list as html5ever yields it; the match returns an OrderedStyle
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	the HTML a paste carries
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | set(raw) | param | &str	free-text	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | set(raw) | param | &str	generic	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	whether the pasted HTML holds more counted elements open than DEPTH_MAX
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep(html) | param | &str	free-text	the HTML a paste carries, scanned before any tree is built
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ELEMENTS | const | [(MarkRoot,&str);7]	generic	each flag mark with the HTML element name a copy writes for it, in nesting order
@@ -1956,11 +1956,11 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(html) | param | Option<&str>	free-text	the HTML half of the clipboard, read when this application's bytes are absent
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	the plain-text half of the clipboard, read when no richer half is usable
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	pasted plain text of several lines, one paragraph per line
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	free-text	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	generic	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family() | ret | bool	generic	whether a paste keeps a family name: not empty, short enough, no control or closing character
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family(name) | param | &str	free-text	family name of a pasted mark, checked before it lands
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family(name) | param | &str	generic	family name of a pasted mark, the input of the check that decides whether it lands
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link() | ret | bool	generic	whether a paste keeps a link: one a reader follows to a page or a mail, never one that runs
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link(href) | param | &str	free-text	link target of a pasted mark, checked before it lands
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link(href) | param | &str	generic	link target of a pasted mark, the input of the check of its scheme that decides whether it lands
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::parse_error(_msg) | param | Cow<'static,str>	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::same_node() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::insert(index) | param | usize	local	the place of a child among its parent's children, in the private arena's own vector
@@ -1993,11 +1993,11 @@ ambre-prose | src/logic/interop.rs | crate::logic::interop | accepts() | ret | b
 ambre-prose | src/logic/interop.rs | crate::logic::interop | cell_styled() | ret | bool	generic	whether a table cell stores a look of its own, which an export reports as lost
 ambre-prose | src/logic/interop.rs | crate::logic::interop | <Op as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/logic/marks.rs | crate::logic::marks | KeySeen::with(carried) | param | bool	generic	whether the run folded in carries the key, a fact that selects no mode
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	free-text	the raw value a command carries; validate_value turns it into a MarkValue before the document is touched
+ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	generic	the raw value a command carries; validate_value turns it into a MarkValue before the document is touched
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	one block's text run by run, each with the style the cascade resolves for it
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
-ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	the raw value validate_value refused, echoed in the refusal; a refused value is by definition no MarkValue
+ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	generic	the raw value validate_value refused, echoed in the refusal; a refused value is by definition no MarkValue
 ambre-prose | src/logic/mod.rs | crate::logic | <Faces as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	whether the engine took the session identity; false leaves the document as it was
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	whether a command names a band or a note, which no structural command may touch
