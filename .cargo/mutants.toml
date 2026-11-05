@@ -37,12 +37,26 @@ exclude_re = [
     # range, which Loro takes as no operation.
     "replace > with >= in ChannelState::edit",
     "replace > with >= in ChannelState::delete",
+    "replace > with >= in fold_into",
     # Cost only: the byte probe spaces its snapshot exports. Each mutant moves
     # when the next export runs, and the close still fires at the first export
     # past the bound.
     "replace < with == in ChannelState::passes_bytes",
     'replace / with \* in ChannelState::passes_bytes',
     "replace / with % in ChannelState::passes_bytes",
+    # Equivalent: Loro reads a counter of 0 in a version vector as an absent
+    # peer, so keeping a peer at 0 forks at the same version.
+    "replace > with >= in ChannelState::relayed_amendments",
+    # Equivalent: each mutant also writes a counter equal to the one held,
+    # which changes no version vector.
+    'relocating\.rs:9[0-9]:.*replace > with >= in ChannelState::relocate_locked',
+    'relocating\.rs:10[0-9]:.*replace > with >= in ChannelState::relocate_locked',
+    # Unobservable from safe code: the mutant drops a frame unwiped, and no
+    # host test can read freed memory. `ambre_core::Secret` holds the wipe.
+    'replace UpdateFrame::wipe with \(\)',
+    # Log only: the count of skipped rows decides whether a warning is
+    # written, and nothing else reads it.
+    'replace > with (==|<|>=) in presence_directory',
     # Equivalent: at ten keys, truncating the cache to ten removes nothing.
     "replace > with >= in SyncDocumentState::rotate_key",
     # Host-unreachable: the socket handle exists in the browser alone, so no
@@ -51,10 +65,72 @@ exclude_re = [
     'replace SyncState::send_wire with \(\)',
     'replace run_wasm with \(\)',
     'in SyncState::wire_ws_callbacks',
+    'replace SyncState::wire_ws_callbacks with \(\)',
+    # The wasm twins of the socket shell: each line names the twin compiled
+    # for wasm32 alone, so a host build never holds its mutant. The native
+    # twin of each stays in scope.
+    'websocket\.rs:(6|7|8)[0-9]:.* in SyncState::open_websocket',
+    'websocket\.rs:(6|7|8)[0-9]:.*replace SyncState::open_websocket with',
+    'websocket\.rs:23[0-9]:.*replace SyncState::jitter',
+    'websocket\.rs:39[0-9]:.*replace SyncState::reauthenticate with',
+    'replace SyncState::(arm_reconnect_timer|arm_event_timer) with \(\)',
+    # Equivalent: the lifecycle clamps the jitter to [0, 1], so a native
+    # jitter of -1 reads as the 0 it replaces.
+    'replace SyncState::jitter -> f64 with -1\.0',
+    # The fetch of a rotated key runs in the `spawn_local` task of the
+    # browser path, and with no relay the host returns before it.
+    'replace SyncState::fetch_rotated_key with \(\)',
+    'in SyncState::fetch_rotated_key',
+    # Host-unreachable: each mutant sits in the `spawn_local` task of the
+    # browser path, which only a socket handle reaches.
+    'match guard resp\.setup_owed\(\) with (true|false) in SyncState::handle_unlock',
+    'delete ! in SyncState::handle_provider_return',
+    # Equivalent: placeholders until their flows land. Each argument drops,
+    # and zeroizes, at the end of the call either way.
+    'replace SyncState::handle_change_passphrase with \(\)',
+    'replace SyncState::handle_recover_account with \(\)',
+    # Equivalent on the host: with no relay the rename only logs. The request
+    # leaves from the browser path alone.
+    'replace SyncState::handle_name_channel with \(\)',
+    # Equivalent on the host: with no relay each of these only logs. The
+    # read cursors, the activity and the space listing leave from the
+    # browser path alone, and the browser tier holds them.
+    'replace SyncState::(handle_mark_read|handle_move_read_cursors|handle_mark_thread_read|move_cursors|handle_mark_all_read|handle_fetch_activity|fetch_activity|handle_list_space_channels) with \(\)',
+    'replace put_cursors with \(\)',
+    'delete ! in SyncState::handle_mark_read',
+    # The same host path for snapshots and the lazy create: with no relay
+    # each only seals or logs, and changes no state a test reads.
+    'replace SyncState::(fetch_announced_snapshot|post_snapshot_vouch|handle_send_snapshot|trigger_lazy_create) with \(\)',
+    # The open of a document past its first lines runs in the `spawn_local`
+    # task of the browser path, which no host test reaches.
+    'updates\.rs:6[0-9][0-9]:.* in SyncState::handle_open_document',
+    # Equivalent: without a session key each update drained is buffered
+    # again in its order, and with nothing buffered nothing drains.
+    'replace \|\| with && in SyncState::flush_pre_session_updates',
+    # Log only.
+    'delete ! in SyncState::flush_pre_session_updates',
+    # Host-unreachable: with no relay a space step ends in a payment that
+    # fails or a key that stays, which leaves the state as it was. With a
+    # relay the step spawns a browser task.
+    'replace SyncState::(drive_space_rotation|start_channel_rotation) with \(\)',
+    'delete match arm .* in SyncState::start_channel_rotation',
+    # Log only: a count of rows skipped decides a warning, and nothing else.
+    'delete ! in (settle_task|rotate_channel)',
+    'replace == with != in SyncState::fetch_activity',
+    'delete match arm .* in SyncState::handle_list_documents',
+    # Cost only, and in the browser path: the mutant fetches the key links
+    # of a name sealed under the current key too, which opens it the same.
+    "replace == with != in ListedName<'_>::open",
     # The browser transport: host tests drive a scripted transport in its
     # place, and the browser tier drives this one.
     '<impl MediaHttp for GlooHttp>',
     '<impl ShareHttp for GlooHttp>',
     '<impl Transport for Fetch>',
+    # The renewal and the revoke over `Fetch`: their `_via` twins hold the
+    # logic, and host tests drive those through the scripted transport.
+    'replace AuthContext::(refresh|revoke) -> Result<\(\), HttpError> with Ok\(\(\)\)',
+    # The request helpers bound to `Fetch`: each hands its request to a
+    # `_via` twin, or to `exchange`, that host tests drive in its place.
+    'http\.rs:.*replace (get_json_opt_auth|download_snapshot|delete_auth|put_sealed|patch_json_auth|delete_json_auth|put_json_auth|post_json_auth_ok|fetch_bytes|fetch_key_links) -> ',
     'Method::gloo',
 ]

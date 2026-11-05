@@ -387,6 +387,20 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
 /// identifier and Bob's reaction. Alice's check accepts it there.
 #[test]
 fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
+    move_refused_message(false);
+}
+
+/// The rewind starts at the least counter the refused deltas name. A caller
+/// that lists them out of order still moves every refused message
+/// (`MURMURE-263`).
+#[test]
+fn the_rewind_starts_at_the_first_refused_operation_in_any_order() {
+    move_refused_message(true);
+}
+
+/// Bob's message and reaction, refused for the lock, listed in the order
+/// they left or in the reverse one.
+fn move_refused_message(reversed: bool) {
     let mut alice = channel(1);
     let (alice_user, bob_user) = (Id::<User>::mint(), Id::<User>::mint());
     alice.send(&draft("one"), alice_user, NOW).expect("send");
@@ -441,8 +455,12 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     )
     .expect("adopt");
 
+    let mut refused = [waiting.delta, reacted.delta];
+    if reversed {
+        refused.reverse();
+    }
     let relocated = bob
-        .relocate_locked(old.document_id(), &[waiting.delta, reacted.delta])
+        .relocate_locked(old.document_id(), &refused)
         .expect("relocate");
     assert!(relocated.replay.is_empty(), "no older message changed");
     let sent = relocated.sent.expect("a message moves");
@@ -459,7 +477,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         [(moved, "meanwhile")]
     );
     assert_eq!(messages[0].reactions[0].users, [bob_user]);
-    assert_eq!(messages[0].styles, [code]);
+    assert_eq!(messages[0].styles, std::slice::from_ref(&code));
     assert_eq!(
         bob.messages(old).expect("old"),
         alice.messages(old).expect("old"),
@@ -478,10 +496,15 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
             signer,
         )
         .expect("the check accepts the moved message");
-    assert_eq!(
-        alice.messages(successor).expect("successor"),
-        bob.messages(successor).expect("successor")
-    );
+    let held = alice.messages(successor).expect("successor");
+    assert_eq!(held, bob.messages(successor).expect("successor"));
+    let written = held
+        .iter()
+        .find(|m| m.id == moved)
+        .expect("the active segment holds the moved message");
+    assert_eq!(written.text, "meanwhile");
+    assert_eq!(written.styles, [code]);
+    assert_eq!(written.reactions[0].users, [bob_user]);
 }
 
 /// A refusal that created no message moves nothing, and the active segment

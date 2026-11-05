@@ -405,3 +405,72 @@ impl SyncState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bare_state() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
+        let (sink, rx) = LogicSink::channel();
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        (state, rx)
+    }
+
+    /// `SYNC-186`: with no relay, each member request answers the Logic
+    /// thread at once, so no view waits on it.
+    #[test]
+    fn a_member_request_with_no_relay_answers_at_once() {
+        let (state, rx) = bare_state();
+        let (document_id, user) = (Id::<Document>::mint(), Id::<User>::mint());
+        let id = Seq::<Request>::new(1);
+        let mut answers = Vec::new();
+        let mut count = |label: &str| {
+            let events: Vec<LogicEvent> = rx.try_iter().collect();
+            assert_eq!(events.len(), 1, "{label}: {events:?}");
+            answers.extend(events);
+        };
+        state.handle_fetch_invitee_key(id, document_id, ambre_core::Email::new("a@b.test".into()));
+        count("invitee key");
+        state.handle_fetch_member_key(id, user);
+        count("member key");
+        let key = crate::sharing::own_exchange_key(&StaticSecret::from([2; 32]));
+        state.handle_invite_to_document(id, document_id, None, user, Role::Editor, key);
+        count("invite");
+        state.handle_revoke_from_document(id, document_id, user);
+        count("revoke");
+        state.handle_leave_document(id, document_id);
+        count("leave");
+        state.handle_update_document_member_role(id, document_id, user, Role::Viewer);
+        count("role");
+        let search =
+            ambre_core::Validated::<ambre_core::UserSearch>::parse("ada").expect("a search");
+        state.handle_search_users(id, search);
+        count("search");
+    }
+
+    /// `SYNC-132`: the signer of log entries is this user, once signed in,
+    /// and nobody before.
+    #[test]
+    fn the_author_is_the_signed_in_user() {
+        let (mut state, _rx) = bare_state();
+        assert!(state.author().is_none());
+        let user = Id::<User>::mint();
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[4; 32]);
+        state.user_id = Some(user);
+        assert!(state.author().is_none(), "no signing key yet");
+        state.signing_key = Some(signing_key.clone());
+        let author = state.author().expect("signed in");
+        assert_eq!(author.user_id, user);
+        assert_eq!(
+            author.public(),
+            sharing::Author {
+                user_id: user,
+                signing_key
+            }
+            .public()
+        );
+    }
+}
