@@ -18,7 +18,6 @@ ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key that order
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id of a registered font blob, private to the glyph atlas
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId | u16	a glyph index as the shaper names it, a u16 the font defines
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey | u32	a raster size quantized to a hundredth of a pixel so it hashes, private to the atlas
-ambre-canvas | src/tokens.rs | crate::tokens | TokenPx | u32	a whole CSS pixel length as the token source writes it, written out as a Px<View>
 ambre-chrome | src/composed.rs | crate::composed | ComposedName | String	a name composed for display alone: it converts to no String, so it is never stored (CHROME-080)
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor | Vec<u8>	an anchor bounded to MAX_ANCHOR_LEN bytes where it is built, while serde reads any length. Encoded would refuse an anchor past MAX_LEN at decode, and writes base64
 ambre-core | src/authorship.rs | crate::authorship | IdCounter | u32	an id part: next ends at u32::MAX and never wraps or holds, so two mints never share a value

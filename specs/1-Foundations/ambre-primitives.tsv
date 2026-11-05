@@ -3839,7 +3839,6 @@ ambre-canvas | src/space.rs | crate::space | <Parley as Space>::NAME | const | &
 ambre-canvas | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-canvas | src/tokens.rs | crate::tokens | TokenPx.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
 ambre-core | src/span.rs | crate::span | <Authored as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <PageLoad as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
 ambre-core | src/span.rs | crate::span | <Relayed as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line

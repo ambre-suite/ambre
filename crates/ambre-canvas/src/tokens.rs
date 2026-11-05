@@ -21,10 +21,10 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use ambre_core::{Rule, Validated};
+use ambre_core::{Px, Rule, Validated, View};
 use ambre_draw::Color;
 use peniko::color::Rgba8;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// A file of the generator, by its role. The set is closed: the source and
 /// the two files it generates.
@@ -84,8 +84,14 @@ struct Tokens {
     effects: ThemePair<Effects>,
     photo: Photo,
     canvas: ThemePair<CanvasColors>,
-    scale: Vec<(Validated<ScaleName>, TokenPx)>,
+    #[serde(deserialize_with = "whole_px_scale")]
+    scale: ScaleSteps,
 }
+
+/// The scale of the source: each step, its name and its length, in source
+/// order. An alias, because the type written out fails
+/// `clippy::type_complexity` in a return (`ARCH-067`).
+type ScaleSteps = Vec<(Validated<ScaleName>, Px<View>)>;
 
 #[derive(Deserialize)]
 struct ThemePair<T> {
@@ -93,16 +99,24 @@ struct ThemePair<T> {
     dark: T,
 }
 
-/// A length in CSS pixels, as the source writes it: a whole number. The
-/// stylesheet writes it with `px`, and the Rust module as a `Px<View>`.
-#[derive(Deserialize, Clone, Copy)]
-#[serde(transparent)]
-struct TokenPx(u32);
+/// A length of the source in CSS pixels, a length on the canvas's view
+/// (`CANVAS-032`). The source writes a whole number up to `u16::MAX`, which
+/// the `f32` of a `Px<View>` holds exactly. A fractional, a negative or a
+/// larger value is refused here. So the length prints back the digits the
+/// source wrote. The stylesheet writes it with `px`, the Rust module as a
+/// `Px<View>`.
+fn whole_px<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Px<View>, D::Error> {
+    u16::deserialize(deserializer).map(|pixels| Px::new(f32::from(pixels)))
+}
 
-impl fmt::Display for TokenPx {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+/// The scale of the source, each length read as [`whole_px`] reads one.
+fn whole_px_scale<'de, D: Deserializer<'de>>(deserializer: D) -> Result<ScaleSteps, D::Error> {
+    Vec::<(Validated<ScaleName>, u16)>::deserialize(deserializer).map(|steps| {
+        steps
+            .into_iter()
+            .map(|(name, pixels)| (name, Px::new(f32::from(pixels))))
+            .collect()
+    })
 }
 
 /// A colour of the source, `#rrggbb` or `#rrggbbaa`. The source text is
@@ -250,8 +264,10 @@ impl ChromeColors {
 /// A drop shadow: a vertical offset and a blur, and a colour.
 #[derive(Deserialize)]
 struct Shadow {
-    y: TokenPx,
-    blur: TokenPx,
+    #[serde(deserialize_with = "whole_px")]
+    y: Px<View>,
+    #[serde(deserialize_with = "whole_px")]
+    blur: Px<View>,
     colour: TokenColour,
 }
 
@@ -363,7 +379,7 @@ impl fmt::Display for RustColour {
 }
 
 /// Refuse a scale name declared twice. Each name is snake_case by its type.
-fn check_scale(scale: &[(Validated<ScaleName>, TokenPx)]) -> Result<(), String> {
+fn check_scale(scale: &[(Validated<ScaleName>, Px<View>)]) -> Result<(), String> {
     let mut seen = BTreeSet::new();
     scale.iter().try_for_each(|(name, _)| {
         if seen.insert(name) {
@@ -452,7 +468,8 @@ fn rust_module(tokens: &Tokens) -> String {
     for (name, value) in &tokens.scale {
         let rust_name = name.as_str().to_ascii_uppercase();
         // A scale step is a length on the canvas's view (`CANVAS-032`): a
-        // spacing, a radius or a font size the canvas draws at.
+        // spacing, a radius or a font size the canvas draws at. It is
+        // whole, so it prints with no fraction, and `.0` makes it a float.
         rs.push_str(&format!(
             "pub const {rust_name}: ambre_core::Px<ambre_core::View> = ambre_core::Px::new({value}.0);\n"
         ));
@@ -653,6 +670,36 @@ mod tests {
             generate(&twice)
                 .err()
                 .is_some_and(|e| e.contains("declared twice: space_1"))
+        );
+    }
+
+    // A token length is a `Px<View>`, whose `f32` holds a whole pixel up to
+    // `u16::MAX` exactly. A fractional, a negative or a larger value is
+    // refused where the source is read, so the files print back the digits
+    // of the source.
+    #[test]
+    fn a_length_that_is_not_a_whole_pixel_fails_the_deserialization() {
+        let step = "(\"space_1\",         2)";
+        let shadow = "blur: 48,";
+        for (from, to) in [
+            (step, "(\"space_1\",         2.5)"),
+            (step, "(\"space_1\",         -2)"),
+            (step, "(\"space_1\",         65536)"),
+            (shadow, "blur: 48.5,"),
+            (shadow, "blur: -1,"),
+            (shadow, "blur: 65536,"),
+        ] {
+            let broken = source().replacen(from, to, 1);
+            assert_ne!(broken, source());
+            assert!(parsed(&broken).is_err(), "{to}");
+        }
+        let largest = source().replacen(step, "(\"space_1\",         65535)", 1);
+        let generated = generate(&largest).unwrap();
+        assert!(generated.css.contains("--space-1: 65535px;"));
+        assert!(
+            generated.rust.contains(
+                "SPACE_1: ambre_core::Px<ambre_core::View> = ambre_core::Px::new(65535.0);"
+            )
         );
     }
 
