@@ -21,8 +21,8 @@ use ambre_bus::app::toile::{
 use ambre_canvas::{Palette, TextCache};
 use ambre_core::id::{Connector, Element, Id};
 use ambre_draw::{
-    Affine, Alignment, BezPath, Brush, DocumentWalk, DrawSurface, FontContext, Point,
-    PositionedLayoutItem, Rect, Stroke,
+    Affine, BezPath, Brush, DocumentWalk, DrawSurface, FontContext, Point, PositionedLayoutItem,
+    Rect, Stroke,
 };
 
 use crate::logic::animate::AnimatedElement;
@@ -71,37 +71,51 @@ pub fn missing_media(
 const ARROW_SELECT_W: ambre_core::Px<ambre_core::View> =
     ambre_core::Px::<ambre_core::View>::new(3.0);
 
+/// What one frame of the content layer paints: the board, its theme, its
+/// decoded images and its overrides. The screen, the PDF export and the
+/// benches each fill one.
+pub struct Scene<'s> {
+    /// The culled, z-ordered nodes of the region drawn.
+    pub viewport: &'s DisplayViewport,
+    /// The theme the board paints in.
+    pub palette: &'s Palette,
+    /// Decoded image pixels for this frame, keyed by media hash. An `Image`
+    /// element whose hash is present paints real pixels via `draw_image`; one
+    /// absent paints a placeholder box (`toile-media`). Empty on a board with
+    /// no images or whose media has not yet been decoded.
+    pub images: &'s HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    /// Smart Animate overrides for an in-flight slide transition. Keyed by
+    /// element id, each replaces the element's transform, bounds, opacity and
+    /// fill for this frame. Empty when no transition is active. Fade-only ids
+    /// (a new or gone element) still appear here so their opacity ramp holds.
+    pub anim: &'s HashMap<Id<Element>, AnimatedElement>,
+}
+
 /// Paint the persistent content layer: board background + adaptive grid, then
 /// the board walk under the camera transform, then the frame titles.
 ///
 /// The walk draws what the PDF page draws, from the same view, at board units
 /// (`CANVAS-074`). The camera is the only thing the screen adds to it.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "each argument is an independent input of one frame, and the screen, the PDF export and the benches set them apart"
-)]
+/// `mode` is presentation focus mode: the UI hides the board grid so the
+/// audience sees only the slide content.
 pub fn paint_content<S: DrawSurface>(
     surface: &mut S,
-    vp: &DisplayViewport,
     cam: &ViewportTransform,
-    palette: &Palette,
-    font_cx: &mut FontContext,
-    text_cache: &mut TextCache,
+    scene: Scene<'_>,
+    walk: BoardWalk<'_>,
     editing: Option<&super::edit::EditTarget>,
-    // Decoded image pixels for this frame, keyed by media hash. An `Image`
-    // element whose hash is present paints real pixels via `draw_image`; one
-    // absent paints a placeholder box (`toile-media`). Empty on a board
-    // with no images or whose media has not yet been decoded.
-    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
-    // Smart Animate overrides for an in-flight slide transition. Keyed by element
-    // id, each replaces the element's transform / bounds / opacity / fill for
-    // this frame. Empty when no transition is active. Fade-only ids (a new / gone
-    // element) still appear here so their opacity ramp is honored.
-    anim: &HashMap<Id<Element>, AnimatedElement>,
-    // Presentation focus mode: the UI hides the board grid so the audience
-    // sees only the slide content.
     mode: PresentMode,
 ) {
+    let Scene {
+        viewport: vp,
+        palette,
+        images,
+        anim,
+    } = scene;
+    let BoardWalk {
+        font_cx,
+        text_cache,
+    } = walk;
     // 1. Background + adaptive grid (screen space). Focus mode drops the grid.
     if mode.is_presenting() {
         grid::paint_background(surface, cam, palette);
@@ -160,6 +174,26 @@ fn selection_rotation(
         .unwrap_or(ambre_core::Radians::ZERO)
 }
 
+/// The marks of one frame the overlay paints over the board.
+pub struct Marks<'m> {
+    /// The selected elements.
+    pub selection: &'m [Id<Element>],
+    /// The live gesture preview, if a gesture is in flight.
+    pub preview: Option<&'m Preview>,
+    /// The elements the find matches.
+    pub find_hits: &'m [Id<Element>],
+    /// The focused find match.
+    pub find_focus: Option<&'m Id<Element>>,
+    /// Live transform overrides for an in-flight resize, rotate or move. The
+    /// selection box and handles of a selected id with an entry follow its
+    /// preview bounds, not the committed geometry. They stay on the object
+    /// during the drag. Empty at rest.
+    pub gesture: &'m HashMap<Id<Element>, AnimatedElement>,
+    /// The selected arrow, if one is (`toile-connectors`). Exclusive with
+    /// `selection`, so at most one of the two boxes is drawn.
+    pub arrow: Option<&'m Id<Connector>>,
+}
+
 /// Paint the transient overlay: find highlights, the selection bounding box + 8
 /// resize handles + the rotate handle, in screen space (`toile-selection`, pass 3).
 /// The selection box is skipped for an empty selection, but find
@@ -171,29 +205,22 @@ fn selection_rotation(
 /// and its handles (`TOILE-UI-083`). A slide is what the room is looking at.
 /// The link badges stay: following a link is navigation, and a presenter uses
 /// it.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "each argument is an independent mark of one frame, and the view and the tests set them apart"
-)]
 pub fn paint_overlay<S: DrawSurface>(
     surface: &mut S,
-    selection: &[Id<Element>],
     vp: &DisplayViewport,
     cam: &ViewportTransform,
     palette: &Palette,
-    preview: Option<&Preview>,
-    find_hits: &[Id<Element>],
-    find_focus: Option<&Id<Element>>,
-    // Live transform overrides for an in-flight resize / rotate / move. When an
-    // entry exists for a selected id, the selection box + handles follow its
-    // preview bounds instead of the committed geometry. They stay glued to the
-    // object during the drag. Empty at rest.
-    gesture: &HashMap<Id<Element>, AnimatedElement>,
-    // The selected arrow, if one is (`toile-connectors`). Exclusive with
-    // `selection`, so at most one of the two boxes is drawn.
-    arrow: Option<&Id<Connector>>,
+    marks: Marks<'_>,
     mode: PresentMode,
 ) {
+    let Marks {
+        selection,
+        preview,
+        find_hits,
+        find_focus,
+        gesture,
+        arrow,
+    } = marks;
     if mode.is_presenting() {
         // Navigation only: a badge says a slide carries a link.
         paint_link_badges(surface, vp, cam, palette);
@@ -598,16 +625,13 @@ fn paint_frame_titles<S: DrawSurface>(
         if editing == Some(&e.id) {
             continue;
         }
-        let layout = text_cache.get_or_build_font(
+        let layout = text_cache.get_or_build(
             font_cx,
             shown.label(),
-            FRAME_TITLE_HEIGHT,
-            ambre_core::Px::<ambre_core::View>::new(f32::MAX),
-            Alignment::Start,
-            ambre_canvas::Weight::Regular,
-            ambre_canvas::Slant::Upright,
-            None,
-            ambre_canvas::WordBreak::Whole,
+            ambre_canvas::Look::body(
+                FRAME_TITLE_HEIGHT,
+                ambre_core::Px::<ambre_core::View>::new(f32::MAX),
+            ),
         );
         // A placeholder reads as the absence it is: the secondary ink, not the
         // ink of a title somebody typed.
@@ -779,14 +803,18 @@ mod tests {
         let mut tc = TextCache::new();
         paint_content(
             &mut surface,
-            &vp,
             &cam(),
-            &LIGHT_PALETTE,
-            &mut font_cx,
-            &mut tc,
+            Scene {
+                viewport: &vp,
+                palette: &LIGHT_PALETTE,
+                images: &HashMap::new(),
+                anim: &HashMap::new(),
+            },
+            BoardWalk {
+                font_cx: &mut font_cx,
+                text_cache: &mut tc,
+            },
             None,
-            &HashMap::new(),
-            &HashMap::new(),
             PresentMode::Editing,
         );
 
@@ -843,14 +871,18 @@ mod tests {
         let mut tc = TextCache::new();
         paint_content(
             &mut surface,
-            &vp,
             &cam(),
-            &LIGHT_PALETTE,
-            &mut font_cx,
-            &mut tc,
+            Scene {
+                viewport: &vp,
+                palette: &LIGHT_PALETTE,
+                images: &HashMap::new(),
+                anim: &anim,
+            },
+            BoardWalk {
+                font_cx: &mut font_cx,
+                text_cache: &mut tc,
+            },
             None,
-            &HashMap::new(),
-            &anim,
             PresentMode::Presenting, // focus mode: grid suppressed
         );
 
@@ -900,14 +932,18 @@ mod tests {
         let mut tc = TextCache::new();
         paint_content(
             &mut surface,
-            vp,
             &cam(),
-            &LIGHT_PALETTE,
-            &mut font_cx,
-            &mut tc,
+            Scene {
+                viewport: vp,
+                palette: &LIGHT_PALETTE,
+                images: &HashMap::new(),
+                anim: &HashMap::new(),
+            },
+            BoardWalk {
+                font_cx: &mut font_cx,
+                text_cache: &mut tc,
+            },
             None,
-            &HashMap::new(),
-            &HashMap::new(),
             PresentMode::Editing,
         );
         surface
@@ -1217,14 +1253,18 @@ mod tests {
         let mut tc = TextCache::new();
         paint_content(
             &mut surface,
-            &vp,
             &cam(),
-            &LIGHT_PALETTE,
-            &mut font_cx,
-            &mut tc,
+            Scene {
+                viewport: &vp,
+                palette: &LIGHT_PALETTE,
+                images: &images,
+                anim: &HashMap::new(),
+            },
+            BoardWalk {
+                font_cx: &mut font_cx,
+                text_cache: &mut tc,
+            },
             None,
-            &images,
-            &HashMap::new(),
             PresentMode::Editing,
         );
 
@@ -1264,15 +1304,17 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[Id::<Element>::from_text("r".into())],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[Id::<Element>::from_text("r".into())],
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         // 4 corner handles + 1 rotate handle = 5 filled squares (corners-only).
@@ -1300,15 +1342,17 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[Id::<Element>::from_text("g".into())],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[Id::<Element>::from_text("g".into())],
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         let handle_fills = surface
@@ -1343,18 +1387,20 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[
-                Id::<Element>::from_text("a".into()),
-                Id::<Element>::from_text("b".into()),
-            ],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[
+                    Id::<Element>::from_text("a".into()),
+                    Id::<Element>::from_text("b".into()),
+                ],
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         let count = |f: fn(&DrawOp) -> bool| surface.ops().iter().filter(|o| f(o)).count();
@@ -1473,15 +1519,17 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[Id::<Element>::from_text("r".into())],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &[Id::<Element>::from_text("r".into())],
-            None,
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[Id::<Element>::from_text("r".into())],
+                preview: None,
+                find_hits: &[Id::<Element>::from_text("r".into())],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Presenting,
         );
         assert!(
@@ -1523,15 +1571,17 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[Id::<Element>::from_text("r".into())],
             &vp,
             &cam,
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &gesture,
-            None,
+            Marks {
+                selection: &[Id::<Element>::from_text("r".into())],
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &gesture,
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         // The selection box is stroked at the preview bounds, not the committed rect.
@@ -1571,15 +1621,17 @@ mod tests {
         let selected = Id::<Connector>::from_text("c".into());
         paint_overlay(
             &mut surface,
-            &[],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &HashMap::new(),
-            Some(&selected),
+            Marks {
+                selection: &[],
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: Some(&selected),
+            },
             PresentMode::Editing,
         );
         let handles = surface
@@ -1626,15 +1678,17 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[],
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         let badges = surface
@@ -1661,15 +1715,17 @@ mod tests {
         let selected = Id::<Connector>::from_text("gone".into());
         paint_overlay(
             &mut surface,
-            &[],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &HashMap::new(),
-            Some(&selected),
+            Marks {
+                selection: &[],
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: Some(&selected),
+            },
             PresentMode::Editing,
         );
         assert!(surface.ops().is_empty(), "nothing is painted");
@@ -1695,15 +1751,17 @@ mod tests {
         ];
         paint_overlay(
             &mut surface,
-            &[],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &hits,
-            Some(&Id::<Element>::from_text("b".into())),
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[],
+                preview: None,
+                find_hits: &hits,
+                find_focus: Some(&Id::<Element>::from_text("b".into())),
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         // No selection => no handles, only the two hit outlines (one per match).
@@ -1735,15 +1793,17 @@ mod tests {
         let hits = ["a", "b", "c"].map(|s| Id::<Element>::from_text(s.into()));
         paint_overlay(
             &mut surface,
-            &[],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &hits,
-            Some(&Id::<Element>::from_text("b".into())),
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[],
+                preview: None,
+                find_hits: &hits,
+                find_focus: Some(&Id::<Element>::from_text("b".into())),
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         let outlines: Vec<(Color, f64)> = surface
@@ -1806,15 +1866,17 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[Id::<Element>::from_text("r".into())],
             &vp,
             &cam,
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[Id::<Element>::from_text("r".into())],
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         // The box must NOT be a `stroke_rect` (that degrades to an upright AABB on
@@ -1895,14 +1957,18 @@ mod tests {
         let mut tc = TextCache::new();
         paint_content(
             &mut surface,
-            vp,
             cam,
-            &LIGHT_PALETTE,
-            &mut font_cx,
-            &mut tc,
+            Scene {
+                viewport: vp,
+                palette: &LIGHT_PALETTE,
+                images: &pass.images,
+                anim: &pass.anim,
+            },
+            BoardWalk {
+                font_cx: &mut font_cx,
+                text_cache: &mut tc,
+            },
             pass.editing.as_ref(),
-            &pass.images,
-            &pass.anim,
             pass.present,
         );
         surface
@@ -2331,15 +2397,17 @@ mod tests {
         ];
         paint_overlay(
             &mut surface,
-            &selection,
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &[],
-            None,
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &selection,
+                preview: None,
+                find_hits: &[],
+                find_focus: None,
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         let union = world_rect_to_screen(Rect::new(0.0, 0.0, 150.0, 120.0), &cam());
@@ -2379,15 +2447,17 @@ mod tests {
         ];
         paint_overlay(
             &mut surface,
-            &[],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
-            None,
-            &hits,
-            Some(&hits[0]),
-            &HashMap::new(),
-            None,
+            Marks {
+                selection: &[],
+                preview: None,
+                find_hits: &hits,
+                find_focus: Some(&hits[0]),
+                gesture: &HashMap::new(),
+                arrow: None,
+            },
             PresentMode::Editing,
         );
         let outlines: Vec<Rect> = surface
@@ -2423,15 +2493,17 @@ mod tests {
             let mut surface = RecordingSurface::new();
             paint_overlay(
                 &mut surface,
-                &[],
                 &board(Vec::new()),
                 &cam,
                 &LIGHT_PALETTE,
-                Some(p),
-                &[],
-                None,
-                &HashMap::new(),
-                None,
+                Marks {
+                    selection: &[],
+                    preview: Some(p),
+                    find_hits: &[],
+                    find_focus: None,
+                    gesture: &HashMap::new(),
+                    arrow: None,
+                },
                 PresentMode::Editing,
             );
             surface.ops().to_vec()

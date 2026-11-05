@@ -6,44 +6,40 @@ use ambre_bus::{Instant, PageLoad};
 use ambre_core::index::{Delta, Pos};
 
 impl TrameView {
-    /// A view of `document_id`, reading time from `clock`: the page's on screen,
-    /// a test's natively. The view itself never reads the browser's.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "one argument per channel, publisher and chrome signal, and the caller in ambre-app builds each one apart"
-    )]
+    /// A view of `document_id` on a canvas of `canvas`, wired by `wiring`.
+    /// The view reads time from the clock of `wiring`, never the browser's.
     pub fn new(
         document_id: Id<Document>,
-        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        canvas_width: ambre_core::Px<ambre_core::Surface>,
-        canvas_height: ambre_core::Px<ambre_core::Surface>,
-        text_input: TextInput,
-        // When embedded as a `doc_embed` child (`toile-embeds`), the child view
-        // must not grab the shared text pipe on construction. The top-level
-        // document owns the caret until the user clicks into the embed. A
-        // top-level view passes `Standalone` and focuses immediately.
-        embedding: ambre_canvas::Embedding,
-        anchor: AnchorPublisher,
-        perf_pub: PerfPublisher,
-        busy_pub: BusyPublisher,
-        filter_open: FilterOpenPublisher,
-        theme_ctl: ThemeControl,
-        clock: Box<dyn Clock>,
-        #[cfg(target_arch = "wasm32")] formula_ref: RwSignal<String>,
-        #[cfg(target_arch = "wasm32")] formula_text: RwSignal<String>,
-        #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
-        #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
-        #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
-        #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<
-            ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
-        >,
-        #[cfg(target_arch = "wasm32")] active_sheet: RwSignal<
-            ambre_core::id::Id<ambre_core::id::Sheet>,
-        >,
-        #[cfg(target_arch = "wasm32")] filter_active: RwSignal<crate::chrome::SheetFilter>,
-        #[cfg(target_arch = "wasm32")] find_result: RwSignal<Option<crate::chrome::FindPosition>>,
+        canvas: ambre_core::Size<ambre_core::Px<ambre_core::Surface>>,
+        wiring: TrameWiring,
     ) -> Self {
+        let TrameWiring {
+            to_logic,
+            from_logic,
+            text_input,
+            embedding,
+            anchor,
+            perf_pub,
+            busy_pub,
+            filter_open,
+            theme_ctl,
+            clock,
+            #[cfg(target_arch = "wasm32")]
+            signals,
+        } = wiring;
+        #[cfg(target_arch = "wasm32")]
+        let TrameSignals {
+            formula_ref,
+            formula_text,
+            formula_action,
+            sel_stats,
+            ctx_scope,
+            zoom: zoom_sig,
+            active_sheet,
+            filter_active,
+            find_result,
+        } = signals;
+        let (canvas_width, canvas_height) = (canvas.width, canvas.height);
         let theme = theme_ctl.get();
 
         // Focus the pipe up front so the keyboard works without a click. Park it

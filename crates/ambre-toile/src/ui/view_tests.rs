@@ -49,16 +49,20 @@ impl Rig {
         let notices = NoticePublisher::new();
         let view = ToileView::new(
             Id::<Document>::mint(),
-            tx,
-            rx,
-            ambre_core::Px::<ambre_core::Surface>::new(1200.0),
-            ambre_core::Px::<ambre_core::Surface>::new(800.0),
-            TextInput::detached(),
-            ambre_canvas::Embedding::Standalone,
-            PerfPublisher::new(),
-            BusyPublisher::new(),
-            notices.clone(),
-            ThemeControl::default(),
+            ambre_core::Size::new(
+                ambre_core::Px::<ambre_core::Surface>::new(1200.0),
+                ambre_core::Px::<ambre_core::Surface>::new(800.0),
+            ),
+            ToileWiring {
+                to_logic: tx,
+                from_logic: rx,
+                text_input: TextInput::detached(),
+                embedding: ambre_canvas::Embedding::Standalone,
+                perf_pub: PerfPublisher::new(),
+                busy_pub: BusyPublisher::new(),
+                notices: notices.clone(),
+                theme_ctl: ThemeControl::default(),
+            },
         );
         Self {
             view,

@@ -74,18 +74,22 @@ impl Rig {
         let theme = ThemeControl::default();
         let view = TrameView::new(
             Id::<Document>::mint(),
-            tx,
-            rx,
-            ambre_core::Px::<ambre_core::Surface>::new(1200.0),
-            ambre_core::Px::<ambre_core::Surface>::new(800.0),
-            TextInput::detached(),
-            ambre_canvas::Embedding::Standalone,
-            AnchorPublisher::new(),
-            PerfPublisher::new(),
-            BusyPublisher::new(),
-            FilterOpenPublisher::new(),
-            theme.clone(),
-            Box::new(clock.clone()),
+            ambre_core::Size::new(
+                ambre_core::Px::<ambre_core::Surface>::new(1200.0),
+                ambre_core::Px::<ambre_core::Surface>::new(800.0),
+            ),
+            TrameWiring {
+                to_logic: tx,
+                from_logic: rx,
+                text_input: TextInput::detached(),
+                embedding: ambre_canvas::Embedding::Standalone,
+                anchor: AnchorPublisher::new(),
+                perf_pub: PerfPublisher::new(),
+                busy_pub: BusyPublisher::new(),
+                filter_open: FilterOpenPublisher::new(),
+                theme_ctl: theme.clone(),
+                clock: Box::new(clock.clone()),
+            },
         );
         Self {
             view,

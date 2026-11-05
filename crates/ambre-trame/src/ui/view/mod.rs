@@ -307,6 +307,65 @@ pub enum PendingCommit {
     Fill,
 }
 
+/// The chrome signals a sheet view shares with the shell. The shell reads
+/// what the view publishes and writes back what the user asks for. ambre-app
+/// creates each signal once and hands the same set to the shell and the view.
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy)]
+pub struct TrameSignals {
+    /// The reference of the active cell, shown in the formula bar.
+    pub formula_ref: RwSignal<String>,
+    /// The text of the formula bar.
+    pub formula_text: RwSignal<String>,
+    /// What the formula bar asks the view to do.
+    pub formula_action: RwSignal<Option<FormulaAction>>,
+    /// The aggregates of the selection.
+    pub sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
+    /// The scope of a right-click, read by the context menu.
+    pub ctx_scope: RwSignal<super::grid::CtxScope>,
+    /// The grid zoom the status bar selects.
+    pub zoom: RwSignal<ambre_core::Scale<ambre_core::Doc, ambre_core::View>>,
+    /// The active sheet.
+    pub active_sheet: RwSignal<Id<ambre_core::id::Sheet>>,
+    /// Whether a filter is active on the sheet.
+    pub filter_active: RwSignal<crate::chrome::SheetFilter>,
+    /// The find counters.
+    pub find_result: RwSignal<Option<crate::chrome::FindPosition>>,
+}
+
+/// The wiring of a sheet view: its channels to the Logic thread, its text
+/// pipe, its publishers, its clock and its chrome signals. ambre-app builds
+/// the parts and fills one per view.
+pub struct TrameWiring {
+    /// The queue to the Logic thread.
+    pub to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    /// The queue from the Logic thread.
+    pub from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    /// The shared text pipe.
+    pub text_input: TextInput,
+    /// When embedded as a `doc_embed` child (`toile-embeds`), the child view
+    /// must not grab the shared text pipe on construction. The top-level
+    /// document owns the caret until the user clicks into the embed. A
+    /// top-level view passes `Standalone` and focuses immediately.
+    pub embedding: ambre_canvas::Embedding,
+    /// The screen position of the active cell.
+    pub anchor: AnchorPublisher,
+    /// The per-frame perf snapshot.
+    pub perf_pub: PerfPublisher,
+    /// The level a full outbox raises.
+    pub busy_pub: BusyPublisher,
+    /// The intent an in-canvas filter button raises.
+    pub filter_open: FilterOpenPublisher,
+    /// The active theme.
+    pub theme_ctl: ThemeControl,
+    /// The clock the view reads time from: the page's on screen, a test's
+    /// natively.
+    pub clock: Box<dyn Clock>,
+    /// The chrome signals the view shares with the shell.
+    #[cfg(target_arch = "wasm32")]
+    pub signals: TrameSignals,
+}
+
 pub struct TrameView {
     /// The document this view renders (from the active route).
     document_id: Id<Document>,

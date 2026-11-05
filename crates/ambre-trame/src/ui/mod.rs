@@ -18,4 +18,6 @@ pub mod renderer;
 pub mod view;
 
 pub use grid::TrameUiState;
-pub use view::TrameView;
+#[cfg(target_arch = "wasm32")]
+pub use view::TrameSignals;
+pub use view::{TrameView, TrameWiring};

@@ -883,14 +883,18 @@ mod pdf_tests {
         let mut board = RecordingSurface::new();
         crate::ui::render::paint_content(
             &mut board,
-            &pages[0].viewport,
             &pages[0].camera,
-            ambre_canvas::Theme::Light.palette(),
-            &mut ambre_draw::FontContext::default(),
-            &mut ambre_canvas::TextCache::new(),
+            crate::ui::render::Scene {
+                viewport: &pages[0].viewport,
+                palette: ambre_canvas::Theme::Light.palette(),
+                images: &std::collections::HashMap::new(),
+                anim: &std::collections::HashMap::new(),
+            },
+            crate::ui::walk::BoardWalk {
+                font_cx: &mut ambre_draw::FontContext::default(),
+                text_cache: &mut ambre_canvas::TextCache::new(),
+            },
             None,
-            &std::collections::HashMap::new(),
-            &std::collections::HashMap::new(),
             ambre_bus::app::toile::PresentMode::Editing,
         );
         let lines = |s: &RecordingSurface| s.count(|op| matches!(op, DrawOp::StrokeLine { .. }));

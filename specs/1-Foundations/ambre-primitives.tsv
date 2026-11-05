@@ -83,9 +83,7 @@ ambre-app | src/route.rs | crate::route | slug_to_type(slug) | param | &str	gene
 ambre-app | src/route.rs | crate::route | type_slug() | ret | &'static str	generic	generic codec/parser/bytes API
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
-ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_ref) | param | RwSignal<String>	free-text	formula bar text
-ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_text) | param | RwSignal<String>	free-text	formula bar text
-ambre-app | src/shell/mod.rs | crate::shell | mount_shell(presenter_notes) | param | RwSignal<String>	free-text	presenter notes text
+ambre-app | src/shell/mod.rs | crate::shell | ShellWiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
 ambre-app | src/signin.rs | crate::signin | PENDING_STATE_KEY | const | &str	free-text	single session-storage key literal
 ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	free-text	path prefix literal
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
@@ -534,7 +532,6 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::build_layout(t
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::cache_size() | ret | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::evict_if_oversized(max_entries) | param | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_font(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_look(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_spans(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::hit_rate() | ret | f32	math	geometry, layout, GPU or count arithmetic
@@ -2974,8 +2971,8 @@ ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView:
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::begin_edit(seed) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::cell_seed() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::is_busy() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(formula_ref) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::new(formula_text) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameSignals.formula_ref | field | RwSignal<String>	free-text	free text: user content, label, message or display string
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameSignals.formula_text | field | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::open_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::open_session(seed) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::send_command_lossy() | ret | bool	generic	predicate or did-it-change return
