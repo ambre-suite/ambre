@@ -1,0 +1,53 @@
+# cargo-mutants configuration (`just mutants`, the CI `mutants` job).
+#
+# The host tier only: a wasm or browser test costs a `-Z build-std` build or a
+# Chrome start per mutant, which no budget holds.
+#
+# The scope is the boundary a surviving mutant would break in silence: the
+# Sync worker (the zero-knowledge and ordering boundary), the cryptography,
+# and the Murmure channel model. Each exclusion below states its reason.
+
+examine_globs = [
+    "crates/ambre-sync/src/**/*.rs",
+    "crates/ambre-crypto/src/**/*.rs",
+    "crates/ambre-murmure/src/channel.rs",
+    "crates/ambre-murmure/src/channel/**/*.rs",
+]
+
+exclude_globs = [
+    # Test doubles: a mutant there changes the harness, not the product.
+    "crates/ambre-sync/src/mock.rs",
+    "crates/ambre-sync/src/mock_relay.rs",
+    # Behind the `fuzz` feature, which no host test build enables.
+    "crates/ambre-sync/src/fuzz.rs",
+    # Compiled for wasm32 alone: no host test can build a mutant of it.
+    "crates/ambre-sync/src/worker.rs",
+]
+
+# Doctests are left out: each one is a separate compile per mutant, and the
+# files in scope hold none.
+additional_cargo_test_args = ["--lib", "--tests"]
+
+# Each line names one mutant by the name cargo-mutants prints, with its reason.
+exclude_re = [
+    # The clamp moves a PeerID of `u64::MAX` to the value below. It fires on a
+    # BLAKE2b output of `u64::MAX` alone: no test can find that preimage.
+    'peer\.rs:.*replace - with / in derive_peer_id',
+    # Equivalent: on an empty body, the mutant unmarks or deletes the empty
+    # range, which Loro takes as no operation.
+    "replace > with >= in ChannelState::edit",
+    "replace > with >= in ChannelState::delete",
+    # Cost only: the byte probe spaces its snapshot exports. Each mutant moves
+    # when the next export runs, and the close still fires at the first export
+    # past the bound.
+    "replace < with == in ChannelState::passes_bytes",
+    'replace / with \* in ChannelState::passes_bytes',
+    "replace / with % in ChannelState::passes_bytes",
+    # Equivalent: at ten keys, truncating the cache to ten removes nothing.
+    "replace > with >= in SyncDocumentState::rotate_key",
+    # Host-unreachable: the socket handle exists in the browser alone, so no
+    # host build reaches the send, and the wasm entry is compiled for wasm32
+    # alone. The browser tier holds both.
+    'replace SyncState::send_wire with \(\)',
+    'replace run_wasm with \(\)',
+]

@@ -376,6 +376,25 @@ fn ecdh_symmetric() {
     );
 }
 
+/// The secret comes from the exchange: another peer gives another secret. A
+/// constant secret would let anyone holding the two public keys derive the
+/// key-encryption key, yet every round trip would still pass.
+#[test]
+fn a_shared_secret_differs_per_peer() {
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let public = |seed: u8| {
+        FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+            x25519_dalek::PublicKey::from(
+                &MasterSeed::from_array([seed; 32]).derive_exchange_key(),
+            )
+            .to_bytes(),
+        )
+    };
+    let with_bob = ecdh::shared_secret(&alice, &public(0x02)).unwrap();
+    let with_carol = ecdh::shared_secret(&alice, &public(0x03)).unwrap();
+    assert_ne!(with_bob.as_bytes(), with_carol.as_bytes());
+}
+
 #[test]
 fn a_shared_secret_is_wiped_and_never_printed() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();

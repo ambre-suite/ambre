@@ -25,3 +25,8 @@ fuzz/coverage/
 # Snapshot a local redis-server writes into its working directory. The db
 # tier's data lives in the compose container, never in the tree.
 *.rdb
+# What `just mutants` and `just mutants-diff` write: the report of each mutant,
+# and the diff the second one reads. CI uploads the report as an artifact.
+mutants.out/
+mutants.out.old/
+mutants.diff

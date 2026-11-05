@@ -1740,6 +1740,70 @@ mod tests {
         assert_eq!(fire_at(&mut state, 5000), 3, "one open per deadline");
     }
 
+    /// `SYNC-059`: while the inbound path holds the socket closed, only an
+    /// edit is kept for the reopen. Any other frame is dropped: the reopen
+    /// subscribes again on its own.
+    #[test]
+    fn while_held_only_an_edit_is_kept_for_the_reopen() {
+        let (mut state, _rx) = with_open_document();
+        state.inbound_held = true;
+        let document_id = *state.documents.keys().next().expect("one document");
+        state.push_frame(&WsClientMsg::Subscribe { document_id });
+        assert!(state.held_outbox.borrow().is_empty());
+    }
+
+    /// `SYNC-045`: a presence sample from a member opens under the key it
+    /// names. It reaches Logic as the bytes its author sealed, under the
+    /// member its signing key resolves to.
+    #[test]
+    fn a_remote_ephemeral_reaches_logic_as_its_author_sealed_it() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let document_id = Id::<Document>::mint();
+        let doc_key = DocumentKey::from_array([0x11; 32]);
+        let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
+        let author = ambre_core::FixedBytes::from_array(signing.verifying_key().to_bytes());
+        let alice = Id::<User>::mint();
+        let mut doc_state = SyncDocumentState::new(
+            document_id,
+            doc_key.clone(),
+            DocType::Prose,
+            crate::Existence::LocalOnly,
+        );
+        doc_state.set_signing_keys([(author, alice)]);
+        state.documents.insert(document_id, doc_state);
+        let public_data = ambre_protocol::EphemeralPublicData {
+            document_id,
+            pub_key: author,
+            key_id: doc_key.id(),
+            counter: Seq::<ambre_protocol::messages::Ephemerals>::new(1),
+        };
+        let eph = crate::pipeline::seal_ephemeral(
+            &ambre_core::Payload::new(b"cursor@42".to_vec()),
+            public_data,
+            &doc_key,
+            &signing,
+        )
+        .expect("seal");
+        state.handle_ws_message(WsServerMsg::Ephemeral(eph));
+        let delivered = std::iter::from_fn(|| rx.try_recv().ok()).find_map(|event| match event {
+            LogicEvent::RemoteEphemeral {
+                from_user_id,
+                payload,
+                ..
+            } => Some((from_user_id, payload)),
+            _ => None,
+        });
+        let Some((from, payload)) = delivered else {
+            panic!("the sample reaches Logic");
+        };
+        assert_eq!(from, alice);
+        assert_eq!(payload.as_bytes(), b"cursor@42");
+    }
+
     /// `SYNC-066`: a sign-out closes the socket and clears every key. A drop
     /// reported after it reopens nothing, where the same drop before it does.
     #[test]
