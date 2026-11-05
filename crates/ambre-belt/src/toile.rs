@@ -310,6 +310,10 @@ pub(crate) mod tests {
         not(feature = "browser"),
         ignore = "needs a build, chromedriver and the services; run just test-browser"
     )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "pauses a worker through the DevTools Protocol, which Firefox does not speak"
+    )]
     async fn an_arrow_a_peer_strands_is_announced_on_both() {
         let first = Page::new_document("toile").await;
         draw_rect(&first, (300.0, 200.0), (360.0, 260.0)).await;

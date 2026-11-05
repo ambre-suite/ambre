@@ -5,6 +5,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use crate::busy::{FLOOD, clear_cell, pause_logic};
+    use crate::driver::Engine;
     use crate::page::{Page, STEP};
 
     /// `TRAME-IO-040`: a file the full queue cannot carry tells the user that
@@ -13,6 +14,10 @@ mod tests {
     #[cfg_attr(
         not(feature = "browser"),
         ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "pauses a worker through the DevTools Protocol, which Firefox does not speak"
     )]
     async fn an_import_the_full_queue_refuses_says_so() {
         let page = Page::new_document("trame").await;
@@ -116,8 +121,10 @@ mod tests {
 
     /// `UI-THREAD-009`: the write a copy defers to the next frame is called
     /// while the activation the key press opened is live. It lands, and the
-    /// clipboard holds the private bytes and the token only that write
-    /// publishes.
+    /// clipboard holds what only that write publishes. On Chrome that is the
+    /// private bytes and the token. Firefox refuses the `web ` types. So
+    /// for a Trame copy, the write publishes the mirror alone
+    /// (`UI-THREAD-055`).
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -129,7 +136,11 @@ mod tests {
         copy(&page).await;
         assert_eq!(first_write(&page).await, (true, "landed".to_owned()));
         let types = clipboard_types(&page).await;
-        for kind in ["web application/x-ambre", "web application/x-ambre-token"] {
+        let published: &[&str] = match page.browser.engine() {
+            Engine::Chrome => &["web application/x-ambre", "web application/x-ambre-token"],
+            Engine::Firefox => &["text/plain"],
+        };
+        for kind in published {
             assert!(holds(&types, kind), "{kind} in {types}");
         }
     }
@@ -142,6 +153,10 @@ mod tests {
         not(feature = "browser"),
         ignore = "needs a build and chromedriver; run just test-browser"
     )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "pauses a worker through the DevTools Protocol, which Firefox does not speak"
+    )]
     async fn a_copy_held_past_the_activation_window_writes_outside_it() {
         let page = Page::new_document("trame").await;
         select_and_record(&page).await;
@@ -152,5 +167,71 @@ mod tests {
         page.resume_worker(paused).await;
         let (active, _) = first_write(&page).await;
         assert!(!active, "the write was called inside the window");
+    }
+
+    /// The canvas as the screen shows it, cut out of a viewport screenshot.
+    async fn canvas_shot(page: &Page) -> image::RgbImage {
+        let rect = page
+            .browser
+            .script(
+                "const r = document.querySelector('canvas').getBoundingClientRect(); \
+                 return [r.left, r.top, r.width, r.height].map(Math.floor);",
+                json!([]),
+            )
+            .await;
+        let at = |i: usize| rect[i].as_u64().unwrap_or(0) as u32;
+        let shot = image::load_from_memory(&page.browser.screenshot().await)
+            .expect("a PNG screenshot")
+            .to_rgb8();
+        image::imageops::crop_imm(&shot, at(0), at(1), at(2), at(3)).to_image()
+    }
+
+    /// Scrolls the wheel over the grid by `steps` pixel deltas of `dy`, one
+    /// every 16 ms, then lets go: no event follows the last one.
+    async fn wheel(page: &Page, steps: u32, dy: i64) {
+        let (ox, oy) = page.canvas_origin().await;
+        let scrolls: Vec<Value> = (0..steps)
+            .map(|_| {
+                json!({ "type": "scroll", "x": (ox + 300.0) as i64, "y": (oy + 300.0) as i64,
+                        "deltaX": 0, "deltaY": dy, "duration": 16 })
+            })
+            .collect();
+        page.browser
+            .perform(json!([{ "type": "wheel", "id": "wheel", "actions": scrolls }]))
+            .await;
+    }
+
+    /// Whether the grid still moves once the wheel has stopped: two shots of
+    /// the canvas, 400 ms apart. The first waits 250 ms after the last wheel
+    /// event, so no frame of the wheel's own steps is still to paint. A glide
+    /// of 0.75 px per ms, decaying over 325 ms (`DECAY`), still travels about
+    /// 80 px between the two shots.
+    async fn moves_after_the_wheel(page: &Page) -> bool {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        let first = canvas_shot(page).await;
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        canvas_shot(page).await != first
+    }
+
+    /// `KINETIC-002`, `KINETIC-009`: Firefox on Linux sends no momentum after a
+    /// flick, so a pixel glide that stops keeps the grid moving on its own. A
+    /// notch never starts that motion. The driver's wheel sends no momentum on
+    /// either engine; the test runs where that absence is the platform's.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "firefox"),
+        ignore = "the glide stands in for the momentum Firefox on Linux never sends; run just test-browser-firefox"
+    )]
+    async fn a_paused_glide_keeps_the_grid_moving_and_a_notch_never_does() {
+        let page = Page::new_document("trame").await;
+        // A notch first: the grid moves once, and is still after it.
+        wheel(&page, 1, 120).await;
+        assert!(
+            !moves_after_the_wheel(&page).await,
+            "a notch started a motion"
+        );
+        // A glide well under the notch size, then nothing.
+        wheel(&page, 12, 12).await;
+        assert!(moves_after_the_wheel(&page).await, "the glide stopped dead");
     }
 }

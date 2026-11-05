@@ -11,6 +11,10 @@ description = "The browser-driven belt: the built application, served and driven
 # off. It needs a Trunk build in `dist/` and a chromedriver
 # (`just test-browser`). Pure marker feature -- it gates test attributes only.
 browser = []
+# `firefox` drives Firefox through geckodriver instead of Chrome
+# (`just test-browser-firefox`). A test that pauses a worker through the
+# DevTools Protocol, which Firefox does not speak, is ignored under it.
+firefox = ["browser"]
 
 [dependencies]
 # Intentionally empty: the belt is tests only, and ships nothing.
