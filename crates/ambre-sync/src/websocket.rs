@@ -2377,6 +2377,190 @@ mod tests {
         );
     }
 
+    /// `SYNC-059`: holding the inbound path reports every open document
+    /// disconnected. The release reopens only while documents wait, no key
+    /// setup is owed and no socket is open.
+    #[test]
+    fn the_inbound_hold_reports_the_documents_and_the_release_reopens_when_wanted() {
+        let (mut state, rx) = with_open_document();
+        let id = *state.documents.keys().next().expect("one document");
+        state.hold_inbound();
+        assert!(matches!(
+            rx.try_iter().collect::<Vec<_>>().as_slice(),
+            [LogicEvent::ConnectionStatus { document_id, connected: ambre_core::LinkState::Disconnected }]
+                if *document_id == id
+        ));
+        state.setup_owed = true;
+        state.release_inbound();
+        assert_eq!(state.socket_opens, 0, "a setup is owed");
+
+        let (mut empty, _rx) = with_open_document();
+        empty.documents.clear();
+        empty.hold_inbound();
+        empty.release_inbound();
+        assert_eq!(empty.socket_opens, 0, "no document waits");
+
+        let (mut wanted, _rx) = with_open_document();
+        wanted.hold_inbound();
+        wanted.release_inbound();
+        assert_eq!(wanted.socket_opens, 1);
+    }
+
+    /// `SYNC-070`: a dropped socket reports every open document disconnected.
+    #[test]
+    fn a_dropped_socket_reports_every_document_disconnected() {
+        let (mut state, rx) = with_open_document();
+        let id = *state.documents.keys().next().expect("one document");
+        state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
+        assert!(rx.try_iter().any(|event| matches!(
+            event,
+            LogicEvent::ConnectionStatus { document_id, connected: ambre_core::LinkState::Disconnected }
+                if document_id == id
+        )));
+    }
+
+    /// `SYNC-063`: a renewal that fails with no dev identity backs off, and
+    /// the socket reopens once the wait is over.
+    #[test]
+    fn a_failed_renewal_backs_off_before_the_reopen() {
+        let (mut state, _rx) = with_open_document();
+        let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
+        let clock = now.clone();
+        state.clock = std::rc::Rc::new(move || Instant::<UnixMs>::new(clock.get()));
+        state.handle_sync_event(SyncEvent::Reauthenticated { ok: false });
+        now.set(249);
+        state.handle_sync_event(SyncEvent::ReconnectNow);
+        assert_eq!(state.socket_opens, 0, "early: nothing reopens");
+        now.set(250);
+        state.handle_sync_event(SyncEvent::ReconnectNow);
+        assert_eq!(state.socket_opens, 1);
+    }
+
+    /// `SYNC-153`: a replay retry asks the relay for a document it holds,
+    /// and never for a local one.
+    #[test]
+    fn a_replay_retry_asks_nothing_for_a_local_document() {
+        let (mut state, _rx, wire, id) = with_relay_document();
+        state.handle_sync_event(stopped(id));
+        state.documents.get_mut(&id).expect("open").existence = crate::Existence::LocalOnly;
+        let ticket = armed(&state, id);
+        state.handle_sync_event(retry(id, ticket));
+        assert!(
+            !sent(&wire)
+                .iter()
+                .any(|m| matches!(m, WsClientMsg::RequestMissing { .. })),
+            "a local document asked the relay"
+        );
+    }
+
+    /// A removal or a share lists the user's channels again for a channel,
+    /// and for no other kind of document (the Murmure layout spec).
+    #[test]
+    fn a_removal_or_a_share_lists_the_channels_again_for_a_channel_alone() {
+        let (mut state, _rx, _wire, prose) = with_relay_document();
+        let listed = |state: &SyncState| state.member_channels_asked.latest();
+        let before = listed(&state);
+        state.handle_ws_message(WsServerMsg::DocumentShared {
+            document_id: Id::<Document>::mint(),
+            doc_type: DocType::Prose,
+        });
+        assert_eq!(listed(&state), before, "a prose share");
+        state.handle_ws_message(WsServerMsg::DocumentShared {
+            document_id: Id::<Document>::mint(),
+            doc_type: DocType::Murmure,
+        });
+        let after_share = listed(&state);
+        assert_ne!(after_share, before, "a channel share");
+
+        let forbidden = |document_id| WsServerMsg::Error {
+            document_id: Some(document_id),
+            code: RefusalCode::Forbidden,
+        };
+        state.handle_ws_message(forbidden(prose));
+        assert_eq!(listed(&state), after_share, "a prose removal");
+        let meta = Id::<Document>::mint();
+        state.documents.insert(
+            meta,
+            SyncDocumentState::new(
+                meta,
+                DocumentKey::generate(),
+                DocType::Murmure,
+                crate::Existence::OnRelay,
+            ),
+        );
+        state.handle_ws_message(forbidden(meta));
+        assert_ne!(listed(&state), after_share, "a channel removal");
+    }
+
+    /// The answer to a segment close names whether the successor was created
+    /// or fetched, as the relay said (the Murmure segments spec).
+    #[test]
+    fn a_closed_segment_reaches_logic_with_how_its_successor_came() {
+        let (mut state, rx) = with_open_document();
+        for (created, successor) in [
+            (ambre_core::Creation::Created, ambre_bus::Successor::Created),
+            (
+                ambre_core::Creation::Existing,
+                ambre_bus::Successor::Fetched,
+            ),
+        ] {
+            state.handle_sync_event(SyncEvent::SegmentClosed {
+                channel_id: Id::<ambre_core::id::Channel>::mint(),
+                closing: Id::<ambre_core::id::Segment>::mint(),
+                result: Ok(crate::http::ClosedSegmentResponse {
+                    active: Id::<ambre_core::id::Segment>::mint(),
+                    created,
+                }),
+            });
+            assert!(matches!(
+                rx.try_iter().collect::<Vec<_>>().as_slice(),
+                [LogicEvent::SegmentClosed { successor: got, .. }] if *got == successor
+            ));
+        }
+    }
+
+    /// `SYNC-128`: a members answer that says a rotation is owed records the
+    /// debt for a writer alone, and an answer that says none records none.
+    #[test]
+    fn a_members_answer_records_an_owed_rotation_for_a_writer_alone() {
+        let answer = |document_id, rotation_owed| SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: ambre_core::Issuer::<crate::generation::Listing>::default().issue(),
+            document_id,
+            word: crate::membership_log::SpaceWord::default(),
+            rotation_owed,
+            members: Vec::new(),
+            signing_keys: Vec::new(),
+        };
+        for (role, owed, records) in [
+            (
+                ambre_bus::Role::Editor,
+                ambre_core::RotationDebt::Owed,
+                true,
+            ),
+            (
+                ambre_bus::Role::Viewer,
+                ambre_core::RotationDebt::Owed,
+                false,
+            ),
+            (
+                ambre_bus::Role::Editor,
+                ambre_core::RotationDebt::Settled,
+                false,
+            ),
+        ] {
+            let (mut state, _rx) = with_open_document();
+            let id = *state.documents.keys().next().expect("one document");
+            state.documents.get_mut(&id).expect("open").role = role;
+            state.handle_sync_event(answer(id, owed));
+            assert_eq!(
+                state.documents[&id].rekey.owes(),
+                records,
+                "{role:?} {owed:?}"
+            );
+        }
+    }
+
     /// `SRV-183`: a socket refusal reaches Logic with the status its code
     /// answers.
     #[test]

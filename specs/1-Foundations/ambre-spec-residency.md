@@ -39,7 +39,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-006` | `POST` | An evicted document MUST reach the local store before its memory is freed. | this spec section 3 | `ambre_logic::residency::tests::a_closed_document_reaches_the_store_then_leaves_memory` -- the snapshot write is queued before the release reaches Sync | none | verified |
 | `RESID-007` | `POST` | Eviction MUST take a document its application marks immutable before any other. | this spec section 3 | `ambre_core::residency::tests::an_immutable_document_leaves_before_any_other` -- an immutable copy leaves before an older mutable one | none | verified |
 | `RESID-008` | `POST` | Among the documents of one rank, eviction MUST take the least recently viewed first. | this spec section 3 | `ambre_core::residency::tests::the_least_recently_viewed_leaves_first` -- the order survives a restore; `ambre_logic::store_ledger::tests::a_reload_keeps_the_order_of_the_views` -- the ledger row round-trips; `ambre_logic::persistence::wasm_tests::ledger_rows_come_back_until_the_copy_leaves` -- wasm tier, a real browser database | none | verified |
-| `RESID-009` | `FRAME` | Evicting a document MUST NOT drop a local change the relay has not acknowledged. | this spec section 3; `ambre-spec-sync.md` | `ambre_sync::light::tests::a_release_waits_for_the_echo_of_every_frame_sent` -- the full session stays while a sent frame waits on its echo, and leaves with it | none | verified |
+| `RESID-009` | `FRAME` | Evicting a document MUST NOT drop a local change the relay has not acknowledged. | this spec section 3; `ambre-spec-sync.md` | `ambre_sync::light::tests::a_release_waits_for_the_echo_of_every_frame_sent` -- the full session stays while a sent frame waits on its echo, and leaves with it; `ambre_sync::light::tests::a_release_waits_on_every_frame_not_yet_sent` -- an update queued before the session, a creation in flight and a pending frame each hold the release, and another document's queue does not | none | verified |
 
 ### 1.3 Reopen an evicted document
 
@@ -61,6 +61,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-022` | `POST` | A document the client never held MUST be counted after the last number the relay gave for it, with no replay of the deltas up to it. | this spec section 3; `RESID-014`; `SRV-222`; `SRV-223` | `ambre_sync::light::tests::a_channel_never_opened_is_watched_after_its_last_number` -- a segment asks for what follows its last number and a reconnection resumes there, a delta at it counts nothing and the next counts; `ambre_sync::light::tests::the_meta_of_a_channel_never_opened_is_watched_after_its_last_number` -- a `meta` with a listed last number asks for what follows it and resumes there; `ambre_logic::unopened::tests::a_channel_never_opened_is_watched_once_listed_and_answered` -- each segment reaches the watch with the last number the answer gave, its `meta` with the listing's | none | verified |
 | `RESID-023` | `POST` | A rotation of a document held as a light subscription MUST give it the new key, and a document watched after under its key the same. | this spec section 3; `RESID-014`; `ambre-spec-key-rotation.md`, `SYNC-080` | `ambre_sync::light::tests::a_rotation_rekeys_a_channel_watched_unopened` -- a mention under the new key counts nothing before the rotation and one after it, the listed key follows, and a segment watched after counts under it | none | verified |
 | `RESID-024` | `POST` | A frame sealed under a key a light subscription lacks MUST ask for the document's current key once per key, and the key taken MUST replay from that frame. | this spec section 3; `RESID-023`; `ambre-spec-key-rotation.md`, `SYNC-080` | `ambre_sync::light::tests::a_frame_under_a_missing_key_fetches_it_and_replays` -- two frames under a missing key mark activity and ask once, the key taken asks from the first again and both mentions count, a key already held replays nothing | none | verified |
+| `RESID-028` | `FRAME` | A light subscription of a document the relay does not hold yet MUST NOT be subscribed on the socket. | this spec section 3; `RESID-004` | `ambre_sync::light::tests::a_local_document_released_is_never_subscribed` -- a local document released keeps its light subscription, and the socket neither replays nor subscribes it | none | verified |
 
 ### 1.5 Meet the browser quota
 
@@ -84,7 +85,7 @@ A row sealed under one session may meet another.
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 27 `verified`, by host tests on the Logic, Sync and ledger states. The browser
+* **Verification.** 28 `verified`, by host tests on the Logic, Sync and ledger states. The browser
   tier holds the quota refusal and the persistent storage request.
 
 ---
