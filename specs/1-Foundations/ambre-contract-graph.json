@@ -1266,6 +1266,7 @@
   {"edge": "verified-by", "from": "SYNC-129", "to": "ambre_sync::updates::tests::a_frame_refused_under_an_older_key_is_sent_again_at_once"},
   {"edge": "verified-by", "from": "SYNC-129", "to": "ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks"},
   {"edge": "verified-by", "from": "SYNC-129", "to": "ambre_sync::rekey::tests::a_refusal_of_an_older_key_resends_without_paying"},
+  {"edge": "verified-by", "from": "SYNC-129", "to": "ambre_sync::rekey::tests::a_key_refusal_resends_only_the_frames_still_refused"},
   {"edge": "cites-section", "from": "SYNC-168", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},
   {"edge": "cites-document", "from": "SYNC-168", "to": "5-Murmure/features/ambre-spec-murmure-channels.md"},
   {"edge": "cites-rule", "from": "SYNC-168", "to": "MURMURE-060"},

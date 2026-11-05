@@ -51,6 +51,9 @@ exclude_re = [
     # which changes no version vector.
     'relocating\.rs:9[0-9]:.*replace > with >= in ChannelState::relocate_locked',
     'relocating\.rs:10[0-9]:.*replace > with >= in ChannelState::relocate_locked',
+    # Unobservable from safe code: the mutant drops a frame unwiped, and no
+    # host test can read freed memory. `ambre_core::Secret` holds the wipe.
+    'replace UpdateFrame::wipe with \(\)',
     # Equivalent: at ten keys, truncating the cache to ten removes nothing.
     "replace > with >= in SyncDocumentState::rotate_key",
     # Host-unreachable: the socket handle exists in the browser alone, so no

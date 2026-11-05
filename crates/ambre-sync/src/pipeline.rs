@@ -1053,6 +1053,27 @@ pub fn object_author(object: &impl StoredObject) -> Result<FixedBytes<PublicKey>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A frame and a sealed blob count their bytes, and their `Debug`
+    /// prints the count alone, never a byte of what they hold.
+    #[test]
+    fn a_frame_and_a_blob_print_their_size_alone() {
+        let frame = UpdateFrame::from_bytes(b"secret".to_vec());
+        assert_eq!(frame.len(), 6);
+        assert_eq!(format!("{frame:?}"), "UpdateFrame(6 bytes)");
+        let blob = object_blob(
+            &Payload::new(b"secret".to_vec()),
+            &ambre_core::Aad::of(b"aad"),
+            &DocumentKey::generate(),
+            &SigningKey::from_bytes(&[7; 32]),
+        )
+        .expect("seal");
+        assert_eq!(
+            format!("{blob:?}"),
+            format!("SealedBlob({} bytes)", blob.len())
+        );
+        assert_eq!(blob.to_body().as_bytes(), blob.as_bytes());
+    }
     use ambre_core::PublicKey;
     use ambre_core::activity::ActivityKind;
     use ambre_core::authorship::SESSION_NONCE_LEN;

@@ -2542,7 +2542,7 @@ mod tests {
         assert!(request.bearer.is_none(), "the link is its own credential");
         let (kind, body) = request.body.as_ref().expect("a body");
         assert_eq!(*kind, ContentType::Octets);
-        assert_eq!(body.as_bytes(), blob.to_body().as_bytes());
+        assert_eq!(body.as_bytes(), blob.as_bytes());
     }
 
     /// A presigned link is its own credential. A failed upload or download
