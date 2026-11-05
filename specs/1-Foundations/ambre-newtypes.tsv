@@ -3,16 +3,16 @@
 # with the reason no generic family of ambre-core fits it. Add a line by hand only; a reviewer reads it.
 key	reason
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, and they would have to move into core. Its serde is the derived Vec<u8>, which the base64 of Encoded would change
-ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple | f32	a ratio that is finite and above zero, checked where it is built
+ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple | f32	a ratio that is finite and above zero. Bounded holds it with the least positive f32 as MIN, but a crate outside core names no float constant of Bounded, and SINGLE and ONE_AND_HALF are const
 ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
-ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed weight of one vote, which travels and is stored as the bare i32
+ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed weight of one vote, any i32, which travels and is stored as the bare i32. No family holds a signed i32 that a sum reads
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for. It moves a Bounded<Decimals> held at its bounds, an operation no family carries
 ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty. draw mints one from a random draw infallibly, which the public door of Validated cannot do
 ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key that orders as its text, the order the store ranges keys in, and every names the bounds of the whole store
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id of a registered font blob, private to the glyph atlas
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id peniko gives a registered font blob, a u64 that crate defines, private to the glyph atlas. Id holds a Uuid or a minted text alone
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId | u16	a glyph index as the shaper names it, a u16 the font defines
 ambre-chrome | src/composed.rs | crate::composed | ComposedName | String	a name composed for display alone: it converts to no String, so it is never stored (CHROME-080)
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor | Vec<u8>	an anchor bounded to MAX_ANCHOR_LEN bytes where it is built, while serde reads any length. Encoded would refuse an anchor past MAX_LEN at decode, and writes base64
@@ -26,18 +26,18 @@ ambre-core | src/color.rs | crate::color | Rgb | u32	a colour packed 0x00RRGGBB 
 ambre-core | src/color.rs | crate::color | Rgba | u32	a colour packed 0xRRGGBBAA, with channel operations
 ambre-core | src/envelope.rs | crate::envelope | Aad | Vec<u8>	associated data built and read within one seal or open: it crosses no thread, and Payload types bytes that do
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed | u64	the constant a fixture author picks: it pins the PeerID, the commit clock and the document id
-ambre-core | src/font.rs | crate::font | FontSize | f32	points, finite and not negative, read capped at FontSize::MAX (CANVAS-088)
+ambre-core | src/font.rs | crate::font | FontSize | f32	points, finite and not negative. A decode refuses a negative value yet reads one past FontSize::MAX as the cap (CANVAS-088): Bounded refuses at both ends, and PrintLength<Pt> checks nothing
 ambre-core | src/media.rs | crate::media | MediaType | String	a media type as the browser names it, such as image/png, carried whole. The upload and schema code read and match it, so it is no Opaque, and it has no rule
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey | String	an object store key the relay sorts to fetch each batch once, and its logs print whole through Display: Opaque has neither
 ambre-core | src/schema.rs | crate::schema | Fnv | u64	the running state of an FNV-1a hash, private to the step fingerprint
 ambre-core | src/schema.rs | crate::schema | StepFingerprint | u64	a migration step fingerprint, only compared and printed as sixteen hex digits
-ambre-core | src/span.rs | crate::span | FrameRate | f32	frames per second of the page clock, measured and shown, never stored or sent
+ambre-core | src/span.rs | crate::span | FrameRate | f32	frames per second of the page clock, measured and shown, never stored or sent: a rate, which no family holds
 ambre-core | src/span.rs | crate::span | LamportStamp | u64	a Lamport stamp: many peers issue stamps and two may share a value, so it is no Seq
 ambre-core | src/status.rs | crate::status | HttpStatus | u16	an HTTP status the relay answered, a u16 the HTTP standard defines
 ambre-core | src/unit.rs | crate::unit | Radians | f64	the one angle unit of the workspace, with to_degrees for a format that takes degrees
-ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millisecond: Px::per writes it and ViewSpeed::over turns it back into a move
-ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller chooses, read for equality alone and never a hash of the pixels
-ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports, a length only once WheelDelta::to_px reads it
+ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millisecond, a rate no family holds: Px is a length and TimeSpan a span. Px::per writes it and ViewSpeed::over turns it back into a move
+ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller chooses, read for equality alone and never a hash of the pixels. Id holds a Uuid or a minted text alone
+ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports: a pixel, a line or a page, known at run time. It is a length only once WheelDelta::to_px reads it, so no Px space fits
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to, one per kind, which Opaque::new would open
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo | usize	the gate depends on no workspace crate: a 1-based line number of the allowlist, for its messages
@@ -66,6 +66,6 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Depth | isize
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Diagonal | isize	a signed diagonal of the Myers graph, private to the search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | GraphOffset | isize	a signed offset into one text of the Myers graph, private to the search
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate | f64	a log-zoom rate per pixel of wheel, private to the view
-ambre-trame | src/logic/fill.rs | crate::logic::fill | Term | i64	a signed place in a fill series, private to the fill
+ambre-trame | src/logic/fill.rs | crate::logic::fill | Term | i64	a signed place in a fill series, from a Delta of either axis: a fill line runs down rows or across columns, and Delta keeps the two axes apart
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer | String	the root name of one sheet's container, joined in one place
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey | String	the 51-character key of the cell maps, a row and a column joined in one place (trame-schema)
