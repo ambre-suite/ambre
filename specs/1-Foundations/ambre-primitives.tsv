@@ -2259,6 +2259,7 @@ ambre-sync | src/fuzz.rs | crate::fuzz | open_relayed_update() | ret | Result<Ve
 ambre-sync | src/fuzz.rs | crate::fuzz | open_relayed_update(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot(bytes) | param | &[u8]	generic	generic byte/text API or codec
+ambre-sync | src/http.rs | crate::http | AuthContext::holds() | ret | bool	generic	predicate or did-it-change return
 ambre-sync | src/http.rs | crate::http | <ApiRoot as UrlKind>::NAME | const | &'static str	free-text	the name a relay address prints through Debug, for a log line
 ambre-sync | src/http.rs | crate::http | <RelayHost as UrlKind>::NAME | const | &'static str	free-text	the name a relay address prints through Debug, for a log line
 ambre-sync | src/http.rs | crate::http | <Route as UrlKind>::NAME | const | &'static str	free-text	the name a relay address prints through Debug, for a log line
@@ -3381,6 +3382,7 @@ ambre-sync | src/http.rs | crate::http | Url<Route>::query(value) | param | &str
 ambre-sync | src/generation.rs | crate::generation | <Listing as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-sync | src/generation.rs | crate::generation | <ReplayTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-sync | src/generation.rs | crate::generation | <ResendTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <RenewalTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-primitives | src/depinfo.rs | crate::depinfo | dependencies() | ret | Result<Vec<PathBuf>,String>	free-text	error messages printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | package() | ret | String	generic	the package name cargo prints in a package id, put in an error message
 ambre-primitives | src/depinfo.rs | crate::depinfo | parses_as_items() | ret | bool	generic	a predicate or a file read of the scanner
