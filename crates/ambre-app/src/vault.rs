@@ -249,7 +249,7 @@ mod tests {
             let moved = Rc::clone(&moved);
             move |rows| {
                 let row = rows.and_then(|rows| rows.into_iter().next().flatten());
-                moved.set(row.map(|row| row.into_plaintext().as_ptr()));
+                moved.set(row.map(|row| row.into_plaintext()));
             }
         });
         let (id, _) = request(&rx);
@@ -259,7 +259,7 @@ mod tests {
             rows: vec![Some(opened)],
         };
         assert!(vault.answer(Some(id), answer).is_none());
-        assert_eq!(moved.get(), Some(before));
+        assert_eq!(moved.take().map(|bytes| bytes.as_ptr()), Some(before));
     }
 
     /// A request the channel to Logic does not take waits, and leaves in

@@ -482,22 +482,21 @@ impl ChromeStatus {
     }
 }
 
-// Gated out under `cfg(test)`: the wasm-bindgen-test harness generates its own
-// entry point, which collides with this `#[wasm_bindgen(start)] fn main` ("entry
-// symbol `main` declared multiple times"). The launcher boot path is not what the
-// unit tests exercise (they cover the pure helpers -- route/base64/fps). Dropping
-// `main` from the test build is harmless.
+// The start attribute is gated out under `cfg(test)`. The wasm-bindgen-test
+// harness generates its own entry point, which collides with this one ("entry
+// symbol `main` declared multiple times"). The function stays in the test build,
+// so the test build compiles and lints the boot path it reaches. None of that
+// path then reads as dead code. No test calls it.
 /// Boot the client: the Logic thread, the Sync worker and the shell.
 ///
 /// # Panics
 ///
 /// When the browser refuses a thread or the page lacks its mount points.
-#[cfg(not(test))]
 #[expect(
     clippy::expect_used,
     reason = "the boot spawns the threads the page runs on, which has no fallback page"
 )]
-#[wasm_bindgen(start)]
+#[cfg_attr(not(test), wasm_bindgen(start))]
 pub fn main() {
     // Our crates log at the build's level, and every dependency at WARN
     // alone. Loro logs its encoding at INFO on each snapshot. The wasm layer

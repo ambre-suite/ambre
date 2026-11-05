@@ -1141,12 +1141,11 @@ mod wasm_tests {
                 if let Ok(txn) = db.transaction_with_str_and_mode(
                     IdbStore::Snapshots.name(),
                     IdbTransactionMode::Readwrite,
-                ) {
-                    if let Ok(store) = txn.object_store(IdbStore::Snapshots.name()) {
-                        let arr = Uint8Array::new_with_length(payload.len() as u32);
-                        arr.copy_from(&payload);
-                        let _ = store.put_with_key(arr.as_ref(), &key.to_js());
-                    }
+                ) && let Ok(store) = txn.object_store(IdbStore::Snapshots.name())
+                {
+                    let arr = Uint8Array::new_with_length(payload.len() as u32);
+                    arr.copy_from(&payload);
+                    let _ = store.put_with_key(arr.as_ref(), &key.to_js());
                 }
                 db.close();
             }
@@ -1267,9 +1266,9 @@ mod wasm_tests {
         let other = Id::<Document>::from_bytes([6; 16]);
         assert!(store.load_deltas(doc).await.unwrap().is_empty());
 
-        store.save_delta(doc, &row(&[1]));
-        store.save_delta(doc, &row(&[2]));
-        store.save_delta(other, &row(&[9]));
+        assert_eq!(store.save_delta(doc, &row(&[1])).await, Ok(Stored::Done));
+        assert_eq!(store.save_delta(doc, &row(&[2])).await, Ok(Stored::Done));
+        assert_eq!(store.save_delta(other, &row(&[9])).await, Ok(Stored::Done));
         let mut deltas = store.load_deltas(doc).await.unwrap();
         deltas.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
         assert_eq!(
@@ -1288,7 +1287,7 @@ mod wasm_tests {
         assert_eq!(store.load_deltas(other).await.unwrap(), vec![row(&[9])]);
 
         // A delete takes both.
-        store.save_delta(doc, &row(&[3]));
+        assert_eq!(store.save_delta(doc, &row(&[3])).await, Ok(Stored::Done));
         store.delete_snapshot(doc);
         assert!(store.load_deltas(doc).await.unwrap().is_empty());
         assert_eq!(store.load_snapshot(doc).await.unwrap(), None);
@@ -1312,7 +1311,7 @@ mod wasm_tests {
             DraftKey::new("z/b".to_owned()),
         );
         assert_eq!(store.save_snapshot(doc, &row(&[1])).await, Ok(Stored::Done));
-        store.save_delta(doc, &row(&[2]));
+        assert_eq!(store.save_delta(doc, &row(&[2])).await, Ok(Stored::Done));
         store.save_draft(&mine, &row(b"one"));
         store.save_draft(&theirs, &row(b"two"));
         store.delete_snapshot(doc);
@@ -1424,7 +1423,7 @@ mod wasm_tests {
             .expect("channel")
             .expect("the database upgrades cleanly");
         assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(row(&[1, 2])));
-        store.save_delta(doc, &row(&[4]));
+        assert_eq!(store.save_delta(doc, &row(&[4])).await, Ok(Stored::Done));
         assert_eq!(store.load_deltas(doc).await.unwrap(), vec![row(&[4])]);
         let nonce = FixedBytes::<SessionNonce>::from_array([3; 16]);
         store.save_session(doc, PeerId::new(5), nonce);
