@@ -2704,8 +2704,8 @@ ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NU
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	free-text	free text: user content, label, message or display string
+ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	generic	the column letters of an A1 reference, the input of their parse into a column position
+ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	generic	the codec of a column position: its letters, which an A1 reference spells and alpha_to_col reads back
 ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	local	private: the formulas compiled since construction, which only its own impl writes and only a test reads
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from() | ret | bool	generic	predicate or did-it-change return
@@ -2841,7 +2841,7 @@ ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | fie
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
-ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	generic	a cell text, the input of its parse into a finite number
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	one of the two formula numbers compared, the order of the two free
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	the other formula number compared, the order of the two free
@@ -2901,9 +2901,9 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | r
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	the formula number formatted to the cell format
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	newtype-inner	the per-sheet root name SheetContainer holds, which the Loro call that opens the root reads
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	generic	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::name_target(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::name_target(reference) | param | &str	generic	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
@@ -3039,10 +3039,10 @@ ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | 
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | GridCursor::css() | ret | &'static str	newtype-inner	the enum's own CSS cursor word, the value the DOM style takes
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar::sync(seed) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Invalid.0 | field | String	free-text	the column text it could not read, echoed in the message
-ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Overflow.0 | field | String	free-text	the column text past the last column, echoed in the message
-ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	free-text	the formula text where parsing stopped, echoed in the message
-ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	free-text	the formula text left unread, echoed in the message
+ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Invalid.0 | field | String	generic	the column text it could not read, echoed in the message
+ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Overflow.0 | field | String	generic	the column text past the last column, echoed in the message
+ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	generic	the formula text where parsing stopped, echoed in the message
+ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	generic	the formula text left unread, echoed in the message
 ambre-trame | src/formula/types.rs | crate::formula::types | <Arg as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <Value as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::FORBIDDEN | const | [char;7]	generic	the characters the SheetName parser refuses, which it reads one by one
