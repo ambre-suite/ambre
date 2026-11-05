@@ -8,7 +8,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_core::id::{Id, Sheet};
+use ambre_core::id::Id;
 
 // AppRoot lives in a sibling submodule; it reaches the launcher imports and
 // `Wiring` via `use super::super::*`.
