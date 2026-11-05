@@ -262,8 +262,8 @@ pub const TRAME_FIXTURES: &[&dyn FixtureGen] = &[
 ];
 
 impl FixtureGen for TrameFixture {
-    fn name(&self) -> FixtureName {
-        FixtureName::declared(match self {
+    fn name(&self) -> Result<ambre_core::Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+        ambre_core::Validated::parse(match self {
             Self::GridLiterals => "trame/grid_literals",
             Self::FormulaDag => "trame/formula_dag",
             Self::MultiSheet => "trame/multi_sheet",
@@ -529,8 +529,8 @@ pub const TRAME_BENCH_FIXTURES: &[&dyn FixtureGen] = &[
 ];
 
 impl FixtureGen for TrameBenchFixture {
-    fn name(&self) -> FixtureName {
-        FixtureName::declared(match self {
+    fn name(&self) -> Result<ambre_core::Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+        ambre_core::Validated::parse(match self {
             Self::DenseGrid100k => "trame/bench_dense_grid_100k",
             Self::FormulaGrid100k => "trame/bench_formula_grid_100k",
             Self::FormulaDag10k => "trame/bench_formula_dag_10k",

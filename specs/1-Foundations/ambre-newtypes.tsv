@@ -28,7 +28,6 @@ ambre-core | src/color.rs | crate::color | Alpha | u8	the alpha byte of a packed
 ambre-core | src/color.rs | crate::color | Rgb | u32	a colour packed 0x00RRGGBB whose top byte is zero, with channel operations
 ambre-core | src/color.rs | crate::color | Rgba | u32	a colour packed 0xRRGGBBAA, with channel operations
 ambre-core | src/envelope.rs | crate::envelope | Aad | Vec<u8>	associated data built and read within one seal or open: it crosses no thread, and Payload types bytes that do
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureName | std::borrow::Cow<'static,str>	the name a generator gives itself, a 'static literal borrowed with no allocation, or owned when a manifest is read back. Every text family of core owns a String
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed | u64	the constant a fixture author picks: it pins the PeerID, the commit clock and the document id
 ambre-core | src/font.rs | crate::font | FontSize | f32	points, finite and not negative. A decode refuses a negative value yet reads one past FontSize::MAX as the cap (CANVAS-088): Bounded refuses at both ends, and PrintLength<Pt> checks nothing
 ambre-core | src/media.rs | crate::media | MediaType | String	a media type as the browser names it, such as image/png, carried whole. The upload and schema code read and match it, so it is no Opaque, and it has no rule

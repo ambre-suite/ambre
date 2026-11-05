@@ -22,7 +22,9 @@ use std::path::{Path, PathBuf};
 
 use ambre_core::docfile::{AMBRE_VERSION, Container, DocFileError, read_ambre_plaintext};
 use ambre_core::id::{Document, Id};
-use ambre_core::{DocType, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, Schema};
+use ambre_core::{
+    DocType, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureName, FixtureShape, Schema,
+};
 
 use ambre_prose::ProseState;
 use ambre_prose::logic::fixtures::PROSE_FIXTURES;
@@ -264,7 +266,7 @@ pub fn baselines_in(dir: &Path) -> Result<Vec<(PathBuf, BenchBaseline)>, Fixture
         let text = fs::read_to_string(&path)?;
         let baseline =
             serde_json::from_str::<BenchBaseline>(&text).map_err(|e| FixtureError::Manifest {
-                name: path.to_string_lossy().into_owned(),
+                path: path.clone(),
                 reason: e.to_string(),
             })?;
         out.push((path, baseline));
@@ -355,6 +357,28 @@ const fn merged_bench_registry() -> [&'static dyn FixtureGen; BENCH_REGISTRY_LEN
 
 const BENCH_REGISTRY_LEN: usize = TRAME_BENCH_FIXTURES.len() + TOILE_BENCH_FIXTURES.len();
 
+/// One generator of a registry, under the name it parsed once for the run.
+struct Named<'r> {
+    name: Validated<FixtureName>,
+    generator: &'r dyn FixtureGen,
+}
+
+/// Every generator of `registry` under its name, in registry order.
+///
+/// The one parse of each name a walk makes. A refused name stops the walk.
+/// The run then fails with the refused text, before it touches a file.
+fn named<'r>(registry: &[&'r dyn FixtureGen]) -> Result<Vec<Named<'r>>, FixtureError> {
+    registry
+        .iter()
+        .map(|generator| {
+            Ok(Named {
+                name: generator.name()?,
+                generator: *generator,
+            })
+        })
+        .collect()
+}
+
 // -----------------------------------------------------------------------------
 // Errors
 // -----------------------------------------------------------------------------
@@ -366,8 +390,18 @@ const BENCH_REGISTRY_LEN: usize = TRAME_BENCH_FIXTURES.len() + TOILE_BENCH_FIXTU
 #[derive(Debug, thiserror::Error)]
 pub enum FixtureError {
     /// No such artifact under the corpus root.
-    #[error("no fixture named `{name}` in the corpus")]
-    NotFound { name: String },
+    #[error("no fixture at `{}` in the corpus", path.display())]
+    NotFound { path: PathBuf },
+
+    /// A generator or a command line names a fixture with a text the rule of
+    /// [`FixtureName`] refuses. The error echoes the text.
+    #[error("{0}")]
+    Name(#[from] Refused<FixtureName>),
+
+    /// A file of the corpus tree carries a stem that no fixture name, or no
+    /// frozen stem, reads as. No generator writes such a file.
+    #[error("`{}` is no artifact stem: {reason}", path.display())]
+    Stem { path: PathBuf, reason: String },
 
     /// Unreadable corpus root, permissions, IO.
     #[error("fixture corpus IO error: {0}")]
@@ -388,8 +422,8 @@ pub enum FixtureError {
 
     /// The sidecar next to an artifact is missing or is not the JSON the
     /// manifest schema describes.
-    #[error("unreadable fixture manifest for `{name}`: {reason}")]
-    Manifest { name: String, reason: String },
+    #[error("unreadable fixture manifest `{}`: {reason}", path.display())]
+    Manifest { path: PathBuf, reason: String },
 }
 
 // -----------------------------------------------------------------------------
@@ -477,7 +511,9 @@ pub fn corpus_root() -> Result<PathBuf, FixtureError> {
 /// # Errors
 ///
 /// As [`load_fixture_from`].
-pub fn load_fixture(name: &str) -> Result<(Id<Document>, DocState), FixtureError> {
+pub fn load_fixture(
+    name: &Validated<FixtureName>,
+) -> Result<(Id<Document>, DocState), FixtureError> {
     load_fixture_from(&corpus_root()?.join(CURRENT_DIR), name)
 }
 
@@ -492,7 +528,9 @@ pub fn load_fixture(name: &str) -> Result<(Id<Document>, DocState), FixtureError
 /// # Errors
 ///
 /// As [`load_fixture_from`].
-pub fn load_bench_fixture(name: &str) -> Result<(Id<Document>, DocState), FixtureError> {
+pub fn load_bench_fixture(
+    name: &Validated<FixtureName>,
+) -> Result<(Id<Document>, DocState), FixtureError> {
     load_fixture_from(&corpus_root()?.join(BENCH_DIR), name)
 }
 
@@ -506,14 +544,15 @@ pub fn load_bench_fixture(name: &str) -> Result<(Id<Document>, DocState), Fixtur
 ///
 /// [`FixtureError::NotFound`] when no artifact has that name, and
 /// [`FixtureError::Io`] when it cannot be read. Otherwise as [`import_fixture`].
-pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(Id<Document>, DocState), FixtureError> {
+pub fn load_fixture_from(
+    dir: &Path,
+    name: &Validated<FixtureName>,
+) -> Result<(Id<Document>, DocState), FixtureError> {
     let path = artifact_path(dir, name);
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(FixtureError::NotFound {
-                name: name.to_owned(),
-            });
+            return Err(FixtureError::NotFound { path });
         }
         Err(e) => return Err(FixtureError::Io(e)),
     };
@@ -572,15 +611,54 @@ pub fn import_fixture(
     Ok((document_id, state))
 }
 
-/// `<dir>/<name>.ambre`. `name` may carry `/` (`"trame/formula_dag_deep"`), which
-/// is a subdirectory, not an escape: the driver creates it.
-pub fn artifact_path(dir: &Path, name: &str) -> PathBuf {
-    dir.join(format!("{name}.{ARTIFACT_EXT}"))
+/// The stem of an artifact: its path relative to its tree, extension
+/// excluded. A [`FixtureName`] in `current/` and `bench/`, a [`FrozenEntry`]
+/// in `frozen/`.
+///
+/// The one way a stem reaches a file path, so no unchecked text forms one.
+pub trait Stem: Sized {
+    /// The stem the artifact at `relative` carries. `relative` is the path
+    /// below the tree, extension dropped.
+    ///
+    /// # Errors
+    ///
+    /// [`FixtureError::Stem`] when the rule of the stem refuses the path.
+    fn read(relative: &Path) -> Result<Self, FixtureError>;
+
+    /// The path of the artifact below its tree, extension excluded.
+    fn relative(&self) -> PathBuf;
 }
 
-/// `<dir>/<name>.manifest` -- the JSON sidecar beside the artifact.
-pub fn manifest_path(dir: &Path, name: &str) -> PathBuf {
-    dir.join(format!("{name}.{MANIFEST_EXT}"))
+/// A live name is its own stem: `trame/grid_literals` is the subdirectory
+/// `trame` and the file stem `grid_literals`.
+impl Stem for Validated<FixtureName> {
+    fn read(relative: &Path) -> Result<Self, FixtureError> {
+        let refused = |reason: String| FixtureError::Stem {
+            path: relative.to_path_buf(),
+            reason,
+        };
+        let text = relative
+            .to_str()
+            .ok_or_else(|| refused("the path is not UTF-8".to_owned()))?;
+        Self::parse(text.replace('\\', "/")).map_err(|e| refused(e.to_string()))
+    }
+
+    fn relative(&self) -> PathBuf {
+        PathBuf::from(self.as_str())
+    }
+}
+
+/// `<dir>/<stem>.ambre`. A stem may carry `/` (`"trame/formula_dag_deep"`).
+/// That `/` is a subdirectory the driver creates, not an escape. The rule of
+/// [`FixtureName`] admits no `..` and no leading `/`. No stem
+/// holds a `.`, so the extension is the only one the file name carries.
+pub fn artifact_path(dir: &Path, stem: &impl Stem) -> PathBuf {
+    dir.join(stem.relative().with_extension(ARTIFACT_EXT))
+}
+
+/// `<dir>/<stem>.manifest` -- the JSON sidecar beside the artifact.
+pub fn manifest_path(dir: &Path, stem: &impl Stem) -> PathBuf {
+    dir.join(stem.relative().with_extension(MANIFEST_EXT))
 }
 
 /// Read a sidecar back off disk. Used by `fixtures-check` and by the frozen belt,
@@ -588,21 +666,20 @@ pub fn manifest_path(dir: &Path, name: &str) -> PathBuf {
 ///
 /// # Errors
 ///
-/// [`FixtureError::NotFound`] when there is no sidecar, [`FixtureError::Io`]
-/// when it cannot be read, and [`FixtureError::Manifest`] when it does not parse.
-pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureError> {
-    let path = manifest_path(dir, name);
+/// [`FixtureError::NotFound`] when there is no sidecar, and [`FixtureError::Io`]
+/// when it cannot be read. [`FixtureError::Manifest`] when it does not parse,
+/// or names a generator the rule refuses.
+pub fn read_manifest(dir: &Path, stem: &impl Stem) -> Result<FixtureManifest, FixtureError> {
+    let path = manifest_path(dir, stem);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(FixtureError::NotFound {
-                name: name.to_owned(),
-            });
+            return Err(FixtureError::NotFound { path });
         }
         Err(e) => return Err(FixtureError::Io(e)),
     };
     serde_json::from_str(&text).map_err(|e| FixtureError::Manifest {
-        name: name.to_owned(),
+        path,
         reason: e.to_string(),
     })
 }
@@ -624,11 +701,13 @@ pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureE
 /// # Errors
 ///
 /// As [`import_fixture`], and [`FixtureError::Container`] when the bytes hold
-/// another type than the generator declares.
+/// another type than the generator declares. [`FixtureError::Name`] when the
+/// rule refuses the name of the generator.
 pub fn manifest_for(
     generator: &dyn FixtureGen,
     container: &ambre_core::Payload<ambre_core::PlaintextContainer>,
 ) -> Result<FixtureManifest, FixtureError> {
+    let name = generator.name()?;
     let (_document_id, state) = import_fixture(container)?;
     if state.doc_type() != generator.doc_type() {
         return Err(FixtureError::Container(DocFileError::WrongDocType {
@@ -636,7 +715,7 @@ pub fn manifest_for(
         }));
     }
     Ok(FixtureManifest {
-        generator: generator.name(),
+        generator: name,
         generator_version: generator.generator_version(),
         seed: generator.seed(),
         doc_type: generator.doc_type(),
@@ -676,7 +755,7 @@ pub fn write_fixture(
     let container = generator.build();
     let manifest = manifest_for(generator, &container)?;
     let bytes = container.as_bytes();
-    let artifact = artifact_path(dir, generator.name().as_str());
+    let artifact = artifact_path(dir, &manifest.generator);
     if let Some(parent) = artifact.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -684,12 +763,13 @@ pub fn write_fixture(
     // Pretty-printed with a trailing newline. The sidecar exists to be *read* in
     // a diff, and a single-line JSON blob would be as opaque as the binary it
     // describes.
+    let sidecar = manifest_path(dir, &manifest.generator);
     let mut json = serde_json::to_string_pretty(&manifest).map_err(|e| FixtureError::Manifest {
-        name: generator.name().to_string(),
+        path: sidecar.clone(),
         reason: e.to_string(),
     })?;
     json.push('\n');
-    fs::write(manifest_path(dir, generator.name().as_str()), json)?;
+    fs::write(sidecar, json)?;
     Ok(manifest)
 }
 
@@ -732,13 +812,11 @@ pub fn generate_into(
 pub fn generate_bench_into(
     registry: &[&dyn FixtureGen],
     dir: &Path,
-) -> Result<Vec<ambre_core::FixtureName>, FixtureError> {
+) -> Result<Vec<Validated<FixtureName>>, FixtureError> {
     let mut built = Vec::new();
     for generator in registry {
-        let name = generator.name();
-        if artifact_path(dir, name.as_str()).is_file()
-            && manifest_path(dir, name.as_str()).is_file()
-        {
+        let name = generator.name()?;
+        if artifact_path(dir, &name).is_file() && manifest_path(dir, &name).is_file() {
             continue;
         }
         write_fixture(*generator, dir)?;
@@ -751,38 +829,51 @@ pub fn generate_bench_into(
 // The frozen tree
 // -----------------------------------------------------------------------------
 
-/// One artifact in `fixtures/frozen/`, as its filename describes it.
+/// One artifact in `fixtures/frozen/`, as its filename describes it. Its stem
+/// is `<name>@v<ambre>-s<schema>`, relative to `frozen/`: the filename minus
+/// the extension, and what a report names. `Display` writes that stem.
 ///
 /// Membership is positional: a frozen artifact is one that sits under
 /// `frozen/`, and no flag in the manifest can contradict the path.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FrozenEntry {
-    /// The stem, `<name>@v<ambre>-s<schema>`, relative to `frozen/`. The
-    /// filename minus the extension, and what a report names.
-    pub stem: String,
-    /// The generator the artifact came from -- the part before the `@`.
-    pub generator: String,
-    /// The two versions the artifact was written at, that is, the outgoing ones.
-    pub ambre_version: Version<Container>,
-    pub schema_version: Version<Schema>,
+    generator: Validated<FixtureName>,
+    ambre_version: Version<Container>,
+    schema_version: Version<Schema>,
 }
 
 impl FrozenEntry {
-    /// Read one entry off its stem, or `None` when the stem carries no version
-    /// pair.
-    ///
-    /// Parsed rather than read from the manifest. The manifest of a frozen
-    /// artifact is a copy of the one written at freeze time. The path is the
-    /// only statement about the artifact that freezing itself produced.
-    fn parse(stem: &str) -> Option<Self> {
-        let (generator, versions) = stem.rsplit_once('@')?;
-        let (ambre, schema) = versions.strip_prefix('v')?.split_once("-s")?;
-        Some(Self {
-            stem: stem.to_owned(),
-            generator: generator.to_owned(),
-            ambre_version: Version::<Container>::new(ambre.parse().ok()?),
-            schema_version: Version::<Schema>::new(schema.parse().ok()?),
-        })
+    /// The entry of the artifact `generator` wrote at the two versions, that
+    /// is, the outgoing ones.
+    #[must_use]
+    pub const fn new(
+        generator: Validated<FixtureName>,
+        ambre_version: Version<Container>,
+        schema_version: Version<Schema>,
+    ) -> Self {
+        Self {
+            generator,
+            ambre_version,
+            schema_version,
+        }
+    }
+
+    /// The generator the artifact came from -- the part before the `@`.
+    #[must_use]
+    pub const fn generator(&self) -> &Validated<FixtureName> {
+        &self.generator
+    }
+
+    /// The container version the artifact was written at.
+    #[must_use]
+    pub const fn ambre_version(&self) -> Version<Container> {
+        self.ambre_version
+    }
+
+    /// The schema version the artifact was written at.
+    #[must_use]
+    pub const fn schema_version(&self) -> Version<Schema> {
+        self.schema_version
     }
 
     /// The ordering key of `FIXTURE-021`: the version pair, compared as two
@@ -797,18 +888,67 @@ impl FrozenEntry {
     }
 }
 
+/// The stem, `<name>@v<ambre>-s<schema>`.
+impl std::fmt::Display for FrozenEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}@v{}-s{}",
+            self.generator, self.ambre_version, self.schema_version
+        )
+    }
+}
+
+/// Read off the path rather than the manifest. The manifest of a frozen
+/// artifact is a copy of the one written at freeze time. The path is the only
+/// statement about the artifact that freezing itself produced.
+impl Stem for FrozenEntry {
+    fn read(relative: &Path) -> Result<Self, FixtureError> {
+        let refused = |reason: &str| FixtureError::Stem {
+            path: relative.to_path_buf(),
+            reason: reason.to_owned(),
+        };
+        let file = relative
+            .file_name()
+            .and_then(|file| file.to_str())
+            .ok_or_else(|| refused("no UTF-8 file name"))?;
+        let (stem, versions) = file
+            .rsplit_once('@')
+            .ok_or_else(|| refused("no `@` before the version pair"))?;
+        let (ambre, schema) = versions
+            .strip_prefix('v')
+            .and_then(|pair| pair.split_once("-s"))
+            .ok_or_else(|| refused("no `v<ambre>-s<schema>` version pair"))?;
+        let ambre = ambre.parse().map_err(|_| refused("no container version"))?;
+        let schema = schema.parse().map_err(|_| refused("no schema version"))?;
+        Ok(Self::new(
+            Validated::<FixtureName>::read(&relative.with_file_name(stem))?,
+            Version::<Container>::new(ambre),
+            Version::<Schema>::new(schema),
+        ))
+    }
+
+    fn relative(&self) -> PathBuf {
+        let mut path = self.generator.relative().into_os_string();
+        path.push(format!("@v{}-s{}", self.ambre_version, self.schema_version));
+        PathBuf::from(path)
+    }
+}
+
 /// Every artifact under `<root>/frozen/`, newest last.
 ///
 /// # Errors
 ///
-/// [`FixtureError::Io`] when the frozen tree cannot be listed.
+/// [`FixtureError::Io`] when the frozen tree cannot be listed, and
+/// [`FixtureError::Stem`] when a file of it carries no frozen stem.
 pub fn frozen_entries(root: &Path) -> Result<Vec<FrozenEntry>, FixtureError> {
     let dir = root.join(FROZEN_DIR);
-    let mut entries: Vec<FrozenEntry> = artifact_stems(&dir)?
-        .iter()
-        .filter_map(|stem| FrozenEntry::parse(stem))
-        .collect();
-    entries.sort_by(|a, b| a.age_key().cmp(&b.age_key()).then(a.stem.cmp(&b.stem)));
+    let mut entries: Vec<FrozenEntry> = artifact_stems(&dir)?;
+    entries.sort_by(|a, b| {
+        a.age_key()
+            .cmp(&b.age_key())
+            .then_with(|| a.generator.cmp(&b.generator))
+    });
     Ok(entries)
 }
 
@@ -830,18 +970,19 @@ pub const FROZEN_KEEP_PER_TYPE: usize = 3;
 ///
 /// As [`read_manifest`], [`FixtureError::Manifest`] when the target is already
 /// frozen, and [`FixtureError::Io`] when a copy fails.
-pub fn freeze(root: &Path, name: &str) -> Result<PathBuf, FixtureError> {
+pub fn freeze(root: &Path, name: &Validated<FixtureName>) -> Result<PathBuf, FixtureError> {
     let current = root.join(CURRENT_DIR);
     let manifest = read_manifest(&current, name)?;
-    let stem = format!(
-        "{name}@v{}-s{}",
-        manifest.ambre_version, manifest.schema_version
+    let stem = FrozenEntry::new(
+        name.clone(),
+        manifest.ambre_version,
+        manifest.schema_version,
     );
     let frozen = root.join(FROZEN_DIR);
     let target = artifact_path(&frozen, &stem);
     if target.exists() {
         return Err(FixtureError::Manifest {
-            name: stem,
+            path: target,
             reason: "already frozen at this version pair; a frozen artifact is written once"
                 .to_owned(),
         });
@@ -870,15 +1011,14 @@ pub fn retain_frozen(
     root: &Path,
 ) -> Result<Vec<PathBuf>, FixtureError> {
     let frozen = root.join(FROZEN_DIR);
+    let named = named(registry)?;
     let entries = frozen_entries(root)?;
     let mut kept_per_type: HashMap<DocType, usize> = HashMap::new();
     let mut dropped = Vec::new();
     // Newest first, so the cap keeps the head of each document type's run.
     for entry in entries.iter().rev() {
-        let live = registry
-            .iter()
-            .find(|g| g.name().as_str() == entry.generator);
-        let doc_type = match read_manifest(&frozen, &entry.stem) {
+        let live = named.iter().find(|g| g.name == entry.generator);
+        let doc_type = match read_manifest(&frozen, entry) {
             Ok(manifest) => manifest.doc_type,
             // An unreadable sidecar leaves the artifact unattributable, and the
             // gate reports it. Retention keeps it rather than deleting what it
@@ -887,9 +1027,9 @@ pub fn retain_frozen(
         };
         let kept = kept_per_type.entry(doc_type).or_insert(0);
         if live.is_none() || *kept >= FROZEN_KEEP_PER_TYPE {
-            dropped.push(artifact_path(&frozen, &entry.stem));
-            fs::remove_file(artifact_path(&frozen, &entry.stem))?;
-            fs::remove_file(manifest_path(&frozen, &entry.stem))?;
+            dropped.push(artifact_path(&frozen, entry));
+            fs::remove_file(artifact_path(&frozen, entry))?;
+            fs::remove_file(manifest_path(&frozen, entry))?;
             continue;
         }
         *kept += 1;
@@ -911,26 +1051,29 @@ pub enum Drift {
     /// A generator with no committed artifact (`FIXTURE-031`). Silent on the run
     /// that introduces it unless the gate says so: a new generator is a diff
     /// with nothing to diff.
-    Missing { name: String },
+    Missing { name: Validated<FixtureName> },
 
     /// A committed artifact whose generator is gone (`FIXTURE-025`). A byte diff
     /// reports nothing here, because the term it would compare against is the
     /// one that vanished.
-    Orphan { name: String },
+    Orphan { name: Validated<FixtureName> },
 
     /// A committed artifact whose bytes no longer match a regeneration
     /// (`FIXTURE-006`).
-    Bytes { name: String },
+    Bytes { name: Validated<FixtureName> },
 
     /// A committed sidecar that is unreadable, or that describes a different
     /// document from the one a regeneration produces.
-    Manifest { name: String, reason: String },
+    Manifest {
+        name: Validated<FixtureName>,
+        reason: String,
+    },
 
     /// A frozen artifact that fails one of the three semantic checks
     /// (`FIXTURE-019`). Those are its digest against its bytes and its load
     /// through the migration chain. The third is its migrated canonical dump
     /// against the live artifact its manifest names.
-    Frozen { stem: String, reason: String },
+    Frozen { stem: FrozenEntry, reason: String },
 
     /// More frozen artifacts for one document type than retention keeps
     /// (`FIXTURE-021`). The remedy is `just fixtures`, which runs the pass.
@@ -980,7 +1123,7 @@ impl std::fmt::Display for Drift {
 /// reports as degraded, and the next freeze restores the coverage.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Degraded {
-    pub stem: String,
+    pub stem: FrozenEntry,
     pub reason: String,
 }
 
@@ -1017,48 +1160,44 @@ pub fn check_corpus(
     scratch: &Path,
 ) -> Result<CorpusReport, FixtureError> {
     let current = root.join(CURRENT_DIR);
+    let named = named(registry)?;
     let mut report = CorpusReport::default();
 
-    for generator in registry {
-        let name = generator.name();
-        let name = name.as_str();
-        let fresh = write_fixture(*generator, scratch)?;
+    for generator in &named {
+        let name = &generator.name;
+        let fresh = write_fixture(generator.generator, scratch)?;
         let committed = match fs::read(artifact_path(&current, name)) {
             Ok(bytes) => ambre_core::Payload::<ambre_core::PlaintextContainer>::new(bytes),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                report.drifts.push(Drift::Missing {
-                    name: name.to_owned(),
-                });
+                report.drifts.push(Drift::Missing { name: name.clone() });
                 continue;
             }
             Err(e) => return Err(FixtureError::Io(e)),
         };
         if digest_of(&committed) != fresh.digest {
-            report.drifts.push(Drift::Bytes {
-                name: name.to_owned(),
-            });
+            report.drifts.push(Drift::Bytes { name: name.clone() });
         }
         match read_manifest(&current, name) {
             Ok(manifest) if manifest == fresh => {}
             Ok(_) => report.drifts.push(Drift::Manifest {
-                name: name.to_owned(),
+                name: name.clone(),
                 reason: "describes a different document from a regeneration".to_owned(),
             }),
             Err(e) => report.drifts.push(Drift::Manifest {
-                name: name.to_owned(),
+                name: name.clone(),
                 reason: e.to_string(),
             }),
         }
     }
 
-    for name in artifact_stems(&current)? {
-        if registry.iter().any(|g| g.name().as_str() == name) {
+    for name in artifact_stems::<Validated<FixtureName>>(&current)? {
+        if named.iter().any(|g| g.name == name) {
             continue;
         }
         report.drifts.push(Drift::Orphan { name });
     }
 
-    check_frozen(registry, root, &mut report)?;
+    check_frozen(&named, root, &mut report)?;
     report
         .drifts
         .extend(unfrozen_versions(registry, root, AMBRE_VERSION)?);
@@ -1087,7 +1226,7 @@ pub fn unfrozen_versions(
     let typed: Vec<(DocType, Version<Container>)> = frozen_entries(root)?
         .into_iter()
         .filter_map(|entry| {
-            let manifest = read_manifest(&frozen, &entry.stem).ok()?;
+            let manifest = read_manifest(&frozen, &entry).ok()?;
             Some((manifest.doc_type, entry.ambre_version))
         })
         .collect();
@@ -1117,7 +1256,7 @@ pub fn unfrozen_versions(
 /// The frozen half of [`check_corpus`], in strengthening order: the digest, the
 /// load through the migration chain, then the canonical dump.
 fn check_frozen(
-    registry: &[&dyn FixtureGen],
+    named: &[Named<'_>],
     root: &Path,
     report: &mut CorpusReport,
 ) -> Result<(), FixtureError> {
@@ -1126,11 +1265,11 @@ fn check_frozen(
     let mut per_type: Vec<(DocType, usize)> = Vec::new();
 
     for entry in frozen_entries(root)? {
-        let manifest = match read_manifest(&frozen, &entry.stem) {
+        let manifest = match read_manifest(&frozen, &entry) {
             Ok(manifest) => manifest,
             Err(e) => {
                 report.drifts.push(Drift::Frozen {
-                    stem: entry.stem.clone(),
+                    stem: entry.clone(),
                     reason: e.to_string(),
                 });
                 continue;
@@ -1141,11 +1280,11 @@ fn check_frozen(
             None => per_type.push((manifest.doc_type, 1)),
         }
         let bytes = ambre_core::Payload::<ambre_core::PlaintextContainer>::new(fs::read(
-            artifact_path(&frozen, &entry.stem),
+            artifact_path(&frozen, &entry),
         )?);
         if digest_of(&bytes) != manifest.digest {
             report.drifts.push(Drift::Frozen {
-                stem: entry.stem.clone(),
+                stem: entry.clone(),
                 reason: "bytes no longer match the digest its manifest carries".to_owned(),
             });
             continue;
@@ -1156,35 +1295,35 @@ fn check_frozen(
             Ok((_id, state)) => state,
             Err(e) => {
                 report.drifts.push(Drift::Frozen {
-                    stem: entry.stem.clone(),
+                    stem: entry.clone(),
                     reason: format!("does not load through the migration chain: {e}"),
                 });
                 continue;
             }
         };
-        let Some(live) = registry.iter().find(|g| g.name() == manifest.generator) else {
+        let Some(live) = named.iter().find(|g| g.name == manifest.generator) else {
             report.degraded.push(Degraded {
-                stem: entry.stem.clone(),
+                stem: entry.clone(),
                 reason: format!("generator `{}` no longer exists", manifest.generator),
             });
             continue;
         };
-        if live.generator_version() != manifest.generator_version {
+        let live_version = live.generator.generator_version();
+        if live_version != manifest.generator_version {
             report.degraded.push(Degraded {
-                stem: entry.stem.clone(),
+                stem: entry.clone(),
                 reason: format!(
-                    "generator is at version {}, the artifact at {}",
-                    live.generator_version(),
+                    "generator is at version {live_version}, the artifact at {}",
                     manifest.generator_version
                 ),
             });
             continue;
         }
-        let (_id, live_state) = match load_fixture_from(&current, live.name().as_str()) {
+        let (_id, live_state) = match load_fixture_from(&current, &live.name) {
             Ok(loaded) => loaded,
             Err(e) => {
                 report.drifts.push(Drift::Frozen {
-                    stem: entry.stem.clone(),
+                    stem: entry.clone(),
                     reason: format!("the live artifact it names does not load: {e}"),
                 });
                 continue;
@@ -1194,7 +1333,7 @@ fn check_frozen(
             report.frozen_held += 1;
         } else {
             report.drifts.push(Drift::Frozen {
-                stem: entry.stem.clone(),
+                stem: entry,
                 reason: "migrated dump differs from the live artifact it names".to_owned(),
             });
         }
@@ -1218,14 +1357,16 @@ fn check_frozen(
 /// # Errors
 ///
 /// [`FixtureError::Io`] when the tree cannot be listed or an artifact cannot be
-/// removed.
+/// removed. [`FixtureError::Name`] when the rule refuses the name of a
+/// generator, and [`FixtureError::Stem`] when a file carries no name.
 pub fn prune_orphans(
     registry: &[&dyn FixtureGen],
     dir: &Path,
 ) -> Result<Vec<PathBuf>, FixtureError> {
+    let named = named(registry)?;
     let mut removed = Vec::new();
-    for name in artifact_stems(dir)? {
-        if registry.iter().any(|g| g.name().as_str() == name) {
+    for name in artifact_stems::<Validated<FixtureName>>(dir)? {
+        if named.iter().any(|g| g.name == name) {
             continue;
         }
         fs::remove_file(artifact_path(dir, &name))?;
@@ -1236,19 +1377,23 @@ pub fn prune_orphans(
     Ok(removed)
 }
 
-/// Every artifact stem under `dir`, relative to it and sorted.
+/// Every artifact stem under `dir`, relative to it and sorted by path.
 ///
 /// A stem carries its subdirectory (`"trame/grid_literals"`), because that is
 /// what a generator name is. A missing directory is an empty corpus rather than
-/// an error: the first run of `just fixtures` creates the tree.
-fn artifact_stems(dir: &Path) -> Result<Vec<String>, FixtureError> {
-    let mut out = Vec::new();
-    collect_stems(dir, dir, &mut out)?;
-    out.sort();
-    Ok(out)
+/// an error: the first run of `just fixtures` creates the tree. A file whose
+/// stem the rule of `S` refuses fails the walk: no generator wrote it, and
+/// its name forms no checked path.
+fn artifact_stems<S: Stem>(dir: &Path) -> Result<Vec<S>, FixtureError> {
+    let mut relatives = Vec::new();
+    collect_stems(dir, dir, &mut relatives)?;
+    relatives.sort();
+    relatives.iter().map(|relative| S::read(relative)).collect()
 }
 
-fn collect_stems(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), FixtureError> {
+/// Walk `dir` for artifacts, pushing each path below `root`, extension
+/// dropped.
+fn collect_stems(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), FixtureError> {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -1263,11 +1408,10 @@ fn collect_stems(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), F
         if path.extension().and_then(|e| e.to_str()) != Some(ARTIFACT_EXT) {
             continue;
         }
-        // Lossy is unreachable for a tree this code wrote. The gate would flag
-        // a non-UTF-8 name that reached it as an orphan, not skip it in
-        // silence.
+        // The stem reads the path through its own rule, so a non-UTF-8 name
+        // fails the walk rather than pass in silence.
         if let Ok(relative) = path.with_extension("").strip_prefix(root) {
-            out.push(relative.to_string_lossy().replace('\\', "/"));
+            out.push(relative.to_path_buf());
         }
     }
     Ok(())
