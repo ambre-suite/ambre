@@ -37,16 +37,16 @@ const BORDER_BUTTONS: &[(BorderPreset, icondata::Icon, &str)] = &[
 ];
 
 /// The border stroke styles offered by the line-style picker (line pattern +
-/// weight). Each is paired with its label and the CSS modifier class that
-/// renders a visual preview of the stroke (see `.line-preview.*` in
-/// `styles.css`).
-const BORDER_STYLES: &[(BorderStyle, &str, &str)] = &[
-    (BorderStyle::Solid, "Solid", "solid"),
-    (BorderStyle::Medium, "Medium", "medium"),
-    (BorderStyle::Thick, "Thick", "thick"),
-    (BorderStyle::Dashed, "Dashed", "dashed"),
-    (BorderStyle::Dotted, "Dotted", "dotted"),
-    (BorderStyle::Double, "Double", "double"),
+/// weight). Each is paired with its label. `BorderStyle::css_word` names the
+/// CSS modifier class that renders a visual preview of the stroke (see
+/// `.line-preview.*` in `styles.css`).
+const BORDER_STYLES: &[(BorderStyle, &str)] = &[
+    (BorderStyle::Solid, "Solid"),
+    (BorderStyle::Medium, "Medium"),
+    (BorderStyle::Thick, "Thick"),
+    (BorderStyle::Dashed, "Dashed"),
+    (BorderStyle::Dotted, "Dotted"),
+    (BorderStyle::Double, "Double"),
 ];
 
 /// The composed borders control (`trame-cell-styles`) is a single toolbar button
@@ -140,7 +140,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                                 <div class="ambre-line-style-popover">
                                     {BORDER_STYLES
                                         .iter()
-                                        .map(|&(bs, label, css)| {
+                                        .map(|&(bs, label)| {
                                             view! {
                                                 <button
                                                     class="line-style-item"
@@ -158,7 +158,10 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                                                             <Icon icon=icondata::BsCheck />
                                                         </Show>
                                                     </span>
-                                                    <span class=format!("line-preview {css}")></span>
+                                                    <span class=format!(
+                                                        "line-preview {}",
+                                                        bs.css_word(),
+                                                    )></span>
                                                 </button>
                                             }
                                         })

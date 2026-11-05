@@ -209,7 +209,10 @@ pub use span::{
     LamportStamp, Months, Ms, Ns, PageLoad, Relayed, Sec, SheetDateTime, SheetDay, StoredAsI64,
     Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
 };
-pub use static_key::{Canvases, Categories, CommandNames, Commands, Icons, KeyKind, StaticKey};
+pub use static_key::{
+    Attributes, Canvases, Categories, CommandNames, Commands, CssClasses, Icons, KeyKind,
+    StaticKey, StorageKeys,
+};
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusWord,
     UnreadableCause, WriteStatus,

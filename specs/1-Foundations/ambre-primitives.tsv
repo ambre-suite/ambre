@@ -40,13 +40,12 @@ ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | para
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell, as PipeHost::clip_published declares it
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	generic	fact flag of the probe timeline, selects no mode
-ambre-app | src/host/probe.rs | crate::host::probe | mark_count(name) | param | &str	free-text	metric name
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.dirty | field | bool	generic	dirty flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.fatal | field | bool	generic	state flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text(text) | param | String	free-text	dropped text
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::signal_fatal(message) | param | &str	free-text	message
-ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
-ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
+ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	foreign-api	the value of the iframe allow attribute, which one set_attribute call alone reads
+ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	foreign-api	the value of the iframe sandbox attribute, which one set_attribute call alone reads
 ambre-app | src/landing.rs | crate::landing | SignInMode::from_dev_flag(dev) | param | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/landing.rs | crate::landing | SignInMode::is_dev() | ret | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/landing.rs | crate::landing | open_document(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
@@ -65,16 +64,13 @@ ambre-app | src/local_store.rs | crate::local_store | Inner.frames | field | Cel
 ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32	math	frame count
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
-ambre-app | src/platform.rs | crate::platform | DEV_USER_KEY | const | &str	free-text	single storage key literal
-ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before the rule of a DisplayName reads it
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
-ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before the rule of a DisplayName reads it
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
-ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	free-text	worker URL
+ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	local	the address of the Sync worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | doc_path() | ret | String	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | needs_reload() | ret | bool	generic	predicate result
@@ -84,8 +80,7 @@ ambre-app | src/route.rs | crate::route | type_slug() | ret | &'static str	gener
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
 ambre-app | src/shell/mod.rs | crate::shell | ShellWiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
-ambre-app | src/signin.rs | crate::signin | PENDING_STATE_KEY | const | &str	free-text	single session-storage key literal
-ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	free-text	path prefix literal
+ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	generic	the path prefix of a provider return address, which is_return_path and parse_return match back: part of the codec of that address
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_return_path() | ret | bool	generic	predicate result
@@ -155,7 +150,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() |
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.html | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
+ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	generic	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | <TextChangeSeq as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
@@ -166,15 +161,15 @@ ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue.0 | fiel
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue::as_str() | ret | &str	newtype-inner	MarkValue accessor, for the Loro mark call and the clipboard payload that carry text
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadColor.0 | field | String	generic	the refused value the error echoes
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadFontSize.0 | field | String	generic	the refused value the error echoes
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_color() | ret | String	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | String	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | read_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell() | ret | String	free-text	the canonical spelling of a number, wrapped into a MarkValue by its callers
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_color() | ret | String	generic	the canonical spelling of a colour mark value, which the constructor wraps into a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | String	generic	the canonical spelling of a numeric mark value, which the constructor wraps into a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	generic	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	generic	the raw text of a colour mark value, the input of its parse
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	generic	the raw text of a size mark value, the input of its parse
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | read_font_size(raw) | param | &str	generic	the raw text of a size mark value, the input of its parse
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell() | ret | String	generic	the canonical spelling of a number, wrapped into a MarkValue by its callers
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell(value) | param | f32	math	a typed size's points, or the number a stored or command string reads as
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	generic	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipElement.notes | field | Option<String>	free-text	user text
@@ -274,6 +269,7 @@ ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::is_single_cell() | re
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::overlaps() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | <Col as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-bus | src/app/grid.rs | crate::app::grid | <Row as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BorderStyle::css_word() | ret | &'static str	newtype-inner	the spelling of a fieldless enum that the stylesheet matches back, as the class of the preview of each border style
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
@@ -397,7 +393,7 @@ ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>
 ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
 ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | url_flag() | ret | bool	generic	predicate result
-ambre-canvas | src/host.rs | crate::host | url_flag(flag) | param | &str	free-text	text, label or message
+ambre-canvas | src/host.rs | crate::host | url_flag(flag) | param | &str	local	the name of the one flag this private function looks for in the query of the page address
 ambre-canvas | src/intent.rs | crate::intent | FilterOpenPublisher.slot | field | Rc<Cell<bool>>	generic	named state or style flag, local
 ambre-canvas | src/intent.rs | crate::intent | FilterOpenPublisher::take() | ret | bool	generic	predicate result
 ambre-canvas | src/intent.rs | crate::intent | NoticePublisher.queue | field | Rc<RefCell<Vec<String>>>	free-text	text, label or message
@@ -540,7 +536,6 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape(text) | param 
 ambre-canvas | src/text_cache.rs | crate::text_cache | registered_family_name() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | ContentKind::label() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | ContentKind::role_description() | ret | &'static str	free-text	text, label or message
-ambre-canvas | src/text_input.rs | crate::text_input | TYPING_ATTR | const | &str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput.focus_requests | field | Rc<Cell<u32>>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput::announce(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput::focus_requests() | ret | u32	math	geometry, layout, GPU or count arithmetic
@@ -555,7 +550,7 @@ ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit() | re
 ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused colour text
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	free-text	the Palette field name of each typed colour, written into the generated Rust module
+ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	generic	the codec of a struct that is no newtype: the Palette field name of each typed colour, which the generated Rust module spells and the compiler matches back
 ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);13]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated files the stylesheets read
 ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'static str,&dyn fmt::Display);4]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed effect, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
@@ -590,7 +585,6 @@ ambre-chrome | src/composed.rs | crate::composed | UNTITLED | const | &str	free-
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.disabled | field | bool	generic	state flag/predicate
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.label | field | String	free-text	text, label or user content
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem::label() | ret | &str	free-text	text, label or user content
-ambre-chrome | src/dialog.rs | crate::dialog | Dialog(class) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/dialog.rs | crate::dialog | Dialog(label) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/dialog.rs | crate::dialog | ModalHold.0 | field | Arc<dyn Fn(bool)+Send+Sync>	newtype-inner	newtype inner
 ambre-chrome | src/dialog.rs | crate::dialog | ModalHold::new(set) | param | impl Fn(bool)+Send+Sync+'static	newtype-inner	ModalHold constructor
@@ -1314,7 +1308,7 @@ ambre-murmure | src/emoji.rs | crate::emoji | entry(name) | param | &'static str
 ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	free-text	the English name of an Emoji, the label a screen reader hears; the emoji itself is the typed Emoji
 ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	free-text	the words a user types in the picker's search box, matched against the English names
 ambre-murmure | src/error.rs | crate::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
-ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.found | field | String	free-text	untrusted word / Loro error text (not Eq)
+ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.found | field | String	generic	the stored kind word a document carried where another kind was expected, echoed in the refusal
 ambre-murmure | src/list.rs | crate::list | BAND_DAMAGED | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | BAND_KEYS | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | BAND_RETRY | const | &str	free-text	UI text/label const
@@ -1372,7 +1366,7 @@ ambre-murmure | src/members.rs | crate::members | is_presence_sample() | ret | b
 ambre-murmure | src/mention.rs | crate::mention | fits() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/mention.rs | crate::mention | fits(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/mention.rs | crate::mention | names() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/mention.rs | crate::mention | value_of() | ret | String	free-text	text, label or user content
+ambre-murmure | src/mention.rs | crate::mention | value_of() | ret | String	generic	the codec of a mention mark: the id text of a user or of this channel, which the store keeps and target_of reads back
 ambre-murmure | src/mention_list.rs | crate::mention_list | AT_CHANNEL | const | &str	free-text	UI text/label const
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer::written() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches() | ret | bool	generic	state flag/predicate
@@ -1928,20 +1922,20 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations.0 | field | Vec<(CssProperty,&'a str)>	newtype-inner	each property of a pasted style with its value as the paste spells it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::hidden() | ret | bool	generic	whether a pasted style hides its element, which the reader then skips
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::names() | ret | bool	generic	whether a pasted style names a property, whatever its value
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::of(style) | param | &'a str	free-text	a pasted element's style attribute, parsed once into its declarations
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::of(style) | param | &'a str	generic	a pasted element's style attribute, parsed once into its declarations
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.pre | field | usize	local	how many preformatted elements the private reader is inside
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::ends_blank() | ret | bool	generic	whether the text read so far ends on a space, so the next collapsed white space adds none
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::flush() | ret | bool	generic	whether closing the block wrote one, which marks its parent as written
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::push_str(text) | param | &str	free-text	pasted text after white space collapsed, appended to the current run
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::text(text) | param | &str	free-text	a text node of the pasted HTML, before its white space collapses
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	free-text	an attribute value as the pasted HTML spells it
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	free-text	a colour value of a pasted style; the parse returns an Rgba
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	free-text	a font-family list of a pasted style; its first usable name becomes a MarkValue
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	free-text	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through Px<Doc>
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	generic	an attribute value as the pasted HTML spells it, before the reader parses it
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	generic	a colour value of a pasted style, the input of its parse into an Rgba
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	generic	a font-family list of a pasted style, the input of its parse; its first usable name becomes a MarkValue
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	generic	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through Px<Doc>
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	whether a pasted colour reads as the page's body ink, so it sets no mark
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	foreign-api	the type attribute of a pasted ordered list as html5ever yields it; the match returns an OrderedStyle
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	the HTML a paste carries
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | set(raw) | param | &str	free-text	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | set(raw) | param | &str	generic	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	whether the pasted HTML holds more counted elements open than DEPTH_MAX
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep(html) | param | &str	free-text	the HTML a paste carries, scanned before any tree is built
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ELEMENTS | const | [(MarkRoot,&str);7]	generic	each flag mark with the HTML element name a copy writes for it, in nesting order
@@ -1962,11 +1956,11 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(html) | param | Option<&str>	free-text	the HTML half of the clipboard, read when this application's bytes are absent
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	the plain-text half of the clipboard, read when no richer half is usable
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	pasted plain text of several lines, one paragraph per line
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	free-text	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	generic	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family() | ret | bool	generic	whether a paste keeps a family name: not empty, short enough, no control or closing character
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family(name) | param | &str	free-text	family name of a pasted mark, checked before it lands
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family(name) | param | &str	generic	family name of a pasted mark, the input of the check that decides whether it lands
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link() | ret | bool	generic	whether a paste keeps a link: one a reader follows to a page or a mail, never one that runs
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link(href) | param | &str	free-text	link target of a pasted mark, checked before it lands
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link(href) | param | &str	generic	link target of a pasted mark, the input of the check of its scheme that decides whether it lands
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::parse_error(_msg) | param | Cow<'static,str>	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::same_node() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::insert(index) | param | usize	local	the place of a child among its parent's children, in the private arena's own vector
@@ -1999,11 +1993,11 @@ ambre-prose | src/logic/interop.rs | crate::logic::interop | accepts() | ret | b
 ambre-prose | src/logic/interop.rs | crate::logic::interop | cell_styled() | ret | bool	generic	whether a table cell stores a look of its own, which an export reports as lost
 ambre-prose | src/logic/interop.rs | crate::logic::interop | <Op as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/logic/marks.rs | crate::logic::marks | KeySeen::with(carried) | param | bool	generic	whether the run folded in carries the key, a fact that selects no mode
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	free-text	the raw value a command carries; validate_value turns it into a MarkValue before the document is touched
+ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	generic	the raw value a command carries; validate_value turns it into a MarkValue before the document is touched
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	one block's text run by run, each with the style the cascade resolves for it
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
-ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	the raw value validate_value refused, echoed in the refusal; a refused value is by definition no MarkValue
+ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	generic	the raw value validate_value refused, echoed in the refusal; a refused value is by definition no MarkValue
 ambre-prose | src/logic/mod.rs | crate::logic | <Faces as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	whether the engine took the session identity; false leaves the document as it was
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	whether a command names a band or a note, which no structural command may touch
@@ -2154,7 +2148,7 @@ ambre-server | src/error.rs | crate::error | AppError::Oidc.0 | field | String	f
 ambre-server | src/error.rs | crate::error | AppError::PayloadTooLarge.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Redis.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::S3.0 | field | String	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	free-text	the path segment that named no provider, echoed in the refusal
+ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	generic	the path segment that named no provider, echoed in the refusal
 ambre-server | src/error.rs | crate::error | AppError::caller_message() | ret | String	free-text	message
 ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret | bool	generic	predicate result
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
@@ -2165,15 +2159,15 @@ ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch() | ret | Resul
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch(keep) | param | Option<usize>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark() | ret | bool	generic	predicate result
 ambre-server | src/hot_tail.rs | crate::hot_tail | trim() | ret | Result<u64,AppError>	math	trimmed count
-ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	free-text	config list text
-ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	free-text	config list text
+ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	generic	the configured list of allowed origins, before parse_cors_origins reads it into header values
+ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	generic	the configured list of allowed origins, the input of its parse into header values
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | <Requests as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Peer::forwarded(entry) | param | &str	free-text	one X-Forwarded-For entry before its parse: an address, or a socket address whose port is dropped
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Peer::forwarded(entry) | param | &str	generic	one X-Forwarded-For entry before its parse: an address, or a socket address whose port is dropped
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::classify(path) | param | &str	generic	path classifier
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::fail_closed() | ret | bool	generic	predicate result
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	free-text	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	generic	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
 ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
@@ -2239,7 +2233,7 @@ ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::try_consume() | ret | bool	generic	predicate result
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | <Topic as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of Topic, lent through Borrow
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId.0 | field | String	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNEL | const | &str	free-text	private hub channel name constant
+ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNEL | const | &str	foreign-api	the name of the private Redis channel of the hub, which one subscribe call alone reads
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_keys.rs | crate::redis_keys | DocumentStateKeys::texts() | ret | [&str;8]	foreign-api	the key texts a DEL, EXISTS or EVAL of the store takes
@@ -2704,14 +2698,14 @@ ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | 
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopover(values) | param | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | col_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_BUTTONS | const | &[(BorderPreset,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_STYLES | const | &[(BorderStyle,&str,&str)]	free-text	free text: user content, label, message or display string
+ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_STYLES | const | &[(BorderStyle,&str)]	free-text	the label a person reads beside each border style of the picker
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | H_ALIGNS | const | &[(HAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NUMBER_FORMATS | const | &[(CellFormat,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	free-text	free text: user content, label, message or display string
+ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	generic	the column letters of an A1 reference, the input of their parse into a column position
+ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	generic	the codec of a column position: its letters, which an A1 reference spells and alpha_to_col reads back
 ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	local	private: the formulas compiled since construction, which only its own impl writes and only a test reads
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from() | ret | bool	generic	predicate or did-it-change return
@@ -2847,7 +2841,7 @@ ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | fie
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
-ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	generic	a cell text, the input of its parse into a finite number
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	one of the two formula numbers compared, the order of the two free
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	the other formula number compared, the order of the two free
@@ -2907,9 +2901,9 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | r
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	the formula number formatted to the cell format
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	newtype-inner	the per-sheet root name SheetContainer holds, which the Loro call that opens the root reads
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	generic	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::name_target(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::name_target(reference) | param | &str	generic	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
@@ -3045,10 +3039,10 @@ ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | 
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | GridCursor::css() | ret | &'static str	newtype-inner	the enum's own CSS cursor word, the value the DOM style takes
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar::sync(seed) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Invalid.0 | field | String	free-text	the column text it could not read, echoed in the message
-ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Overflow.0 | field | String	free-text	the column text past the last column, echoed in the message
-ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	free-text	the formula text where parsing stopped, echoed in the message
-ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	free-text	the formula text left unread, echoed in the message
+ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Invalid.0 | field | String	generic	the column text it could not read, echoed in the message
+ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Overflow.0 | field | String	generic	the column text past the last column, echoed in the message
+ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	generic	the formula text where parsing stopped, echoed in the message
+ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	generic	the formula text left unread, echoed in the message
 ambre-trame | src/formula/types.rs | crate::formula::types | <Arg as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <Value as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::FORBIDDEN | const | [char;7]	generic	the characters the SheetName parser refuses, which it reads one by one
@@ -3137,7 +3131,7 @@ ambre-core | src/mode.rs | crate::mode | ThreadState::is_resolved() | ret | bool
 ambre-core | src/mode.rs | crate::mode | ThreadState::resolved_if(resolved) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::Raw | assoc | String	generic	the refused value the error echoes
-ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	free-text	the manifest's wire word for a build with no commit id
+ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	generic	the manifest's wire word for a build with no commit id, which the serde codec writes and matches back
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(Pos<Block>,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | IdxVec<SlashChoice,&'static str>	free-text	the labels of the slash menu entries
 ambre-prose | src/view/slash.rs | crate::view::slash | <SlashChoice as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -3150,7 +3144,7 @@ ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_titl
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::FALLBACK_STEM | const | &'static str	free-text	a stem the suite names itself
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(name) | param | &str	free-text	the name another user sent, which the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(fallback) | param | &'static str	free-text	a stem the suite names itself
-ambre-core | src/export_file.rs | crate::export_file | is_kept_extension(extension) | param | &str	free-text	the extension a received name ends with
+ambre-core | src/export_file.rs | crate::export_file | is_kept_extension(extension) | param | &str	local	the extension a received name ends with, which this private function tests against the kept list alone
 ambre-core | src/export_file.rs | crate::export_file | is_kept_extension() | ret | bool	generic	predicate
 ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character(c) | param | char	free-text	a character of the title or the received name the stem is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character() | ret | bool	generic	predicate
@@ -3955,6 +3949,9 @@ ambre-core | src/static_key.rs | crate::static_key | <Categories as KeyKind>::NA
 ambre-core | src/static_key.rs | crate::static_key | <CommandNames as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Commands as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Icons as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/static_key.rs | crate::static_key | <StorageKeys as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/static_key.rs | crate::static_key | <CssClasses as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/static_key.rs | crate::static_key | <Attributes as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | StaticKey.text | field | &'static str	newtype-inner	StaticKey newtype, the key text a const table names
 ambre-core | src/static_key.rs | crate::static_key | StaticKey<K>::as_str() | ret | &'static str	newtype-inner	StaticKey newtype, the key text a const table names
 ambre-core | src/static_key.rs | crate::static_key | StaticKey<K>::new(value) | param | &'static str	newtype-inner	StaticKey newtype, the key text a const table names

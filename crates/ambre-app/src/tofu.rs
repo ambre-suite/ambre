@@ -177,7 +177,11 @@ pub(crate) fn TofuDialog(
     let on_close = Callback::new(move |()| prompt.set(None));
 
     view! {
-        <Dialog open=open on_close=on_close class="ambre-tofu">
+        <Dialog
+            open=open
+            on_close=on_close
+            class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-tofu")}
+        >
             {move || {
                 prompt
                     .get()

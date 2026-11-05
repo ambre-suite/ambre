@@ -131,6 +131,37 @@ impl KeyKind for Canvases {
     const NAME: &'static str = "CanvasId";
 }
 
+/// A key of the browser's local or session storage. The code writes the
+/// value under the key and reads it back by the same key, so a typo in one
+/// place loses the value.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StorageKeys {}
+
+impl sealed::Sealed for StorageKeys {}
+impl KeyKind for StorageKeys {
+    const NAME: &'static str = "StorageKey";
+}
+
+/// A class that the code puts on an element and a stylesheet selects. The
+/// stylesheet matches the class back, so it is no text a person reads.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CssClasses {}
+
+impl sealed::Sealed for CssClasses {}
+impl KeyKind for CssClasses {
+    const NAME: &'static str = "CssClass";
+}
+
+/// The name of an attribute that the code sets on an element and reads back
+/// off it, possibly from another crate.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Attributes {}
+
+impl sealed::Sealed for Attributes {}
+impl KeyKind for Attributes {
+    const NAME: &'static str = "AttributeName";
+}
+
 impl StaticKey<Canvases> {
     /// The content canvas, the central one that every application paints.
     pub const CONTENT: Self = Self::new("ambre-canvas");
@@ -165,6 +196,23 @@ mod tests {
         assert_eq!(
             format!("{:?}", StaticKey::<Commands>::new("a.b")),
             "CommandId(\"a.b\")"
+        );
+    }
+
+    #[test]
+    fn each_new_kind_prints_its_own_name() {
+        use super::{Attributes, CssClasses, StorageKeys};
+        assert_eq!(
+            format!("{:?}", StaticKey::<StorageKeys>::new("a.b")),
+            "StorageKey(\"a.b\")"
+        );
+        assert_eq!(
+            format!("{:?}", StaticKey::<CssClasses>::new("c")),
+            "CssClass(\"c\")"
+        );
+        assert_eq!(
+            format!("{:?}", StaticKey::<Attributes>::new("data-x")),
+            "AttributeName(\"data-x\")"
         );
     }
 

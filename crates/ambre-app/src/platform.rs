@@ -199,7 +199,10 @@ pub(crate) async fn read_clipboard_item(
 /// the old full-page-load workaround. The landing's dev-login field dispatches
 /// `DevLogin` directly thereafter. The `https://`->`{url_scheme}://` fix lives
 /// in `ambre-sync`.
-pub(crate) fn dev_user_from_url() -> Option<String> {
+///
+/// `None` when the address names no user, or a text that breaks the rule of
+/// a display name.
+pub(crate) fn dev_user_from_url() -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
     let window = web_sys::window()?;
     window
         .location()
@@ -207,39 +210,40 @@ pub(crate) fn dev_user_from_url() -> Option<String> {
         .ok()
         .and_then(|s| web_sys::UrlSearchParams::new_with_str(&s).ok())
         .and_then(|p| p.get("user"))
-        .map(|u| u.trim().to_string())
-        .filter(|u| !u.is_empty())
+        .and_then(|u| ambre_core::Validated::<ambre_core::DisplayName>::parse(u).ok())
 }
 
 /// localStorage key holding the active dev username, so a refresh
 /// re-establishes the dev session without `?user=` in the URL.
-const DEV_USER_KEY: &str = "ambre.dev_user";
+const DEV_USER_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =
+    ambre_core::StaticKey::new("ambre.dev_user");
 
-/// Read the dev username remembered from a prior session, if any.
-pub(crate) fn stored_dev_user() -> Option<String> {
+/// Read the dev username remembered from a prior session, if any. `None`
+/// when no name is stored, or when the stored text breaks the rule of a
+/// display name.
+pub(crate) fn stored_dev_user() -> Option<ambre_core::Validated<ambre_core::DisplayName>> {
     web_sys::window()?
         .local_storage()
         .ok()
         .flatten()?
-        .get_item(DEV_USER_KEY)
+        .get_item(DEV_USER_KEY.as_str())
         .ok()
         .flatten()
-        .map(|u| u.trim().to_owned())
-        .filter(|u| !u.is_empty())
+        .and_then(|u| ambre_core::Validated::<ambre_core::DisplayName>::parse(u.trim()).ok())
 }
 
 /// Remember `username` as the active dev identity (dev-only; the derived keys are
 /// never stored, only the name they are re-derived from).
 pub(crate) fn remember_dev_user(username: &ambre_core::Validated<ambre_core::DisplayName>) {
     if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
-        let _ = storage.set_item(DEV_USER_KEY, username.as_str());
+        let _ = storage.set_item(DEV_USER_KEY.as_str(), username.as_str());
     }
 }
 
 /// Forget the remembered dev identity, so the next boot signs no one in.
 pub(crate) fn forget_dev_user() {
     if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
-        let _ = storage.remove_item(DEV_USER_KEY);
+        let _ = storage.remove_item(DEV_USER_KEY.as_str());
     }
 }
 
@@ -569,7 +573,7 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
     // typed text, so a bare tool key still arms its tool.
     let typing = target
         .dyn_ref::<web_sys::Element>()
-        .and_then(|el| el.get_attribute(ambre_canvas::TYPING_ATTR));
+        .and_then(|el| el.get_attribute(ambre_canvas::TYPING_ATTR.as_str()));
     if typing.as_deref() == Some("false") {
         return false;
     }

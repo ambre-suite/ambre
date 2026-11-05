@@ -224,7 +224,7 @@ pub fn SortDialog(
     view! {
         <ambre_chrome::Dialog
             open=open
-            class="ambre-sort-modal"
+            class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-sort-modal")}
             label="Sort range"
             on_close=Callback::new(move |()| close())
         >

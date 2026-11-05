@@ -11,7 +11,8 @@
 // ============================================================================
 
 /// sessionStorage key holding the `state` of the sign-in this tab started.
-const PENDING_STATE_KEY: &str = "ambre.signin.state";
+const PENDING_STATE_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =
+    ambre_core::StaticKey::new("ambre.signin.state");
 
 /// The path prefix the provider returns to. The deployment registers
 /// `/signin/<provider>` as the provider's redirect address.
@@ -85,7 +86,7 @@ pub(crate) fn follow_address(
         return false;
     };
     if state
-        .present_state(|text| storage.set_item(PENDING_STATE_KEY, text))
+        .present_state(|text| storage.set_item(PENDING_STATE_KEY.as_str(), text))
         .is_err()
     {
         return false;
@@ -135,8 +136,8 @@ fn session_storage() -> Option<web_sys::Storage> {
 /// Read and clear the remembered state: one return per sign-in.
 fn take_pending_state() -> Option<ambre_core::Credential<ambre_core::OidcState>> {
     let storage = session_storage()?;
-    let state = storage.get_item(PENDING_STATE_KEY).ok().flatten();
-    let _ = storage.remove_item(PENDING_STATE_KEY);
+    let state = storage.get_item(PENDING_STATE_KEY.as_str()).ok().flatten();
+    let _ = storage.remove_item(PENDING_STATE_KEY.as_str());
     state.map(ambre_core::Credential::new)
 }
 
@@ -256,7 +257,7 @@ mod tests {
         );
         session_storage()
             .unwrap()
-            .set_item(PENDING_STATE_KEY, "st1")
+            .set_item(PENDING_STATE_KEY.as_str(), "st1")
             .unwrap();
         let mut reloaded = false;
         leave_session(|| reloaded = true);
