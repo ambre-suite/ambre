@@ -447,7 +447,6 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId::of_blob(blob
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId.0 | field | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::get() | ret | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::new(index) | param | u16	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey.0 | field | u32	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload.bytes | field | Vec<u8>	generic	raw texel bytes the GPU copies
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.height | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.width | field | u32	math	geometry, layout, GPU or count arithmetic
@@ -3847,6 +3846,8 @@ ambre-core | src/index.rs | crate::index | Span<A>::is_empty() | ret | bool	gene
 ambre-core | src/index.rs | crate::index | Span<A>::to_usize_range() | ret | Range<usize>	generic	the span as the range of slice indices a foreign API takes: the codec of a struct of two fields
 ambre-canvas | src/space.rs | crate::space | <GlyphRaster as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-canvas | src/space.rs | crate::space | <GlyphRaster as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <RasterKey as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-canvas | src/space.rs | crate::space | <RasterKey as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <Parley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-canvas | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/space.rs | crate::space | <TokenCss as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
