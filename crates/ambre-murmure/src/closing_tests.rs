@@ -386,6 +386,20 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
 /// identifier and Bob's reaction. Alice's check accepts it there.
 #[test]
 fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
+    move_refused_message(false);
+}
+
+/// The rewind starts at the least counter the refused deltas name. A caller
+/// that lists them out of order still moves every refused message
+/// (`MURMURE-263`).
+#[test]
+fn the_rewind_starts_at_the_first_refused_operation_in_any_order() {
+    move_refused_message(true);
+}
+
+/// Bob's message and reaction, refused for the lock, listed in the order
+/// they left or in the reverse one.
+fn move_refused_message(reversed: bool) {
     let mut alice = channel(1);
     let (alice_user, bob_user) = (Id::<User>::mint(), Id::<User>::mint());
     alice.send(&draft("one"), alice_user, NOW).expect("send");
@@ -440,8 +454,12 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     )
     .expect("adopt");
 
+    let mut refused = [waiting.delta, reacted.delta];
+    if reversed {
+        refused.reverse();
+    }
     let relocated = bob
-        .relocate_locked(old.document_id(), &[waiting.delta, reacted.delta])
+        .relocate_locked(old.document_id(), &refused)
         .expect("relocate");
     assert!(relocated.replay.is_empty(), "no older message changed");
     let sent = relocated.sent.expect("a message moves");

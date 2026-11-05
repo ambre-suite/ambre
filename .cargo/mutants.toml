@@ -37,12 +37,20 @@ exclude_re = [
     # range, which Loro takes as no operation.
     "replace > with >= in ChannelState::edit",
     "replace > with >= in ChannelState::delete",
+    "replace > with >= in fold_into",
     # Cost only: the byte probe spaces its snapshot exports. Each mutant moves
     # when the next export runs, and the close still fires at the first export
     # past the bound.
     "replace < with == in ChannelState::passes_bytes",
     'replace / with \* in ChannelState::passes_bytes',
     "replace / with % in ChannelState::passes_bytes",
+    # Equivalent: Loro reads a counter of 0 in a version vector as an absent
+    # peer, so keeping a peer at 0 forks at the same version.
+    "replace > with >= in ChannelState::relayed_amendments",
+    # Equivalent: each mutant also writes a counter equal to the one held,
+    # which changes no version vector.
+    'relocating\.rs:9[0-9]:.*replace > with >= in ChannelState::relocate_locked',
+    'relocating\.rs:10[0-9]:.*replace > with >= in ChannelState::relocate_locked',
     # Equivalent: at ten keys, truncating the cache to ten removes nothing.
     "replace > with >= in SyncDocumentState::rotate_key",
     # Host-unreachable: the socket handle exists in the browser alone, so no
