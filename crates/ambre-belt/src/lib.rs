@@ -18,6 +18,10 @@ mod busy;
 #[cfg(test)]
 mod driver;
 #[cfg(test)]
+mod frame;
+#[cfg(test)]
+mod ime;
+#[cfg(test)]
 mod page;
 #[cfg(test)]
 mod prose;

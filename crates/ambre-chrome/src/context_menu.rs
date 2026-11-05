@@ -207,14 +207,16 @@ pub fn ContextMenu(
     // whatever is underneath. A right-click on the canvas reaches the canvas, so
     // it re-selects the cell (pointerdown) and reopens the menu at the new point
     // (contextmenu). A backdrop would have swallowed both -- the menu moved but
-    // the selection stayed on the old cell. Registered once (the menu is a shell
-    // singleton); it no-ops while closed and ignores clicks inside the menu.
+    // the selection stayed on the old cell. Registered once per mount; it no-ops
+    // while closed or unmounted, and ignores clicks inside the menu.
     // Without a document, there is no outside to click: the menu still closes
     // on Escape and on a command.
     if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         let cb =
             Closure::<dyn FnMut(web_sys::PointerEvent)>::new(move |e: web_sys::PointerEvent| {
-                if pos.get_untracked().is_none() {
+                // The listener outlives the menu: a menu bar unmounts its
+                // menu on each presentation, and `pos` is disposed then.
+                if pos.try_get_untracked().flatten().is_none() {
                     return;
                 }
                 // A click inside the menu is the item handlers' business; ignore it.

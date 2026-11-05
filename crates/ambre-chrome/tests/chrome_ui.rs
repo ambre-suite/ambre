@@ -22,8 +22,8 @@
 
 use ambre_chrome::{
     AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatBar, FormatControl,
-    FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, StatusBar, ToastHost,
-    ToastKind, Toasts, Toolbar, ZoomChip,
+    FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, Sidebar, StatusBar,
+    ToastHost, ToastKind, Toasts, Toolbar, ZoomChip,
 };
 use ambre_core::FontSize;
 use ambre_core::{Categories, Commands, StaticKey};
@@ -1179,4 +1179,414 @@ async fn an_open_modal_unmounted_releases_the_loop() {
     drop(modal.handle.take());
     assert_eq!(modal.holds(), 0, "the unmount released the hold");
     modal.root.remove();
+}
+
+// -- The floating menu (context_menu.rs) -------------------------------------
+
+/// A command of the floating menu's test table, labelled `title`.
+fn ctx_command(
+    id: &'static str,
+    title: fn(&ambre_commands::Locale) -> String,
+) -> ambre_commands::Command {
+    ambre_commands::Command {
+        id: StaticKey::<Commands>::new(id),
+        title,
+        icon: None,
+        keybindings: &[],
+        category: StaticKey::<Categories>::new(""),
+    }
+}
+
+/// Five rows, a separator after the second: `Copy`, `Cut`, then `Paste`,
+/// `Clear` and `Delete`. `Delete` is disabled.
+fn ctx_entries() -> Vec<MenuEntry> {
+    let en = ambre_commands::Locale::En;
+    vec![
+        MenuEntry::command(&ctx_command("t.copy", |_| "Copy".into()), &en),
+        MenuEntry::command(&ctx_command("t.cut", |_| "Cut".into()), &en),
+        MenuEntry::separator(),
+        MenuEntry::command(&ctx_command("t.paste", |_| "Paste".into()), &en),
+        MenuEntry::command(&ctx_command("t.clear", |_| "Clear".into()), &en),
+        MenuEntry::command(&ctx_command("t.delete", |_| "Delete".into()), &en).disabled(),
+    ]
+}
+
+/// A floating menu mounted closed, the point that opens it, and every command
+/// it ran, in order.
+struct FloatingMenu {
+    root: web_sys::Element,
+    pos: RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::Css>>>>,
+    ran: RwSignal<Vec<StaticKey<Commands>>>,
+}
+
+impl FloatingMenu {
+    /// Mounts the menu over [`ctx_entries`], beside a button outside it.
+    fn mount() -> Self {
+        let pos = RwSignal::new(None);
+        let ran = RwSignal::new(Vec::new());
+        let on_command = Callback::new(move |id| ran.update(|r| r.push(id)));
+        let root = mount_in_container(move || {
+            view! {
+                <button class="test-outside">"Outside"</button>
+                <ContextMenu pos=pos entries=ctx_entries() on_command=on_command/>
+            }
+        });
+        Self { root, pos, ran }
+    }
+
+    /// Opens the menu and waits for its render.
+    async fn open(&self) -> web_sys::Element {
+        self.pos.set(Some(css_point(20.0, 20.0)));
+        leptos::task::tick().await;
+        self.menu().unwrap()
+    }
+
+    fn menu(&self) -> Option<web_sys::Element> {
+        self.root.query_selector(".ambre-ctx-menu").unwrap()
+    }
+
+    /// The label of the row that holds the focus.
+    fn focused(&self) -> Option<String> {
+        let el = active()?;
+        el.matches("[role=menuitem]").ok()?.then_some(())?;
+        el.query_selector(".ambre-ctx-label").ok()??.text_content()
+    }
+}
+
+/// Presses `key` on the menu and waits for the focus to follow.
+async fn press_menu(menu: &web_sys::Element, key: &str) {
+    press(menu, key);
+    leptos::task::tick().await;
+}
+
+/// Dispatch a bubbling primary `pointerdown` on `target`, as a press there
+/// raises.
+fn pointer_down(target: &web_sys::EventTarget) {
+    let init = web_sys::PointerEventInit::new();
+    init.set_bubbles(true);
+    init.set_cancelable(true);
+    init.set_is_primary(true);
+    let ev = web_sys::PointerEvent::new_with_event_init_dict("pointerdown", &init).unwrap();
+    target.dispatch_event(&ev).unwrap();
+}
+
+/// The floating menu is operable from the keyboard alone (`CHROME-026`). The
+/// arrows move, wrap and skip the separator. Home and End jump to the ends. A
+/// letter jumps to the next row it starts, and Enter runs the focused row.
+#[wasm_bindgen_test]
+async fn the_floating_menu_is_operable_by_keyboard_alone() {
+    let owner = Owner::new();
+    owner.set();
+    let m = FloatingMenu::mount();
+    let menu = m.open().await;
+    assert_eq!(
+        m.focused().as_deref(),
+        Some("Copy"),
+        "the menu took the focus"
+    );
+
+    press_menu(&menu, "ArrowDown").await;
+    assert_eq!(m.focused().as_deref(), Some("Cut"));
+    press_menu(&menu, "ArrowDown").await;
+    assert_eq!(
+        m.focused().as_deref(),
+        Some("Paste"),
+        "the separator is skipped"
+    );
+    press_menu(&menu, "End").await;
+    assert_eq!(m.focused().as_deref(), Some("Delete"));
+    press_menu(&menu, "ArrowDown").await;
+    assert_eq!(m.focused().as_deref(), Some("Copy"), "ArrowDown wrapped");
+    press_menu(&menu, "ArrowUp").await;
+    assert_eq!(m.focused().as_deref(), Some("Delete"), "ArrowUp wrapped");
+    press_menu(&menu, "Home").await;
+    assert_eq!(m.focused().as_deref(), Some("Copy"));
+
+    press_menu(&menu, "p").await;
+    assert_eq!(m.focused().as_deref(), Some("Paste"), "a letter jumps");
+    press_menu(&menu, "c").await;
+    assert_eq!(
+        m.focused().as_deref(),
+        Some("Clear"),
+        "to the next row it starts"
+    );
+    press_menu(&menu, "c").await;
+    assert_eq!(m.focused().as_deref(), Some("Copy"), "and wraps");
+    press_menu(&menu, "x").await;
+    assert_eq!(
+        m.focused().as_deref(),
+        Some("Copy"),
+        "a letter no row starts moves nothing"
+    );
+    assert!(m.ran.get_untracked().is_empty(), "moving runs nothing");
+
+    press_menu(&menu, "c").await;
+    assert_eq!(m.focused().as_deref(), Some("Cut"));
+    press_menu(&menu, "Enter").await;
+    assert_eq!(
+        m.ran.get_untracked(),
+        vec![StaticKey::<Commands>::new("t.cut")],
+        "Enter ran the focused row"
+    );
+    assert!(m.menu().is_none(), "and closed the menu");
+    assert_eq!(m.pos.get_untracked(), None, "and cleared its point");
+    m.root.remove();
+}
+
+/// A disabled row runs nothing, neither from the keyboard nor from a click,
+/// and the menu stays open (`CHROME-112`).
+#[wasm_bindgen_test]
+async fn a_disabled_row_runs_nothing_from_the_keyboard_or_the_pointer() {
+    let owner = Owner::new();
+    owner.set();
+    let m = FloatingMenu::mount();
+    let menu = m.open().await;
+    press_menu(&menu, "End").await;
+    assert_eq!(m.focused().as_deref(), Some("Delete"));
+    let row: web_sys::HtmlElement = active().unwrap().dyn_into().unwrap();
+    assert_eq!(row.get_attribute("aria-disabled").as_deref(), Some("true"));
+
+    press_menu(&menu, "Enter").await;
+    press_menu(&menu, " ").await;
+    row.click();
+    leptos::task::tick().await;
+    assert!(m.ran.get_untracked().is_empty(), "the disabled row ran");
+    assert!(m.menu().is_some(), "the menu stays open");
+    m.pos.set(None);
+    leptos::task::tick().await;
+    m.root.remove();
+}
+
+/// A press outside the open menu closes it and runs nothing. A press inside
+/// it leaves it open (`CHROME-111`).
+#[wasm_bindgen_test]
+async fn a_press_outside_closes_the_floating_menu_and_one_inside_does_not() {
+    let owner = Owner::new();
+    owner.set();
+    let m = FloatingMenu::mount();
+    let menu = m.open().await;
+
+    let row = menu.query_selector("[data-idx=\"2\"]").unwrap().unwrap();
+    pointer_down(&row);
+    leptos::task::tick().await;
+    assert!(m.menu().is_some(), "a press inside keeps the menu");
+
+    let outside = m.root.query_selector(".test-outside").unwrap().unwrap();
+    pointer_down(&outside);
+    leptos::task::tick().await;
+    assert!(m.menu().is_none(), "a press outside closes the menu");
+    assert_eq!(m.pos.get_untracked(), None);
+    assert!(m.ran.get_untracked().is_empty(), "and runs nothing");
+    m.root.remove();
+}
+
+/// A press anywhere once the floating menu is unmounted throws nothing
+/// (`CHROME-113`). The press listener lives on the document, past the menu,
+/// and a Toile menu bar unmounts its menu on each presentation.
+#[wasm_bindgen_test]
+async fn a_press_after_the_floating_menu_is_unmounted_throws_nothing() {
+    let child = Owner::new();
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let target: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let handle = child.with(|| {
+        let pos = RwSignal::new(Some(css_point(10.0, 10.0)));
+        mount_to(target, move || {
+            view! { <ContextMenu pos=pos entries=ctx_entries() on_command=Callback::new(|_| {})/> }
+        })
+    });
+    leptos::task::tick().await;
+    assert!(root.query_selector(".ambre-ctx-menu").unwrap().is_some());
+    // What a `Show` does when it hides its children: unmount, then dispose.
+    drop(handle);
+    child.cleanup();
+    root.remove();
+
+    let thrown = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = std::rc::Rc::clone(&thrown);
+    let on_error = wasm_bindgen::closure::Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+        count.set(count.get() + 1);
+    });
+    let window = web_sys::window().unwrap();
+    let listener = on_error.as_ref().unchecked_ref();
+    window
+        .add_event_listener_with_callback("error", listener)
+        .unwrap();
+    pointer_down(&document().body().unwrap());
+    window
+        .remove_event_listener_with_callback("error", listener)
+        .unwrap();
+    assert_eq!(thrown.get(), 0, "the press threw");
+}
+
+// -- The command palette, driven by keys (palette.rs) -------------------------
+
+/// The palette is operable from the keyboard alone (`CHROME-114`). The arrows
+/// move the highlight and wrap. Enter runs the highlighted row, and Escape
+/// closes the palette with nothing run.
+#[wasm_bindgen_test]
+async fn the_palette_is_operable_by_keyboard_alone() {
+    let owner = Owner::new();
+    owner.set();
+    let open = RwSignal::new(Openness::Open);
+    let ran = RwSignal::new(Vec::new());
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=PALETTE_TABLE
+                on_command=Callback::new(move |id| ran.update(|r: &mut Vec<_>| r.push(id)))
+            />
+        }
+    });
+    leptos::task::tick().await;
+    let query = root
+        .query_selector(".ambre-palette-query")
+        .unwrap()
+        .unwrap();
+    let highlighted = || {
+        root.query_selector(".ambre-palette-row[aria-selected=true] .ambre-palette-label")
+            .unwrap()
+            .and_then(|e| e.text_content())
+    };
+    assert_eq!(highlighted().as_deref(), Some("Command palette"));
+
+    press(&query, "ArrowUp");
+    leptos::task::tick().await;
+    assert_eq!(
+        highlighted().as_deref(),
+        Some("Merge cells"),
+        "ArrowUp wrapped"
+    );
+    press(&query, "ArrowDown");
+    press(&query, "ArrowDown");
+    leptos::task::tick().await;
+    assert_eq!(
+        highlighted().as_deref(),
+        Some("Recalculate everything"),
+        "ArrowDown wrapped"
+    );
+    press(&query, "Enter");
+    leptos::task::tick().await;
+    assert_eq!(
+        ran.get_untracked(),
+        vec![StaticKey::<Commands>::new("t.engine.recalc")],
+        "Enter ran the highlighted row"
+    );
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Closed,
+        "and closed the palette"
+    );
+
+    open.set(Openness::Open);
+    leptos::task::tick().await;
+    press(&query, "Escape");
+    leptos::task::tick().await;
+    assert_eq!(open.get_untracked(), Openness::Closed, "Escape closed it");
+    assert_eq!(ran.get_untracked().len(), 1, "Escape ran nothing");
+    // The native close lands on a later task: wait for it while the modal lives.
+    sleep(10).await;
+    root.remove();
+}
+
+/// Each open starts from a blank query on the first row (`CHROME-115`), so
+/// the last search never picks the row the next Enter runs.
+#[wasm_bindgen_test]
+async fn a_reopened_palette_starts_blank_on_the_first_row() {
+    let owner = Owner::new();
+    owner.set();
+    let open = RwSignal::new(Openness::Open);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandPalette open=open table=PALETTE_TABLE on_command=Callback::new(|_| {})/>
+        }
+    });
+    leptos::task::tick().await;
+    let query: web_sys::HtmlInputElement = root
+        .query_selector(".ambre-palette-query")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    query.set_value("merge");
+    query
+        .dispatch_event(&web_sys::Event::new("input").unwrap())
+        .unwrap();
+    press(&query, "ArrowDown");
+    leptos::task::tick().await;
+    assert_eq!(palette_labels(&root), vec!["Merge cells".to_owned()]);
+
+    open.set(Openness::Closed);
+    sleep(10).await;
+    open.set(Openness::Open);
+    sleep(10).await;
+    assert_eq!(query.value(), "", "the query is blank");
+    assert_eq!(
+        palette_labels(&root).len(),
+        PALETTE_TABLE.len(),
+        "every row is back"
+    );
+    let first = root.query_selector(".ambre-palette-row").unwrap().unwrap();
+    assert_eq!(
+        first.get_attribute("aria-selected").as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        active().as_ref(),
+        Some(query.as_ref()),
+        "the query holds the caret"
+    );
+    open.set(Openness::Closed);
+    sleep(10).await;
+    root.remove();
+}
+
+// -- The shell slots (app_shell.rs) ------------------------------------------
+
+/// The shell puts the toolbar and the sidebar an application hands it in
+/// their regions. The sidebar folds from its own control and stays in the
+/// page, its name kept.
+#[wasm_bindgen_test]
+async fn the_shell_fills_its_toolbar_and_sidebar_and_the_sidebar_folds() {
+    let owner = Owner::new();
+    owner.set();
+    let root = mount_in_container(|| {
+        view! {
+            <AppShell>
+                <Header slot>"H"</Header>
+                <Toolbar slot><button class="test-tool">"Bold"</button></Toolbar>
+                <Sidebar slot label="Channels"><p class="test-nav">"General"</p></Sidebar>
+            </AppShell>
+        }
+    });
+    assert!(
+        root.query_selector(".ambre-commandbar .test-tool")
+            .unwrap()
+            .is_some()
+    );
+    let nav = root.query_selector("nav.ambre-sidebar").unwrap().unwrap();
+    assert_eq!(nav.get_attribute("aria-label").as_deref(), Some("Channels"));
+    assert!(nav.query_selector(".test-nav").unwrap().is_some());
+    let fold: web_sys::HtmlElement = nav
+        .query_selector(".ambre-sidebar-fold")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    assert_eq!(fold.get_attribute("aria-expanded").as_deref(), Some("true"));
+
+    fold.click();
+    leptos::task::tick().await;
+    assert_eq!(
+        fold.get_attribute("aria-expanded").as_deref(),
+        Some("false")
+    );
+    assert_eq!(nav.get_attribute("data-expanded").as_deref(), Some("false"));
+    assert!(nav.is_connected(), "a folded sidebar stays in the page");
+
+    fold.click();
+    leptos::task::tick().await;
+    assert_eq!(nav.get_attribute("data-expanded").as_deref(), Some("true"));
+    root.remove();
 }
