@@ -50,4 +50,11 @@ exclude_re = [
     # alone. The browser tier holds both.
     'replace SyncState::send_wire with \(\)',
     'replace run_wasm with \(\)',
+    'in SyncState::wire_ws_callbacks',
+    # The browser transport: host tests drive a scripted transport in its
+    # place, and the browser tier drives this one.
+    '<impl MediaHttp for GlooHttp>',
+    '<impl ShareHttp for GlooHttp>',
+    '<impl Transport for Fetch>',
+    'Method::gloo',
 ]

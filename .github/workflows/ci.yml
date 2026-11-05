@@ -441,9 +441,10 @@ jobs:
   # ---------------------------------------------------------------------------
   # mutants -- mutation testing over the scope of `.cargo/mutants.toml`, on the
   # host tier (`ambre-spec-testing.md section 2`). Non-blocking, and on the
-  # default branch alone: the whole scope costs about six hours on one runner,
-  # so a branch push leaves it to `mutants-diff`. Eight shards of about 45 min
-  # each, built in place in the restored cache. Each uploads its report.
+  # default branch alone. The whole scope took 1 h 56 min on four cores with
+  # three jobs (measured 2026-11-05), so a branch push leaves it to
+  # `mutants-diff`. Eight shards, each built in place in the restored cache.
+  # Each uploads its report.
   # ---------------------------------------------------------------------------
   mutants:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -478,6 +479,8 @@ jobs:
   # mutants-diff -- the mutants of the lines a pull request changes in the
   # scope of `.cargo/mutants.toml`. Blocking: a surviving mutant is a changed
   # line no test would fail on. A pull request outside the scope tests none.
+  # A fix of 179 lines in ambre-sync took 4 min, build included (measured
+  # 2026-11-05 on four cores).
   # ---------------------------------------------------------------------------
   mutants-diff:
     if: github.event_name == 'pull_request'
