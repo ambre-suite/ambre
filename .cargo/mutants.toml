@@ -54,6 +54,9 @@ exclude_re = [
     # Unobservable from safe code: the mutant drops a frame unwiped, and no
     # host test can read freed memory. `ambre_core::Secret` holds the wipe.
     'replace UpdateFrame::wipe with \(\)',
+    # Log only: the count of skipped rows decides whether a warning is
+    # written, and nothing else reads it.
+    'replace > with (==|<|>=) in presence_directory',
     # Equivalent: at ten keys, truncating the cache to ten removes nothing.
     "replace > with >= in SyncDocumentState::rotate_key",
     # Host-unreachable: the socket handle exists in the browser alone, so no

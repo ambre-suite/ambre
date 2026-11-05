@@ -2492,8 +2492,27 @@ mod tests {
                     status,
                     ..
                 },
+                message,
                 ..
-            }) if status.get() == 409
+            }) if status.get() == 409 && message.contains("key changed")
+        ));
+
+        // Another refusal is no rotation: it says so in its own words.
+        let http = FakeHttp::new(vec![
+            Ok(user_search_json("invitee@test.local", &i_pub)),
+            Ok(serde_json::json!({ "members": [] })),
+            Err(http::HttpError::refused(
+                http::Method::Post,
+                &crate::http::Target::relay("https://api.test/share"),
+                ambre_core::HttpStatus::new(403),
+                None,
+            )),
+        ]);
+        let (etx, _erx, sink, lrx) = channels();
+        invite_task(&http, invite_params(&my_xk, expect), &etx, &sink).await;
+        assert!(matches!(
+            lrx.try_recv(),
+            Ok(LogicEvent::ApiError { message, .. }) if !message.contains("key changed")
         ));
     }
 
@@ -3654,6 +3673,7 @@ mod tests {
             (entry.member, entry.author),
             (bob.author.user_id, bob.author.user_id)
         );
+        assert_eq!(entry.role, Role::Editor, "the role the leaver held");
         let text = body["entry"].as_str().unwrap();
         let log = logged.walk(&[text]);
         assert_eq!(log.standing(bob.author.user_id).0, MemberStanding::Revoked);
@@ -3696,9 +3716,69 @@ mod tests {
         };
         assert!(url.ends_with(&format!("/members/{}", bob.author.user_id)));
         assert_eq!(body["role"], "viewer");
+        assert_eq!(
+            posted_entry(body).member_key,
+            FixedBytes::from_array(bob.author.signing_key.verifying_key().to_bytes()),
+            "the entry names the key of the member it changes"
+        );
         let text = body["entry"].as_str().unwrap();
         let log = logged.walk(&[text]);
         assert_eq!(log.standing(bob.author.user_id).1, Some(Role::Viewer));
+    }
+
+    /// The refusal of a log that moved, as the relay answers it.
+    fn log_moved() -> http::HttpError {
+        http::HttpError::refused(
+            http::Method::Post,
+            &crate::http::Target::relay("https://api.test/share"),
+            ambre_core::HttpStatus::new(409),
+            Some(RefusalCode::LogMoved),
+        )
+    }
+
+    /// `SYNC-132`: a log that keeps moving ends an invite and a leave after
+    /// their tries, each read again before it is signed again.
+    #[tokio::test]
+    async fn a_log_that_keeps_moving_ends_after_the_tries() {
+        let owner = Peer::new(1);
+        let bob = Peer::new(2);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &bob, Role::Editor);
+
+        let (_invitee_xk, invitee_hex) = keypair(3);
+        let mut params = invite_params(&owner.xk, invitee_hex);
+        params.document_id = logged.document_id;
+        params.doc_key = logged.doc_key.clone();
+        params.author = same(&owner.author);
+        let mut script = vec![Ok(user_search_json("invitee@test.local", &invitee_hex))];
+        for _ in 0..ROTATION_TRIES {
+            script.extend([Ok(logged.answer()), Err(log_moved())]);
+        }
+        let http = FakeHttp::new(script);
+        let (etx, erx, sink, lrx) = channels();
+        invite_task(&http, params, &etx, &sink).await;
+        assert!(erx.try_recv().is_err(), "nothing was invited");
+        assert!(matches!(lrx.try_recv(), Ok(LogicEvent::ApiError { .. })));
+        assert_eq!(http.calls().len(), 1 + 2 * ROTATION_TRIES);
+
+        let params = LeaveParams {
+            id: ambre_bus::next_request(),
+            document_id: logged.document_id,
+            author: same(&bob.author),
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: bob.xk.clone(),
+        };
+        let mut script = Vec::new();
+        for _ in 0..ROTATION_TRIES {
+            script.extend([Ok(logged.answer()), Err(log_moved())]);
+        }
+        let http = FakeHttp::new(script);
+        let (etx, erx, sink, lrx) = channels();
+        leave_task(&http, params, &etx, &sink).await;
+        assert!(erx.try_recv().is_err(), "nothing was left");
+        assert!(matches!(lrx.try_recv(), Ok(LogicEvent::ApiError { .. })));
+        assert_eq!(http.calls().len(), 2 * ROTATION_TRIES);
     }
 
     /// Holds `SYNC-108` and `SYNC-110` at the list: a row no valid entry

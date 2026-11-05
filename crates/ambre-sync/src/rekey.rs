@@ -385,6 +385,20 @@ mod tests {
         r
     }
 
+    /// `SYNC-129`: a frame sealed again answers to its new signature alone,
+    /// and no other frame changes.
+    #[test]
+    fn a_frame_sealed_again_is_echoed_under_its_new_signature() {
+        let mut r = three_sent();
+        r.resealed(Seq::<DeltaAuthor>::new(2), sig(22));
+        r.confirm(&sig(2));
+        assert_eq!(r.unconfirmed(), 3, "the old signature confirmed a frame");
+        r.confirm(&sig(22));
+        assert_eq!(r.unconfirmed(), 1, "clock 3 still waits");
+        r.confirm(&sig(3));
+        assert_eq!(r.unconfirmed(), 0);
+    }
+
     /// `SYNC-129`: a key refusal is resent once the key lands, unless the
     /// frame left the log first. An echo of an earlier frame keeps the
     /// refusal. A clock refusal at or below it takes the refusal, so a frame
