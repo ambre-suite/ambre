@@ -23,10 +23,10 @@
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
-use ambre_bus::{Inbox, Outbox, PasteSource, Port, SendOutcome, UiEvent};
+use ambre_bus::{Inbox, Load, Outbox, PasteSource, Port, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
-    BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
+    BusyLevel, BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
     NoticePublisher, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, ModifierKeys};
@@ -110,6 +110,15 @@ pub struct ProseView {
     /// The keystrokes in flight, from their input to their frame.
     probe: KeyProbe,
     timeline: super::probe::Timeline,
+}
+
+/// The busy level the renderer shows for an outbox load (`BUS-016`). The
+/// renderer knows no thread protocol, so the view converts the load here.
+fn busy_level(load: Load) -> BusyLevel {
+    match load {
+        Load::Free => BusyLevel::Free,
+        Load::Busy => BusyLevel::Busy,
+    }
 }
 
 /// The width and the height of a canvas box, as the view pixels the page
@@ -242,7 +251,7 @@ impl ProseView {
             let (outbox, document_id) = (&mut self.outbox, self.document_id);
             let mut send = |command| send_edit(outbox, document_id, command);
             self.dirty |= self.state.replay(&mut send).is_yes();
-            self.busy_pub.publish(self.outbox.load());
+            self.busy_pub.publish(busy_level(self.outbox.load()));
         }
         if self.shown != Some(self.state.word_count) {
             self.shown = Some(self.state.word_count);
@@ -264,7 +273,7 @@ impl ProseView {
         let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
         if let Some(command) = self.state.take_intent(intent, now) {
             send_edit(&mut self.outbox, self.document_id, command);
-            self.busy_pub.publish(self.outbox.load());
+            self.busy_pub.publish(busy_level(self.outbox.load()));
         }
         self.publish_hover();
         self.dirty = true;
@@ -291,7 +300,7 @@ impl ProseView {
         if let Some(command) = self.state.format(id) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
     }
 
     /// Act on a released ruler handle: one command for the whole drag
@@ -308,7 +317,7 @@ impl ProseView {
         if let Some(command) = self.state.ruler_release(release) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
     }
 
     /// Publish the ruler in pixels of the view. The release comes back in
@@ -353,7 +362,7 @@ impl ProseView {
             .state
             .handle_input(&ProseInput::SlashPick(index), &mut send)
             .is_yes();
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
     }
 
     /// Publish the slash menu where the view placed it.
@@ -421,7 +430,7 @@ impl ProseView {
             self.signal_fatal("Logic thread disconnected");
             return;
         }
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
     }
 
     /// Announce the block the caret entered (`CHROME-023`). A move inside the
@@ -617,7 +626,7 @@ impl ProseView {
                 if let Some(url) = self.state.followed.take() {
                     self.annotations.followed.set(Some(url));
                 }
-                self.busy_pub.publish(self.outbox.load());
+                self.busy_pub.publish(busy_level(self.outbox.load()));
                 self.publish_toolbar();
                 self.dirty |= consumed.is_yes();
                 consumed
@@ -663,7 +672,7 @@ impl ProseView {
         let (outbox, document_id) = (&mut self.outbox, self.document_id);
         let mut send = |command| send_edit(outbox, document_id, command);
         let consumed = self.state.handle_input(input, &mut send);
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
         self.publish_toolbar();
         self.dirty |= consumed.is_yes();
         consumed

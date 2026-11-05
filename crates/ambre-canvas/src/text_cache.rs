@@ -11,9 +11,8 @@
 // shaping cost. Only new or changed strings trigger a shape call.
 // ============================================================================
 
-use ambre_bus::Byte;
 use ambre_core::index::Span;
-use ambre_core::{Doc, Px, View};
+use ambre_core::{Byte, Doc, Px, View};
 
 use ambre_draw::{Brush, BundledFamily, Color};
 use parley::style::{
@@ -551,9 +550,8 @@ impl TextCache {
 #[cfg(test)]
 mod tests {
     use super::{SpanShape, TextCache, registered_family_name};
-    use ambre_bus::Byte;
     use ambre_core::index::Span;
-    use ambre_core::{Px, View};
+    use ambre_core::{Byte, Px, View};
     use parley::{Alignment, FontContext};
 
     /// The face the family `label` names resolves to.

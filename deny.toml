@@ -15,7 +15,7 @@
 #     instead of one silent line in a `Cargo.toml`.
 #
 # Invariants mechanised here: `ZK-002`, `ZK-003`, `ZK-004`, `SRV-012`, `SYNC-011`,
-# `ARCH-020` (`ambre-spec-zero-knowledge.md`, `ambre-spec-server.md`,
+# `ARCH-020`, `ARCH-071` (`ambre-spec-zero-knowledge.md`, `ambre-spec-server.md`,
 # `ambre-spec-sync.md`, `ambre-spec-architecture.md`).
 
 [graph]
@@ -155,6 +155,17 @@ wrappers = ["ambre-canvas", "ambre-app"]
 [[bans.deny]]
 name = "swash"
 wrappers = ["ambre-canvas", "parley"]
+
+# The protocol between the threads. The renderer knows no thread protocol
+# (`ARCH-071`): a view converts what it reads off the bus into a type of the
+# canvas. Every crate that speaks the protocol is named here, so a new direct
+# dependant, the renderer first, is a reviewed edit of this file.
+[[bans.deny]]
+name = "ambre-bus"
+wrappers = [
+    "ambre-app", "ambre-logic", "ambre-murmure", "ambre-prose", "ambre-sync", "ambre-toile",
+    "ambre-trame",
+]
 
 [sources]
 unknown-registry = "deny"

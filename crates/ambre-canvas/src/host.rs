@@ -27,8 +27,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
 use crate::{QuadRenderer, SurfaceSize, TextCache};
-use ambre_bus::{Instant, Ms, PageLoad, TimeSpan};
-use ambre_core::{Px, Size, Texel};
+use ambre_core::{Instant, Ms, PageLoad, Px, Size, Texel, TimeSpan};
 
 // -----------------------------------------------------------------------------
 // GpuState
