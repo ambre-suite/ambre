@@ -25,10 +25,10 @@ use kurbo::Rect;
 
 use ambre_core::id::{Element, Id};
 
-// The `SnapElement` / `FrameSnapshot` capture DTOs live in `ambre-bus`, so the
+// The `SnapElement` / `FrameSnapshot` capture DTOs live in `crate::message`, so the
 // enriched `SlideChanged` event can carry them to the render thread. That
 // thread owns no board state. This solver stays here as the sole consumer.
-pub use ambre_bus::app::toile::{FrameSnapshot, SnapElement};
+pub use crate::message::{FrameSnapshot, SnapElement};
 
 /// A transition phase, in `0.0 ..= 1.0`: the marker of a [`Bounded<Phase>`].
 /// The lowest value shows the source, the highest the target. It is never

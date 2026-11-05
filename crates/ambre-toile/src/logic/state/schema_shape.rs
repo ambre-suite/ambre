@@ -260,8 +260,8 @@ fn postcard_layouts() -> Vec<(String, String)> {
         opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.25).unwrap(),
         corner: Px::<StoredBoard>::new(3.5),
         font: FontSpec {
-            family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
-            size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
+            family: Some(crate::message::FontFamily::Other("f".to_owned())),
+            size: crate::message::FontSizeChoice::try_from(7.5).unwrap(),
             weight: ambre_core::Bounded::<ambre_core::FontWeight>::BOLD,
             italic: ambre_core::Slant::Italic,
             underline: ambre_core::Underline::Underlined,
@@ -278,7 +278,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let layout = AutoLayout {
         direction: Direction::Vertical,
         gap: Px::<Board>::new(1.5),
-        padding: ambre_bus::app::toile::Padding {
+        padding: crate::message::Padding {
             top: Px::<Board>::new(2.5),
             right: Px::<Board>::new(3.5),
             bottom: Px::<Board>::new(4.5),
@@ -290,7 +290,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let points = vec![StrokePoint {
         x: Px::<StoredBoard>::new(1.5),
         y: Px::<StoredBoard>::new(2.5),
-        pressure: ambre_core::Bounded::<ambre_bus::app::toile::UnitFraction>::HALF,
+        pressure: ambre_core::Bounded::<crate::message::UnitFraction>::HALF,
     }];
     vec![
         // `to_bytes` prefixes the style with its own version byte, so the frozen
@@ -335,7 +335,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         (
             format!("reactions/{ANY}#vote"),
             hex(&encode(&Reaction {
-                kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(2)),
+                kind: ReactionKind::Vote(crate::message::VoteWeight::new(2)),
                 ts: Instant::<Authored>::new(3),
             })),
         ),
@@ -517,10 +517,8 @@ pub(super) fn board_of_every_key() -> ToileState {
         ElementKind::Embed,
         Point::new(40.0, 200.0),
         InitContent::Embed(
-            ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse(
-                "https://example.invalid",
-            )
-            .expect("a safe address"),
+            ambre_core::Validated::<crate::message::WebAddress>::parse("https://example.invalid")
+                .expect("a safe address"),
         ),
         None,
     );
@@ -560,7 +558,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     });
     st.handle_command(ToileCommand::LockElements {
         ids: vec![rect.clone()],
-        lock: ambre_bus::app::toile::LockState::Locked,
+        lock: crate::message::LockState::Locked,
     });
     st.handle_command(ToileCommand::SetFrameChildren {
         frame: frame.clone(),
@@ -576,7 +574,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         layout: Some(AutoLayout {
             direction: Direction::Horizontal,
             gap: Px::<Board>::new(8.0),
-            padding: ambre_bus::app::toile::Padding::uniform(Px::<Board>::new(4.0)),
+            padding: crate::message::Padding::uniform(Px::<Board>::new(4.0)),
             align: Align::Start,
             sizing: Sizing::Hug,
         }),
@@ -607,8 +605,8 @@ pub(super) fn board_of_every_key() -> ToileState {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Arrow,
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Arrow,
         },
     });
     let connector = st
@@ -809,7 +807,7 @@ fn a_value_changing_leaves_the_shape_alone() {
         .expect("the scenario creates an element");
     second.handle_command(ToileCommand::LockElements {
         ids: vec![id],
-        lock: ambre_bus::app::toile::LockState::Unlocked,
+        lock: crate::message::LockState::Unlocked,
     });
     assert_eq!(
         render(&shape_of(&first.doc)),

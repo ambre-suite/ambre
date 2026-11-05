@@ -106,8 +106,7 @@ pub fn import_svg(
     if batch.commands.is_empty() {
         return Err(ImportError::Empty);
     }
-    batch.report.imported =
-        ambre_core::Count::<ambre_bus::app::toile::Elements>::of(batch.commands.len());
+    batch.report.imported = ambre_core::Count::<crate::message::Elements>::of(batch.commands.len());
     Ok(batch)
 }
 

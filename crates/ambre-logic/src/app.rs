@@ -11,8 +11,8 @@
 // ============================================================================
 
 use ambre_bus::app::prose::{ProseCommand, ProseEvent};
-use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 use ambre_bus::{Embed, Mutation};
+use ambre_toile::message::{ToileCommand, ToileEvent};
 use ambre_trame::message::{TrameCommand, TrameEvent};
 use std::convert::Infallible;
 
@@ -120,10 +120,10 @@ embed_nothing!(AppEvent);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{PresencePayload, Viewport as ToileViewport};
     use ambre_bus::{Col, Instant, PageLoad, Row};
     use ambre_core::id::{Element, Id, Sheet};
     use ambre_core::index::Pos;
+    use ambre_toile::message::{PresencePayload, Viewport as ToileViewport};
     use ambre_trame::message::SelectionKind;
 
     /// Whether `T` can be encoded. The inherent constant applies when `T`
@@ -242,7 +242,7 @@ mod tests {
             AppCommand::Toile(ToileCommand::React {
                 target: Id::<Element>::mint_from(
                     ambre_core::PeerId::new(1),
-                    ambre_bus::app::toile::IdCounter::new(1),
+                    ambre_toile::message::IdCounter::new(1),
                 ),
                 reaction: None,
             }),

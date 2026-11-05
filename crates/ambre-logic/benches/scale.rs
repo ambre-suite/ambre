@@ -25,10 +25,10 @@
 use ambre_core::index::Pos;
 use std::hint::black_box;
 
-use ambre_bus::app::toile::{ToileCommand, Viewport};
 use ambre_bus::{CellPos, Col, Row};
 use ambre_logic::DocState;
 use ambre_logic::fixtures::load_bench_fixture;
+use ambre_toile::message::{ToileCommand, Viewport};
 use ambre_trame::message::TrameCommand;
 use criterion::{Criterion, criterion_group, criterion_main};
 use kurbo::{Point, Vec2};

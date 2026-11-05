@@ -12,7 +12,7 @@
 // callback the launcher maps to the matching `ToileCommand`.
 // ============================================================================
 
-use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
+use crate::message::{Broadcast, PresentMode, SlidePosition};
 use ambre_core::Utf16;
 use ambre_core::id::{Id, User};
 use ambre_core::index::Pos;

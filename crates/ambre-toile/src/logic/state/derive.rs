@@ -224,7 +224,7 @@ impl ToileState {
             kind,
             transform,
             bounds,
-            locked: ambre_bus::app::toile::LockState::locked_if(locked),
+            locked: crate::message::LockState::locked_if(locked),
             style,
             geom,
             // The link register, absent on an element that carries none
@@ -259,7 +259,7 @@ impl ToileState {
             // A peer may have written any text here, so the stored address
             // passes the same check as a typed one (`TOILE-267`).
             ElementKind::Embed => DisplayGeom::Embed(str_of(em, ElementKey::Url).and_then(|url| {
-                ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse(&url).ok()
+                ambre_core::Validated::<crate::message::WebAddress>::parse(&url).ok()
             })),
             ElementKind::DocEmbed => {
                 // Parse back the reference; on any parse failure fall to Frame so
@@ -272,7 +272,7 @@ impl ToileState {
                     (Some(document_id), Some(doc_type)) => DisplayGeom::DocEmbed {
                         document_id,
                         doc_type,
-                        focused: ambre_bus::app::toile::InputFocus::Board,
+                        focused: crate::message::InputFocus::Board,
                     },
                     _ => DisplayGeom::Frame(String::new()),
                 }

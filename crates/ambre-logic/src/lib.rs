@@ -245,7 +245,7 @@ impl DocState {
                 })
             }
             DocState::Toile(_) => AppEvent::Toile(
-                ambre_bus::app::toile::ToileEvent::DocumentRefused(error.to_string()),
+                ambre_toile::message::ToileEvent::DocumentRefused(error.to_string()),
             ),
             DocState::Prose(_) => {
                 AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocumentRefused {
@@ -317,7 +317,7 @@ impl DocState {
                 AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { filename, data })
             }
             DocState::Toile(_) => {
-                AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete {
+                AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete {
                     filename,
                     data,
                     skipped: Vec::new(),
@@ -343,7 +343,7 @@ impl DocState {
                 AppEvent::Trame(ambre_trame::message::TrameEvent::Error { message: reason })
             }
             DocState::Toile(_) => {
-                AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(reason))
+                AppEvent::Toile(ambre_toile::message::ToileEvent::ExportFailed(reason))
             }
             DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error(
                 ambre_bus::app::prose::ProseError::new(
@@ -1601,7 +1601,7 @@ mod pass_tests {
     fn import(document_id: Id<Document>, n: usize) -> LogicCommand {
         LogicCommand::App {
             document_id,
-            command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::ImportSvg {
+            command: AppCommand::Toile(ambre_toile::message::ToileCommand::ImportSvg {
                 bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(n)),
                 at: kurbo::Point::ZERO,
             }),
@@ -1716,7 +1716,7 @@ mod pass_tests {
         assert!(state.has_pending_work());
         let mut peer = ambre_toile::ToileState::new();
         let delta = peer
-            .handle_command(ambre_bus::app::toile::ToileCommand::ImportSvg {
+            .handle_command(ambre_toile::message::ToileCommand::ImportSvg {
                 bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(1)),
                 at: kurbo::Point::new(-50.0, 0.0),
             })
@@ -1734,7 +1734,7 @@ mod pass_tests {
         );
         state.handle_logic_command(LogicCommand::App {
             document_id,
-            command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::Undo),
+            command: AppCommand::Toile(ambre_toile::message::ToileCommand::Undo),
         });
         assert_eq!(
             elements(&state, document_id),

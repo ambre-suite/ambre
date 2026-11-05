@@ -13,7 +13,7 @@
 // only sends it to the routed document.
 // ============================================================================
 
-use ambre_bus::app::toile::{Broadcast, SlidePosition, StatsRequestKind, ToileCommand, ToileEvent};
+use crate::message::{Broadcast, SlidePosition, StatsRequestKind, ToileCommand, ToileEvent};
 use ambre_bus::{Embed, UiEvent};
 use ambre_core::id::{Frame, Id, User};
 use leptos::prelude::*;

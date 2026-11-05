@@ -10,8 +10,8 @@ use super::*;
 // This file therefore names the two Toile bus types the rest of the module
 // reaches only through `AppCommand` / `AppEvent`.
 use ambre_bus::Mutation;
-use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 use ambre_bus::sync_warning::SyncWarningCode;
+use ambre_toile::message::{ToileCommand, ToileEvent};
 
 use ambre_core::LoroPayloadRef;
 

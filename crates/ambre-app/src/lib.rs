@@ -38,7 +38,6 @@ use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
-use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use ambre_bus::conduit::{self, ChannelSlots, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
@@ -49,6 +48,7 @@ use ambre_chrome::{
 use ambre_core::id::{Document, Frame, Id, User};
 use ambre_core::{Board, Doc, Scale, View};
 use ambre_logic::app::{AppCommand, LogicCommand, UiEvent};
+use ambre_toile::message::{Broadcast, PresentMode, SlidePosition};
 use ambre_trame::message::SheetTab;
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
@@ -311,7 +311,7 @@ struct Wiring {
     find_state_toile: RwSignal<toile_chrome::FindPanelState>,
     /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
     /// step origin. Published by the board view, which keeps the hits.
-    find_result_toile: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
+    find_result_toile: RwSignal<Option<ambre_toile::message::FindResults>>,
     /// Presenter overlay panel open flag (`toile-presentation`). Published by
     /// the board view on `ToileEvent::PresentModeChanged`, as the mode it
     /// adopted.
@@ -348,7 +348,7 @@ struct Wiring {
     toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
     /// Whole-style edit the inspector emits back (`toile-styles`): the
     /// canvas view drains it into one `RestyleElements` over the live selection.
-    toile_restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
+    toile_restyle: RwSignal<Option<ambre_toile::message::ElementStyle>>,
     /// Floating selection toolbar placement + flags (`toile-styles`),
     /// republished every frame by the canvas view so the bar tracks pan/zoom;
     /// `None` hides it.
@@ -660,7 +660,7 @@ pub fn main() {
     // The find counters of both applications. The view keeps the match set,
     // so it alone writes them (`UI-THREAD-003`).
     let find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
-    let find_result_toile = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
+    let find_result_toile = RwSignal::new(None::<ambre_toile::message::FindResults>);
     // Presenter overlay panel signals (toile-presentation). The board view
     // publishes the mode; the per-frame relay fills the slide signals from the
     // enriched `SlideChanged`. Created here and passed to the shell.
@@ -715,7 +715,7 @@ pub fn main() {
     // common style into `toile_style_model`. It drains a whole-style edit from
     // `toile_restyle`, exactly like the context-menu pair above.
     let toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
-    let toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
+    let toile_restyle = RwSignal::new(None::<ambre_toile::message::ElementStyle>);
     // Floating selection toolbar (`toile-styles`): the view republishes its placement
     // into `toile_float_bar` each frame. It drains single-field style edits from
     // `toile_quick_style`, mirroring the inspector's model / restyle pair.
@@ -1756,7 +1756,7 @@ pub fn main() {
     let ch_toile_zoom = RwSignal::new(Scale::<Board, View>::ONE);
     let ch_toile_sel_stats = RwSignal::new(None::<toile_chrome::SelStats>);
     let ch_toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
-    let ch_toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
+    let ch_toile_restyle = RwSignal::new(None::<ambre_toile::message::ElementStyle>);
     let ch_toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
     let ch_toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
     let ch_toile_comments = toile_chrome::CommentSignals {
@@ -1785,7 +1785,7 @@ pub fn main() {
     let ch_tr_filter_active = RwSignal::new(trame_chrome::SheetFilter::Unfiltered);
     let ch_tr_find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
     let ch_toile_present = RwSignal::new(PresentMode::Editing);
-    let ch_toile_find_result = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
+    let ch_toile_find_result = RwSignal::new(None::<ambre_toile::message::FindResults>);
     let make_child_fn = move |document_id: Id<Document>,
                               doc_type: ambre_bus::DocType,
                               size: ambre_draw::Size,

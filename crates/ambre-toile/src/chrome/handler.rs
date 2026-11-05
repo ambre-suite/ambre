@@ -12,7 +12,7 @@
 // no format list.
 // ============================================================================
 
-use ambre_bus::app::toile::ToileCommand;
+use crate::message::ToileCommand;
 use ambre_chrome::{CommandHandler, KeyRoute, Openness, ShellAction, Toasts};
 use ambre_core::{Commands, StaticKey};
 use ambre_draw::Point;
@@ -36,7 +36,7 @@ pub struct ToileDialogs {
     /// The address typed into the web embed dialog.
     pub embed_web_text: RwSignal<String>,
     /// Why the typed address was refused, read beside the field.
-    pub embed_web_error: RwSignal<Option<ambre_bus::app::toile::AddressError>>,
+    pub embed_web_error: RwSignal<Option<crate::message::AddressError>>,
     /// The document embed dialog is open.
     pub embed_doc_open: RwSignal<Openness>,
     /// The link chooser is open.
@@ -44,7 +44,7 @@ pub struct ToileDialogs {
     /// The address typed into the link chooser.
     pub link_text: RwSignal<String>,
     /// Why the typed link address was refused.
-    pub link_error: RwSignal<Option<ambre_bus::app::toile::AddressError>>,
+    pub link_error: RwSignal<Option<crate::message::AddressError>>,
 }
 
 impl ToileDialogs {

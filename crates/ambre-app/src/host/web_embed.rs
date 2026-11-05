@@ -23,9 +23,9 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::toile::WebAddress;
 use ambre_core::Validated;
 use ambre_core::id::{Element, Id};
+use ambre_toile::message::WebAddress;
 use ambre_toile::ui::embed::VisibleWebEmbed;
 use wasm_bindgen::JsCast;
 
@@ -92,7 +92,7 @@ impl WebFrames {
             // Until the embed is entered the frame lets the pointer through, so
             // the board's own move and resize stay reachable. Entering it hands
             // the page its events directly (`TOILE-UI-091`, `TOILE-UI-324`).
-            let input = if e.focused == ambre_bus::app::toile::InputFocus::Entered {
+            let input = if e.focused == ambre_toile::message::InputFocus::Entered {
                 PointerInput::Taken
             } else {
                 PointerInput::FallsThrough
@@ -164,10 +164,10 @@ fn place(frame: &web_sys::HtmlIFrameElement, e: &VisibleWebEmbed) {
 #[cfg(test)]
 mod tests {
     use super::WebFrames;
-    use ambre_bus::app::toile::WebAddress;
     use ambre_core::Validated;
     use ambre_core::id::{Element, Id};
     use ambre_draw::{Affine, Rect, Size};
+    use ambre_toile::message::WebAddress;
     use ambre_toile::ui::embed::VisibleWebEmbed;
     use wasm_bindgen::JsCast;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -192,7 +192,7 @@ mod tests {
             screen_rect: Rect::new(0.0, 0.0, 200.0, 100.0),
             layout_size: Size::new(200.0, 100.0),
             to_screen: Affine::IDENTITY,
-            focused: ambre_bus::app::toile::InputFocus::Board,
+            focused: ambre_toile::message::InputFocus::Board,
         };
         let mut frames = WebFrames::default();
         frames.sync(&layer, std::slice::from_ref(&embed));

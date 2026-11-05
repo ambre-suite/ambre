@@ -566,6 +566,7 @@ WALK_REACH = {
     },
     "ambre-toile": {
         "crate::logic::animate": "the presented element's animated state",
+        "crate::message": "the culled display list the Logic thread sends, in board units",
         "crate::ui::label": "the label geometry, in board units",
     },
 }
@@ -579,7 +580,7 @@ SCREEN_STATE = re.compile(
 # (`BUS-029`), and the message vocabulary each application declares in its own
 # crate (`BUS-032`), which holds the same rule.
 BUS = "crates/ambre-bus/src"
-APP_MESSAGES = ("crates/ambre-trame/src/message",)
+APP_MESSAGES = ("crates/ambre-trame/src/message", "crates/ambre-toile/src/message")
 BUS_ID_FIELD = re.compile(r"\b((?:\w+_)?ids?)\s*:\s*(?!:)")
 # The relay's rows and routes and the HTTP layer of Sync, whose identifiers
 # each take their newtype and reach JSON as their text (`SRV-179`).

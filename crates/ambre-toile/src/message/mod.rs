@@ -1,11 +1,10 @@
-//! Toile (whiteboard) IPC contract (`ambre-spec-toile-schema.md`).
-//!
-//! Mirrors the Trame split. The typed command / event / display data-plane types
-//! live here in `ambre-bus`, so the `ambre-logic` dispatcher can match on
-//! `(DocState, AppCommand::Toile)` without a dependency cycle. The engine crate
-//! `ambre-toile` depends on `ambre-bus`, never the reverse. The stateful engine
-//! (`ToileState`) and its `ToileOutcome` wrapper stay in `ambre-toile`, exactly
-//! as `TrameState` / `TrameOutcome` stay in `ambre-trame`.
+//! Toile (whiteboard) data plane (`ambre-spec-toile-schema.md`): the whole
+//! typed content vocabulary of a board, both directions. It lives in the
+//! application's crate, beside the engine and the view that use it, and the
+//! Sync worker never builds against it (`BUS-032`, `ARCH-069`). The Logic
+//! runtime carries it as `AppCommand::Toile` and `AppEvent::Toile`. The
+//! stateful engine (`ToileState`) and its `ToileOutcome` wrapper sit beside it
+//! under `logic`.
 //!
 //! * Pure data only: identity, element kinds, the single per-element style
 //!   register, freehand strokes, connector anchoring, the culled
@@ -1164,7 +1163,7 @@ pub struct Reaction {
 /// a signed vote weight (for example `+1` / `-1` / a weighted ballot).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReactionKind {
-    Emoji(crate::app::murmure::Emoji),
+    Emoji(ambre_bus::Emoji),
     Vote(VoteWeight),
 }
 
@@ -1260,7 +1259,7 @@ use ambre_core::{Authored, Instant, PageLoad};
 /// aggregate the `Vote` entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionCounts {
-    pub emoji: Vec<(crate::app::murmure::Emoji, Count<Reactions>)>,
+    pub emoji: Vec<(ambre_bus::Emoji, Count<Reactions>)>,
     pub vote_total: VoteTotal,
     pub vote_count: Count<Votes>,
 }
@@ -1708,7 +1707,7 @@ impl fmt::Debug for SlideChange {
 /// reserved value. The view mints the tokens, one after another.
 pub enum ElementCreation {}
 
-impl crate::token::TokenKind for ElementCreation {
+impl ambre_bus::token::TokenKind for ElementCreation {
     const NAME: &'static str = "CorrelationToken";
 }
 
@@ -1754,7 +1753,7 @@ pub enum ToileCommand {
         /// A request token the engine echoes in `ElementCreated`, so a
         /// deferred open claims the element this command created and no other
         /// (`TOILE-UI-194`). `None` when no deferred open is pending.
-        correlate: Option<crate::token::Token<ElementCreation>>,
+        correlate: Option<ambre_bus::token::Token<ElementCreation>>,
     },
     MoveElements {
         ids: Vec<Id<Element>>,
@@ -1858,7 +1857,7 @@ pub enum ToileCommand {
     /// shared text. A title is short and written by one person at a time. Two
     /// writers converge on one whole name, never interleaving into a third
     /// (`TOILE-252`). Trimmed and cut to
-    /// [`FRAME_NAME_MAX`](crate::app::toile::FRAME_NAME_MAX) by the engine.
+    /// [`FRAME_NAME_MAX`](crate::message::FRAME_NAME_MAX) by the engine.
     /// One undo item.
     RenameFrame {
         frame: Id<Element>,
@@ -2081,7 +2080,7 @@ pub enum ToileCommand {
     /// the first hit. A `None` `query` is the emptied field, answered with no hit
     /// (`FIND-005`). No CRDT effect.
     Find {
-        query: Option<super::find::FindQuery<FindOptions>>,
+        query: Option<ambre_bus::app::find::FindQuery<FindOptions>>,
         from: Option<Id<Element>>,
         direction: ambre_core::StepDirection,
     },
@@ -2347,7 +2346,7 @@ impl fmt::Debug for ToileCommand {
     }
 }
 
-impl crate::Mutation for ToileCommand {
+impl ambre_bus::Mutation for ToileCommand {
     fn is_mutating(&self) -> bool {
         ToileCommand::is_mutating(self)
     }
@@ -2575,7 +2574,7 @@ pub enum ToileEvent {
     /// open.
     ElementCreated {
         id: Id<Element>,
-        correlate: Option<crate::token::Token<ElementCreation>>,
+        correlate: Option<ambre_bus::token::Token<ElementCreation>>,
     },
     /// Result of `CopyElements`: the UI stashes it and may mirror it to the OS
     /// clipboard for cross-tab paste (`toile-clipboard`).
@@ -2819,7 +2818,7 @@ pub struct DisplayViewport {
     /// How many viewport requests the Logic thread had applied when it built
     /// this frame. The view drops a frame older than the one it last accepted
     /// (`BUS-017`).
-    pub version: ambre_core::Seq<crate::ViewportVersion>,
+    pub version: ambre_core::Seq<ambre_bus::ViewportVersion>,
     pub viewport: Viewport,
     /// The board's grid unit in world units, as its `board` register holds it.
     /// The grid step is a power-of-two multiple of it (`TOILE-UI-279`). The

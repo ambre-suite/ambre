@@ -10,7 +10,7 @@
 // Pure geometry -- host-tested, no `cfg(wasm32)`, no GPU.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode};
+use crate::message::{DisplayElement, DisplayGeom, DisplayNode};
 use ambre_core::id::{Element, Id};
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurveNearest, Shape};
@@ -42,7 +42,7 @@ pub fn pick_floor(cam: &ViewportTransform) -> Px<Board> {
 /// floor of a stroke's reach, in world units (see [`pick_floor`]). `false`
 /// for a `Group` (it paints nothing; selection resolves through membership,).
 pub fn exact_hit(elem: &DisplayElement, world_pt: Point, pick: Px<Board>) -> bool {
-    if elem.locked == ambre_bus::app::toile::LockState::Locked {
+    if elem.locked == crate::message::LockState::Locked {
         return false;
     }
     // Undo the element's rotation: geometry below is in the unrotated frame.
@@ -107,7 +107,7 @@ pub(crate) fn stroke_reach(stroke_w: Px<Board>, pick: Px<Board>) -> Px<Board> {
 
 /// The stroke width of a style, as a board length. The style keeps the `f32`
 /// the bus and the document store carry.
-pub(crate) fn stroke_width(style: &ambre_bus::app::toile::ElementStyle) -> Px<Board> {
+pub(crate) fn stroke_width(style: &crate::message::ElementStyle) -> Px<Board> {
     style.stroke_w.widened()
 }
 
@@ -213,8 +213,7 @@ pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<Id<Element>> {
             DisplayNode::Connector(_) => None,
         })
         .filter(|e| {
-            e.locked == ambre_bus::app::toile::LockState::Unlocked
-                && !matches!(e.geom, DisplayGeom::Group)
+            e.locked == crate::message::LockState::Unlocked && !matches!(e.geom, DisplayGeom::Group)
         })
         .filter(|e| {
             let b = rotated_aabb(e);
@@ -239,7 +238,7 @@ pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<Id<Element>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{ElementKind, ElementStyle, ShapeKind};
+    use crate::message::{ElementKind, ElementStyle, ShapeKind};
     use ambre_core::StoredBoard;
     use ambre_draw::Affine;
 
@@ -254,7 +253,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom,
             link: None,
@@ -378,7 +377,7 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 50.0),
             Affine::IDENTITY,
         );
-        e.locked = ambre_bus::app::toile::LockState::Locked;
+        e.locked = crate::message::LockState::Locked;
         assert!(!hit(&e, Point::new(50.0, 25.0)));
     }
 
@@ -442,7 +441,7 @@ mod tests {
     /// still taken.
     #[test]
     fn a_marquee_skips_a_locked_element_and_a_group_node() {
-        let node = |id: &str, geom: DisplayGeom, locked: ambre_bus::app::toile::LockState| {
+        let node = |id: &str, geom: DisplayGeom, locked: crate::message::LockState| {
             let mut e = elem(geom, Rect::new(10.0, 10.0, 40.0, 40.0), Affine::IDENTITY);
             e.id = Id::<Element>::from_text(id.to_owned());
             e.locked = locked;
@@ -452,17 +451,17 @@ mod tests {
             node(
                 "locked",
                 DisplayGeom::Rect,
-                ambre_bus::app::toile::LockState::Locked,
+                crate::message::LockState::Locked,
             ),
             node(
                 "group",
                 DisplayGeom::Group,
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             node(
                 "free",
                 DisplayGeom::Rect,
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ];
         let hits = marquee_hits(&nodes, Rect::new(0.0, 0.0, 100.0, 100.0));

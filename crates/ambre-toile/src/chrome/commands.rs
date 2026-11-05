@@ -7,7 +7,7 @@
 // `CommandStates` store the menu bar reads.
 // ============================================================================
 
-use ambre_bus::app::toile::ToileEvent;
+use crate::message::ToileEvent;
 use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::{Availability, CommandStates};
 use leptos::prelude::*;

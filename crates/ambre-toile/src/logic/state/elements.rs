@@ -438,7 +438,7 @@ impl ToileState {
     pub(super) fn lock_elements(
         &mut self,
         ids: &[Id<Element>],
-        lock: ambre_bus::app::toile::LockState,
+        lock: crate::message::LockState,
     ) -> ToileOutcome {
         let mut touched = false;
         for id in ids {
@@ -750,7 +750,7 @@ mod inner_tests {
         use crate::logic::command::ToileError;
         let mut st = ToileState::new();
         let a = rect_at(&mut st, 0.0);
-        st.counter = ambre_bus::app::toile::IdCounter::new(u32::MAX - 1);
+        st.counter = crate::message::IdCounter::new(u32::MAX - 1);
         let last = rect_at(&mut st, 20.0);
         assert!(last.as_str().ends_with("_ffffffff"));
         st.doc.commit();
@@ -793,7 +793,7 @@ mod inner_tests {
     #[test]
     fn a_spent_counter_refuses_every_other_create_and_writes_nothing() {
         use crate::logic::command::ToileError;
-        use ambre_bus::app::toile::{
+        use crate::message::{
             Anchor, BoolOp, Cap, CommentAnchor, EndCaps, PathType, Sources, StrokePoint,
         };
         let mut st = ToileState::new();
@@ -801,7 +801,7 @@ mod inner_tests {
         let a = rect_at(&mut st, 0.0);
         let b = rect_at(&mut st, 5.0);
         st.doc.commit();
-        st.counter = ambre_bus::app::toile::IdCounter::new(u32::MAX);
+        st.counter = crate::message::IdCounter::new(u32::MAX);
         let vv = st.doc.oplog_vv();
         let doc = st.doc.get_deep_value();
         let point = |x: f32| {
@@ -872,7 +872,7 @@ mod inner_tests {
         let b = rect_at(&mut st, 20.0);
         let first = st.group_inner(&[a.clone(), b.clone()]).expect("group");
         st.doc.commit();
-        st.counter = ambre_bus::app::toile::IdCounter::new(u32::MAX);
+        st.counter = crate::message::IdCounter::new(u32::MAX);
         let doc_before = st.doc.get_deep_value();
         let caches_before = st.debug_caches();
         let vv_before = st.doc.oplog_vv();
@@ -959,7 +959,7 @@ mod inner_tests {
         let b = rect(&mut st, 40.0, 0.0, 10.0);
         st.handle_command(ToileCommand::LockElements {
             ids: vec![background.clone()],
-            lock: ambre_bus::app::toile::LockState::Locked,
+            lock: crate::message::LockState::Locked,
         });
 
         st.handle_command(ToileCommand::AlignElements {
@@ -1082,7 +1082,7 @@ mod inner_tests {
         let a = rect(&mut st, 0.0, 0.0, 10.0);
         let b = rect(&mut st, 40.0, 0.0, 10.0);
         // Seed two members with differing hidden fields, whole (the import path).
-        let shadow = ambre_bus::app::toile::Shadow {
+        let shadow = crate::message::Shadow {
             color: Rgba::from_bits(0x0000_0000),
             dx: Px::<StoredBoard>::new(1.0),
             dy: Px::<StoredBoard>::new(1.0),
@@ -1092,7 +1092,7 @@ mod inner_tests {
             fill: Some(Rgba::from_bits(0xff00_00ff)),
             corner: Px::<StoredBoard>::new(12.0),
             shadow: Some(shadow),
-            font: ambre_bus::app::toile::FontSpec {
+            font: crate::message::FontSpec {
                 weight: ambre_core::Bounded::<ambre_core::FontWeight>::new(600).unwrap(),
                 ..Default::default()
             },
@@ -1102,7 +1102,7 @@ mod inner_tests {
             fill: Some(Rgba::from_bits(0x00ff_00ff)),
             corner: Px::<StoredBoard>::ZERO,
             shadow: None,
-            font: ambre_bus::app::toile::FontSpec {
+            font: crate::message::FontSpec {
                 weight: ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR,
                 ..Default::default()
             },
@@ -1172,7 +1172,7 @@ mod inner_tests {
         st.doc.commit();
         st.handle_command(ToileCommand::LockElements {
             ids: vec![id.clone()],
-            lock: ambre_bus::app::toile::LockState::Locked,
+            lock: crate::message::LockState::Locked,
         });
         st.handle_command(ToileCommand::SetText {
             id: id.clone(),

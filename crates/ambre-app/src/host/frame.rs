@@ -730,7 +730,7 @@ mod tests {
             screen_rect: Rect::new(10.0, 20.0, 110.0, 80.0),
             child_size: Size::new(100.0, 60.0),
             to_screen,
-            focused: ambre_bus::app::toile::InputFocus::Board,
+            focused: ambre_toile::message::InputFocus::Board,
         }
     }
 

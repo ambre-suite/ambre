@@ -21,8 +21,8 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 #[cfg(any(test, target_arch = "wasm32"))]
-use ambre_bus::app::toile::CommentAnchor;
-use ambre_bus::app::toile::{
+use crate::message::CommentAnchor;
+use crate::message::{
     ClipboardPayload as ToileClipboardPayload, DisplayConnector, DisplayElement, DisplayGeom,
     DisplayNode, DisplayViewport, ElementCreation, ElementKind, End, LinkTarget, PresencePayload,
     PresentMode, StatsRequestKind, ToileCommand, ToileError, ToileEvent, Viewport,
@@ -512,7 +512,7 @@ pub struct ToileView {
     /// register (`toile-styles`), and the view attaches the ids the DOM lacks.
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
+    restyle: RwSignal<Option<crate::message::ElementStyle>>,
     /// The content-anchored floating selection toolbar's placement + flags
     /// (`toile-styles`), republished every frame so the bar follows the
     /// selection as the board pans and zooms (transform-synced). `None` hides
@@ -564,9 +564,9 @@ pub struct ToileView {
     /// view keeps both, so it alone writes these signals (`UI-THREAD-003`).
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    present_mode: RwSignal<ambre_bus::app::toile::PresentMode>,
+    present_mode: RwSignal<crate::message::PresentMode>,
     #[cfg(target_arch = "wasm32")]
-    find_result: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
+    find_result: RwSignal<Option<crate::message::FindResults>>,
 
     /// The element that anchors a thread the panel opened, awaiting the
     /// `SelectionStats` reply that carries its bounds. The camera then comes to
@@ -727,9 +727,7 @@ impl ToileView {
         >,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
         #[cfg(target_arch = "wasm32")] style_model: RwSignal<Option<super::style::StyleModel>>,
-        #[cfg(target_arch = "wasm32")] restyle: RwSignal<
-            Option<ambre_bus::app::toile::ElementStyle>,
-        >,
+        #[cfg(target_arch = "wasm32")] restyle: RwSignal<Option<crate::message::ElementStyle>>,
         #[cfg(target_arch = "wasm32")] float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
         #[cfg(target_arch = "wasm32")] quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
         #[cfg(target_arch = "wasm32")] comments: super::comments::CommentSignals,
@@ -738,10 +736,8 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] placed_embed: RwSignal<Option<super::embed::PlacedEmbed>>,
         #[cfg(target_arch = "wasm32")] set_link: RwSignal<Option<super::link::LinkEdit>>,
         #[cfg(target_arch = "wasm32")] followed_link: RwSignal<Option<super::link::ShellNav>>,
-        #[cfg(target_arch = "wasm32")] present_mode: RwSignal<ambre_bus::app::toile::PresentMode>,
-        #[cfg(target_arch = "wasm32")] find_result: RwSignal<
-            Option<ambre_bus::app::toile::FindResults>,
-        >,
+        #[cfg(target_arch = "wasm32")] present_mode: RwSignal<crate::message::PresentMode>,
+        #[cfg(target_arch = "wasm32")] find_result: RwSignal<Option<crate::message::FindResults>>,
     ) -> Self {
         let embedded = embedding == ambre_canvas::Embedding::Embedded;
         if !embedded {
@@ -2158,7 +2154,7 @@ impl ToileView {
     /// members included: the refusal belongs to the write (`TOILE-UI-182`).
     /// The selection itself is left as it was (`TOILE-UI-176`).
     #[cfg(any(test, target_arch = "wasm32"))]
-    fn apply_restyle(&mut self, style: ambre_bus::app::toile::ElementStyle) {
+    fn apply_restyle(&mut self, style: crate::message::ElementStyle) {
         if self.selection.is_empty() {
             // An arrow takes the same edit through its own command
             // (`toile-connectors`).
@@ -2360,19 +2356,19 @@ impl ToileView {
 
     /// Publish the board-wide list the panel renders.
     #[cfg(target_arch = "wasm32")]
-    fn publish_comment_list(&mut self, list: Vec<ambre_bus::app::toile::CommentSummary>) {
+    fn publish_comment_list(&mut self, list: Vec<crate::message::CommentSummary>) {
         self.comments.list.set(list);
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn publish_comment_list(&mut self, _list: Vec<ambre_bus::app::toile::CommentSummary>) {}
+    fn publish_comment_list(&mut self, _list: Vec<crate::message::CommentSummary>) {}
 
     /// Publish the one thread the panel shows whole.
     #[cfg(target_arch = "wasm32")]
-    fn publish_comment_thread(&mut self, thread: ambre_bus::app::toile::CommentThread) {
+    fn publish_comment_thread(&mut self, thread: crate::message::CommentThread) {
         self.comments.open.set(Some(thread));
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn publish_comment_thread(&mut self, _thread: ambre_bus::app::toile::CommentThread) {}
+    fn publish_comment_thread(&mut self, _thread: crate::message::CommentThread) {}
 
     /// Open the composer the comment tool dropped (`TOILE-UI-307`).
     #[cfg(target_arch = "wasm32")]
@@ -2485,11 +2481,11 @@ impl ToileView {
 
     /// Publish the frames the panel renders.
     #[cfg(target_arch = "wasm32")]
-    fn publish_deck(&mut self, view: ambre_bus::app::toile::DeckView) {
+    fn publish_deck(&mut self, view: crate::message::DeckView) {
         self.deck.view.set(view);
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn publish_deck(&mut self, _view: ambre_bus::app::toile::DeckView) {}
+    fn publish_deck(&mut self, _view: crate::message::DeckView) {}
 
     /// Drain the intent the deck panel emitted this frame. Each edit answers
     /// with the whole new order, which is the only shape `SetSlideOrder` takes.
@@ -3708,7 +3704,7 @@ impl ToileView {
                         // while the editor was open (`TOILE-UI-381`).
                         let locked = self
                             .find_element(&id)
-                            .is_some_and(|e| e.locked == ambre_bus::app::toile::LockState::Locked);
+                            .is_some_and(|e| e.locked == crate::message::LockState::Locked);
                         if !locked {
                             self.patch_element_text(&id, &base, &text);
                         }
@@ -4198,7 +4194,7 @@ impl ToileView {
 
     /// Drain the embed the shell resolved for us this frame (`TOILE-086`,
     /// `TOILE-087`). The address has already been through
-    /// [`WebAddress`](ambre_bus::app::toile::WebAddress) on the
+    /// [`WebAddress`](crate::message::WebAddress) on the
     /// shell's side. The dialog refuses what it cannot accept. The user learns
     /// of a bad address while it is still on screen, rather than after a box
     /// lands on the board. Placing writes a reference and nothing else, so it

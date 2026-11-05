@@ -15,7 +15,7 @@
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Char, Utf16, char_len, char_to_utf16, utf16_to_char};
 
-use ambre_bus::app::toile::Broadcast;
+use crate::message::Broadcast;
 use ambre_core::id::{Id, User};
 
 use crate::logic::command::{Slide, SlidePosition, TextDelta};

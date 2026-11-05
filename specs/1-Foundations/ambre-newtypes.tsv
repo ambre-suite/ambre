@@ -6,8 +6,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition | u32	a r
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, and they would have to move into core. Its serde is the derived Vec<u8>, which the base64 of Encoded would change
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple | f32	a ratio that is finite and above zero, checked where it is built
 ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
-ambre-bus | src/app/toile.rs | crate::app::toile | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
-ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed weight of one vote, which travels and is stored as the bare i32
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
 ambre-trame | src/message/calendar.rs | crate::message::calendar | MonthCount | i64	a signed count of months that may run past December or below January, as DATE and EDATE read it. TimeSpan<Month> would need a Month unit over an i64 in core, which no other site uses
 ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
@@ -71,6 +69,8 @@ ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKe
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Depth | isize	the edit steps of a Myers path, signed for the diagonal arithmetic, private to the search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Diagonal | isize	a signed diagonal of the Myers graph, private to the search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | GraphOffset | isize	a signed offset into one text of the Myers graph, private to the search
+ambre-toile | src/message/mod.rs | crate::message | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
+ambre-toile | src/message/mod.rs | crate::message | VoteWeight | i32	the signed weight of one vote, which travels and is stored as the bare i32
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate | f64	a log-zoom rate per pixel of wheel, private to the view
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term | i64	a signed place in a fill series, private to the fill
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer | String	the root name of one sheet's container, joined in one place

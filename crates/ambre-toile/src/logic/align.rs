@@ -28,7 +28,7 @@
 use ambre_core::{Board, Px};
 use kurbo::{Rect, Vec2};
 
-pub use ambre_bus::app::toile::AlignOp;
+pub use crate::message::AlignOp;
 
 /// One translation per input box, in the order fed in.
 ///

@@ -439,7 +439,7 @@ fn locked_element_ignores_move() {
     let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     st.handle_command(ToileCommand::LockElements {
         ids: vec![id.clone()],
-        lock: ambre_bus::app::toile::LockState::Locked,
+        lock: crate::message::LockState::Locked,
     });
     st.handle_command(ToileCommand::MoveElements {
         ids: vec![id.clone()],
@@ -460,8 +460,8 @@ fn delete_drops_owned_connectors() {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Arrow,
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Arrow,
         },
     });
     // One element node + one element node + one connector node.
@@ -489,8 +489,8 @@ fn create_connector(st: &mut ToileState) -> Id<Connector> {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Arrow,
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Arrow,
         },
     });
     // The newest connector is the last node in the paint order, which is where
@@ -987,7 +987,7 @@ fn board_ids_excludes_locked_and_group_nodes() {
     let c = create_rect(&mut st, Point::new(80.0, 0.0), Size::new(10.0, 10.0));
     st.handle_command(ToileCommand::LockElements {
         ids: vec![a.clone()],
-        lock: ambre_bus::app::toile::LockState::Locked,
+        lock: crate::message::LockState::Locked,
     });
     st.handle_command(ToileCommand::GroupElements {
         ids: vec![b.clone(), c.clone()],
@@ -1144,14 +1144,14 @@ fn naming_a_frame_is_bounded_undoable_and_refused_off_a_frame() {
     assert!(out.update.is_none() && out.display.is_empty());
 
     // A title no document should carry is cut to the bound.
-    let long = "x".repeat(ambre_bus::app::toile::FRAME_NAME_MAX.to_usize() + 50);
+    let long = "x".repeat(crate::message::FRAME_NAME_MAX.to_usize() + 50);
     st.handle_command(ToileCommand::RenameFrame {
         frame: frame.clone(),
         name: long,
     });
     assert_eq!(
         st.frame_name(&frame).unwrap_or_default().chars().count(),
-        ambre_bus::app::toile::FRAME_NAME_MAX.to_usize()
+        crate::message::FRAME_NAME_MAX.to_usize()
     );
 
     // Anything that is not a frame is refused, and keeps its own body.
@@ -1415,12 +1415,12 @@ fn a_stroke_in_flight_reaches_the_other_users() {
         StrokePoint {
             x: Px::<StoredBoard>::new(10.0),
             y: Px::<StoredBoard>::new(10.0),
-            pressure: ambre_core::Bounded::<ambre_bus::app::toile::UnitFraction>::HALF,
+            pressure: ambre_core::Bounded::<crate::message::UnitFraction>::HALF,
         },
         StrokePoint {
             x: Px::<StoredBoard>::new(12.0),
             y: Px::<StoredBoard>::new(14.0),
-            pressure: ambre_core::Bounded::<ambre_bus::app::toile::UnitFraction>::new(0.6)
+            pressure: ambre_core::Bounded::<crate::message::UnitFraction>::new(0.6)
                 .expect("a pressure inside 0 ..= 1"),
         },
     ];
@@ -2796,8 +2796,8 @@ fn an_arrow_stranded_by_a_peer_is_announced() {
             to_anch: Anchor::Left,
             path_type: PathType::Straight,
             arrows: EndCaps {
-                start: ambre_bus::app::toile::Cap::Plain,
-                end: ambre_bus::app::toile::Cap::Arrow,
+                start: crate::message::Cap::Plain,
+                end: crate::message::Cap::Arrow,
             },
         })
         .update
@@ -2854,8 +2854,8 @@ fn paste_keeps_fully_copied_connector_drops_half_copied() {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Arrow,
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Arrow,
         },
     });
     assert_eq!(connector_count(&st), 1);
@@ -2962,8 +2962,8 @@ fn a_pasted_arrow_joins_the_copies() {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Arrow,
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Arrow,
         },
     });
     let before = st.connector_ids();
@@ -3175,8 +3175,8 @@ fn connect(st: &mut ToileState, from: Id<Element>, to: Id<Element>) -> Id<Connec
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Arrow,
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Arrow,
         },
     });
     st.connector_ids()
@@ -3342,8 +3342,8 @@ fn an_arrow_off_screen_is_culled() {
         to_anch: Anchor::Bottom,
         path_type: PathType::Curved,
         arrows: EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Plain,
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Plain,
         },
     });
     let bulge = st.connector_ids().pop().expect("the curve exists");
@@ -4436,7 +4436,7 @@ fn a_layout(direction: Direction, gap: f64) -> AutoLayout {
     AutoLayout {
         direction,
         gap: Px::<Board>::new(gap),
-        padding: ambre_bus::app::toile::Padding::uniform(Px::<Board>::new(4.0)),
+        padding: crate::message::Padding::uniform(Px::<Board>::new(4.0)),
         align: Align::Start,
         sizing: Sizing::Hug,
     }
@@ -4577,7 +4577,7 @@ fn emoji(s: &str) -> Reaction {
 
 fn vote(w: i32) -> Reaction {
     Reaction {
-        kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(w)),
+        kind: ReactionKind::Vote(crate::message::VoteWeight::new(w)),
         ts: Instant::<Authored>::new(0),
     }
 }
@@ -4605,7 +4605,7 @@ fn react_add_change_remove_updates_counts() {
         counts.emoji,
         vec![(
             ambre_bus::Emoji::from("thumbsup"),
-            ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1)
+            ambre_core::Count::<crate::message::Reactions>::new(1)
         )]
     );
     assert_eq!(counts.vote_count.get(), 0);
@@ -4651,7 +4651,7 @@ fn derive_viewport_carries_counts_and_skips_deleted_target() {
         counts.emoji,
         vec![(
             ambre_bus::Emoji::from("thumbsup"),
-            ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1)
+            ambre_core::Count::<crate::message::Reactions>::new(1)
         )]
     );
 
@@ -4714,7 +4714,7 @@ fn doc_embed_reference_survives_the_crdt_round_trip() {
     // Focus is view-local state, never CRDT: derive always says false.
     assert_eq!(
         focused,
-        ambre_bus::app::toile::InputFocus::Board,
+        crate::message::InputFocus::Board,
         "focus must not be derived from the document"
     );
 }
@@ -4785,7 +4785,7 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
             size: Size::new(100.0, 100.0),
             fill: None,
             content: InitContent::Embed(
-                ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse("example.com")
+                ambre_core::Validated::<crate::message::WebAddress>::parse("example.com")
                     .expect("a safe address"),
             ),
             correlate: None,
@@ -5008,7 +5008,7 @@ fn concurrent_reactions_distinct_users_converge() {
         ta.emoji,
         vec![(
             ambre_bus::Emoji::from("thumbsup"),
-            ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(2)
+            ambre_core::Count::<crate::message::Reactions>::new(2)
         )],
         "two distinct users must both count, no double-count"
     );
@@ -5108,7 +5108,7 @@ fn a_reacted_target_out_of_view_is_left_out_of_the_frame() {
         st.reaction_counts(&far).emoji,
         vec![(
             ambre_bus::Emoji::from("heart"),
-            ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1)
+            ambre_core::Count::<crate::message::Reactions>::new(1)
         )],
         "the board still holds the reaction out of view"
     );
@@ -5123,11 +5123,11 @@ fn the_chips_of_a_target_keep_one_order() {
     let expected = vec![
         (
             ambre_bus::Emoji::from("apple"),
-            ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1),
+            ambre_core::Count::<crate::message::Reactions>::new(1),
         ),
         (
             ambre_bus::Emoji::from("zebra"),
-            ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(2),
+            ambre_core::Count::<crate::message::Reactions>::new(2),
         ),
     ];
 
@@ -5161,7 +5161,7 @@ fn votes_fold_into_one_signed_total_and_one_count() {
         counts.emoji,
         vec![(
             ambre_bus::Emoji::from("heart"),
-            ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(1)
+            ambre_core::Count::<crate::message::Reactions>::new(1)
         )],
         "a vote is no chip"
     );
@@ -6181,8 +6181,8 @@ fn apply_local(
                 to_anch: Anchor::Left,
                 path_type: PathType::Straight,
                 arrows: EndCaps {
-                    start: ambre_bus::app::toile::Cap::Plain,
-                    end: ambre_bus::app::toile::Cap::Arrow,
+                    start: crate::message::Cap::Plain,
+                    end: crate::message::Cap::Arrow,
                 },
             }),
             _ => return None,
@@ -6260,7 +6260,7 @@ fn apply_local(
         PeerOp::LockNth { nth: n, locked } => match nth(*n) {
             Some(id) => st.handle_command(ToileCommand::LockElements {
                 ids: vec![id],
-                lock: ambre_bus::app::toile::LockState::locked_if(*locked),
+                lock: crate::message::LockState::locked_if(*locked),
             }),
             None => return None,
         },
@@ -7166,8 +7166,8 @@ fn a_create_to_a_missing_element_is_refused() {
             to_anch: Anchor::Left,
             path_type: PathType::Straight,
             arrows: EndCaps {
-                start: ambre_bus::app::toile::Cap::Plain,
-                end: ambre_bus::app::toile::Cap::Arrow,
+                start: crate::message::Cap::Plain,
+                end: crate::message::Cap::Arrow,
             },
         });
         assert!(out.update.is_none(), "a refused create writes nothing");
@@ -7368,7 +7368,7 @@ fn a_combine_consumes_only_its_sources() {
     let locked = filled_rect(&mut st, 3.0, Rgba::from_bits(0xFF00_00FF));
     st.handle_command(ToileCommand::LockElements {
         ids: vec![locked.clone()],
-        lock: ambre_bus::app::toile::LockState::Locked,
+        lock: crate::message::LockState::Locked,
     });
     let note = create_sticky(&mut st, Point::new(2.0, 2.0), "note");
     st.handle_command(ToileCommand::BooleanOp {

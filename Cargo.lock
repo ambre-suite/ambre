@@ -102,7 +102,6 @@ dependencies = [
  "ambre-core",
  "atomic-waker",
  "crossbeam-queue",
- "kurbo",
  "postcard",
  "serde",
  "serde_json",

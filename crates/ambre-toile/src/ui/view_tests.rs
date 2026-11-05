@@ -4,8 +4,8 @@
 //! detached, and a frame paints into a recording surface.
 
 use super::*;
+use crate::message::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use crate::ui::kinetic::FingerRole;
-use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
 use ambre_bus::{Instant, PageLoad};
 use ambre_commands::KeyChar;
@@ -212,9 +212,9 @@ fn sticky(id: &str, bounds: Rect) -> DisplayElement {
         kind: ElementKind::Sticky,
         transform: kurbo::Affine::IDENTITY,
         bounds,
-        locked: ambre_bus::app::toile::LockState::Unlocked,
+        locked: crate::message::LockState::Unlocked,
         style: Default::default(),
-        geom: ambre_bus::app::toile::DisplayGeom::Text("hi".to_owned()),
+        geom: crate::message::DisplayGeom::Text("hi".to_owned()),
         link: None,
         group: None,
     }
@@ -228,15 +228,15 @@ fn arrow(id: &str) -> DisplayConnector {
         id: Id::<Connector>::from_text(id.to_owned()),
         path,
         style: Default::default(),
-        arrows: ambre_bus::app::toile::EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Arrow,
+        arrows: crate::message::EndCaps {
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Arrow,
         },
         label: "yes".to_owned(),
     }
 }
 
-fn lost(error: ambre_bus::app::toile::ToileError) -> ToileEvent {
+fn lost(error: crate::message::ToileError) -> ToileEvent {
     ToileEvent::Error(error)
 }
 
@@ -397,7 +397,7 @@ fn a_title_editor_outlives_a_pan_and_leaves_with_the_board() {
     let mut rig = Rig::new();
     let mut frame = sticky("f", A);
     frame.kind = ElementKind::Frame;
-    frame.geom = ambre_bus::app::toile::DisplayGeom::Frame("Plan".to_owned());
+    frame.geom = crate::message::DisplayGeom::Frame("Plan".to_owned());
     rig.show(vec![DisplayNode::Element(frame.clone())]);
     rig.sent();
     rig.view.open_frame_title_editor(eid("f"));
@@ -499,7 +499,7 @@ fn a_write_refused_for_its_lost_target_is_told_and_another_refusal_is_not() {
         rig.sent().as_slice(),
         [.., ToileCommand::SetText { id, .. }] if id == &eid("a")
     ));
-    use ambre_bus::app::toile::ToileError;
+    use crate::message::ToileError;
     rig.answer(lost(ToileError::NoSuchElement(eid("b"))));
     assert!(
         rig.notices.take().is_empty(),
@@ -884,7 +884,7 @@ fn the_pipe_follows_the_caret_inside_the_element() {
 /// for moves nothing (`FIND-004`).
 #[test]
 fn the_current_match_is_brought_into_view() {
-    use ambre_bus::app::toile::{Elements, FindResults, SelectionStats};
+    use crate::message::{Elements, FindResults, SelectionStats};
     let far = Rect::new(1.0e6, 1.0e6, 1.0e6 + 100.0, 1.0e6 + 80.0);
     let mut rig = Rig::with_stickies(&[("a", A)]);
     assert!(!rig.view.cam.visible_world().contains(far.center()));
@@ -1434,8 +1434,8 @@ fn editing(rig: &Rig) -> Option<Id<Element>> {
 /// A rectangle shape: an element that carries no body.
 fn shape(id: &str, bounds: Rect) -> DisplayElement {
     DisplayElement {
-        kind: ElementKind::Shape(ambre_bus::app::toile::ShapeKind::Rect),
-        geom: ambre_bus::app::toile::DisplayGeom::Rect,
+        kind: ElementKind::Shape(crate::message::ShapeKind::Rect),
+        geom: crate::message::DisplayGeom::Rect,
         ..sticky(id, bounds)
     }
 }
@@ -1692,7 +1692,7 @@ fn a_rotated_note_keeps_its_rotation_while_edited() {
 /// selection are as they were before the search.
 #[test]
 fn a_find_step_recentres_without_a_zoom_or_a_selection() {
-    use ambre_bus::app::toile::{Elements, FindResults, SelectionStats};
+    use crate::message::{Elements, FindResults, SelectionStats};
     let far = Rect::new(5000.0, 4000.0, 5100.0, 4080.0);
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
@@ -2048,7 +2048,7 @@ fn an_editor_or_a_gesture_keeps_the_overlay_repainting() {
 /// A group node over `bounds`, itself a member of `parent` when one is given.
 fn group_node(id: &str, bounds: Rect, parent: Option<&str>) -> DisplayNode {
     DisplayNode::Element(DisplayElement {
-        geom: ambre_bus::app::toile::DisplayGeom::Group,
+        geom: crate::message::DisplayGeom::Group,
         group: parent.map(eid),
         ..shape(id, bounds)
     })
@@ -2126,10 +2126,8 @@ fn asks_for_the_frame(sent: &[ToileCommand]) -> bool {
 /// The reply a fit request gets: the frame's box, or none for an id the
 /// board no longer holds.
 fn fit_reply(bounds: Option<Rect>) -> ToileEvent {
-    ToileEvent::SelectionStats(ambre_bus::app::toile::SelectionStats {
-        count: ambre_core::Count::<ambre_bus::app::toile::Elements>::new(u32::from(
-            bounds.is_some(),
-        )),
+    ToileEvent::SelectionStats(crate::message::SelectionStats {
+        count: ambre_core::Count::<crate::message::Elements>::new(u32::from(bounds.is_some())),
         bounds,
         kind: StatsRequestKind::Fit,
     })
@@ -2289,7 +2287,7 @@ fn chord_of(id: StaticKey<Commands>) -> InputEvent {
 fn chord_board(selection: &[&str]) -> Rig {
     let group = DisplayElement {
         kind: ElementKind::Group,
-        geom: ambre_bus::app::toile::DisplayGeom::Group,
+        geom: crate::message::DisplayGeom::Group,
         ..sticky("g", AWAY)
     };
     let elements = vec![sticky("a", A), sticky("b", B), group];
@@ -2511,7 +2509,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
     let mut rig = Rig::new();
     let a = sticky("a", A);
     let b = DisplayElement {
-        locked: ambre_bus::app::toile::LockState::Locked,
+        locked: crate::message::LockState::Locked,
         style: ElementStyle {
             stroke_w: Px::<StoredBoard>::new(4.0),
             ..ElementStyle::default()
@@ -2618,22 +2616,22 @@ fn a_shared_board(peer: Id<User>) -> Rig {
     let mut reactions = std::collections::BTreeMap::new();
     reactions.insert(
         eid("a"),
-        ambre_bus::app::toile::ReactionCounts {
+        crate::message::ReactionCounts {
             emoji: vec![(
                 ambre_bus::Emoji::from("+1"),
-                ambre_core::Count::<ambre_bus::app::toile::Reactions>::new(2),
+                ambre_core::Count::<crate::message::Reactions>::new(2),
             )],
-            vote_total: ambre_bus::app::toile::VoteTotal::ZERO,
-            vote_count: ambre_core::Count::<ambre_bus::app::toile::Votes>::ZERO,
+            vote_total: crate::message::VoteTotal::ZERO,
+            vote_count: ambre_core::Count::<crate::message::Votes>::ZERO,
         },
     );
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
         version: ambre_core::Seq::ZERO,
         grid_unit: Px::<Board>::new(20.0),
-        pins: vec![ambre_bus::app::toile::CommentPin {
+        pins: vec![crate::message::CommentPin {
             thread: Id::<Thread>::from_text("t".to_owned()),
             at: kurbo::Point::new(50.0, 50.0),
-            messages: Len::<ambre_bus::app::toile::ThreadMessage>::new(1),
+            messages: Len::<crate::message::ThreadMessage>::new(1),
             resolved: ambre_core::ThreadState::Open,
         }],
         reactions,
@@ -2841,13 +2839,11 @@ fn a_thread_brings_the_camera_to_its_anchor() {
         )
     });
     assert!(asked, "the view asks for the anchor's box");
-    rig.answer(ToileEvent::SelectionStats(
-        ambre_bus::app::toile::SelectionStats {
-            count: ambre_core::Count::<ambre_bus::app::toile::Elements>::new(1),
-            bounds: Some(Rect::new(4000.0, 4000.0, 4100.0, 4200.0)),
-            kind: StatsRequestKind::CommentFocus,
-        },
-    ));
+    rig.answer(ToileEvent::SelectionStats(crate::message::SelectionStats {
+        count: ambre_core::Count::<crate::message::Elements>::new(1),
+        bounds: Some(Rect::new(4000.0, 4000.0, 4100.0, 4200.0)),
+        kind: StatsRequestKind::CommentFocus,
+    }));
     assert_eq!(rig.view.cam.center, kurbo::Point::new(4050.0, 4100.0));
 }
 
@@ -2994,7 +2990,7 @@ fn a_dropped_media_request_is_offered_again() {
     let mut picture = sticky("p", Rect::new(0.0, 0.0, 100.0, 100.0));
     picture.kind = ElementKind::Image;
     let hash = "f".repeat(64);
-    picture.geom = ambre_bus::app::toile::DisplayGeom::Image(
+    picture.geom = crate::message::DisplayGeom::Image(
         ambre_core::Validated::<ambre_core::ContentHash>::parse(&hash).ok(),
     );
     rig.show(vec![DisplayNode::Element(picture)]);
