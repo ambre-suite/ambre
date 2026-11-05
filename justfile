@@ -261,6 +261,26 @@ test-wasm:
 cov:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
 
+# Mutation testing on the host tier (`ambre-spec-testing.md` section 2). A wasm
+# or browser test costs a std rebuild or a Chrome start per mutant, so neither
+# tier runs. `.cargo/mutants.toml` holds the scope and each exclusion with its
+# reason. `shard` splits the run as `k/n`, `k` from 0: the CI `mutants` job runs
+# each shard on its own runner. A surviving mutant exits non-zero, and its diff
+# lands under `mutants.out/`. `flags` go to cargo-mutants as written: CI passes
+# `--in-place`, which builds in the restored `target/` rather than in a copy.
+
+# mutation testing: the mutants of the configured scope, one shard of them.
+mutants shard="0/1" *flags:
+    cargo mutants --shard {{shard}} --no-shuffle {{flags}}
+
+# The mutants of the lines this branch changes against `base` alone. The CI
+# `mutants-diff` job runs it on a pull request and blocks on a survivor.
+
+# mutation testing: the mutants of the lines changed since `base`.
+mutants-diff base="origin/main" *flags:
+    git diff {{base}}...HEAD > mutants.diff
+    cargo mutants --in-diff mutants.diff {{flags}}
+
 # A spec states what and why; the source states how (`ambre-spec-template.md §0`).
 # Shapes are the contract and stay -- `struct`, `enum`, trait and public
 # signatures. Function bodies are a second, uncompiled copy that drifts: a

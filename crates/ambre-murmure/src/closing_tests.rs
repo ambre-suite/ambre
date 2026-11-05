@@ -129,6 +129,16 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
     );
 }
 
+/// A channel owes no close until a rotation retires its key, and owes one
+/// from then on (`MURMURE-060`).
+#[test]
+fn a_rotation_owes_the_close_of_the_active_segment() {
+    let mut alice = channel(10);
+    assert!(!alice.owes_rotation_close());
+    alice.key_rotated();
+    assert!(alice.owes_rotation_close());
+}
+
 // --- MURMURE-481 ---
 
 /// A segment of long messages asks to close at the send that takes its
@@ -507,4 +517,53 @@ fn a_refused_reaction_alone_moves_nothing() {
         alice.relocate_locked(alice.active_id().document_id(), &[]),
         Err(MurmureError::NotActive(_))
     ));
+}
+
+/// The byte bound of a segment is the 2 MB of the budget row, in binary
+/// megabytes (`MURMURE-481`).
+#[test]
+fn the_byte_bound_of_a_segment_is_two_megabytes() {
+    assert_eq!(crate::SEGMENT_SNAPSHOT_SIZE.get(), 2_097_152);
+}
+
+// --- AUTHOR-026 ---
+
+/// The identity the Sync worker issues for a successor still arriving is
+/// kept, and the successor takes it once admitted. Until then this member
+/// may not write it.
+#[test]
+fn an_identity_issued_before_the_successor_arrives_is_adopted_on_admission() {
+    let mut alice = channel(1);
+    let author = Id::<User>::mint();
+    alice.send(&draft("one"), author, NOW).expect("send");
+    let mut bob = peer_of(&alice);
+    let (successor, meta, first) = close_created(&mut alice);
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
+        .expect("meta");
+    assert_eq!(bob.successor_to_open(), Some(successor));
+    let peer = next_peer();
+    assert_eq!(
+        bob.adopt_session(
+            successor.document_id(),
+            peer,
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
+        ),
+        Ok(None),
+        "kept for the successor still arriving"
+    );
+    assert!(!bob.identified(successor.document_id()), "not held yet");
+    let signer = Signer {
+        peer: alice.peer(successor.document_id()).expect("a session"),
+        user: Some(author),
+    };
+    bob.apply_signed(
+        successor.document_id(),
+        Seq::<Relay>::new(1),
+        &first,
+        signer,
+    )
+    .expect("arrival");
+    bob.older_ready(successor.document_id()).expect("ready");
+    assert!(bob.identified(successor.document_id()));
+    assert_eq!(bob.peer(successor.document_id()), Some(peer));
 }

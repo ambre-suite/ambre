@@ -459,6 +459,8 @@ run the same command.
 | `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
+| `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, on the default branch alone, non-blocking. Each shard uploads its report |
+| `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |
 
 The wasm `-A warnings` rustflag is scoped to `[target.wasm32-unknown-unknown]`, so host clippy keeps
 every warning. `lint-wasm` sets its own `RUSTFLAGS`, which replace that rustflag. Every native job
@@ -480,8 +482,8 @@ whether it blocks the current MVP.
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
 | `proptest` | wired | `ambre-crypto`, the Trame formula engine, convergence on Trame, Toile and Murmure, and the Toile index against rebuild |
 | `cargo-fuzz` | wired | seven targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser, the Markdown reader, the sealed open path, and the Trame and Toile file readers, one minute each in the CI `fuzz` job. The sealed target opens under a fixed key, so a key-holding peer's plaintext reaches the decompression |
-| `cargo-mutants` | absent | the whole suite, never adversarially checked |
-| `cargo-llvm-cov` | wired, non-blocking | an `lcov` baseline only. No diff-mode gate on added lines |
+| `cargo-mutants` | wired, host tier | `ambre-sync`, `ambre-crypto` and the Murmure channel module, measured 2026-11-05: 2862 mutants, and 183 survivors left after triage. The wasm and browser tiers run per mutation nowhere |
+| `cargo-llvm-cov` | wired, non-blocking, host tier alone | an `lcov` baseline only. No diff-mode gate on added lines. The wasm tier has none: `-C instrument-coverage` needs `-Zno-profiler-runtime` on wasm32, a lever the primitive gate refuses (`ARCH-033`) |
 | `criterion` | benches in `ambre-crypto`, `ambre-toile` and `ambre-murmure` | a desktop figure only. **The mobile measurement the targets are written against has never been taken** |
 | `callgrind` | wired, three budgets | the CI `instructions` job holds the Toile body commit, the content walk of a busy Toile board and the Prose text layout of a paragraph under their ceilings, and the bound the Toile diff cap allows. Every other budget row has no ceiling yet |
 | `insta` | absent | candidates: `RecordingSurface` op sequences, wire encodings, and the `KrillaSurface` primitives |

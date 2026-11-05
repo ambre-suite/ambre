@@ -1481,6 +1481,29 @@ mod tests {
         ));
     }
 
+    /// The ceiling is inclusive: an output of exactly the floor opens, and
+    /// one byte more is refused.
+    #[test]
+    fn an_output_at_the_ceiling_opens_and_one_byte_past_is_refused() {
+        let floor = usize::try_from(MIN_DECOMPRESS_CEILING.get()).expect("fits");
+        let at = vec![0u8; floor];
+        let compressed = compress_to_vec(at.as_slice(), CompressionLevel::Fastest);
+        assert!(
+            compressed.len() * MAX_DECOMPRESS_RATIO < floor,
+            "the floor binds"
+        );
+        assert_eq!(
+            decompress(CompressionVersion::Zstd, &compressed).unwrap(),
+            at
+        );
+        let past = vec![0u8; floor + 1];
+        let compressed = compress_to_vec(past.as_slice(), CompressionLevel::Fastest);
+        assert!(matches!(
+            decompress(CompressionVersion::Zstd, &compressed),
+            Err(PipelineError::DecompressTooLarge)
+        ));
+    }
+
     #[test]
     fn decompress_within_ceiling_ok() {
         // A legitimate ~4 KiB payload round-trips unaffected by the bound.

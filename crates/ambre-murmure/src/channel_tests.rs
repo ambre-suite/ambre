@@ -218,6 +218,28 @@ fn an_open_channel_holds_meta_the_active_and_the_closing_segment() {
     assert_eq!(state.closing_id(), Some(stored.closing_id));
 }
 
+/// The documents a close releases are every one the channel holds: `meta`,
+/// its live segments, and an older segment loaded since, never one unloaded
+/// (`MURMURE-026`).
+#[test]
+fn the_documents_of_a_channel_are_every_one_it_holds() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    let set = |ids: Vec<Id<Document>>| ids.into_iter().collect::<HashSet<_>>();
+    let live = [
+        stored.meta_id.document_id(),
+        stored.closing_id.document_id(),
+        stored.active_id.document_id(),
+    ];
+    assert_eq!(state.document_ids().len(), live.len());
+    assert_eq!(set(state.document_ids()), set(live.to_vec()));
+    let bytes = stored.segments.get(&stored.final_id).expect("bytes");
+    state.load_older(stored.final_id, bytes).expect("load");
+    let mut held = live.to_vec();
+    held.push(stored.final_id.document_id());
+    assert_eq!(set(state.document_ids()), set(held));
+}
+
 #[test]
 fn a_live_segment_with_no_bytes_refuses_the_open() {
     let mut stored = stored_channel();
@@ -966,6 +988,19 @@ fn clearing_a_name_removes_its_key() {
     }
 }
 
+/// Clearing a name the channel does not carry writes no operation, so no
+/// member receives a change that changes nothing.
+#[test]
+fn clearing_an_absent_name_writes_nothing() {
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Direct, None, NOW)
+        .expect("create")
+        .identify();
+    let meta = alice.meta_id().document_id();
+    let before = alice.doc(meta).expect("meta").oplog_vv();
+    alice.name_direct(None).expect("clear");
+    assert_eq!(alice.doc(meta).expect("meta").oplog_vv(), before);
+}
+
 #[test]
 fn only_a_direct_message_takes_a_name_from_a_member() {
     for kind in [ChannelType::Private, ChannelType::Public] {
@@ -1430,6 +1465,19 @@ fn a_loaded_segment_is_no_band() {
     state.load_older(stored.final_id, bytes).expect("load");
     assert_eq!(
         state.band(stored.final_id.document_id(), Unreadable::Damaged),
+        None
+    );
+}
+
+/// A closing segment the channel holds shows its messages, never a band:
+/// only one it opened without stands as a band (`MURMURE-502`).
+#[test]
+fn a_held_closing_segment_is_no_band() {
+    let stored = stored_channel();
+    let state = open(&stored);
+    assert!(state.holds(stored.closing_id.document_id()));
+    assert_eq!(
+        state.band(stored.closing_id.document_id(), Unreadable::Damaged),
         None
     );
 }

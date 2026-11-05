@@ -462,3 +462,75 @@ jobs:
           name: lcov
           path: lcov.info
           if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # mutants -- mutation testing over the scope of `.cargo/mutants.toml`, on the
+  # host tier (`ambre-spec-testing.md section 2`). Non-blocking, and on the
+  # default branch alone. The whole scope took 1 h 56 min on four cores with
+  # three jobs (measured 2026-11-05), so a branch push leaves it to
+  # `mutants-diff`. Eight shards, each built in place in the restored cache.
+  # Each uploads its report.
+  # ---------------------------------------------------------------------------
+  mutants:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just and cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-mutants
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 0 }}
+      - run: just mutants ${{ matrix.shard }}/8 --in-place
+      - name: Upload the mutants report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-${{ matrix.shard }}
+          path: mutants.out/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # mutants-diff -- the mutants of the lines a pull request changes in the
+  # scope of `.cargo/mutants.toml`. Blocking: a surviving mutant is a changed
+  # line no test would fail on. A pull request outside the scope tests none.
+  # A fix of 179 lines in ambre-sync took 4 min, build included (measured
+  # 2026-11-05 on four cores).
+  # ---------------------------------------------------------------------------
+  mutants-diff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The whole history: the diff reads the merge base with the base branch.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just and cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-mutants
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants
+          save-if: false
+      - run: just mutants-diff origin/${{ github.base_ref }} --in-place
+      - name: Upload the mutants report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-diff
+          path: mutants.out/
+          if-no-files-found: ignore
