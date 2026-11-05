@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: ROWS AND COLUMNS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- inserting, deleting and reordering are built. Four of their rules the
-code contradicts, and one of the four contradicts it across the wire.
+**Implementation:** partial -- inserting, deleting and reordering are built. Five rules are broken
+across the wire: two peers that add one line at once add two lines.
 
 > A user inserts a row above the one they are on, deletes the three they selected, or drags a column
 > to another position. Everything on those lines moves with them, and every formula still adds up.
@@ -25,7 +25,12 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-085` | `INV` | A merge MUST cover the same cells after a line is inserted, deleted or moved. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` -- it drives the insert alone, the delete and the drag reaching the same rebuild with no test reading a merge after either | none | verified |
 | `TRAME-170` | `INV` | The height, the width and the hidden mark of a line MUST follow that line when the lines move. | this spec section 3 | `ambre_trame::logic::tests::group11::a_line_keeps_its_size_and_its_hidden_mark_when_it_moves` | none | verified |
 | `TRAME-091` | `CONC` | Two users inserting at the same position MUST both get a line. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op set carries an insert and a delete on both axes | none | verified |
-| `TRAME-261` | `CONC` | Two peers writing at once in one line past the used range MUST both land on that line. | this spec section 3 | none | fails -- each peer materializes the line under an id it mints, so the merge keeps two lines. Two first writes in `A2` and `B2` leave the second value in `B3` on both peers. The documents converge, so no convergence test sees it; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-261` | `CONC` | Two peers writing at once in one line past the used range MUST both land on that line. | this spec section 3 | none | fails -- each peer materializes the line under an id it mints, so the merge keeps two lines. Two first writes in `A2` and `B2` leave the second value in `B3` on both peers. The documents converge, so no convergence test sees it. The fix is the derived uid of section 3, "A line a write adds"; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-262` | `CONC` | Two peers writing at once on two different lines past the used range MUST each land on the line they wrote. | this spec section 3 | none | fails -- `A2` from one peer and `B3` from the other add three lines, so `B3` reads one row lower on both peers. The spike of 2026-11-05 reproduced it on host; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-263` | `CONC` | An insert above the last line MUST NOT separate two concurrent first writes into the line after it. | this spec section 3 | none | fails -- each peer adds its own line after the last one, so the two values sit on two rows. The spike of 2026-11-05 reproduced it on host; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-264` | `CONC` | A move of a new line MUST carry the value another peer wrote into that line at the same moment. | this spec section 3 | none | fails -- the other peer's value sits on a line of its own, so it stays behind when the line moves. The spike of 2026-11-05 reproduced it on host; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-265` | `CONC` | A delete of a line MUST keep a value that a peer which never received the line wrote into it at the same moment. | this spec section 3 | none | unheld -- the value holds today because it sits on a line of its own; the derived uid makes the two lines one, and no test holds the value across that change; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
+| `TRAME-266` | `CONC` | Undoing one of two concurrent first writes in one new line MUST leave the other value on that line. | this spec section 3 | none | fails -- the two writes sit on two lines, so the value that stays is one row away from where it was typed. The spike of 2026-11-05 reproduced it on host; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 Insert a line
 
@@ -42,6 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-081` | `POST` | Deleting a line MUST leave none of its cells in the document. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the absence through a snapshot round trip | none | verified |
 | `TRAME-082` | `POST` | Deleting a line MUST leave none of its formatting in the document either. | this spec section 6 | `ambre_trame::logic::tests::group2::deleted_line_leaves_no_formatting` | none | verified |
+| `TRAME-269` | `POST` | Deleting a line that two peers added at once MUST leave no copy of that line on the grid. | this spec section 3 | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `TRAME-172` | `FRAME` | Deleting a line MUST NOT drop a cell that sits on another line. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the lines above and below the removed one keep their values across the round trip | none | verified |
 
 ### 1.4 Drag a line to another slot
@@ -50,6 +56,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-083` | `POST` | Moving a line MUST carry the values on it. | this spec section 3 | `ambre_trame::logic::tests::group2::move_row_carries_cells_and_formula_follows_data`; `::move_column_carries_cells` | none | verified |
 | `TRAME-084` | `FRAME` | Moving a line MUST change no formula result. | this spec section 3 | `ambre_trame::logic::tests::group2::move_row_carries_cells_and_formula_follows_data` -- it reads the formula at its new position and gets its old answer | none | verified |
+| `TRAME-268` | `FRAME` | Moving a line MUST NOT show a second copy of a line that two peers added at once. | this spec section 3 | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `TRAME-173` | `FRAME` | Releasing a line on the slot it came from MUST write nothing. | this spec section 4 | `ambre_trame::logic::tests::group11::a_line_released_on_its_slot_writes_nothing` | none | verified |
 
 ### 1.5 Delete the selected lines
@@ -73,15 +80,16 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-089` | `FAIL` | A write more than ten thousand lines past the used range MUST be refused. | this spec section 5 | `ambre_trame::logic::tests::group11::a_write_past_the_line_cap_is_refused` -- the line before the cap is written | none | verified |
+| `TRAME-267` | `FRAME` | A write past the used range MUST NOT turn a `#REF!` to a deleted line back into a value. | this spec section 3; `TRAME-007` | none | unheld -- a minted uid is never minted twice, so the reference stays broken today; a derived uid could repeat the deleted one, and no test holds the reference across that change; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | untested |
 
 * **Budget.** the `SheetIndex` rebuild of 10k rows in < 10 ms
   (`ambre-spec-budgets.md section 1`): a structural operation is what that row was written
-  for. No bench measures it.
+  for. No bench measures it, nor the one hash a derived uid adds per line.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
-  seals every payload before it leaves the client.
-* **Verification.** 20 `verified`, 1 `failing`. What holds is the single-line gesture, the frame
-  conditions around it, and the summed block an insert widens. What is loose is the metrics that
-  follow a line, the drag that lands on its own slot and the guard past the used range.
+  seals every payload before it leaves the client. A derived uid hashes sealed content only.
+* **Verification.** 20 `verified`, 5 `failing`, 2 `untested`, 2 `unimplemented`. What holds is the
+  single-line gesture, the frame conditions around it, and the summed block an insert widens. What
+  is loose is two peers adding one line at once, and the guard past the used range.
 
 ---
 
@@ -92,6 +100,9 @@ status values are normative in `ambre-spec-template.md`.
 | inserts a row at 3 | inserts a row at 3 | two new rows, in a canonical order | two blank rows where one was asked for, on both screens (`TRAME-091`) | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` |
 | deletes row 3 | writes into row 3 | the row gone, and the write on whichever line the identity kept | the same grid, and B's value either lost with the row or on the line below | the same property, whose op set carries `DeleteRow` and `SetText` |
 | drags column B to the front | writes into column B | the column moved, with the write on it | both see the value in the moved column (`TRAME-083`) | the same property, whose op set carries `MoveColumn` and `SetText` |
+| writes `A2`, the first write in row 2 | writes `B2` at the same moment | one row 2, carrying both values | both values on row 2 (`TRAME-261`) | not built |
+| inserts a row above row 1, then writes `A3` | writes `B2` at the same moment | one new line after the old last line | both values on that line, row 3 on both screens (`TRAME-263`) | not built |
+| deletes the new row 2 | writes `C2` without having received row 2 | row 2 deleted, and the line kept for the value written into it | `C2` kept on that line, the other values gone with the delete (`TRAME-265`) | not built |
 | inserts a row above a merge | reads the merge | the merge, over the same cells | the block unchanged, one row lower (`TRAME-085`) | `ambre_trame::logic::tests::group3::merge_follows_structural_insert`, one peer |
 
 ---
@@ -123,6 +134,43 @@ and a sort (`TRAME-004`).
 | What the lists hold | the used range only. Past it a line has no element and no storage |
 | An insert out there | a no-op (`TRAME-086`) |
 | A write out there | materializes every line up to it, unless the jump exceeds ten thousand (`TRAME-089`) |
+
+**A line a write adds.** A write past the used range adds its lines under a **derived uid**. An
+insert keeps a minted uid. Two peers that agree on the last line then derive one uid for the next
+line, and their two cells key one line (`TRAME-261`).
+
+| Step | Rule |
+|---|---|
+| input | the sheet id, the axis, the uid of the line before, and a salt that starts at 0 |
+| the line before | the last line of the axis on the writing peer, or the line this write derived just before |
+| hash | BLAKE2b, the workspace hash, over a fixed domain string and the four inputs, cut to 96 bits |
+| spelling | 64 bits fill the `peer` half and 32 bits the `counter` half, so a reader parses it as any uid (`TRAME-248`) |
+| salt | raised by one while the uid is live in the axis or recorded in `retired_{sheet}` (`TRAME-271`) |
+| counter | none spent: only an insert and a new sheet spend the session counter (`TRAME-242`) |
+
+**Two pushes of one uid.** Each peer pushes its own element, so the merged list holds the uid twice.
+The reader keeps the first element and hides the later one (`TRAME-270`). An insert, a delete, a
+move and a sort first remove every hidden element, in a commit of their own under the excluded
+origin. List index and grid position then agree again, and the undo stack holds no removal
+(`TRAME-268`, `TRAME-269`).
+
+**A delete records the uid.** A delete writes the removed uid into `retired_{sheet}` in the same
+commit, so undoing the delete removes the record with it. The next write at that position derives a
+new uid, and a reference to the deleted line stays `#REF!` (`TRAME-267`).
+
+**The cases the spike of 2026-11-05 drove**, on host, through two `TrameState` peers that exchange
+snapshots. The time box was 2 hours; the question had its answer in less.
+
+| Case | Converged line | Row |
+|---|---|---|
+| first writes in `A2` and `B2` | one line, both values | `TRAME-261` |
+| one peer writes row 2, the other row 3 | rows 2 and 3, the first derived by both | `TRAME-262` |
+| an insert above the last line races the two writes | one new line after the old last line | `TRAME-263` |
+| a move of the new line races the other first write | the moved line carries both values | `TRAME-264` |
+| a third peer, which never received the line, writes into it while it is deleted | that line survives, with that value only | `TRAME-265` |
+| an undo of one of the two writes | the other value stays on the line | `TRAME-266` |
+| a write after the line was deleted | a new uid, the reference to the old line stays `#REF!` | `TRAME-267` |
+| a document of schema version 1 | read unchanged: its lines hold minted uids, none twice | `TRAME-272` |
 
 **Code.** `logic/structural.rs` -- `insert_axis`, `delete_axis`, `move_axis`,
 `delete_selected_axis`, `purge_axis`, `after_structural`; `logic/cells.rs` -- `materialize` and the
@@ -172,6 +220,15 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 | A move reseeds the engine only when it re-anchored a range | reseeding after every structural operation, as a delete does | a cell reference resolves through the position cache, and a move only permutes it. Re-parsing every formula to reach the same answer is the cost a stable identity exists to avoid |
 | A delete purges the removed line's cells | leaving the entries and filtering them at read time | a cell keyed by a deleted identity is unreachable and would ride in the document and every sync payload for ever |
 | An insert from any surface goes through one intent | each surface computing a grid position and sending it | the menu, the header affordance and a future keyboard chord then resolve the position in one place, and cannot disagree about what "above" means |
+| A line a write adds takes a derived uid | a minted uid, then a merge of the two lines after the fact | every peer that imports the split writes the fold, and the fold rewrites every cell key of one line. A viewer cannot write, so a viewer keeps the split |
+| A line a write adds takes a derived uid | a uid the relay assigns | the relay is blind and orders no structure. A peer offline could then write past the used range only after it reconnects |
+| A line a write adds takes a derived uid | a uid derived from the grid position | a delete above, then a write, derives the uid of a line still live: two lines become one, and their cells collide |
+| A line a write adds takes a derived uid | a uid derived from the set of every uid of the axis | any concurrent insert or delete, anywhere on the axis, changes the set. Most real races then still split the line |
+| A line a write adds takes a derived uid | a hash keyed with the document key | the uid never leaves the sealed document, so a key hides nothing. A key rotation would then change the uid of every line not yet written |
+| A line a write adds takes a derived uid | a 64-bit non-cryptographic hash spread over 96 bits | 96 bits cut from a 64-bit hash still collide at 64 bits. BLAKE2b is already the workspace hash |
+| A deleted uid is recorded in `retired_{sheet}` | derive again whatever the axis no longer holds | the next write at that position takes the deleted uid back. Every `#REF!` to the old line then reads a value again, and a cell written into it at the same moment comes back too |
+| The reader hides a repeated uid, and a positional write removes it | remove the repeat at import time | the import becomes a write: every peer writes the same removal, and a viewer may not write at all |
+| The reader hides a repeated uid, and a positional write removes it | keep the repeat, and map each grid position to its list index in every writer | the insert, the delete, the move and the sort then each carry the map. A move past a hidden repeat also makes the repeat the first element, so the line jumps back |
 | An insert keeps each range corner on its line | a positional range, which counts the new line with no edit | the block's old last line then falls out of it, and the total changes for an operation that wrote no value. A corner names its line, so the range widens over what is inserted inside it (`TRAME-171`), and two concurrent inserts widen it twice, which is what both users meant |
 
 ---
@@ -185,6 +242,10 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 * **The materialization cap is a branch nothing enters** (`TRAME-089`). Ten thousand lines past the
   used range, the write is dropped with a log line. No test, no event, and nothing tells the user
   their value did not land.
+* **Two peers that disagree on the last line still split a new line.** A move, a sort or a delete
+  of the last line, racing two first writes, gives each peer another line before. Each peer then
+  derives another uid, and the values sit on two lines, as they all do today. No rule binds that
+  race yet.
 * **Nothing inserts or deletes more than one line at a time.** There is no "insert three rows", only
   three inserts. The multi-line delete removes its lines in one commit, so it is one undo item and
   one delta (`TRAME-088`, `TRAME-175`).
