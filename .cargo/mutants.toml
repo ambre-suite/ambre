@@ -70,6 +70,17 @@ exclude_re = [
     # Equivalent on the host: with no relay the rename only logs. The request
     # leaves from the browser path alone.
     'replace SyncState::handle_name_channel with \(\)',
+    # Equivalent on the host: with no relay each of these only logs. The
+    # read cursors, the activity and the space listing leave from the
+    # browser path alone, and the browser tier holds them.
+    'replace SyncState::(handle_mark_read|handle_move_read_cursors|handle_mark_thread_read|move_cursors|handle_mark_all_read|handle_fetch_activity|fetch_activity|handle_list_space_channels) with \(\)',
+    'replace put_cursors with \(\)',
+    'delete ! in SyncState::handle_mark_read',
+    'replace == with != in SyncState::fetch_activity',
+    'delete match arm .* in SyncState::handle_list_documents',
+    # Cost only, and in the browser path: the mutant fetches the key links
+    # of a name sealed under the current key too, which opens it the same.
+    "replace == with != in ListedName<'_>::open",
     # The browser transport: host tests drive a scripted transport in its
     # place, and the browser tier drives this one.
     '<impl MediaHttp for GlooHttp>',

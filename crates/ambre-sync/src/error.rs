@@ -135,6 +135,23 @@ impl From<SyncError> for HttpError {
 
 #[cfg(test)]
 mod tests {
+    /// A malformed answer names the part that did not decode, so the log
+    /// and the failure shown say which one.
+    #[test]
+    fn a_malformed_answer_names_its_part() {
+        for (part, text) in [
+            (Part::SigningKey, "the signing key"),
+            (Part::WrappedKey, "the wrapped key"),
+            (Part::SealedChannelKey, "the sealed channel key"),
+            (Part::JoinHead, "the join head"),
+        ] {
+            assert_eq!(
+                SyncError::Malformed(part).to_string(),
+                format!("{text} does not decode")
+            );
+        }
+    }
+
     use super::*;
 
     /// A relay refusal carried through a step keeps its code, and a failure

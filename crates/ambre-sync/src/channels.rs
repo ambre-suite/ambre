@@ -2209,6 +2209,13 @@ pub(crate) mod tests {
         let (own_key, root) = unwrap_from(&alice, &alice, &body.doc_key_enc).expect("own wrap");
         assert_eq!(body.key_id, own_key.id());
         let entries = membership_log::decode(&body.entries);
+        // `SYNC-123`: the creation and each invite name the key; the role
+        // change of the creator installs none.
+        for entry in &entries {
+            let named =
+                (entry.act != ambre_protocol::MembershipAct::ChangeRole).then_some(body.key_id);
+            assert_eq!(entry.key, named, "{:?}", entry.act);
+        }
         let log = membership_log::Log::walk(
             meta.document_id(),
             root,
@@ -2230,6 +2237,77 @@ pub(crate) mod tests {
             assert_eq!(opened_root, root);
             assert!(same_key(&key, &own_key));
         }
+    }
+
+    /// `SYNC-106`: a self-join extends the log the join head names, at its
+    /// place and after its last entry, with the role the relay grants. An
+    /// empty log takes none.
+    #[test]
+    fn a_self_join_extends_the_log_the_join_head_names() {
+        let author = crate::sharing::Author {
+            user_id: Id::<User>::mint(),
+            signing_key: SigningKey::from_bytes(&[4; 32]),
+        };
+        let meta_id = Id::<Meta>::mint();
+        let key = DocumentKey::generate().id();
+        let mut head = http::JoinHeadResponse {
+            meta_id,
+            role: Role::Editor,
+            length: ambre_core::Seq::ZERO,
+            last: None,
+        };
+        assert_eq!(self_join_entry(&author, &head, key).expect("empty"), None);
+
+        let owner = SigningKey::from_bytes(&[6; 32]);
+        let first = membership_log::sign(
+            membership_log::Draft {
+                document: meta_id.document_id(),
+                member: Id::<User>::mint(),
+                member_key: FixedBytes::from_array(owner.verifying_key().to_bytes()),
+                act: ambre_protocol::MembershipAct::Create,
+                role: Role::Owner,
+                key: Some(key),
+            },
+            membership_log::LogHead::EMPTY,
+            Id::<User>::mint(),
+            &owner,
+        )
+        .expect("sign");
+        head.length = ambre_core::Seq::new(1);
+        head.last = Some(membership_log::encode(&first).expect("encode"));
+        let entry = self_join_entry(&author, &head, key)
+            .expect("joined")
+            .expect("an entry");
+        let joined = membership_log::decode(std::slice::from_ref(&entry));
+        let [joined] = joined.as_slice() else {
+            panic!("one entry");
+        };
+        assert_eq!(joined.act, ambre_protocol::MembershipAct::SelfJoin);
+        assert_eq!(
+            (joined.document, joined.member, joined.role, joined.key),
+            (
+                meta_id.document_id(),
+                author.user_id,
+                Role::Editor,
+                Some(key)
+            )
+        );
+        assert_eq!(joined.position, head.length);
+        assert_eq!(joined.previous, membership_log::digest(&first));
+    }
+
+    /// The activity answer reaches the Logic thread as it came; a failed one
+    /// sends nothing.
+    #[test]
+    fn the_activity_answer_reaches_logic() {
+        let (state, rx) = bare_state();
+        state.activity_fetched(Ok(Vec::new()));
+        assert!(matches!(
+            rx.try_iter().collect::<Vec<_>>().as_slice(),
+            [LogicEvent::ChannelActivity { documents }] if documents.is_empty()
+        ));
+        state.activity_fetched(Err(crate::http::HttpError::Local("down".into())));
+        assert_eq!(rx.try_iter().count(), 0);
     }
 
     /// A member whose key the relay now serves differently is refused: no
