@@ -46,7 +46,7 @@ pub struct FindReplaceState {
 }
 
 /// A `ReplaceOne` or `ReplaceAll` request. The panel sends none for an empty
-/// query. The launcher forwards it as [`ambre_bus::TrameCommand::ReplaceAll`].
+/// query. The launcher forwards it as [`crate::message::TrameCommand::ReplaceAll`].
 #[derive(Clone, PartialEq, Eq)]
 pub struct ReplaceRequest {
     pub query: FindQuery<FindOptions>,

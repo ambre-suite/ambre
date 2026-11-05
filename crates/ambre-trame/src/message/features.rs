@@ -12,7 +12,7 @@
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
 use super::{CellFloat, CellRect, Col, SourceForm};
-use crate::app::trame::CellText;
+use crate::message::CellText;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Len;
 use ambre_core::{Bounded, Bounds, Count, Instant, Refusal, Rgb, SheetDateTime};

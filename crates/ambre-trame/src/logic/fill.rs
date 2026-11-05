@@ -11,8 +11,9 @@
 use super::*;
 use crate::formula::shift::shift_formula;
 use crate::formula::text::CellText;
-use ambre_bus::app::trame::CellFloat;
-use ambre_bus::{Col, FillMode, Row};
+use crate::message::CellFloat;
+use crate::message::FillMode;
+use ambre_bus::{Col, Row};
 use ambre_core::Bounded;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Delta, Len};

@@ -14,8 +14,8 @@ use ambre_core::Version;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::{BTreeMap, HashMap};
 
+use crate::message::DocChar;
 use ambre_bus::app::grid::{CellPos, Col, Row};
-use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Footnote, Id, User};
 use ambre_core::{
     Char, Count, DocBlocks, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Generator,
@@ -361,7 +361,7 @@ const COMMENT_AT: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000
 enum FixtureError {
     /// The engine refused a command the fixture runs.
     Refused {
-        command: crate::events::CommandName,
+        command: ambre_core::StaticKey<ambre_core::CommandNames>,
         reason: ProseRefusal,
     },
     /// A part the fixture writes into was not there. The sentence names it.
@@ -582,7 +582,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::FixtureGen;
     use ambre_core::index::{Len, Pos};
 

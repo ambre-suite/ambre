@@ -5,12 +5,11 @@
 // invitation and the request of a direct message, so every route to either
 // passes a decision.
 
-use ambre_bus::{
-    Authored, DirectMember, DirectMessageDraft, FixedBytes, Instant, LogicCommand, RestCommand,
-    Role,
-};
+use ambre_bus::{Authored, DirectMember, FixedBytes, Instant, RestCommand, Role};
 use ambre_chrome::Dialog;
 use ambre_core::id::{Channel, Document, Id, User};
+use ambre_logic::app::LogicCommand;
+use ambre_murmure::message::DirectMessageDraft;
 use leptos::prelude::*;
 
 /// What a confirmed key is for.
@@ -177,7 +176,11 @@ pub(crate) fn TofuDialog(
     let on_close = Callback::new(move |()| prompt.set(None));
 
     view! {
-        <Dialog open=open on_close=on_close class="ambre-tofu">
+        <Dialog
+            open=open
+            on_close=on_close
+            class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-tofu")}
+        >
             {move || {
                 prompt
                     .get()

@@ -336,7 +336,7 @@ fn build_shapes_and_frame(state: &mut ToileState) {
     });
     state.handle_command(ToileCommand::LockElements {
         ids: vec![ids[0].clone()],
-        lock: ambre_bus::app::toile::LockState::Locked,
+        lock: crate::message::LockState::Locked,
     });
 }
 
@@ -371,8 +371,8 @@ fn build_connectors_and_groups(state: &mut ToileState) {
             to_anch: Anchor::Left,
             path_type,
             arrows: EndCaps {
-                start: ambre_bus::app::toile::Cap::Plain,
-                end: ambre_bus::app::toile::Cap::Arrow,
+                start: crate::message::Cap::Plain,
+                end: crate::message::Cap::Arrow,
             },
         });
         state.handle_command(ToileCommand::SetConnectorLabel {
@@ -517,7 +517,7 @@ impl FixtureGen for ToileBenchFixture {
                 Px::<Board>::new(600.0),
                 Px::<Board>::new(24.0),
             ),
-            Self::Deck50 => build_deck(&mut state, Len::<ambre_bus::app::toile::Slide>::new(50)),
+            Self::Deck50 => build_deck(&mut state, Len::<crate::message::Slide>::new(50)),
         }
         state
             .export_ambre_plaintext(seeded_document_id(seed))
@@ -608,7 +608,7 @@ fn copy_payload(state: &mut ToileState, ids: Vec<Id<Element>>) -> Option<Clipboa
 ///
 /// The frames declare their children and the deck declares its order. The
 /// export walks that order and that membership, never the spatial overlap.
-fn build_deck(state: &mut ToileState, slides: Len<ambre_bus::app::toile::Slide>) {
+fn build_deck(state: &mut ToileState, slides: Len<crate::message::Slide>) {
     const PITCH: Px<Board> = Px::<Board>::new(1_400.0);
     let mut order = Vec::with_capacity(slides.to_usize());
     for slide in 0..slides.get() {

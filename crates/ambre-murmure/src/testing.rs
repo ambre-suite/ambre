@@ -3,8 +3,10 @@
 
 use std::rc::Rc;
 
+use crate::message::UiEvent;
+use crate::message::{MessageView, MurmureEvent};
 use ambre_bus::conduit::{Sender, local};
-use ambre_bus::{Authored, Instant, MessageView, MurmureEvent, UiEvent};
+use ambre_bus::{Authored, Instant};
 use ambre_canvas::{TextInput, ThemeControl};
 use ambre_core::id::{Channel, Id, Message, Segment, User};
 
@@ -65,7 +67,13 @@ pub fn channel_of(
     };
     let (events, from_logic) =
         local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
-    let view = MurmureView::new(Some(from_logic), None, reads, size, ThemeControl::default());
+    let view = MurmureView::new(
+        Some(ambre_bus::Inbox::direct(from_logic)),
+        None,
+        reads,
+        size,
+        ThemeControl::default(),
+    );
     let author = Id::<User>::mint();
     let messages = texts
         .iter()
@@ -80,8 +88,8 @@ pub fn channel_of(
             attachments: Vec::new(),
             reactions: Vec::new(),
             notice: None,
-            edited: ambre_bus::Revision::Original,
-            deleted: ambre_bus::Deletion::Live,
+            edited: crate::message::Revision::Original,
+            deleted: crate::message::Deletion::Live,
             thread: None,
             also_in_thread: None,
         })

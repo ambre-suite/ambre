@@ -315,7 +315,7 @@ fn xml_escape(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::logic::model::ElementStyle;
-    use ambre_bus::app::toile::FontSizeChoice;
+    use crate::message::FontSizeChoice;
     use ambre_core::{Px, StoredBoard};
 
     fn rect_el() -> ExportElement {

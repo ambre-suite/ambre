@@ -6,10 +6,8 @@ use ambre_bus::Char;
 use ambre_core::index::Span;
 use std::collections::HashMap;
 
-use ambre_bus::{
-    Authored, FoldAnswer, Instant, MessageDraft, MessageView, MurmureEvent, SnapshotVerdict,
-    StyleMark, TextStyle,
-};
+use crate::message::{MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle};
+use ambre_bus::{Authored, FoldAnswer, Instant, SnapshotVerdict};
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
@@ -388,8 +386,8 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         read.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
         ["uno", "", "three"]
     );
-    assert_eq!(read[0].edited, ambre_bus::Revision::Edited);
-    assert_eq!(read[1].deleted, ambre_bus::Deletion::Deleted);
+    assert_eq!(read[0].edited, crate::message::Revision::Edited);
+    assert_eq!(read[1].deleted, crate::message::Deletion::Deleted);
     // `MURMURE-562`: the fold keeps the styles of the edit.
     assert_eq!(read[0].styles, [bold()]);
     assert_eq!(read, before, "the fold reads as the amendments did");
@@ -689,8 +687,8 @@ fn amendments_still_arriving_are_dropped_once_folded() {
 fn a_fold_drops_a_mention_the_edit_removed() {
     let bob = Id::<User>::mint();
     let mentioned = MessageDraft {
-        mentions: vec![ambre_bus::Mention {
-            target: ambre_bus::MentionTarget::User(bob),
+        mentions: vec![crate::message::Mention {
+            target: crate::message::MentionTarget::User(bob),
             range: Span::<Char>::from_usize_range(0..4),
         }],
         ..draft("@bob hi")

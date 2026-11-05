@@ -11,7 +11,7 @@
 // signals declared at the bottom.
 // ============================================================================
 
-use ambre_bus::app::toile::{DeckFrame, Slide};
+use crate::message::{DeckFrame, Slide};
 use ambre_core::id::{Frame, Id};
 use ambre_core::index::Pos;
 
@@ -120,7 +120,7 @@ pub struct DeckSignals {
     /// Whether the panel is open (the Present menu sets it).
     pub panel: leptos::prelude::RwSignal<super::PanelState>,
     /// The board's frames, deck first: re-read on every deck change.
-    pub view: leptos::prelude::RwSignal<ambre_bus::app::toile::DeckView>,
+    pub view: leptos::prelude::RwSignal<crate::message::DeckView>,
     /// The panel's next intent, drained by the view each frame.
     pub intent: leptos::prelude::RwSignal<Option<DeckIntent>>,
 }

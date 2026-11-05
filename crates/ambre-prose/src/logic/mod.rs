@@ -451,7 +451,7 @@ impl ProseState {
         let shaped = std::sync::Arc::new(shaped);
         self.in_view.push(std::sync::Arc::clone(&shaped));
         Some(ProseEvent::LayoutShaped {
-            layout: ambre_bus::app::prose::SharedLayout::from_arc(shaped),
+            layout: crate::message::SharedLayout::from_arc(shaped),
         })
     }
 
@@ -1424,7 +1424,7 @@ mod tests {
     use super::*;
     use crate::events::HeadingLevel;
     use crate::events::{BlockId, BlockInit, CursorPosition};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
 
     #[test]
     fn a_fresh_document_holds_one_paragraph_and_a_version() {

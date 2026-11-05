@@ -8,8 +8,8 @@
 // puts it on screen.
 // ============================================================================
 
-use ambre_bus::app::toile::ToileEvent;
-use ambre_bus::{AppEvent, UiEvent};
+use crate::message::ToileEvent;
+use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::Toasts;
 
 use crate::ui::interop::import_message;
@@ -20,12 +20,11 @@ use crate::ui::interop::import_message;
 /// It also surfaces the two schema notices: a board this build cannot open
 /// (`SCHEMA-008`) and a register it cannot decode (`SCHEMA-003`). A no-op for
 /// every other event.
-pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
-    let UiEvent::Viewport {
-        event: AppEvent::Toile(te),
-        ..
-    } = ev
-    else {
+pub fn notify_event<S: Embed<ToileEvent>, P: ambre_bus::ChannelPlane>(
+    toasts: &Toasts,
+    ev: &UiEvent<S, P>,
+) {
+    let Some(te) = ev.viewport_event::<ToileEvent>() else {
         return;
     };
     match te {

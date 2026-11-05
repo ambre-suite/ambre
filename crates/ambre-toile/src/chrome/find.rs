@@ -15,8 +15,8 @@
 // canvas view handles the highlight + camera recenter off the same event.
 // ============================================================================
 
+use crate::message::{FindOptions, FindResults};
 use ambre_bus::app::find::FindQuery;
-use ambre_bus::app::toile::{FindOptions, FindResults};
 use ambre_core::StepDirection;
 use ambre_core::id::{Element, Id};
 use ambre_core::index::{Len, Pos};
@@ -29,7 +29,7 @@ use ambre_bus::app::find::Match;
 /// A `Find` request emitted by the panel. It carries the query and its options,
 /// `None` for an emptied field. It carries the hit to resume from, `None` for a
 /// fresh search focusing the first hit, and the step direction. The launcher
-/// forwards it as [`ambre_bus::app::toile::ToileCommand::Find`]; Logic steps
+/// forwards it as [`crate::message::ToileCommand::Find`]; Logic steps
 /// `focus` forward or backward from `from` itself (toile-find).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FindRequest {

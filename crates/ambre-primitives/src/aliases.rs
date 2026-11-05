@@ -38,7 +38,7 @@ const WALKED: &[&str] = &["crates", "fuzz"];
 const FAMILIES: &str = "## 2. THE FAMILIES";
 
 /// The crate that declares the families, as a directory and as a path root.
-const CORE: &str = "ambre-core";
+pub const CORE: &str = "ambre-core";
 const CORE_ROOT: &str = "ambre_core";
 
 /// The first segments of a path that start in the crate that writes it.

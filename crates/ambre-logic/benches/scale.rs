@@ -25,10 +25,11 @@
 use ambre_core::index::Pos;
 use std::hint::black_box;
 
-use ambre_bus::app::toile::{ToileCommand, Viewport};
-use ambre_bus::{CellPos, Col, Row, TrameCommand};
+use ambre_bus::{CellPos, Col, Row};
 use ambre_logic::DocState;
 use ambre_logic::fixtures::load_bench_fixture;
+use ambre_toile::message::{ToileCommand, Viewport};
+use ambre_trame::message::TrameCommand;
 use criterion::{Criterion, criterion_group, criterion_main};
 use kurbo::{Point, Vec2};
 
@@ -282,7 +283,7 @@ fn bench_prose_paragraph_shape(c: &mut Criterion) {
     let mut layout_cx = parley::LayoutContext::new();
     let style = measure::EffectiveStyle::from_parts(
         &ambre_prose::doc::DocDefaults::default(),
-        &ambre_bus::app::prose::ParagraphStyle::default(),
+        &ambre_prose::message::ParagraphStyle::default(),
         ambre_core::Weight::Regular,
     );
     let width = style.text_width(ambre_core::Px::<ambre_core::Doc>::new(600.0));

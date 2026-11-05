@@ -1,8 +1,8 @@
 //! Toile IPC contract and the data-oriented display structures.
 //!
-//! The command / event / display types themselves live in `ambre-bus`
-//! (`ambre_bus::app::toile`) so the `ambre-logic` dispatcher can match on `(DocState,
-//! AppCommand::Toile)` without a dependency cycle. This module re-exports them
+//! The command / event / display types themselves live in the message
+//! vocabulary (`crate::message`), which the Logic runtime carries as
+//! `AppCommand::Toile` and `AppEvent::Toile`. This module re-exports them
 //! (keeping the engine's `crate::logic::command::...` paths) and adds the one
 //! engine-local type: [`ToileOutcome`].
 //!
@@ -12,7 +12,7 @@
 //! `document_id`, which the standalone engine does not hold. Same division of labour
 //! as Trame.
 
-pub use ambre_bus::app::toile::{
+pub use crate::message::{
     BoolOp, Broadcast, ClipBytes, ClipConnector, ClipElement, ClipMembership, ClipSlot, ClipValue,
     ClipboardPayload, CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread,
     DeckFrame, DeckView, DisplayConnector, DisplayElement, DisplayGeom, DisplayNode,

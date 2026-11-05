@@ -14,10 +14,9 @@ use std::rc::Rc;
 use ambre_core::{Payload, SealedRowBytes};
 
 use ambre_bus::conduit::{Sender, TrySendError};
-use ambre_bus::{
-    Confidential, LogicCommand, Plaintext, Request, RestCommand, RestEvent, RowPlace, SealedRow,
-};
+use ambre_bus::{Confidential, Plaintext, Request, RestCommand, RestEvent, RowPlace, SealedRow};
 use ambre_core::Seq;
+use ambre_logic::app::LogicCommand;
 
 /// What rows read back open to, one slot each: `None` when the store is
 /// locked.

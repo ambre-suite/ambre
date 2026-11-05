@@ -119,7 +119,7 @@ nothing at all. So no step writes (`TOILE-063`) and none reaches the undo histor
 
 **Code:**
 
-* `crates/ambre-bus/src/app/toile.rs` -- the target type, the command, the register on the painted
+* `crates/ambre-toile/src/message/mod.rs` -- the target type, the command, the register on the painted
   element;
 * `crates/ambre-toile/src/logic/state/elements.rs` -- the one write;
 * `crates/ambre-toile/src/ui/link.rs` -- which click follows, which element it means, and what

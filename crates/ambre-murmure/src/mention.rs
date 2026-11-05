@@ -5,7 +5,7 @@
 //! it stays out of the mention. The marks are the truth: nothing here parses
 //! the text (`MURMURE-103`).
 
-use ambre_bus::{Mention, MentionTarget, MessageDraft};
+use crate::message::{Mention, MentionTarget, MessageDraft};
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::{Pos, Span};
 use ambre_core::{Char, Count, Members, char_len};
@@ -121,7 +121,7 @@ pub enum Screened {
 pub fn screen(
     draft: MessageDraft,
     members: Option<&[Id<User>]>,
-    confirmed: ambre_bus::Confirmation,
+    confirmed: crate::message::Confirmation,
 ) -> Screened {
     let Some(members) = members else {
         return Screened::Send(draft);
@@ -132,7 +132,7 @@ pub fn screen(
         .iter()
         .any(|mention| mention.target == MentionTarget::Channel);
     if all
-        && confirmed == ambre_bus::Confirmation::Unconfirmed
+        && confirmed == crate::message::Confirmation::Unconfirmed
         && Count::<Members>::of(members.len()) > CONFIRM_CHANNEL_PAST
     {
         return Screened::Confirm {

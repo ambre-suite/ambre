@@ -27,7 +27,7 @@ use std::sync::Arc;
 
 use loro::TreeID;
 
-use ambre_bus::app::prose::{DocChar, ProseCommand};
+use crate::message::{DocChar, ProseCommand};
 use ambre_core::{Doc, Px, View};
 
 use ambre_draw::kinetic::ScrollStep;

@@ -12,7 +12,7 @@
 //! and a cross-paragraph delete are therefore one code path and one convergence
 //! case (`PROSE-039`).
 
-use ambre_bus::app::prose::{DocChar, MarkKey};
+use crate::message::{DocChar, MarkKey};
 use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroText, TreeID, TreeParentId};
 
@@ -405,7 +405,7 @@ mod tests {
     use crate::events::HeadingLevel;
     use crate::events::{BlockInit, ProseCommand};
     use crate::logic::ProseState;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::Validated;
     use ambre_core::index::{Pos, Span};
 
@@ -526,7 +526,7 @@ mod tests {
         let (mut state, ids) = document_of(&["one", "two"]);
         state.handle_command(ProseCommand::SetBlockStyle {
             block_id: ids[0],
-            style_id: ambre_bus::app::prose::StyleId::new("quote".to_owned()),
+            style_id: crate::message::StyleId::new("quote".to_owned()),
         });
         state.handle_command(ProseCommand::DeleteRange {
             anchor: (ids[0], Pos::<DocChar>::new(3)),
@@ -535,7 +535,7 @@ mod tests {
         assert_eq!(state.root_blocks(), vec![ids[0]]);
         assert_eq!(
             state.style_of(&ids[0]),
-            Some(ambre_bus::app::prose::StyleId::new("quote".to_owned()))
+            Some(crate::message::StyleId::new("quote".to_owned()))
         );
     }
 
@@ -743,7 +743,7 @@ mod tests {
             parent_id: None,
             after_id: Some(first),
             init: BlockInit::CodeBlock {
-                lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
+                lang: ambre_core::Validated::<crate::message::CodeLang>::parse("rust").ok(),
             },
             style_id: None,
         });

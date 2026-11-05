@@ -132,7 +132,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, tree_id};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::FixedBytes;
     use ambre_core::id::{Id, User};
     use ambre_core::index::Pos;

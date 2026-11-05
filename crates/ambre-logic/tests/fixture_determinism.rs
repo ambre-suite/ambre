@@ -18,7 +18,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::{CellPos, Col, DocType, Row, TrameCommand};
+use ambre_bus::{CellPos, Col, DocType, Row};
 use ambre_core::id::{Document, Id};
 use ambre_core::index::Pos;
 use ambre_logic::DocState;
@@ -27,6 +27,7 @@ use ambre_toile::ToileState;
 use ambre_toile::logic::command::{InitContent, ToileCommand};
 use ambre_toile::logic::model::{ElementKind, ShapeKind};
 use ambre_trame::TrameState;
+use ambre_trame::message::TrameCommand;
 use kurbo::{Point, Size};
 
 /// The seed every single-peer case in this file builds from. A constant, like a
@@ -403,7 +404,7 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
     let block = prose.root_blocks()[0];
     prose.handle_command(ProseCommand::InsertText {
         block_id: block,
-        pos: Pos::<ambre_bus::app::prose::DocChar>::ZERO,
+        pos: Pos::<ambre_prose::message::DocChar>::ZERO,
         text: "a paragraph".to_owned(),
     });
     assert_round_trip(&DocState::Prose(Box::new(prose)), DocType::Prose);

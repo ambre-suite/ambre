@@ -141,7 +141,7 @@ impl TrameView {
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
-            command: AppCommand::Trame(cmd),
+            command: cmd,
         };
         match ambre_bus::send_lossy(&self.to_logic, msg) {
             LossyOutcome::Sent => true,
@@ -180,7 +180,7 @@ impl TrameView {
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
-            command: AppCommand::Trame(cmd),
+            command: cmd,
         };
         match self.outbox.send(msg) {
             SendOutcome::Sent => Ok(()),

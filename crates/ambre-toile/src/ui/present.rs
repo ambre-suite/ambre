@@ -12,7 +12,7 @@
 // a `Transition` and advances it each `plan_repaint` until it is `done`.
 // ============================================================================
 
-use ambre_bus::app::toile::FrameSnapshot;
+use crate::message::FrameSnapshot;
 use ambre_draw::Point;
 
 use crate::logic::animate::{AnimatedElement, Phase, Tween, ease_in_out_cubic, smart_animate};
@@ -81,7 +81,7 @@ impl Transition {
     /// The culling viewport that covers both ends of this transition
     /// (`TOILE-UI-085`). `cam` is the camera the frame is drawn at, and only
     /// its size is read.
-    pub fn covering_viewport(&self, cam: &ViewportTransform) -> ambre_bus::app::toile::Viewport {
+    pub fn covering_viewport(&self, cam: &ViewportTransform) -> crate::message::Viewport {
         let from = ViewportTransform {
             size: cam.size,
             ..self.cam_from
@@ -118,7 +118,7 @@ impl Transition {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::SnapElement;
+    use crate::message::SnapElement;
     use ambre_bus::{Instant, PageLoad};
     use ambre_core::Rgba;
     use ambre_core::id::{Element, Id};

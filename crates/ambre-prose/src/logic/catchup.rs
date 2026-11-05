@@ -12,7 +12,7 @@
 use ambre_core::index::{Delta, Pos, Span};
 use std::collections::VecDeque;
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 
 use crate::events::{ProseCommand, ProseEvent, ProseOutcome, TextEdit};
 use crate::rebase;
@@ -60,17 +60,14 @@ impl Prediction {
 #[derive(Debug, Default)]
 pub(super) struct CatchUp {
     /// How many changes the view did not draw so far.
-    seq: ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
+    seq: ambre_core::Seq<crate::message::TextChangeSeq>,
     /// The last of them the view said it applied.
-    seen: ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
+    seen: ambre_core::Seq<crate::message::TextChangeSeq>,
     /// How many text commands the view sent so far.
-    acked: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
+    acked: ambre_core::Seq<crate::message::TextAck>,
     /// The runs of the changes the view has not said it applied, each with
     /// its number. Each counts positions after every text command taken.
-    queue: VecDeque<(
-        ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
-        TextEdit,
-    )>,
+    queue: VecDeque<(ambre_core::Seq<crate::message::TextChangeSeq>, TextEdit)>,
     /// What the view drew for the command in dispatch.
     pub(super) predicting: Prediction,
 }
@@ -129,8 +126,8 @@ impl CatchUp {
         edits: Vec<TextEdit>,
     ) -> (
         crate::events::ChangeOrigin,
-        ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
-        ambre_core::Seq<ambre_bus::app::prose::TextAck>,
+        ambre_core::Seq<crate::message::TextChangeSeq>,
+        ambre_core::Seq<crate::message::TextAck>,
         Vec<TextEdit>,
     ) {
         let prediction = match source {

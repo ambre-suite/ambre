@@ -11,10 +11,9 @@ use ambre_core::{Image, Px, Size};
 use std::io::Cursor;
 
 use super::*;
-use ambre_bus::{
-    ContentHash, Ms, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent, TimeSpan,
-};
+use ambre_bus::{ContentHash, Ms, RestCommand, RestEvent, TimeSpan};
 use ambre_core::{Count, MediaBytes, Octets, Payload};
+use ambre_murmure::message::{MurmureEvent, Picture, PictureFrame};
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};

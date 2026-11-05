@@ -9,7 +9,8 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Authored, Instant, MemberView, Presence};
+use crate::message::{MemberView, Presence};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Id, User};
 use ambre_core::{Ms, TimeSpan};
 

@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use ambre_bus::app::prose::{HeadingLevel, OrderedStyle};
+use crate::message::{HeadingLevel, OrderedStyle};
 use ambre_core::Rgba;
 use html5ever::{LocalName, local_name};
 

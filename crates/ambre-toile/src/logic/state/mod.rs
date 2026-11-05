@@ -72,7 +72,7 @@ use std::collections::{HashMap, HashSet};
 use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
-use ambre_bus::app::toile::{Elements, IdCounter};
+use crate::message::{Elements, IdCounter};
 use ambre_core::id::{Connector, Element, Frame, Id, Thread, User};
 use ambre_core::schema::SchemaError;
 use ambre_core::{HistoryStep, Rgba};
@@ -1385,7 +1385,7 @@ mod schema_tests {
     use kurbo::{Point, Size};
     use loro::{ExportMode, LoroDoc};
 
-    use ambre_bus::app::toile::ToileEvent;
+    use crate::message::ToileEvent;
     use ambre_core::schema::SchemaError;
 
     use crate::logic::command::{InitContent, ToileCommand};
@@ -1577,7 +1577,7 @@ mod undo_state_tests {
 
     use kurbo::{Point, Size};
 
-    use ambre_bus::app::toile::ToileEvent;
+    use crate::message::ToileEvent;
 
     use crate::logic::command::{InitContent, ToileCommand};
     use crate::logic::model::{ElementKind, ShapeKind};
@@ -1645,7 +1645,7 @@ mod undo_state_tests {
             },
             ToileCommand::LockElements {
                 ids: Vec::new(),
-                lock: ambre_bus::app::toile::LockState::Locked,
+                lock: crate::message::LockState::Locked,
             },
         ] {
             let label = format!("{no_op:?}");

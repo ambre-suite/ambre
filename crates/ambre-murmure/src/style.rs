@@ -6,7 +6,7 @@
 //! sits on the body beside the `mention` marks (`MURMURE-562`). The marks are
 //! the truth: nothing here parses the text.
 
-use ambre_bus::{StyleMark, TextStyle};
+use crate::message::{StyleMark, TextStyle};
 use ambre_core::index::{Pos, Span};
 use ambre_core::{Char, char_len};
 use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};

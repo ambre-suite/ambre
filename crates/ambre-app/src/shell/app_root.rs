@@ -38,7 +38,7 @@ pub(crate) fn MurmureShell(
     /// The pane, the sidebar, and the channels this page opened.
     relay: MurmureRelay,
     /// Carries what the channel list asks of the Logic thread.
-    send: Callback<LogicCommand>,
+    send: Callback<ambre_murmure::message::LogicCommand>,
     /// The shared header.
     children: ChildrenFn,
 ) -> impl IntoView {
@@ -683,7 +683,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             })
         />
 
-        <Dialog open=about_open class="ambre-about">
+        <Dialog open=about_open class={StaticKey::<ambre_core::CssClasses>::new("ambre-about")}>
             <div class="ambre-about-panel">
                 <h2>"Ambre"</h2>
                 <p>"Collaborative office suite, 100% Rust, E2EE encrypted."</p>
@@ -696,7 +696,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <Dialog
             open=share_open
             on_open=share_on_open
-            class="ambre-share"
+            class={StaticKey::<ambre_core::CssClasses>::new("ambre-share")}
         >
             <div class="ambre-share-panel">
                 <h2>"Share document"</h2>

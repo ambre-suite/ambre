@@ -7,12 +7,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_bus::{Attachment, Authored, DraftKey, Instant, RowPlace, SealedRow};
+use ambre_bus::{Authored, DraftKey, Instant, RowPlace, SealedRow};
 use ambre_canvas::TextInput;
 use ambre_core::id::{Id, User};
 use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::drafts::{DraftRows, DraftShelf, DraftWrite, user_range};
+use ambre_murmure::message::Attachment;
 use ambre_murmure::uploads::{download_name, opens_as};
 use ambre_murmure::view::PageReads;
 use leptos::prelude::{GetUntracked, Set, Update};

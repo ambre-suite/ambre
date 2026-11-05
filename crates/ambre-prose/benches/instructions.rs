@@ -16,13 +16,13 @@
 use ambre_core::index::Len;
 use std::hint::black_box;
 
-use ambre_bus::app::prose::ParagraphStyle;
 use ambre_core::{Doc, Px};
 use ambre_draw::ParleyBrush;
 use ambre_prose::doc::DocDefaults;
 use ambre_prose::layout::fonts::register_faces;
 use ambre_prose::layout::measure::{EffectiveStyle, Measurer, reshape_paragraph};
 use ambre_prose::layout::run::{ParleyRunData, RunLine, ShapedRun};
+use ambre_prose::message::ParagraphStyle;
 use parley::{FontContext, LayoutContext};
 
 /// The longest paragraph the "Text layout" row holds to its budget at its

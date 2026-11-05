@@ -7,7 +7,7 @@
 //! once it is sent (`MURMURE-565`). No token is new: the tint and the ink are
 //! the palette's.
 
-use ambre_bus::TextStyle;
+use crate::message::TextStyle;
 use ambre_canvas::theme::SPACE_6;
 use ambre_canvas::{Palette, SpanShape};
 use ambre_core::Byte;

@@ -87,7 +87,7 @@ impl Timeline {
     /// under `?probes`.
     pub(crate) fn count(&mut self, name: ProbeName, values: Vec<Count<AnimationFrames>>) {
         for value in values {
-            mark_count(name.as_str(), value);
+            mark_count(name, value);
             if let Some(counts) = self.counts.as_mut() {
                 counts.entry(name).or_default().push(value);
                 self.fresh = true;
@@ -142,7 +142,7 @@ pub(crate) fn mark(name: ProbeName) {
 
 /// One `performance.mark(name, { detail: value })`, through `Reflect` like
 /// the measures.
-fn mark_count(name: &str, value: Count<AnimationFrames>) {
+fn mark_count(name: ProbeName, value: Count<AnimationFrames>) {
     let Some(performance) = web_sys::window().and_then(|w| w.performance()) else {
         return;
     };
@@ -154,7 +154,7 @@ fn mark_count(name: &str, value: Count<AnimationFrames>) {
     let Ok(function) = function.dyn_into::<js_sys::Function>() else {
         return;
     };
-    let _ = function.call2(&performance, &name.into(), &options);
+    let _ = function.call2(&performance, &name.as_str().into(), &options);
 }
 
 /// One `performance.measure(name, { start, end })`. The options form is not

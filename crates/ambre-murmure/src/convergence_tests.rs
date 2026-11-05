@@ -17,8 +17,9 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Authored, Deletion, Emoji, Instant, MessageAt, MessageDraft, MessageView};
-use ambre_bus::{MurmureEvent, ReplyEcho};
+use crate::message::{Deletion, MessageAt, MessageDraft, MessageView};
+use crate::message::{MurmureEvent, ReplyEcho};
+use ambre_bus::{Authored, Emoji, Instant};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use proptest::prelude::*;

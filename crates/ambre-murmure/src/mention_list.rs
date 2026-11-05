@@ -5,7 +5,7 @@
 //! by name (`MURMURE-551`). A pick writes the name into the draft, and a
 //! mention over it rides with the message (`MURMURE-552`).
 
-use ambre_bus::MentionTarget;
+use crate::message::MentionTarget;
 use ambre_core::id::{Id, User};
 use ambre_core::index::{Axis, Circular, IdxVec, Len, Pos};
 use ambre_core::{Byte, Point, Px, View};

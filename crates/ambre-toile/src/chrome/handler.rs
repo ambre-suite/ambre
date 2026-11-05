@@ -12,8 +12,7 @@
 // no format list.
 // ============================================================================
 
-use ambre_bus::AppCommand;
-use ambre_bus::app::toile::ToileCommand;
+use crate::message::ToileCommand;
 use ambre_chrome::{CommandHandler, KeyRoute, Openness, ShellAction, Toasts};
 use ambre_core::{Commands, StaticKey};
 use ambre_draw::Point;
@@ -37,7 +36,7 @@ pub struct ToileDialogs {
     /// The address typed into the web embed dialog.
     pub embed_web_text: RwSignal<String>,
     /// Why the typed address was refused, read beside the field.
-    pub embed_web_error: RwSignal<Option<ambre_bus::app::toile::AddressError>>,
+    pub embed_web_error: RwSignal<Option<crate::message::AddressError>>,
     /// The document embed dialog is open.
     pub embed_doc_open: RwSignal<Openness>,
     /// The link chooser is open.
@@ -45,7 +44,7 @@ pub struct ToileDialogs {
     /// The address typed into the link chooser.
     pub link_text: RwSignal<String>,
     /// Why the typed link address was refused.
-    pub link_error: RwSignal<Option<ambre_bus::app::toile::AddressError>>,
+    pub link_error: RwSignal<Option<crate::message::AddressError>>,
 }
 
 impl ToileDialogs {
@@ -88,9 +87,9 @@ pub struct ToileHandler {
 }
 
 impl CommandHandler for ToileHandler {
-    type Command = AppCommand;
+    type Command = ToileCommand;
 
-    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<ToileCommand>> {
         let dialogs = self.dialogs;
         match id {
             PALETTE => return vec![ShellAction::OpenPalette],
@@ -118,7 +117,7 @@ impl CommandHandler for ToileHandler {
                 // the panel last read the deck, and a document shared since the
                 // landing screen fetched.
                 return vec![
-                    ShellAction::Send(AppCommand::Toile(ToileCommand::ReadDeck)),
+                    ShellAction::Send(ToileCommand::ReadDeck),
                     ShellAction::RefreshDocuments,
                 ];
             }
@@ -131,7 +130,7 @@ impl CommandHandler for ToileHandler {
         &self,
         id: StaticKey<Commands>,
         target: ambre_chrome::KeyTarget,
-    ) -> KeyRoute<AppCommand> {
+    ) -> KeyRoute<ToileCommand> {
         if let Some(tool) = tool_for_command(id) {
             // A bare tool key typed into a text field is a character.
             if target == ambre_chrome::KeyTarget::TextField {
@@ -152,11 +151,9 @@ impl CommandHandler for ToileHandler {
     fn sealed_save(
         &self,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-    ) -> Option<AppCommand> {
+    ) -> Option<ToileCommand> {
         // The passphrase goes into the command and nowhere else (`ARCH-004`).
-        Some(AppCommand::Toile(ToileCommand::ExportAmbreFileSealed {
-            passphrase,
-        }))
+        Some(ToileCommand::ExportAmbreFileSealed { passphrase })
     }
 }
 

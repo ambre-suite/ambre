@@ -755,13 +755,14 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::DocChar;
-    use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{Authored, Instant};
     use ambre_bus::{Col, Row};
-    use ambre_bus::{Request, RestCommand, RestEvent, TrameCommand};
+    use ambre_bus::{Request, RestCommand, RestEvent};
     use ambre_core::Seq;
     use ambre_core::index::Pos;
+    use ambre_prose::message::DocChar;
+    use ambre_toile::message::ToileCommand;
+    use ambre_trame::message::TrameCommand;
     use std::io::Cursor;
 
     /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
@@ -789,8 +790,8 @@ mod tests {
             DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFile),
             DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFile),
             DocType::Prose => {
-                AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ExportDocument {
-                    format: ambre_bus::app::prose::ExportFormat::Ambre,
+                AppCommand::Prose(ambre_prose::message::ProseCommand::ExportDocument {
+                    format: ambre_prose::message::ExportFormat::Ambre,
                 })
             }
             other => panic!("no engine for {other:?}"),
@@ -804,21 +805,22 @@ mod tests {
         std::iter::from_fn(|| ui.try_recv().ok())
             .find_map(|evt| match evt {
                 UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. }),
-                    ..
-                }
-                | UiEvent::Viewport {
                     event:
-                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete {
+                        AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete {
                             data, ..
                         }),
                     ..
                 }
                 | UiEvent::Viewport {
                     event:
-                        AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady {
+                        AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete {
                             data, ..
                         }),
+                    ..
+                }
+                | UiEvent::Viewport {
+                    event:
+                        AppEvent::Prose(ambre_prose::message::ProseEvent::ExportReady { data, .. }),
                     ..
                 } => Some(data.into_bytes()),
                 _ => None,
@@ -832,9 +834,9 @@ mod tests {
     fn exported_file_from(state: &LogicState, document_id: Id<Document>) -> Vec<u8> {
         let doc = state.docs.get(&document_id).expect("a live document");
         match doc.state.ambre_file_event(document_id) {
-            AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. })
-            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. })
-            | AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady { data, .. }) => {
+            AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. })
+            | AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete { data, .. })
+            | AppEvent::Prose(ambre_prose::message::ProseEvent::ExportReady { data, .. }) => {
                 data.into_bytes()
             }
             other => panic!("the export answered with {other:?}"),
@@ -875,7 +877,7 @@ mod tests {
         };
         state.handle_logic_command(LogicCommand::App {
             document_id,
-            command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::InsertText {
+            command: AppCommand::Prose(ambre_prose::message::ProseCommand::InsertText {
                 block_id: block,
                 pos: Pos::<DocChar>::ZERO,
                 text: "typed".to_owned(),
@@ -886,7 +888,7 @@ mod tests {
             .find_map(|evt| match evt {
                 UiEvent::Viewport {
                     event:
-                        AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocUpdated { payload }),
+                        AppEvent::Prose(ambre_prose::message::ProseEvent::DocUpdated { payload }),
                     document_id: id,
                 } if id == document_id => Some(payload),
                 _ => None,
@@ -912,7 +914,7 @@ mod tests {
     /// text out. A caret move writes nothing, so it sends no layout.
     #[test]
     fn the_view_draws_a_layout_the_logic_thread_computed() {
-        use ambre_bus::app::prose::ProseEvent;
+        use ambre_prose::message::ProseEvent;
         let (mut state, ui, _sync) = harness();
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
@@ -925,7 +927,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(command),
         };
-        state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::InsertText {
+        state.handle_logic_command(prose(ambre_prose::message::ProseCommand::InsertText {
             block_id: block,
             pos: Pos::<DocChar>::ZERO,
             text: "typed".to_owned(),
@@ -964,8 +966,8 @@ mod tests {
             "the runs arrive shaped with the layout"
         );
 
-        state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
-            pos: ambre_bus::app::prose::CursorPosition {
+        state.handle_logic_command(prose(ambre_prose::message::ProseCommand::UpdateCursor {
+            pos: ambre_prose::message::CursorPosition {
                 block_id: block,
                 offset: Pos::<DocChar>::new(1),
                 anchor: None,
@@ -992,8 +994,8 @@ mod tests {
         };
         state.handle_logic_command(LogicCommand::App {
             document_id,
-            command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
-                pos: ambre_bus::app::prose::CursorPosition {
+            command: AppCommand::Prose(ambre_prose::message::ProseCommand::UpdateCursor {
+                pos: ambre_prose::message::CursorPosition {
                     block_id: block,
                     offset: Pos::<DocChar>::ZERO,
                     anchor: None,
@@ -1085,15 +1087,19 @@ mod tests {
                 version: ambre_core::Seq::nth(1),
             }),
         });
-        let kept = std::iter::from_fn(|| ui.try_recv().ok()).any(|evt| match evt {
-            UiEvent::Viewport {
-                event: AppEvent::Trame(ambre_bus::TrameEvent::ViewportData { cells, .. }),
-                ..
-            } => cells.iter().any(|c| {
-                c.row == Pos::<Row>::new(3) && c.col == Pos::<Col>::new(1) && c.text == "kept"
-            }),
-            _ => false,
-        });
+        let kept =
+            std::iter::from_fn(|| ui.try_recv().ok()).any(|evt| match evt {
+                UiEvent::Viewport {
+                    event:
+                        AppEvent::Trame(ambre_trame::message::TrameEvent::ViewportData {
+                            cells, ..
+                        }),
+                    ..
+                } => cells.iter().any(|c| {
+                    c.row == Pos::<Row>::new(3) && c.col == Pos::<Col>::new(1) && c.text == "kept"
+                }),
+                _ => false,
+            });
         assert!(kept, "the saved file reopened without the edit it carried");
     }
 
@@ -1132,12 +1138,13 @@ mod tests {
     fn export_bytes(ui: &Receiver<UiEvent>) -> Option<Vec<u8>> {
         std::iter::from_fn(|| ui.try_recv().ok()).find_map(|evt| match evt {
             UiEvent::Viewport {
-                event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. }),
+                event:
+                    AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. }),
                 ..
             }
             | UiEvent::Viewport {
                 event:
-                    AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. }),
+                    AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete { data, .. }),
                 ..
             } => Some(data.into_bytes()),
             _ => None,
@@ -1199,8 +1206,8 @@ mod tests {
                 events.iter().any(|e| matches!(
                     e,
                     UiEvent::Viewport {
-                        event: AppEvent::Trame(ambre_bus::TrameEvent::Error { .. })
-                            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(_)),
+                        event: AppEvent::Trame(ambre_trame::message::TrameEvent::Error { .. })
+                            | AppEvent::Toile(ambre_toile::message::ToileEvent::ExportFailed(_)),
                         ..
                     }
                 )),
@@ -1210,10 +1217,11 @@ mod tests {
                 !events.iter().any(|e| matches!(
                     e,
                     UiEvent::Viewport {
-                        event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { .. })
-                            | AppEvent::Toile(
-                                ambre_bus::app::toile::ToileEvent::ExportComplete { .. }
-                            ),
+                        event: AppEvent::Trame(
+                            ambre_trame::message::TrameEvent::ExportComplete { .. }
+                        ) | AppEvent::Toile(
+                            ambre_toile::message::ToileEvent::ExportComplete { .. }
+                        ),
                         ..
                     }
                 )),
@@ -1570,7 +1578,7 @@ mod tests {
             command: AppCommand::Trame(TrameCommand::ImportCsv {
                 data: ambre_core::Payload::<ambre_core::FileBytes>::new(file.clone()),
                 delimiter: None,
-                header: ambre_bus::HeaderRow::Absent,
+                header: ambre_trame::message::HeaderRow::Absent,
                 target_sheet_id: None,
                 start_row: Pos::<Row>::new(0),
                 start_col: Pos::<Col>::new(0),
@@ -2295,7 +2303,7 @@ mod tests {
         state: &mut LogicState,
         ui_rx: &Receiver<UiEvent>,
         doc_id: Id<Document>,
-    ) -> ambre_bus::app::toile::ToileEvent {
+    ) -> ambre_toile::message::ToileEvent {
         // Whatever seeded the board has already spoken; the export's own answer
         // is the only event this reads.
         ui_rx.try_iter().for_each(drop);
@@ -2326,7 +2334,7 @@ mod tests {
                 ),
                 at: kurbo::Point::new(0.0, 0.0),
                 size: kurbo::Size::new(100.0, 60.0),
-                content: ambre_bus::app::toile::InitContent::None,
+                content: ambre_toile::message::InitContent::None,
                 fill: None,
                 correlate: None,
             }),
@@ -2343,7 +2351,7 @@ mod tests {
         let doc_id = board_with_content(&mut state);
         let answer = export_pdf_answer(&mut state, &ui_rx, doc_id);
         assert!(
-            matches!(answer, ambre_bus::app::toile::ToileEvent::ExportFailed(_)),
+            matches!(answer, ambre_toile::message::ToileEvent::ExportFailed(_)),
             "an export with no font context must say why"
         );
     }
@@ -2357,7 +2365,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         let doc_id = board_with_content(&mut state);
         match export_pdf_answer(&mut state, &ui_rx, doc_id) {
-            ambre_bus::app::toile::ToileEvent::ExportComplete { filename, data, .. } => {
+            ambre_toile::message::ToileEvent::ExportComplete { filename, data, .. } => {
                 assert_eq!(filename.as_str(), "deck.pdf");
                 assert!(data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
             }
@@ -2377,7 +2385,7 @@ mod tests {
         let answer = export_pdf_answer(&mut state, &ui_rx, doc_id);
         assert!(matches!(
             answer,
-            ambre_bus::app::toile::ToileEvent::ExportComplete { .. }
+            ambre_toile::message::ToileEvent::ExportComplete { .. }
         ));
         assert!(sync_rx.try_recv().is_err(), "the export sent a delta");
     }

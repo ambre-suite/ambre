@@ -12,9 +12,9 @@
 use ambre_core::index::Pos;
 use std::hint::black_box;
 
-use ambre_bus::app::prose::{DocChar, ProseCommand};
 use ambre_prose::events::ProseEvent;
 use ambre_prose::logic::ProseState;
+use ambre_prose::message::{DocChar, ProseCommand};
 use criterion::{Criterion, criterion_group, criterion_main};
 
 const PARAGRAPH: &str =
@@ -39,7 +39,7 @@ fn faces() -> Vec<ambre_core::Payload<ambre_core::FontBytes>> {
 
 /// The probe's long document, laid out once, with the caret at the end of
 /// its last paragraph.
-fn document() -> (ProseState, ambre_bus::app::prose::BlockId, u32) {
+fn document() -> (ProseState, ambre_prose::message::BlockId, u32) {
     let Some(mut state) = ProseState::with_peer(ambre_core::authorship::PeerId::new(1)) else {
         panic!("a document is built");
     };
@@ -75,7 +75,7 @@ fn document() -> (ProseState, ambre_bus::app::prose::BlockId, u32) {
     (state, last, pos)
 }
 
-fn key(block_id: ambre_bus::app::prose::BlockId, pos: u32) -> ProseCommand {
+fn key(block_id: ambre_prose::message::BlockId, pos: u32) -> ProseCommand {
     ProseCommand::InsertText {
         block_id,
         pos: Pos::<DocChar>::new(pos),

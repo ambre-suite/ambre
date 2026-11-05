@@ -5,7 +5,7 @@
 //! the caret is this author's view state (`PROSE-UI-074`). The engine reads it
 //! because the view holds no document to read it from (`PROSE-UI-001`).
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::index::Pos;
 use loro::event::Diff;
 use loro::{ContainerID, Frontiers, LoroDoc, TextDelta, TreeExternalDiff};
@@ -83,8 +83,8 @@ fn text_point(deltas: &[TextDelta]) -> Option<Pos<DocChar>> {
 mod tests {
     use crate::events::{CursorPosition, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
+    use crate::message::DocChar;
     use crate::ui::ProseUiState;
-    use ambre_bus::app::prose::DocChar;
     use ambre_core::index::{Pos, Span};
 
     fn placed(display: &[ProseEvent]) -> Option<(crate::events::BlockId, Pos<DocChar>)> {

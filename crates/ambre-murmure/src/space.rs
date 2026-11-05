@@ -7,10 +7,8 @@
 //! bytes and never opens them: no key material reaches this thread
 //! (`MURMURE-157`).
 
-use ambre_bus::{
-    Authored, CatalogPosition, CatalogueEntry, CategoryView, ChannelTopic, Instant, Rank,
-    SealedChannelKey,
-};
+use crate::message::{CatalogPosition, CatalogueEntry, CategoryView};
+use ambre_bus::{Authored, ChannelTopic, Instant, Rank, SealedChannelKey};
 use ambre_core::id::{Category, Channel, Document, Id, Space};
 use ambre_core::{
     DeltaBytes, LoroPayloadRef, Name, Payload, PeerEntryBytes, SnapshotBytes, Validated,

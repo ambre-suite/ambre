@@ -11,7 +11,7 @@ use ambre_core::index::{IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use ambre_bus::app::prose::{
+use crate::message::{
     BlockType, DocChar, FootnoteCall, KeepTogether, KeepWithNext, Page, ParagraphStyle,
 };
 use ambre_core::id::{Footnote, Id};
@@ -891,8 +891,8 @@ pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
     });
     let valign = number_at(&attrs, doc::AttrKey::VAlign)
         .and_then(|code| u8::try_from(code as i64).ok())
-        .and_then(ambre_bus::app::prose::VAlign::from_code)
-        .unwrap_or(ambre_bus::app::prose::VAlign::Top);
+        .and_then(crate::message::VAlign::from_code)
+        .unwrap_or(crate::message::VAlign::Top);
     CellStyle {
         fill: colour(doc::AttrKey::CellBg),
         border,

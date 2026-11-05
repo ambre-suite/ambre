@@ -5,7 +5,7 @@
 //! Everything here is arithmetic over the layout in force: nothing shapes,
 //! nothing reads the document, and nothing is sent.
 
-use ambre_bus::app::prose::Page;
+use crate::message::Page;
 use ambre_core::index::{Len, Pos, Span};
 
 use ambre_core::{Doc, Point, Px, View};

@@ -23,8 +23,9 @@
 // Listing requires a session, so the signed-out panel gates access.
 // ============================================================================
 
-use ambre_bus::{DocType, LogicCommand, RestCommand};
+use ambre_bus::{DocType, RestCommand};
 use ambre_core::id::{Document, Id};
+use ambre_logic::app::LogicCommand;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
@@ -518,7 +519,11 @@ fn DeleteConfirm(
         pending.set(None);
     };
     view! {
-        <ambre_chrome::Dialog open=open on_close=on_close class="ambre-confirm-dialog">
+        <ambre_chrome::Dialog
+            open=open
+            on_close=on_close
+            class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-confirm-dialog")}
+        >
             <h3>"Delete document?"</h3>
             <p>
                 "\""

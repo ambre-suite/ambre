@@ -12,10 +12,8 @@
 )]
 
 use ambre_bus::{
-    Authored, CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace,
-    DirectMessageEvent, HeldReply, HeldSend, Instant, LogicCommand, MemberChannel, MemberInfo,
-    MemberStanding, MemberView, MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent,
-    Presence, RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, UiEvent,
+    Authored, ChannelActivity, ChannelName, ChannelPlace, Instant, MemberChannel, MemberInfo,
+    MemberStanding, RestCommand, RestEvent, Role,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteKey, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, KeyChar, Locale};
@@ -30,9 +28,18 @@ use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
     NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, Writer, key_list,
 };
+use ambre_murmure::message::{
+    CatalogueEntry, ChannelMatches, DirectMessageEvent, HeldReply, HeldSend, MemberView, MessageAt,
+    MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, SearchMatch, SpaceEvent,
+};
+use ambre_murmure::message::{LogicCommand, UiEvent};
 use ambre_murmure::{MessageRef, MurmurePane, Region};
 use leptos::prelude::*;
 use wasm_bindgen_test::*;
+
+/// The events the relay reads, as the launcher relays them minus any
+/// document event: Murmure reads none.
+type Event = UiEvent;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -42,7 +49,7 @@ fn shown_direct() -> (Owner, MurmureRelay, Id<Channel>) {
     owner.set();
     let relay = MurmureRelay::new();
     let direct = Id::<Channel>::mint();
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: direct,
             place: ChannelPlace::Direct,
@@ -65,7 +72,7 @@ fn shown_direct() -> (Owner, MurmureRelay, Id<Channel>) {
 #[wasm_bindgen_test]
 fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
     let (_owner, relay, direct) = shown_direct();
-    let lost = UiEvent::Channel {
+    let lost = Event::Channel {
         channel_id: direct,
         event: MurmureEvent::Left,
     };
@@ -73,7 +80,7 @@ fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
     assert_eq!(relay.pane.get_untracked(), MurmurePane::ChannelList);
     assert!(!relay.sidebar.with_untracked(|s| s.is_member(direct)));
 
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: direct,
             place: ChannelPlace::Direct,
@@ -112,21 +119,21 @@ fn a_lost_channel_and_a_sign_out_take_their_drafts() {
     }
     let thread_of = DraftOf::Thread(left, Id::<Message>::mint());
     shelf.put(thread_of, Some(draft.clone()));
-    relay.absorb(&UiEvent::Channel {
+    relay.absorb(&Event::Channel {
         channel_id: direct,
         event: MurmureEvent::Left,
     });
-    relay.absorb(&UiEvent::Channel {
+    relay.absorb(&Event::Channel {
         channel_id: failed,
         event: MurmureEvent::OpenFailed {
             message: "unreachable".to_owned(),
         },
     });
-    relay.absorb(&UiEvent::Space {
+    relay.absorb(&Event::Space {
         space_id: Id::<Space>::mint(),
         event: SpaceEvent::ChannelLeft { channel_id: left },
     });
-    relay.absorb(&UiEvent::Space {
+    relay.absorb(&Event::Space {
         space_id: Id::<Space>::mint(),
         event: SpaceEvent::ChannelDeleted {
             channel_id: deleted,
@@ -138,7 +145,7 @@ fn a_lost_channel_and_a_sign_out_take_their_drafts() {
     assert_eq!(shelf.get(thread_of), None, "a thread goes with its channel");
     assert_eq!(shelf.get(DraftOf::Channel(failed)), Some(draft));
 
-    relay.absorb(&UiEvent::Rest {
+    relay.absorb(&Event::Rest {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::LoggedOut,
     });
@@ -154,7 +161,7 @@ fn a_root_found_opens_its_thread_in_the_channel_shown() {
         segment: Id::<Segment>::mint(),
         message: Id::<Message>::mint(),
     };
-    let found = |channel_id| UiEvent::Channel {
+    let found = |channel_id| Event::Channel {
         channel_id,
         event: MurmureEvent::RootFound {
             thread: Id::<Document>::mint(),
@@ -209,7 +216,7 @@ fn toasts_for(events: &[UiEvent]) -> Vec<String> {
 #[wasm_bindgen_test]
 fn a_root_lost_tells_the_user_the_thread_cannot_open() {
     let (_owner, relay, direct) = shown_direct();
-    let lost = UiEvent::Channel {
+    let lost = Event::Channel {
         channel_id: direct,
         event: MurmureEvent::RootLost {
             thread: Id::<Document>::mint(),
@@ -217,7 +224,7 @@ fn a_root_lost_tells_the_user_the_thread_cannot_open() {
     };
     assert!(relay.absorb(&lost).is_empty());
     assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
-    let left = UiEvent::Channel {
+    let left = Event::Channel {
         channel_id: direct,
         event: MurmureEvent::Left,
     };
@@ -235,7 +242,7 @@ fn a_root_lost_tells_the_user_the_thread_cannot_open() {
 #[wasm_bindgen_test]
 fn a_channel_that_cannot_open_is_told_and_opens_anew() {
     let (_owner, relay, direct) = shown_direct();
-    let failed = UiEvent::Channel {
+    let failed = Event::Channel {
         channel_id: direct,
         event: MurmureEvent::OpenFailed {
             message: "the relay refused it".to_owned(),
@@ -284,7 +291,7 @@ fn a_space_that_cannot_open_is_told_and_opens_anew() {
     owner.set();
     let relay = MurmureRelay::new();
     let space = Id::<Space>::mint();
-    let listing = UiEvent::MemberChannels {
+    let listing = Event::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: Id::<Channel>::mint(),
             place: ChannelPlace::Public(space),
@@ -300,7 +307,7 @@ fn a_space_that_cannot_open_is_told_and_opens_anew() {
             .count()
     };
     assert_eq!(opens(relay.absorb(&listing)), 1);
-    let failed = UiEvent::Space {
+    let failed = Event::Space {
         space_id: space,
         event: SpaceEvent::OpenFailed {
             message: "the relay refused it".to_owned(),
@@ -321,7 +328,7 @@ fn a_space_that_cannot_open_is_told_and_opens_anew() {
 /// A channel change that failed is told, without its cause (`MURMURE-580`).
 #[wasm_bindgen_test]
 fn a_channel_change_that_failed_is_told() {
-    let failed = UiEvent::Space {
+    let failed = Event::Space {
         space_id: Id::<Space>::mint(),
         event: SpaceEvent::ChannelFailed {
             channel_id: Id::<Channel>::mint(),
@@ -342,7 +349,7 @@ fn a_channel_change_that_failed_is_told() {
 #[wasm_bindgen_test]
 fn a_channel_named_shows_its_name_in_the_header() {
     let (_owner, relay, direct) = shown_direct();
-    let named = UiEvent::Channel {
+    let named = Event::Channel {
         channel_id: direct,
         event: MurmureEvent::Named {
             name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Ada").unwrap()),
@@ -377,7 +384,7 @@ fn three_named() -> (Owner, MurmureRelay, [Id<Channel>; 3]) {
         channel_id,
         name: ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
     };
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![
             member(direct, ChannelPlace::Direct),
             member(zeta, ChannelPlace::Private(space)),
@@ -455,7 +462,7 @@ fn a_space_with(
     owner.set();
     let relay = MurmureRelay::new();
     let space = Id::<Space>::mint();
-    relay.absorb(&UiEvent::Rest {
+    relay.absorb(&Event::Rest {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: users[0],
@@ -463,7 +470,7 @@ fn a_space_with(
             email: ambre_bus::Email::from("alice@test.local"),
         },
     });
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: general,
             place: ChannelPlace::Public(space),
@@ -472,7 +479,7 @@ fn a_space_with(
         names: Vec::new(),
         peers: Vec::new(),
     });
-    relay.absorb(&UiEvent::Space {
+    relay.absorb(&Event::Space {
         space_id: space,
         event: SpaceEvent::Catalogue {
             name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Acme").unwrap()),
@@ -491,7 +498,7 @@ fn a_space_with(
         display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse(name).unwrap(),
         presence: Presence::Offline,
     };
-    relay.absorb(&UiEvent::Space {
+    relay.absorb(&Event::Space {
         space_id: space,
         event: SpaceEvent::Members {
             members: vec![
@@ -602,7 +609,7 @@ fn choosing_a_member_fetches_their_key_then_shows_the_direct_message() {
     assert_eq!(relay.member_name(bob).unwrap().as_str(), "Bob");
 
     let direct = Id::<Channel>::mint();
-    let after = relay.absorb(&UiEvent::DirectMessage {
+    let after = relay.absorb(&Event::DirectMessage {
         requested: Id::<Channel>::mint(),
         event: DirectMessageEvent::Opened { channel_id: direct },
     });
@@ -611,7 +618,7 @@ fn choosing_a_member_fetches_their_key_then_shows_the_direct_message() {
         "{after:?}"
     );
     assert_eq!(relay.pane.get_untracked().shown_channel(), Some(direct));
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: direct,
             place: ChannelPlace::Direct,
@@ -644,7 +651,7 @@ fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
         Id::<User>::mint(),
     );
     let member = |channel_id, place| MemberChannel { channel_id, place };
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![
             member(general, ChannelPlace::Public(space)),
             member(board, ChannelPlace::Private(space)),
@@ -659,7 +666,7 @@ fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
         display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse(name).unwrap(),
         presence: Presence::Offline,
     };
-    relay.absorb(&UiEvent::Space {
+    relay.absorb(&Event::Space {
         space_id: other,
         event: SpaceEvent::Members {
             members: vec![view(bob, "Bob"), view(dave, "Dave")],
@@ -712,7 +719,7 @@ fn the_invite_control_offers_no_member_of_the_channel() {
         .with_untracked(|s| s.public_space_of(general))
         .unwrap();
     let board = Id::<Channel>::mint();
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: board,
             place: ChannelPlace::Private(space),
@@ -739,7 +746,7 @@ fn the_invite_control_offers_no_member_of_the_channel() {
         role: Role::Editor,
         standing: MemberStanding::Verified,
     };
-    relay.absorb(&UiEvent::Channel {
+    relay.absorb(&Event::Channel {
         channel_id: board,
         event: MurmureEvent::Members {
             members: vec![info(bob)],
@@ -749,11 +756,11 @@ fn the_invite_control_offers_no_member_of_the_channel() {
     assert!(relay.invite(bob).is_none(), "no key for a member");
     assert!(relay.invite(carol).is_some());
 
-    relay.absorb(&UiEvent::Channel {
+    relay.absorb(&Event::Channel {
         channel_id: board,
         event: MurmureEvent::Left,
     });
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: board,
             place: ChannelPlace::Private(space),
@@ -810,7 +817,7 @@ fn a_jump_opens_the_next_active_channel_and_moves_no_read_cursor() {
         unread: None,
         mentions: None,
     };
-    relay.absorb(&UiEvent::ChannelActivity {
+    relay.absorb(&Event::ChannelActivity {
         channels: vec![active(budget), active(direct)],
     });
     let (handler, sent) = handler(relay);
@@ -895,7 +902,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         mentions: Vec::new(),
         styles: Vec::new(),
         writer: Writer::Member,
-        deleted: ambre_bus::Deletion::Live,
+        deleted: ambre_murmure::message::Deletion::Live,
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
@@ -947,7 +954,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
 fn an_edit_is_handed_to_the_region_and_sends_nothing() {
     let (_owner, relay, direct) = shown_direct();
     let me = Id::<User>::mint();
-    relay.absorb(&UiEvent::Rest {
+    relay.absorb(&Event::Rest {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: me,
@@ -965,7 +972,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         mentions: Vec::new(),
         styles: Vec::new(),
         writer: Writer::Member,
-        deleted: ambre_bus::Deletion::Live,
+        deleted: ambre_murmure::message::Deletion::Live,
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
@@ -1014,7 +1021,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
 
     let (_owner, relay, direct) = shown_direct();
     let me = Id::<User>::mint();
-    relay.absorb(&UiEvent::Rest {
+    relay.absorb(&Event::Rest {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: me,
@@ -1034,7 +1041,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         mentions: Vec::new(),
         styles: Vec::new(),
         writer: Writer::Member,
-        deleted: ambre_bus::Deletion::Live,
+        deleted: ambre_murmure::message::Deletion::Live,
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
@@ -1181,7 +1188,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         mentions: Vec::new(),
         styles: Vec::new(),
         writer: Writer::Member,
-        deleted: ambre_bus::Deletion::Live,
+        deleted: ambre_murmure::message::Deletion::Live,
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
@@ -1284,25 +1291,25 @@ fn found(query: &str, budget: Id<Channel>, zeta: Id<Channel>) -> UiEvent {
         attachments: Vec::new(),
         reactions: Vec::new(),
         notice: None,
-        edited: ambre_bus::Revision::Original,
-        deleted: ambre_bus::Deletion::Live,
+        edited: ambre_murmure::message::Revision::Original,
+        deleted: ambre_murmure::message::Deletion::Live,
         thread: None,
         also_in_thread: None,
     };
-    UiEvent::MessageSearch {
+    Event::MessageSearch {
         query: ambre_core::Validated::<ambre_core::SearchQuery>::parse(query.to_owned())
             .expect("a word"),
         channels: vec![
             ChannelMatches {
                 channel_id: budget,
                 covered: vec![segment],
-                listed: ambre_core::Count::<ambre_bus::Segments>::new(2),
+                listed: ambre_core::Count::<ambre_murmure::message::Segments>::new(2),
                 matches: vec![SearchMatch { segment, message }],
             },
             ChannelMatches {
                 channel_id: zeta,
                 covered: vec![Id::<Segment>::mint()],
-                listed: ambre_core::Count::<ambre_bus::Segments>::new(1),
+                listed: ambre_core::Count::<ambre_murmure::message::Segments>::new(1),
                 matches: Vec::new(),
             },
         ],
@@ -1410,7 +1417,7 @@ fn a_match_opens_its_message_in_its_channel_and_closes_the_search() {
 }
 
 fn news(channel_id: Id<Channel>, mention: ambre_bus::MentionState) -> UiEvent {
-    UiEvent::NewMessage {
+    Event::NewMessage {
         channel_id,
         mention,
         message: None,
@@ -1428,7 +1435,7 @@ fn a_notice_opens_its_channel_at_its_message() {
         segment: Id::<Segment>::mint(),
         message: Id::<Message>::mint(),
     };
-    let event = UiEvent::NewMessage {
+    let event = Event::NewMessage {
         channel_id: direct,
         mention: ambre_bus::MentionState::Unmentioned,
         message: Some((at.segment, at.message)),
@@ -1478,7 +1485,7 @@ fn a_notice_debugs_its_title_length_alone() {
 fn a_notice_asks_nothing_of_another_channel() {
     let (_owner, relay, general, _) = a_space_with_members();
     let other = Id::<Channel>::mint();
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![
             MemberChannel {
                 channel_id: general,
@@ -1512,7 +1519,7 @@ fn a_notice_asks_nothing_of_another_channel() {
 fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
     let (_owner, relay, general, _) = a_space_with_members();
     let direct = Id::<Channel>::mint();
-    relay.absorb(&UiEvent::MemberChannels {
+    relay.absorb(&Event::MemberChannels {
         channels: vec![
             MemberChannel {
                 channel_id: general,
@@ -1558,7 +1565,7 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
         assert_eq!(message.title, "New message from Bob");
     }
     assert_eq!(
-        relay.notice(&UiEvent::UpdateRequired, PageVisibility::Visible),
+        relay.notice(&Event::UpdateRequired, PageVisibility::Visible),
         None
     );
 }
@@ -1665,8 +1672,8 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
 /// that region closes the bar (`MURMURE-432`).
 #[wasm_bindgen_test]
 async fn the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one() {
-    use ambre_bus::TextStyle;
     use ambre_murmure::markers::{Cover, MarkBar};
+    use ambre_murmure::message::TextStyle;
     use wasm_bindgen::JsCast;
 
     let (_owner, relay, _) = shown_direct();
@@ -1760,7 +1767,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         mentions: Vec::new(),
         styles: Vec::new(),
     };
-    let ask = |reply: Option<HeldReply>| UiEvent::Channel {
+    let ask = |reply: Option<HeldReply>| Event::Channel {
         channel_id: direct,
         event: MurmureEvent::ConfirmChannelMention {
             members: ambre_core::Count::<ambre_core::Members>::new(12),
@@ -1776,7 +1783,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     let root_id = Id::<Message>::mint();
     relay.absorb(&ask(Some(HeldReply {
         root: root_id,
-        also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,
+        also_in_channel: ambre_murmure::message::ReplyEcho::AlsoInChannel,
     })));
     settle().await;
     assert!(dialog.open(), "the question opens");
@@ -1814,7 +1821,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         &sent.get_untracked()[..],
         [LogicCommand::Channel {
             channel_id,
-            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: ambre_bus::Confirmation::Confirmed, .. },
+            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: ambre_murmure::message::Confirmation::Confirmed, .. },
         }] if *channel_id == direct && *d == draft && *t == now
     ));
     assert_eq!(

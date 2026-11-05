@@ -8,7 +8,7 @@
 // for the sheet, the palette, the sealed-save prompt, the clipboard, a picker.
 // ============================================================================
 
-use ambre_bus::{AppCommand, StylePatch, TrameCommand};
+use crate::message::{StylePatch, TrameCommand};
 use ambre_chrome::commands::{ClipboardWrite, PasteForm};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
 use ambre_core::index::Pos;
@@ -44,7 +44,7 @@ impl TrameHandler {
     /// Open the filter popover under the active column, and return the request
     /// for that column's values (`trame-shared-filter`). The menu entry and
     /// the in-canvas filter button both come here, so they share one path.
-    pub fn open_filter(&self) -> AppCommand {
+    pub fn open_filter(&self) -> TrameCommand {
         let at = client_anchor(self.anchor.get_untracked());
         // `col` is provisional; the ColumnValues reply carries the real one.
         self.filter_popover.set(Some(FilterPopoverState {
@@ -52,7 +52,7 @@ impl TrameHandler {
             at,
         }));
         self.filter_values.set(Vec::new());
-        AppCommand::Trame(TrameCommand::RequestActiveColumnValues)
+        TrameCommand::RequestActiveColumnValues
     }
 
     /// Open find and replace in `mode`, the panel that emits the search itself.
@@ -61,7 +61,7 @@ impl TrameHandler {
     }
 
     /// Flip bold or italic against the tracked style (`trame-cell-styles`).
-    fn toggle_style(&self, style: StyleToggle) -> AppCommand {
+    fn toggle_style(&self, style: StyleToggle) -> TrameCommand {
         let mut patch = StylePatch::default();
         match style {
             StyleToggle::Bold => {
@@ -71,7 +71,7 @@ impl TrameHandler {
                 patch.italic = Some(self.style.italic.get_untracked().flipped());
             }
         }
-        AppCommand::Trame(TrameCommand::SetCellStyle { patch })
+        TrameCommand::SetCellStyle { patch }
     }
 }
 
@@ -83,9 +83,9 @@ enum StyleToggle {
 }
 
 impl CommandHandler for TrameHandler {
-    type Command = AppCommand;
+    type Command = TrameCommand;
 
-    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<TrameCommand>> {
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
             SAVE_SEALED_FILE => ShellAction::OpenSealedSave,
@@ -99,9 +99,7 @@ impl CommandHandler for TrameHandler {
             }
             // A band selection has no extent the canvas knows, so the sort
             // dialog opens on the Logic thread's `SortRange` reply.
-            SORT_RANGE_MULTI => {
-                ShellAction::Send(AppCommand::Trame(TrameCommand::RequestSortRange))
-            }
+            SORT_RANGE_MULTI => ShellAction::Send(TrameCommand::RequestSortRange),
             FILTER_COLUMN => ShellAction::Send(self.open_filter()),
             BOLD => ShellAction::Send(self.toggle_style(StyleToggle::Bold)),
             ITALIC => ShellAction::Send(self.toggle_style(StyleToggle::Italic)),
@@ -113,15 +111,13 @@ impl CommandHandler for TrameHandler {
             IMPORT_CSV => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Csv,
                 unreadable: "Could not read the CSV file",
-                read: Box::new(|data| {
-                    AppCommand::Trame(TrameCommand::ImportCsv {
-                        data,
-                        delimiter: None,
-                        header: ambre_bus::HeaderRow::Absent,
-                        target_sheet_id: None,
-                        start_row: Pos::<ambre_bus::Row>::ZERO,
-                        start_col: Pos::<ambre_bus::Col>::ZERO,
-                    })
+                read: Box::new(|data| TrameCommand::ImportCsv {
+                    data,
+                    delimiter: None,
+                    header: crate::message::HeaderRow::Absent,
+                    target_sheet_id: None,
+                    start_row: Pos::<ambre_bus::Row>::ZERO,
+                    start_col: Pos::<ambre_bus::Col>::ZERO,
                 }),
             }),
             _ => match command_to_app(id) {
@@ -139,7 +135,7 @@ impl CommandHandler for TrameHandler {
         &self,
         id: StaticKey<Commands>,
         _target: ambre_chrome::KeyTarget,
-    ) -> KeyRoute<AppCommand> {
+    ) -> KeyRoute<TrameCommand> {
         // A chord opens the palette and find and replace like the menu does.
         // Every other chord
         // maps straight through the table: the toggles and the clipboard keep
@@ -163,11 +159,9 @@ impl CommandHandler for TrameHandler {
     fn sealed_save(
         &self,
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-    ) -> Option<AppCommand> {
+    ) -> Option<TrameCommand> {
         // The passphrase goes into the command and nowhere else (`ARCH-004`).
-        Some(AppCommand::Trame(TrameCommand::ExportAmbreFileSealed {
-            passphrase,
-        }))
+        Some(TrameCommand::ExportAmbreFileSealed { passphrase })
     }
 }
 

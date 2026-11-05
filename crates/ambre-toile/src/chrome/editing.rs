@@ -6,7 +6,7 @@
 // and come back when it ends.
 // ============================================================================
 
-use ambre_bus::app::toile::PresentMode;
+use crate::message::PresentMode;
 use leptos::prelude::*;
 
 /// Mount `children` while the board is not presenting. The launcher wraps

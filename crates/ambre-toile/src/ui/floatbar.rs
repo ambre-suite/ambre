@@ -19,7 +19,7 @@
 // selection into an anchored [`FloatBar`].
 // ============================================================================
 
-use ambre_bus::app::toile::{
+use crate::message::{
     DisplayElement, ElementKind, ElementStyle, Elements, FontFamily, FontSizeChoice,
 };
 use ambre_core::id::{Element, Id};
@@ -227,7 +227,7 @@ fn find_element<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{
+    use crate::message::{
         DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle, FontSpec,
         ShapeKind, Viewport,
     };
@@ -250,7 +250,7 @@ mod tests {
         id: &str,
         kind: ElementKind,
         bounds: Rect,
-        locked: ambre_bus::app::toile::LockState,
+        locked: crate::message::LockState,
         fill: Option<Rgba>,
     ) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
@@ -279,7 +279,7 @@ mod tests {
             kind: ElementKind::Sticky,
             transform: Affine::IDENTITY,
             bounds: Rect::new(0.0, 0.0, 10.0, 10.0),
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style,
             geom: DisplayGeom::Rect,
             link: None,
@@ -325,7 +325,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             Rect::new(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
             None,
         )]);
         assert_eq!(
@@ -340,7 +340,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             Rect::new(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
             None,
         )]);
         assert_eq!(
@@ -363,7 +363,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             Rect::new(10.0, 20.0, 30.0, 60.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
             Some(Rgba::from_bits(0x00ff_00ff)),
         )]);
         let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), ambre_core::Point::default())
@@ -381,7 +381,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             Rect::new(10.0, 20.0, 30.0, 60.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
             None,
         )]);
         let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), page(40.0, 96.0)).expect("bar");
@@ -397,14 +397,14 @@ mod tests {
                 "a",
                 ElementKind::Sticky,
                 Rect::new(0.0, 10.0, 20.0, 30.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
                 None,
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 Rect::new(60.0, 40.0, 80.0, 70.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
                 None,
             ),
         ]);
@@ -426,14 +426,14 @@ mod tests {
                 "g",
                 ElementKind::Group,
                 Rect::new(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
                 None,
             ),
             elem(
                 "l",
                 ElementKind::Sticky,
                 Rect::new(0.0, 0.0, 5.0, 5.0),
-                ambre_bus::app::toile::LockState::Locked,
+                crate::message::LockState::Locked,
                 None,
             ),
         ]);
@@ -456,14 +456,14 @@ mod tests {
                 "a",
                 ElementKind::Sticky,
                 Rect::new(0.0, 0.0, 5.0, 5.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
                 Some(Rgba::from_bits(0xff00_00ff)),
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 Rect::new(6.0, 0.0, 10.0, 5.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
                 Some(Rgba::from_bits(0x0000_ffff)),
             ),
         ]);
@@ -484,14 +484,14 @@ mod tests {
                 "a",
                 ElementKind::Shape(ShapeKind::Rect),
                 Rect::new(0.0, 0.0, 5.0, 5.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
                 Some(Rgba::from_bits(0x1122_33ff)),
             ),
             elem(
                 "b",
                 ElementKind::Shape(ShapeKind::Rect),
                 Rect::new(6.0, 0.0, 10.0, 5.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
                 Some(Rgba::from_bits(0x1122_33ff)),
             ),
         ]);
@@ -513,7 +513,7 @@ mod tests {
         let base = ElementStyle {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             text_color: Some(Rgba::from_bits(0x4455_66ff)),
-            font: ambre_bus::app::toile::FontSpec {
+            font: crate::message::FontSpec {
                 size: FontSizeChoice::from_whole_points(Some(18)),
                 weight: ambre_core::Bounded::<ambre_core::FontWeight>::BOLD,
                 italic: ambre_core::Slant::Italic,

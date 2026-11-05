@@ -2,8 +2,9 @@
 //! (`features/ambre-spec-murmure-mentions.md`).
 
 use crate::Receipt;
+use crate::message::{Mention, MentionTarget, MessageDraft, MessageView};
 use ambre_bus::Char;
-use ambre_bus::{Authored, Instant, Mention, MentionTarget, Mentions, MessageDraft, MessageView};
+use ambre_bus::{Authored, Instant, Mentions};
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::Span;
 use ambre_core::{Relay, Seq};
@@ -341,12 +342,16 @@ fn a_mention_of_a_non_member_is_no_mark() {
         screen(
             both.clone(),
             Some(&[bob]),
-            ambre_bus::Confirmation::Unconfirmed
+            crate::message::Confirmation::Unconfirmed
         ),
         Screened::Send(draft("@bob @eve", vec![at(MentionTarget::User(bob), 0..4)]))
     );
     assert_eq!(
-        screen(both.clone(), None, ambre_bus::Confirmation::Unconfirmed),
+        screen(
+            both.clone(),
+            None,
+            crate::message::Confirmation::Unconfirmed
+        ),
         Screened::Send(both)
     );
 }
@@ -366,7 +371,7 @@ fn an_at_channel_past_the_threshold_waits_for_confirmation() {
         screen(
             all.clone(),
             Some(at_threshold),
-            ambre_bus::Confirmation::Unconfirmed
+            crate::message::Confirmation::Unconfirmed
         ),
         Screened::Send(all.clone())
     );
@@ -374,7 +379,7 @@ fn an_at_channel_past_the_threshold_waits_for_confirmation() {
         screen(
             all.clone(),
             Some(&members),
-            ambre_bus::Confirmation::Unconfirmed
+            crate::message::Confirmation::Unconfirmed
         ),
         Screened::Confirm {
             members: ambre_core::Count::<ambre_core::Members>::new(CONFIRM_CHANNEL_PAST.get() + 1),
@@ -385,7 +390,7 @@ fn an_at_channel_past_the_threshold_waits_for_confirmation() {
         screen(
             all.clone(),
             Some(&members),
-            ambre_bus::Confirmation::Confirmed
+            crate::message::Confirmation::Confirmed
         ),
         Screened::Send(all)
     );
@@ -394,7 +399,7 @@ fn an_at_channel_past_the_threshold_waits_for_confirmation() {
         screen(
             plain.clone(),
             Some(&members),
-            ambre_bus::Confirmation::Unconfirmed
+            crate::message::Confirmation::Unconfirmed
         ),
         Screened::Send(plain)
     );

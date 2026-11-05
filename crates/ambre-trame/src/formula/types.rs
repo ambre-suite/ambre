@@ -3,7 +3,8 @@ use ambre_core::index::{Axis, Len, Numbered, Pos, Span};
 use ambre_core::{Displayed, Ordinal, OrdinalKind, Rule, Validated};
 use std::fmt;
 
-use ambre_bus::{CellPos, Col, DefinedName, Row, SheetName};
+use crate::message::{DefinedName, SheetName};
+use ambre_bus::{CellPos, Col, Row};
 
 use crate::model::{Line, SheetIndex, Uid};
 

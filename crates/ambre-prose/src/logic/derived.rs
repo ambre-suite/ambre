@@ -180,7 +180,7 @@ impl ProseState {
 #[cfg(test)]
 mod tests {
     use crate::events::{HeadingLevel, TocNumbering};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::Pos;
     use loro::LoroValue;
 

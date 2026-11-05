@@ -10,18 +10,18 @@
 // the board's stead reaches a frame.
 // ============================================================================
 
+use crate::message::LinkTarget;
 use ambre_bus::DocType;
-use ambre_bus::app::toile::LinkTarget;
 use ambre_chrome::{ComposedName, Dialog, Openness};
 use ambre_core::id::{Document, Id};
 use leptos::prelude::*;
 
 use super::handler::ToileDialogs;
+use crate::message::{AddressError, WebAddress, link_url};
 use crate::ui::deck::DeckSignals;
 use crate::ui::embed::{EmbedTarget, PlacedEmbed};
 use crate::ui::link::LinkEdit;
-use ambre_bus::app::toile::{AddressError, WebAddress, link_url};
-use ambre_core::Validated;
+use ambre_core::{CssClasses, StaticKey, Validated};
 
 /// A document the user may embed or link to, as the launcher's list names it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,7 +77,7 @@ pub fn ToileChoosers(
 
     view! {
         // Embed a web page (`TOILE-087`).
-        <Dialog open=embed_web_open class="ambre-embed-web">
+        <Dialog open=embed_web_open class={StaticKey::<CssClasses>::new("ambre-embed-web")}>
             <div class="ambre-embed-panel">
                 <h2>"Embed a web page"</h2>
                 <input
@@ -107,7 +107,7 @@ pub fn ToileChoosers(
         // Embed another Ambre document (`TOILE-086`). The list is the one the
         // launcher already holds: this opens no document, so it touches none
         // (`TOILE-225`).
-        <Dialog open=embed_doc_open class="ambre-embed-doc">
+        <Dialog open=embed_doc_open class={StaticKey::<CssClasses>::new("ambre-embed-doc")}>
             <div class="ambre-embed-panel">
                 <h2>"Embed a document"</h2>
                 <ul class="ambre-embed-docs">
@@ -136,7 +136,7 @@ pub fn ToileChoosers(
         // no more: an address, a frame on this board, or another document. The
         // frame list is the deck's, which holds every frame. That includes the
         // off-screen ones a link exists to reach.
-        <Dialog open=link_open class="ambre-link-chooser">
+        <Dialog open=link_open class={StaticKey::<CssClasses>::new("ambre-link-chooser")}>
             <div class="ambre-embed-panel">
                 <h2>"Link this element"</h2>
                 <h3>"To a web page"</h3>

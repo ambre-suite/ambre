@@ -112,8 +112,6 @@ pub struct TextInput {
     typing: Rc<Cell<Typing>>,
 }
 
-/// The attribute that says a key on the pipe is not typed text, when it reads
-/// `false`. A pipe without it is typed text.
 /// What a key on the pipe is (`CHROME-103`): a command a keymap reads, or
 /// typed text an editor takes. A pipe is typed text by default.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -136,7 +134,10 @@ impl Typing {
     }
 }
 
-pub const TYPING_ATTR: &str = "data-typing";
+/// The attribute that says a key on the pipe is not typed text, when it reads
+/// `false`. A pipe without it is typed text.
+pub const TYPING_ATTR: ambre_core::StaticKey<ambre_core::Attributes> =
+    ambre_core::StaticKey::new("data-typing");
 
 #[derive(Clone)]
 struct Pipe {
@@ -193,7 +194,7 @@ impl TextInput {
             ("wrap", "off"),
             // The element says what the pipe is from the start, so the keymap
             // listener reads a content pipe even where no view sets it.
-            (TYPING_ATTR, "true"),
+            (TYPING_ATTR.as_str(), "true"),
         ] {
             let _ = textarea.set_attribute(k, v);
         }
@@ -290,7 +291,7 @@ impl TextInput {
                 Typing::Commands => "false",
                 Typing::Text => "true",
             };
-            let _ = dom.textarea.set_attribute(TYPING_ATTR, flag);
+            let _ = dom.textarea.set_attribute(TYPING_ATTR.as_str(), flag);
         }
     }
 

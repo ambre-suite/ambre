@@ -180,7 +180,7 @@ pub(crate) fn paint_page<S: DrawSurface>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{
+    use crate::message::{
         DisplayElement, DisplayGeom, DisplayNode, ElementKind, ElementStyle, ShapeKind,
     };
     use ambre_canvas::Theme;
@@ -194,7 +194,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
             link: None,
@@ -288,7 +288,7 @@ mod tests {
                 kind: ElementKind::Text,
                 transform: Affine::IDENTITY,
                 bounds: Rect::new(100.0, 10.0, 190.0, 40.0),
-                locked: ambre_bus::app::toile::LockState::Unlocked,
+                locked: crate::message::LockState::Unlocked,
                 style: ElementStyle::default(),
                 geom: DisplayGeom::Text("Ambre".to_owned()),
                 link: None,
@@ -411,7 +411,7 @@ mod tests {
                 text_cache: &mut tc,
             },
             None,
-            ambre_bus::app::toile::PresentMode::Presenting,
+            crate::message::PresentMode::Presenting,
         );
 
         let frame = page.clip.expect("the page has a frame");
@@ -473,9 +473,9 @@ mod tests {
 
             let mut screen = RecordingSurface::new();
             crate::ui::render::paint_content(&mut screen, &camera, crate::ui::render::Scene { viewport: &page.viewport, palette, images: &images, anim: &anim }, BoardWalk { font_cx: &mut font_cx, text_cache: &mut tc }, None, if present {
-                    ambre_bus::app::toile::PresentMode::Presenting
+                    crate::message::PresentMode::Presenting
                 } else {
-                    ambre_bus::app::toile::PresentMode::Editing
+                    crate::message::PresentMode::Editing
                 });
             let view = BoardView {
                 viewport: &page.viewport,

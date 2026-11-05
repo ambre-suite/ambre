@@ -2,10 +2,10 @@
 // Unit tests for `TrameState` (moved verbatim out of logic.rs).
 
 use super::{TrameOutcome, TrameState, col_to_alpha, default_sheet};
+use crate::message::{FilterKind, FilterOp};
 use crate::model::Uid;
 use crate::{CellPos, Col, Row};
 use crate::{HeaderRow, SortKey, SortOrder, TrameCommand, TrameEvent};
-use ambre_bus::{FilterKind, FilterOp};
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 
@@ -36,7 +36,7 @@ mod group9;
 /// A patch that sets the bold weight, and nothing else.
 fn bold_patch() -> crate::StylePatch {
     crate::StylePatch {
-        bold: Some(ambre_bus::Weight::Bold),
+        bold: Some(ambre_core::Weight::Bold),
         ..Default::default()
     }
 }
@@ -121,7 +121,7 @@ fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec
 
 /// Whether grid `row` is hidden by the active filter (read through a viewport).
 fn is_filtered(state: &mut TrameState, row: u32, col: u32) -> bool {
-    read_display(state, row, col).is_filtered == ambre_bus::RowFilter::Filtered
+    read_display(state, row, col).is_filtered == crate::message::RowFilter::Filtered
 }
 
 /// Seed column A (col 0) with one value per row, top to bottom.

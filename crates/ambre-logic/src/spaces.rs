@@ -8,11 +8,9 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{
-    Authored, Instant, MemberInfo, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey,
-    SpaceCommand, SpaceEvent,
-};
+use ambre_bus::{Authored, Instant, MemberInfo, SealedChannelKey};
 use ambre_core::{Name, Validated};
+use ambre_murmure::message::{PrivateChannelDraft, PublicChannelDraft, SpaceCommand, SpaceEvent};
 use ambre_murmure::{
     ChannelState, ChannelType, Listing, Roster, SpaceState, is_presence_sample, presence_sample,
 };
@@ -893,7 +891,7 @@ impl LogicState {
         self.drop_channel(channel_id);
         self.send_to_ui(UiEvent::Channel {
             channel_id,
-            event: ambre_bus::MurmureEvent::Left,
+            event: ambre_murmure::message::MurmureEvent::Left,
         });
     }
 
@@ -989,7 +987,10 @@ mod tests {
     /// The catalogue of the last catalogue event the view got.
     fn last_catalogue(
         shown: &[UiEvent],
-    ) -> Option<(Option<Validated<Name>>, Vec<ambre_bus::CatalogueEntry>)> {
+    ) -> Option<(
+        Option<Validated<Name>>,
+        Vec<ambre_murmure::message::CatalogueEntry>,
+    )> {
         shown.iter().rev().find_map(|e| match e {
             UiEvent::Space {
                 event: SpaceEvent::Catalogue { name, channels, .. },
@@ -1762,7 +1763,7 @@ mod tests {
         );
         assert!(drain(&ui).iter().any(|e| matches!(
             e,
-            UiEvent::Channel { channel_id: id, event: ambre_bus::MurmureEvent::Left }
+            UiEvent::Channel { channel_id: id, event: ambre_murmure::message::MurmureEvent::Left }
                 if *id == other
         )));
     }
@@ -1905,7 +1906,7 @@ mod tests {
         assert!(
             told.iter().any(|e| matches!(
                 e,
-                UiEvent::Channel { channel_id: id, event: ambre_bus::MurmureEvent::Left }
+                UiEvent::Channel { channel_id: id, event: ambre_murmure::message::MurmureEvent::Left }
                     if *id == channel_id
             )),
             "the view was told {told:?}"
@@ -2053,9 +2054,10 @@ mod tests {
 
     // --- The members of a space, and their presence ---
 
-    use ambre_bus::{MemberInfo, MemberView, Presence, Request, RestCommand};
+    use ambre_bus::{MemberInfo, Request, RestCommand};
     use ambre_core::Seq;
     use ambre_murmure::PRESENCE_EXPIRY;
+    use ambre_murmure::message::{MemberView, Presence};
 
     /// The member list of the last members event the view got.
     fn last_members(shown: &[UiEvent]) -> Option<Vec<MemberView>> {

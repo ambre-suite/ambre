@@ -9,6 +9,13 @@
 //! use ambre_core::{Commands, Icons, StaticKey};
 //! let _: StaticKey<Icons> = StaticKey::<Commands>::new("prose.format.bold");
 //! ```
+//!
+//! Nor does the name a refusal prints stand in for a command id:
+//!
+//! ```compile_fail
+//! use ambre_core::{CommandNames, Commands, StaticKey};
+//! let _: StaticKey<Commands> = StaticKey::<CommandNames>::new("typing");
+//! ```
 
 use std::fmt;
 use std::marker::PhantomData;
@@ -95,6 +102,24 @@ impl KeyKind for Categories {
     const NAME: &'static str = "CommandCategory";
 }
 
+/// The words a refusal uses for a command, for example "replying to the
+/// comment". A [`Commands`] key is a namespaced id a registry looks up, which
+/// no author reads, so the two kinds stay apart.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CommandNames {}
+
+impl sealed::Sealed for CommandNames {}
+impl KeyKind for CommandNames {
+    const NAME: &'static str = "CommandName";
+}
+
+/// The bare words, as a refusal shows them to the author.
+impl fmt::Display for StaticKey<CommandNames> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.text)
+    }
+}
+
 /// The id of a `<canvas>` element in the page. The shell mounts the element
 /// with this id, and the canvas host finds it by the same id. Each id is a
 /// constant of the code, so a distinct kind keeps it apart from page text.
@@ -104,6 +129,37 @@ pub enum Canvases {}
 impl sealed::Sealed for Canvases {}
 impl KeyKind for Canvases {
     const NAME: &'static str = "CanvasId";
+}
+
+/// A key of the browser's local or session storage. The code writes the
+/// value under the key and reads it back by the same key, so a typo in one
+/// place loses the value.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StorageKeys {}
+
+impl sealed::Sealed for StorageKeys {}
+impl KeyKind for StorageKeys {
+    const NAME: &'static str = "StorageKey";
+}
+
+/// A class that the code puts on an element and a stylesheet selects. The
+/// stylesheet matches the class back, so it is no text a person reads.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CssClasses {}
+
+impl sealed::Sealed for CssClasses {}
+impl KeyKind for CssClasses {
+    const NAME: &'static str = "CssClass";
+}
+
+/// The name of an attribute that the code sets on an element and reads back
+/// off it, possibly from another crate.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Attributes {}
+
+impl sealed::Sealed for Attributes {}
+impl KeyKind for Attributes {
+    const NAME: &'static str = "AttributeName";
 }
 
 impl StaticKey<Canvases> {
@@ -121,7 +177,14 @@ impl fmt::Display for StaticKey<Canvases> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Canvases, Commands, StaticKey};
+    use super::{Canvases, CommandNames, Commands, StaticKey};
+
+    #[test]
+    fn a_command_name_prints_its_bare_words_and_its_old_debug_form() {
+        let name = StaticKey::<CommandNames>::new("typing");
+        assert_eq!(name.to_string(), "typing");
+        assert_eq!(format!("{name:?}"), "CommandName(\"typing\")");
+    }
 
     #[test]
     fn a_key_prints_its_kind_and_a_canvas_id_its_bare_text() {
@@ -133,6 +196,23 @@ mod tests {
         assert_eq!(
             format!("{:?}", StaticKey::<Commands>::new("a.b")),
             "CommandId(\"a.b\")"
+        );
+    }
+
+    #[test]
+    fn each_new_kind_prints_its_own_name() {
+        use super::{Attributes, CssClasses, StorageKeys};
+        assert_eq!(
+            format!("{:?}", StaticKey::<StorageKeys>::new("a.b")),
+            "StorageKey(\"a.b\")"
+        );
+        assert_eq!(
+            format!("{:?}", StaticKey::<CssClasses>::new("c")),
+            "CssClass(\"c\")"
+        );
+        assert_eq!(
+            format!("{:?}", StaticKey::<Attributes>::new("data-x")),
+            "AttributeName(\"data-x\")"
         );
     }
 

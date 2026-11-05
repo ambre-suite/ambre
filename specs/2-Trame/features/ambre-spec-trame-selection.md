@@ -100,7 +100,7 @@ that rectangle, and a cell in two of them is enumerated once (`TRAME-UI-031`). E
 |---|---|---|
 | `TrameCommand::SetActiveCell { row, col, anchor_row, anchor_col, extra, kind }` | UI to Logic | the whole selection, on every move: the live rectangle's two corners, the committed disjoint rectangles and the band kind, so a range intent has a target (`TRAME-UI-032`, `TRAME-UI-129`, `TRAME-UI-033`) |
 | `TrameEvent::SelectRange { r1, c1, r2, c2 }` | Logic to UI | a selection the canvas cannot derive: the cells an unmerge just freed |
-| `TrameCommand::UpdateCursor`, `TrameEvent::RemoteCursors { cursors }` | both ways | the presence pair, still absent from `ambre-bus`. The event carries the whole live set, rebuilt on every change, so the UI replaces its own and a departed peer needs no removal path |
+| `TrameCommand::UpdateCursor`, `TrameEvent::RemoteCursors { cursors }` | both ways | the presence pair, still absent from Trame's message vocabulary. The event carries the whole live set, rebuilt on every change, so the UI replaces its own and a departed peer needs no removal path |
 
 **Steps, on every move of the active cell:**
 

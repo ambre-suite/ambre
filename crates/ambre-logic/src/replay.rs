@@ -135,9 +135,9 @@ fn take_slice(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::TrameCommand;
     use ambre_bus::{Col, Row};
     use ambre_core::index::Pos;
+    use ambre_trame::message::TrameCommand;
 
     /// A delta a session of `peer` wrote, carrying `bytes` of cell text.
     fn written_by(peer: ambre_core::PeerId, bytes: usize) -> SignedDelta {

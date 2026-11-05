@@ -53,10 +53,8 @@ dependencies = [
  "ambre-core",
  "atomic-waker",
  "crossbeam-queue",
- "kurbo",
  "postcard",
  "serde",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -184,6 +182,7 @@ dependencies = [
  "postcard",
  "pulldown-cmark",
  "serde",
+ "thiserror 2.0.21",
  "tracing",
  "unicode-segmentation",
  "web-sys",
@@ -283,6 +282,7 @@ dependencies = [
  "petgraph",
  "postcard",
  "serde",
+ "thiserror 2.0.21",
  "tracing",
  "wasm-bindgen",
  "web-sys",

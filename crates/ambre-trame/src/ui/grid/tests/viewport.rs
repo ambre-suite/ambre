@@ -8,7 +8,7 @@ use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{Px, Surface};
 
 /// A cell at `(row, col)`, hidden by the filter when `filtered`.
-fn cell(row: u32, col: u32, filtered: ambre_bus::RowFilter) -> DisplayCell {
+fn cell(row: u32, col: u32, filtered: crate::message::RowFilter) -> DisplayCell {
     DisplayCell {
         row: Pos::<Row>::new(row),
         col: Pos::<Col>::new(col),
@@ -57,7 +57,7 @@ fn a_scroll_requests_the_screen_and_a_bounded_padding() {
     state.on_viewport_data(answer(
         0,
         (0..300)
-            .map(|row| cell(row, 0, ambre_bus::RowFilter::Filtered))
+            .map(|row| cell(row, 0, crate::message::RowFilter::Filtered))
             .collect(),
     ));
     assert!(state.scroll_by(Delta::<Row>::new(1_000), Delta::<Col>::new(0)));
@@ -87,11 +87,14 @@ fn a_scroll_evicts_every_cell_outside_the_window() {
     state.on_viewport_data(answer(
         0,
         vec![
-            cell(0, 0, ambre_bus::RowFilter::Shown),
-            cell(0, 200, ambre_bus::RowFilter::Shown),
+            cell(0, 0, crate::message::RowFilter::Shown),
+            cell(0, 200, crate::message::RowFilter::Shown),
         ],
     ));
-    state.on_viewport_data(answer(1, vec![cell(5_000, 0, ambre_bus::RowFilter::Shown)]));
+    state.on_viewport_data(answer(
+        1,
+        vec![cell(5_000, 0, crate::message::RowFilter::Shown)],
+    ));
     assert!(state.scroll_by(Delta::<Row>::new(5_000), Delta::<Col>::new(0)));
     let (row_start, row_end, col_start, col_end) = window(state.scroll_viewport_cmd());
     assert!(
@@ -164,7 +167,7 @@ fn an_answer_does_not_move_the_scroll_origin() {
     state.on_viewport_data(answer(
         0,
         (0..400)
-            .map(|row| cell(row, 0, ambre_bus::RowFilter::from_bool(row % 2 == 0)))
+            .map(|row| cell(row, 0, crate::message::RowFilter::from_bool(row % 2 == 0)))
             .collect(),
     ));
     assert_eq!((state.top_row, state.left_col), origin);

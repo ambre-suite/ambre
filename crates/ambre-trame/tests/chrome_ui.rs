@@ -25,10 +25,7 @@
 )]
 
 use ambre_bus::app::find::{FindQuery, Match};
-use ambre_bus::{
-    AppCommand, AppEvent, CellFormat, CellStyle, Col, HAlign, Row, SheetName, SheetTab,
-    TrameCommand, TrameEvent, UiEvent, VAlign,
-};
+use ambre_bus::{Col, Row, UiEvent};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_commands::Locale;
@@ -40,11 +37,17 @@ use ambre_trame::chrome::{
     IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE, SelStats,
     SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar, StyleState, Toggles, UNDO,
 };
+use ambre_trame::message::{
+    CellFormat, CellStyle, HAlign, SheetName, SheetTab, TrameCommand, TrameEvent, VAlign,
+};
 use ambre_trame::ui::commands as registry;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
+
+/// The events the chrome reads in these tests: TrameEvent documents, no channel.
+type Event = UiEvent<TrameEvent>;
 
 // Every test touches the DOM (or at least the leptos reactive graph backed by
 // the browser), so run them inside headless Chrome rather than Node.
@@ -54,20 +57,20 @@ wasm_bindgen_test_configure!(run_in_browser);
 /// under test sees exactly the shape it does in production.
 fn style_applied(
     style: CellStyle,
-    bold: ambre_bus::Weight,
-    italic: ambre_bus::Slant,
-    merged: ambre_bus::Merge,
-    numeric: ambre_bus::CellValueKind,
-) -> UiEvent {
-    UiEvent::Viewport {
+    bold: ambre_core::Weight,
+    italic: ambre_core::Slant,
+    merged: ambre_trame::message::Merge,
+    numeric: ambre_trame::message::CellValueKind,
+) -> UiEvent<TrameEvent> {
+    Event::Viewport {
         document_id: Id::<Document>::mint(),
-        event: AppEvent::Trame(TrameEvent::StyleApplied {
+        event: TrameEvent::StyleApplied {
             style,
             bold,
             italic,
             merged,
             numeric,
-        }),
+        },
     }
 }
 
@@ -85,8 +88,8 @@ fn style_applied_mirrors_into_style_state() {
 
     let state = StyleState::new();
     let style = CellStyle {
-        underline: ambre_bus::Underline::Underlined,
-        wrap: ambre_bus::WordBreak::Anywhere,
+        underline: ambre_core::Underline::Underlined,
+        wrap: ambre_core::WordBreak::Anywhere,
         h_align: HAlign::Right,
         v_align: VAlign::Bottom,
         format: CellFormat::Percent,
@@ -96,29 +99,29 @@ fn style_applied_mirrors_into_style_state() {
         &state,
         &style_applied(
             style,
-            ambre_bus::Weight::Bold,
-            ambre_bus::Slant::Upright,
-            ambre_bus::Merge::Merged,
-            ambre_bus::CellValueKind::Number,
+            ambre_core::Weight::Bold,
+            ambre_core::Slant::Upright,
+            ambre_trame::message::Merge::Merged,
+            ambre_trame::message::CellValueKind::Number,
         ),
     );
 
     assert_eq!(
         state.bold.get(),
-        ambre_bus::Weight::Bold,
+        ambre_core::Weight::Bold,
         "bold reported separately must be mirrored"
     );
-    assert_eq!(state.italic.get(), ambre_bus::Slant::Upright);
+    assert_eq!(state.italic.get(), ambre_core::Slant::Upright);
     assert_eq!(
         state.merged.get(),
-        ambre_bus::Merge::Merged,
+        ambre_trame::message::Merge::Merged,
         "merge pressed-state drives the merge toggle"
     );
-    assert_eq!(state.underline.get(), ambre_bus::Underline::Underlined);
-    assert_eq!(state.wrap.get(), ambre_bus::WordBreak::Anywhere);
+    assert_eq!(state.underline.get(), ambre_core::Underline::Underlined);
+    assert_eq!(state.wrap.get(), ambre_core::WordBreak::Anywhere);
     assert_eq!(
         state.numeric.get(),
-        ambre_bus::CellValueKind::Number,
+        ambre_trame::message::CellValueKind::Number,
         "numeric gates Auto-alignment resolution"
     );
     assert_eq!(state.h_align.get(), HAlign::Right);
@@ -148,15 +151,15 @@ fn style_state_ignores_unrelated_events() {
     let _owner = OwnerScope::new();
 
     let state = StyleState::new();
-    state.bold.set(ambre_bus::Weight::Bold);
-    let ev = UiEvent::Viewport {
+    state.bold.set(ambre_core::Weight::Bold);
+    let ev = Event::Viewport {
         document_id: Id::<Document>::mint(),
-        event: AppEvent::Trame(TrameEvent::DataReset),
+        event: TrameEvent::DataReset,
     };
     chrome::apply_style_event(&state, &ev);
     assert_eq!(
         state.bold.get(),
-        ambre_bus::Weight::Bold,
+        ambre_core::Weight::Bold,
         "DataReset must not clobber the style state"
     );
 }
@@ -180,12 +183,12 @@ fn undo_state_mirrors_into_command_store() {
         ambre_chrome::Availability::Disabled
     );
 
-    let ev = UiEvent::Viewport {
+    let ev = Event::Viewport {
         document_id: Id::<Document>::mint(),
-        event: AppEvent::Trame(TrameEvent::UndoState {
+        event: TrameEvent::UndoState {
             undo: ambre_core::Availability::Enabled,
             redo: ambre_core::Availability::Disabled,
-        }),
+        },
     };
     chrome::mirror_event(&store, &ev);
     assert_eq!(
@@ -205,11 +208,11 @@ fn undo_state_mirrors_into_command_store() {
 fn command_to_app_maps_intents() {
     assert!(matches!(
         chrome::command_to_app(UNDO),
-        Some(AppCommand::Trame(TrameCommand::Undo))
+        Some(TrameCommand::Undo)
     ));
     assert!(matches!(
         chrome::command_to_app(REDO),
-        Some(AppCommand::Trame(TrameCommand::Redo))
+        Some(TrameCommand::Redo)
     ));
     // BOLD is intercepted into a SetCellStyle patch by the launcher; no direct
     // AppCommand here.
@@ -280,7 +283,7 @@ where
 fn status_bar_renders_label_and_aggregates() {
     let container = mount_in_container(|| {
         let stats = RwSignal::new(Some(SelStats {
-            count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(3),
+            count: ambre_core::Count::<ambre_trame::message::Cells>::new(3),
             numbers: totals(&[1.0, 2.0, 3.0]),
         }));
         let perf = RwSignal::new(PerfSnapshot::default());
@@ -326,8 +329,7 @@ fn find_replace_panel_opens_in_find_mode() {
     let container = mount_in_container(|| {
         let state = RwSignal::new(None::<FindReplaceState>);
         let result = RwSignal::new(None::<chrome::FindPosition>);
-        let noop_find =
-            Callback::new(|_: Option<FindQuery<ambre_bus::app::trame::FindOptions>>| {});
+        let noop_find = Callback::new(|_: Option<FindQuery<ambre_trame::message::FindOptions>>| {});
         let noop_replace = Callback::new(|_: ReplaceRequest| {});
         // Open the panel in find mode after the initial render so the closed ->
         // open transition is what the DOM reflects.
@@ -424,7 +426,7 @@ fn sort_dialog_adds_levels_and_emits_on_apply() {
     let req = emitted.get_untracked().expect("Sort emitted a request");
     assert_eq!(
         req.header,
-        ambre_bus::HeaderRow::Present,
+        ambre_trame::message::HeaderRow::Present,
         "header toggle carried into the request"
     );
     // Two distinct levels (the add-level default picks the next unused column).
@@ -736,11 +738,11 @@ fn a_lost_edit_reaches_the_user() {
     let toasts = ambre_chrome::Toasts::new();
     chrome::notify_event(
         &toasts,
-        &UiEvent::Viewport {
+        &Event::Viewport {
             document_id: Id::<Document>::mint(),
-            event: AppEvent::Trame(TrameEvent::EditTargetGone {
+            event: TrameEvent::EditTargetGone {
                 session: ambre_bus::Token::FIRST,
-            }),
+            },
         },
     );
     let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });
@@ -756,9 +758,9 @@ fn a_lost_edit_reaches_the_user() {
 
 /// The totals of `values`, each a finite cell number. Their plain sum stands
 /// for the Logic thread's exact one: the band shows what it is given.
-fn totals(values: &[f64]) -> Option<ambre_bus::app::trame::NumericStats> {
-    use ambre_bus::app::trame::{CellFloat, NumericStats};
+fn totals(values: &[f64]) -> Option<ambre_trame::message::NumericStats> {
     use ambre_core::Bounded;
+    use ambre_trame::message::{CellFloat, NumericStats};
     let numbers: Vec<Bounded<CellFloat>> = values
         .iter()
         .map(|&v| Bounded::<CellFloat>::new(v).unwrap())
@@ -789,7 +791,7 @@ fn status_text(stats: Option<SelStats>) -> String {
 #[wasm_bindgen_test]
 fn a_selection_with_no_number_shows_no_numeric_aggregate() {
     let text = status_text(Some(SelStats {
-        count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(4),
+        count: ambre_core::Count::<ambre_trame::message::Cells>::new(4),
         ..SelStats::default()
     }));
     assert!(text.contains("Count: 4"), "{text}");
@@ -797,7 +799,7 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
         assert!(!text.contains(absent), "{absent} in {text}");
     }
     let text = status_text(Some(SelStats {
-        count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(4),
+        count: ambre_core::Count::<ambre_trame::message::Cells>::new(4),
         numbers: totals(&[5.0]),
     }));
     for present in ["Sum: 5", "Avg: 5", "Min: 5", "Max: 5", "Count: 4"] {
@@ -811,7 +813,7 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
 #[wasm_bindgen_test]
 fn an_aggregate_reads_whole_or_with_two_decimals() {
     let text = status_text(Some(SelStats {
-        count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(3),
+        count: ambre_core::Count::<ambre_trame::message::Cells>::new(3),
         numbers: totals(&[-2.0, 1.0 / 3.0, 9.5 - 1.0 / 3.0]),
     }));
     for present in ["Sum: 7.50", "Avg: 2.50", "Min: -2", "Max: 9.17"] {
@@ -825,7 +827,7 @@ fn an_aggregate_reads_whole_or_with_two_decimals() {
 #[wasm_bindgen_test]
 fn a_sum_past_the_largest_number_reads_num() {
     let text = status_text(Some(SelStats {
-        count: ambre_core::Count::<ambre_bus::app::trame::Cells>::new(2),
+        count: ambre_core::Count::<ambre_trame::message::Cells>::new(2),
         numbers: totals(&[f64::MAX, f64::MAX]),
     }));
     for present in ["Sum: #NUM!", "Avg: #NUM!", "Count: 2"] {
@@ -852,9 +854,9 @@ fn a_refusal_reaches_the_user_as_a_toast() {
     ] {
         chrome::notify_event(
             &toasts,
-            &UiEvent::Viewport {
+            &Event::Viewport {
                 document_id: Id::<Document>::mint(),
-                event: AppEvent::Trame(event),
+                event,
             },
         );
     }
@@ -918,12 +920,12 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
     let toasts = ambre_chrome::Toasts::new();
     chrome::notify_event(
         &toasts,
-        &UiEvent::Viewport {
+        &Event::Viewport {
             document_id: Id::<Document>::mint(),
-            event: AppEvent::Trame(TrameEvent::FilterApplied {
+            event: TrameEvent::FilterApplied {
                 hidden_row_count: Len::<Row>::new(37),
                 col: Pos::<Col>::new(2),
-            }),
+            },
         },
     );
     let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });
@@ -942,14 +944,14 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
 fn the_sort_reply_opens_the_dialog_over_its_columns() {
     let _owner = OwnerScope::new();
     let relay = relay();
-    relay.absorb(&UiEvent::Viewport {
+    relay.absorb(&Event::Viewport {
         document_id: Id::<Document>::mint(),
-        event: AppEvent::Trame(TrameEvent::SortRange {
+        event: TrameEvent::SortRange {
             r1: Pos::<Row>::new(2),
             c1: Pos::<Col>::new(3),
             r2: Pos::<Row>::new(9),
             c2: Pos::<Col>::new(5),
-        }),
+        },
     });
     let (root, _) = sort_dialog(relay.sort_dialog);
     let options = root.query_selector_all(".ambre-sort-col option").unwrap();

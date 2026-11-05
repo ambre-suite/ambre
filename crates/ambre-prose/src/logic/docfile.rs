@@ -96,7 +96,7 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::docfile::{AMBRE_VERSION, HEADER_LEN};
     use ambre_core::index::{Pos, Span};
 

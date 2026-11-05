@@ -11,7 +11,7 @@
 // in `render.rs`. Every editing operation delegates to the core.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, ElementStyle};
+use crate::message::{DisplayElement, ElementStyle};
 use ambre_canvas::{Palette, TextEditor, TextEditorStyle};
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{Px, Rgba, View};
@@ -240,7 +240,7 @@ fn ink_color(v: Rgba, opacity: ambre_core::Bounded<ambre_core::Opacity>) -> Colo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{DisplayGeom, ElementKind, FontSpec};
+    use crate::message::{DisplayGeom, ElementKind, FontSpec};
     use ambre_canvas::Theme;
     use kurbo::Affine;
 
@@ -250,7 +250,7 @@ mod tests {
             kind,
             transform: Affine::IDENTITY,
             bounds: kurbo::Rect::new(0.0, 0.0, 120.0, 80.0),
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style,
             geom: DisplayGeom::Text("hi".to_owned()),
             link: None,
@@ -326,7 +326,7 @@ mod tests {
     fn an_automatic_size_text_keeps_its_drawn_size_under_edit() {
         let style = ElementStyle {
             font: FontSpec {
-                size: ambre_bus::app::toile::FontSizeChoice::AUTO,
+                size: crate::message::FontSizeChoice::AUTO,
                 ..Default::default()
             },
             ..ElementStyle::default()

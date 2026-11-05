@@ -60,29 +60,29 @@ pub struct CellData {
     /// Raw cell text (formula source for formula cells, equal to `text`
     /// otherwise). Seeds the in-cell editor so formulas are editable as text.
     pub raw: CellText<DisplayForm>,
-    pub bold: ambre_bus::Weight,
-    pub italic: ambre_bus::Slant,
+    pub bold: ambre_core::Weight,
+    pub italic: ambre_core::Slant,
     /// Rich manual formatting (`trame-cell-styles`): underline run, alignments,
     /// wrap, text/fill colours, font family/size, border preset. Pinned to the
     /// cell, fed by [`DisplayCell`](crate::DisplayCell).
-    pub underline: ambre_bus::Underline,
-    pub strikethrough: ambre_bus::Strikethrough,
-    pub h_align: ambre_bus::HAlign,
+    pub underline: ambre_core::Underline,
+    pub strikethrough: ambre_core::Strikethrough,
+    pub h_align: crate::message::HAlign,
     /// What the computed value is (`DisplayCell::numeric`).
-    pub numeric: ambre_bus::CellValueKind,
-    pub v_align: ambre_bus::VAlign,
-    pub wrap: ambre_bus::WordBreak,
+    pub numeric: crate::message::CellValueKind,
+    pub v_align: crate::message::VAlign,
+    pub wrap: ambre_core::WordBreak,
     pub fg: Option<Rgb>,
     pub bg: Option<Rgb>,
     pub font: Option<ambre_core::FontFamily>,
     pub size: Option<ambre_core::FontSize>,
-    pub borders: ambre_bus::Borders,
+    pub borders: crate::message::Borders,
     /// The block's extent on a merge master, `None` otherwise. Covered cells
     /// arrive with empty text and are simply rendered blank.
     pub merge_span: Option<MergeSpan>,
     /// The cell's row is hidden by the active shared filter (`trame-shared-filter`):
     /// the row axis collapses over it. Drives [`TrameUiState::hidden_rows`].
-    pub is_filtered: ambre_bus::RowFilter,
+    pub is_filtered: crate::message::RowFilter,
 }
 
 impl CellData {

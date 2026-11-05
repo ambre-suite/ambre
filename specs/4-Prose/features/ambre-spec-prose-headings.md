@@ -89,7 +89,8 @@ numbered as the nearest level in range (`PROSE-FEAT-029`), and the stored level 
 
 Without the clamp, a level of zero indexes the counter vector below its first component.
 
-**Creating and changing one** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**Creating and changing one** (`ambre_prose::message`, declared in
+`features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Carries |
 |---|---|

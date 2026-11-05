@@ -13,6 +13,7 @@ use ambre_commands::Locale;
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Commands, StaticKey};
 use std::collections::{HashMap, HashSet};
+use std::convert::Infallible;
 
 use crate::commands::{
     AskedAll, COMMANDS, KEYS, KeyPlace, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY,
@@ -23,16 +24,17 @@ use crate::drafts::DraftShelf;
 use crate::emoji;
 use crate::markers::{Cover, MarkBar};
 use crate::mention_list::{MentionEntry, MentionList};
+use crate::message::LogicCommand;
+use crate::message::{
+    ChannelMatches, DirectMessageEvent, MemberView, MessageAt, MurmureCommand, MurmureEvent,
+    Presence, SpaceCommand, SpaceEvent, TextStyle,
+};
 use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
 };
-use ambre_bus::{AppCommand, MentionState};
-use ambre_bus::{
-    Authored, ChannelMatches, ChannelPlace, DirectMessageEvent, Instant, LogicCommand, MemberView,
-    MessageAt, MurmureCommand, MurmureEvent, Presence, RestCommand, RestEvent, SpaceCommand,
-    SpaceEvent, TextStyle, UiEvent,
-};
+use ambre_bus::MentionState;
+use ambre_bus::{Authored, ChannelPlace, Instant, RestCommand, RestEvent};
 use ambre_chrome::{
     CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, PaletteKey,
     Pressed, ShellAction, ShellRegion, Toasts,
@@ -50,7 +52,7 @@ pub use crate::notices::{
 /// (`MURMURE-549`, `MURMURE-550`). So is a channel change or a direct message
 /// that failed (`MURMURE-580`, `MURMURE-581`). The launcher names no Murmure
 /// variant. A no-op for every other event.
-pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
+pub fn notify_event<S>(toasts: &Toasts, ev: &ambre_bus::UiEvent<S, crate::message::Murmure>) {
     if let Some(text) = crate::notices::warning_of(ev) {
         toasts.warning(text);
     }
@@ -470,7 +472,7 @@ impl std::fmt::Debug for SearchGroup {
 }
 
 /// "1 segment", or "2 segments": the coverage line counts in segments.
-fn segments(count: ambre_core::Count<ambre_bus::Segments>) -> String {
+fn segments(count: ambre_core::Count<crate::message::Segments>) -> String {
     match count.get() {
         1 => "1 segment".to_owned(),
         n => format!("{n} segments"),
@@ -481,11 +483,10 @@ fn segments(count: ambre_core::Count<ambre_bus::Segments>) -> String {
 /// A result list states its coverage, matches or not (`MURMURE-149`).
 pub fn coverage(channels: &[ChannelMatches]) -> String {
     let covered: usize = channels.iter().map(|c| c.covered.len()).sum();
-    let listed = channels
-        .iter()
-        .fold(ambre_core::Count::<ambre_bus::Segments>::ZERO, |all, c| {
-            all.plus(c.listed)
-        });
+    let listed = channels.iter().fold(
+        ambre_core::Count::<crate::message::Segments>::ZERO,
+        |all, c| all.plus(c.listed),
+    );
     let open = match channels.len() {
         1 => "1 open channel".to_owned(),
         n => format!("{n} open channels"),
@@ -783,7 +784,13 @@ impl MurmureRelay {
     /// message that names the user notifies, and so does any message of a
     /// direct message. The channel the user is reading notifies nothing
     /// (`MURMURE-146`). A hidden page shows none to read.
-    pub fn notice(&self, ev: &UiEvent, page: PageVisibility) -> Option<Notice> {
+    pub fn notice<S>(
+        &self,
+        ev: &ambre_bus::UiEvent<S, crate::message::Murmure>,
+        page: PageVisibility,
+    ) -> Option<Notice> {
+        // The relayed event carries the launcher's sum, which Murmure never reads.
+        use ambre_bus::UiEvent;
         let UiEvent::NewMessage {
             channel_id,
             mention,
@@ -905,7 +912,12 @@ impl MurmureRelay {
 
     /// Take one event, and return the commands it calls for: a space to
     /// open for its catalogue, the channels to list again after a join.
-    pub fn absorb(&self, ev: &UiEvent) -> Vec<LogicCommand> {
+    pub fn absorb<S>(
+        &self,
+        ev: &ambre_bus::UiEvent<S, crate::message::Murmure>,
+    ) -> Vec<LogicCommand> {
+        // The relayed event carries the launcher's sum, which Murmure never reads.
+        use ambre_bus::UiEvent;
         match ev {
             UiEvent::Rest {
                 evt: RestEvent::SessionReady { user_id, .. },
@@ -1443,9 +1455,11 @@ impl MurmureHandler {
 }
 
 impl CommandHandler for MurmureHandler {
-    type Command = AppCommand;
+    // Murmure's commands address the user's channels, not the routed
+    // document: they leave through `send`, and the shell sends none.
+    type Command = Infallible;
 
-    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<Infallible>> {
         if id == PALETTE {
             return vec![ShellAction::OpenPalette];
         }
@@ -1471,7 +1485,7 @@ impl CommandHandler for MurmureHandler {
         &self,
         id: StaticKey<Commands>,
         target: ambre_chrome::KeyTarget,
-    ) -> KeyRoute<AppCommand> {
+    ) -> KeyRoute<Infallible> {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
@@ -1488,7 +1502,7 @@ impl CommandHandler for MurmureHandler {
     fn sealed_save(
         &self,
         _passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-    ) -> Option<AppCommand> {
+    ) -> Option<Infallible> {
         // Murmure declares no sealed save.
         None
     }
@@ -1600,7 +1614,7 @@ pub fn DeleteConfirm(
         <ambre_chrome::Dialog
             open=open
             on_close=Callback::new(move |()| cancel())
-            class="murmure-delete"
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-delete")}
             label="Delete message"
         >
             <h2>"Delete this message?"</h2>
@@ -1646,7 +1660,7 @@ pub fn ChannelMentionConfirm(
         <ambre_chrome::Dialog
             open=open
             on_close=Callback::new(move |()| relay.cancel_all())
-            class="murmure-all"
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-all")}
             label="Mention the whole channel"
         >
             <h2>{title}</h2>
@@ -1792,7 +1806,7 @@ pub fn EmojiPicker(
         <ambre_chrome::Dialog
             open=open
             on_close=Callback::new(move |()| relay.picking.set(None))
-            class="murmure-emoji"
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-emoji")}
             label="Emoji"
         >
             <h2>{title}</h2>
@@ -1850,7 +1864,11 @@ pub fn EmojiPicker(
 pub fn KeyList(relay: MurmureRelay) -> impl IntoView {
     let rows = key_list(&Locale::En);
     view! {
-        <ambre_chrome::Dialog open=relay.keys class="murmure-keys" label="Keyboard shortcuts">
+        <ambre_chrome::Dialog
+            open=relay.keys
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-keys")}
+            label="Keyboard shortcuts"
+        >
             <h2>"Keyboard shortcuts"</h2>
             <table class="murmure-keys-table">
                 <thead>

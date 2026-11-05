@@ -45,7 +45,7 @@ fn snap_keeps_multi_block_fill_selection() {
         col,
         text: String::new(),
         raw: String::new(),
-        is_merged: ambre_bus::Merge::Merged,
+        is_merged: crate::message::Merge::Merged,
         merge_span: span,
         ..Default::default()
     };
@@ -99,14 +99,14 @@ fn snap_keeps_multi_block_fill_selection() {
 #[test]
 fn filtered_rows_collapse_geometry_and_nav() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
-    let cell = |row: u32, filtered: ambre_bus::RowFilter| DisplayCell {
+    let cell = |row: u32, filtered: crate::message::RowFilter| DisplayCell {
         row: Pos::<Row>::new(row),
         col: Pos::<Col>::new(0),
         text: format!("v{row}"),
         raw: format!("v{row}"),
-        bold: ambre_bus::Weight::Regular,
-        italic: ambre_bus::Slant::Upright,
-        is_merged: ambre_bus::Merge::Single,
+        bold: ambre_core::Weight::Regular,
+        italic: ambre_core::Slant::Upright,
+        is_merged: crate::message::Merge::Single,
         merge_span: None,
         is_filtered: filtered,
         ..Default::default()
@@ -119,11 +119,11 @@ fn filtered_rows_collapse_geometry_and_nav() {
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
-            cell(0, ambre_bus::RowFilter::Shown),
-            cell(1, ambre_bus::RowFilter::Shown),
-            cell(2, ambre_bus::RowFilter::Filtered),
-            cell(3, ambre_bus::RowFilter::Filtered),
-            cell(4, ambre_bus::RowFilter::Shown),
+            cell(0, crate::message::RowFilter::Shown),
+            cell(1, crate::message::RowFilter::Shown),
+            cell(2, crate::message::RowFilter::Filtered),
+            cell(3, crate::message::RowFilter::Filtered),
+            cell(4, crate::message::RowFilter::Shown),
         ],
     });
 
@@ -235,11 +235,11 @@ fn move_to_and_content_scans() {
                 col: Pos::<Col>::new(5),
                 text: "x".into(),
                 raw: "x".into(),
-                bold: ambre_bus::Weight::Regular,
-                italic: ambre_bus::Slant::Upright,
-                is_merged: ambre_bus::Merge::Single,
+                bold: ambre_core::Weight::Regular,
+                italic: ambre_core::Slant::Upright,
+                is_merged: crate::message::Merge::Single,
                 merge_span: None,
-                is_filtered: ambre_bus::RowFilter::Shown,
+                is_filtered: crate::message::RowFilter::Shown,
                 ..Default::default()
             },
             DisplayCell {
@@ -247,11 +247,11 @@ fn move_to_and_content_scans() {
                 col: Pos::<Col>::new(1),
                 text: "y".into(),
                 raw: "y".into(),
-                bold: ambre_bus::Weight::Regular,
-                italic: ambre_bus::Slant::Upright,
-                is_merged: ambre_bus::Merge::Single,
+                bold: ambre_core::Weight::Regular,
+                italic: ambre_core::Slant::Upright,
+                is_merged: crate::message::Merge::Single,
                 merge_span: None,
-                is_filtered: ambre_bus::RowFilter::Shown,
+                is_filtered: crate::message::RowFilter::Shown,
                 ..Default::default()
             },
             DisplayCell {
@@ -259,11 +259,11 @@ fn move_to_and_content_scans() {
                 col: Pos::<Col>::new(3),
                 text: "".into(),
                 raw: "".into(),
-                bold: ambre_bus::Weight::Regular,
-                italic: ambre_bus::Slant::Upright,
-                is_merged: ambre_bus::Merge::Single,
+                bold: ambre_core::Weight::Regular,
+                italic: ambre_core::Slant::Upright,
+                is_merged: crate::message::Merge::Single,
                 merge_span: None,
-                is_filtered: ambre_bus::RowFilter::Shown,
+                is_filtered: crate::message::RowFilter::Shown,
                 ..Default::default()
             },
         ],
@@ -296,11 +296,11 @@ fn viewport_data_preserves_formula_raw_for_editing() {
             col: Pos::<Col>::new(2),
             text: "3".to_owned(),
             raw: "=SUM(A1:B1)".to_owned(),
-            bold: ambre_bus::Weight::Regular,
-            italic: ambre_bus::Slant::Upright,
-            is_merged: ambre_bus::Merge::Single,
+            bold: ambre_core::Weight::Regular,
+            italic: ambre_core::Slant::Upright,
+            is_merged: crate::message::Merge::Single,
             merge_span: None,
-            is_filtered: ambre_bus::RowFilter::Shown,
+            is_filtered: crate::message::RowFilter::Shown,
             ..Default::default()
         }],
     });
@@ -371,11 +371,11 @@ fn dirty_and_error_lifecycle() {
             col: Pos::<Col>::new(0),
             text: "42".to_owned(),
             raw: "=A2".to_owned(),
-            bold: ambre_bus::Weight::Regular,
-            italic: ambre_bus::Slant::Upright,
-            is_merged: ambre_bus::Merge::Single,
+            bold: ambre_core::Weight::Regular,
+            italic: ambre_core::Slant::Upright,
+            is_merged: crate::message::Merge::Single,
             merge_span: None,
-            is_filtered: ambre_bus::RowFilter::Shown,
+            is_filtered: crate::message::RowFilter::Shown,
             ..Default::default()
         }],
     });

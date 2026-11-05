@@ -156,7 +156,7 @@ open on machines nobody controls. The list order is the order the CRDT converges
 timestamp is shown to the reader and used for nothing else (`TOILE-FEAT-012`).
 
 **Code:** `ambre_toile::logic::state::comments` and the five comment commands of
-`ambre_bus::app::toile::ToileCommand`. The pins on `DisplayViewport`, the pin painter and the pick
+`ambre_toile::message::ToileCommand`. The pins on `DisplayViewport`, the pin painter and the pick
 in `ambre_toile::ui::comments`, the comment tool in `ambre_toile::ui::tool`. The panel and the
 composer are in `ambre_toile::chrome::comments`.
 

@@ -5,7 +5,7 @@
 //! `annots` naming its author. An intercepted edit is one commit, so an undo
 //! takes back the text, the mark and the entry together.
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::id::{Id, Suggestion};
 use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroMap, TreeID};

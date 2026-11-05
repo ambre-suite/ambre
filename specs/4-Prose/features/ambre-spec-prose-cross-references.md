@@ -100,7 +100,7 @@ pub struct CrossRefMark(String);
 pub fn encode(target: TreeID, kind: &CrossRefKind) -> CrossRefMark;
 pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)>;
 
-// ambre_bus::app::prose. The variant's position is its stored code: a new kind is appended,
+// ambre_prose::message. The variant's position is its stored code: a new kind is appended,
 // never inserted.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CrossRefKind {
@@ -131,7 +131,7 @@ new block is a new identity (`PROSE-FEAT-073`). A reference carrying its own lab
 showing that label, because the label is in the reference and needs no target to be read
 (`PROSE-UI-048`).
 
-**The command** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The command** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

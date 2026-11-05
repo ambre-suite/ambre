@@ -2,8 +2,9 @@
 //! (`features/ambre-spec-murmure-composer.md`).
 
 use crate::Receipt;
+use crate::message::{MessageDraft, MessageView, StyleMark, TextStyle};
 use ambre_bus::Char;
-use ambre_bus::{Authored, Instant, MessageDraft, MessageView, StyleMark, TextStyle};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::Span;
 use ambre_core::{Relay, Seq};
@@ -234,7 +235,7 @@ fn an_edit_rewrites_the_styles_of_the_body() {
     let read = &messages(&bob)[0];
     assert_eq!(
         (read.text.as_str(), read.edited),
-        ("one two", ambre_bus::Revision::Edited)
+        ("one two", crate::message::Revision::Edited)
     );
     assert_eq!(read.styles, [mark(TextStyle::Italic, 4..7)], "bold is gone");
 
@@ -285,7 +286,7 @@ fn a_style_outside_the_body_or_a_bad_link_is_refused() {
         );
         assert!(
             matches!(
-                alice.reply(id, &bad, author, NOW, ambre_bus::ReplyEcho::ThreadOnly),
+                alice.reply(id, &bad, author, NOW, crate::message::ReplyEcho::ThreadOnly),
                 Err(MurmureError::BadStyle)
             ),
             "reply {styles:?}"

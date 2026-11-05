@@ -6,7 +6,7 @@
 //! (`MURMURE-431`). The marks follow the text through each edit, as the
 //! mentions do (`MURMURE-553`).
 
-use ambre_bus::{StyleMark, TextStyle};
+use crate::message::{StyleMark, TextStyle};
 use ambre_commands::{Key, KeyChar};
 use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Byte, Char, byte_to_char, char_len};

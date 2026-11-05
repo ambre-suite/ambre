@@ -4,7 +4,7 @@
 **Implementation:** implemented
 
 > **Which generic of `ambre-core` a newtype is, and why the few that are none stay hand-written.**
-> A newtype over an integer, a float, a `String` or a `Vec<u8>` is an instance of a family below.
+> A newtype over a primitive of the census list below is an instance of a family below.
 > If none fits, it is a line of `ambre-newtypes.tsv` with its reason. The rule is `ARCH-062`,
 > which the primitive gate holds, and the truth of a reason is `ARCH-063`, which a reviewer holds.
 
@@ -31,7 +31,8 @@
 | :--- | :--- | :--- |
 | The rule | `ambre-spec-architecture.md` section 1.1, `ARCH-062` | the primitive gate, `crates/ambre-primitives/src/newtypes.rs` |
 | The exceptions | `specs/1-Foundations/ambre-newtypes.tsv`: a key, then a reason | the gate refuses a newtype no line names, a line that names none, and an empty reason. A reviewer reads each reason a change adds, `ARCH-063` |
-| The census | every struct of the walk outside a test, with no generic parameter and one field once `PhantomData` is set apart, over an integer, a float, a `String` or a `Vec<u8>` | the gate reads the type as the source writes it: an alias or a macro hides it, and a reviewer holds both |
+| The census | every struct of the walk outside a test, with one field once `PhantomData` is set apart, over a primitive of the census list. A struct of `ambre-core` with a type or a const parameter is a family and stays out. A generic struct of another crate is in: no row of section 2 declares it | the gate reads the type as the source writes it: an alias or a macro hides it, and a reviewer holds both |
+| The census list | an integer, a float, a `bool`, a `char`, a `String`, a `Uuid`, a `Vec<u8>`; a `str` or a `[u8]`, bare or behind a reference; a `Cow` of a `str` or of a `[u8]`; an `Option` of any of these | the gate matches the last segment of the path, so `uuid::Uuid` and `ambre_core::Uuid` read alike |
 | A name | an alias that stands for a family alone, section 3 | the gate refuses it, `ARCH-066`. It reads the families from section 2, and refuses one that `ambre-core` declares as no generic struct. A reviewer and `clippy::type_complexity` hold an alias of a compound type, `ARCH-067` |
 | A stale line | a line whose newtype was folded or removed | `cargo run -p ambre-primitives -- --prune` removes it, and nothing else |
 

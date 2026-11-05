@@ -10,7 +10,7 @@
 // DOM names no command queue, and the panel keeps no order of its own.
 // ============================================================================
 
-use ambre_bus::app::toile::{DeckView, Slide};
+use crate::message::{DeckView, Slide};
 use ambre_core::id::{Frame, Id};
 use ambre_core::index::{Len, Pos};
 use leptos::prelude::*;

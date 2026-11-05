@@ -62,7 +62,7 @@ fn csv_export_evaluates_formulas() {
 /// reopened peer must see the full filled series, not just the seed cell.
 #[test]
 fn autofill_series_survives_incremental_delta_replay() {
-    use ambre_bus::FillMode;
+    use crate::message::FillMode;
 
     let mut author = TrameState::new();
 
@@ -147,7 +147,7 @@ fn batched_formatting_broadcasts_complete_delta() {
         for col in 0..=2 {
             assert_eq!(
                 read_display(&mut reopened, row, col).bold,
-                ambre_bus::Weight::Bold,
+                ambre_core::Weight::Bold,
                 "bold on ({row},{col}) must survive an incremental reopen"
             );
         }
@@ -425,8 +425,8 @@ fn percent_sheet() -> TrameState {
         text: "0.5".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellStyle {
-        patch: ambre_bus::StylePatch {
-            format: Some(ambre_bus::CellFormat::Percent),
+        patch: crate::message::StylePatch {
+            format: Some(crate::message::CellFormat::Percent),
             decimals: Some(ambre_core::Bounded::new(1)),
             ..Default::default()
         },

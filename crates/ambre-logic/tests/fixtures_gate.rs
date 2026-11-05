@@ -23,13 +23,14 @@ use ambre_core::Version;
 use ambre_core::index::Pos;
 use std::path::{Path, PathBuf};
 
-use ambre_bus::{CellPos, Col, Row, TrameCommand};
+use ambre_bus::{CellPos, Col, Row};
 use ambre_core::{Container, DocType, FixtureGen, seeded_document_id};
 use ambre_logic::fixtures::{
     self, Drift, FROZEN_KEEP_PER_TYPE, REGISTRY, check_corpus, freeze, generate_into,
     retain_frozen, unfrozen_versions, write_fixture,
 };
 use ambre_trame::TrameState;
+use ambre_trame::message::TrameCommand;
 
 // -----------------------------------------------------------------------------
 // A registry the test can mutate

@@ -5,8 +5,8 @@
 // the mapping from event to toast lives here, as Trame's and Toile's do.
 // ============================================================================
 
-use ambre_bus::app::prose::{CommandName, ProseError, ProseEvent, ProseRefusal, RefusedAction};
-use ambre_bus::{AppEvent, UiEvent};
+use crate::message::{ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction};
+use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::Toasts;
 
 use crate::interop::report_message;
@@ -15,12 +15,11 @@ use crate::view::annotate::LostReply;
 /// Surface what a conversion lost, and a file that produced nothing, as a
 /// toast (`PROSE-IO-053`). A reply refused for its thread is told too
 /// (`PROSE-UI-232`). A no-op for every other event.
-pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
-    let UiEvent::Viewport {
-        event: AppEvent::Prose(event),
-        ..
-    } = ev
-    else {
+pub fn notify_event<S: Embed<ProseEvent>, P: ambre_bus::ChannelPlane>(
+    toasts: &Toasts,
+    ev: &UiEvent<S, P>,
+) {
+    let Some(event) = ev.viewport_event::<ProseEvent>() else {
         return;
     };
     match event {
@@ -49,5 +48,5 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
 /// engine puts the name of the reply command on that refusal.
 fn is_refused_reply(error: &ProseError) -> bool {
     matches!(error.reason, ProseRefusal::NoSuchComment(_))
-        && error.refused == RefusedAction::Command(CommandName::REPLY_TO_COMMENT)
+        && error.refused == RefusedAction::Command(ProseCommand::REPLY_TO_COMMENT_NAME)
 }

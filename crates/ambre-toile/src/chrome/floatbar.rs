@@ -24,7 +24,7 @@
 // pipe, the palette / inspector hazard. A click then never clears the selection the bar
 // acts on. ============================================================================
 
-use ambre_bus::app::toile::{FontFamily, FontSizeChoice};
+use crate::message::{FontFamily, FontSizeChoice};
 use ambre_chrome::commands::Locale;
 use ambre_core::{Commands, StaticKey};
 use ambre_core::{FontSize, Rgba};

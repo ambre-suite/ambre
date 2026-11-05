@@ -2,7 +2,7 @@
 // ============================================================================
 // ViewportTransform: the render thread's world <-> screen camera (toile-viewport).
 //
-// Deliberately a distinct type from `ambre_bus::app::toile::Viewport` (the Logic
+// Deliberately a distinct type from `crate::message::Viewport` (the Logic
 // culling input). They carry identical fields, but this one is the GPU transform.
 // It is updated locally and immediately on every pan / zoom for a jank-free
 // gesture (toile-viewport). The UI forwards each change to Logic as `SetViewport`,
@@ -10,10 +10,10 @@
 // `cfg(wasm32)`.
 // ============================================================================
 
-use ambre_bus::app::toile::Viewport;
+use crate::message::Viewport;
 /// Minimum / maximum zoom: the bounds the culling type clamps to
 /// (`TOILE-UI-281`), so the camera and the Logic thread share one range.
-pub use ambre_bus::app::toile::{MAX_ZOOM, MIN_ZOOM};
+pub use crate::message::{MAX_ZOOM, MIN_ZOOM};
 use ambre_core::{Board, Px, Scale, View};
 use ambre_draw::kinetic::ScrollStep;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};

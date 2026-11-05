@@ -16,7 +16,7 @@
 // FormatBar, Find&Replace) -- not a canvas `DrawSurface` band.
 // ============================================================================
 
-use ambre_bus::app::trame::CellFloat;
+use crate::message::CellFloat;
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
 use ambre_core::Bounded;
@@ -26,13 +26,13 @@ use leptos::prelude::*;
 use crate::chrome::commands::status_label;
 
 /// Selection aggregates rendered by the status bar, mirrored from
-/// [`TrameEvent::SelectionStats`](ambre_bus::TrameEvent::SelectionStats). `count`
+/// [`TrameEvent::SelectionStats`](crate::message::TrameEvent::SelectionStats). `count`
 /// is the non-empty cell count; `numbers` the totals of the numeric cells, shown
 /// only when there is one.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub count: ambre_core::Count<ambre_bus::app::trame::Cells>,
-    pub numbers: Option<ambre_bus::app::trame::NumericStats>,
+    pub count: ambre_core::Count<crate::message::Cells>,
+    pub numbers: Option<crate::message::NumericStats>,
 }
 
 /// Format an aggregate value: an integer shows without decimals, otherwise two

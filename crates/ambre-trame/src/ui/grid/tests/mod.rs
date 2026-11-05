@@ -45,7 +45,7 @@ fn seed_merge_2x2(state: &mut TrameUiState) {
         col,
         text: String::new(),
         raw: String::new(),
-        is_merged: ambre_bus::Merge::Merged,
+        is_merged: crate::message::Merge::Merged,
         merge_span: span,
         ..Default::default()
     };

@@ -10,7 +10,8 @@ use ambre_core::Validated;
 use ambre_core::index::{Axis, Len, Pos};
 use std::collections::HashMap;
 
-use ambre_bus::{Attachment, ContentHash, MediaType, Octets, Request};
+use crate::message::Attachment;
+use ambre_bus::{ContentHash, MediaType, Octets, Request};
 use ambre_core::Count;
 use ambre_core::Seq;
 use ambre_core::{Byte, ExportFilename, KnownMediaType};

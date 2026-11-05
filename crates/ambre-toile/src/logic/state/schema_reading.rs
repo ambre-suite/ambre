@@ -374,7 +374,7 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         (ElementKey::Style, _) => Some(style_reading(&shown.style)),
         (ElementKey::Link, _) => Some(link_reading(shown.link.as_ref()?)),
         (ElementKey::Locked, _) => Some(
-            if shown.locked == ambre_bus::app::toile::LockState::Locked {
+            if shown.locked == crate::message::LockState::Locked {
                 "locked"
             } else {
                 "unlocked"

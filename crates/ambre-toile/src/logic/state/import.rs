@@ -13,8 +13,8 @@ use ambre_core::Validated;
 use ambre_core::index::Pos;
 use std::collections::HashMap;
 
+use crate::message::Elements;
 use ambre_bus::RestEvent;
-use ambre_bus::app::toile::Elements;
 use ambre_core::Seq;
 use kurbo::Point;
 use loro::{LoroMap, LoroValue};

@@ -1,28 +1,28 @@
 //! Prose's IPC contract, and the one engine-local value that is not part of it.
 //!
-//! The command and event types live in `ambre-bus` (`ambre_bus::app::prose`) so
-//! the `ambre-logic` dispatcher can match on `(DocState, AppCommand::Prose)`
-//! without a dependency cycle. This module re-exports them, keeping the
-//! engine's `crate::events::...` paths, and adds [`ProseOutcome`].
+//! The command and event types live in [`crate::message`]. This module
+//! re-exports them, keeping the engine's `crate::events::...` paths, and adds
+//! [`ProseOutcome`].
 //!
 //! [`ProseOutcome`] stays here, like `ToileOutcome` and `TrameOutcome` stay in
 //! their own crates. It carries raw CRDT and ephemeral bytes; the `ambre-logic`
 //! dispatcher wraps them into `SyncCommand`s under the owning `Id<Document>`,
 //! which the engine does not hold (`PROSE-024`).
 
-pub use ambre_bus::app::grid;
-pub use ambre_bus::app::prose::{
+pub use crate::message::{
     ActiveMarks, Align, AnchorState, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
-    ChangeOrigin, CommandName, CommentReply, CommentThread, CrossRefKind, CursorPosition,
-    DateFieldFormat, EditMode, FindMatch, FindOptions, FirstPage, FootnoteCall, FootnoteEntry,
-    Graphemes, HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether, KeepWithNext,
-    LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle,
-    Page, ParagraphStyle, Paragraphs, PatternKind, PresencePayload, ProseCommand, ProseError,
-    ProseEvent, ProseRefusal, RefusedAction, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion,
+    ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition, DateFieldFormat,
+    EditMode, FindMatch, FindOptions, FirstPage, FootnoteCall, FootnoteEntry, Graphemes,
+    HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether, KeepWithNext, LineHeight,
+    LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle, Page,
+    ParagraphStyle, Paragraphs, PatternKind, PresencePayload, ProseCommand, ProseError, ProseEvent,
+    ProseRefusal, RefusedAction, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion,
     SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering,
     TodoMark, TriState, VAlign, WordCount, Words,
 };
+pub use ambre_bus::app::grid;
 
+use ambre_core::{CommandNames, StaticKey};
 use loro::TreeID;
 
 /// The CRDT id a transport block id names.
@@ -104,7 +104,7 @@ impl ProseOutcome {
     /// Name every refusal this outcome carries after the command that drew it
     /// (`PROSE-105`). An outcome that refused nothing passes through.
     #[must_use]
-    pub fn named(mut self, refused: CommandName) -> Self {
+    pub fn named(mut self, refused: StaticKey<CommandNames>) -> Self {
         for event in &mut self.display {
             if let ProseEvent::Error(error) = event {
                 error.refused = RefusedAction::Command(refused);

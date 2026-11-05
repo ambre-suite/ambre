@@ -7,8 +7,8 @@
 // `CommandStates` store the menu bar reads.
 // ============================================================================
 
-use ambre_bus::app::toile::ToileEvent;
-use ambre_bus::{AppEvent, UiEvent};
+use crate::message::ToileEvent;
+use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::{Availability, CommandStates};
 use leptos::prelude::*;
 
@@ -49,12 +49,11 @@ impl Toggles {
 /// into the command store, so the menu entries' `disabled` state reflects the
 /// Logic thread. A no-op for every event that is not a Toile `UndoState`; the
 /// launcher calls this for every event it relays, naming no Toile variant.
-pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
-    if let UiEvent::Viewport {
-        event: AppEvent::Toile(ToileEvent::UndoState { undo, redo }),
-        ..
-    } = ev
-    {
+pub fn mirror_event<S: Embed<ToileEvent>, P: ambre_bus::ChannelPlane>(
+    store: &CommandStates,
+    ev: &UiEvent<S, P>,
+) {
+    if let Some(ToileEvent::UndoState { undo, redo }) = ev.viewport_event() {
         store.set_enabled(UNDO, *undo);
         store.set_enabled(REDO, *redo);
     }

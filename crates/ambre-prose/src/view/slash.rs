@@ -10,10 +10,10 @@ use crate::events::{
     BlockInit, BlockType, HeadingLevel, ListStyle, OrderedStyle, ProseCommand, tree_id,
 };
 use crate::layout::run::Affinity;
+use crate::message::DocChar;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
 use ambre_bus::app::grid::{Col, Row};
-use ambre_bus::app::prose::DocChar;
 use ambre_core::index::{Axis, IdxVec, Len, Pos, Span};
 use ambre_core::{Doc, Point, Px, View};
 

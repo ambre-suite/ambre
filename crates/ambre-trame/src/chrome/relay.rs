@@ -12,10 +12,8 @@
 // only sends it to the routed document.
 // ============================================================================
 
-use ambre_bus::{
-    AppCommand, AppEvent, FilterKind, SheetName, SheetTab, StylePatch, TrameCommand, TrameEvent,
-    UiEvent,
-};
+use crate::message::{FilterKind, SheetName, SheetTab, StylePatch, TrameCommand, TrameEvent};
+use ambre_bus::{Embed, UiEvent};
 use ambre_core::id::{Id, Sheet};
 use leptos::prelude::*;
 
@@ -24,8 +22,8 @@ use super::popovers::FilterPopoverState;
 use super::sheet_tabs::ReorderSheet;
 use super::sort_dialog::{SortApply, SortDialogState};
 use super::status::SelStats;
+use crate::message::FindOptions;
 use ambre_bus::app::find::FindQuery;
-use ambre_bus::app::trame::FindOptions;
 
 /// What one of Trame's panels asks of the sheet.
 pub enum TrameIntent {
@@ -74,8 +72,8 @@ pub struct TrameRelay {
 impl TrameRelay {
     /// The command `intent` becomes. The Logic thread resolves the geometry
     /// from the selection it tracks, and answers with the events above.
-    pub fn command(&self, intent: TrameIntent) -> AppCommand {
-        AppCommand::Trame(match intent {
+    pub fn command(&self, intent: TrameIntent) -> TrameCommand {
+        match intent {
             TrameIntent::Style(patch) => TrameCommand::SetCellStyle { patch },
             TrameIntent::Filter(kind) => TrameCommand::ApplyFilterToActiveColumn { kind },
             // The dialog's snapshotted bounds only label its column picker, so
@@ -108,16 +106,12 @@ impl TrameRelay {
                 sheet_id: req.id,
                 to_index: req.to_index,
             },
-        })
+        }
     }
 
     /// Fill the chrome from `ev`. Any event not Trame's is a no-op.
-    pub fn absorb(&self, ev: &UiEvent) {
-        let UiEvent::Viewport {
-            event: AppEvent::Trame(te),
-            ..
-        } = ev
-        else {
+    pub fn absorb<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(&self, ev: &UiEvent<S, P>) {
+        let Some(te) = ev.viewport_event::<TrameEvent>() else {
             return;
         };
         match te {

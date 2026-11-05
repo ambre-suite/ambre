@@ -1,14 +1,14 @@
 //! Trame (spreadsheet) event surface (Logic thread -> UI Thread).
 //!
 //! The `TrameEvent` family plus its display value type [`DisplayCell`], carried
-//! by move inside [`AppEvent::Trame`](crate::ui::AppEvent). The command-side
+//! by move inside `AppEvent::Trame` of the Logic runtime. The command-side
 //! value types it reuses (`CellStyle`, `HAlign`, `VAlign`, `Borders`, ...) arrive
-//! by glob from the sibling command modules of `crate::app::trame`.
+//! by glob from the sibling command modules of `crate::message`.
 
 use std::cmp::Ordering;
 
 use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
-use crate::token::Token;
+use ambre_bus::token::Token;
 use ambre_core::id::{FilterView, Id, Sheet, User};
 use ambre_core::index::{Axis, Len, Pos};
 use ambre_core::{Bounded, Bounds, Count, Doc, Px, RankKind, Refusal, Rgb};
@@ -125,7 +125,7 @@ pub enum TrameEvent {
     /// [`TrameCommand::ScrollViewport`](super::TrameCommand::ScrollViewport)
     /// so stale responses can be dropped.
     ViewportData {
-        version: ambre_core::Seq<crate::ViewportVersion>,
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
         row_start: Pos<Row>,
         col_start: Pos<Col>,
         cells: Vec<DisplayCell>,
@@ -316,7 +316,7 @@ pub enum TrameEvent {
     /// "not found".
     FindResult {
         matches: Vec<CellPos>,
-        active: Option<Pos<crate::app::find::Match>>,
+        active: Option<Pos<ambre_bus::app::find::Match>>,
     },
 
     /// A [`ReplaceAll`](super::TrameCommand::ReplaceAll) finished, having
@@ -324,7 +324,7 @@ pub enum TrameEvent {
     /// [`DataReset`](Self::DataReset) that prompts the viewport re-fetch; the
     /// chrome surfaces the count as a toast.
     ReplaceDone {
-        replaced: Len<crate::app::find::Match>,
+        replaced: Len<ambre_bus::app::find::Match>,
     },
 
     /// A local [`PasteRange`](super::TrameCommand::PasteRange) was refused
@@ -361,7 +361,7 @@ pub enum TrameEvent {
     /// The accompanying [`DataReset`](Self::DataReset) prompts a viewport
     /// re-fetch with the new style overrides applied.
     CondFormatsUpdated {
-        version: ambre_core::Seq<crate::ViewportVersion>,
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
     },
 
     /// A local edit was rejected by a [`ValidationOnInvalid::Reject`] rule
@@ -370,7 +370,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Reject`]: super::ValidationOnInvalid::Reject
     ValidationError {
-        version: ambre_core::Seq<crate::ViewportVersion>,
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         message: String,
@@ -382,7 +382,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Warn`]: super::ValidationOnInvalid::Warn
     ValidationWarning {
-        version: ambre_core::Seq<crate::ViewportVersion>,
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         message: String,
@@ -392,7 +392,7 @@ pub enum TrameEvent {
     /// edit (`trame-cell-editing`, Post-MVP). No CRDT delta was
     /// produced; the chrome surfaces `description`.
     ProtectionDenied {
-        version: ambre_core::Seq<crate::ViewportVersion>,
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
         row: Pos<Row>,
         col: Pos<Col>,
         description: String,
@@ -726,7 +726,7 @@ ambre_core::define_flag! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::trame::CellText;
+    use crate::message::CellText;
 
     fn numbers(values: &[f64]) -> Vec<Bounded<CellFloat>> {
         values.iter().map(|&v| number(v)).collect()

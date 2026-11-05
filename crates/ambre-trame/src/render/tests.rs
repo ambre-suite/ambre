@@ -594,13 +594,13 @@ fn a_spill_runs_in_the_direction_of_the_alignment() {
         c.h_align = h_align;
         the_clip(&draw_one(&l, 0, 3, c))
     };
-    let left = with(ambre_bus::HAlign::Left);
+    let left = with(crate::message::HAlign::Left);
     assert_eq!(left.x0, rect.x0);
     assert!(left.x1 > rect.x1);
-    let right = with(ambre_bus::HAlign::Right);
+    let right = with(crate::message::HAlign::Right);
     assert!(right.x0 < rect.x0);
     assert_eq!(right.x1, rect.x1);
-    let center = with(ambre_bus::HAlign::Center);
+    let center = with(crate::message::HAlign::Center);
     assert!(center.x0 < rect.x0 && center.x1 > rect.x1);
     for clip in [left, right, center] {
         assert_eq!(
@@ -640,7 +640,7 @@ fn text_taller_than_its_row_is_cut_at_the_row() {
 fn a_vertical_alignment_never_lifts_text_above_the_top() {
     // `TRAME-UI-099`: text taller than the box sits at the top for every align.
     use super::content::{TextFit, cell_v_offset};
-    use ambre_bus::VAlign;
+    use crate::message::VAlign;
     let fit = |box_h: f64, text_h: f64| TextFit {
         box_height: Px::<Surface>::new(box_h),
         text_height: Px::<Surface>::new(text_h),
@@ -673,7 +673,7 @@ fn glyphs_scale_with_the_zoom() {
             .cell_rect(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
             .y0;
         let mut c = CellContent::plain("Ag");
-        c.v_align = ambre_bus::VAlign::Top;
+        c.v_align = crate::message::VAlign::Top;
         let ops = draw_one(&l, 0, 0, c);
         let y = ops
             .iter()
@@ -713,11 +713,11 @@ fn a_fill_and_a_border_stop_at_the_cell_edge() {
             assert_eq!(*r, rect);
         }
     }
-    let edge = Some(ambre_bus::CellBorder {
-        style: ambre_bus::BorderStyle::Thick,
+    let edge = Some(crate::message::CellBorder {
+        style: crate::message::BorderStyle::Thick,
         color: None,
     });
-    c.borders = ambre_bus::Borders {
+    c.borders = crate::message::Borders {
         top: edge,
         right: edge,
         bottom: edge,

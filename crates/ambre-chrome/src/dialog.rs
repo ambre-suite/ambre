@@ -82,7 +82,7 @@ pub fn Dialog(
     on_close: Option<Callback<()>>,
     /// Extra class on the `<dialog>` element, for per-dialog styling.
     #[prop(optional, into)]
-    class: Option<String>,
+    class: Option<ambre_core::StaticKey<ambre_core::CssClasses>>,
     /// The modal's accessible name, for one with no heading to name it.
     #[prop(optional, into)]
     label: Option<String>,
@@ -148,7 +148,7 @@ pub fn Dialog(
     };
 
     let class = class
-        .map(|c| format!("ambre-dialog {c}"))
+        .map(|c| format!("ambre-dialog {}", c.as_str()))
         .unwrap_or_else(|| "ambre-dialog".to_string());
 
     view! {

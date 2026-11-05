@@ -1,12 +1,10 @@
-//! Prose (word processor) IPC contract (`features/ambre-spec-prose-engine.md`).
-//!
-//! Mirrors the Trame and Toile split. The typed command / event / display
-//! data-plane types live here in `ambre-bus`, so the `ambre-logic` dispatcher
-//! can match on `(DocState, AppCommand::Prose)` without a dependency cycle. The
-//! engine crate `ambre-prose` depends on `ambre-bus`, never the reverse. The
-//! stateful engine (`ProseState`) and its `ProseOutcome` wrapper stay in
-//! `ambre-prose`, exactly as `ToileState` / `ToileOutcome` stay in
-//! `ambre-toile`.
+//! Prose (word processor) data plane: the whole typed content vocabulary of a
+//! Prose document, both directions (`features/ambre-spec-prose-engine.md`).
+//! It lives in the application's crate, beside the engine and the view that
+//! use it, and the Sync worker never builds against it (`BUS-032`,
+//! `ARCH-070`). The Logic runtime carries it as `AppCommand::Prose` and
+//! `AppEvent::Prose`. The stateful engine (`ProseState`) and its
+//! `ProseOutcome` wrapper stay outside this module.
 //!
 //! * Pure data only: block identity, the typed block initializer, the paragraph
 //!   style register, the presence sample, and the command / event enums.
@@ -14,10 +12,9 @@
 //!
 //! **Why [`BlockId`] and not `loro::TreeID`.** A block's identity is the id the
 //! tree mints (`PROSE-085`), and [`BlockId`] is that id's two numbers under a
-//! name this crate can carry. Naming the CRDT type here would pull `loro` into
-//! `ambre-bus`, which `ambre-sync` links, and the Sync worker must compile no
-//! CRDT (`SYNC-011`, `deny.toml`). The engine converts at its own boundary, and
-//! the value is the same pair on both sides: it is one identity, not two.
+//! name of this plane. The engine converts at its own boundary, so the plane
+//! names no CRDT type and stays pure data. The value is the same pair on both
+//! sides: it is one identity, not two.
 //!
 //! **The offset unit is the Unicode code point**, everywhere below
 //! (`PROSE-FEAT-006`). It is what the CRDT indexes a body text and a cursor
@@ -33,12 +30,12 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
-use ambre_core::{Count, Pt, Rgb};
+use ambre_core::{CommandNames, Count, Pt, Rgb, StaticKey};
 
-use super::grid::{CellPos, Col, Row};
+use ambre_bus::app::grid::{CellPos, Col, Row};
 
 pub mod mark;
-use crate::{Authored, Instant};
+use ambre_core::{Authored, Instant};
 pub use mark::MarkValue;
 
 /// A code-point offset into the body of one block, as the CRDT counts it
@@ -1694,7 +1691,7 @@ pub enum ProseCommand {
     /// (`PROSE-FEAT-151`). `None` is the emptied field: it closes the open
     /// search and the highlight clears (`FIND-005`).
     FindStart {
-        query: Option<super::find::FindQuery<FindOptions>>,
+        query: Option<ambre_bus::app::find::FindQuery<FindOptions>>,
     },
     FindNext,
     FindPrev,
@@ -2348,6 +2345,12 @@ impl ExportFormat {
     }
 }
 
+impl ambre_bus::Mutation for ProseCommand {
+    fn is_mutating(&self) -> bool {
+        ProseCommand::is_mutating(self)
+    }
+}
+
 impl ProseCommand {
     /// Whether this command can change the document's shared CRDT state.
     ///
@@ -2374,12 +2377,19 @@ impl ProseCommand {
         )
     }
 
+    /// The name of [`ProseCommand::ReplyToComment`], for a reader that must
+    /// recognise that refusal without a command to ask.
+    pub const REPLY_TO_COMMENT_NAME: StaticKey<CommandNames> =
+        StaticKey::new("replying to the comment");
+
     /// What a refusal calls this command when it tells the author
     /// (`PROSE-105`). The match is exhaustive, so a command added to the enum
-    /// does not compile until it has a name a reader understands.
+    /// does not compile until it has a name a reader understands. Only this
+    /// method and [`Self::REPLY_TO_COMMENT_NAME`] build a command name, so a
+    /// refusal names only a command that exists.
     #[must_use]
-    pub fn name(&self) -> CommandName {
-        CommandName(match self {
+    pub fn name(&self) -> StaticKey<CommandNames> {
+        StaticKey::new(match self {
             Self::Noop => "nothing",
             Self::Sync { .. } => "catching up",
             Self::InsertText { .. } => "typing",
@@ -2435,7 +2445,7 @@ impl ProseCommand {
             Self::EditFootnote { .. } => "editing the footnote",
             Self::DeleteFootnote { .. } => "deleting the footnote",
             Self::AddComment { .. } => "adding a comment",
-            Self::ReplyToComment { .. } => CommandName::REPLY_TO_COMMENT.0,
+            Self::ReplyToComment { .. } => return Self::REPLY_TO_COMMENT_NAME,
             Self::ResolveComment { .. } => "resolving the comment",
             Self::ReopenComment { .. } => "reopening the comment",
             Self::DeleteComment { .. } => "deleting the comment",
@@ -2588,11 +2598,11 @@ pub enum ProseEvent {
     /// It goes to the peer that searched and to no other (`PROSE-FEAT-148`).
     FindResults {
         matches: Vec<FindMatch>,
-        current: Option<Pos<super::find::Match>>,
+        current: Option<Pos<ambre_bus::app::find::Match>>,
     },
     /// The current match moved; the list did not (`PROSE-FEAT-152`).
     FindUpdated {
-        current: Option<Pos<super::find::Match>>,
+        current: Option<Pos<ambre_bus::app::find::Match>>,
     },
     /// What the local history holds after a command that wrote. The chrome
     /// disables its undo and redo affordances from this alone (`UNDO-006`),
@@ -2681,31 +2691,6 @@ impl fmt::Debug for ProseEvent {
 // Errors
 // =============================================================================
 
-/// The words a refusal uses for a command (`PROSE-105`). Only
-/// [`ProseCommand::name`] and the constants below build one, so a refusal
-/// names only a command that exists. A test that reads it compares two names,
-/// never two strings.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CommandName(&'static str);
-
-impl CommandName {
-    /// The name of [`ProseCommand::ReplyToComment`], for a reader that must
-    /// recognise that refusal without a command to ask.
-    pub const REPLY_TO_COMMENT: Self = Self("replying to the comment");
-
-    /// The words a refusal prints for this command.
-    #[must_use]
-    pub fn label(self) -> &'static str {
-        self.0
-    }
-}
-
-impl fmt::Display for CommandName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
-    }
-}
-
 /// What the engine turned down, as a refusal names it (`PROSE-105`).
 ///
 /// A command names itself through [`ProseCommand::name`]. The other variants
@@ -2717,7 +2702,7 @@ pub enum RefusedAction {
     /// where no command drives the engine, and no such path exists today.
     Unnamed,
     /// A command, under the name [`ProseCommand::name`] gives it.
-    Command(CommandName),
+    Command(StaticKey<CommandNames>),
     /// Growing a block back into a document that a command left empty.
     KeepingBlock,
     /// A collaborator's update. It enters the engine the way a command does
@@ -2733,7 +2718,7 @@ impl RefusedAction {
     pub fn label(self) -> &'static str {
         match self {
             Self::Unnamed => "that",
-            Self::Command(name) => name.label(),
+            Self::Command(name) => name.as_str(),
             Self::KeepingBlock => "keeping a block",
             Self::RemoteUpdate => "a collaborator's update",
             Self::Exporting => "exporting",
@@ -3064,8 +3049,9 @@ mod tests {
             ),
         ] {
             let name = command.name();
-            assert_eq!(name.label(), label);
+            assert_eq!(name.as_str(), label);
             assert_eq!(name.to_string(), label);
+            assert_eq!(format!("{name:?}"), format!("CommandName({label:?})"));
             assert_eq!(RefusedAction::Command(name).to_string(), label);
         }
         assert_ne!(ProseCommand::Undo.name(), ProseCommand::Redo.name());

@@ -99,7 +99,7 @@ thread, and nothing about a search is persisted (`ambre-spec-find.md`, `FIND-001
 **The query and a match:**
 
 ```rust
-// ambre_bus::app::prose -- the shared shape is `ambre-spec-find.md section 3`;
+// ambre_prose::message -- the shared shape is `ambre-spec-find.md section 3`;
 // a command carries `find::FindQuery<FindOptions>`, written in full
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct FindOptions {
@@ -146,7 +146,7 @@ fn match_offsets(hay: &str, query: &FindQuery<FindOptions>) -> Vec<Span<DocChar>
   still valid. The whole set is computed once and sent as one run (`PROSE-FEAT-036`), which is also
   what makes it one undo item (`ambre-spec-find.md`, `FIND-006`).
 
-**The commands and the events** (`ambre-bus`, the shared shape is `ambre-spec-find.md section 3`,
+**The commands and the events** (`ambre_prose::message`, the shared shape is `ambre-spec-find.md section 3`,
 declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Direction | Carries |

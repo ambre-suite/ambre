@@ -11,7 +11,7 @@
 //! (`PROSE-FEAT-163`, `PROSE-FEAT-283`). Its value is resolved when a page is
 //! drawn and never stored (`PROSE-FEAT-065`).
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::StoredAsI64;
 use ambre_core::index::Pos;
 use loro::TreeID;
@@ -237,7 +237,7 @@ impl ProseState {
 pub(crate) mod tests {
     use super::*;
     use crate::events::{BlockId, DateFieldFormat, Page, ProseCommand};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::{Len, Span};
     use ambre_core::{Authored, Instant};
     use ambre_core::{Doc, Px};
