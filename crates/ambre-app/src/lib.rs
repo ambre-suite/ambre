@@ -875,10 +875,7 @@ pub fn main() {
                 state: ret.state,
             },
         });
-    } else if let Some(username) = dev_user_from_url()
-        .or_else(stored_dev_user)
-        .and_then(|name| ambre_core::Validated::<ambre_core::DisplayName>::parse(&name).ok())
-    {
+    } else if let Some(username) = dev_user_from_url().or_else(stored_dev_user) {
         tracing::info!("Dev login requested for user {username:?}");
         remember_dev_user(&username);
         let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
