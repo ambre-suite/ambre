@@ -39,7 +39,7 @@ use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
 use ambre_prose::message::{ProseCommand, ProseEvent, WordCount};
 use ambre_prose::probe::{Answer, Dispatch, KeyProbe, Measure, ProbeName};
-use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
+use ambre_prose::ui::{ProseUiState, send_edit, send_request, status_figures};
 use ambre_prose::view::paint::PagePalette;
 
 /// The page palette, read from the theme tokens (`PROSE-UI-014`).
@@ -80,8 +80,8 @@ fn canvas_origin() -> Point<Px<Css>> {
 /// One open Prose document on the canvas.
 pub struct ProseView {
     document_id: Id<Document>,
-    to_logic: Port<ProseCommand>,
-    /// The edits' path out: a full channel holds them here (`BUS-011`).
+    /// The one path out: a full channel holds an edit here (`BUS-011`), and
+    /// drops a request the page asks again (`BUS-023`).
     outbox: Outbox<ProseCommand>,
     busy_pub: BusyPublisher,
     /// What the shell shows the user when the page cannot, such as a reply
@@ -164,10 +164,9 @@ impl ProseView {
         state.resize(size.0, size.1);
         Self {
             document_id,
-            outbox: Outbox::new(to_logic.clone()),
+            outbox: Outbox::new(to_logic),
             busy_pub,
             notices,
-            to_logic,
             from_logic,
             state,
             theme_ctl,
@@ -374,7 +373,7 @@ impl ProseView {
         self.publish_origin();
         if !self.fatal
             && let Some(query) = self.state.marks_query()
-            && send_command(&self.to_logic, self.document_id, query).accepted()
+            && send_request(&self.outbox, self.document_id, query).accepted()
         {
             self.state.marks_sent();
         }
@@ -454,13 +453,13 @@ impl ProseView {
         // (`PROSE-FEAT-124`). A full channel drops it, and the next change
         // asks again.
         if let Some(command) = self.state.tick(now) {
-            send_command(&self.to_logic, self.document_id, command);
+            send_request(&self.outbox, self.document_id, command);
         }
         // The pages the canvas is about to show, asked for before a frame
-        // needs them (`PROSE-UI-211`). A full channel drops the request, and
-        // the next layout taken asks again.
+        // needs them (`PROSE-UI-211`). The view records the request as asked
+        // before it leaves, so a full channel holds it rather than drop it.
         if let Some(command) = self.state.window_request() {
-            send_command(&self.to_logic, self.document_id, command);
+            send_edit(&mut self.outbox, self.document_id, command);
         }
         // A drag held near an edge scrolls the page (`PROSE-UI-038`), and a
         // flick keeps it moving (`PROSE-UI-217`).

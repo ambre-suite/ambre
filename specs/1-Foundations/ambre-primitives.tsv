@@ -4138,8 +4138,10 @@ ambre-toile | src/message/mod.rs | crate::message | <ToileCommand as ambre_bus::
 ambre-trame | src/message/command.rs | crate::message::command | <TrameCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/content.rs | crate::content | Mutation::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/content.rs | crate::content | <Infallible as Mutation>::is_mutating() | ret | bool	generic	predicate, never called: no value of the type exists
-ambre-bus | src/port.rs | crate::port | Delivery<A,P>::sent() | ret | bool	generic	predicate
-ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::is_busy() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::is_busy() | ret | bool	generic	predicate or internal state flag
+ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-logic | src/app.rs | crate::app | <AppCommand as Mutation>::is_mutating() | ret | bool	generic	predicate
+ambre-bus | src/lossy.rs | crate::lossy | lossy() | ret | bool	generic	predicate
+ambre-murmure | src/message/mod.rs | crate::message | <MurmureCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
+ambre-murmure | src/view.rs | crate::view | MurmureView::busy() | ret | bool	generic	predicate

@@ -11,12 +11,13 @@
 
 use std::convert::Infallible;
 
-use crate::Embed;
+use crate::{Embed, Mutation};
 
 /// The channel types an envelope carries, one per variant that names them.
 pub trait ChannelPlane {
-    /// What `LogicCommand::Channel` carries to an open channel.
-    type Command;
+    /// What `LogicCommand::Channel` carries to an open channel. The lossy
+    /// class asks it the questions it asks a document command (`BUS-023`).
+    type Command: Mutation;
     /// What `LogicCommand::Space` carries to an open space.
     type SpaceCommand;
     /// The direct message `LogicCommand::OpenDirectMessage` asks for.

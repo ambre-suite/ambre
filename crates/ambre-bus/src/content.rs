@@ -5,8 +5,9 @@
 //! runtime declares `AppCommand` and `AppEvent`, the closed sums over them,
 //! because it sits downstream of every application. [`Embed`] is the seam
 //! between the two: the launcher embeds a view's command into the sum, and
-//! projects the view's event out of it. [`Mutation`] is the one question the
-//! lossy class asks of a command it does not know (`BUS-023`).
+//! projects the view's event out of it. [`Mutation`] holds the two questions
+//! the role gate and the lossy class ask of a command they do not know
+//! (`BUS-007`, `BUS-023`).
 
 use std::convert::Infallible;
 
@@ -45,19 +46,43 @@ impl<A> Embed<A> for A {
     }
 }
 
-/// Whether a document command can change the document's shared CRDT state.
+/// The traffic class of a content command: what a full queue may do to it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Traffic {
+    /// Intent the user gave once. A full queue holds it in the outbox
+    /// (`BUS-011`).
+    Lossless,
+    /// A request over a state the screen already shows. A full queue drops
+    /// it, and the next frame offers it again (`BUS-024`).
+    Lossy,
+}
+
+/// The two questions the bus asks of a content command it does not know.
 ///
-/// The Logic dispatcher gates a read-only caller on it (`BUS-007`), and the
-/// lossy class refuses a command that answers yes (`BUS-023`). Ephemeral
-/// presence and local view state are not mutating: a viewer still scrolls,
-/// selects, copies and broadcasts a cursor.
+/// The Logic dispatcher gates a read-only caller on [`is_mutating`]
+/// (`BUS-007`). The lossy class carries a command only when [`traffic`]
+/// answers [`Traffic::Lossy`] and [`is_mutating`] answers no (`BUS-023`).
+/// Ephemeral presence and local view state are not mutating: a viewer still
+/// scrolls, selects, copies and broadcasts a cursor. Not mutating is not
+/// lossy: a selection changes no document and still carries intent.
+///
+/// [`is_mutating`]: Mutation::is_mutating
+/// [`traffic`]: Mutation::traffic
 pub trait Mutation {
     /// Whether the command can change the document.
     fn is_mutating(&self) -> bool;
+
+    /// What a full queue may do to the command. An application names its
+    /// lossy commands one by one, and every other command is lossless.
+    fn traffic(&self) -> Traffic;
 }
 
 impl Mutation for Infallible {
     fn is_mutating(&self) -> bool {
+        match *self {}
+    }
+
+    fn traffic(&self) -> Traffic {
         match *self {}
     }
 }

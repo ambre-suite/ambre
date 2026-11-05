@@ -2351,6 +2351,18 @@ impl ambre_bus::Mutation for ToileCommand {
     fn is_mutating(&self) -> bool {
         ToileCommand::is_mutating(self)
     }
+
+    /// The viewport fetch, the media fetch and the presence beat are lossy:
+    /// the board offers each again on a later frame (`BUS-024`). Every other
+    /// command carries intent.
+    fn traffic(&self) -> ambre_bus::Traffic {
+        match self {
+            Self::SetViewport(_) | Self::RequestMedia { .. } | Self::Presence { .. } => {
+                ambre_bus::Traffic::Lossy
+            }
+            _ => ambre_bus::Traffic::Lossless,
+        }
+    }
 }
 
 impl ToileCommand {

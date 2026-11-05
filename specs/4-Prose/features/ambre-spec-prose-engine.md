@@ -103,7 +103,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-002` | `POST` | Every mutation MUST leave the UI thread as a command. | this spec section 3 | structural -- `ambre_prose::ui::send_command` builds the one envelope, and `ProseUiState` holds no document to write to; `ambre_prose::ui::tests::the_draft_echo_never_reaches_the_wire` | none | verified |
+| `PROSE-UI-002` | `POST` | Every mutation MUST leave the UI thread as a command. | this spec section 3 | structural -- `ambre_prose::ui::send_edit` builds the one envelope a mutation leaves in, through the view's outbox (`BUS-033`), and `ProseUiState` holds no document to write to; `ambre_prose::ui::tests::the_draft_echo_never_reaches_the_wire` | none | verified |
 | `PROSE-UI-149` | `FAIL` | A full Logic queue MUST hold an edit in the outbox rather than hold the frame or drop the edit (`BUS-011`). | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_prose::ui::tests::a_full_channel_holds_an_edit_rather_than_the_frame`; `::a_closed_channel_is_told_apart_from_a_full_one` | none | verified |
 | `PROSE-UI-150` | `FRAME` | The draft echo a send paints MUST NOT reach the wire. | this spec section 3 | `ambre_prose::ui::tests::the_draft_echo_never_reaches_the_wire` | none | verified |
 

@@ -52,9 +52,8 @@ impl TrameView {
 
         Self {
             document_id,
-            outbox: Outbox::new(to_logic.clone()),
+            outbox: Outbox::new(to_logic),
             busy_pub,
-            to_logic,
             from_logic,
             state: TrameUiState::new(canvas_width, canvas_height),
             text_input,
@@ -130,9 +129,9 @@ impl TrameView {
     /// A caller that ignores it leaves the screen ahead of the document, which
     /// is the state `BUS-018` bans.
     ///
-    /// The class carries no document mutation: `send_lossy` refuses one
-    /// (`BUS-023`), and the outbox is the path such a command owes
-    /// (`send_command_lossless`).
+    /// The class carries only a command `TrameCommand::traffic` names lossy:
+    /// `send_lossy` refuses any other (`BUS-023`), which owes
+    /// `send_command_lossless`.
     ///
     /// Runs on the page's main thread, so it must never block.
     pub(crate) fn send_command_lossy(&self, cmd: TrameCommand) -> bool {
@@ -143,14 +142,14 @@ impl TrameView {
             document_id: self.document_id,
             command: cmd,
         };
-        match ambre_bus::send_lossy(&self.to_logic, msg) {
+        match self.outbox.send_lossy(msg) {
             LossyOutcome::Sent => true,
             LossyOutcome::Dropped => {
                 tracing::warn!("Trame: UI->Logic channel full, the lossy request was dropped");
                 false
             }
             LossyOutcome::Refused => {
-                tracing::error!("Trame: a document mutation was offered to the lossy class");
+                tracing::error!("Trame: a lossless command was offered to the lossy class");
                 false
             }
             LossyOutcome::Disconnected => {

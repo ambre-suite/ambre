@@ -1890,6 +1890,7 @@ pub fn main() {
                 AppView::Murmure(host::MurmureView::new(
                     Some(ambre_bus::Inbox::embedded(view_rx)),
                     Some(ambre_bus::Port::embedded(view_tx_logic)),
+                    busy_pub.clone(),
                     host::page_reads(
                         murmure_relay,
                         text_input,

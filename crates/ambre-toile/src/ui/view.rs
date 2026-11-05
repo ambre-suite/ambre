@@ -42,7 +42,7 @@ const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was remov
 /// (`TOILE-UI-160`).
 #[cfg(any(test, target_arch = "wasm32"))]
 const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
-use ambre_bus::{Delivery, Inbox, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
+use ambre_bus::{Inbox, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
 use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint, NoticePublisher,
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
@@ -90,35 +90,39 @@ use ambre_bus::PasteSource;
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
-/// Hand one child-session control command to the Logic thread, and report
-/// whether it left (`TOILE-UI-338`, `TOILE-UI-339`).
+/// Hand one child-session control command to the outbox, and report whether
+/// it is on its way (`TOILE-UI-338`, `TOILE-UI-339`).
 ///
 /// A free function rather than a method: the reconciliation borrows the session
-/// registry mutably, so the sender it calls cannot also borrow the whole view.
+/// registry mutably, so the outbox it calls cannot also borrow the whole view.
+/// An open or a close is a control command, so it takes the lossless path
+/// (`BUS-011`). A full queue holds it, and the registry records it as sent.
 /// The answer is what makes the reconciliation self-healing -- the registry
 /// records no refused command, so a later frame offers it again.
 ///
 /// `fatal` reports success on a send nobody made. The view is tearing down and
 /// no later frame will retry. A `false` here would keep a dead registry asking
 /// for ever instead of letting it go.
-fn send_session(to_logic: &Port<ToileCommand>, fatal: bool, cmd: LogicCommand) -> bool {
+fn send_session(outbox: &mut Outbox<ToileCommand>, fatal: bool, cmd: LogicCommand) -> bool {
     if fatal {
         return true;
     }
     // A session command carries no document command, so it retypes as any.
-    match to_logic.try_send(cmd.map(|never| match never {})) {
-        Delivery::Sent => true,
-        Delivery::Full(_) => {
-            // Neither an open nor a close is worth blocking the UI thread for.
-            // Both are worth a warning, and both come back on a later frame.
-            tracing::warn!("Toile: UI->Logic channel full, embed session command deferred");
-            false
+    let outcome = outbox.send(cmd.map(|never| match never {}));
+    match outcome {
+        SendOutcome::Sent => {}
+        SendOutcome::Held => {
+            tracing::warn!("Toile: UI->Logic channel full, embed session command held");
         }
-        Delivery::Disconnected => {
+        SendOutcome::Refused => {
+            // The registry records nothing, so a later frame offers it again.
+            tracing::warn!("Toile: the outbox is full, embed session command deferred");
+        }
+        SendOutcome::Disconnected => {
             tracing::error!("Toile: UI->Logic channel disconnected");
-            false
         }
     }
+    outcome.accepted()
 }
 
 /// A log-zoom rate per pixel of wheel `dy`: a step of `dy` zooms by the
@@ -340,7 +344,8 @@ pub struct ToileSignals {
 /// pipe, its publishers and its chrome signals. ambre-app builds the parts
 /// and fills one per view.
 pub struct ToileWiring {
-    /// The queue to the Logic thread.
+    /// The queue to the Logic thread. The view moves it into its outbox,
+    /// its one way to write (`BUS-011`).
     pub to_logic: Port<ToileCommand>,
     /// The queue from the Logic thread.
     pub from_logic: Inbox<ToileEvent>,
@@ -366,10 +371,10 @@ pub struct ToileWiring {
 
 pub struct ToileView {
     document_id: Id<Document>,
-    to_logic: Port<ToileCommand>,
     from_logic: Inbox<ToileEvent>,
-    /// The lossless send path: it keeps an edit a full queue could not take,
-    /// and offers it again on a later frame (`BUS-011`).
+    /// The one send path to the Logic thread. It keeps a lossless command a
+    /// full queue could not take, and offers it again on a later frame
+    /// (`BUS-011`). It drops a lossy one (`BUS-023`).
     outbox: Outbox<ToileCommand>,
     /// The busy level the chrome reads while the outbox holds anything
     /// (`BUS-016`).
@@ -821,10 +826,9 @@ impl ToileView {
         let theme = theme_ctl.get();
         Self {
             document_id,
-            outbox: Outbox::new(to_logic.clone()),
+            outbox: Outbox::new(to_logic),
             busy_pub,
             notices,
-            to_logic,
             from_logic,
             cam: ViewportTransform::new(ambre_draw::Size::new(
                 canvas_width.get(),
@@ -981,8 +985,9 @@ impl ToileView {
     /// nothing holds it. The caller offers the request again on a later frame
     /// (`BUS-024`), or undoes what it recorded for it. Every drop is logged: a
     /// board that stops re-culling leaves no trace of why (`TOILE-UI-313`). The
-    /// bus gate refuses a command that changes the document, so an edit offered
-    /// here stops instead of dropping. Never blocks the UI thread.
+    /// bus gate refuses a command `ToileCommand::traffic` leaves lossless, so
+    /// an edit offered here stops instead of dropping. Never blocks the UI
+    /// thread.
     fn send_lossy(&self, cmd: ToileCommand) -> bool {
         if self.fatal {
             return false;
@@ -991,14 +996,14 @@ impl ToileView {
             document_id: self.document_id,
             command: cmd,
         };
-        match ambre_bus::send_lossy(&self.to_logic, msg) {
+        match self.outbox.send_lossy(msg) {
             LossyOutcome::Sent => true,
             LossyOutcome::Dropped => {
                 tracing::warn!("Toile: UI->Logic channel full, the lossy request was dropped");
                 false
             }
             LossyOutcome::Refused => {
-                tracing::error!("Toile: a document mutation was offered to the lossy class");
+                tracing::error!("Toile: a lossless command was offered to the lossy class");
                 false
             }
             LossyOutcome::Disconnected => {
@@ -1684,9 +1689,9 @@ impl ToileView {
         // (`TOILE-UI-338`, `TOILE-UI-339`). `fatal` is the one case that
         // reports success on a send nobody made. The view is tearing down and
         // no later frame will run, so retrying for ever would be the leak.
-        let (to_logic, fatal) = (&self.to_logic, self.fatal);
+        let (outbox, fatal) = (&mut self.outbox, self.fatal);
         self.embed_sessions
-            .sync(&self.display, now, |cmd| send_session(to_logic, fatal, cmd));
+            .sync(&self.display, now, |cmd| send_session(outbox, fatal, cmd));
         // Focus cannot outlive the element that held it. An embed a peer
         // deleted, or one scrolled far enough away to close, leaves the board
         // with nothing to route input into.
@@ -1707,9 +1712,9 @@ impl ToileView {
     /// Close every child session this view opened (`toile-embeds`:
     /// "Closing the Toile closes every child immediately, no debounce").
     fn close_all_embeds(&mut self) {
-        let (to_logic, fatal) = (&self.to_logic, self.fatal);
+        let (outbox, fatal) = (&mut self.outbox, self.fatal);
         self.embed_sessions
-            .close_all(|cmd| send_session(to_logic, fatal, cmd));
+            .close_all(|cmd| send_session(outbox, fatal, cmd));
         self.embed_focus.blur();
     }
 
