@@ -11,7 +11,7 @@ use super::{CellPos, CellRect, Col, EditSession, MergeSpan, Row, SheetName};
 use crate::token::Token;
 use ambre_core::id::{FilterView, Id, Sheet, User};
 use ambre_core::index::{Axis, Len, Pos};
-use ambre_core::{Bounded, Bounds, Count, Doc, Px, Refusal, Rgb};
+use ambre_core::{Bounded, Bounds, Count, Doc, Px, RankKind, Refusal, Rgb};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- events (Logic -> UI)
@@ -578,24 +578,14 @@ impl std::fmt::Debug for TrameEvent {
     }
 }
 
-/// Where a conditional-formatting rule falls in evaluation order: the
-/// smaller is evaluated first, and the first rule that matches wins
-/// (`trame-cell-styles`). It orders rules and counts nothing.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-pub struct CondFormatPriority(i64);
+/// The evaluation order of conditional-formatting rules: the smaller rank
+/// is evaluated first, negative ranks first, and the first rule that matches
+/// wins (`trame-cell-styles`). It orders rules and counts nothing.
+pub enum CondFormatPriority {}
 
-impl CondFormatPriority {
-    /// The rank `rank`, negative ranks first.
-    #[must_use]
-    pub const fn new(rank: i64) -> Self {
-        Self(rank)
-    }
-
-    /// The rank itself.
-    #[must_use]
-    pub const fn get(self) -> i64 {
-        self.0
-    }
+impl RankKind for CondFormatPriority {
+    type Repr = i64;
+    const NAME: &'static str = "CondFormatPriority";
 }
 
 pub use ambre_core::Cells;
