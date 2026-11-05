@@ -115,10 +115,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_byte
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field | u32	newtype-inner	the inside of the CatalogPosition newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::to_stored() | ret | i64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
 ambre-bus | src/app/prose.rs | crate::app::prose | <ConversionLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
 ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
@@ -258,9 +254,6 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Prot
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionViolationWarning.description | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationError.message | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationWarning.message | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::new(rank) | param | i64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::MAX | const | f32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::MIN | const | f32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
@@ -4105,3 +4098,10 @@ ambre-core | src/lang.rs | crate::lang | primary_subtag() | ret | String	generic
 ambre-bus | src/app/toile.rs | crate::app::toile | <SkipReasons as ambre_core::OpaqueKind>::NAME | const | &'static str	free-text	the name a skip reason prints through Debug, for a log line
 ambre-core | src/credential.rs | crate::credential | <ProviderUrls as OpaqueKind>::NAME | const | &'static str	free-text	the name a provider address prints through Debug, for a log line
 ambre-core | src/fingerprint.rs | crate::fingerprint | <KeyFingerprints as OpaqueKind>::NAME | const | &'static str	free-text	the name a key fingerprint prints through Debug, for a log line
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <CatalogPosition as RankKind>::NAME | const | &'static str	free-text	the name a rank prints through Debug, for a log line
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <CatalogPosition as RankKind>::Repr | assoc | u32	newtype-inner	the number a rank of the catalogue holds, the inside of Rank
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CondFormatPriority as RankKind>::NAME | const | &'static str	free-text	the name a rank prints through Debug, for a log line
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CondFormatPriority as RankKind>::Repr | assoc | i64	newtype-inner	the number a rank of the conditional formats holds, the inside of Rank, negative ranks first
+ambre-core | src/rank.rs | crate::rank | <Rank<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/rank.rs | crate::rank | Rank<K>::from_stored(stored) | param | u64	newtype-inner	the inside of a Rank from zero, as the Loro map stores it; the Loro call is at the caller
+ambre-core | src/rank.rs | crate::rank | Rank<K>::to_stored() | ret | i64	newtype-inner	the inside of a Rank from zero, as the Loro map stores it; the Loro call is at the caller

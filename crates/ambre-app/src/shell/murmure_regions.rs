@@ -206,7 +206,7 @@ impl Acme {
             name: ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
             topic: None,
             category,
-            position: ambre_bus::CatalogPosition::new(position),
+            position: ambre_bus::Rank::new(position),
         };
         UiEvent::Space {
             space_id: self.space,
@@ -215,7 +215,7 @@ impl Acme {
                 categories: vec![CategoryView {
                     id: team,
                     name: ambre_core::Validated::<ambre_core::Name>::parse("Team").unwrap(),
-                    position: ambre_bus::CatalogPosition::FIRST,
+                    position: ambre_bus::Rank::FIRST,
                 }],
                 channels: vec![
                     entry(self.random, "random", None, 1),

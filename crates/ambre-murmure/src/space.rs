@@ -8,7 +8,7 @@
 //! (`MURMURE-157`).
 
 use ambre_bus::{
-    Authored, CatalogPosition, CatalogueEntry, CategoryView, ChannelTopic, Instant,
+    Authored, CatalogPosition, CatalogueEntry, CategoryView, ChannelTopic, Instant, Rank,
     SealedChannelKey,
 };
 use ambre_core::id::{Category, Channel, Document, Id, Space};
@@ -30,7 +30,7 @@ pub struct Listing<'a> {
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
-    pub position: CatalogPosition,
+    pub position: Rank<CatalogPosition>,
     /// The channel key, sealed under the space key by the Sync worker.
     pub key: SealedChannelKey,
 }
@@ -205,7 +205,7 @@ impl SpaceState {
         &mut self,
         category_id: Id<Category>,
         name: &Validated<Name>,
-        position: CatalogPosition,
+        position: Rank<CatalogPosition>,
     ) -> Result<Payload<DeltaBytes>, MurmureError> {
         self.writable()?;
         let entry = Fields::<CategoryKey>::of(
@@ -430,6 +430,6 @@ fn clear(map: &Fields<EntryKey>, key: EntryKey) -> Result<(), MurmureError> {
 
 /// A stored position, saturating at the last rank. A value no build wrote
 /// reads as the first.
-fn position_of<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> CatalogPosition {
-    schema::unsigned(map, key).map_or(CatalogPosition::FIRST, CatalogPosition::from_stored)
+fn position_of<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> Rank<CatalogPosition> {
+    schema::unsigned(map, key).map_or(Rank::FIRST, Rank::from_stored)
 }

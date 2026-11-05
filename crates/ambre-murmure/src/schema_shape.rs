@@ -443,11 +443,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
         .expect("adopt");
     let category = Id::<Category>::mint();
     space
-        .put_category(
-            category,
-            &crate::fit_name("Teams"),
-            ambre_bus::CatalogPosition::new(0),
-        )
+        .put_category(category, &crate::fit_name("Teams"), ambre_bus::Rank::new(0))
         .expect("category");
     let topic = ambre_core::Validated::<ChannelTopic>::parse("everything").expect("a topic");
     space
@@ -456,7 +452,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
             &Listing {
                 topic: Some(&topic),
                 category: Some(category),
-                position: ambre_bus::CatalogPosition::new(0),
+                position: ambre_bus::Rank::new(0),
                 key: SealedChannelKey::from_bytes(vec![1; 72]),
             },
         )

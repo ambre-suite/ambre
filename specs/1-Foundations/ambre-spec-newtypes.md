@@ -60,6 +60,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `CountColumn`, `IndexedAs` |
 | A number one issuer hands out going up, each once | `Seq<K>` | `SeqKind`, with its `IssueRight` | `Wire`, `Before`, `CountsSince`, `SeqColumn` |
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
+| Where an item falls in an order, zero included, never counted and handed out by no issuer | `Rank<K>` | `RankKind`, with its `Repr` of `u32` or `i64` | -- |
 | A format or a schema version | `Version<K>` | `VersionKind`, with its `Repr` | `Current`, `OpenRange` |
 | A number between two bounds | `Bounded<K>` | `Bounds`, with its `Repr` | `Defaulted`, `Saturates` |
 | The error of a number outside its bounds, which echoes it | `OutOfRange<K>` | `Bounds`, the marker of the `Bounded<K>` it failed | -- |

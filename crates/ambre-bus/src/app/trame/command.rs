@@ -8,7 +8,7 @@ use super::*;
 use ambre_core::id::{CondFormat, FilterView, Sheet};
 use ambre_core::id::{Id, User};
 use ambre_core::index::{Len, Pos};
-use ambre_core::{Redacted, Refused, Refuses, Rule, Validated};
+use ambre_core::{Rank, Redacted, Refused, Refuses, Rule, Validated};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- commands (UI -> Logic)
@@ -913,7 +913,7 @@ pub enum TrameCommand {
         range: CellRect,
         rule: CondFormatKind,
         style: CondStyle,
-        priority: CondFormatPriority,
+        priority: Rank<CondFormatPriority>,
     },
 
     /// Replace the rule identified by `id` on `sheet_id` (`trame-cell-styles`).
@@ -925,7 +925,7 @@ pub enum TrameCommand {
         range: CellRect,
         rule: CondFormatKind,
         style: CondStyle,
-        priority: CondFormatPriority,
+        priority: Rank<CondFormatPriority>,
     },
 
     /// Remove the conditional-formatting rule `id` from `sheet_id`

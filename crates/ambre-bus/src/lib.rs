@@ -243,7 +243,7 @@ pub use ambre_core::text_offset::{
 };
 pub use ambre_core::{
     ApiFailure, ChannelDocumentKind, DocType, Email, FixedBytes, FracMs, HttpStatus, Instant, Ms,
-    PageLoad, PublicKey, RefusalCode, Relay, Role, Seq, TimeSpan, UnreadableCause, Uuid,
+    PageLoad, PublicKey, Rank, RefusalCode, Relay, Role, Seq, TimeSpan, UnreadableCause, Uuid,
 };
 
 #[cfg(test)]

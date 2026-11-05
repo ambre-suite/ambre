@@ -2,7 +2,6 @@
 # One line per hand-written single-field newtype over an integer, a float, a String or a Vec<u8>,
 # with the reason no generic family of ambre-core fits it. Add a line by hand only; a reviewer reads it.
 key	reason
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition | u32	a rank in a space's catalogue: it orders, ties broken by id, and counts and addresses nothing. Zero is a rank, so it is no Ordinal, and no issuer hands it out, so it is no Seq
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, and they would have to move into core. Its serde is the derived Vec<u8>, which the base64 of Encoded would change
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple | f32	a ratio that is finite and above zero, checked where it is built
 ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
@@ -11,7 +10,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed w
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount | i64	a signed count of months that may run past December or below January, as DATE and EDATE read it. TimeSpan<Month> would need a Month unit over an i64 in core, which no other site uses
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority | i64	the evaluation order of conditional-format rules: it orders and counts nothing. Zero is a rank, so it is no Ordinal, and no issuer hands it out, so it is no Seq
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
 ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty. draw mints one from a random draw infallibly, which the public door of Validated cannot do
 ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key that orders as its text, the order the store ranges keys in, and every names the bounds of the whole store

@@ -1097,3 +1097,28 @@ fn an_entry(fill: u8) -> ambre_core::PeerEntry {
         signature: ambre_core::FixedBytes::from_array([fill; 64]),
     }
 }
+
+/// A catalogue rank keeps the integer a Loro map stored before the rank
+/// family, and the `Debug` text the hand-written type printed.
+#[test]
+fn a_catalogue_rank_keeps_its_stored_integer_and_its_debug_text() {
+    use ambre_bus::{CatalogPosition, Rank};
+    let rank = Rank::<CatalogPosition>::new(7);
+    assert_eq!(rank.to_stored(), 7_i64);
+    assert_eq!(Rank::<CatalogPosition>::from_stored(7), rank);
+    assert_eq!(Rank::<CatalogPosition>::FIRST.to_stored(), 0_i64);
+    assert_eq!(format!("{rank:?}"), "CatalogPosition(7)");
+    assert_eq!(rank.to_string(), "7");
+}
+
+/// A conditional-format rank keeps the `Debug` text the hand-written type
+/// printed. A log reads that form alone, since the UI to Logic hop moves the
+/// command and serializes nothing.
+#[test]
+fn a_cond_format_rank_keeps_its_debug_text() {
+    use ambre_bus::{CondFormatPriority, Rank};
+    let rank = Rank::<CondFormatPriority>::new(-2);
+    assert_eq!(rank.get(), -2_i64);
+    assert!(rank < Rank::new(0));
+    assert_eq!(format!("{rank:?}"), "CondFormatPriority(-2)");
+}

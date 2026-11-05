@@ -982,7 +982,7 @@ mod tests {
             name: named(name),
             topic: ambre_core::Validated::<ChannelTopic>::parse("the weekly figures").ok(),
             category: None,
-            position: ambre_bus::CatalogPosition::new(1),
+            position: ambre_bus::Rank::new(1),
         }
     }
 
@@ -1278,7 +1278,7 @@ mod tests {
             command: SpaceCommand::AddCategory {
                 category_id: Id::<Category>::mint(),
                 name: Validated::<Name>::parse("Teams").unwrap(),
-                position: ambre_bus::CatalogPosition::FIRST,
+                position: ambre_bus::Rank::FIRST,
             },
         });
         assert!(drain(&sync).is_empty());
@@ -1420,7 +1420,7 @@ mod tests {
                 &Listing {
                     topic: None,
                     category: None,
-                    position: ambre_bus::CatalogPosition::FIRST,
+                    position: ambre_bus::Rank::FIRST,
                     key: sealed(9),
                 },
             )
@@ -1496,7 +1496,7 @@ mod tests {
         let listing = Listing {
             topic: None,
             category: None,
-            position: ambre_bus::CatalogPosition::FIRST,
+            position: ambre_bus::Rank::FIRST,
             key: sealed(9),
         };
         alice.list_channel(&listed, &listing).expect("list");
@@ -2020,7 +2020,7 @@ mod tests {
                 &Listing {
                     topic: None,
                     category: None,
-                    position: ambre_bus::CatalogPosition::FIRST,
+                    position: ambre_bus::Rank::FIRST,
                     key: sealed(2),
                 },
             )
