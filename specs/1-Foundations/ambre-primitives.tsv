@@ -1308,7 +1308,7 @@ ambre-murmure | src/emoji.rs | crate::emoji | entry(name) | param | &'static str
 ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	free-text	the English name of an Emoji, the label a screen reader hears; the emoji itself is the typed Emoji
 ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	free-text	the words a user types in the picker's search box, matched against the English names
 ambre-murmure | src/error.rs | crate::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
-ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.found | field | String	free-text	untrusted word / Loro error text (not Eq)
+ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.found | field | String	generic	the stored kind word a document carried where another kind was expected, echoed in the refusal
 ambre-murmure | src/list.rs | crate::list | BAND_DAMAGED | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | BAND_KEYS | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | BAND_RETRY | const | &str	free-text	UI text/label const
@@ -1366,7 +1366,7 @@ ambre-murmure | src/members.rs | crate::members | is_presence_sample() | ret | b
 ambre-murmure | src/mention.rs | crate::mention | fits() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/mention.rs | crate::mention | fits(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/mention.rs | crate::mention | names() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/mention.rs | crate::mention | value_of() | ret | String	free-text	text, label or user content
+ambre-murmure | src/mention.rs | crate::mention | value_of() | ret | String	generic	the codec of a mention mark: the id text of a user or of this channel, which the store keeps and target_of reads back
 ambre-murmure | src/mention_list.rs | crate::mention_list | AT_CHANNEL | const | &str	free-text	UI text/label const
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer::written() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches() | ret | bool	generic	state flag/predicate
