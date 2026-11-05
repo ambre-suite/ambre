@@ -3131,7 +3131,7 @@ ambre-core | src/mode.rs | crate::mode | ThreadState::is_resolved() | ret | bool
 ambre-core | src/mode.rs | crate::mode | ThreadState::resolved_if(resolved) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Refuses>::Raw | assoc | String	generic	the refused value the error echoes
-ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	free-text	the manifest's wire word for a build with no commit id
+ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	generic	the manifest's wire word for a build with no commit id, which the serde codec writes and matches back
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(Pos<Block>,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | IdxVec<SlashChoice,&'static str>	free-text	the labels of the slash menu entries
 ambre-prose | src/view/slash.rs | crate::view::slash | <SlashChoice as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
