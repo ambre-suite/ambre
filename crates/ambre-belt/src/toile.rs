@@ -1,7 +1,7 @@
 //! A Toile board, driven in the browser.
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use serde_json::json;
 
     use crate::page::{Page, STEP, drag, drag_still, key, palette_row_js};
@@ -235,7 +235,7 @@ mod tests {
     /// Signs a second user in, in a second browser, and shares the board of
     /// `first` with them. That browser has a profile of its own, so it holds
     /// nothing of the board.
-    async fn invite_second(first: &Page) -> Page {
+    pub(crate) async fn invite_second(first: &Page) -> Page {
         let name = format!("belt-{}", uuid::Uuid::new_v4());
         let second = Page::home(first.relay()).await;
         second.sign_in(&name).await;
@@ -244,7 +244,7 @@ mod tests {
     }
 
     /// Opens the board of `first` on `second`.
-    async fn open_board_of(second: &Page, first: &Page) {
+    pub(crate) async fn open_board_of(second: &Page, first: &Page) {
         let path = first
             .browser
             .script("return location.pathname;", json!([]))
@@ -309,6 +309,10 @@ mod tests {
     #[cfg_attr(
         not(feature = "browser"),
         ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "pauses a worker through the DevTools Protocol, which Firefox does not speak"
     )]
     async fn an_arrow_a_peer_strands_is_announced_on_both() {
         let first = Page::new_document("toile").await;

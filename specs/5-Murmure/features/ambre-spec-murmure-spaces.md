@@ -26,6 +26,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | `ambre_sync::membership_log::tests::a_channel_log_heeds_the_word_of_its_space` -- a link a space admin signed counts as verified; `ambre_sync::channels::tests::a_listed_meta_walks_under_the_word_of_its_open_space` | none | verified |
 | `MURMURE-301` | `INV` | A space with no retention set MUST keep every segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-302` | `OBS` | The interface MUST state the retention as a range: at least its duration, at most that plus the span of a segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-583` | `OBS` | The sidebar MUST offer a signed-in user a control that creates a space, and the new space MUST show in the sidebar once created. | this spec section 4 | not built | unbuilt -- lands with the `Spaces and channels created from the sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-584` | `OBS` | A space MUST offer its owner and its editors a control that creates a public channel in it, and the new channel MUST open once created. | this spec section 4 | not built | unbuilt -- lands with the `Spaces and channels created from the sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-585` | `OBS` | A space MUST offer its owner a control that invites another user into it. | this spec section 4 | not built | unbuilt -- lands with the `Spaces and channels created from the sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a space
 
@@ -87,7 +90,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 29 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 29 `verified`, 8 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
   database tier holds the leave and the delete. The Sync worker and the Logic thread hold the key
   rotation on a leave. The guest and the retention are unbuilt.

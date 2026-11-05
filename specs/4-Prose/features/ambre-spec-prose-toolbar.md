@@ -23,19 +23,19 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-054` | `OBS` | Each control MUST report the state of the whole selection. | this spec section 3 | `ambre_prose::input_tests::a_selection_bold_in_part_reads_mixed` | none | verified |
-| `PROSE-UI-096` | `OBS` | A selection that is formatted in part MUST be reported as mixed, never as the state of either end. | this spec section 3 | `ambre_prose::input_tests::a_selection_bold_in_part_reads_mixed` | none | verified |
+| `PROSE-UI-096` | `OBS` | A selection that is formatted in part MUST be reported as mixed, never as the state of either end. | this spec section 3 | `ambre_prose::input_tests::a_selection_bold_in_part_reads_mixed`; `ambre_prose::tests::chrome_ui::the_format_bar_follows_its_anchor_and_reports_each_mark` -- wasm tier: a mixed mark reads `aria-pressed="mixed"` | none | verified |
 | `PROSE-UI-055` | `OBS` | The bar MUST stay over the text it was raised on while the page scrolls or zooms. | this spec section 3 | `ambre_prose::input_tests::the_bar_follows_its_text_through_a_scroll_and_a_zoom` | none | verified |
 | `PROSE-UI-057` | `INV` | The bar MUST NOT hold document content: the state it renders MUST arrive from the Logic thread with the selection it describes. | this spec section 3; `PROSE-UI-001` | `ambre_prose::input_tests::the_marks_shown_are_the_ones_read_for_this_selection` | none | verified |
 | `PROSE-UI-097` | `INV` | The state a control shows MUST be rebuilt from the current selection; a mark MUST NOT be carried over from the selection before it. | this spec section 5 | `ambre_prose::input_tests::the_marks_shown_are_the_ones_read_for_this_selection` | none | verified |
-| `PROSE-UI-056` | `INV` | A control and the keyboard chord for the same formatting MUST resolve to one command id. | this spec section 3; `ambre-spec-chrome.md` | `ambre_prose::commands::tests::a_control_and_its_chord_resolve_to_one_command_id` | none | verified |
-| `PROSE-UI-098` | `INV` | The bar MUST NOT have a path into the document of its own: every control MUST reach it through a command the plane already declares. | this spec section 5 | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` | none | verified |
+| `PROSE-UI-056` | `INV` | A control and the keyboard chord for the same formatting MUST resolve to one command id. | this spec section 3; `ambre-spec-chrome.md` | `ambre_prose::commands::tests::a_control_and_its_chord_resolve_to_one_command_id`; `ambre_belt::prose::tests::a_chord_and_its_control_toggle_one_mark` -- browser tier: `Ctrl+B` bolds a selected word, and the Bold control then takes the same mark off; `ambre_app::platform::tests::a_modifier_chord_on_a_typing_pipe_is_the_pages` -- wasm tier: a chord with the modifier on the page's pipe reaches the keymap, and a chrome field keeps it | none | verified |
+| `PROSE-UI-098` | `INV` | The bar MUST NOT have a path into the document of its own: every control MUST reach it through a command the plane already declares. | this spec section 5 | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection`; `ambre_prose::tests::chrome_ui::a_control_press_hands_its_command_back_and_keeps_the_focus` -- wasm tier: a click on each control writes its declared command id, and its press keeps the focus | none | verified |
 | `PROSE-UI-192` | `INV` | One gesture on a control MUST be taken back by one undo, whatever the number of blocks it covers. | derived | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` | none | verified |
 
 ### 1.2 Raise the bar
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-053` | `POST` | The bar MUST appear only over a non-empty selection. | this spec section 3 | `ambre_prose::input_tests::the_bar_shows_over_a_selection_and_goes_with_it` | none | verified |
+| `PROSE-UI-053` | `POST` | The bar MUST appear only over a non-empty selection. | this spec section 3 | `ambre_prose::input_tests::the_bar_shows_over_a_selection_and_goes_with_it`; `ambre_prose::tests::chrome_ui::the_format_bar_follows_its_anchor_and_reports_each_mark` -- wasm tier: the bar element is on the page only while the view gives it an anchor | none | verified |
 | `PROSE-UI-099` | `FRAME` | Raising the bar MUST NOT write to the document, and MUST NOT move or shrink the selection it was raised on. | derived | `ambre_prose::input_tests::raising_the_bar_writes_nothing_and_keeps_the_selection` | none | verified |
 
 ### 1.3 Dismiss the bar

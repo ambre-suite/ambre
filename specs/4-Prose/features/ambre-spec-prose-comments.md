@@ -57,7 +57,7 @@ Two of the four match. The two that do not are the anchor itself, which is why t
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-190` | `POST` | A reply MUST be appended at the end of the thread's reply list. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_lands_last_whatever_its_stamp` | none | verified |
+| `PROSE-FEAT-190` | `POST` | A reply MUST be appended at the end of the thread's reply list. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_lands_last_whatever_its_stamp`; `ambre_belt::prose::tests::a_reply_posted_from_the_panel_lands_last_in_its_thread` -- browser tier: a reply sent from the panel field shows last in its thread | none | verified |
 | `PROSE-FEAT-079` | `POST` | A reply to a resolved thread MUST reopen it. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_reopens_a_resolved_thread` | none | verified |
 | `PROSE-FEAT-191` | `FRAME` | Replying MUST NOT move the thread's mark, rewrite an earlier reply, or touch another thread. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_touches_nothing_but_its_own_list` | none | verified |
 | `PROSE-UI-231` | `FRAME` | A reply being typed MUST NOT be emptied when its thread moves in the panel. | this spec section 2; section 4 | `ambre_prose::view::annotate::tests::a_draft_outlives_a_move_and_its_thread_leaving_is_told`; `ambre_prose::tests::chrome_panel::a_reply_being_typed_survives_its_thread_moving` | none | verified |

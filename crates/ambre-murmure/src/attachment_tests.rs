@@ -137,3 +137,22 @@ fn a_delete_names_the_files_no_other_own_message_carries() {
     assert!(state.erasable(segment, ids[0], alice).is_empty(), "deleted");
     assert_eq!(state.erasable(segment, ids[1], alice), [b.media_ref]);
 }
+
+/// `MURMURE-240`: the files of another author's message are never named for
+/// erasure, even when no message of the asking author carries them.
+#[test]
+fn a_message_of_another_author_names_no_file_to_erase() {
+    let mut state = channel();
+    let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
+    let (a, c) = (file('a', "a.png"), file('c', "c.png"));
+    state
+        .send_attached(&plain("1"), std::slice::from_ref(&c), bob, NOW)
+        .expect("send");
+    state
+        .send_attached(&plain("2"), std::slice::from_ref(&a), alice, NOW)
+        .expect("send");
+    let segment = state.active_id();
+    let bobs = state.messages(segment).expect("held")[0].id;
+    assert!(state.erasable(segment, bobs, alice).is_empty());
+    assert_eq!(state.erasable(segment, bobs, bob), [c.media_ref]);
+}

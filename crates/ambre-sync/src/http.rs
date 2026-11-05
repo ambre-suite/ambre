@@ -2147,6 +2147,20 @@ mod tests {
         HttpError::refused(method, &Target::relay(url), HttpStatus::new(status), code)
     }
 
+    /// A relay on this machine speaks plain HTTP, and any other relay TLS, so
+    /// a remote relay never sees a request in the clear. Two addresses are
+    /// one address only when their text is.
+    #[test]
+    fn only_a_relay_on_this_machine_speaks_plain_http() {
+        let scheme = |host: &str| UrlScheme::of(&Url::<RelayHost>::new(host.to_owned()));
+        assert_eq!(scheme("localhost:3000"), UrlScheme::Http);
+        assert_eq!(scheme("127.0.0.1:3000"), UrlScheme::Http);
+        assert_eq!(scheme("relay.example"), UrlScheme::Https);
+        let host = Url::<RelayHost>::new("relay.example".to_owned());
+        assert!(host == host.clone());
+        assert!(host != Url::<RelayHost>::new("other.example".to_owned()));
+    }
+
     /// An answer body becomes a fetched blob with every byte kept, and each
     /// prints its role and its length alone.
     #[test]

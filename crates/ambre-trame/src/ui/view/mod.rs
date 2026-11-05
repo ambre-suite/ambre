@@ -455,6 +455,10 @@ pub struct TrameView {
     /// is live only then. The buffer is not final when the key is handled, so the
     /// commit runs after `draw_edit` flushes. `None` when no commit is pending.
     pending_commit: Option<PendingCommit>,
+    /// The keys and texts typed while a commit waits for the paint flush. They
+    /// belong after the commit, so the flush replays them once it ran
+    /// (`TRAME-UI-183`).
+    deferred_input: Vec<InputEvent>,
     /// True while the pointer is dragging out a text selection inside the open
     /// editor (between a press in the cell and its release).
     editor_text_drag: bool,
