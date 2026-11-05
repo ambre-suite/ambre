@@ -326,7 +326,7 @@ async fn the_history_rows_follow_the_reported_state() {
     let report = |event: ProseEvent| {
         signals.mirror_event(&Event::Viewport {
             document_id: Id::<Document>::mint(),
-            event: event,
+            event,
         });
     };
     leptos::task::tick().await;

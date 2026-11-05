@@ -199,10 +199,7 @@ impl SyncState {
                             master_seed,
                             signing_key,
                             exchange_key,
-                            tokens: http::TokenPair {
-                                access_token: resp.access_token,
-                                refresh_token: resp.refresh_token,
-                            },
+                            tokens: resp.tokens,
                         });
                     }
                     Err(e) => {
@@ -300,10 +297,9 @@ impl SyncState {
             let auth = http::AuthContext {
                 api_base: api_base.clone(),
                 url_scheme,
-                tokens: Rc::new(RefCell::new(Some(http::TokenPair {
-                    access_token: resp.access_token,
-                    refresh_token: resp.refresh_token,
-                }))),
+                tokens: Rc::new(RefCell::new(Some(resp.tokens))),
+                renewing: Rc::new(futures_util::lock::Mutex::new(())),
+                renewed: None,
             };
             let keys_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route("/keys/master");
@@ -403,10 +399,7 @@ impl SyncState {
                             master_seed,
                             signing_key,
                             exchange_key,
-                            tokens: http::TokenPair {
-                                access_token: resp.access_token,
-                                refresh_token: resp.refresh_token,
-                            },
+                            tokens: resp.tokens,
                         });
                     }
                     Err(e) => {
@@ -471,6 +464,7 @@ impl SyncState {
         self.signing_key = None;
         self.exchange_key = None;
         *self.tokens.borrow_mut() = None;
+        self.renewal.cancel();
         tracing::info!("Sync: logged out, all keys zeroized");
     }
 
@@ -494,6 +488,8 @@ impl SyncState {
             api_base: self.api_base.clone(),
             url_scheme: self.url_scheme,
             tokens: Rc::new(RefCell::new(Some(tokens))),
+            renewing: Rc::new(futures_util::lock::Mutex::new(())),
+            renewed: None,
         };
         let logic_tx = self.logic_tx.clone();
         wasm_bindgen_futures::spawn_local(async move {
@@ -545,14 +541,15 @@ mod unlock_tests {
     /// A held pair is the one the session announces, shared with the store.
     #[test]
     fn an_unlock_announces_the_pair_the_store_holds() {
-        let pair = TokenPair {
-            access_token: Credential::new("acc-s3cr3t".to_owned()),
-            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
-        };
+        let pair = TokenPair::new(
+            Credential::new("acc-s3cr3t".to_owned()),
+            Credential::new("ref-s3cr3t".to_owned()),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+        );
         let store: http::TokenStore = Rc::new(RefCell::new(Some(pair.clone())));
         let announced = session_tokens(&store).expect("the store holds a pair");
-        assert!(announced.access_token.matches(&pair.access_token));
-        assert!(announced.refresh_token.matches(&pair.refresh_token));
+        assert!(announced.access_token().matches(pair.access_token()));
+        assert!(announced.refresh_token().matches(pair.refresh_token()));
     }
 }
 
@@ -579,10 +576,11 @@ mod provider_tests {
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap(),
             email: "ada@example.org".into(),
             keys_stored,
-            tokens: TokenPair {
-                access_token: Credential::new("access-s3cr3t".to_owned()),
-                refresh_token: Credential::new("refresh-s3cr3t".to_owned()),
-            },
+            tokens: TokenPair::new(
+                Credential::new("access-s3cr3t".to_owned()),
+                Credential::new("refresh-s3cr3t".to_owned()),
+                ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+            ),
         }
     }
 
@@ -596,8 +594,8 @@ mod provider_tests {
 
         let stored = state.tokens.borrow();
         let stored = stored.as_ref().expect("the worker holds the session");
-        assert_eq!(stored.access_token.secret().expose(), "access-s3cr3t");
-        assert_eq!(stored.refresh_token.secret().expose(), "refresh-s3cr3t");
+        assert_eq!(stored.access_token().secret().expose(), "access-s3cr3t");
+        assert_eq!(stored.refresh_token().secret().expose(), "refresh-s3cr3t");
         assert_eq!(state.socket_opens, 0);
         assert!(!state.setup_owed);
 
@@ -615,6 +613,53 @@ mod provider_tests {
         )));
         let heard = format!("{told:?}");
         assert!(!heard.contains("s3cr3t"), "a token reached Logic: {heard}");
+    }
+
+    /// The message Logic heard of a sign-in that had no relay to ask.
+    fn no_relay(rx: &ambre_bus::conduit::Receiver<LogicEvent>) -> bool {
+        rx.try_iter().any(|event| {
+            matches!(
+                event,
+                LogicEvent::AuthError { message } if message == "Sign-in failed: no relay to ask"
+            )
+        })
+    }
+
+    /// With no relay to ask, a provider sign-in and a provider return each
+    /// fail at once, and say so. No answer would ever come.
+    #[test]
+    fn a_provider_sign_in_with_no_relay_fails_at_once() {
+        let (mut state, rx) = worker();
+        state.handle_provider_sign_in(ambre_bus::next_request(), ambre_core::OidcProvider::Google);
+        assert!(no_relay(&rx), "the sign-in");
+        state.handle_provider_return(
+            ambre_bus::next_request(),
+            ambre_core::OidcProvider::Google,
+            ambre_core::Credential::new("code".to_owned()),
+            ambre_core::Credential::new("state".to_owned()),
+        );
+        assert!(no_relay(&rx), "the return");
+    }
+
+    /// With no relay, a development sign-in adopts the identity its username
+    /// derives, and answers that the session is ready.
+    #[test]
+    fn a_dev_login_with_no_relay_adopts_the_identity_of_its_username() {
+        let (mut state, rx) = worker();
+        let name = ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap();
+        state.handle_dev_login(Some(ambre_bus::next_request()), name.clone());
+        let derived = ambre_crypto::hash::dev_seed(&name).derive_signing_key();
+        assert_eq!(
+            state.signing_key.as_ref().map(|key| key.verifying_key()),
+            Some(derived.verifying_key())
+        );
+        assert!(rx.try_iter().any(|event| matches!(
+            event,
+            LogicEvent::Rest {
+                evt: RestEvent::SessionReady { display_name, .. },
+                ..
+            } if display_name.as_str() == "Ada"
+        )));
     }
 
     /// An account that owes its keys is marked so, which keeps the socket

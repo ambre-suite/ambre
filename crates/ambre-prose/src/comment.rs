@@ -7,6 +7,7 @@
 //! Nothing in this module writes.
 
 use ambre_core::StoredAsI64;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::{self, Axis, Len, Pos};
 use std::collections::HashMap;
 
@@ -57,7 +58,7 @@ pub(crate) fn entry(document: &LoroDoc, id: &Id<Comment>) -> Option<Fields<Annot
     else {
         return None;
     };
-    let map = Fields::of(map);
+    let map = Fields::new(map);
     (doc::kind_of(&map) == Some(doc::AnnotKind::Comment)).then_some(map)
 }
 
@@ -88,7 +89,7 @@ pub(crate) fn reply_slots(list: &LoroList) -> index::Span<ReplySlot> {
 #[must_use]
 pub(crate) fn reply_at(list: &LoroList, slot: Pos<ReplySlot>) -> Option<Fields<ReplyKey>> {
     match list.get(slot.to_usize()) {
-        Some(ValueOrContainer::Container(Container::Map(map))) => Some(Fields::of(map)),
+        Some(ValueOrContainer::Container(Container::Map(map))) => Some(Fields::new(map)),
         _ => None,
     }
 }

@@ -611,7 +611,7 @@ fn sign_in_panel(
                 // A name the account rule refuses, a blank one among them,
                 // sends nothing: the relay would refuse it (`SRV-234`).
                 if let Ok(name) =
-                    ambre_core::Validated::<ambre_core::DisplayName>::parse(&value.get())
+                    ambre_core::Validated::<ambre_core::DisplayName>::parse(value.get())
                 {
                     // Remember the dev identity so a later refresh re-establishes
                     // the session without `?user=` in the URL.

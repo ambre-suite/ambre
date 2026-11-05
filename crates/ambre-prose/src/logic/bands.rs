@@ -223,7 +223,7 @@ impl ProseState {
 
     /// The band register a key names, opened once and never replaced.
     fn register(&self, key: doc::MetaKey) -> Option<doc::Fields<doc::BandKey>> {
-        doc::map_at(&doc::meta(&self.doc), key).map(doc::Fields::of)
+        doc::map_at(&doc::meta(&self.doc), key).map(doc::Fields::new)
     }
 
     /// Commit a band write and tell the view the bands as they now stand.

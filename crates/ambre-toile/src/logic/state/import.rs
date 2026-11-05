@@ -604,7 +604,7 @@ impl ToileState {
             }
             let Ok(entry) = media
                 .insert_container(key, LoroMap::new())
-                .map(Fields::<MediaKey>::of)
+                .map(Fields::<MediaKey>::new)
             else {
                 continue;
             };
@@ -637,7 +637,7 @@ impl ToileState {
         let LoroValue::Map(entry) = m.get(hash)? else {
             return None;
         };
-        let entry = super::names::FieldValues::<MediaKey>::of(entry);
+        let entry = super::names::FieldValues::<MediaKey>::new(entry);
         let w = match entry.get(MediaKey::W)? {
             LoroValue::I64(v) => *v,
             _ => return None,

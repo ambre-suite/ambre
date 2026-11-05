@@ -1,7 +1,7 @@
 //! Toile (whiteboard) data plane (`ambre-spec-toile-schema.md`): the whole
 //! typed content vocabulary of a board, both directions. It lives in the
 //! application's crate, beside the engine and the view that use it, and the
-//! Sync worker never builds against it (`BUS-032`, `ARCH-069`). The Logic
+//! Sync worker never builds against it (`BUS-032`, `ARCH-070`). The Logic
 //! runtime carries it as `AppCommand::Toile` and `AppEvent::Toile`. The
 //! stateful engine (`ToileState`) and its `ToileOutcome` wrapper sit beside it
 //! under `logic`.
@@ -11,6 +11,7 @@
 //!   `DisplayViewport`, and the command / event enums.
 //! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 
+use ambre_core::crdt::CrdtName;
 use std::collections::BTreeMap;
 use std::fmt;
 

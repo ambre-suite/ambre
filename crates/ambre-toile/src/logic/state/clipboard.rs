@@ -3,6 +3,7 @@
 //! id-free [`ClipboardPayload`] (subtrees, slot-referenced connectors and
 //! membership) and rematerialized with fresh ids.
 
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::{IdxVec, Pos};
 use std::collections::{HashMap, HashSet};
 
@@ -84,7 +85,7 @@ impl ToileState {
             let fields = match self.element_map(id) {
                 Some(em) => match em.map().get_deep_value() {
                     LoroValue::Map(f) => {
-                        let f = FieldValues::<ElementKey>::of(&f);
+                        let f = FieldValues::<ElementKey>::new(&f);
                         capture_scalars(f, ElementKey::ALL, &[ElementKey::Notes])
                     }
                     _ => Vec::new(),
@@ -122,7 +123,7 @@ impl ToileState {
         if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             for (_key, v) in m.iter() {
                 if let LoroValue::Map(f) = v {
-                    let f = FieldValues::<ConnectorKey>::of(f);
+                    let f = FieldValues::<ConnectorKey>::new(f);
                     let slot = |key| {
                         map_str(f, key).and_then(|id| slot_of.get(&Id::<Element>::from_text(id)))
                     };
@@ -183,7 +184,7 @@ impl ToileState {
         for (id, clip) in new_ids.iter().zip(&payload.elements) {
             let Ok(em) = elems
                 .insert_container(id.as_str(), LoroMap::new())
-                .map(Fields::<ElementKey>::of)
+                .map(Fields::<ElementKey>::new)
             else {
                 continue;
             };
@@ -226,7 +227,7 @@ impl ToileState {
             };
             let Ok(cm) = conns
                 .insert_container(conn_id.as_str(), LoroMap::new())
-                .map(Fields::<ConnectorKey>::of)
+                .map(Fields::<ConnectorKey>::new)
             else {
                 continue;
             };

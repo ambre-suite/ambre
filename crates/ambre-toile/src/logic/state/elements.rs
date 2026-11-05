@@ -83,7 +83,7 @@ impl ToileState {
         let elems = self.doc.get_map(Root::Elements.as_str());
         let Ok(em) = elems
             .insert_container(id.as_str(), LoroMap::new())
-            .map(Fields::<ElementKey>::of)
+            .map(Fields::<ElementKey>::new)
         else {
             return Err(ToileError::NoSuchElement(id));
         };
@@ -604,7 +604,7 @@ impl ToileState {
         let elems = self.doc.get_map(Root::Elements.as_str());
         let Ok(em) = elems
             .insert_container(id.as_str(), LoroMap::new())
-            .map(Fields::<ElementKey>::of)
+            .map(Fields::<ElementKey>::new)
         else {
             return self.err_no_element(&id);
         };

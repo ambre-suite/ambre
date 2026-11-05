@@ -393,16 +393,14 @@ fn paint_label<S: DrawSurface>(
     let pad = TEXT_PAD.get();
     let wrap_w = Px::<Doc>::new((world.width() - 2.0 * pad).max(1.0) as f32);
     let style = ElementStyle::default();
-    let layout = walk.text_cache.get_or_build_font(
+    let layout = walk.text_cache.get_or_build(
         walk.font_cx,
         &c.label,
-        LABEL_FONT_SIZE,
-        wrap_w,
-        Alignment::Center,
-        ambre_canvas::Weight::Regular,
-        ambre_canvas::Slant::Upright,
-        Some(style.font.face()),
-        ambre_canvas::WordBreak::Whole,
+        ambre_canvas::Look {
+            align: Alignment::Center,
+            family: Some(style.font.face()),
+            ..ambre_canvas::Look::body(LABEL_FONT_SIZE, wrap_w)
+        },
     );
     // The plate hugs the laid-out text rather than the (fixed) caption box, so a
     // short caption does not punch a wide hole in the board.
@@ -600,16 +598,15 @@ fn paint_text<S: DrawSurface>(
     let color = resolved_text_ink(host, e.style.text_color, fill)
         .map(|c| style_color(c, opacity))
         .unwrap_or(palette.cell_text);
-    let layout = walk.text_cache.get_or_build_font(
+    let layout = walk.text_cache.get_or_build(
         walk.font_cx,
         text,
-        font_size,
-        wrap_w,
-        Alignment::Start,
-        ambre_canvas::Weight::from_bool(e.style.font.weight.is_bold()),
-        e.style.font.italic,
-        Some(e.style.font.face()),
-        ambre_canvas::WordBreak::Whole,
+        ambre_canvas::Look {
+            weight: ambre_canvas::Weight::from_bool(e.style.font.weight.is_bold()),
+            slant: e.style.font.italic,
+            family: Some(e.style.font.face()),
+            ..ambre_canvas::Look::body(font_size, wrap_w)
+        },
     );
     let brush = Brush::Solid(color);
     let underline = e.style.font.underline == ambre_core::Underline::Underlined;

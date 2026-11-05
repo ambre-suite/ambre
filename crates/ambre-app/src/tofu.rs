@@ -347,7 +347,7 @@ mod tests {
     fn a_trusted_member_key_opens_the_direct_message_of_the_two() {
         let prompt = fetched_for_direct(6);
         let Purpose::Direct { channel_id } = prompt.purpose else {
-            unreachable!()
+            panic!("a direct message prompt")
         };
         let expected = vec![DirectMember {
             user_id: prompt.user_id,

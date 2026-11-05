@@ -181,6 +181,7 @@ pub mod mock;
 pub mod mock_relay;
 mod pipeline;
 mod rekey;
+mod renewal;
 mod sharing;
 mod space_rotation;
 mod updates;
@@ -266,6 +267,14 @@ enum SyncEvent {
     Reauthenticated {
         ok: bool,
     },
+    /// Fired by the timer armed when a token pair was stored: renew it
+    /// ahead of its expiry (`SYNC-183`). A later pair makes the timer stale.
+    RenewalDue {
+        ticket: ambre_core::Seq<generation::RenewalTicket>,
+    },
+    /// A renewal replaced the pair in the store, on any path: arm the
+    /// renewal of the new pair (`SYNC-183`).
+    TokensRenewed,
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Seq<Request>>,
@@ -1095,6 +1104,15 @@ pub struct SyncState {
     /// The wall clock the lifecycle reads. A host test swaps in one it
     /// advances by hand.
     clock: Rc<dyn Fn() -> ambre_core::Instant<ambre_core::UnixMs>>,
+    /// The renewal of the access token ahead of its expiry (`SYNC-183`).
+    renewal: renewal::Renewal,
+    /// The gate every renewal passes, shared by each [`http::AuthContext`]
+    /// this state hands out: two renewals never run at once (`SYNC-184`).
+    renewing: Rc<futures_util::lock::Mutex<()>>,
+    /// The tokens each renewal ahead of the expiry was asked for, on the
+    /// native build, which sends no request: a host test reads them.
+    #[cfg(not(target_arch = "wasm32"))]
+    renewals_ahead: Vec<http::Credential<http::AccessToken>>,
     /// Set when the relay refused the socket for a key setup still owed, and
     /// cleared once a session with keys is stored. While set, no timer or
     /// renewal reopens the socket (`SYNC-133`).
@@ -1205,6 +1223,10 @@ impl SyncState {
             _reconnect_timer: None,
             lifecycle: lifecycle::Lifecycle::default(),
             clock: lifecycle::system_clock(),
+            renewal: renewal::Renewal::default(),
+            renewing: Rc::new(futures_util::lock::Mutex::new(())),
+            #[cfg(not(target_arch = "wasm32"))]
+            renewals_ahead: Vec::new(),
             setup_owed: false,
             update_owed: false,
             inbound_held: false,
@@ -1241,6 +1263,8 @@ impl SyncState {
             api_base: self.api_base.clone(),
             url_scheme: self.url_scheme,
             tokens: self.tokens.clone(),
+            renewing: self.renewing.clone(),
+            renewed: self.event_tx.clone(),
         }
     }
 
@@ -1808,6 +1832,40 @@ mod run_tests {
             })
             .await;
     }
+
+    /// `SYNC-058`: the loop hands each command it waits on to the worker. A
+    /// sign-out sent before the commands close is answered once the loop
+    /// returns.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_loop_hands_each_command_to_the_worker() {
+        let (sink, logic_rx) = LogicSink::channel();
+        let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
+        cmd_tx
+            .send(SyncCommand::Rest {
+                id: Seq::<ambre_bus::Request>::new(7),
+                cmd: ambre_bus::RestCommand::Logout,
+            })
+            .expect("send");
+        drop(cmd_tx);
+        run(
+            cmd_rx,
+            SyncState::new(
+                sink,
+                crate::http::Url::<crate::RelayHost>::new(String::new()),
+            ),
+        )
+        .await;
+        let answered = std::iter::from_fn(|| logic_rx.try_recv().ok()).any(|event| {
+            matches!(
+                event,
+                LogicEvent::Rest {
+                    evt: ambre_bus::RestEvent::LoggedOut,
+                    ..
+                }
+            )
+        });
+        assert!(answered, "the sign-out reached the worker");
+    }
 }
 
 #[cfg(test)]
@@ -1956,6 +2014,40 @@ mod ephemeral_tests {
             assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
+    }
+
+    /// The signing key of author `i`, distinct for each `i`.
+    fn author(i: u64) -> FixedBytes<PublicKey> {
+        let mut bytes = [0u8; 32];
+        bytes[..8].copy_from_slice(&i.to_le_bytes());
+        FixedBytes::from_array(bytes)
+    }
+
+    /// Below the cap, a new author evicts nobody: each author keeps the
+    /// baseline its replay is refused against.
+    #[test]
+    fn below_the_cap_each_author_keeps_its_counter() {
+        let mut d = doc_state();
+        assert!(d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author(1), Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author(1), Seq::<Ephemerals>::new(1)));
+    }
+
+    /// At the cap, a known author's next counter evicts nobody: only a new
+    /// author makes room.
+    #[test]
+    fn at_the_cap_a_known_author_evicts_nobody() {
+        let mut d = doc_state();
+        let cap = MAX_EPHEMERAL_REMOTE_AUTHORS as u64;
+        for i in 0..cap {
+            assert!(d.accept_ephemeral_counter(&author(i), Seq::<Ephemerals>::new(i + 1)));
+        }
+        assert!(d.accept_ephemeral_counter(&author(cap - 1), Seq::<Ephemerals>::new(cap + 1)));
+        assert!(
+            !d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)),
+            "the least active author is still known"
+        );
     }
 
     // -- Presence identity resolution (`sync`, "Presence identity") ------------

@@ -572,7 +572,7 @@ mod tests {
     use ambre_bus::{Instant, PageLoad};
     use ambre_canvas::ThemeControl;
     use ambre_chrome::commands::KeyChar;
-    use ambre_core::{Device, Point, Px, Size, View};
+    use ambre_core::Px;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// The size of a region, in its view pixels.
@@ -826,7 +826,7 @@ mod tests {
         let rows = {
             let mut view = bound.view.borrow_mut();
             let AppView::Murmure(v) = &mut *view else {
-                unreachable!()
+                panic!("a Murmure view")
             };
             paint(v);
             v.last_painted().unwrap().rows
@@ -849,7 +849,7 @@ mod tests {
             let _ = view.handle_input(&input);
         }
         let AppView::Murmure(v) = &mut *view else {
-            unreachable!()
+            panic!("a Murmure view")
         };
         paint(v);
         drop(view);
@@ -893,7 +893,7 @@ mod tests {
         let press_content = |content: &mut AppView| {
             let (cx, cy) = match content {
                 AppView::Murmure(v) => field_of(v, 200.0),
-                _ => unreachable!(),
+                _ => panic!("a Murmure view"),
             };
             let _ = content.handle_input(&InputEvent::PointerDown {
                 at: pointer(cx, cy),

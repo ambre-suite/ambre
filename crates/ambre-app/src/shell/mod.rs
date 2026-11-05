@@ -8,7 +8,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_core::id::{Id, Sheet};
+use ambre_core::id::Id;
 
 // AppRoot lives in a sibling submodule; it reaches the launcher imports and
 // `Wiring` via `use super::super::*`.
@@ -31,77 +31,133 @@ pub(crate) type Relays = (
     ambre_murmure::chrome::MurmureRelay,
 );
 
+/// The slots the mount fills with the `!Send` handles it creates, for the
+/// launcher to read back once the mount returns.
+pub(crate) struct ShellSlots {
+    pub(crate) store: Slot<CommandStates>,
+    pub(crate) toile_store: Slot<CommandStates>,
+    pub(crate) anchor: Slot<RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>>>,
+    pub(crate) toasts: Slot<Toasts>,
+    pub(crate) user: Slot<RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>>,
+    pub(crate) docs: Slot<RwSignal<Vec<DocItem>>>,
+    pub(crate) members: Slot<RwSignal<Vec<MemberInfo>>>,
+    pub(crate) devmode: Slot<RwSignal<Option<landing::SignInMode>>>,
+    pub(crate) current_doc: Slot<RwSignal<Option<Id<Document>>>>,
+    pub(crate) relays: Slot<Relays>,
+    pub(crate) style: Slot<trame_chrome::StyleState>,
+    pub(crate) chrome_status: Slot<RwSignal<ChromeStatus>>,
+    pub(crate) commands: Slot<CommandPath>,
+}
+
+/// The wiring of the shell: each channel, slot and signal the launcher
+/// builds and the mount hands to the widget that reads it. The signals the
+/// shell shares with a view travel as that view's own set.
+pub(crate) struct ShellWiring {
+    pub(crate) to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    pub(crate) clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
+    pub(crate) raf: ambre_canvas::RafControl,
+    pub(crate) theme_ctl: ambre_canvas::ThemeControl,
+    pub(crate) boot_doc: Option<Id<Document>>,
+    pub(crate) booted: ambre_bus::DocType,
+    pub(crate) slots: ShellSlots,
+    pub(crate) prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
+    pub(crate) prose_signals: crate::host::ProseSignals,
+    pub(crate) tofu_prompt: RwSignal<Option<TofuPrompt>>,
+    pub(crate) tofu_confirm: RwSignal<Option<TofuPrompt>>,
+    pub(crate) opened_file: RwSignal<Option<platform::OpenedFile>>,
+    pub(crate) invite_role: RwSignal<Role>,
+    pub(crate) me: RwSignal<Option<Id<User>>>,
+    pub(crate) presenter_slide: RwSignal<SlidePosition>,
+    pub(crate) presenter_notes: RwSignal<String>,
+    pub(crate) presenter_frame: RwSignal<Option<Id<Frame>>>,
+    pub(crate) broadcasting_toile: RwSignal<Broadcast>,
+    pub(crate) following_toile: RwSignal<Option<Id<User>>>,
+    pub(crate) presenter_peer_toile: RwSignal<Option<Id<User>>>,
+    pub(crate) perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
+    pub(crate) sheets: RwSignal<Vec<SheetTab>>,
+    /// The signals the shell shares with a sheet view.
+    pub(crate) trame: ambre_trame::ui::TrameSignals,
+    /// The signals the shell shares with a board view.
+    pub(crate) toile: ambre_toile::ui::ToileSignals,
+}
+
 /// Mount the Leptos shell onto the page body: the persistent AppShell chrome
 /// (which owns the `<canvas>`) plus the landing overlay shown on `/`. All
 /// reactive state is created here (the mount owner) and published via the slots
 /// so the imperative engine wiring in `main` can read it back.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the mount hands each channel, slot and signal to the one widget that reads it"
-)]
-pub(crate) fn mount_shell(
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-    clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
-    raf: ambre_canvas::RafControl,
-    theme_ctl: ambre_canvas::ThemeControl,
-    boot_doc: Option<Id<Document>>,
-    store_slot: Slot<CommandStates>,
-    toile_store_slot: Slot<CommandStates>,
-    anchor_slot: Slot<RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>>>,
-    toasts_slot: Slot<Toasts>,
-    user_slot: Slot<RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>>,
-    docs_slot: Slot<RwSignal<Vec<DocItem>>>,
-    members_slot: Slot<RwSignal<Vec<MemberInfo>>>,
-    devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>>,
-    current_doc_slot: Slot<RwSignal<Option<Id<Document>>>>,
-    relays_slot: Slot<Relays>,
-    booted: ambre_bus::DocType,
-    prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
-    prose_signals: crate::host::ProseSignals,
-    style_slot: Slot<trame_chrome::StyleState>,
-    chrome_status_slot: Slot<RwSignal<ChromeStatus>>,
-    formula_ref: RwSignal<String>,
-    formula_text: RwSignal<String>,
-    formula_action: RwSignal<Option<FormulaAction>>,
-    tofu_prompt: RwSignal<Option<TofuPrompt>>,
-    tofu_confirm: RwSignal<Option<TofuPrompt>>,
-    opened_file: RwSignal<Option<platform::OpenedFile>>,
-    invite_role: RwSignal<Role>,
-    me: RwSignal<Option<Id<User>>>,
-    sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
-    sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
-    find_result: RwSignal<Option<trame_chrome::FindPosition>>,
-    find_result_toile: RwSignal<Option<ambre_toile::message::FindResults>>,
-    present_toile: RwSignal<PresentMode>,
-    presenter_slide: RwSignal<SlidePosition>,
-    presenter_notes: RwSignal<String>,
-    presenter_frame: RwSignal<Option<Id<Frame>>>,
-    broadcasting_toile: RwSignal<Broadcast>,
-    following_toile: RwSignal<Option<Id<User>>>,
-    presenter_peer_toile: RwSignal<Option<Id<User>>>,
-    perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
-    zoom: RwSignal<Scale<Doc, View>>,
-    board_zoom: RwSignal<Scale<Board, View>>,
-    ctx_scope: RwSignal<trame_chrome::CtxScope>,
-    filter_active: RwSignal<trame_chrome::SheetFilter>,
-    toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
-    toile_menu_cmd: RwSignal<Option<ambre_core::StaticKey<ambre_core::Commands>>>,
-    toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
-    toile_cursor: RwSignal<Option<ambre_toile::ui::palette::CanvasCursor>>,
-    toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
-    toile_restyle: RwSignal<Option<ambre_toile::message::ElementStyle>>,
-    toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,
-    toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
-    toile_comments: toile_chrome::CommentSignals,
-    toile_deck: toile_chrome::DeckSignals,
-    toile_dropped_file: RwSignal<Option<toile_chrome::DroppedFile>>,
-    toile_placed_embed: RwSignal<Option<toile_chrome::PlacedEmbed>>,
-    toile_set_link: RwSignal<Option<toile_chrome::LinkEdit>>,
-    toile_followed_link: RwSignal<Option<toile_chrome::ShellNav>>,
-    sheets: RwSignal<Vec<SheetTab>>,
-    active_sheet: RwSignal<Id<Sheet>>,
-    commands_slot: Slot<CommandPath>,
-) {
+pub(crate) fn mount_shell(wiring: ShellWiring) {
+    let ShellWiring {
+        to_logic,
+        clipboard_paste,
+        raf,
+        theme_ctl,
+        boot_doc,
+        booted,
+        slots,
+        prose_figures,
+        prose_signals,
+        tofu_prompt,
+        tofu_confirm,
+        opened_file,
+        invite_role,
+        me,
+        presenter_slide,
+        presenter_notes,
+        presenter_frame,
+        broadcasting_toile,
+        following_toile,
+        presenter_peer_toile,
+        perf_snap,
+        sheets,
+        trame,
+        toile,
+    } = wiring;
+    let ShellSlots {
+        store: store_slot,
+        toile_store: toile_store_slot,
+        anchor: anchor_slot,
+        toasts: toasts_slot,
+        user: user_slot,
+        docs: docs_slot,
+        members: members_slot,
+        devmode: devmode_slot,
+        current_doc: current_doc_slot,
+        relays: relays_slot,
+        style: style_slot,
+        chrome_status: chrome_status_slot,
+        commands: commands_slot,
+    } = slots;
+    let ambre_trame::ui::TrameSignals {
+        formula_ref,
+        formula_text,
+        formula_action,
+        sel_stats,
+        ctx_scope,
+        zoom,
+        active_sheet,
+        filter_active,
+        find_result,
+    } = trame;
+    let ambre_toile::ui::ToileSignals {
+        ctx_scope: toile_ctx_scope,
+        menu_cmd: toile_menu_cmd,
+        active_tool: toile_active_tool,
+        cursor: toile_cursor,
+        zoom: board_zoom,
+        sel_stats: sel_stats_toile,
+        style_model: toile_style_model,
+        restyle: toile_restyle,
+        float_bar: toile_float_bar,
+        quick_style: toile_quick_style,
+        comments: toile_comments,
+        deck: toile_deck,
+        dropped_file: toile_dropped_file,
+        placed_embed: toile_placed_embed,
+        set_link: toile_set_link,
+        followed_link: toile_followed_link,
+        present_mode: present_toile,
+        find_result: find_result_toile,
+    } = toile;
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
         // and the per-frame relay drives it. The shell sees only its toggle

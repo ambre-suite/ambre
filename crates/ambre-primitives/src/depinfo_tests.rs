@@ -3,8 +3,9 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use super::{
-    Build, COMPILES, Compile, Compiled, Target, Unit, artifact, collect, cross_check,
-    declares_workspace, dependencies, env_levers, levers, outer_levers, stray_workspaces,
+    Build, Compile, Compiled, LINT_RECIPES, Subcommand, Unit, artifact, collect, compiles,
+    cross_check, declares_workspace, dependencies, env_levers, levers, lint_compiles, outer_levers,
+    stray_workspaces,
 };
 use crate::scan::{Disk, NESTED_WORKSPACES, Scan, Tree, lexical, scan};
 
@@ -166,10 +167,21 @@ fn an_artifact_with_no_test_flag_fails_closed() {
 }
 
 #[test]
+fn an_artifact_with_no_feature_list_fails_closed() {
+    // A missing list would read as an empty one, and refuse a feature the
+    // lint turns on without the cause.
+    let message = r#"{"reason":"compiler-artifact","package_id":"path+file:///w/crates/demo#0.1.0","manifest_path":"/w/crates/demo/Cargo.toml","target":{"kind":["lib"],"src_path":"/w/crates/demo/src/lib.rs"},"profile":{"test":false},"filenames":["/w/target/debug/deps/libdemo-1.rmeta"]}"#;
+    let Err(error) = artifact(Path::new(ROOT), message) else {
+        panic!("an artifact with no feature list is read");
+    };
+    assert!(error.contains("names no feature list"), "{error}");
+}
+
+#[test]
 fn a_missing_dep_info_names_how_to_rebuild_it() {
     let message = |id: &str| {
         format!(
-            r#"{{"reason":"compiler-artifact","package_id":"{id}","manifest_path":"/w/crates/demo/Cargo.toml","target":{{"kind":["lib"],"src_path":"/w/crates/demo/src/lib.rs"}},"profile":{{"test":false}},"filenames":["/w/target/debug/deps/libdemo-1.rmeta"]}}"#
+            r#"{{"reason":"compiler-artifact","package_id":"{id}","manifest_path":"/w/crates/demo/Cargo.toml","target":{{"kind":["lib"],"src_path":"/w/crates/demo/src/lib.rs"}},"profile":{{"test":false}},"features":[],"filenames":["/w/target/debug/deps/libdemo-1.rmeta"]}}"#
         )
     };
     for id in [
@@ -202,6 +214,7 @@ fn a_file_a_product_build_reads_and_the_walk_does_not_is_refused() {
                 "crates/demo/src/hidden.rs",
             ],
         )],
+        features: BTreeMap::new(),
     };
     let sources = paths(&[
         "crates/demo/src/lib.rs",
@@ -244,6 +257,7 @@ fn a_file_only_a_test_build_reads_is_no_refusal_and_no_orphan() {
                 &["crates/demo/tests/it.rs"],
             ),
         ],
+        features: BTreeMap::new(),
     };
     let sources = paths(&[
         "crates/demo/src/lib.rs",
@@ -266,6 +280,7 @@ fn a_file_no_compile_reads_is_refused_whatever_its_name() {
             Build::Product,
             &["crates/demo/src/lib.rs"],
         )],
+        features: BTreeMap::new(),
     };
     let sources = paths(&[
         "crates/demo/src/lib.rs",
@@ -291,6 +306,7 @@ fn a_crate_root_the_walk_does_not_start_from_is_refused() {
             Build::Product,
             &["crates/demo/src/tool/main.rs"],
         )],
+        features: BTreeMap::new(),
     };
     let sources = paths(&["crates/demo/src/lib.rs", "crates/demo/src/tool/main.rs"]);
     let errors = cross_check(&scan, &compiled, &sources, Path::new(ROOT), &empty());
@@ -323,6 +339,7 @@ fn a_file_a_product_build_reads_is_refused_whatever_its_name_unless_named_as_dat
                 "extra/hid",
             ],
         )],
+        features: BTreeMap::new(),
     };
     let tree = Files::new(&[("crates/demo/src/data.txt", "plain text")]);
     let sources = paths(&["crates/demo/src/lib.rs"]);
@@ -363,6 +380,7 @@ fn a_data_file_that_parses_as_rust_items_is_refused() {
                 "crates/demo/src/shader.wgsl",
             ],
         )],
+        features: BTreeMap::new(),
     };
     let tree = Files::new(&[
         ("crates/demo/src/code.txt", "pub fn f() { let expose = 1; }"),
@@ -415,26 +433,256 @@ fn workspace() -> PathBuf {
         .to_path_buf()
 }
 
+/// The words of `text`, owned.
+fn owned(text: &str) -> Vec<String> {
+    text.split_whitespace().map(str::to_owned).collect()
+}
+
 #[test]
-fn the_wasm_compiles_are_the_lines_of_lint_wasm() {
-    let Ok(justfile) = std::fs::read_to_string(workspace().join("justfile")) else {
-        panic!("the justfile cannot be read");
+fn the_compiles_are_the_lines_of_the_lint_recipes_as_written() {
+    let justfile = "lint:\n\
+                    \x20   cargo fmt --all --check\n\
+                    \x20   cargo clippy --workspace --all-targets --features a/x,b/y -- -D warnings\n\
+                    \n\
+                    # The wasm lines.\n\
+                    lint-wasm:\n\
+                    \x20   RUSTFLAGS=\"-Awarnings -C debuginfo=0\" cargo clippy --target wasm32-unknown-unknown -p c --lib\n\
+                    \x20   # A comment inside the body.\n\
+                    \x20   RUSTFLAGS=\"-C debuginfo=0\" cargo check --target wasm32-unknown-unknown -p d --tests\n\
+                    \n\
+                    test-native:\n\
+                    \x20   cargo test --workspace\n";
+    assert_eq!(
+        compiles(justfile, LINT_RECIPES),
+        Ok(vec![
+            Compile::new(
+                None,
+                Subcommand::Clippy,
+                owned("--workspace --all-targets --features a/x,b/y"),
+                owned("-D warnings"),
+            ),
+            Compile::new(
+                Some("-Awarnings -C debuginfo=0".to_owned()),
+                Subcommand::Clippy,
+                owned("--target wasm32-unknown-unknown -p c --lib"),
+                Vec::new(),
+            ),
+            Compile::new(
+                Some("-C debuginfo=0".to_owned()),
+                Subcommand::Check,
+                owned("--target wasm32-unknown-unknown -p d --tests"),
+                Vec::new(),
+            ),
+        ])
+    );
+}
+
+/// The refusals of the recipe parser on `lint` alone, or a panic when it
+/// reads the text.
+fn unread(justfile: &str) -> Vec<String> {
+    match compiles(justfile, &["lint"]) {
+        Ok(found) => panic!("the parser reads {found:?}"),
+        Err(errors) => errors,
+    }
+}
+
+#[test]
+fn a_lint_line_the_gate_cannot_run_as_written_fails_closed() {
+    for line in [
+        // `just` reads a prefix: `-` ignores a failure, `@` echoes nothing.
+        "-cargo clippy --workspace",
+        "@cargo clippy --workspace",
+        // Another tool, another subcommand, another toolchain.
+        "cargo build --workspace",
+        "cargo +stable clippy --workspace",
+        "clippy-driver src/lib.rs",
+        // An expansion of the shell or of `just`.
+        "cargo clippy --features $FEATURES",
+        "cargo clippy {{args}}",
+        "cargo clippy --workspace && cargo test",
+        "cargo clippy --workspace # trailing",
+        "FOO=bar cargo clippy --workspace",
+        "RUSTFLAGS=\"$EXTRA\" cargo clippy --workspace",
+        "RUSTFLAGS=\"-C debuginfo=0\"cargo clippy --workspace",
+        // An argument that changes what the gate reads.
+        "cargo clippy --manifest-path other/Cargo.toml",
+        "cargo clippy --target-dir elsewhere",
+        "cargo clippy --config build.rustflags=[]",
+        "cargo clippy --message-format=short",
+        "cargo clippy -Zunstable-options",
+        // `cargo fmt` under flags is no line the gate knows.
+        "RUSTFLAGS=\"-C debuginfo=0\" cargo fmt --all",
+    ] {
+        let errors = unread(&format!("lint:\n    {line}\n"));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.starts_with("justfile:2: ") && error.contains("fails closed")),
+            "{line}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn a_lint_recipe_the_gate_cannot_read_whole_fails_closed() {
+    for (justfile, said) in [
+        ("other:\n    cargo clippy\n", "declared 0 times"),
+        (
+            "lint:\n    cargo clippy\nlint:\n    cargo check\n",
+            "declared 2 times",
+        ),
+        (
+            "lint: fmt\n    cargo clippy\n",
+            "takes a parameter or a dependency",
+        ),
+        (
+            "lint FLAGS:\n    cargo clippy\n",
+            "takes a parameter or a dependency",
+        ),
+        (
+            "lint:\n    cargo fmt --all --check\n",
+            "holds no compile line",
+        ),
+    ] {
+        let errors = unread(justfile);
+        assert!(
+            errors.iter().any(|error| error.contains(said)),
+            "{justfile:?}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn the_lint_recipes_of_the_workspace_parse_into_a_host_line_and_wasm_lines() {
+    let compiles = match lint_compiles(&Disk::at(&workspace()), &workspace()) {
+        Ok(compiles) => compiles,
+        Err(errors) => panic!("the lint recipes do not parse: {errors:?}"),
     };
-    let recipe: Vec<Vec<String>> = justfile
-        .lines()
-        .skip_while(|line| *line != "lint-wasm:")
-        .skip(1)
-        .take_while(|line| line.starts_with("    ") || line.is_empty())
-        .filter_map(|line| line.split_once("--target wasm32-unknown-unknown "))
-        .map(|(_, args)| args.split_whitespace().map(str::to_owned).collect())
-        .collect();
-    let compiled: Vec<Vec<String>> = COMPILES
-        .iter()
-        .filter(|compile| compile.target == Target::Wasm)
-        .map(|compile| compile.args.iter().map(|arg| (*arg).to_owned()).collect())
-        .collect();
-    assert!(!recipe.is_empty(), "no wasm line in lint-wasm");
-    assert_eq!(recipe, compiled);
+    let wasm = |compile: &&Compile| {
+        compile
+            .args
+            .windows(2)
+            .any(|pair| pair == ["--target", "wasm32-unknown-unknown"])
+    };
+    // `lint` may hold more than one host line: a feature that swaps a
+    // behaviour, as `ambre-belt/firefox` swaps the driver, gets a line of its
+    // own. One of them reads the whole workspace.
+    let host: Vec<&Compile> = compiles.iter().filter(|c| !wasm(c)).collect();
+    assert!(!host.is_empty(), "`lint` holds no host compile line");
+    for line in &host {
+        assert_eq!(line.subcommand, Subcommand::Clippy, "{line:?}");
+    }
+    assert!(
+        host.iter().any(|line| {
+            ["--workspace", "--all-targets"]
+                .iter()
+                .all(|wide| line.args.iter().any(|arg| arg == wide))
+        }),
+        "no host line reads the whole workspace: {host:?}"
+    );
+    assert!(
+        compiles.iter().any(|c| wasm(&c)),
+        "no wasm line in lint-wasm"
+    );
+}
+
+#[test]
+fn a_clippy_dep_info_reads_as_the_check_one_plus_its_configuration() {
+    // The rules rustc writes under `cargo check`, then those clippy writes
+    // for the same unit. Clippy lists its configuration and the workspace
+    // manifest first, and adds two `env-dep` comments.
+    let check = "/t/deps/demo-1.d: crates/demo/src/lib.rs crates/demo/src/m.rs\n\
+                 \n\
+                 /t/deps/libdemo-1.rmeta: crates/demo/src/lib.rs crates/demo/src/m.rs\n\
+                 \n\
+                 crates/demo/src/lib.rs:\n\
+                 crates/demo/src/m.rs:\n\
+                 \n\
+                 # env-dep:CARGO_PKG_NAME=demo\n";
+    let clippy = "/t/deps/demo-1.d: /w/crates/demo/clippy.toml /w/Cargo.toml crates/demo/src/lib.rs crates/demo/src/m.rs\n\
+                  \n\
+                  /t/deps/libdemo-1.rmeta: /w/crates/demo/clippy.toml /w/Cargo.toml crates/demo/src/lib.rs crates/demo/src/m.rs\n\
+                  \n\
+                  /w/crates/demo/clippy.toml:\n\
+                  /w/Cargo.toml:\n\
+                  crates/demo/src/lib.rs:\n\
+                  crates/demo/src/m.rs:\n\
+                  \n\
+                  # env-dep:CARGO_PKG_NAME=demo\n\
+                  # env-dep:CLIPPY_ARGS=-D__CLIPPY_HACKERY__warnings__CLIPPY_HACKERY__\n\
+                  # env-dep:CLIPPY_CONF_DIR\n";
+    let read = |text: &str| -> BTreeSet<PathBuf> {
+        match dependencies(text) {
+            Ok(found) => found
+                .into_iter()
+                .map(|path| lexical(&Path::new(ROOT).join(path)))
+                .collect(),
+            Err(error) => panic!("the parser refuses {text:?}: {error}"),
+        }
+    };
+    let (check, clippy) = (read(check), read(clippy));
+    let read_by_clippy = paths(&["crates/demo/clippy.toml", "Cargo.toml"]);
+    assert_eq!(
+        clippy
+            .difference(&read_by_clippy)
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        check
+    );
+    // The same walk, held to each: the same refusals, the configuration
+    // passing as data. The walk misses `m.rs`, so each refuses it once.
+    let tree = Files::new(&[
+        ("Cargo.toml", "[workspace]\nmembers = [\"crates/demo\"]\n"),
+        ("crates/demo/clippy.toml", "msrv = \"1.80\"\n"),
+        ("crates/demo/src/lib.rs", "mod m;\n"),
+        ("crates/demo/src/m.rs", "pub fn f() {}\n"),
+    ]);
+    let walk = walked("crates/demo/src/lib.rs", &["crates/demo/src/lib.rs"]);
+    let held = |reads: BTreeSet<PathBuf>| {
+        let compiled = Compiled {
+            units: vec![Unit {
+                root: Path::new(ROOT).join("crates/demo/src/lib.rs"),
+                build: Build::Product,
+                reads,
+            }],
+            features: BTreeMap::new(),
+        };
+        cross_check(&walk, &compiled, &BTreeSet::new(), Path::new(ROOT), &tree)
+    };
+    let refusals = held(check);
+    assert_eq!(refusals.len(), 1, "{refusals:?}");
+    assert!(
+        refusals[0].starts_with("crates/demo/src/m.rs: "),
+        "{refusals:?}"
+    );
+    assert_eq!(held(clippy), refusals);
+}
+
+#[test]
+fn a_clippy_configuration_that_parses_as_rust_items_is_refused() {
+    let tree = Files::new(&[
+        ("clippy.toml", "pub fn f() {}\n"),
+        ("crates/demo/src/lib.rs", ""),
+    ]);
+    let walk = walked("crates/demo/src/lib.rs", &["crates/demo/src/lib.rs"]);
+    let compiled = Compiled {
+        units: vec![unit(
+            "crates/demo/src/lib.rs",
+            Build::Product,
+            &["clippy.toml", "crates/demo/src/lib.rs"],
+        )],
+        features: BTreeMap::new(),
+    };
+    let refusals = cross_check(&walk, &compiled, &BTreeSet::new(), Path::new(ROOT), &tree);
+    assert_eq!(
+        refusals,
+        vec![
+            "clippy.toml: clippy reads it for the crate root \
+             crates/demo/src/lib.rs, and it parses as Rust items. The dep-info does not tell a \
+             module from data, so the gate cannot show that no `mod` compiles it"
+                .to_owned()
+        ]
+    );
 }
 
 /// A directory removed when the test ends, pass or fail.
@@ -503,13 +751,21 @@ fn probe(test: &str, members: &[&str]) -> (PathBuf, Scratch) {
 /// What cargo compiles in the scratch workspace `root`, every target of
 /// every member, in a target directory of its own.
 fn compile(root: &Path) -> Result<Compiled, Vec<String>> {
+    compile_with(root, "--workspace --all-targets")
+}
+
+/// What cargo compiles in the scratch workspace `root` under the arguments
+/// `args`, in a target directory of its own.
+fn compile_with(root: &Path, args: &str) -> Result<Compiled, Vec<String>> {
     let cargo = PathBuf::from(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
     let rustc = cargo.with_file_name("rustc");
     let target = root.join("target");
-    let compiles = [Compile {
-        target: Target::Host,
-        args: &["--workspace", "--all-targets"],
-    }];
+    let compiles = [Compile::new(
+        None,
+        Subcommand::Check,
+        owned(args),
+        Vec::new(),
+    )];
     collect(root, &compiles, &|command| {
         command
             .arg("--offline")
@@ -1192,7 +1448,7 @@ fn a_lever_in_a_flag_variable_of_the_environment_is_refused() {
         ]
     );
     // The flags of `lint-wasm` are no lever.
-    let plain = environment(&[("RUSTFLAGS", "-Awarnings -C debuginfo=0")]);
+    let plain = environment(&[("RUSTFLAGS", "-D warnings -C debuginfo=0")]);
     assert_eq!(env_levers(plain), Vec::<String>::new());
 }
 
@@ -1268,7 +1524,7 @@ fn a_lever_on_a_line_of_the_justfile_is_refused() {
         (
             "justfile",
             "# RUSTFLAGS=\"-Zx\" in a comment\n\
-             lint-wasm:\n    RUSTFLAGS=\"-Awarnings -C debuginfo=0\" cargo clippy\n\
+             lint-wasm:\n    RUSTFLAGS=\"-D warnings -C debuginfo=0\" cargo clippy\n\
              \x20   RUSTFLAGS=\"-Awarnings -Zcrate-attr=feature(yeet_expr)\" cargo check\n\
              \x20   grep '[A-Z]' x\n\
              \x20   cargo +nightly build -Z build-std\n",
@@ -1372,5 +1628,46 @@ fn a_loop_of_directory_links_ends_the_listing() {
         listed,
         ["Cargo.toml", "a/f.rs", "a/file.rs", "b.rs"].map(PathBuf::from)
     );
+    drop(scratch);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_real_compile_reports_the_features_a_line_reaches_and_refuses_the_rest() {
+    // cargo reports three features on: one the line names, one a feature
+    // reaches, and one a dev-dependency turns on under `--all-targets`. A
+    // feature nothing reaches fails the check. So does a feature added to a
+    // manifest and to no line.
+    let (root, scratch) = probe("features", &["lib", "user"]);
+    put(
+        &root,
+        "crates/lib/Cargo.toml",
+        "[package]\nname = \"lib\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n\
+         [features]\nnamed = [\"reached\"]\nreached = []\ndev = []\nforgotten = []\n",
+    );
+    put(
+        &root,
+        "crates/user/Cargo.toml",
+        "[package]\nname = \"user\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n\
+         [dev-dependencies]\nlib = { path = \"../lib\", features = [\"dev\"] }\n",
+    );
+    put(&root, "crates/lib/src/lib.rs", "");
+    put(&root, "crates/user/src/lib.rs", "");
+    put(&root, crate::features::EXCLUSIONS, "feature\treason\n");
+    let compiled = match compile_with(&root, "--workspace --all-targets --features lib/named") {
+        Ok(compiled) => compiled,
+        Err(errors) => panic!("the probe does not compile: {errors:?}"),
+    };
+    let disk = Disk::at(&root);
+    let lib = disk.canonical(&root.join("crates/lib/Cargo.toml"));
+    assert_eq!(
+        compiled.features.get(&lib),
+        Some(&owned("dev named reached").into_iter().collect())
+    );
+    let refusals = crate::features::check(&disk, &root, &compiled.features);
+    let [refusal] = refusals.as_slice() else {
+        panic!("one refusal expected: {refusals:?}");
+    };
+    assert!(refusal.starts_with("lib/forgotten: "), "{refusal}");
     drop(scratch);
 }

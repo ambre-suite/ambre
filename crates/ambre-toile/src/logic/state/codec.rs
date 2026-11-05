@@ -6,6 +6,7 @@
 //! super::codec::*`.
 
 use ambre_core::Bounded;
+use ambre_core::crdt::CrdtName;
 use ambre_core::crdt::FieldKey;
 use ambre_core::{Board, Payload, Px};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};

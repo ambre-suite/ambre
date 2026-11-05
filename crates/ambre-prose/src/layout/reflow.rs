@@ -611,7 +611,7 @@ mod tests {
         let Some(defaults) = crate::doc::map_at(&meta, crate::doc::MetaKey::Defaults) else {
             return;
         };
-        let _ = crate::doc::Fields::of(defaults).insert(crate::doc::DefaultsKey::FontSizePt, 24.0);
+        let _ = crate::doc::Fields::new(defaults).insert(crate::doc::DefaultsKey::FontSizePt, 24.0);
         let _ = paginator.reflow(&document, &[]);
         // `PROSE-082`: the inherited size moved, so every block is re-styled
         // and shaped again, even though no block was named dirty.
@@ -631,7 +631,7 @@ mod tests {
         let Some(page) = crate::doc::map_at(&meta, crate::doc::MetaKey::Page) else {
             return;
         };
-        let _ = crate::doc::Fields::of(page).insert(crate::doc::PageKey::WidthMm, 100.0);
+        let _ = crate::doc::Fields::new(page).insert(crate::doc::PageKey::WidthMm, 100.0);
         let _ = paginator.reflow(&document, &[]);
         // `PROSE-082`: the width moved, so every block is shaped again.
         assert_eq!(

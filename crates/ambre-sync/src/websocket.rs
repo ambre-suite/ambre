@@ -43,7 +43,7 @@ impl SyncState {
             .tokens
             .borrow()
             .as_ref()
-            .map(|t| t.access_token.clone())
+            .map(|t| t.access_token().clone())
         else {
             tracing::warn!("Sync: socket opened before the access token is ready");
             return;
@@ -394,8 +394,19 @@ impl SyncState {
             return;
         };
         let auth = self.auth_context();
+        let stale = self
+            .tokens
+            .borrow()
+            .as_ref()
+            .map(|t| t.access_token().clone());
         wasm_bindgen_futures::spawn_local(async move {
-            let ok = match auth.refresh().await {
+            let renewed = match stale {
+                Some(stale) => auth.renew(&stale).await,
+                None => Err(crate::http::HttpError::Local(
+                    "auth required: no access token".to_owned(),
+                )),
+            };
+            let ok = match renewed {
                 Ok(()) => true,
                 Err(e) => {
                     tracing::warn!("Sync: token refresh failed: {e}");
@@ -542,6 +553,8 @@ impl SyncState {
                 self.handle_ws_disconnected(None, "ws error".to_owned());
                 self.socket_closed(None);
             }
+            SyncEvent::RenewalDue { ticket } => self.renewal_due(ticket),
+            SyncEvent::TokensRenewed => self.tokens_renewed(),
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;
                 let next = self.lifecycle.poll((self.clock)());
@@ -569,7 +582,7 @@ impl SyncState {
                 self.master_seed = Some(master_seed);
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
-                *self.tokens.borrow_mut() = Some(tokens);
+                self.hold_tokens(tokens);
                 self.setup_owed = false;
                 self.open_websocket();
                 self.flush_pending_opens();
@@ -593,7 +606,7 @@ impl SyncState {
                 // The tokens stop here (`CHROME-096`). No key is held yet, so no
                 // socket opens: the unlock or the setup opens it.
                 self.user_id = Some(user_id);
-                *self.tokens.borrow_mut() = Some(tokens);
+                self.hold_tokens(tokens);
                 self.setup_owed = keys_stored == ambre_bus::KeySetup::Absent;
                 self.reply(
                     id,
@@ -616,7 +629,7 @@ impl SyncState {
                 self.master_seed = Some(master_seed);
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
-                *self.tokens.borrow_mut() = Some(tokens);
+                self.hold_tokens(tokens);
                 self.setup_owed = false;
                 self.open_websocket();
                 self.flush_pending_opens();
@@ -1740,6 +1753,70 @@ mod tests {
         assert_eq!(fire_at(&mut state, 5000), 3, "one open per deadline");
     }
 
+    /// `SYNC-059`: while the inbound path holds the socket closed, only an
+    /// edit is kept for the reopen. Any other frame is dropped: the reopen
+    /// subscribes again on its own.
+    #[test]
+    fn while_held_only_an_edit_is_kept_for_the_reopen() {
+        let (mut state, _rx) = with_open_document();
+        state.inbound_held = true;
+        let document_id = *state.documents.keys().next().expect("one document");
+        state.push_frame(&WsClientMsg::Subscribe { document_id });
+        assert!(state.held_outbox.borrow().is_empty());
+    }
+
+    /// `SYNC-045`: a presence sample from a member opens under the key it
+    /// names. It reaches Logic as the bytes its author sealed, under the
+    /// member its signing key resolves to.
+    #[test]
+    fn a_remote_ephemeral_reaches_logic_as_its_author_sealed_it() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let document_id = Id::<Document>::mint();
+        let doc_key = DocumentKey::from_array([0x11; 32]);
+        let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
+        let author = ambre_core::FixedBytes::from_array(signing.verifying_key().to_bytes());
+        let alice = Id::<User>::mint();
+        let mut doc_state = SyncDocumentState::new(
+            document_id,
+            doc_key.clone(),
+            DocType::Prose,
+            crate::Existence::LocalOnly,
+        );
+        doc_state.set_signing_keys([(author, alice)]);
+        state.documents.insert(document_id, doc_state);
+        let public_data = ambre_protocol::EphemeralPublicData {
+            document_id,
+            pub_key: author,
+            key_id: doc_key.id(),
+            counter: Seq::<ambre_protocol::messages::Ephemerals>::new(1),
+        };
+        let eph = crate::pipeline::seal_ephemeral(
+            &ambre_core::Payload::new(b"cursor@42".to_vec()),
+            public_data,
+            &doc_key,
+            &signing,
+        )
+        .expect("seal");
+        state.handle_ws_message(WsServerMsg::Ephemeral(eph));
+        let delivered = std::iter::from_fn(|| rx.try_recv().ok()).find_map(|event| match event {
+            LogicEvent::RemoteEphemeral {
+                from_user_id,
+                payload,
+                ..
+            } => Some((from_user_id, payload)),
+            _ => None,
+        });
+        let Some((from, payload)) = delivered else {
+            panic!("the sample reaches Logic");
+        };
+        assert_eq!(from, alice);
+        assert_eq!(payload.as_bytes(), b"cursor@42");
+    }
+
     /// `SYNC-066`: a sign-out closes the socket and clears every key. A drop
     /// reported after it reopens nothing, where the same drop before it does.
     #[test]
@@ -1766,10 +1843,11 @@ mod tests {
         state
             .session_nonces
             .insert(id, ambre_core::FixedBytes::from_array([1; 16]));
-        *state.tokens.borrow_mut() = Some(TokenPair {
-            access_token: Credential::new("access".to_owned()),
-            refresh_token: Credential::new("refresh".to_owned()),
-        });
+        *state.tokens.borrow_mut() = Some(TokenPair::new(
+            Credential::new("access".to_owned()),
+            Credential::new("refresh".to_owned()),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+        ));
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
 
@@ -1810,10 +1888,11 @@ mod tests {
             signing_key: master_seed.derive_signing_key(),
             exchange_key: master_seed.derive_exchange_key(),
             master_seed,
-            tokens: TokenPair {
-                access_token: Credential::new("access".to_owned()),
-                refresh_token: Credential::new("refresh".to_owned()),
-            },
+            tokens: TokenPair::new(
+                Credential::new("access".to_owned()),
+                Credential::new("refresh".to_owned()),
+                ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+            ),
         });
         assert_eq!(state.socket_opens, 1);
     }
@@ -2011,10 +2090,11 @@ mod tests {
         let (mut state, _rx) = with_open_document();
         let id = *state.documents.keys().next().unwrap();
         state.documents.get_mut(&id).unwrap().existence = crate::Existence::OnRelay;
-        *state.tokens.borrow_mut() = Some(TokenPair {
-            access_token: Credential::new("acc-s3cr3t".to_owned()),
-            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
-        });
+        *state.tokens.borrow_mut() = Some(TokenPair::new(
+            Credential::new("acc-s3cr3t".to_owned()),
+            Credential::new("ref-s3cr3t".to_owned()),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+        ));
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
         state.handle_sync_event(SyncEvent::WsOpened);
@@ -2033,10 +2113,11 @@ mod tests {
     /// A token pair logged by `Debug` prints neither token (`SYNC-061`).
     #[test]
     fn a_logged_token_pair_carries_no_token() {
-        let pair = TokenPair {
-            access_token: Credential::new("acc-s3cr3t".to_owned()),
-            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
-        };
+        let pair = TokenPair::new(
+            Credential::new("acc-s3cr3t".to_owned()),
+            Credential::new("ref-s3cr3t".to_owned()),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+        );
         let shown = format!("{pair:?}");
         assert!(!shown.contains("s3cr3t"), "{shown}");
     }

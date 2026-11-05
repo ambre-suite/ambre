@@ -26,8 +26,9 @@ use ambre_draw::FontContext;
 use ambre_draw::testing::RecordingSurface;
 use ambre_toile::logic::command::DisplayViewport;
 use ambre_toile::message::{DisplayElement, DisplayGeom, DisplayNode, ElementStyle, ShapeKind};
-use ambre_toile::ui::render::paint_content;
+use ambre_toile::ui::render::{Scene, paint_content};
 use ambre_toile::ui::viewport::ViewportTransform;
+use ambre_toile::ui::walk::BoardWalk;
 use ambre_toile::{ElementKind, InitContent, ToileCommand, ToileEvent, ToileOutcome, ToileState};
 use kurbo::{Affine, Point, Rect, Size};
 
@@ -198,14 +199,18 @@ fn walk(
     let mut surface = RecordingSurface::new();
     paint_content(
         &mut surface,
-        viewport,
         camera,
-        Theme::Light.palette(),
-        font_cx,
-        cache,
+        Scene {
+            viewport,
+            palette: Theme::Light.palette(),
+            images: &HashMap::new(),
+            anim: &HashMap::new(),
+        },
+        BoardWalk {
+            font_cx,
+            text_cache: cache,
+        },
         None,
-        &HashMap::new(),
-        &HashMap::new(),
         ambre_toile::message::PresentMode::Editing,
     );
     surface.ops().len()

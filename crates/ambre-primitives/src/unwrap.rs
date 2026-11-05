@@ -45,8 +45,8 @@
 //!   * the return type of a workspace `fn` types its call, and `?` reads
 //!     the `Ok` or `Some` type. An `Err(e)` pattern and the closure of
 //!     `map_err` bind an error;
-//!   * a type a `macro_rules!` body names as written is catalogued, as
-//!     `loro_fields!` writes `Fields`.
+//!   * a type a `macro_rules!` body names as written is catalogued, as a
+//!     transcriber that writes `struct Fields` names it.
 //!
 //! Each handed unwrap gets one verdict. A callee the workspace defines and
 //! no foreign API names is a refusal. The tuple struct of a newtype is
@@ -1289,9 +1289,9 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                         }
                         self.raw.macros.insert(ident.to_string(), accessors);
                     }
-                    // A type a transcriber names, as `loro_fields!` writes
-                    // `Fields`, is catalogued as written. A type it names by
-                    // a metavariable is not.
+                    // A type a transcriber names as written, as in
+                    // `struct Fields`, is catalogued. A type it names by a
+                    // metavariable is not.
                     for body in rule_bodies(m.mac.tokens.clone()) {
                         if let Ok(file) = syn::parse2::<syn::File>(body) {
                             for item in &file.items {
@@ -2338,7 +2338,7 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
         let callee = self.method_callee(&m.receiver, &method);
         // A parameter typed `impl Into<T>`, with `T` foreign, hands its
         // argument to the foreign type at once: a boundary, as the
-        // `insert` of `loro_fields!` is.
+        // `insert` of `ambre_crdt::Fields` is.
         let boundaries: Vec<usize> = self
             .infer(&m.receiver)
             .and_then(|owner| self.catalog.boundaries.get(&format!("{owner}::{method}")))

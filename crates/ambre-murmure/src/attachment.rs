@@ -37,7 +37,7 @@ pub(crate) fn write(
     }
     let list = message.insert_container(MessageKey::Attachments, LoroList::new())?;
     for attachment in attachments {
-        let entry = Fields::<AttachmentKey>::of(list.push_container(LoroMap::new())?);
+        let entry = Fields::<AttachmentKey>::new(list.push_container(LoroMap::new())?);
         entry.insert(AttachmentKey::Media, attachment.media_ref.as_str())?;
         entry.insert(AttachmentKey::Name, attachment.name.as_str())?;
         entry.insert(AttachmentKey::Type, attachment.media_type.as_str())?;

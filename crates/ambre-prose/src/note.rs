@@ -23,7 +23,7 @@ pub(crate) fn entry(document: &LoroDoc, id: &Id<Footnote>) -> Option<doc::Fields
     else {
         return None;
     };
-    let map = doc::Fields::of(map);
+    let map = doc::Fields::new(map);
     (doc::kind_of(&map) == Some(doc::AnnotKind::Footnote)).then_some(map)
 }
 

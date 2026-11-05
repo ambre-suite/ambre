@@ -9,6 +9,7 @@
 
 use crate::message::{DocChar, MarkKey};
 use ambre_core::Opaque;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::BTreeMap;
 

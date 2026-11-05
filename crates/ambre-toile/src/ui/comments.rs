@@ -22,8 +22,7 @@ use crate::message::{CommentAnchor, CommentPin, DisplayViewport};
 use ambre_canvas::{Palette, TextCache};
 use ambre_core::id::{Id, Thread};
 use ambre_draw::{
-    Affine, Alignment, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
-    Stroke,
+    Affine, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect, Stroke,
 };
 use kurbo::{Circle, Shape};
 
@@ -158,11 +157,10 @@ fn paint_pin<S: DrawSurface>(
     let layout = text_cache.get_or_build(
         font_cx,
         &label,
-        PIN_FONT_SIZE,
-        ambre_core::Px::<ambre_core::View>::new(1000.0),
-        Alignment::Start,
-        ambre_canvas::Weight::Regular,
-        ambre_canvas::Slant::Upright,
+        ambre_canvas::Look::body(
+            PIN_FONT_SIZE,
+            ambre_core::Px::<ambre_core::View>::new(1000.0),
+        ),
     );
     let (w, h) = (layout.width() as f64, layout.height() as f64);
     let origin = Point::new(circle.center.x - w / 2.0, circle.center.y - h / 2.0);

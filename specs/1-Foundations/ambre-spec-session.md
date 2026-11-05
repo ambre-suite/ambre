@@ -166,7 +166,8 @@ code of its own, so a client renews rather than backs off (`ambre-spec-broadcast
 | a person chooses their provider | the relay answers with an address to visit, and remembers the handshake for ten minutes |
 | the provider returns | the relay exchanges the code, upserts the account and answers the pair |
 | a person signs up with a passphrase | the client derives the keys, the relay stores the sealed material and answers the pair |
-| a request is refused for an expired token | the client renews once and replays it (`ambre-spec-sync.md`, `SYNC-062`) |
+| an access token nears the end of its announced lifetime | the client renews the pair ahead of the expiry, once (`ambre-spec-sync.md`, `SYNC-183`, `SYNC-184`) |
+| a request is refused for an expired token | the client renews once, as the fallback, and replays it (`ambre-spec-sync.md`, `SYNC-062`) |
 | the socket is refused on authentication | the client renews and reopens, with no action from the person (`SYNC-063`) |
 | a person signs out | the refresh token is revoked, and the access token dies at its own expiry |
 

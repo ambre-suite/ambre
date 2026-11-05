@@ -119,6 +119,12 @@ wrappers = ["ambre-sync", "ambre-logic"]
 # must not be able to interpret a document at all.
 [[bans.deny]]
 name = "loro"
+wrappers = ["ambre-crdt", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
+
+# The typed handles over the CRDT engine. They link Loro, so the four crates
+# that may hold a document alone depend on them.
+[[bans.deny]]
+name = "ambre-crdt"
 wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
 
 # The CSV reader and writer. A conversion runs on the user's machine, in the

@@ -49,7 +49,7 @@ one numbering over the four documents the rendering layer produces.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-012` | `POST` | A paused loop MUST hold its last frame on screen. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-011` | `ambre_canvas::frame::tests::a_paused_loop_relays_and_does_no_frame_work` -- no frame work while paused, so no present replaces the last frame | none | verified |
-| `CANVAS-058` | `FRAME` | A paused loop MUST NOT dispatch and MUST NOT render. | this spec section 2 | `ambre_canvas::frame::tests::a_paused_loop_relays_and_does_no_frame_work` -- the relay alone runs, dispatch and render both skipped | none | verified |
+| `CANVAS-058` | `FRAME` | A paused loop MUST NOT dispatch and MUST NOT render. | this spec section 2 | `ambre_canvas::frame::tests::a_paused_loop_relays_and_does_no_frame_work` -- the relay alone runs, dispatch and render both skipped; `ambre_belt::frame::tests::a_modal_stops_the_frames_and_escape_gives_them_back` -- the browser tier: behind an open modal the loop issues no WebGL draw call for a second, while the animation frames go on | none | verified |
 | `CANVAS-075` | `POST` | A hidden page MUST still run the relay on a timer, since the browser gives it no animation frame. | this spec section 2 | `ambre_canvas::frame::tests::a_hidden_page_relays_on_its_timer_and_a_shown_one_does_not` -- the timer relays while the page is hidden, and leaves a shown page to its frames | none | verified |
 
 ### 1.4 A fatal condition is signalled

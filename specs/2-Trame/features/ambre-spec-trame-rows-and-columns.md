@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-085` | `INV` | A merge MUST cover the same cells after a line is inserted, deleted or moved. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` -- it drives the insert alone, the delete and the drag reaching the same rebuild with no test reading a merge after either | none | verified |
 | `TRAME-170` | `INV` | The height, the width and the hidden mark of a line MUST follow that line when the lines move. | this spec section 3 | `ambre_trame::logic::tests::group11::a_line_keeps_its_size_and_its_hidden_mark_when_it_moves` | none | verified |
 | `TRAME-091` | `CONC` | Two users inserting at the same position MUST both get a line. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op set carries an insert and a delete on both axes | none | verified |
+| `TRAME-261` | `CONC` | Two peers writing at once in one line past the used range MUST both land on that line. | this spec section 3 | none | fails -- each peer materializes the line under an id it mints, so the merge keeps two lines. Two first writes in `A2` and `B2` leave the second value in `B3` on both peers. The documents converge, so no convergence test sees it; lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 Insert a line
 
@@ -78,9 +79,9 @@ status values are normative in `ambre-spec-template.md`.
   for. No bench measures it.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client.
-* **Verification.** 20 `verified`. What holds is the single-line gesture, the frame conditions
-  around it, and the summed block an insert widens. What is loose is the metrics that follow a line,
-  the drag that lands on its own slot and the guard past the used range.
+* **Verification.** 20 `verified`, 1 `failing`. What holds is the single-line gesture, the frame
+  conditions around it, and the summed block an insert widens. What is loose is the metrics that
+  follow a line, the drag that lands on its own slot and the guard past the used range.
 
 ---
 

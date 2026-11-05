@@ -52,7 +52,7 @@ impl ToileState {
             for value in map.values() {
                 elements = elements.incremented();
                 if let LoroValue::Map(fields) = value
-                    && value_has_type(FieldValues::of(fields), ElementKind::Frame)
+                    && value_has_type(FieldValues::new(fields), ElementKind::Frame)
                 {
                     frames = frames.incremented();
                 }

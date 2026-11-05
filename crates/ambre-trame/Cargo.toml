@@ -26,6 +26,8 @@ ambre-core = { path = "../ambre-core" }
 # like `ambre-toile`'s. The leaf carries no dependency of its own.
 ambre-commands = { path = "../ambre-commands" }
 loro      = { workspace = true }
+# The map handles typed by the schema keys.
+ambre-crdt = { path = "../ambre-crdt" }
 petgraph  = { workspace = true }
 nom       = { workspace = true }
 # CSV import/export (`trame-import-export`).

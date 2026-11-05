@@ -12,6 +12,7 @@
 //! renders as two decimal numbers joined by `@`, so neither half carries the
 //! separator (`PROSE-088`).
 
+use ambre_core::crdt::CrdtName;
 use ambre_core::crdt::FieldKey;
 use ambre_core::index::{Pos, Span};
 use ambre_core::{FontSize, LangTag, Mm, Pt, Validated};
@@ -31,7 +32,7 @@ use ambre_core::{Authored, Instant};
 // Container names and keys (`ambre-spec-prose-schema.md section 3`)
 // -----------------------------------------------------------------------------
 
-ambre_core::loro_fields!(pub(crate));
+pub(crate) use ambre_crdt::{FieldValues, Fields};
 
 /// Why a write to the document did not land.
 #[derive(Debug)]
@@ -448,7 +449,7 @@ pub(crate) fn root_map(doc: &LoroDoc, root: Root) -> LoroMap {
 /// [`meta_read`] instead.
 #[must_use]
 pub(crate) fn meta(doc: &LoroDoc) -> Fields<MetaKey> {
-    Fields::of(root_map(doc, Root::Meta))
+    Fields::new(root_map(doc, Root::Meta))
 }
 
 /// The `annots` dictionary, keyed by the annotation's id. Each entry is a map
@@ -468,7 +469,7 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
         .into_container()
         .ok()
         .and_then(|container| container.into_map().ok())
-        .map(Fields::of)
+        .map(Fields::new)
 }
 
 /// The width a column takes when the command that makes it names none
@@ -598,7 +599,7 @@ pub(crate) fn node_of(tree: &LoroTree, id: &TreeID) -> Option<Fields<NodeKey>> {
     if tree.is_node_deleted(id).unwrap_or(true) || is_hidden(tree, id) {
         return None;
     }
-    tree.get_meta(*id).ok().map(Fields::of)
+    tree.get_meta(*id).ok().map(Fields::new)
 }
 
 /// Whether the block, or a block on its parent chain, carries the hiding
@@ -620,7 +621,7 @@ pub(crate) fn is_hidden(tree: &LoroTree, id: &TreeID) -> bool {
 /// Whether the block itself carries the hiding marker.
 fn carries_hiding(tree: &LoroTree, id: &TreeID) -> bool {
     tree.get_meta(*id)
-        .is_ok_and(|node| Fields::of(node).contains(NodeKey::Hidden))
+        .is_ok_and(|node| Fields::new(node).contains(NodeKey::Hidden))
 }
 
 /// Hide a block and the subtree under it, in place of removing it
@@ -630,7 +631,7 @@ fn carries_hiding(tree: &LoroTree, id: &TreeID) -> bool {
 /// # Errors
 /// The CRDT engine's refusal.
 pub(crate) fn hide_block(doc: &LoroDoc, tree: &LoroTree, id: &TreeID) -> Result<(), WriteError> {
-    let node = Fields::of(tree.get_meta(*id)?);
+    let node = Fields::new(tree.get_meta(*id)?);
     node.insert(NodeKey::Hidden, doc.peer_id().to_string())?;
     Ok(())
 }
@@ -729,13 +730,13 @@ pub(crate) fn list_style_of(tree: &LoroTree, id: &TreeID) -> Option<ListStyle> {
 /// never mints the map it looked for (`PROSE-079`).
 #[must_use]
 pub(crate) fn attrs_read(tree: &LoroTree, id: &TreeID) -> Option<Fields<AttrKey>> {
-    map_read(&node_of(tree, id)?, NodeKey::Attrs).map(Fields::of)
+    map_read(&node_of(tree, id)?, NodeKey::Attrs).map(Fields::new)
 }
 
 /// A block's attribute map, minted when the node holds none, for the same
 /// reason as [`map_at`].
 pub(crate) fn attrs_at(node: &Fields<NodeKey>) -> Option<Fields<AttrKey>> {
-    map_at(node, NodeKey::Attrs).map(Fields::of)
+    map_at(node, NodeKey::Attrs).map(Fields::new)
 }
 
 /// The two settings a live table of contents carries.
@@ -836,7 +837,7 @@ pub(crate) fn regions(tree: &LoroTree, table: &TreeID) -> Vec<Region> {
         let Ok(anchor) = TreeID::try_from(key) else {
             return;
         };
-        let record = FieldValues::<RegionKey>::of(&record);
+        let record = FieldValues::<RegionKey>::new(&record);
         let extent = match record.get(RegionKey::Extent) {
             Some(LoroValue::String(text)) => TreeID::try_from(text.as_str()).ok(),
             _ => None,
@@ -1062,7 +1063,7 @@ pub(crate) fn write_paragraph_style(
         node.insert(NodeKey::KeepWithNext, keep.as_bool())?;
     }
     if let Some(line_height) = style.line_height {
-        let Some(map) = map_at(node, NodeKey::LineHeight).map(Fields::<LineHeightKey>::of) else {
+        let Some(map) = map_at(node, NodeKey::LineHeight).map(Fields::<LineHeightKey>::new) else {
             return Err(WriteError::Engine(loro::LoroError::NotFoundError(
                 "the line-height register refused a container".into(),
             )));
@@ -1242,7 +1243,7 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
     let fallback = DocDefaults::default();
     let Some(defaults) = meta_read(doc)
         .and_then(|meta| map_read(&meta, MetaKey::Defaults))
-        .map(Fields::<DefaultsKey>::of)
+        .map(Fields::<DefaultsKey>::new)
     else {
         return fallback;
     };
@@ -1274,7 +1275,7 @@ pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
     let fallback = PageFormat::default();
     let Some(page) = meta_read(doc)
         .and_then(|meta| map_read(&meta, MetaKey::Page))
-        .map(Fields::<PageKey>::of)
+        .map(Fields::<PageKey>::new)
     else {
         return fallback;
     };
@@ -1330,7 +1331,7 @@ pub(crate) fn write_page_format(
     }
     // The register the document already holds: minting a fresh one would drop
     // the four margins `seed` wrote beside these three keys.
-    let Some(page) = map_at(&meta(doc), MetaKey::Page).map(Fields::<PageKey>::of) else {
+    let Some(page) = map_at(&meta(doc), MetaKey::Page).map(Fields::<PageKey>::new) else {
         return false;
     };
     page.insert(PageKey::Orientation, orientation.as_str())
@@ -1362,7 +1363,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
     if !write_page_format(doc, Orientation::Portrait, A4_WIDTH, A4_HEIGHT) {
         return None;
     }
-    let page = Fields::of(map_at(&meta, MetaKey::Page)?);
+    let page = Fields::new(map_at(&meta, MetaKey::Page)?);
     for key in [
         PageKey::MarginTopMm,
         PageKey::MarginBottomMm,
@@ -1371,7 +1372,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
     ] {
         page.insert(key, f64::from(DEFAULT_MARGIN.get())).ok()?;
     }
-    let defaults = Fields::of(map_at(&meta, MetaKey::Defaults)?);
+    let defaults = Fields::new(map_at(&meta, MetaKey::Defaults)?);
     let text = DocDefaults::default();
     defaults
         .insert(DefaultsKey::FontFamily, text.font_family.label())
@@ -1417,7 +1418,7 @@ pub(crate) fn create_block(
         .create(parent)
         .map_err(|e| tracing::warn!("Prose: the tree refused a block: {e}"))
         .ok()?;
-    let node = Fields::of(tree.get_meta(id).ok()?);
+    let node = Fields::new(tree.get_meta(id).ok()?);
     node.insert(NodeKey::Type, i64::from(block_type.code()))
         .ok()?;
     if block_type.has_body() {
@@ -1544,7 +1545,7 @@ impl BandAlign {
 }
 
 fn read_band(meta: &Fields<MetaKey>, key: MetaKey) -> Band {
-    let Some(map) = map_read(meta, key).map(Fields::<BandKey>::of) else {
+    let Some(map) = map_read(meta, key).map(Fields::<BandKey>::new) else {
         return Band::default();
     };
     let block = read_string(&map, BandKey::Block).and_then(|s| TreeID::try_from(s.as_str()).ok());
@@ -1565,7 +1566,7 @@ pub fn read_bands(doc: &LoroDoc) -> Bands {
     let enabled = |key: MetaKey| {
         BandState::on_if(
             map_read(&meta, key)
-                .is_some_and(|map| read_bool(&Fields::of(map), BandKey::Enabled) == Some(true)),
+                .is_some_and(|map| read_bool(&Fields::new(map), BandKey::Enabled) == Some(true)),
         )
     };
     let tree = blocks_read(doc);
@@ -1801,7 +1802,7 @@ mod tests {
         let doc = LoroDoc::new();
         seed(&doc);
         let page = map_at(&meta(&doc), MetaKey::Page)
-            .map(Fields::<PageKey>::of)
+            .map(Fields::<PageKey>::new)
             .expect("seed writes the page register");
         page.insert(PageKey::WidthMm, 0.0)
             .expect("the register takes a double");
@@ -1819,7 +1820,7 @@ mod tests {
         let doc = LoroDoc::new();
         seed(&doc);
         let defaults = map_at(&meta(&doc), MetaKey::Defaults)
-            .map(Fields::<DefaultsKey>::of)
+            .map(Fields::<DefaultsKey>::new)
             .expect("seed writes the defaults register");
         defaults
             .insert(DefaultsKey::FontSizePt, 1.0e6)
@@ -1996,7 +1997,7 @@ mod tests {
                 Some(mode(PrintLength::<Pt>::new(12.0)))
             );
             let map = map_at(&node, NodeKey::LineHeight)
-                .map(Fields::<LineHeightKey>::of)
+                .map(Fields::<LineHeightKey>::new)
                 .expect("the register");
             for bad in [f64::NAN, f64::INFINITY, f64::MAX] {
                 map.insert(LineHeightKey::Value, bad).expect("stored");
@@ -2056,7 +2057,7 @@ mod tests {
         ));
         doc.commit();
         let page = map_at(&meta(&doc), MetaKey::Page)
-            .map(Fields::<PageKey>::of)
+            .map(Fields::<PageKey>::new)
             .expect("the page register");
         for key in [
             PageKey::MarginTopMm,

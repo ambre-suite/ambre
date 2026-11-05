@@ -31,6 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-006` | `INV` | Every offset a command carries MUST be a count of Unicode code points, the unit the CRDT indexes a body text and a cursor with. | this spec section 3; this spec section 6 | structural -- every write path reached from `ambre_prose::logic::ProseState::handle_command` calls the code-point form of the Loro text API and converts nothing | none | verified |
 | `PROSE-044` | `INV` | The page layout, the media cache and the local history MUST be derived or session state: none of them MUST enter the document. | this spec section 3 | `ambre_prose::logic::tests::the_picture_cache_and_the_history_never_enter_the_document`; `::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
 | `PROSE-004` | `CONC` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | this spec section 3 | `ambre_prose::logic::presence::tests::a_caret_resolves_to_the_same_place_on_both_peers` | none | verified |
+| `PROSE-132` | `CONC` | Two peers typing at once in two different paragraphs MUST converge on one document that keeps both texts. | this spec section 3 | `ambre_belt::prose::tests::two_peers_typing_in_two_paragraphs_converge` -- browser tier: two users in two browsers, the second one's Sync worker paused while both type, then both Markdown exports are equal and hold both edits | none | verified |
 | `PROSE-IO-042` | `IO` | A document re-imported from its own snapshot MUST hold what the document that exported it held. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held` | none | verified |
 | `PROSE-UI-001` | `INV` | The UI thread MUST hold no document data: only view state and what arrives as an event. | this spec section 3 | structural -- `ambre_prose::ui::ProseUiState` declares no document container and no block content: every field is view state or an event's payload | none | verified |
 | `PROSE-UI-010` | `INV` | The scroll position and the selection MUST stay local: neither MUST enter the document. | this spec section 3 | structural -- the viewport and the caret are fields of `ambre_prose::ui::ProseUiState`, and no variant of `ProseCommand` carries either; `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
@@ -54,6 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-048` | `POST` | The confirmed-change event of a remote change MUST carry the payload that arrived, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
 | `PROSE-126` | `POST` | A remote change that brings no operation the document lacks, its own change echoed by the relay among them, MUST answer no event. | this spec section 3 | `ambre_prose::logic::convergence_tests::an_echo_of_this_peers_own_change_answers_nothing` | none | verified |
 | `PROSE-129` | `POST` | Opening a document MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_prose::logic::tests::a_reader_that_sent_nothing_holds_no_history_of_its_own` -- the reader's version vector equals the author's after the snapshot and after a delta, and its one root is the author's | none | verified |
+| `PROSE-131` | `POST` | Text one peer types MUST reach the document of every peer that holds it open. | this spec section 3 | `ambre_belt::prose::tests::a_paragraph_one_peer_types_reaches_the_other` -- browser tier: two users in two browsers, the second one's count and Markdown export read what the first typed while it held the document open | none | verified |
 
 **Frame:** `SYNC-101`
 
@@ -117,11 +119,10 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 42 `verified`, 1 `unimplemented`. Seven rows are compiler-held:
-  the crate graph, the lint wall, the closed command enum, the one return type. Two rows bind a
-  shape no command builds yet: the image block, and the block under a table cell. Each is read
-  through the format rather than through a gesture. The fan-out is driven across the real
-  dispatcher.
+* **Verification.** 44 `verified`, 1 `unimplemented`. Seven rows are compiler-held: the crate graph,
+  the lint wall, the closed command enum, the one return type. Two rows bind a shape no command
+  builds yet: the image block, and the block under a table cell. Each is read through the format
+  rather than through a gesture. The fan-out is driven across the real dispatcher.
 
 ---
 

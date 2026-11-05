@@ -82,6 +82,7 @@ pub mod ordinal;
 pub mod payload;
 pub mod provider;
 pub mod public_key;
+pub mod rank;
 pub mod redacted;
 pub mod refused;
 /// Which documents a client holds, and which leave first
@@ -182,6 +183,7 @@ pub use payload::{
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
+pub use rank::{Rank, RankKind, RankRepr};
 pub use redacted::Redacted;
 pub use refused::{Refused, Refuses};
 pub use role::{DocumentRank, OrganizationRank, Role};
@@ -204,8 +206,8 @@ pub use space::{
 };
 pub use span::{
     Authored, ClockTick, ClockUnit, Day, Failures, FracDay, FracMs, FrameRate, Instant,
-    LamportStamp, Ms, Ns, PageLoad, Relayed, Sec, SheetDateTime, SheetDay, StoredAsI64, Tick,
-    TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
+    LamportStamp, Months, Ms, Ns, PageLoad, Relayed, Sec, SheetDateTime, SheetDay, StoredAsI64,
+    Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
 };
 pub use static_key::{Canvases, Categories, Commands, Icons, KeyKind, StaticKey};
 pub use status::{

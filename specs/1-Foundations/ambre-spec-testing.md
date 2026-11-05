@@ -78,9 +78,13 @@ mark none, since a release build can compile either. A site is a field, a parame
 return, a constant, a static or an alias whose type holds a primitive. Its key names the crate, the
 file, the module, the item, the kind and the type, and no line number.
 
-* **rustc holds the files the walk reads** (`ARCH-033`). The gate runs `cargo check` on the host
-  with every package, target and feature, and on each wasm line of `lint-wasm`. It reads the
-  dep-info of each unit of the workspace. A file that a shipped build reads fails, whatever its
+* **rustc holds the files the walk reads** (`ARCH-033`). The gate reads the compile lines of the
+  `lint` and `lint-wasm` recipes from the `justfile`, and runs each as written. cargo then deems
+  fresh each unit the lint built, so the gate compiles nothing the lint compiled. It reads the
+  dep-info of each unit of the workspace, where clippy lists its configuration as data.
+
+  A line the gate cannot run as `just` runs it fails closed. That is a prefix, a shell expansion,
+  or an argument that changes what the gate reads. A file that a shipped build reads fails, whatever its
   name, unless the walk reads it or a walked file names it as data. Data is the string literal of
   an `include_str!` or an `include_bytes!`, or the directory a `sqlx::migrate!` names. A bare
   `migrate!` counts only where a `use` imports `sqlx::migrate`.
@@ -126,10 +130,16 @@ file, the module, the item, the kind and the type, and no line number.
   manifest declares one. Any other manifest with a top-level `workspace` key in its TOML fails. The
   listing follows no link to a directory.
 
-  A failed compile, a missing dep-info file, a unit with no test flag and a dep-info line the
-  parser cannot read whole fail closed. `just primitives-files` runs this half alone. A build none
-  of these compiles makes, under another target, `cfg`, feature set or profile, is a reviewer's
-  (`ARCH-050`).
+  Each feature a workspace manifest declares is on in a shipped build of these compiles, as cargo
+  reports it. Otherwise a line of `specs/1-Foundations/ambre-features.tsv` excludes it with its
+  reason. A feature no compile turns on fails. So does a line that names no declared feature, or one a
+  compile turns on.
+
+  A failed compile and a lint the line denies fail closed. So do a missing dep-info file, a unit
+  with no test flag or no feature list, and a dep-info line the parser cannot read whole.
+  `just primitives-files` runs this half alone. `just primitives` runs the strict unwrap report on
+  the same scan. A build none of these compiles makes, under another target, `cfg`, feature set or
+  profile, is a reviewer's (`ARCH-050`).
 
 * **The primitive allowlist is `specs/1-Foundations/ambre-primitives.tsv`.** One line per site:
   the key, a category and a note. The categories are a closed set: `free-text`, `foreign-api`,
@@ -228,7 +238,7 @@ file, the module, the item, the kind and the type, and no line number.
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
-  `serde_json` reads the messages of `cargo check`, which name the dep-info file of each unit.
+  `serde_json` reads the messages of each compile, which name the dep-info file of each unit.
 
   `toml` parses each manifest and each cargo config as cargo reads them. The lockfile already
   holds it under `leptos`. The tree walk uses `std` rather than a crate.
@@ -290,12 +300,19 @@ and syn does not.
 | **host** | `just test-native` | the default tier. Pure logic, zero external dependency. The Logic thread, the Sync pipeline, every formula and CRDT handler, and the render feed | fast |
 | **db** | `just test-db` | `ambre-server` integration behind the Cargo feature `db`. `just services-up` (postgres, redis and a prepared garage), then `#[sqlx::test]` per test | medium |
 | **wasm** | `just test-wasm` | every `cfg(target_arch = "wasm32")` surface: DOM and Leptos, GPU. `cargo test --target wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, in headless Chrome | slow: `-Z build-std` rebuilds `std`, then Chrome starts |
-| **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`). A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
+| **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`), and by headless Firefox through geckodriver under the Cargo feature `firefox` (`just test-browser-firefox`). A canvas surface is read through what the page exposes: the live region, the status bar, the formula bar's name box, an export. A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
 
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
 pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser
 behaviour no driver can produce, such as a full quota, is a page script in the test. The row's
-`Mechanism` note says so.
+`Mechanism` note says so. A test that pauses a worker runs on Chrome alone, and reads `ignored` under
+Firefox, which WebDriver gives no route to pause one.
+
+**A composition and a frame loop are driven, not assumed.** A composition goes through the DevTools
+input methods, `Input.imeSetComposition` then `Input.insertText`, which raise the composition events
+through Chrome's own pipeline. A page script installed before boot counts the WebGL draw calls,
+and that count reads the frame loop back. A paused loop still takes its animation frames, so a count
+of those reads nothing.
 
 **The db tier is a Cargo feature, never a bare `#[ignore]`.** The engraved pattern is
 `#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]`. A bare
@@ -310,8 +327,8 @@ The five tests that are the whole
 Eight `ambre-toile` PDF tests sat behind `--features pdf`. Both features are in `just test-db` and
 `just test-native` now, which is where local and CI parity is defined.
 
-`just test-wasm` covers `ambre-trame`, `ambre-chrome`, `ambre-toile`, `ambre-logic`, `ambre-prose`
-and `ambre-app`.
+`just test-wasm` covers `ambre-trame`, `ambre-chrome`, `ambre-toile`, `ambre-logic`, `ambre-prose`,
+`ambre-murmure` and `ambre-app`.
 
 ---
 
@@ -408,15 +425,15 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-canvas` | yes | GPU not unit-tested, by design | `RecordingSurface` | `TextCache` hit and LRU eviction, `GlyphAtlas` eviction, the dirty flag skipping the batch build, font fallback on an absent codepoint, and the compiled icon blob covering every SVG of `assets/icons/` with a non-zero vertex count per icon |
 | `ambre-commands` | yes | -- | -- | registry lookup, keybinding resolution, derived `CommandState` |
 | `ambre-trame` | yes (`proptest`) | yes (`tests/chrome_ui.rs`) | `MockSyncHandle`, `TrameState::with_peer`, `RecordingSurface`, a `TrameView` on a detached pipe and a test clock | **CRDT convergence** over generated interleavings. **Formula properties**: totality, exactness, order independence over generated trees. **Cache against rebuild** on the `SheetIndex`. A **geometry round trip**: drawn rect against hit test, under zoom and variable metrics. A `RecordingSurface` assertion for anything painted. **Per feature**: a view feature lands with a positive case, a no-op guard, a convergence case and a proof that it changes no data; a mutation feature lands with the permutation assertion, a header-pin case, a no-delta case and a references-follow case |
-| `ambre-chrome` | yes (`key_from_dom`, `place_menu`, `vet`) | yes (`tests/chrome_ui.rs`) | section 5.A | the reactive store over real signals, the toast ARIA live region, the shell canvas cell, and the menu flip on viewport overflow |
+| `ambre-chrome` | yes (`key_from_dom`, `place_menu`, `vet`) | yes (`tests/chrome_ui.rs`) | section 5.A | the reactive store over real signals, the toast ARIA live region, the shell canvas cell and its toolbar and sidebar slots, the menu flip on viewport overflow, the modal, the floating menu driven by keys and presses, and the palette driven by keys |
 | `ambre-app` | -- | yes (inline) | -- | `route` round trip and malformed fallback, the base64 codec, the FPS sliding window. A re-render is read after `leptos::task::tick`, and a width by mounting in a frame of that width, since a width query reads the frame's viewport |
 | `ambre-server` | yes | -- (db tier) | `#[sqlx::test]`, a local Redis | ACL per role **and per membership**, Ed25519 accept and refuse, the Redis Lua clock cases (valid, mismatch, first update, two concurrent clients), the rank clamp on both the granted and the target role, the size cap on both durable paths, and a postcard round trip per message variant -- the document plane only: the four channel variants and the share notice have none |
 | `ambre-toile` | yes | yes (`tests/chrome_ui.rs`, `tests/chrome_effects.rs`) | `ToileState::with_peer`, `RecordingSurface` | CRDT convergence, and the spatial index against a full rebuild |
 | `ambre-draw`, `ambre-pdf` | tooling | -- | they **are** the seam | `RecordingSurface` is exercised by every consumer |
-| `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel is mounted in Chrome |
-| `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user |
+| `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`, `tests/chrome_ui.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel, the suggestion popover, the format bar, the slash menu and the ruler are mounted in Chrome |
+| `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user. Trame and Prose are typed into end to end, and each converges across two browsers whose edits cross; Toile carries a board between two |
 | `ambre-primitives` | yes | -- | `Tree`, a source tree held in memory | the primitive gate itself: every kind of site read, a module resolved where rustc finds it, test code and macro output never read, a file rustc reads and the walk misses failing the gate, and a file no compile reads, the allowlist failing on a missing site, a stale line and a word outside the set, and a secret read or wiped outside the code that may |
-| `ambre-murmure` | -- | -- | -- | none yet: a stub. The belt it lands with: CRDT convergence of a channel across its documents, a forged delta refused by the authorship check, a false final snapshot caught by the second client, and eviction held to its byte budget |
+| `ambre-murmure` | yes (`proptest`, `criterion`) | yes (`tests/chrome_relay.rs`) | a `ChannelState` peer forked from another, a `MurmureRelay` fed by hand | CRDT convergence of a channel across its `meta`, segment and thread documents over generated interleavings, a forged delta refused by the authorship check, and a false final snapshot caught by the second client. Eviction is the shared residency's belt, and the decoded pictures hold their own cap. The browser tier drives two users through the relay |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
 verify a rule are named in that rule's `Mechanism` cell and nowhere else. A list of intended
@@ -438,13 +455,16 @@ run the same command.
 | `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, and the primitive gate |
 | `test-native` | the host tier, plus `ambre-server` on the native target |
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
-| `test-wasm` | `just lint-wasm`, the denied lints on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
-| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` |
+| `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
+| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
+| `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, on the default branch alone, non-blocking. Each shard uploads its report |
+| `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |
 
 The wasm `-A warnings` rustflag is scoped to `[target.wasm32-unknown-unknown]`, so host clippy keeps
-every warning. Every native job installs `libfontconfig1-dev`: the font stack links system fontconfig.
+every warning. `lint-wasm` sets its own `RUSTFLAGS`, which replace that rustflag. Every native job
+installs `libfontconfig1-dev`: the font stack links system fontconfig.
 
 ---
 
@@ -460,10 +480,10 @@ whether it blocks the current MVP.
 | `#![forbid(unsafe_code)]` | **wired** | `unsafe_code = "forbid"` in the workspace lint table, so all 18 crates refuse an `unsafe` block |
 | `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc`, `missing_panics_doc` and the panic lints (`ARCH-028`); no `pedantic`. Clippy reads the wasm-only code in the `test-wasm` job |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
-| `proptest` | wired | `ambre-crypto`, the Trame formula engine, 2-peer convergence on Trame and Toile, and the Toile index against rebuild |
+| `proptest` | wired | `ambre-crypto`, the Trame formula engine, convergence on Trame, Toile and Murmure, and the Toile index against rebuild |
 | `cargo-fuzz` | wired | seven targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser, the Markdown reader, the sealed open path, and the Trame and Toile file readers, one minute each in the CI `fuzz` job. The sealed target opens under a fixed key, so a key-holding peer's plaintext reaches the decompression |
-| `cargo-mutants` | absent | the whole suite, never adversarially checked |
-| `cargo-llvm-cov` | wired, non-blocking | an `lcov` baseline only. No diff-mode gate on added lines |
+| `cargo-mutants` | wired, host tier | `ambre-sync`, `ambre-crypto` and the Murmure channel module, measured 2026-11-05: 2862 mutants, and 183 survivors left after triage. The wasm and browser tiers run per mutation nowhere |
+| `cargo-llvm-cov` | wired, non-blocking, host tier alone | an `lcov` baseline only. No diff-mode gate on added lines. The wasm tier has none: `-C instrument-coverage` needs `-Zno-profiler-runtime` on wasm32, a lever the primitive gate refuses (`ARCH-033`) |
 | `criterion` | benches in `ambre-crypto`, `ambre-toile` and `ambre-murmure` | a desktop figure only. **The mobile measurement the targets are written against has never been taken** |
 | `callgrind` | wired, three budgets | the CI `instructions` job holds the Toile body commit, the content walk of a busy Toile board and the Prose text layout of a paragraph under their ceilings, and the bound the Toile diff cap allows. Every other budget row has no ceiling yet |
 | `insta` | absent | candidates: `RecordingSurface` op sequences, wire encodings, and the `KrillaSurface` primitives |
@@ -478,8 +498,10 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 
 | Debt | Why it is not built |
 | :--- | :--- |
-| Two browser cases of the canvas and DOM boundary | the browser tier boots the whole application and runs commands from the palette to the board. Two cases are left: one IME composition cycle (`CHROME-007`), which a driver cannot compose, and rAF suspension and resumption behind a modal, which no page reads back |
-| `ambre-chrome` DOM interactions | the reactive store, the toast and the shell cell are covered. `Dialog` (modal, Escape, backdrop click, the canvas suspend and resume) and `ContextMenu` (keyboard navigation, typeahead, outside close) need richer driving. `CommandPalette`, `Sidebar` and `Toolbar` are unbuilt, and get a belt when they land |
+| One IME composition in a Toile text element | an `Escape` sent just after a commit closes the editor without the committed text, so a browser test of it fails one run in a few. A Prose page and a Trame cell compose in the browser tier |
+| A Prose comment between two browsers | no gesture opens a thread, and a thread read from a file stays in a document no peer holds: the browser tier posts a reply in one browser alone |
+| Murmure in the browser tier | no interface creates a space or a channel, so no user gesture reaches one, and the belt drives no Murmure path |
+| The wasm tier on Firefox | Trame, the chrome, Toile, Prose and Logic pass under geckodriver. Eleven `ambre-app` tests build synthetic clipboard, pointer and layout events that Firefox handles differently, so the tier runs in Chrome alone |
 | The GPU "how to draw" half | section 5.B: the upload and the shaders need a real device. The CPU work beside them is extracted and host-tested |
 | `ambre-sync` benchmarks, and further pipeline tiers | they land when the pipeline exits placeholder |
 

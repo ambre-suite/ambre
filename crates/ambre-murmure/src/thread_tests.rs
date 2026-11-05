@@ -3,6 +3,7 @@
 //! root another member may write.
 
 use ambre_bus::Char;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::Span;
 use std::collections::HashMap;
 
@@ -1007,4 +1008,40 @@ fn a_seek_ends_on_what_it_cannot_follow() {
         empty.probe_ready(thread),
         Err(MurmureError::NotHeld(thread))
     );
+}
+
+// --- AUTHOR-026 ---
+
+/// The identity the Sync worker issues for a thread still arriving is kept,
+/// and the thread takes it once admitted. Until then this member may not
+/// write it.
+#[test]
+fn an_identity_issued_before_a_thread_arrives_is_adopted_on_admission() {
+    let alice_user = Id::<User>::mint();
+    let mut alice = channel_with(&["root"], alice_user);
+    let root = message_at(&alice, 0).id;
+    let (thread, first, _) = threaded(&mut alice, root);
+    let mut bob = peer_of(&alice);
+    assert_eq!(bob.threads_to_open(), [thread]);
+    let peer = next_peer();
+    assert_eq!(
+        bob.adopt_session(
+            thread,
+            peer,
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
+        ),
+        Ok(None),
+        "kept for the thread still arriving"
+    );
+    assert!(!bob.identified(thread), "not held yet");
+    bob.apply_signed(
+        thread,
+        Seq::<Relay>::new(1),
+        &first,
+        signer(&alice, thread, alice_user),
+    )
+    .expect("waits");
+    bob.older_ready(thread).expect("admitted");
+    assert!(bob.identified(thread));
+    assert_eq!(bob.peer(thread), Some(peer));
 }

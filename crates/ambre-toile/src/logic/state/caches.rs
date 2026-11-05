@@ -42,7 +42,7 @@ impl ToileState {
         if let LoroValue::Map(m) = self.walk_elements() {
             for (key, v) in m.iter() {
                 if let LoroValue::Map(fields) = v {
-                    let fields = FieldValues::<ElementKey>::of(fields);
+                    let fields = FieldValues::<ElementKey>::new(fields);
                     // Groups and frames name their members; the same pass
                     // indexes them, so the parent lookup costs no walk of its own.
                     if let Some(LoroValue::List(kids)) = fields.get(ElementKey::Children) {

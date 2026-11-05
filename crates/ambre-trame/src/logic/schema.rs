@@ -42,7 +42,7 @@ pub(crate) fn default_sheet() -> Id<Sheet> {
     Id::<Sheet>::from_text("s0".to_owned())
 }
 
-ambre_core::loro_fields!(pub(crate));
+pub(crate) use ambre_crdt::{FieldValues, Fields};
 
 ambre_core::crdt_names! {
     /// The root containers a workbook opens by one fixed name.
@@ -145,6 +145,8 @@ impl SheetContainer {
     #[cfg(test)]
     #[must_use]
     pub(crate) fn parse(name: &str) -> Option<(SheetRoot, &str)> {
+        use ambre_core::crdt::CrdtName;
+
         SheetRoot::ALL
             .iter()
             .filter_map(|root| {

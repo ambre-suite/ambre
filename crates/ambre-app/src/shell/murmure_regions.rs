@@ -210,7 +210,7 @@ impl Acme {
             name: ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
             topic: None,
             category,
-            position: ambre_murmure::message::CatalogPosition::new(position),
+            position: ambre_bus::Rank::new(position),
         };
         UiEvent::Space {
             space_id: self.space,
@@ -219,7 +219,7 @@ impl Acme {
                 categories: vec![CategoryView {
                     id: team,
                     name: ambre_core::Validated::<ambre_core::Name>::parse("Team").unwrap(),
-                    position: ambre_murmure::message::CatalogPosition::FIRST,
+                    position: ambre_bus::Rank::FIRST,
                 }],
                 channels: vec![
                     entry(self.random, "random", None, 1),
@@ -460,7 +460,7 @@ async fn the_layout_reads_the_three_widths() {
 async fn back_shows_the_channel_at_the_root_then_the_list() {
     let pane = thread();
     let MurmurePane::Thread { channel, root } = pane else {
-        unreachable!()
+        panic!("a thread pane")
     };
     let frame = Frame::new(360, pane).await;
     frame.click(".murmure-back").await;
@@ -1144,7 +1144,7 @@ async fn the_mark_of_the_channel_differs_in_shape_from_the_others() {
         ..
     } = &members
     else {
-        unreachable!("alice_and_bob lists members")
+        panic!("alice_and_bob lists members")
     };
     let carol = Id::<User>::mint();
     let mut rows = rows.clone();

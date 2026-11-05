@@ -24,11 +24,11 @@ use crate::drafts::DraftShelf;
 use crate::emoji;
 use crate::markers::{Cover, MarkBar};
 use crate::mention_list::{MentionEntry, MentionList};
+use crate::message::LogicCommand;
 use crate::message::{
     ChannelMatches, DirectMessageEvent, MemberView, MessageAt, MurmureCommand, MurmureEvent,
     Presence, SpaceCommand, SpaceEvent, TextStyle,
 };
-use crate::message::{LogicCommand, UiEvent};
 use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
@@ -53,8 +53,6 @@ pub use crate::notices::{
 /// that failed (`MURMURE-580`, `MURMURE-581`). The launcher names no Murmure
 /// variant. A no-op for every other event.
 pub fn notify_event<S>(toasts: &Toasts, ev: &ambre_bus::UiEvent<S, crate::message::Murmure>) {
-    // The relayed event carries the launcher's sum, which Murmure never reads.
-    use ambre_bus::UiEvent;
     if let Some(text) = crate::notices::warning_of(ev) {
         toasts.warning(text);
     }

@@ -76,7 +76,7 @@ is what a full queue means.
 | `BUS-031` | `POST` | A fixed-width byte value -- a key, a nonce, a signature, a digest -- MUST cross the worker hop as its bytes in order, with no length prefix. | this spec section 2; `BUS-003` | `ambre_core::fixed_bytes::tests::a_binary_format_writes_the_bytes_with_no_length_prefix` -- a 64-byte value between two bytes of a frame encodes as those 64 bytes alone, reads back, and a frame one byte short is refused; type-level -- every fixed-width value is a `FixedBytes<R>`, whose one hand-written serde writes that form | none | verified |
 | `BUS-025` | `POST` | An event from the Sync worker MUST reach the Logic thread in arrival order. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order`; `::a_backlog_never_lets_a_new_value_overtake_a_held_one` | none | verified |
 | `BUS-026` | `POST` | An event from the Sync worker MUST NOT be dropped on a full queue. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order` | none | verified |
-| `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path into the application module of `ambre-bus`, or an app command or event, in `ambre-sync` above its tests, and the worker depends on no crate that declares an application message (`ARCH-069`); cargo-deny -- `deny.toml` grants `loro` to the application crates, and the CI `deny` job fails a worker that takes it; `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- the bytes come back identical | none | verified |
+| `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path into the application module of `ambre-bus`, or an app command or event, in `ambre-sync` above its tests, and the worker depends on no crate that declares an application message (`ARCH-070`); cargo-deny -- `deny.toml` grants `loro` to the application crates, and the CI `deny` job fails a worker that takes it; `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- the bytes come back identical | none | verified |
 
 * **Budget.** two rows of `ambre-spec-budgets.md section 1`: the queue send and receive at
   < 1 us, and the Logic to Sync `postMessage` hop at < 1 ms. Neither is measured.
@@ -156,7 +156,7 @@ application.
 
 A view holds a `Port` and an `Inbox` typed by its own vocabulary. The launcher builds them over the
 shared queues: `Embed` wraps a view's command into the sum, and unwraps its events. So the Sync
-worker builds against no application's vocabulary (`ARCH-069`).
+worker builds against no application's vocabulary (`ARCH-070`).
 
 **Murmure's content rides a channel plane.** Its commands and events are addressed to a channel or
 a space, never to a document (`BUS-027`), so they keep variants of their own. The envelopes take

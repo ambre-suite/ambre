@@ -155,3 +155,16 @@ fn a_decimal_count_keeps_its_wire_form_and_its_refusal() {
     );
     assert_eq!(format!("{:?}", Bounded::<Decimals>::MAX), "Decimals(15)");
 }
+
+/// A conditional-format rank keeps the `Debug` text the hand-written type
+/// printed. A log reads that form alone, since the UI to Logic hop moves the
+/// command and serializes nothing.
+#[test]
+fn a_cond_format_rank_keeps_its_debug_text() {
+    use ambre_bus::Rank;
+    use ambre_trame::message::CondFormatPriority;
+    let rank = Rank::<CondFormatPriority>::new(-2);
+    assert_eq!(rank.get(), -2_i64);
+    assert!(rank < Rank::new(0));
+    assert_eq!(format!("{rank:?}"), "CondFormatPriority(-2)");
+}

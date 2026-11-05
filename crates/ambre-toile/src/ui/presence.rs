@@ -31,8 +31,8 @@ use ambre_canvas::TextCache;
 use ambre_core::id::{Element, Id, User};
 use ambre_core::{DisplayName, Validated};
 use ambre_draw::{
-    Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, Point,
-    PositionedLayoutItem, Rect, Stroke, peer_color,
+    Affine, BezPath, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
+    Stroke, peer_color,
 };
 
 use super::viewport::ViewportTransform;
@@ -180,29 +180,39 @@ impl PeerCursors {
         peers.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
         for (user_id, state) in peers {
             let color = peer_color(user_id);
-            paint_peer(
-                surface, user_id, state, &color, vp, &w2s, font_cx, text_cache, now,
-            );
+            let peer = Peer {
+                user_id,
+                state,
+                color: &color,
+            };
+            paint_peer(surface, peer, vp, &w2s, font_cx, text_cache, now);
         }
     }
 }
 
+/// One peer as its overlay paints it: who it is, what it shares, and the
+/// colour it paints in.
+struct Peer<'p> {
+    user_id: &'p Id<User>,
+    state: &'p PeerState,
+    color: &'p Color,
+}
+
 /// Paint one peer's overlay: selection ghosts, live stroke, laser trail, cursor.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the peer, the camera and the shaping context are three inputs, and paint reads each one apart"
-)]
 fn paint_peer<S: DrawSurface>(
     surface: &mut S,
-    user_id: &Id<User>,
-    state: &PeerState,
-    color: &Color,
+    peer: Peer<'_>,
     vp: &DisplayViewport,
     w2s: &Affine,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     now: Instant<PageLoad>,
 ) {
+    let Peer {
+        user_id,
+        state,
+        color,
+    } = peer;
     let p = &state.presence;
 
     // 1. Selection ghosts: outline each of the peer's selected elements that is
@@ -324,11 +334,13 @@ fn paint_cursor<S: DrawSurface>(
     let layout = text_cache.get_or_build(
         font_cx,
         label.as_str(),
-        LABEL_FONT_SIZE,
-        ambre_core::Px::<ambre_core::View>::new(200.0),
-        Alignment::Start,
-        ambre_canvas::Weight::Bold,
-        ambre_canvas::Slant::Upright,
+        ambre_canvas::Look {
+            weight: ambre_canvas::Weight::Bold,
+            ..ambre_canvas::Look::body(
+                LABEL_FONT_SIZE,
+                ambre_core::Px::<ambre_core::View>::new(200.0),
+            )
+        },
     );
     let pad = 4.0;
     let chip_x = at.x + s * 0.8;

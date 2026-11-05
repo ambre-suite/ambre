@@ -36,6 +36,8 @@ thiserror = { workspace = true }
 # `LoroMap` for the registers, `UndoManager` for the local history
 # (`features/ambre-spec-prose-engine.md section 3`).
 loro = { workspace = true }
+# The map handles typed by the schema keys.
+ambre-crdt = { path = "../ambre-crdt" }
 
 # The presence sample, and nothing else: a CRDT delta is already bytes
 # (`features/ambre-spec-prose-engine.md section 3.D`).

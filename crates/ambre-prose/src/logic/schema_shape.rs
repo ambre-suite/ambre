@@ -21,6 +21,7 @@
 
 use crate::message::DocChar;
 use crate::message::MarkKey;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::BTreeSet;
 

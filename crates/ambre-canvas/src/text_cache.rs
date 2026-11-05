@@ -252,16 +252,35 @@ impl TextLength for Px<Doc> {
 
 /// The look of a whole text: everything a layout is shaped with but the
 /// text and its spans. Its two lengths share one [`TextLength`], unwrapped at
-/// the parley call and the cache key only.
+/// the parley call and the cache key only. Each field is one axis of the
+/// cache key, so two looks that differ on one axis cache apart.
 #[derive(Clone, Copy)]
-struct Look<'a, L> {
-    font_size: L,
-    max_width: L,
-    align: Alignment,
-    weight: Weight,
-    slant: Slant,
-    family: Option<&'a ambre_core::FontFamily>,
-    word_break: WordBreak,
+pub struct Look<'a, L> {
+    pub font_size: L,
+    pub max_width: L,
+    pub align: Alignment,
+    pub weight: Weight,
+    pub slant: Slant,
+    /// The font family, `None` for the grid default.
+    pub family: Option<&'a ambre_core::FontFamily>,
+    pub word_break: WordBreak,
+}
+
+impl<L> Look<'_, L> {
+    /// A body text at `font_size` within `max_width`: start-aligned,
+    /// regular, upright, in the default family, broken on whole words. A
+    /// caller sets any other axis with the struct update syntax.
+    pub fn body(font_size: L, max_width: L) -> Self {
+        Self {
+            font_size,
+            max_width,
+            align: Alignment::Start,
+            weight: Weight::Regular,
+            slant: Slant::Upright,
+            family: None,
+            word_break: WordBreak::Whole,
+        }
+    }
 }
 
 /// A cached layout plus the monotonic tick of its last access, used to drive
@@ -384,68 +403,21 @@ impl TextCache {
         self.layouts.retain(|_, c| c.last_used > threshold);
     }
 
-    /// Return a shaped `Layout` for `text`, building it on first access.
+    /// Return a shaped `Layout` for `text` in `look`, building it on first
+    /// access.
     ///
-    /// `weight` and `slant` select the matching real face of the family, not
-    /// faux bold or oblique. They are part of the cache key, so each style combination
-    /// of the same string is stored separately.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "each argument is one axis of the cached look, and Trame and Toile pass each apart"
-    )]
+    /// The weight and the slant of `look` select the matching real face of
+    /// the family, not faux bold or oblique. The family resolves to a
+    /// bundled face through [`registered_family_name`], and a family no face
+    /// is named for falls back to the default one. Every axis of `look` is
+    /// part of the cache key, so each look of the same string is stored apart.
     pub fn get_or_build<L: TextLength>(
         &mut self,
         font_cx: &mut FontContext,
         text: &str,
-        font_size: L,
-        max_width: L,
-        align: Alignment,
-        weight: Weight,
-        slant: Slant,
+        look: Look<'_, L>,
     ) -> &Layout<Brush> {
-        self.get_or_build_font(
-            font_cx,
-            text,
-            font_size,
-            max_width,
-            align,
-            weight,
-            slant,
-            None,
-            WordBreak::Whole,
-        )
-    }
-
-    /// Like [`get_or_build`](Self::get_or_build) but selecting a font `family`
-    /// (`None` = the grid default). The family resolves to a bundled face
-    /// through [`registered_family_name`], and a family no face is named for
-    /// falls back to the default one.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "each argument is one axis of the cached look, and Trame and Toile pass each apart"
-    )]
-    pub fn get_or_build_font<L: TextLength>(
-        &mut self,
-        font_cx: &mut FontContext,
-        text: &str,
-        font_size: L,
-        max_width: L,
-        align: Alignment,
-        weight: Weight,
-        slant: Slant,
-        family: Option<&ambre_core::FontFamily>,
-        word_break: WordBreak,
-    ) -> &Layout<Brush> {
-        let plain = Look {
-            font_size,
-            max_width,
-            align,
-            weight,
-            slant,
-            family,
-            word_break,
-        };
-        self.get_or_build_look(font_cx, text, plain, &[])
+        self.get_or_build_look(font_cx, text, look, &[])
     }
 
     /// A body text at `font_size` within `max_width`, start-aligned, with
@@ -459,16 +431,7 @@ impl TextCache {
         max_width: L,
         spans: &[SpanShape],
     ) -> &Layout<Brush> {
-        let look = Look {
-            font_size,
-            max_width,
-            align: Alignment::Start,
-            weight: Weight::Regular,
-            slant: Slant::Upright,
-            family: None,
-            word_break: WordBreak::Whole,
-        };
-        self.get_or_build_look(font_cx, text, look, spans)
+        self.get_or_build_look(font_cx, text, Look::body(font_size, max_width), spans)
     }
 
     fn get_or_build_look<L: TextLength>(
@@ -587,7 +550,7 @@ impl TextCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{Slant, SpanShape, TextCache, Weight, registered_family_name};
+    use super::{SpanShape, TextCache, registered_family_name};
     use ambre_bus::Byte;
     use ambre_core::index::Span;
     use ambre_core::{Px, View};
@@ -613,11 +576,7 @@ mod tests {
         let layout = cache.get_or_build(
             cx,
             text,
-            Px::<View>::new(14.0),
-            Px::<View>::new(400.0),
-            Alignment::Start,
-            Weight::Regular,
-            Slant::Upright,
+            crate::Look::body(Px::<View>::new(14.0), Px::<View>::new(400.0)),
         );
         let glyphs = layout
             .lines()
@@ -835,11 +794,10 @@ mod tests {
             cache.get_or_build(
                 &mut cx,
                 &text,
-                Px::<View>::new(14.0),
-                Px::<View>::new(120.0),
-                align,
-                Weight::Regular,
-                Slant::Upright,
+                crate::Look {
+                    align,
+                    ..crate::Look::body(Px::<View>::new(14.0), Px::<View>::new(120.0))
+                },
             );
         }
         assert_eq!(
@@ -866,20 +824,15 @@ mod tests {
         let start = last_x(cache.get_or_build(
             &mut cx,
             &text,
-            Px::<View>::new(14.0),
-            Px::<View>::new(120.0),
-            Alignment::Start,
-            Weight::Regular,
-            Slant::Upright,
+            crate::Look::body(Px::<View>::new(14.0), Px::<View>::new(120.0)),
         ));
         let justified = last_x(cache.get_or_build(
             &mut cx,
             &text,
-            Px::<View>::new(14.0),
-            Px::<View>::new(120.0),
-            Alignment::Justify,
-            Weight::Regular,
-            Slant::Upright,
+            crate::Look {
+                align: Alignment::Justify,
+                ..crate::Look::body(Px::<View>::new(14.0), Px::<View>::new(120.0))
+            },
         ));
         assert!(justified > start, "the justified line was not spread");
     }

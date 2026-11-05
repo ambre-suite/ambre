@@ -106,7 +106,7 @@ impl ToileState {
         let elements = self.doc.get_map(Root::Elements.as_str());
         let Ok(em) = elements
             .insert_container(id.as_str(), LoroMap::new())
-            .map(Fields::<ElementKey>::of)
+            .map(Fields::<ElementKey>::new)
         else {
             return Err(refused());
         };
@@ -625,7 +625,7 @@ impl ToileState {
                 if let LoroValue::Map(m) = self.walk_elements() {
                     for (key, val) in m.iter() {
                         if matches!(val, LoroValue::Map(f)
-                            if value_has_type(FieldValues::of(f), ElementKind::Group))
+                            if value_has_type(FieldValues::new(f), ElementKind::Group))
                         {
                             let id = Id::<Element>::from_text(key.clone());
                             if self.children_of(&id).is_empty() {
@@ -665,7 +665,7 @@ impl ToileState {
             if let LoroValue::Map(m) = self.walk_elements() {
                 for (key, val) in m.iter() {
                     if let LoroValue::Map(fields) = val
-                        && value_has_type(FieldValues::of(fields), ElementKind::Group)
+                        && value_has_type(FieldValues::new(fields), ElementKind::Group)
                     {
                         let id = Id::<Element>::from_text(key.clone());
                         let kids = self.children_of(&id);

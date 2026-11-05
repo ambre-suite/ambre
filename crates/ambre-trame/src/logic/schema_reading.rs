@@ -25,6 +25,7 @@
 //! here, so a command added to it lands with a raised version, like a new key.
 
 use ambre_core::Rgb;
+use ambre_core::crdt::CrdtName;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use std::collections::BTreeSet;

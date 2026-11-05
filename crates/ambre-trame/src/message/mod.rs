@@ -1,7 +1,7 @@
 //! Trame (spreadsheet) data plane: the whole typed content vocabulary of a Trame
 //! document, both directions. It lives in the application's crate, beside the
 //! view and the engine that use it, and the Sync worker never builds against it
-//! (`BUS-032`, `ARCH-069`).
+//! (`BUS-032`, `ARCH-070`).
 //!
 //! - `command` -- the `TrameCommand` family (UI -> Logic), carried by
 //!   `AppCommand::Trame` of the Logic runtime.

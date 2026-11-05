@@ -489,7 +489,7 @@ fn a_space_with(
                 name: ambre_core::Validated::<ambre_core::Name>::parse("general").unwrap(),
                 topic: None,
                 category: None,
-                position: ambre_murmure::message::CatalogPosition::FIRST,
+                position: ambre_bus::Rank::FIRST,
             }],
         },
     });

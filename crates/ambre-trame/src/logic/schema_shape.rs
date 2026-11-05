@@ -31,6 +31,7 @@
 //! is the reading belt's, in `schema_reading.rs`, over this same scenario.
 
 use ambre_core::Rgb;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::Pos;
 use std::collections::BTreeSet;
 

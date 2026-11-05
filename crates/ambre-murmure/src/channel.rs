@@ -1078,7 +1078,7 @@ impl ChannelState {
         let segment = self.active_id();
         let (doc, session) = self.active.session()?;
         let id = Id::<Message>::mint();
-        let message = crate::schema::Fields::of(
+        let message = crate::schema::Fields::new(
             crate::schema::root_list(doc, Root::Messages).push_container(LoroMap::new())?,
         );
         message.insert(MessageKey::Id, id.to_string())?;
@@ -1939,7 +1939,7 @@ pub(crate) fn push_segment_entry(
     from: Instant<Authored>,
     state: SegmentState,
 ) -> Result<(), MurmureError> {
-    let entry = crate::schema::Fields::of(
+    let entry = crate::schema::Fields::new(
         crate::schema::root_list(meta, Root::Segments).push_container(LoroMap::new())?,
     );
     entry.insert(SegmentKey::Document, id.to_string())?;
@@ -2099,7 +2099,7 @@ fn write_message(
     copy: Option<(Id<Document>, Id<Message>)>,
 ) -> Result<(Id<Message>, Vec<Mention>, Vec<StyleMark>), MurmureError> {
     let id = copy.map_or_else(Id::<Message>::mint, |(_, reply)| threading::copy_id(reply));
-    let message = crate::schema::Fields::of(
+    let message = crate::schema::Fields::new(
         crate::schema::root_list(doc, Root::Messages).push_container(LoroMap::new())?,
     );
     message.insert(MessageKey::Id, id.to_string())?;

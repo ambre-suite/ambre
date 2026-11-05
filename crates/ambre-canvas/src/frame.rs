@@ -266,11 +266,10 @@ fn text_height(
     let layout = cache.get_or_build(
         font_cx,
         text,
-        size,
-        width,
-        Alignment::Center,
-        crate::Weight::Regular,
-        crate::Slant::Upright,
+        crate::Look {
+            align: Alignment::Center,
+            ..crate::Look::body(size, width)
+        },
     );
     f64::from(layout.height())
 }
@@ -295,11 +294,10 @@ fn draw_centered(
     let layout = cache.get_or_build(
         font_cx,
         text,
-        size,
-        column,
-        Alignment::Center,
-        crate::Weight::Regular,
-        crate::Slant::Upright,
+        crate::Look {
+            align: Alignment::Center,
+            ..crate::Look::body(size, column)
+        },
     );
     let brush = Brush::Solid(color);
     for line in layout.lines() {

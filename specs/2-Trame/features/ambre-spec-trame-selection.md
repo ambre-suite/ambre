@@ -36,6 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-030` | `POST` | Extending a selection MUST move its active corner alone and leave its fixed corner where the user put it. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::move_with_extend_keeps_anchor`; `::selection_extend_disjoint_and_membership` | none | verified |
 | `TRAME-UI-132` | `FRAME` | A move that does not extend MUST NOT keep a rectangle the modifier committed. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::selection_extend_disjoint_and_membership` -- after two rectangles, a plain `move_to` leaves a single cell; `::single_cell_selection_tracks_active` -- the arrow path | none | verified |
+| `TRAME-UI-182` | `POST` | With no session open, an arrow or `Tab` MUST move the active cell one cell its way. | this spec section 4 | `ambre_belt::trame_grid::tests::the_arrows_and_tab_move_the_active_cell` -- in the browser, the live region names each cell in turn | none | verified |
 
 ### 1.3 Take a whole column or row from its header
 
@@ -50,11 +51,11 @@ status values are normative in `ambre-spec-template.md`.
   ephemeral, which `ZK-005` seals with the `DocumentKey`. The relay is left `document_id`,
   `pub_key` and `counter` alone. The local selection stops at the Logic thread, which holds it in
   memory to resolve the parameterless intents (`TRAME-UI-032`).
-* **Verification.** 10 `verified`, 1 `unimplemented`. What holds is the intent path, plus three
+* **Verification.** 11 `verified`, 1 `unimplemented`. What holds is the intent path, plus three
   rules declared elsewhere and cited here. A merged block selects whole, a hidden row is stepped
   over, and hit-testing inverts the drawn geometry. A disjoint selection and a whole-axis band both
-  reach the Logic thread whole, and no selection leaves the peer. What is loose is the
-  `CellAnchor` of section 3 and the re-derive half of `TRAME-UI-019`.
+  reach the Logic thread whole, and no selection leaves the peer. What is loose is the `CellAnchor`
+  of section 3 and the re-derive half of `TRAME-UI-019`.
 
 ---
 

@@ -2,7 +2,7 @@
 //! Prose document, both directions (`features/ambre-spec-prose-engine.md`).
 //! It lives in the application's crate, beside the engine and the view that
 //! use it, and the Sync worker never builds against it (`BUS-032`,
-//! `ARCH-069`). The Logic runtime carries it as `AppCommand::Prose` and
+//! `ARCH-070`). The Logic runtime carries it as `AppCommand::Prose` and
 //! `AppEvent::Prose`. The stateful engine (`ProseState`) and its
 //! `ProseOutcome` wrapper stay outside this module.
 //!

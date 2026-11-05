@@ -701,3 +701,51 @@ fn a_change_refused_by_the_lock_is_replayed() {
         Ok(ChangeTarget::Create(_))
     ));
 }
+
+/// A failed link drops only amendments this client created and has not yet
+/// identified: amendments already in use stay (`MURMURE-073`).
+#[test]
+fn a_failed_link_keeps_amendments_already_in_use() {
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    let (amendments, _, _) = amended(&mut alice, segment);
+    assert!(!alice.amendments_failed(segment, amendments));
+    assert_eq!(alice.amendments_id(segment), Some(amendments));
+}
+
+// --- AUTHOR-026 ---
+
+/// The identity the Sync worker issues for amendments still arriving is
+/// kept, and the amendments take it once admitted. Until then this member
+/// may not write them.
+#[test]
+fn an_identity_issued_before_the_amendments_arrive_is_adopted_on_admission() {
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let mut bob = peer_of(&alice);
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
+        .expect("meta");
+    assert_eq!(bob.amendments_to_open(), [amendments]);
+    let peer = next_peer();
+    assert_eq!(
+        bob.adopt_session(
+            amendments,
+            peer,
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
+        ),
+        Ok(None),
+        "kept for the amendments still arriving"
+    );
+    assert!(!bob.identified(amendments), "not held yet");
+    bob.apply_signed(
+        amendments,
+        Seq::<Relay>::new(1),
+        &first,
+        signer(&alice, amendments, author),
+    )
+    .expect("the header waits");
+    bob.older_ready(amendments).expect("admitted");
+    assert!(bob.identified(amendments));
+    assert_eq!(bob.peer(amendments), Some(peer));
+}

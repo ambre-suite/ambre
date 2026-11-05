@@ -418,7 +418,8 @@ FRAME_CREATE = re.compile(r'create_element\(\s*"iframe"\s*\)')
 LOGIC_MANIFEST = "crates/ambre-logic/Cargo.toml"
 RENDER_OR_TOOLKIT = ("ambre-canvas", "ambre-chrome", "ambre-app", "wgpu", "vello", "leptos")
 SYNC_UNREACHABLE = RENDER_OR_TOOLKIT + (
-    "ambre-draw", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure", "ambre-logic",
+    "ambre-draw", "ambre-crdt", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure",
+    "ambre-logic",
 )
 PATH_DEP = re.compile(r'^([\w-]+)\s*=\s*\{[^}]*\bpath\s*=\s*"\.\./([\w-]+)"', re.MULTILINE)
 
@@ -588,7 +589,7 @@ APP_MESSAGES = (
 )
 # The command and event enums ambre-bus may declare: the four envelopes and the
 # service family they carry. An application's own lives in its crate
-# (`BUS-032`), so the Sync worker builds against none (`ARCH-069`).
+# (`BUS-032`), so the Sync worker builds against none (`ARCH-070`).
 BUS_ENVELOPES = {"LogicCommand", "UiEvent", "SyncCommand", "LogicEvent", "RestCommand", "RestEvent"}
 BUS_MESSAGE_ENUM = re.compile(r"\bpub\s+enum\s+(\w*(?:Command|Event))\b")
 # A document handle of the CRDT engine, by path or by name. A message carries
@@ -1846,7 +1847,7 @@ def typed_fields(line: str) -> list[tuple[str, str]]:
 
 
 def check_bus_vocabulary(errors: list[str]) -> int:
-    """`BUS-032`, `ARCH-069`: ambre-bus declares no application's commands or
+    """`BUS-032`, `ARCH-070`: ambre-bus declares no application's commands or
     events.
 
     Above its tests, every command or event enum of the bus is an envelope or

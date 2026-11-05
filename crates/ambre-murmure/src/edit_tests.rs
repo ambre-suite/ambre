@@ -186,6 +186,28 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
     );
 }
 
+/// An edit that takes a mention out and keeps its text leaves no mark on
+/// that text, here and at a peer.
+#[test]
+fn an_edit_that_drops_a_mention_leaves_its_text_unmarked() {
+    let carol = Id::<User>::mint();
+    let (mut alice, mut bob, message) = pair(&MessageDraft {
+        text: "@carol lunch?".to_owned(),
+        styles: Vec::new(),
+        mentions: vec![Mention {
+            target: MentionTarget::User(carol),
+            range: Span::<Char>::from_usize_range(0..6),
+        }],
+    });
+    let sent = alice.edit(message, &plain("@carol lunch?"));
+    bob.receive(&alice, &sent, 2);
+    for member in [&alice, &bob] {
+        let shown = member.only_message();
+        assert_eq!(shown.text, "@carol lunch?");
+        assert!(shown.mentions.is_empty(), "the mark went with the edit");
+    }
+}
+
 /// A mention past the draft is refused before any write.
 #[test]
 fn an_edit_with_a_mention_past_its_body_is_refused() {

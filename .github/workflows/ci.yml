@@ -65,14 +65,15 @@ jobs:
       # The primitive gate: every bare primitive outside a test is typed or named
       # by the allowlist, and no line names a site that is gone (`ARCH-033`).
       # It first holds the files it reads to the files rustc compiles: it runs
-      # each compile and reads its dep-info (`ARCH-033`, `ARCH-045`), and prints
-      # that half's count before the allowlist half.
+      # the compile lines of `lint` and `lint-wasm` as written, so the host
+      # line finds fresh each unit `just lint` built above. It reads their
+      # dep-info (`ARCH-033`, `ARCH-045`), and prints that half's count before
+      # the allowlist half.
+      # Then, on the same scan, the strict unwrap report: no newtype unwrapped
+      # early inside a body unless `ambre-unwrap.tsv` names its key with a
+      # count and a reason (`ai/ambre-rust-style.md`, the newtype rule). The
+      # step prints both verdicts on its last line, and fails on either.
       - run: just primitives
-      # The unwrap report: no newtype unwrapped early inside a body unless
-      # `ambre-unwrap.tsv` names its key with a count and a reason. In strict
-      # mode, an unlisted key, a line over its count and a stale line all fail
-      # (`ai/ambre-rust-style.md`, the newtype rule).
-      - run: just unwrap
       # What a spec quotes: no function body in a spec (template §0).
       - run: just spec-code
       # How a spec is built: prose share, production markers in a feature
@@ -281,10 +282,15 @@ jobs:
   # ---------------------------------------------------------------------------
   # test-browser -- the browser-driven belt (`crates/ambre-belt`): the Trunk
   # build of the whole application, served in front of a relay and driven by
-  # headless Chrome through chromedriver. The relay needs the db-tier services.
+  # headless Chrome through chromedriver, then by headless Firefox through
+  # geckodriver. The relay needs the db-tier services.
   # ---------------------------------------------------------------------------
   test-browser:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chrome, firefox]
     services:
       postgres:
         image: postgres:16-alpine   # keep in sync with docker-compose.yml
@@ -315,15 +321,30 @@ jobs:
       - uses: actions/checkout@v5
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      # Headless Firefox makes its WebGL2 context through an X display and the
+      # Mesa EGL driver: `xvfb-run` gives it the display.
+      - name: System deps (Firefox)
+        if: matrix.engine == 'firefox'
+        run: sudo apt-get install -y xvfb libegl1 libegl-mesa0 libgl1-mesa-dri
       - name: Install just and trunk
         uses: taiki-e/install-action@v2
         with:
           tool: just,trunk
       - name: Install Chrome and chromedriver
+        if: matrix.engine == 'chrome'
         id: chrome
         uses: browser-actions/setup-chrome@v2
         with:
           install-chromedriver: true
+      - name: Install Firefox
+        if: matrix.engine == 'firefox'
+        id: firefox
+        uses: browser-actions/setup-firefox@v1
+      - name: Install geckodriver
+        if: matrix.engine == 'firefox'
+        uses: browser-actions/setup-geckodriver@latest
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: test-browser
@@ -335,9 +356,14 @@ jobs:
       - name: Start garage
         run: just garage-up
       - run: just test-browser
+        if: matrix.engine == 'chrome'
         env:
           CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
           BELT_CHROME: ${{ steps.chrome.outputs.chrome-path }}
+      - run: just test-browser-firefox
+        if: matrix.engine == 'firefox'
+        env:
+          BELT_FIREFOX: ${{ steps.firefox.outputs.firefox-path }}
 
   # ---------------------------------------------------------------------------
   # size -- the release build Trunk ships, and the brotli of each wasm
@@ -436,3 +462,75 @@ jobs:
           name: lcov
           path: lcov.info
           if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # mutants -- mutation testing over the scope of `.cargo/mutants.toml`, on the
+  # host tier (`ambre-spec-testing.md section 2`). Non-blocking, and on the
+  # default branch alone. The whole scope took 1 h 56 min on four cores with
+  # three jobs (measured 2026-11-05), so a branch push leaves it to
+  # `mutants-diff`. Eight shards, each built in place in the restored cache.
+  # Each uploads its report.
+  # ---------------------------------------------------------------------------
+  mutants:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just and cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-mutants
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 0 }}
+      - run: just mutants ${{ matrix.shard }}/8 --in-place
+      - name: Upload the mutants report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-${{ matrix.shard }}
+          path: mutants.out/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # mutants-diff -- the mutants of the lines a pull request changes in the
+  # scope of `.cargo/mutants.toml`. Blocking: a surviving mutant is a changed
+  # line no test would fail on. A pull request outside the scope tests none.
+  # A fix of 179 lines in ambre-sync took 4 min, build included (measured
+  # 2026-11-05 on four cores).
+  # ---------------------------------------------------------------------------
+  mutants-diff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The whole history: the diff reads the merge base with the base branch.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just and cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-mutants
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants
+          save-if: false
+      - run: just mutants-diff origin/${{ github.base_ref }} --in-place
+      - name: Upload the mutants report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-diff
+          path: mutants.out/
+          if-no-files-found: ignore

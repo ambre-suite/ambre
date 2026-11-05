@@ -203,7 +203,7 @@ pub(super) fn replay_of(
 /// Only the author's own reactions were refused with it, so only theirs are
 /// written.
 fn rewrite(doc: &LoroDoc, channel: Id<Channel>, view: &MessageView) -> Result<(), MurmureError> {
-    let message = crate::schema::Fields::of(
+    let message = crate::schema::Fields::new(
         crate::schema::root_list(doc, Root::Messages).push_container(LoroMap::new())?,
     );
     message.insert(MessageKey::Id, view.id.to_string())?;

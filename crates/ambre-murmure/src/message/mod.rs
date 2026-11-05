@@ -2,7 +2,7 @@
 //! engine answers with, and the value types both carry
 //! (`features/ambre-spec-murmure-engine.md section 3`). It lives in the
 //! application's crate, and the Sync worker never builds against it
-//! (`BUS-032`, `ARCH-069`). The channel types of the service plane stay in
+//! (`BUS-032`, `ARCH-070`). The channel types of the service plane stay in
 //! `ambre-bus`, where the worker reads them.
 //!
 //! Pure data: no Loro type crosses the bus (`SYNC-011`).
@@ -13,7 +13,7 @@
 //! address is a document (`BUS-027`).
 
 use ambre_core::index::{IdxVec, Len, Pos, Span};
-use ambre_core::{Byte, Char, Count, CountKind, Validated};
+use ambre_core::{Byte, Char, Count, CountKind, Rank, RankKind, Validated};
 
 use ambre_core::id::{Category, Channel, Document, Id, Message, Segment, User};
 
@@ -656,39 +656,13 @@ pub enum Unreadable {
     Damaged,
 }
 
-/// The rank of a category or of a channel in the catalogue of a space:
-/// lower first, ties by identifier. Any `u32` is a rank, so it is built
-/// infallibly; the type keeps it apart from counts and indexes.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct CatalogPosition(u32);
+/// The order of the categories and channels in the catalogue of a space:
+/// lower first, ties by identifier. Any `u32` is a rank.
+pub enum CatalogPosition {}
 
-impl CatalogPosition {
-    /// The first rank.
-    pub const FIRST: Self = Self(0);
-
-    /// The rank `rank`.
-    #[must_use]
-    pub const fn new(rank: u32) -> Self {
-        Self(rank)
-    }
-
-    /// The rank a document stored as `stored`, saturating at the last rank.
-    #[must_use]
-    pub fn from_stored(stored: u64) -> Self {
-        Self(u32::try_from(stored).unwrap_or(u32::MAX))
-    }
-
-    /// The rank as a document stores it.
-    #[must_use]
-    pub fn to_stored(self) -> i64 {
-        i64::from(self.0)
-    }
-}
-
-impl std::fmt::Display for CatalogPosition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
+impl RankKind for CatalogPosition {
+    type Repr = u32;
+    const NAME: &'static str = "CatalogPosition";
 }
 
 /// A category of a space, as the view draws it.
@@ -697,7 +671,7 @@ pub struct CategoryView {
     pub id: Id<Category>,
     pub name: ambre_core::Validated<ambre_core::Name>,
     /// The rank among the categories: lower first, ties by identifier.
-    pub position: CatalogPosition,
+    pub position: Rank<CatalogPosition>,
 }
 
 /// One public channel of the catalogue, as the view draws it.
@@ -712,7 +686,7 @@ pub struct CatalogueEntry {
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
-    pub position: CatalogPosition,
+    pub position: Rank<CatalogPosition>,
 }
 
 /// A public channel the view asks a space to create and list.
@@ -725,7 +699,7 @@ pub struct PublicChannelDraft {
     /// Absent for a channel outside every category.
     pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
-    pub position: CatalogPosition,
+    pub position: Rank<CatalogPosition>,
 }
 
 /// Whether a member of a space is online, as the member list marks it.
@@ -790,7 +764,7 @@ pub enum SpaceCommand {
         category_id: Id<Category>,
         name: ambre_core::Validated<ambre_core::Name>,
         /// The rank among the categories: lower first, ties by identifier.
-        position: CatalogPosition,
+        position: Rank<CatalogPosition>,
     },
     /// Create a public channel, then list it in the catalogue with its key
     /// sealed under the space key (`MURMURE-037`).

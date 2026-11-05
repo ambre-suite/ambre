@@ -1,0 +1,17 @@
+[package]
+name = "ambre-crdt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The map handles of a Loro document, typed by the keys of one schema. Shared by the four application crates (ambre-spec-architecture.md)."
+
+[dependencies]
+# The key traits and the name sets live in `ambre-core`, which links no CRDT:
+# the relay links it, and `deny.toml` keeps Loro out of the relay and the Sync
+# worker. This crate is the one shared place that joins the two, so no
+# application writes its own copy of the handle.
+ambre-core = { path = "../ambre-core" }
+loro = { workspace = true }
+
+[lints]
+workspace = true

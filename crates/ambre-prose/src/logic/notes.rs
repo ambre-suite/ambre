@@ -133,7 +133,7 @@ impl ProseState {
         let annots = doc::annots(&self.doc);
         let entry = annots
             .insert_container(&id.to_hyphenated(), LoroMap::new())
-            .map(doc::Fields::<doc::AnnotKey>::of)?;
+            .map(doc::Fields::<doc::AnnotKey>::new)?;
         entry.insert(doc::AnnotKey::Kind, doc::AnnotKind::Footnote.as_str())?;
         entry
             .insert(doc::AnnotKey::NoteBlock, block.to_string())
@@ -458,7 +458,7 @@ mod tests {
         let shaped_alike = Id::<Footnote>::mint();
         let entry = annots
             .insert_container(&shaped_alike.to_hyphenated(), LoroMap::new())
-            .map(doc::Fields::<doc::AnnotKey>::of)
+            .map(doc::Fields::<doc::AnnotKey>::new)
             .expect("an entry");
         entry
             .insert(doc::AnnotKey::NoteBlock, "no kind")
@@ -466,7 +466,7 @@ mod tests {
         let other = Id::<Footnote>::mint();
         let entry = annots
             .insert_container(&other.to_hyphenated(), LoroMap::new())
-            .map(doc::Fields::<doc::AnnotKey>::of)
+            .map(doc::Fields::<doc::AnnotKey>::new)
             .expect("an entry");
         entry
             .insert(doc::AnnotKey::Kind, "comment")

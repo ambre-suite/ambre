@@ -12,12 +12,14 @@ description = "The primitive gate: every site whose type holds a primitive is ty
 [dependencies]
 proc-macro2 = { workspace = true }
 quote       = { workspace = true }
-# The messages of `cargo check --message-format=json`, which name the
-# dep-info file of each unit rustc compiled (`ARCH-033`).
+# The messages of each lint line run with `--message-format=json`, which name
+# the dep-info file of each unit rustc compiled and the features cargo turned
+# on for it (`ARCH-033`).
 serde_json  = { workspace = true }
 syn         = { workspace = true }
 # Each manifest and each cargo config, parsed as cargo reads them: the
-# workspace a manifest declares, and the flags a build takes (`ARCH-033`).
+# workspace and the features a manifest declares, and the flags a build takes
+# (`ARCH-033`).
 toml        = { workspace = true }
 
 [lints]

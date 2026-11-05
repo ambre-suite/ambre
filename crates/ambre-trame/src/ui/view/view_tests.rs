@@ -74,18 +74,22 @@ impl Rig {
         let theme = ThemeControl::default();
         let view = TrameView::new(
             Id::<Document>::mint(),
-            ambre_bus::Port::direct(tx),
-            ambre_bus::Inbox::direct(rx),
-            ambre_core::Px::<ambre_core::Surface>::new(1200.0),
-            ambre_core::Px::<ambre_core::Surface>::new(800.0),
-            TextInput::detached(),
-            ambre_canvas::Embedding::Standalone,
-            AnchorPublisher::new(),
-            PerfPublisher::new(),
-            BusyPublisher::new(),
-            FilterOpenPublisher::new(),
-            theme.clone(),
-            Box::new(clock.clone()),
+            ambre_core::Size::new(
+                ambre_core::Px::<ambre_core::Surface>::new(1200.0),
+                ambre_core::Px::<ambre_core::Surface>::new(800.0),
+            ),
+            TrameWiring {
+                to_logic: ambre_bus::Port::direct(tx),
+                from_logic: ambre_bus::Inbox::direct(rx),
+                text_input: TextInput::detached(),
+                embedding: ambre_canvas::Embedding::Standalone,
+                anchor: AnchorPublisher::new(),
+                perf_pub: PerfPublisher::new(),
+                busy_pub: BusyPublisher::new(),
+                filter_open: FilterOpenPublisher::new(),
+                theme_ctl: theme.clone(),
+                clock: Box::new(clock.clone()),
+            },
         );
         Self {
             view,
@@ -182,6 +186,44 @@ fn a_typed_value_reaches_the_logic_thread_through_the_view() {
         "sent {sent:?}"
     );
     assert!(rig.view.editor.is_none());
+}
+
+/// `TRAME-UI-183`: a text typed after `Tab`, before the frame that commits,
+/// opens the next cell's session. It never joins the buffer the `Tab` commits.
+/// A fast typist, or a driven browser, types `21`, `Tab`, `=A1*2` in one frame.
+#[test]
+fn a_text_typed_before_the_commit_frame_reaches_the_next_cell() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.sent();
+    rig.type_text("21");
+    rig.key(Key::Tab);
+    rig.type_text("=A1*2");
+    rig.key(Key::Enter);
+    rig.frame();
+    rig.frame();
+    let commits: Vec<(i64, i64, String)> = {
+        let sent = rig.sent();
+        let mut opened = std::collections::HashMap::new();
+        sent.iter()
+            .filter_map(|c| match c {
+                TrameCommand::BeginCellEdit { session, row, col } => {
+                    opened.insert(*session, (row.get() as i64, col.get() as i64));
+                    None
+                }
+                TrameCommand::CommitCellEdit { session, text } => {
+                    let (r, c) = opened[session];
+                    Some((r, c, text.as_str().to_owned()))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(
+        commits,
+        vec![(0, 0, "21".to_owned()), (0, 1, "=A1*2".to_owned())]
+    );
+    assert_eq!(rig.active(), (1, 1));
 }
 
 /// The caret blinks on the clock the view was handed, not on the browser's.

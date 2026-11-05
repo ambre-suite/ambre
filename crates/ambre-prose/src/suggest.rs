@@ -8,6 +8,7 @@
 //! (`PROSE-FEAT-258`). Nothing in this module writes.
 
 use crate::message::DocChar;
+use ambre_core::crdt::CrdtName;
 use ambre_core::id::{self, Id, User};
 use ambre_core::index::{Pos, Span};
 use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
@@ -50,7 +51,7 @@ pub(crate) fn entry(
     else {
         return None;
     };
-    let map = doc::Fields::of(map);
+    let map = doc::Fields::new(map);
     (doc::kind_of(&map) == Some(doc::AnnotKind::Suggestion)).then_some(map)
 }
 

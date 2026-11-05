@@ -456,19 +456,19 @@ impl Sidebar {
 /// every listed channel while the catalogue does not list it yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Placed {
-    At(CatalogPosition),
+    At(ambre_bus::Rank<CatalogPosition>),
     Unlisted,
 }
 
 /// The order of a public channel: where it stands in the catalogue, ties
 /// by the bytes of its identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Rank {
+struct ChannelOrder {
     placed: Placed,
     channel: Id<Channel>,
 }
 
-impl Ord for Rank {
+impl Ord for ChannelOrder {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.placed
             .cmp(&other.placed)
@@ -476,16 +476,16 @@ impl Ord for Rank {
     }
 }
 
-impl PartialOrd for Rank {
+impl PartialOrd for ChannelOrder {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 /// The rank of the public channel `channel`, listed by `entry` or not yet.
-fn rank(entry: Option<&CatalogueEntry>, channel: Id<Channel>) -> Rank {
+fn rank(entry: Option<&CatalogueEntry>, channel: Id<Channel>) -> ChannelOrder {
     let placed = entry.map_or(Placed::Unlisted, |e| Placed::At(e.position));
-    Rank { placed, channel }
+    ChannelOrder { placed, channel }
 }
 
 fn push(
@@ -543,7 +543,7 @@ mod tests {
             name: ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap(),
             topic: None,
             category,
-            position: CatalogPosition::new(position),
+            position: ambre_bus::Rank::new(position),
         }
     }
 
@@ -635,7 +635,7 @@ mod tests {
             vec![CategoryView {
                 id: team,
                 name: ambre_core::Validated::<ambre_core::Name>::parse("Team").unwrap(),
-                position: crate::message::CatalogPosition::new(0),
+                position: ambre_bus::Rank::new(0),
             }],
             vec![
                 listed(leads, "leads", Some(team), 2),

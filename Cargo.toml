@@ -8,6 +8,7 @@ members = [
     "crates/ambre-crypto",
     "crates/ambre-protocol",
     "crates/ambre-bus",
+    "crates/ambre-crdt",
     "crates/ambre-draw",
     "crates/ambre-pdf",
     "crates/ambre-logic",
@@ -34,6 +35,7 @@ default-members = [
     "crates/ambre-crypto",
     "crates/ambre-protocol",
     "crates/ambre-bus",
+    "crates/ambre-crdt",
     "crates/ambre-draw",
     "crates/ambre-pdf",
     "crates/ambre-logic",
@@ -306,8 +308,8 @@ license = "AGPL-3.0-only"
 # inherits this table (`ARCH-032`), so none can open an unchecked block.
 unsafe_code = "forbid"
 # A kept silence whose reason is gone fails the build (`ARCH-068`). `deny` and
-# not the default `warn`: the wasm lint lines run under `-A warnings`, which
-# would hide a `warn` there.
+# not the default `warn`: the value that reads as the truth is the one written
+# here, as the comment above the table states.
 unfulfilled_lint_expectations = "deny"
 
 [workspace.lints.clippy]

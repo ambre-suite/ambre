@@ -21,30 +21,35 @@ default:
 #
 # Every non-default feature is on, so the code behind one is linted too: the
 # fixture machinery, the PDF export and the relay's database half. A panic lint
-# that never sees a file holds nothing there (`ARCH-028`).
+# that never sees a file holds nothing there (`ARCH-028`). `just primitives`
+# refuses a feature a manifest declares that no lint line turns on, unless
+# `specs/1-Foundations/ambre-features.tsv` excludes it with its reason
+# (`ARCH-033`).
 
 # Lint (native): fmt + clippy with warnings denied.
 lint:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens -- -D warnings
+    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz,ambre-belt/browser -- -D warnings
+    cargo clippy -p ambre-belt --all-targets --features ambre-belt/firefox -- -D warnings
 
 # Lint (wasm): the code only the browser compiles -- the application chrome, the
-# canvas host, the workers -- which host clippy never reads. The flags are those
-# of `test-wasm`, so the two share one build. `-Awarnings` silences what is only a
-# warning, so this holds the denied lints alone: the panic lints (`ARCH-028`)
-# and the documentation lints. The Prose and Murmure unit tests are host-only,
-# so their wasm test files are linted alone.
+# canvas host, the workers -- which host clippy never reads. `RUSTFLAGS` drops
+# the threading flags of `.cargo/config.toml`, as `test-wasm` does, and with
+# them the `-A warnings` there. `-D warnings` makes every warning fatal, so a
+# warning on wasm-only code fails here as one on the host fails `lint`. The
+# Prose and Murmure unit tests are host-only, so their wasm test files are
+# linted alone.
 lint-wasm:
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --lib
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
-    # `test-wasm` builds the Logic, app and chrome test targets with these
-    # flags, and no other wasm line compiles them, so a broken wasm test build
-    # fails here.
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo check --target wasm32-unknown-unknown -p ambre-logic --tests
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo check --target wasm32-unknown-unknown -p ambre-app --tests
-    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo check --target wasm32-unknown-unknown -p ambre-chrome --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
+    # `test-wasm` builds the Logic, app and chrome test targets, and no other
+    # wasm line compiles them, so these three lines lint them. A broken wasm
+    # test build, or a warning in one, fails here.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over
@@ -190,6 +195,16 @@ test-browser:
     cargo build -p ambre-server
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt --features browser -- --test-threads=1
 
+# The browser tier on Firefox: the same belt, driven by headless Firefox
+# through geckodriver (`GECKODRIVER`, `BELT_FIREFOX`). A test that pauses a
+# worker through the DevTools Protocol is ignored there. Headless Firefox on
+# Linux makes its WebGL2 context through an X display, so without `DISPLAY`
+# the run takes a virtual one from `xvfb-run`.
+test-browser-firefox:
+    trunk build
+    cargo build -p ambre-server
+    if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1
+
 # `cargo test` runs each wasm test module through `wasm-bindgen-test-runner`,
 # named as the target's runner; the pinned nightly + rust-src
 # (rust-toolchain.toml) supply `-Z build-std`. The runner must be the version of
@@ -232,8 +247,8 @@ test-wasm:
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-trame
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-chrome
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-toile
-    # The Prose unit tests are host-only (proptest, shaped fixtures): the chrome test alone.
-    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
+    # The Prose unit tests are host-only (proptest, shaped fixtures): the chrome tests alone.
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     # The Murmure unit tests are host-only too: the chrome relay test alone.
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-logic
@@ -245,6 +260,26 @@ test-wasm:
 # Coverage (native tier): lcov baseline, non-blocking in CI.
 cov:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+# Mutation testing on the host tier (`ambre-spec-testing.md` section 2). A wasm
+# or browser test costs a std rebuild or a Chrome start per mutant, so neither
+# tier runs. `.cargo/mutants.toml` holds the scope and each exclusion with its
+# reason. `shard` splits the run as `k/n`, `k` from 0: the CI `mutants` job runs
+# each shard on its own runner. A surviving mutant exits non-zero, and its diff
+# lands under `mutants.out/`. `flags` go to cargo-mutants as written: CI passes
+# `--in-place`, which builds in the restored `target/` rather than in a copy.
+
+# mutation testing: the mutants of the configured scope, one shard of them.
+mutants shard="0/1" *flags:
+    cargo mutants --shard {{shard}} --no-shuffle {{flags}}
+
+# The mutants of the lines this branch changes against `base` alone. The CI
+# `mutants-diff` job runs it on a pull request and blocks on a survivor.
+
+# mutation testing: the mutants of the lines changed since `base`.
+mutants-diff base="origin/main" *flags:
+    git diff {{base}}...HEAD > mutants.diff
+    cargo mutants --in-diff mutants.diff {{flags}}
 
 # A spec states what and why; the source states how (`ambre-spec-template.md §0`).
 # Shapes are the contract and stay -- `struct`, `enum`, trait and public
@@ -297,15 +332,19 @@ index-write:
 # that names no site fails too (`ARCH-034`). It prints the lines per category.
 #
 # The gate finds the files with a syn walk, and rustc is the source of truth
-# for them. So it runs `cargo check` itself, the host line with every target
-# and every feature and the wasm lines of `lint-wasm`, and reads the dep-info
-# of each unit. A file a shipped build reads fails, whatever its name, unless
-# the walk reads it or a string literal of a walked file names it as data. A
-# `.rs` file under the root that no compile reads fails too. A test holds its
-# wasm lines to those of `lint-wasm`. This half runs first, and CI runs this
-# recipe alone, since it holds both halves.
+# for them. So it reads the compile lines of `lint` and `lint-wasm` from this
+# file and runs each as written, with its flags and its clippy arguments, and
+# reads the dep-info of each unit. cargo fingerprints both, so after `just
+# lint` and `just lint-wasm` every unit is fresh and the gate compiles nothing.
+# A file a shipped build reads fails, whatever its name, unless the walk reads
+# it or a string literal of a walked file names it as data. A `.rs` file under
+# the root that no compile reads fails too. This half runs first.
+#
+# `--unwrap-strict` runs the strict unwrap report on the same scan, so one
+# walk of the sources serves both, and prints both verdicts whatever the first
+# says. CI runs this recipe alone, since it holds all three.
 primitives:
-    cargo run -q -p ambre-primitives -- check
+    cargo run -q -p ambre-primitives -- check --unwrap-strict
 
 # The dep-info half of the gate alone, as `fixtures-check` is the drift half of
 # the fixtures. The allowlist half is red while the workspace is typed, so a
@@ -319,7 +358,8 @@ primitives-files:
 # `specs/1-Foundations/ambre-unwrap.tsv` names its key with a count and a
 # reason.
 # In strict mode, an unlisted key, a line over its count and a stale line all
-# fail. The report walks the syntax and compiles nothing. CI runs this recipe.
+# fail. The report walks the syntax and compiles nothing. CI runs it through
+# `primitives`, on the scan of the gate; this recipe runs it alone.
 unwrap:
     cargo run -q -p ambre-primitives -- unwrap --strict
 

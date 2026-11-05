@@ -23,7 +23,7 @@
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
-use ambre_bus::{Inbox, LogicCommand, Outbox, PasteSource, Port, SendOutcome, UiEvent};
+use ambre_bus::{Inbox, Outbox, PasteSource, Port, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
     BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
@@ -121,23 +121,41 @@ fn view_size(size: Size<Px<CanvasCss>>) -> (Px<View>, Px<View>) {
     )
 }
 
+/// The wiring of a page view: its channels to the Logic thread, its text
+/// pipe, its publishers and its chrome signals. The launcher builds the parts
+/// and fills one per view.
+pub struct ProseWiring {
+    /// The queue to the Logic thread.
+    pub to_logic: Port<ProseCommand>,
+    /// The queue from the Logic thread.
+    pub from_logic: Inbox<ProseEvent>,
+    /// The shared text pipe.
+    pub text_input: TextInput,
+    /// The active theme.
+    pub theme_ctl: ThemeControl,
+    /// The status bar slot the view fills with its figures.
+    pub figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
+    /// The annotation signals the view shares with the shell.
+    pub annotations: ProseSignals,
+    /// The level a full outbox raises.
+    pub busy_pub: BusyPublisher,
+    /// What the page must tell the user and cannot show on the page.
+    pub notices: NoticePublisher,
+}
+
 impl ProseView {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the host wires each channel and signal of the page apart, and the view keeps each"
-    )]
-    pub fn new(
-        document_id: Id<Document>,
-        to_logic: Port<ProseCommand>,
-        from_logic: Inbox<ProseEvent>,
-        size: Size<Px<CanvasCss>>,
-        text_input: TextInput,
-        theme_ctl: ThemeControl,
-        figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
-        annotations: ProseSignals,
-        busy_pub: BusyPublisher,
-        notices: NoticePublisher,
-    ) -> Self {
+    /// A view of `document_id` in a canvas box of `size`, wired by `wiring`.
+    pub fn new(document_id: Id<Document>, size: Size<Px<CanvasCss>>, wiring: ProseWiring) -> Self {
+        let ProseWiring {
+            to_logic,
+            from_logic,
+            text_input,
+            theme_ctl,
+            figures,
+            annotations,
+            busy_pub,
+            notices,
+        } = wiring;
         // A page is never embedded, so it always owns the pipe it is handed.
         text_input.name_content(ContentKind::Page);
         let theme = theme_ctl.get();
@@ -781,9 +799,10 @@ fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::LogicCommand;
     use ambre_core::Count;
     use ambre_core::index::Len;
-    use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
+    use ambre_core::{Px, Size};
     use ambre_prose::message::{Graphemes, Page, Paragraphs, Words};
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -817,15 +836,17 @@ mod tests {
         let pipe = TextInput::create(&document, &cell);
         let mut view = ProseView::new(
             Id::<Document>::mint(),
-            Port::direct(to_logic),
-            Inbox::direct(from_logic),
             Size::new(Px::new(800), Px::new(600)),
-            pipe.clone(),
-            ThemeControl::new(Theme::Dark),
-            RwSignal::new(None),
-            ProseSignals::new(),
-            BusyPublisher::new(),
-            NoticePublisher::new(),
+            ProseWiring {
+                to_logic: Port::direct(to_logic),
+                from_logic: Inbox::direct(from_logic),
+                text_input: pipe.clone(),
+                theme_ctl: ThemeControl::new(Theme::Dark),
+                figures: RwSignal::new(None),
+                annotations: ProseSignals::new(),
+                busy_pub: BusyPublisher::new(),
+                notices: NoticePublisher::new(),
+            },
         );
         if let Some(body) = document.body() {
             let _ = body.focus();
@@ -865,15 +886,17 @@ mod tests {
         let document_id = Id::<Document>::mint();
         let mut view = ProseView::new(
             document_id,
-            Port::direct(to_logic),
-            Inbox::direct(from_logic),
             Size::new(Px::new(800), Px::new(600)),
-            TextInput::create(&document, &cell),
-            ThemeControl::new(Theme::Dark),
-            RwSignal::new(None),
-            ProseSignals::new(),
-            BusyPublisher::new(),
-            NoticePublisher::new(),
+            ProseWiring {
+                to_logic: Port::direct(to_logic),
+                from_logic: Inbox::direct(from_logic),
+                text_input: TextInput::create(&document, &cell),
+                theme_ctl: ThemeControl::new(Theme::Dark),
+                figures: RwSignal::new(None),
+                annotations: ProseSignals::new(),
+                busy_pub: BusyPublisher::new(),
+                notices: NoticePublisher::new(),
+            },
         );
         let open = || LogicCommand::OpenDocument {
             document_id,
@@ -930,15 +953,17 @@ mod tests {
         >::of::<4>());
         let mut view = ProseView::new(
             Id::<Document>::mint(),
-            Port::direct(to_logic),
-            Inbox::direct(from_logic),
             Size::new(Px::new(800), Px::new(600)),
-            TextInput::create(&document, &cell),
-            ThemeControl::new(Theme::Dark),
-            figures,
-            ProseSignals::new(),
-            BusyPublisher::new(),
-            NoticePublisher::new(),
+            ProseWiring {
+                to_logic: Port::direct(to_logic),
+                from_logic: Inbox::direct(from_logic),
+                text_input: TextInput::create(&document, &cell),
+                theme_ctl: ThemeControl::new(Theme::Dark),
+                figures,
+                annotations: ProseSignals::new(),
+                busy_pub: BusyPublisher::new(),
+                notices: NoticePublisher::new(),
+            },
         );
         // The count as the page state holds it once the Logic thread's event
         // is applied. Decoding that event is Prose's own, and tested there.

@@ -11,7 +11,7 @@ use ambre_core::crdt::FieldKey;
 
 use ambre_core::id::{Connector, Element, Id, Thread, User};
 
-ambre_core::loro_fields!(pub(crate));
+pub(crate) use ambre_crdt::{FieldValues, Fields};
 
 ambre_core::crdt_names! {
     /// The root containers of a board. A root container's identity is its
@@ -108,13 +108,13 @@ pub(crate) fn root_map(doc: &LoroDoc, root: Root) -> LoroMap {
 /// The `board` register.
 #[must_use]
 pub(crate) fn board(doc: &LoroDoc) -> Fields<BoardKey> {
-    Fields::of(root_map(doc, Root::Board))
+    Fields::new(root_map(doc, Root::Board))
 }
 
 /// The `presentation_config` register.
 #[must_use]
 pub(crate) fn config(doc: &LoroDoc) -> Fields<ConfigKey> {
-    Fields::of(root_map(doc, Root::PresentationConfig))
+    Fields::new(root_map(doc, Root::PresentationConfig))
 }
 
 /// A map schema that a root dictionary holds one entry of per id. The id type
@@ -162,7 +162,7 @@ pub(crate) fn entry<K: EntrySchema>(doc: &LoroDoc, id: &K::Id) -> Option<Fields<
         .ok()?
         .into_map()
         .ok()
-        .map(Fields::of)
+        .map(Fields::new)
 }
 
 /// The key of one reaction: the target's id and the user's id, joined by `/`.

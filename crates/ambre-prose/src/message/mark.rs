@@ -10,6 +10,7 @@
 
 use super::MarkKey;
 use ambre_core::Redacted;
+use ambre_core::crdt::CrdtName;
 use ambre_core::{FontSize, Rgb, Rgba};
 
 ambre_core::crdt_names! {

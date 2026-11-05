@@ -35,6 +35,7 @@
 use ambre_core::Px;
 use ambre_core::Rgba;
 use ambre_core::Validated;
+use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Board, Char, StoredBoard};
 use std::collections::BTreeSet;

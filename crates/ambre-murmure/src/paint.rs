@@ -16,8 +16,8 @@ use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_core::id::{Id, Message, User};
 use ambre_core::{Byte, Px, Size, Surface, View};
 use ambre_draw::{
-    Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource,
-    Layout, ParleyBrush, Point, PositionedLayoutItem, Rect, Selection,
+    Affine, Affinity, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource, Layout,
+    ParleyBrush, Point, PositionedLayoutItem, Rect, Selection,
 };
 
 use crate::list::{
@@ -142,6 +142,20 @@ pub(crate) fn text_height(layout: &Layout<ParleyBrush>) -> Px<View> {
     Px::<View>::new(layout.height())
 }
 
+/// The paint context of a Murmure painter: the surface it draws on, the
+/// shaping context, the shaped-text cache and the palette. The four travel
+/// together through every painter of the crate.
+pub struct Pen<'p, S> {
+    /// The surface the painter draws on.
+    pub surface: &'p mut S,
+    /// The shaping context.
+    pub font_cx: &'p mut FontContext,
+    /// The shaped-text cache.
+    pub cache: &'p mut TextCache,
+    /// The colours of the theme.
+    pub palette: &'p Palette,
+}
+
 /// What one paint of the list did.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Painted {
@@ -218,20 +232,19 @@ pub struct Shown<'a> {
 ///
 /// `name_of` names a member, and `time_of` writes a time in the reader's
 /// language and zone (`MURMURE-418`).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the paint context comes in four parts, as for every painter of the crate"
-)]
 pub fn paint_list<S: DrawSurface>(
-    surface: &mut S,
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
+    pen: Pen<'_, S>,
     shown: Shown<'_>,
     size: Size<Px<View>>,
-    palette: &Palette,
     name_of: &dyn Fn(Id<User>) -> Option<ambre_core::Validated<ambre_core::DisplayName>>,
     time_of: &dyn Fn(Instant<Authored>) -> String,
 ) -> Painted {
+    let Pen {
+        surface,
+        font_cx,
+        cache,
+        palette,
+    } = pen;
     let (width, height) = (size.width, size.height);
     let backdrop = view_rect(Px::<View>::ZERO, Px::<View>::ZERO, width, height);
     surface.fill_rect(backdrop, palette.content_bg);
@@ -341,13 +354,15 @@ pub fn paint_list<S: DrawSurface>(
             top = draw_line(surface, font_cx, cache, top, width, palette);
         }
         draw_row(
-            surface,
-            font_cx,
-            cache,
+            Pen {
+                surface,
+                font_cx,
+                cache,
+                palette,
+            },
             row,
             top,
             text_width,
-            palette,
             shown.me,
             pics,
             &mut played,
@@ -484,20 +499,19 @@ fn chip_boxes(
 
 /// Paint the reaction chips of a row, their top-left at `at`. A chip
 /// that holds `me` takes the accent (`MURMURE-137`).
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the paint context comes in four parts, as for every painter of the crate"
-)]
 fn draw_chips<S: DrawSurface>(
-    surface: &mut S,
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
+    pen: Pen<'_, S>,
     row: &RowWords,
     at: Point,
     width: Px<View>,
-    palette: &Palette,
     me: Option<Id<User>>,
 ) {
+    let Pen {
+        surface,
+        font_cx,
+        cache,
+        palette,
+    } = pen;
     let (boxes, _) = chips(font_cx, cache, row, width);
     let (dx, dy) = (at.x, at.y);
     for (reaction, b) in row.reactions.iter().zip(boxes) {
@@ -836,11 +850,10 @@ pub(crate) fn shape<'c>(
     cache.get_or_build(
         font_cx,
         text,
-        size,
-        width,
-        Alignment::Start,
-        weight,
-        ambre_canvas::Slant::Upright,
+        ambre_canvas::Look {
+            weight,
+            ..ambre_canvas::Look::body(size, width)
+        },
     )
 }
 
@@ -996,22 +1009,21 @@ fn measure(
 }
 
 /// Paint one row whose top is at `top`.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the paint context comes in four parts, as for every painter of the crate"
-)]
 fn draw_row<S: DrawSurface>(
-    surface: &mut S,
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
+    pen: Pen<'_, S>,
     row: &RowWords,
     top: Px<View>,
     width: Px<View>,
-    palette: &Palette,
     me: Option<Id<User>>,
     pics: Option<Pictured<'_>>,
     played: &mut Played,
 ) {
+    let Pen {
+        surface,
+        font_cx,
+        cache,
+        palette,
+    } = pen;
     let x = SPACE_8;
     let mut y = top + SPACE_2;
     if let Some(HeaderWords { author, time }) = &row.header {
@@ -1063,7 +1075,13 @@ fn draw_row<S: DrawSurface>(
     draw_files(surface, font_cx, cache, row, at, width, palette);
     y += file_chips(font_cx, cache, row, width).1;
     let at = Point::new(surface_px(x).get(), surface_px(y).get());
-    draw_chips(surface, font_cx, cache, row, at, width, palette, me);
+    let pen = Pen {
+        surface,
+        font_cx,
+        cache,
+        palette,
+    };
+    draw_chips(pen, row, at, width, me);
     y += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
         let layout = shape(
@@ -1200,12 +1218,14 @@ pub(crate) mod tests {
         let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
         let mut cache = TextCache::new();
         let painted = paint_list(
-            &mut surface,
-            &mut font_cx,
-            &mut cache,
+            Pen {
+                surface: &mut surface,
+                font_cx: &mut font_cx,
+                cache: &mut cache,
+                palette: &LIGHT,
+            },
             shown,
             Size::new(Px::<View>::new(400.0), Px::<View>::new(height)),
-            &LIGHT,
             &|_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
             &|_| "t".to_owned(),
         );
@@ -1638,12 +1658,14 @@ pub(crate) mod tests {
             };
             let palette = &LIGHT;
             paint_list(
-                &mut surface,
-                &mut font_cx,
-                &mut cache,
+                Pen {
+                    surface: &mut surface,
+                    font_cx: &mut font_cx,
+                    cache: &mut cache,
+                    palette,
+                },
                 shown,
                 Size::new(Px::<View>::new(400.0), Px::<View>::new(600.0)),
-                palette,
                 &|_| ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").ok(),
                 &|_| "t".to_owned(),
             );
