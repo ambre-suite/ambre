@@ -723,10 +723,10 @@ fn last_day(date: DateParts) -> DayOfMonth {
 
 /// Shift the month of `date` by `months`, normalizing into a valid month. The
 /// day is kept as it stands.
-pub(crate) fn shift_month(date: DateParts, months: MonthCount) -> DateParts {
+pub(crate) fn shift_month(date: DateParts, months: TimeSpan<Months>) -> DateParts {
     DateParts::of_months(
         date.year,
-        MonthCount::new(i64::from(date.month.get()) - 1).plus(months),
+        TimeSpan::<Months>::new(i64::from(date.month.get()) - 1).plus(months),
         date.day,
     )
 }
@@ -746,7 +746,7 @@ pub(crate) fn edate(args: &[CellValue]) -> CellValue {
     };
     let shifted = shift_month(
         DateParts::of_day(Instant::<SheetDay>::new(serial)),
-        MonthCount::new(months),
+        TimeSpan::<Months>::new(months),
     );
     let day = shifted.day.min(last_day(shifted));
     CellValue::Number(DateParts { day, ..shifted }.serial().get() as f64)
@@ -766,7 +766,7 @@ pub(crate) fn eomonth(args: &[CellValue]) -> CellValue {
     };
     let shifted = shift_month(
         DateParts::of_day(Instant::<SheetDay>::new(serial)),
-        MonthCount::new(months),
+        TimeSpan::<Months>::new(months),
     );
     let day = last_day(shifted);
     CellValue::Number(DateParts { day, ..shifted }.serial().get() as f64)

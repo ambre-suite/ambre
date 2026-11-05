@@ -42,26 +42,19 @@ impl ambre_core::CountKind for Ops {
     const NAME: &'static str = "OpCount";
 }
 
-/// How many pushes of one stack no pop has closed yet. It never goes below
-/// zero: a pop with no push is the renderer bug the double exists to catch.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct StackDepth(u32);
+/// The pushes of one stack that no pop has closed yet.
+pub enum OpenPushes {}
 
-impl StackDepth {
-    /// The depth after one more push.
-    fn pushed(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+impl ambre_core::CountKind for OpenPushes {
+    type Repr = u32;
+    const NAME: &'static str = "StackDepth";
+}
 
-    /// The depth after one pop, or `None` when no push is open.
-    fn popped(self) -> Option<Self> {
-        self.0.checked_sub(1).map(Self)
-    }
-
-    /// Whether every push has its pop.
-    fn is_balanced(self) -> bool {
-        self.0 == 0
-    }
+/// The depth after one pop, or `None` when no push is open. A pop with no
+/// push is the renderer bug the double exists to catch. So it is refused
+/// here, where `minus` alone would hold the depth at zero.
+fn popped(depth: Count<OpenPushes>) -> Option<Count<OpenPushes>> {
+    (!depth.is_zero()).then(|| depth.minus(Count::new(1)))
 }
 
 /// One recorded drawing operation. Glyph runs are summarised by their glyph
@@ -136,9 +129,9 @@ pub struct RecordingSurface {
     ops: Vec<DrawOp>,
     /// Current clip-stack depth, updated live so tests can assert balance even
     /// mid-frame. Underflow (pop without push) panics -- that is a renderer bug.
-    clip_depth: StackDepth,
+    clip_depth: Count<OpenPushes>,
     /// Current transform-stack depth, same contract as `clip_depth`.
-    transform_depth: StackDepth,
+    transform_depth: Count<OpenPushes>,
 }
 
 impl RecordingSurface {
@@ -154,13 +147,13 @@ impl RecordingSurface {
     /// Whether every clip pushed so far is popped: true at a balanced frame
     /// boundary.
     pub fn clips_balanced(&self) -> bool {
-        self.clip_depth.is_balanced()
+        self.clip_depth.is_zero()
     }
 
     /// Whether every transform pushed so far is popped: true at a balanced
     /// frame boundary.
     pub fn transforms_balanced(&self) -> bool {
-        self.transform_depth.is_balanced()
+        self.transform_depth.is_zero()
     }
 
     /// Count the ops matching `pred`, for example
@@ -224,15 +217,12 @@ impl DrawSurface for RecordingSurface {
     }
 
     fn push_clip(&mut self, rect: Rect) {
-        self.clip_depth = self.clip_depth.pushed();
+        self.clip_depth = self.clip_depth.incremented();
         self.ops.push(DrawOp::PushClip { rect });
     }
 
     fn pop_clip(&mut self) {
-        self.clip_depth = self
-            .clip_depth
-            .popped()
-            .expect("pop_clip without a matching push_clip");
+        self.clip_depth = popped(self.clip_depth).expect("pop_clip without a matching push_clip");
         self.ops.push(DrawOp::PopClip);
     }
 
@@ -258,15 +248,13 @@ impl DrawSurface for RecordingSurface {
     }
 
     fn push_transform(&mut self, transform: Affine) {
-        self.transform_depth = self.transform_depth.pushed();
+        self.transform_depth = self.transform_depth.incremented();
         self.ops.push(DrawOp::PushTransform { transform });
     }
 
     fn pop_transform(&mut self) {
-        self.transform_depth = self
-            .transform_depth
-            .popped()
-            .expect("pop_transform without a matching push_transform");
+        self.transform_depth =
+            popped(self.transform_depth).expect("pop_transform without a matching push_transform");
         self.ops.push(DrawOp::PopTransform);
     }
 }
@@ -298,10 +286,10 @@ mod tests {
     /// A depth never goes below zero: a pop with no push has no depth.
     #[test]
     fn a_pop_with_no_push_has_no_depth() {
-        assert_eq!(StackDepth::default().popped(), None);
-        let one = StackDepth::default().pushed();
-        assert!(!one.is_balanced());
-        assert_eq!(one.popped().map(StackDepth::is_balanced), Some(true));
+        assert_eq!(popped(Count::ZERO), None);
+        let one = Count::<OpenPushes>::ZERO.incremented();
+        assert!(!one.is_zero());
+        assert_eq!(popped(one).map(Count::<OpenPushes>::is_zero), Some(true));
     }
 
     /// The double stops the test at a pop that no push opened.

@@ -18,7 +18,7 @@ use rustc_hash::FxHashMap;
 
 use ambre_core::{Css, Device, Px, Scale, Size, Texel};
 
-use crate::space::{GlyphRaster, Parley};
+use crate::space::{GlyphRaster, Parley, RasterKey};
 
 // ============================================================================
 // GlyphAtlas
@@ -87,23 +87,17 @@ fn texel_scale(size: Px<GlyphRaster>) -> f32 {
     (size / RASTER_CAP).max(1.0)
 }
 
-/// A raster size quantized to a hundredth of a device pixel, so it can be
-/// hashed. Two sizes closer than that share a raster.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct RasterSizeKey(u32);
-
-impl RasterSizeKey {
-    /// The key of a raster `size` device pixels high.
-    fn of(size: Px<GlyphRaster>) -> Self {
-        Self((size.get() * 100.0) as u32)
-    }
+/// The key of a raster `size` device pixels high: the size quantized to a
+/// hundredth of a device pixel, so it can be hashed.
+fn raster_key(size: Px<GlyphRaster>) -> Px<RasterKey> {
+    Px::new((size.get() * 100.0) as u32)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct GlyphKey {
     font: FontId,
     glyph: GlyphId,
-    size: RasterSizeKey,
+    size: Px<RasterKey>,
 }
 
 impl GlyphKey {
@@ -113,7 +107,7 @@ impl GlyphKey {
         Self {
             font,
             glyph,
-            size: RasterSizeKey::of(raster_size),
+            size: raster_key(raster_size),
         }
     }
 }

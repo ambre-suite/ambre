@@ -13,31 +13,8 @@
 // The year and the month live in `ambre-core`, which Prose shares. The day
 // stays here: it runs past either end of its month, as `DATE` reads it.
 
-use ambre_core::{Bounded, Day, Instant, SheetDay, TimeSpan};
+use ambre_core::{Bounded, Day, Instant, Months, SheetDay, TimeSpan};
 pub use ambre_core::{Month, Year};
-
-/// A count of months, from January of some year. It may run past December
-/// or below January, as `DATE` and `EDATE` read a month out of range.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MonthCount(i64);
-
-impl MonthCount {
-    /// A count of `months`, of either sign.
-    pub const fn new(months: i64) -> Self {
-        Self(months)
-    }
-
-    /// The number of months.
-    pub const fn get(self) -> i64 {
-        self.0
-    }
-
-    /// The two counts together, held at either end of `i64`.
-    #[must_use]
-    pub const fn plus(self, other: Self) -> Self {
-        Self(self.0.saturating_add(other.0))
-    }
-}
 
 /// A day of a month, counted from 1 on the first.
 ///
@@ -107,16 +84,16 @@ impl DateParts {
     /// runs past either end of the year and carries into it, as `DATE` and
     /// `EDATE` read a month out of range. Twelve months after January 2024
     /// is January 2025.
-    pub const fn of_months(year: Year, months: MonthCount, day: DayOfMonth) -> Self {
+    pub const fn of_months(year: Year, months: TimeSpan<Months>, day: DayOfMonth) -> Self {
         debug_assert!(
-            matches!(months.0.rem_euclid(12) + 1, 1..=12),
+            matches!(months.get().rem_euclid(12) + 1, 1..=12),
             "a remainder of twelve gives a month"
         );
         Self {
-            year: Year::new(year.get() + months.0.div_euclid(12)),
+            year: Year::new(year.get() + months.get().div_euclid(12)),
             // The remainder keeps the month in 1 to 12. A count of months
-            // past either end of a year is a `MonthCount`.
-            month: match Bounded::<Month>::numbered(months.0.rem_euclid(12) + 1) {
+            // past either end of a year is a `TimeSpan<Months>`.
+            month: match Bounded::<Month>::numbered(months.get().rem_euclid(12) + 1) {
                 Some(month) => month,
                 None => Bounded::<Month>::JANUARY,
             },
@@ -140,7 +117,7 @@ impl DateParts {
     pub const fn next_month_start(self) -> Self {
         Self::of_months(
             self.year,
-            MonthCount(self.month.get() as i64),
+            TimeSpan::new(self.month.get() as i64),
             DayOfMonth(1),
         )
     }
@@ -151,7 +128,7 @@ mod tests {
     use super::*;
 
     const fn date(year: i64, month: i64, day: i64) -> DateParts {
-        DateParts::of_months(Year::new(year), MonthCount(month - 1), DayOfMonth(day))
+        DateParts::of_months(Year::new(year), TimeSpan::new(month - 1), DayOfMonth(day))
     }
 
     #[test]
@@ -186,10 +163,17 @@ mod tests {
             Bounded::<Month>::numbered(12).map(Bounded::<Month>::get),
             Some(12)
         );
-        let carried =
-            DateParts::of_months(Year::new(2024), MonthCount::new(12), DayOfMonth::new(5));
+        let carried = DateParts::of_months(
+            Year::new(2024),
+            TimeSpan::<Months>::new(12),
+            DayOfMonth::new(5),
+        );
         assert_eq!((carried.year.get(), carried.month.get()), (2025, 1));
-        let back = DateParts::of_months(Year::new(2024), MonthCount::new(-1), DayOfMonth::new(5));
+        let back = DateParts::of_months(
+            Year::new(2024),
+            TimeSpan::<Months>::new(-1),
+            DayOfMonth::new(5),
+        );
         assert_eq!((back.year.get(), back.month.get()), (2023, 12));
         assert_eq!(
             date(2024, 3, 1).serial() - date(2024, 2, 1).serial(),

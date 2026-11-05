@@ -10,8 +10,8 @@ use ambre_core::Validated;
 use ambre_core::index::Pos;
 
 use super::types::{CellValue, FormulaError, FunctionName, finite_number, nearly_equal};
-use ambre_bus::{DateParts, DayOfMonth, MonthCount, Year};
-use ambre_core::{Day, Instant, SheetDateTime, SheetDay, TimeSpan};
+use ambre_bus::{DateParts, DayOfMonth, Year};
+use ambre_core::{Day, Instant, Months, SheetDateTime, SheetDay, TimeSpan};
 
 // -----------------------------------------------------------------------------
 // Dispatch

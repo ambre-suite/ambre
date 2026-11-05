@@ -206,8 +206,8 @@ pub use space::{
 };
 pub use span::{
     Authored, ClockTick, ClockUnit, Day, Failures, FracDay, FracMs, FrameRate, Instant,
-    LamportStamp, Ms, Ns, PageLoad, Relayed, Sec, SheetDateTime, SheetDay, StoredAsI64, Tick,
-    TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
+    LamportStamp, Months, Ms, Ns, PageLoad, Relayed, Sec, SheetDateTime, SheetDay, StoredAsI64,
+    Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
 };
 pub use static_key::{Canvases, Categories, Commands, Icons, KeyKind, StaticKey};
 pub use status::{
