@@ -14,7 +14,7 @@ use loro::{LoroMap, LoroMovableList, LoroValue};
 use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{ElementKind, NodeId};
-use ambre_bus::app::toile::{Elements, FRAME_NAME_MAX};
+use crate::message::{Elements, FRAME_NAME_MAX};
 
 use super::ToileState;
 use super::codec::{em_seed_group, str_of};

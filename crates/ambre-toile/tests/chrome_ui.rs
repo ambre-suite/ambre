@@ -25,12 +25,6 @@
 )]
 
 use ambre_bus::UiEvent;
-use ambre_bus::app::toile::TextDelta;
-use ambre_bus::app::toile::{
-    Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
-    Elements, PresencePayload, PresenceUpdate, PresentMode, Slide, SlidePosition, ToileCommand,
-    ToileEvent,
-};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
@@ -46,6 +40,12 @@ use ambre_toile::chrome::{
     EditingSurfaces, FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats, SelectionToolbar,
     StatusBar, StyleEdit, StyleModel, Toggles, ToileIntent, ToileRelay, ToolPalette, TopMenuBar,
     UNDO,
+};
+use ambre_toile::message::TextDelta;
+use ambre_toile::message::{
+    Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
+    Elements, PresencePayload, PresenceUpdate, PresentMode, Slide, SlidePosition, ToileCommand,
+    ToileEvent,
 };
 use ambre_toile::ui::menu::{self, ClickSite, CtxScope, GroupHeld, LockMix};
 use ambre_toile::ui::menu_bar::ZOOM_IN;
@@ -106,7 +106,7 @@ fn multi_selection_shows_count_bounds_and_chips() {
     let owner = Owner::new();
     owner.set();
     let stats = SelStats {
-        count: ambre_core::Count::<ambre_bus::app::toile::Elements>::new(3),
+        count: ambre_core::Count::<ambre_toile::message::Elements>::new(3),
         bounds: Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.5, ambre_core::FrameRate::new(60.0));
@@ -163,7 +163,7 @@ fn single_selection_shows_count_without_bounds() {
     owner.set();
     // A lone element: the count shows, but no combined-bounds caption.
     let stats = SelStats {
-        count: ambre_core::Count::<ambre_bus::app::toile::Elements>::new(1),
+        count: ambre_core::Count::<ambre_toile::message::Elements>::new(1),
         bounds: Some(Rect::new(0.0, 0.0, 10.0, 10.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.0, ambre_core::FrameRate::new(60.0));
@@ -888,8 +888,8 @@ fn an_import_report_reaches_the_user() {
     let owner = Owner::new();
     owner.set();
     let root = mount_notified(ToileEvent::ImportReport {
-        imported: ambre_core::Count::<ambre_bus::app::toile::Elements>::new(4),
-        skipped: vec![ambre_core::Opaque::<ambre_bus::app::toile::SkipReasons>::new("gradient")],
+        imported: ambre_core::Count::<ambre_toile::message::Elements>::new(4),
+        skipped: vec![ambre_core::Opaque::<ambre_toile::message::SkipReasons>::new("gradient")],
     });
     let toast = root
         .query_selector(".ambre-toast")
@@ -1037,10 +1037,8 @@ fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
     assert_eq!(
         placed.target,
         EmbedTarget::Web(
-            ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse(
-                "https://example.com"
-            )
-            .expect("a safe address")
+            ambre_core::Validated::<ambre_toile::message::WebAddress>::parse("https://example.com")
+                .expect("a safe address")
         )
     );
     assert_eq!(
@@ -1104,7 +1102,7 @@ fn summary(id: &str, preview: &str) -> CommentSummary {
         id: Id::<Thread>::from_text(id.to_owned()),
         anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         resolved: ambre_core::ThreadState::Open,
-        messages: Len::<ambre_bus::app::toile::ThreadMessage>::new(1),
+        messages: Len::<ambre_toile::message::ThreadMessage>::new(1),
         preview: preview.to_owned(),
     }
 }

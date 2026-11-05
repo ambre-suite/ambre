@@ -13,10 +13,10 @@ use rstar::{AABB, RTree, RTreeObject};
 
 use ambre_core::id::{Element, Id};
 
-/// The camera / viewport type lives in the `ambre-bus` IPC contract, carried by
+/// The camera / viewport type lives in the message vocabulary, carried by
 /// `ToileCommand::SetViewport`. It is re-exported here so the index keeps its
 /// `crate::logic::index::Viewport` path and its culling helpers.
-pub use ambre_bus::app::toile::Viewport;
+pub use crate::message::Viewport;
 
 /// R-tree leaf: an element's world-space, rotation-expanded AABB plus its id.
 #[derive(Clone, Debug, PartialEq)]

@@ -1005,7 +1005,7 @@ class CrateBoundaries(unittest.TestCase):
             "pub struct S {\n    pub target_sheet_id: Option<String>,\n}\n",
             "pub struct S {\n    pub row_ids: Vec<u64>,\n}\n",
         ):
-            for rel in (f"{cb.BUS}/app/toile.rs", f"{cb.APP_MESSAGES[0]}/command.rs"):
+            for rel in (f"{cb.BUS}/app/grid.rs", f"{cb.APP_MESSAGES[0]}/command.rs"):
                 errors = self.breach(rel, text)
                 self.assertTrue(any("carries an identifier as a bare" in e for e in errors), (rel, text, errors))
 

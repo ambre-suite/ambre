@@ -159,15 +159,17 @@ pub fn place_batch_at(batch: &mut ImportBatch, at: Point) {
 /// pattern, an unhandled node) so the user knows the import was lossy.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ImportReport {
-    pub imported: ambre_core::Count<ambre_bus::app::toile::Elements>,
-    pub skipped: Vec<ambre_core::Opaque<ambre_bus::app::toile::SkipReasons>>,
+    pub imported: ambre_core::Count<crate::message::Elements>,
+    pub skipped: Vec<ambre_core::Opaque<crate::message::SkipReasons>>,
 }
 
 impl ImportReport {
     /// Record a dropped/unsupported construct in the report.
     pub fn skip(&mut self, reason: impl Into<String>) {
         self.skipped
-            .push(ambre_core::Opaque::<ambre_bus::app::toile::SkipReasons>::new(reason));
+            .push(ambre_core::Opaque::<crate::message::SkipReasons>::new(
+                reason,
+            ));
     }
 }
 

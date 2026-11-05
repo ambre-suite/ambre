@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use ambre_bus::app::toile::{
+use crate::message::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle,
 };
 use ambre_canvas::{Palette, TextCache};

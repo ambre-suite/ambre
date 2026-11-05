@@ -9,7 +9,7 @@
 // means. It is kept pure so the host tier can run it.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayNode, DisplayViewport, End, NodeId, ToileCommand, ZTarget};
+use crate::message::{DisplayNode, DisplayViewport, End, NodeId, ToileCommand, ZTarget};
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{Board, Px, View};
 use ambre_core::{Commands, StaticKey};
@@ -106,7 +106,7 @@ pub fn holds_element(display: &DisplayViewport, id: &Id<Element>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::toile::{
+    use crate::message::{
         Anchor, DisplayConnector, DisplayElement, DisplayGeom, ElementKind, ElementStyle, EndCaps,
         ShapeKind, Viewport,
     };
@@ -127,7 +127,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds: b,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
             link: None,
@@ -141,8 +141,8 @@ mod tests {
             path,
             style: ElementStyle::default(),
             arrows: EndCaps {
-                start: ambre_bus::app::toile::Cap::Plain,
-                end: ambre_bus::app::toile::Cap::Arrow,
+                start: crate::message::Cap::Plain,
+                end: crate::message::Cap::Arrow,
             },
             label: String::new(),
         })

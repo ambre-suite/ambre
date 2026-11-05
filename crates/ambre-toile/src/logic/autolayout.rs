@@ -44,10 +44,10 @@
 use kurbo::{Rect, Size};
 
 // The auto-layout spec value types (`AutoLayout`, `Direction`, `Align`,
-// `Sizing`) live in `ambre-bus` so `ToileCommand::SetAutoLayout` can carry them
-// across `AppCommand::Toile` without a dependency cycle (mirrors `model.rs`).
+// `Sizing`) live in the message vocabulary (`crate::message`), so
+// `ToileCommand::SetAutoLayout` can carry them (mirrors `model.rs`).
 // This module owns the pure `solve_layout` solver over them.
-pub use ambre_bus::app::toile::{Align, AutoLayout, Direction, Padding, Sizing};
+pub use crate::message::{Align, AutoLayout, Direction, Padding, Sizing};
 
 /// Solve the auto-layout of `frame` for the given `children` sizes (in
 /// `children` order), returning one world-space [`Rect`] per child.

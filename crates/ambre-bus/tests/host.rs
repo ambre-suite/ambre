@@ -22,11 +22,10 @@ use ambre_bus::{
     MemberChannel, MemberInfo, MemberStanding, OpenFailure, RestCommand, RestEvent, Role,
     SyncCommand,
 };
-use ambre_core::Bounded;
+use ambre_core::Seq;
 use ambre_core::id::{
     Channel, Document, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
-use ambre_core::{Board, Px, Seq};
 use ambre_core::{Ms, TimeSpan};
 
 /// A line-height multiple is finite and above zero, and a stored number that
@@ -53,29 +52,6 @@ fn a_line_height_multiple_is_finite_and_above_zero() {
         Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_HALF))
     );
     assert_eq!(read.map(LineHeight::stored_value), Some(1.5));
-}
-
-/// A fraction of a side lies in 0..=1, and a decoded one outside it is
-/// refused.
-#[test]
-fn a_fraction_of_a_side_lies_between_zero_and_one() {
-    use ambre_bus::app::toile::UnitFraction;
-    for refused in [-0.1, 1.1, f32::NAN] {
-        assert_eq!(Bounded::<UnitFraction>::new(refused), None);
-    }
-    assert_eq!(
-        Bounded::<UnitFraction>::HALF.along(Px::<Board>::new(10.0), Px::<Board>::new(30.0)),
-        Px::<Board>::new(20.0)
-    );
-    let past: Result<Bounded<UnitFraction>, _> =
-        postcard::from_bytes(&postcard::to_allocvec(&2.0_f32).unwrap());
-    assert!(past.is_err(), "a decoded fraction past one is refused");
-    let bytes = postcard::to_allocvec(&Bounded::<UnitFraction>::HALF).unwrap();
-    assert_eq!(
-        bytes,
-        postcard::to_allocvec(&0.5_f32).unwrap(),
-        "it travels as an f32"
-    );
 }
 
 // -- Service plane: request id issuer -----------------------------------------

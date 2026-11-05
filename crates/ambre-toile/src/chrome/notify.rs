@@ -8,7 +8,7 @@
 // puts it on screen.
 // ============================================================================
 
-use ambre_bus::app::toile::ToileEvent;
+use crate::message::ToileEvent;
 use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::Toasts;
 

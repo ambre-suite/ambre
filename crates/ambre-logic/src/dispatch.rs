@@ -756,12 +756,12 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::app::prose::DocChar;
-    use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{Authored, Instant};
     use ambre_bus::{Col, Row};
     use ambre_bus::{Request, RestCommand, RestEvent};
     use ambre_core::Seq;
     use ambre_core::index::Pos;
+    use ambre_toile::message::ToileCommand;
     use ambre_trame::message::TrameCommand;
     use std::io::Cursor;
 
@@ -810,7 +810,7 @@ mod tests {
                 }
                 | UiEvent::Viewport {
                     event:
-                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete {
+                        AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete {
                             data, ..
                         }),
                     ..
@@ -834,7 +834,7 @@ mod tests {
         let doc = state.docs.get(&document_id).expect("a live document");
         match doc.state.ambre_file_event(document_id) {
             AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. })
-            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. })
+            | AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete { data, .. })
             | AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady { data, .. }) => {
                 data.into_bytes()
             }
@@ -1143,7 +1143,7 @@ mod tests {
             }
             | UiEvent::Viewport {
                 event:
-                    AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. }),
+                    AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete { data, .. }),
                 ..
             } => Some(data.into_bytes()),
             _ => None,
@@ -1206,7 +1206,7 @@ mod tests {
                     e,
                     UiEvent::Viewport {
                         event: AppEvent::Trame(ambre_trame::message::TrameEvent::Error { .. })
-                            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(_)),
+                            | AppEvent::Toile(ambre_toile::message::ToileEvent::ExportFailed(_)),
                         ..
                     }
                 )),
@@ -1219,7 +1219,7 @@ mod tests {
                         event: AppEvent::Trame(
                             ambre_trame::message::TrameEvent::ExportComplete { .. }
                         ) | AppEvent::Toile(
-                            ambre_bus::app::toile::ToileEvent::ExportComplete { .. }
+                            ambre_toile::message::ToileEvent::ExportComplete { .. }
                         ),
                         ..
                     }
@@ -2302,7 +2302,7 @@ mod tests {
         state: &mut LogicState,
         ui_rx: &Receiver<UiEvent>,
         doc_id: Id<Document>,
-    ) -> ambre_bus::app::toile::ToileEvent {
+    ) -> ambre_toile::message::ToileEvent {
         // Whatever seeded the board has already spoken; the export's own answer
         // is the only event this reads.
         ui_rx.try_iter().for_each(drop);
@@ -2333,7 +2333,7 @@ mod tests {
                 ),
                 at: kurbo::Point::new(0.0, 0.0),
                 size: kurbo::Size::new(100.0, 60.0),
-                content: ambre_bus::app::toile::InitContent::None,
+                content: ambre_toile::message::InitContent::None,
                 fill: None,
                 correlate: None,
             }),
@@ -2350,7 +2350,7 @@ mod tests {
         let doc_id = board_with_content(&mut state);
         let answer = export_pdf_answer(&mut state, &ui_rx, doc_id);
         assert!(
-            matches!(answer, ambre_bus::app::toile::ToileEvent::ExportFailed(_)),
+            matches!(answer, ambre_toile::message::ToileEvent::ExportFailed(_)),
             "an export with no font context must say why"
         );
     }
@@ -2364,7 +2364,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         let doc_id = board_with_content(&mut state);
         match export_pdf_answer(&mut state, &ui_rx, doc_id) {
-            ambre_bus::app::toile::ToileEvent::ExportComplete { filename, data, .. } => {
+            ambre_toile::message::ToileEvent::ExportComplete { filename, data, .. } => {
                 assert_eq!(filename.as_str(), "deck.pdf");
                 assert!(data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
             }
@@ -2384,7 +2384,7 @@ mod tests {
         let answer = export_pdf_answer(&mut state, &ui_rx, doc_id);
         assert!(matches!(
             answer,
-            ambre_bus::app::toile::ToileEvent::ExportComplete { .. }
+            ambre_toile::message::ToileEvent::ExportComplete { .. }
         ));
         assert!(sync_rx.try_recv().is_err(), "the export sent a delta");
     }

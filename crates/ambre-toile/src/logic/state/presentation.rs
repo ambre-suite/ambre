@@ -802,7 +802,7 @@ mod pdf_tests {
     /// neighbour is drawn by the walk. The clip is the frame's own rect.
     #[test]
     fn the_page_clip_leaves_the_neighbour_out() {
-        use ambre_bus::app::toile::DisplayNode;
+        use crate::message::DisplayNode;
         use ambre_draw::testing::DrawOp;
 
         let mut st = ToileState::new();
@@ -891,7 +891,7 @@ mod pdf_tests {
             None,
             &std::collections::HashMap::new(),
             &std::collections::HashMap::new(),
-            ambre_bus::app::toile::PresentMode::Editing,
+            crate::message::PresentMode::Editing,
         );
         let lines = |s: &RecordingSurface| s.count(|op| matches!(op, DrawOp::StrokeLine { .. }));
         assert!(lines(&board).get() > 0, "the editing walk draws the grid");

@@ -18,7 +18,7 @@
 // ============================================================================
 
 use super::tool::Tool;
-use ambre_bus::app::toile::{CommentAnchor, CommentPin, DisplayViewport};
+use crate::message::{CommentAnchor, CommentPin, DisplayViewport};
 use ambre_canvas::{Palette, TextCache};
 use ambre_core::id::{Id, Thread};
 use ambre_draw::{
@@ -289,9 +289,9 @@ pub struct CommentSignals {
     /// Whether the panel is open (the View menu and a pin click set it).
     pub panel: leptos::prelude::RwSignal<super::PanelState>,
     /// The board-wide thread list, re-read on every change.
-    pub list: leptos::prelude::RwSignal<Vec<ambre_bus::app::toile::CommentSummary>>,
+    pub list: leptos::prelude::RwSignal<Vec<crate::message::CommentSummary>>,
     /// The thread the panel currently shows whole, bodies included.
-    pub open: leptos::prelude::RwSignal<Option<ambre_bus::app::toile::CommentThread>>,
+    pub open: leptos::prelude::RwSignal<Option<crate::message::CommentThread>>,
     /// The composer the comment tool just dropped (`TOILE-UI-307`).
     pub draft: leptos::prelude::RwSignal<Option<CommentDraft>>,
     /// The panel's next intent, drained by the view each frame.
@@ -313,7 +313,7 @@ pub fn pin_rect(at: Point, w2s: &Affine) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::Viewport;
+    use crate::message::Viewport;
     use ambre_canvas::PointerButton;
     use ambre_canvas::theme::LIGHT;
     use ambre_core::index::Len;
@@ -345,7 +345,7 @@ mod tests {
         CommentPin {
             thread: Id::<Thread>::from_text(id.to_owned()),
             at,
-            messages: Len::<ambre_bus::app::toile::ThreadMessage>::new(messages),
+            messages: Len::<crate::message::ThreadMessage>::new(messages),
             resolved,
         }
     }

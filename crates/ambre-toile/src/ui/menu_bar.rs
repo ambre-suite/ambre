@@ -19,7 +19,7 @@
 // here.
 // ============================================================================
 
-use ambre_bus::app::toile::{PresentFocus, ToileCommand};
+use crate::message::{PresentFocus, ToileCommand};
 use ambre_core::{Commands, StaticKey};
 
 use super::menu;

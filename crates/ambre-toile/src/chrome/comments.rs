@@ -15,7 +15,7 @@
 // names no camera and holds no command queue.
 // ============================================================================
 
-use ambre_bus::app::toile::{CommentSummary, CommentThread};
+use crate::message::{CommentSummary, CommentThread};
 use leptos::html;
 use leptos::prelude::*;
 

@@ -10,6 +10,7 @@
 //! arrive in later crates / slices (Epic `E4`).
 
 pub mod logic;
+pub mod message;
 pub mod ui;
 
 /// Toile-specific chrome (the Find panel and, later, the tool palette / context

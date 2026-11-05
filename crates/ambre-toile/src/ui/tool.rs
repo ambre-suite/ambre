@@ -12,7 +12,7 @@
 // pointer sequences.
 // ============================================================================
 
-use ambre_bus::app::toile::{
+use crate::message::{
     Anchor, CommentAnchor, DisplayGeom, DisplayNode, DisplayViewport, ElementKind, EndCaps,
     InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
@@ -812,8 +812,8 @@ impl ToolMachine {
                             to_anch,
                             path_type: PathType::Straight,
                             arrows: EndCaps {
-                                start: ambre_bus::app::toile::Cap::Plain,
-                                end: ambre_bus::app::toile::Cap::Arrow,
+                                start: crate::message::Cap::Plain,
+                                end: crate::message::Cap::Arrow,
                             },
                         })
                     }
@@ -992,8 +992,8 @@ fn stroke_point(world: Point) -> StrokePoint {
 }
 
 /// Default freehand style: a solid stroke, no fill.
-fn draw_style() -> ambre_bus::app::toile::ElementStyle {
-    ambre_bus::app::toile::ElementStyle {
+fn draw_style() -> crate::message::ElementStyle {
+    crate::message::ElementStyle {
         fill: None,
         stroke: Some(Rgba::from_bits(0x3333_33FF)),
         stroke_w: Px::<StoredBoard>::new(2.0),
@@ -1112,9 +1112,9 @@ fn pen_bezpath(nodes: &[PenNode]) -> BezPath {
 pub fn selection_bounds(selection: &[Id<Element>], display: &DisplayViewport) -> Option<Rect> {
     let mut acc: Option<Rect> = None;
     for node in &display.nodes {
-        if let ambre_bus::app::toile::DisplayNode::Element(e) = node
+        if let crate::message::DisplayNode::Element(e) = node
             && selection.contains(&e.id)
-            && e.locked == ambre_bus::app::toile::LockState::Unlocked
+            && e.locked == crate::message::LockState::Unlocked
         {
             acc = Some(match acc {
                 Some(r) => r.union(e.bounds),
@@ -1305,7 +1305,7 @@ fn resize_rect_rotated(base: Rect, handle: Handle, to: Point, rot: ambre_core::R
 /// is a pure rotation and `atan2(b, a)` recovers the angle.
 pub fn element_rotation(display: &DisplayViewport, id: &Id<Element>) -> ambre_core::Radians {
     for node in &display.nodes {
-        if let ambre_bus::app::toile::DisplayNode::Element(e) = node
+        if let crate::message::DisplayNode::Element(e) = node
             && &e.id == id
         {
             let c = e.transform.as_coeffs();
@@ -1368,9 +1368,7 @@ pub fn drop_missing(selection: &mut Vec<Id<Element>>, missing: &[Id<Element>]) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{
-        DisplayElement, DisplayGeom, DisplayNode, ElementKind, ElementStyle,
-    };
+    use crate::message::{DisplayElement, DisplayGeom, DisplayNode, ElementKind, ElementStyle};
     use ambre_draw::{Affine, Vec2};
 
     /// `TOILE-UI-385`: the ids the board lost leave the selection, the others
@@ -1392,7 +1390,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
             link: None,
@@ -1408,7 +1406,7 @@ mod tests {
             kind: ElementKind::Frame,
             transform: Affine::IDENTITY,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Frame(title.to_owned()),
             link: None,
@@ -1432,7 +1430,7 @@ mod tests {
             kind: ElementKind::Group,
             transform: Affine::IDENTITY,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Group,
             link: None,
@@ -2204,10 +2202,7 @@ mod tests {
                 assert_eq!(to, Id::<Element>::from_text("b".into()));
                 assert_eq!(
                     (arrows.start, arrows.end),
-                    (
-                        ambre_bus::app::toile::Cap::Plain,
-                        ambre_bus::app::toile::Cap::Arrow
-                    )
+                    (crate::message::Cap::Plain, crate::message::Cap::Arrow)
                 );
             }
             other => panic!("expected CreateConnector, got {other:?}"),
@@ -2551,7 +2546,7 @@ mod tests {
             rect_elem("b", Rect::new(40.0, 0.0, 50.0, 10.0)),
         ]);
         if let DisplayNode::Element(e) = &mut disp.nodes[0] {
-            e.locked = ambre_bus::app::toile::LockState::Locked;
+            e.locked = crate::message::LockState::Locked;
         }
 
         // A locked-only selection wears no box.

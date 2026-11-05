@@ -20,7 +20,7 @@
 // (icons + separators) lives in `mod.rs`.
 // ============================================================================
 
-use ambre_bus::app::toile::{
+use crate::message::{
     AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementKind, Elements, LockState,
     NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
 };
@@ -512,11 +512,11 @@ pub fn resolve_menu_command(
         BACKWARD => reorder_each(selection, ZTarget::Backward),
         LOCK => vec![ToileCommand::LockElements {
             ids: ids(),
-            lock: ambre_bus::app::toile::LockState::Locked,
+            lock: crate::message::LockState::Locked,
         }],
         UNLOCK => vec![ToileCommand::LockElements {
             ids: ids(),
-            lock: ambre_bus::app::toile::LockState::Unlocked,
+            lock: crate::message::LockState::Unlocked,
         }],
         // Align and distribute: one batch over the whole selection, whatever
         // the operation. Logic owns the arithmetic -- it holds the boxes, and
@@ -619,7 +619,7 @@ fn add_to_frame(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{
+    use crate::message::{
         DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle, Viewport,
     };
     use kurbo::Affine;
@@ -632,7 +632,7 @@ mod tests {
         id: &str,
         kind: ElementKind,
         bounds: Rect,
-        locked: ambre_bus::app::toile::LockState,
+        locked: crate::message::LockState,
     ) -> DisplayElement {
         DisplayElement {
             id: eid(id),
@@ -688,7 +688,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<StaticKey<Commands>> =
@@ -719,19 +719,19 @@ mod tests {
                 "back",
                 ElementKind::Frame,
                 r(0.0, 0.0, 100.0, 100.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "front",
                 ElementKind::Frame,
                 r(5.0, 5.0, 50.0, 50.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(10.0, 10.0, 20.0, 20.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
@@ -745,13 +745,13 @@ mod tests {
                 "a",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let cmds =
@@ -781,7 +781,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         )]);
         let cmds = resolve_menu_command(REACT_CLEAR, &[eid("a")], None, &els(&dv), &dv).unwrap();
         assert_eq!(cmds.len(), 1);
@@ -805,7 +805,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         assert_eq!(scope.site, ClickSite::Selection);
@@ -822,13 +822,13 @@ mod tests {
                 "a",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 r(20.0, 0.0, 30.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &els(&dv), &[], &dv);
@@ -843,13 +843,13 @@ mod tests {
                 "g",
                 ElementKind::Group,
                 r(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "l",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 5.0, 5.0),
-                ambre_bus::app::toile::LockState::Locked,
+                crate::message::LockState::Locked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("g"), eid("l")], None, &els(&dv), &[], &dv);
@@ -864,13 +864,13 @@ mod tests {
                 "f",
                 ElementKind::Frame,
                 r(0.0, 0.0, 100.0, 100.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(10.0, 10.0, 20.0, 20.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
@@ -884,13 +884,13 @@ mod tests {
                 "f",
                 ElementKind::Frame,
                 r(0.0, 0.0, 30.0, 30.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(100.0, 100.0, 110.0, 110.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
@@ -907,13 +907,13 @@ mod tests {
                 "f",
                 ElementKind::Frame,
                 r(0.0, 0.0, 30.0, 30.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(100.0, 100.0, 110.0, 110.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[eid("a")], &dv);
@@ -936,13 +936,13 @@ mod tests {
                 "f",
                 ElementKind::Frame,
                 r(0.0, 0.0, 100.0, 100.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(10.0, 10.0, 20.0, 20.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
@@ -961,20 +961,20 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         )]);
         let selected = vec![
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 r(1000.0, 1000.0, 1010.0, 1010.0),
-                ambre_bus::app::toile::LockState::Locked,
+                crate::message::LockState::Locked,
             ),
         ];
         let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &selected, &[], &dv);
@@ -1004,7 +1004,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         )]);
         let sel = vec![eid("a")];
         assert!(matches!(
@@ -1032,7 +1032,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         )]);
         let out = resolve_menu_command(DUPLICATE, &[eid("a")], None, &els(&dv), &dv).unwrap();
         assert!(matches!(
@@ -1049,13 +1049,13 @@ mod tests {
                 "g",
                 ElementKind::Group,
                 r(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 5.0, 5.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         assert!(matches!(
@@ -1082,19 +1082,19 @@ mod tests {
                 "g",
                 ElementKind::Group,
                 r(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "h",
                 ElementKind::Group,
                 r(20.0, 0.0, 30.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 5.0, 5.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let sel = [eid("g"), eid("a"), eid("h")];
@@ -1117,13 +1117,13 @@ mod tests {
                 "a",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 5.0, 5.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 r(6.0, 0.0, 10.0, 5.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let out =
@@ -1144,14 +1144,14 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         )]);
         assert!(matches!(
             resolve_menu_command(LOCK, &[eid("a")], None, &els(&dv), &dv)
                 .unwrap()
                 .as_slice(),
             [ToileCommand::LockElements {
-                lock: ambre_bus::app::toile::LockState::Locked,
+                lock: crate::message::LockState::Locked,
                 ..
             }]
         ));
@@ -1160,7 +1160,7 @@ mod tests {
                 .unwrap()
                 .as_slice(),
             [ToileCommand::LockElements {
-                lock: ambre_bus::app::toile::LockState::Unlocked,
+                lock: crate::message::LockState::Unlocked,
                 ..
             }]
         ));
@@ -1173,13 +1173,13 @@ mod tests {
                 "f",
                 ElementKind::Frame,
                 r(0.0, 0.0, 100.0, 100.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(10.0, 10.0, 20.0, 20.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let out = resolve_menu_command(ADD_TO_FRAME, &[eid("a")], None, &els(&dv), &dv).unwrap();
@@ -1200,13 +1200,13 @@ mod tests {
                 "f",
                 ElementKind::Frame,
                 r(0.0, 0.0, 100.0, 100.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(10.0, 10.0, 20.0, 20.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let out =
@@ -1259,13 +1259,13 @@ mod tests {
                 "a",
                 ElementKind::Sticky,
                 r(0.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 r(40.0, 0.0, 10.0, 10.0),
-                ambre_bus::app::toile::LockState::Unlocked,
+                crate::message::LockState::Unlocked,
             ),
         ]);
         let sel = [eid("a"), eid("b")];
@@ -1300,7 +1300,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Locked,
+            crate::message::LockState::Locked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<StaticKey<Commands>> =
@@ -1331,7 +1331,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<StaticKey<Commands>> =

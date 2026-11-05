@@ -10,17 +10,17 @@
 // the board's stead reaches a frame.
 // ============================================================================
 
+use crate::message::LinkTarget;
 use ambre_bus::DocType;
-use ambre_bus::app::toile::LinkTarget;
 use ambre_chrome::{ComposedName, Dialog, Openness};
 use ambre_core::id::{Document, Id};
 use leptos::prelude::*;
 
 use super::handler::ToileDialogs;
+use crate::message::{AddressError, WebAddress, link_url};
 use crate::ui::deck::DeckSignals;
 use crate::ui::embed::{EmbedTarget, PlacedEmbed};
 use crate::ui::link::LinkEdit;
-use ambre_bus::app::toile::{AddressError, WebAddress, link_url};
 use ambre_core::Validated;
 
 /// A document the user may embed or link to, as the launcher's list names it.

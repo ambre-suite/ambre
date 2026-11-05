@@ -203,7 +203,7 @@ fn a_seed_of_another_kind_is_refused() {
         (
             ElementKind::Sticky,
             InitContent::Embed(
-                ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse("https://x.test")
+                ambre_core::Validated::<crate::message::WebAddress>::parse("https://x.test")
                     .expect("a safe address"),
             ),
         ),
@@ -280,7 +280,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
     let bystander = rect(&mut st, 400.0, 0.0);
     st.handle_command(ToileCommand::LockElements {
         ids: vec![note.clone()],
-        lock: ambre_bus::app::toile::LockState::Locked,
+        lock: crate::message::LockState::Locked,
     });
     let before = (order(&st), st.bounds_of(&note), st.style_of(&note));
     let red = ElementStyle {
@@ -333,7 +333,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
 
     st.handle_command(ToileCommand::LockElements {
         ids: vec![note.clone()],
-        lock: ambre_bus::app::toile::LockState::Unlocked,
+        lock: crate::message::LockState::Unlocked,
     });
     st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
     assert_eq!(
@@ -754,7 +754,7 @@ fn every_id_the_board_writes_has_the_minted_width() {
         assert_eq!(
             Id::<Element>::mint_from(
                 ambre_core::PeerId::new(peer),
-                ambre_bus::app::toile::IdCounter::new(counter)
+                crate::message::IdCounter::new(counter)
             )
             .as_str()
             .len(),
@@ -763,7 +763,7 @@ fn every_id_the_board_writes_has_the_minted_width() {
         assert_eq!(
             Id::<Connector>::mint_from(
                 ambre_core::PeerId::new(peer),
-                ambre_bus::app::toile::IdCounter::new(counter)
+                crate::message::IdCounter::new(counter)
             )
             .as_str()
             .len(),
@@ -784,8 +784,8 @@ fn every_id_the_board_writes_has_the_minted_width() {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: ambre_bus::app::toile::Cap::Plain,
-            end: ambre_bus::app::toile::Cap::Arrow,
+            start: crate::message::Cap::Plain,
+            end: crate::message::Cap::Arrow,
         },
     });
     st.handle_command(ToileCommand::CommitStroke {

@@ -231,8 +231,8 @@ mod tests {
             to_anch: Anchor::Left,
             path_type,
             arrows: EndCaps {
-                start: ambre_bus::app::toile::Cap::Plain,
-                end: ambre_bus::app::toile::Cap::Arrow,
+                start: crate::message::Cap::Plain,
+                end: crate::message::Cap::Arrow,
             },
         }
     }

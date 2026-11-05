@@ -21,7 +21,7 @@ use ambre_core::Rgba;
 use ambre_core::{Commands, StaticKey};
 use std::borrow::Cow;
 
-use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};
+use crate::message::{STICKY_DEFAULT_FILL, ShapeKind};
 
 use super::tool::{Handle, Tool};
 

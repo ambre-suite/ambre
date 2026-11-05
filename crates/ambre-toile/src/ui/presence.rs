@@ -26,7 +26,7 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
-use ambre_bus::app::toile::{DisplayNode, DisplayViewport, PresencePayload, PresenceUpdate};
+use crate::message::{DisplayNode, DisplayViewport, PresencePayload, PresenceUpdate};
 use ambre_canvas::TextCache;
 use ambre_core::id::{Element, Id, User};
 use ambre_core::{DisplayName, Validated};
@@ -392,7 +392,7 @@ fn screen_polyline(pts: impl Iterator<Item = Point>, w2s: &Affine) -> BezPath {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{
+    use crate::message::{
         DisplayElement, DisplayGeom, ElementKind, ElementStyle, ShapeKind, StrokePoint,
     };
     use ambre_bus::{Instant, PageLoad};
@@ -409,7 +409,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
             link: None,

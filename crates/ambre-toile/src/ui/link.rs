@@ -9,9 +9,7 @@
 // what following that element means.
 // ============================================================================
 
-use ambre_bus::app::toile::{
-    DisplayElement, DisplayNode, DisplayViewport, LinkTarget, PresentMode,
-};
+use crate::message::{DisplayElement, DisplayNode, DisplayViewport, LinkTarget, PresentMode};
 use ambre_commands::ModifierKeys;
 use ambre_core::Flags;
 use ambre_core::id::{Document, Element, Id};
@@ -158,11 +156,11 @@ pub fn linked(display: &DisplayViewport) -> impl Iterator<Item = &DisplayElement
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::toile::{ElementKind, ElementStyle, ShapeKind, Viewport};
+    use crate::message::{ElementKind, ElementStyle, ShapeKind, Viewport};
     use ambre_draw::Affine;
 
     use super::*;
-    use ambre_bus::app::toile::DisplayGeom;
+    use crate::message::DisplayGeom;
 
     fn elem(id: &str, bounds: Rect, link: Option<LinkTarget>) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
@@ -170,7 +168,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
             link,

@@ -19,7 +19,7 @@
 // one `RestyleElements`.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, DisplayNode, DisplayViewport, ElementStyle};
+use crate::message::{DisplayElement, DisplayNode, DisplayViewport, ElementStyle};
 use ambre_core::id::{Connector, Element, Id};
 
 /// Which style attributes differ across the current selection. A set flag means
@@ -162,7 +162,7 @@ pub fn style_scope_for(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementKind, ShapeKind, Viewport};
+    use crate::message::{DisplayElement, DisplayGeom, ElementKind, ShapeKind, Viewport};
     use ambre_core::{Board, Px, Rgba, StoredBoard};
     use kurbo::{Affine, Point, Rect, Size};
 
@@ -177,7 +177,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds: Rect::new(0.0, 0.0, 10.0, 10.0),
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style,
             geom: DisplayGeom::Rect,
             link: None,
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn an_element_set_to_sans_shows_sans() {
         let mut sans = ElementStyle::default();
-        let picked = ambre_bus::app::toile::FontFamily::from_label("Sans");
+        let picked = crate::message::FontFamily::from_label("Sans");
         crate::ui::floatbar::StyleEdit::Font(Some(picked)).apply_to(&mut sans);
         let dv = viewport(vec![elem("a", sans)]);
         let model = style_scope_for(&[eid("a")], &els(&dv)).expect("model");
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn differing_text_decorations_flag_underline_and_strikethrough() {
-        let font_with = |underline, strikethrough| ambre_bus::app::toile::FontSpec {
+        let font_with = |underline, strikethrough| crate::message::FontSpec {
             underline,
             strikethrough,
             ..Default::default()
