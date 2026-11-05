@@ -445,6 +445,10 @@ mod tests {
         count("leave");
         state.handle_update_document_member_role(id, document_id, user, Role::Viewer);
         count("role");
+        let search =
+            ambre_core::Validated::<ambre_core::UserSearch>::parse("ada").expect("a search");
+        state.handle_search_users(id, search);
+        count("search");
     }
 
     /// `SYNC-132`: the signer of log entries is this user, once signed in,
