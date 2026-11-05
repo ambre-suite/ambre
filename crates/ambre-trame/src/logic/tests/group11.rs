@@ -479,9 +479,16 @@ fn a_peer_size_out_of_range_reads_clamped_or_default() {
         let LoroValue::Map(sizes) = map.get_value() else {
             panic!("the sizes map");
         };
-        let mut keys: Vec<String> = sizes.keys().cloned().collect();
-        // Key order follows the line order: the uids count up as lines pin.
-        keys.sort();
+        // Each size goes to the line at its position, the order the reading
+        // below takes. A derived uid keeps no order of its own.
+        let keys: Vec<String> = (0..6)
+            .filter_map(|line| match root {
+                SheetRoot::ColWidths => peer.index.col_id(Pos::<Col>::new(line)),
+                _ => peer.index.row_id(Pos::<Row>::new(line)),
+            })
+            .map(|uid| uid.to_key_part())
+            .filter(|key| sizes.contains_key(key))
+            .collect();
         for (key, size) in keys.iter().zip(hostile) {
             map.insert(key, size).expect("a crafted size");
         }

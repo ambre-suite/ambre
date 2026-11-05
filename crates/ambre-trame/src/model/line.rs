@@ -11,7 +11,7 @@ use std::fmt::Debug;
 use ambre_bus::{Col, Row};
 use ambre_core::index::{Axis, Len, Pos};
 
-use super::{SheetIndex, Uid};
+use super::{Element, SheetIndex, Uid};
 
 /// One axis of a sheet: [`Row`] or [`Col`].
 ///
@@ -26,6 +26,13 @@ pub trait Line: Axis + Copy + Debug {
 
     /// How many lines the axis holds.
     fn len(index: &SheetIndex) -> Len<Self>;
+
+    /// The visible element of the line at `pos`: the one a reference binds to.
+    fn element(index: &SheetIndex, pos: Pos<Self>) -> Option<Element>;
+
+    /// Where the line of `element` sits: `None` once that element is gone,
+    /// whatever uid another element carries (`TRAME-278`).
+    fn pos_of_element(index: &SheetIndex, element: &Element) -> Option<Pos<Self>>;
 }
 
 impl Line for Row {
@@ -38,6 +45,12 @@ impl Line for Row {
     fn len(index: &SheetIndex) -> Len<Row> {
         index.row_len()
     }
+    fn element(index: &SheetIndex, pos: Pos<Row>) -> Option<Element> {
+        index.rows().element(pos)
+    }
+    fn pos_of_element(index: &SheetIndex, element: &Element) -> Option<Pos<Row>> {
+        index.rows().pos_of_element(element)
+    }
 }
 
 impl Line for Col {
@@ -49,5 +62,11 @@ impl Line for Col {
     }
     fn len(index: &SheetIndex) -> Len<Col> {
         index.col_len()
+    }
+    fn element(index: &SheetIndex, pos: Pos<Col>) -> Option<Element> {
+        index.cols().element(pos)
+    }
+    fn pos_of_element(index: &SheetIndex, element: &Element) -> Option<Pos<Col>> {
+        index.cols().pos_of_element(element)
     }
 }

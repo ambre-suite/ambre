@@ -2921,6 +2921,20 @@ ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_di
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | line_element() | ret | nom::IResult<&str,Element>	generic	the nom parser of a line reference: the rest of the input it hands back, and the element it read
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | line_element(input) | param | &str	generic	the stored formula text a nom parser reads
+ambre-trame | src/formula/render.rs | crate::formula::render | render_element() | ret | String	generic	the stored text of a line reference: the codec of a struct of two fields
+ambre-trame | src/logic/schema.rs | crate::logic::schema | line_elements_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-trame | src/model/axis.rs | crate::model::axis | <Col as AxisOrder>::ROOT_KEY | const | &'static str	generic	the key half that names the column root in the generation record: the codec of a closed set
+ambre-trame | src/model/axis.rs | crate::model::axis | <Col as AxisOrder>::TAG | const | u8	generic	the byte the derivation hashes to name the column axis: hash input, a codec of a closed set
+ambre-trame | src/model/axis.rs | crate::model::axis | <LineGeneration as VersionKind>::NAME | const | &'static str	free-text	the name a version prints through Debug, for a log line
+ambre-trame | src/model/axis.rs | crate::model::axis | <LineGeneration as VersionKind>::Repr | assoc | u32	newtype-inner	the number a generation of a line holds
+ambre-trame | src/model/axis.rs | crate::model::axis | <Row as AxisOrder>::ROOT_KEY | const | &'static str	generic	the key half that names the row root in the generation record: the codec of a closed set
+ambre-trame | src/model/axis.rs | crate::model::axis | <Row as AxisOrder>::TAG | const | u8	generic	the byte the derivation hashes to name the row axis: hash input, a codec of a closed set
+ambre-trame | src/model/axis.rs | crate::model::axis | Before::key() | ret | String	generic	the key half of a generation key: the codec of an enum that carries data
+ambre-trame | src/model/axis.rs | crate::model::axis | DERIVATION_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-trame | src/model/axis.rs | crate::model::axis | generation_key() | ret | String	generic	the key a generation record stores: the codec of a line before and a generation
+ambre-trame | src/model/axis.rs | crate::model::axis | parse_generation_key(key) | param | &str	generic	the key a generation record stores, read back into a line before and a generation
 ambre-trame | src/model/axis.rs | crate::model::axis | <Slot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/model/axis.rs | crate::model::axis | AxisView<L>::is_empty() | ret | bool	generic	predicate
 ambre-trame | src/model/axis.rs | crate::model::axis | Element::is_minted() | ret | bool	generic	predicate

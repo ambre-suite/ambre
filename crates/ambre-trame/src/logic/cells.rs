@@ -14,7 +14,7 @@ use std::cell::OnceCell;
 use super::*;
 use crate::formula::SheetQualifier;
 use crate::formula::identity;
-use crate::model::{Axes, Element};
+use crate::model::{Axes, ElementId};
 
 impl TrameState {
     /// Display text for a cell. The formula evaluation result if it's a formula
@@ -202,8 +202,8 @@ impl TrameState {
 
     /// Ensure the cell `at` is materialized (its row and column exist in the
     /// `rows_/cols_` lists) and return the `(row_lid, col_lid)` pair to key the
-    /// cell with. Extends the dense used range by pushing placeholder elements,
-    /// capturing each new element's stable id. The write is refused when the
+    /// cell with. Extends the dense used range by pushing one element per new
+    /// line, each line under a uid derived from the line before it. The write is refused when the
     /// jump past the high-water mark exceeds [`MATERIALIZE_ROWS`]. It is refused
     /// too when the session cannot mint every uid the cell needs. Every uid is minted
     /// before the first push, so a refusal for want of one pushes no line.
@@ -246,23 +246,24 @@ impl TrameState {
             return Err(Unmaterialized::IdsExhausted);
         }
         let grew = !row_uids.is_empty() || !col_uids.is_empty();
+        // Each minted id names the element that carries a line, never the line
+        // itself. The line takes a uid derived from the line before it. So two
+        // peers writing at once in one new line add one line (`TRAME-261`).
+        let row_ids: Vec<ElementId> = row_uids.into_iter().map(ElementId::minted).collect();
+        let col_ids: Vec<ElementId> = col_uids.into_iter().map(ElementId::minted).collect();
         let axes = Axes::of(&self.doc, &self.active_sheet);
-        for uid in row_uids {
-            if axes
-                .push::<Row>(&mut self.index, Element::minted(uid))
-                .is_none()
-            {
-                break;
-            }
-        }
-        for uid in col_uids {
-            if axes
-                .push::<Col>(&mut self.index, Element::minted(uid))
-                .is_none()
-            {
-                break;
-            }
-        }
+        let (Some(rows), Some(cols)) = (
+            axes.plan::<Row>(&self.index, &row_ids),
+            axes.plan::<Col>(&self.index, &col_ids),
+        ) else {
+            self.uid_counter = before;
+            return Err(Unmaterialized::IdsExhausted);
+        };
+        // A refused push leaves the index as the lines that landed; the resolve
+        // below then answers the refusal.
+        let _ = axes
+            .grow(&mut self.index, rows)
+            .and_then(|()| axes.grow(&mut self.index, cols));
         // Commit the implicit scaffolding under the excluded origin so it stays
         // OUT of the undo stack (see `CommitOrigin::Materialize`). A cell edit's intent
         // is the value, not the row/column placeholders it forced into existence.

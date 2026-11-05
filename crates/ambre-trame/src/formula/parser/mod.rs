@@ -20,7 +20,7 @@ use super::types::{
     FunctionName, NameTarget, ParseError, RangeDep, SheetQualifier, StoredAxis, StoredCell,
     UnaryOpKind, alpha_to_col,
 };
-use crate::model::Uid;
+use crate::model::{Element, ElementId, Uid};
 use ambre_bus::{DefinedName, Row, SheetName};
 
 // -----------------------------------------------------------------------------
@@ -140,17 +140,30 @@ fn line_uid(input: &str) -> nom::IResult<&str, Uid> {
     .parse(input)
 }
 
+/// A line reference as the stored text writes it: the uid, then `#` and the
+/// element id for a derived line (`TRAME-278`). A bare uid names the minted
+/// element whose id is that uid, as every version-1 reference does.
+fn line_element(input: &str) -> nom::IResult<&str, Element> {
+    let (input, uid) = line_uid(input)?;
+    let (input, id) = opt(preceded(char('#'), line_uid)).parse(input)?;
+    let element = match id {
+        Some(id) => Element::derived(uid, ElementId::minted(id)),
+        None => Element::minted(uid),
+    };
+    Ok((input, element))
+}
+
 /// A cell in stored form, `{row|col}` (`TRAME-228`). Each axis is a line
 /// identity, or the position it held when no line stood there: a 1-based row
 /// number, column letters. A `*` is the whole axis of a whole-line range.
 fn stored_cell(input: &str) -> nom::IResult<&str, StoredCell> {
     let row = alt((
-        map(line_uid, StoredAxis::Line),
+        map(line_element, StoredAxis::Line),
         map(row_number, StoredAxis::At),
         value(StoredAxis::Whole, char('*')),
     ));
     let col = alt((
-        map(line_uid, StoredAxis::Line),
+        map(line_element, StoredAxis::Line),
         map_res(col_letters, |s: &str| alpha_to_col(s).map(StoredAxis::At)),
         value(StoredAxis::Whole, char('*')),
     ));

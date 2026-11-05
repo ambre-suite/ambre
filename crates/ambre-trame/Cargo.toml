@@ -26,6 +26,11 @@ ambre-core = { path = "../ambre-core" }
 # like `ambre-toile`'s. The leaf carries no dependency of its own.
 ambre-commands = { path = "../ambre-commands" }
 loro      = { workspace = true }
+# The workspace hash. A line a write past the used range adds takes a uid
+# derived by BLAKE2b from the line before it, so two peers writing at once in
+# one new line derive one line (`ambre-spec-trame-rows-and-columns.md`
+# section 3). Pure Rust, already in the lock through `ambre-crypto`.
+blake2    = { workspace = true }
 # The map handles typed by the schema keys.
 ambre-crdt = { path = "../ambre-crdt" }
 petgraph  = { workspace = true }

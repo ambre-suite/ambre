@@ -34,7 +34,9 @@ use std::collections::HashMap;
 use ambre_bus::{CellPos, CellRect, Col, Row};
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Axis, IdxVec, Len, Pos};
-use loro::{LoroDoc, LoroMovableList, LoroValue};
+use ambre_core::{OpenRange, Version, VersionKind};
+use blake2::{Blake2b512, Digest};
+use loro::{LoroDoc, LoroMap, LoroMovableList, LoroValue};
 
 use super::line::Line;
 use super::sheet_index::{LineRead, Uid};
@@ -116,7 +118,7 @@ impl Element {
 
     /// Read a list value back. `None` for any other spelling, a bare uid or a
     /// derived pair each read from its canonical halves alone (`TRAME-248`).
-    fn parse(value: &str) -> Option<Self> {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
         match value.split_once('#') {
             None => Uid::parse(value).map(Self::minted),
             Some((uid, id)) => {
@@ -325,6 +327,109 @@ impl<L: Axis> AxisView<L> {
     }
 }
 
+/// The space of the generation a line carries (`TRAME-271`): how many lines
+/// were derived after it, less one, in the history a peer holds.
+pub enum LineGeneration {}
+
+impl VersionKind for LineGeneration {
+    type Repr = u32;
+    const NAME: &'static str = "LineGeneration";
+}
+
+impl OpenRange for LineGeneration {}
+
+/// The domain string the derivation hashes first, so no other BLAKE2b input of
+/// the workspace can produce a line uid.
+const DERIVATION_DOMAIN: &[u8] = b"ambre-trame-line-v1";
+
+/// What a derived line follows: the line before it, or the axis root when the
+/// axis is empty.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Before {
+    Root,
+    Line(Uid),
+}
+
+impl Before {
+    /// The half of a generation key that names what the line follows.
+    fn key<L: AxisOrder>(self) -> String {
+        match self {
+            Before::Root => L::ROOT_KEY.to_owned(),
+            Before::Line(uid) => uid.to_key_part(),
+        }
+    }
+}
+
+/// The generation key `"{before}:{generation:08x}"` of `line_gen_{sheet}`.
+fn generation_key<L: AxisOrder>(before: Before, generation: Version<LineGeneration>) -> String {
+    format!("{}:{generation:08x}", before.key::<L>())
+}
+
+/// Read a generation key of axis `L` back into its two halves. `None` for a
+/// key of the other axis root, and for any other spelling than the one
+/// [`generation_key`] writes. A uid half names a line of either axis: the
+/// derivation reads it under the line it hangs after alone.
+fn parse_generation_key<L: AxisOrder>(key: &str) -> Option<(Before, Version<LineGeneration>)> {
+    let (before, generation) = key.rsplit_once(':')?;
+    let value = u32::from_str_radix(generation, 16).ok()?;
+    let parsed = Version::<LineGeneration>::new(value);
+    let before = if before == L::ROOT_KEY {
+        Before::Root
+    } else {
+        Before::Line(Uid::parse(before)?)
+    };
+    (generation_key::<L>(before, parsed) == key).then_some((before, parsed))
+}
+
+/// The uid of the line derived after `before` at generation `generation`, on
+/// axis `L` of `sheet`. It is BLAKE2b over the domain and the four inputs, cut
+/// to 96 bits. 64 bits fill the `peer` half and 32 bits the `counter` half, so a
+/// reader parses it as any uid (`TRAME-248`). The inputs are sealed document
+/// content, and the uid never leaves the sealed document (`ZK-001`).
+fn derive_uid<L: AxisOrder>(
+    sheet: &Id<Sheet>,
+    before: Before,
+    generation: Version<LineGeneration>,
+) -> Option<Uid> {
+    let mut hasher = Blake2b512::new();
+    hasher.update(DERIVATION_DOMAIN);
+    let sheet = sheet.as_str().as_bytes();
+    hasher.update(u64::try_from(sheet.len()).ok()?.to_le_bytes());
+    hasher.update(sheet);
+    hasher.update([L::TAG]);
+    match before {
+        Before::Root => hasher.update([0]),
+        Before::Line(uid) => {
+            hasher.update([1]);
+            hasher.update(uid.peer.get().to_le_bytes());
+            hasher.update(uid.counter.get().to_le_bytes());
+        }
+    }
+    hasher.update(generation.get().to_le_bytes());
+    let digest = hasher.finalize();
+    let (peer, rest) = digest.as_slice().split_first_chunk::<8>()?;
+    let counter = rest.first_chunk::<4>()?;
+    Some(Uid {
+        peer: ambre_core::PeerId::new(u64::from_le_bytes(*peer)),
+        counter: ambre_core::IdCounter::new(u32::from_le_bytes(*counter)),
+    })
+}
+
+/// The lines a write past the used range adds on one axis, planned before
+/// anything is written so a refusal writes nothing.
+pub(crate) struct Growth<L: AxisOrder> {
+    steps: Vec<GrowthStep>,
+    axis: std::marker::PhantomData<fn() -> L>,
+}
+
+/// One derived line of a [`Growth`]: the record it writes and the element it
+/// pushes.
+struct GrowthStep {
+    before: Before,
+    generation: Version<LineGeneration>,
+    element: Element,
+}
+
 /// The rows and the columns of one sheet, each deduplicated, and the
 /// position <-> uid cache the engine reads.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -526,7 +631,43 @@ fn apply_delete<L: Axis>(view: &mut AxisView<L>, pos: Pos<L>) -> Option<Uid> {
 }
 
 /// The list that orders one axis, named by its line marker.
+/// The line a generation key names, as the schema reading prints it: a row, a
+/// column, or the root of one axis.
+#[cfg(test)]
+pub(crate) fn generation_owner(index: &SheetIndex, key: &str) -> Option<String> {
+    let line = |before: Before| match before {
+        Before::Line(uid) => match (index.row_pos(&uid), index.col_pos(&uid)) {
+            (Some(row), _) => Some(format!("row {}", row.get() + 1)),
+            (_, Some(col)) => Some(format!("column {}", col.get() + 1)),
+            _ => None,
+        },
+        Before::Root => None,
+    };
+    let (before, generation) = match parse_generation_key::<Row>(key) {
+        Some((Before::Root, generation)) => {
+            return Some(format!("the row root carries generation {generation}"));
+        }
+        Some(found) => found,
+        None => match parse_generation_key::<Col>(key)? {
+            (Before::Root, generation) => {
+                return Some(format!("the column root carries generation {generation}"));
+            }
+            found => found,
+        },
+    };
+    Some(format!("{} carries generation {generation}", line(before)?))
+}
+
 pub(crate) trait AxisOrder: Line {
+    /// The key half that names the axis root in the generation record.
+    #[doc(hidden)]
+    const ROOT_KEY: &'static str;
+    /// The byte that names the axis in a derivation.
+    #[doc(hidden)]
+    const TAG: u8;
+    /// The view of this axis inside a sheet index.
+    #[doc(hidden)]
+    fn view(index: &SheetIndex) -> &AxisView<Self>;
     /// The container family of the list.
     #[doc(hidden)]
     fn order_root() -> SheetRoot;
@@ -536,6 +677,11 @@ pub(crate) trait AxisOrder: Line {
 }
 
 impl AxisOrder for Row {
+    const ROOT_KEY: &'static str = "rows";
+    const TAG: u8 = 0;
+    fn view(index: &SheetIndex) -> &AxisView<Row> {
+        &index.rows
+    }
     fn order_root() -> SheetRoot {
         SheetRoot::Rows
     }
@@ -545,6 +691,11 @@ impl AxisOrder for Row {
 }
 
 impl AxisOrder for Col {
+    const ROOT_KEY: &'static str = "cols";
+    const TAG: u8 = 1;
+    fn view(index: &SheetIndex) -> &AxisView<Col> {
+        &index.cols
+    }
     fn order_root() -> SheetRoot {
         SheetRoot::Cols
     }
@@ -670,10 +821,115 @@ impl<'a> Axes<'a> {
         Some(())
     }
 
-    /// Empty both axes, for a sheet the workbook drops.
+    /// Empty both axes and their record, for a sheet the workbook drops.
     pub(crate) fn clear(&self) {
         let _ = self.list::<Row>().clear();
         let _ = self.list::<Col>().clear();
+        let _ = self.record().clear();
+    }
+
+    /// The generation record of the sheet, `line_gen_{sheet}`. Private: the
+    /// record is part of the axes.
+    fn record(&self) -> LoroMap {
+        self.doc
+            .get_map(SheetContainer::of(SheetRoot::LineGen, self.sheet).as_str())
+    }
+
+    /// The highest generation the record holds under each line before.
+    fn highest<L: AxisOrder>(&self) -> HashMap<Before, Version<LineGeneration>> {
+        let mut highest: HashMap<Before, Version<LineGeneration>> = HashMap::new();
+        for key in self.record().keys() {
+            let Some((before, generation)) = parse_generation_key::<L>(&key) else {
+                continue;
+            };
+            highest
+                .entry(before)
+                .and_modify(|seen| *seen = (*seen).max(generation))
+                .or_insert(generation);
+        }
+        highest
+    }
+
+    /// Plan the lines a write past the used range adds on axis `L`, one per
+    /// element id of `ids` (`TRAME-261`). Each line hangs after the last line
+    /// of `index`, or after the line planned just before. Its generation is
+    /// one more than the highest the record holds for that line, or 0. `None`
+    /// when a generation would pass the last one: a repeat would make two
+    /// lines one (`TRAME-271`).
+    pub(crate) fn plan<L: AxisOrder>(
+        &self,
+        index: &SheetIndex,
+        ids: &[ElementId],
+    ) -> Option<Growth<L>> {
+        let view = L::view(index);
+        let mut before = view
+            .len()
+            .last()
+            .and_then(|last| view.uid(last))
+            .map_or(Before::Root, Before::Line);
+        let highest = if ids.is_empty() {
+            HashMap::new()
+        } else {
+            self.highest::<L>()
+        };
+        let mut steps = Vec::with_capacity(ids.len());
+        for id in ids {
+            let generation = match highest.get(&before) {
+                Some(seen) if seen.get() == u32::MAX => return None,
+                Some(seen) => seen.next(),
+                None => Version::new(0),
+            };
+            let uid = derive_uid::<L>(self.sheet, before, generation)?;
+            steps.push(GrowthStep {
+                before,
+                generation,
+                element: Element::derived(uid, *id),
+            });
+            before = Before::Line(uid);
+        }
+        Some(Growth {
+            steps,
+            axis: std::marker::PhantomData,
+        })
+    }
+
+    /// Write a planned growth: each derivation records its generation, drops
+    /// the one below it (`TRAME-276`), and pushes its element. The caller
+    /// commits, so the record rides the commit that pushes the line.
+    pub(crate) fn grow<L: AxisOrder>(
+        &self,
+        index: &mut SheetIndex,
+        growth: Growth<L>,
+    ) -> Option<()> {
+        let record = self.record();
+        for step in growth.steps {
+            record
+                .insert(&generation_key::<L>(step.before, step.generation), true)
+                .ok()?;
+            if let Some(below) = step.generation.get().checked_sub(1) {
+                let below = generation_key::<L>(step.before, Version::new(below));
+                if record.get(&below).is_some() {
+                    record.delete(&below).ok()?;
+                }
+            }
+            self.push::<L>(index, step.element)?;
+        }
+        Some(())
+    }
+
+    /// Drop every generation the record holds under the line `uid`, for a
+    /// delete that removes it.
+    pub(crate) fn purge_record(&self, uid: &Uid) {
+        let record = self.record();
+        let prefix = format!("{}:", uid.to_key_part());
+        let keys: Vec<String> = record
+            .keys()
+            .filter(|key| key.starts_with(&prefix))
+            .map(|key| key.to_string())
+            .collect();
+        for key in keys {
+            let _ = record.delete(&key);
+        }
     }
 }
 

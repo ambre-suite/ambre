@@ -278,6 +278,8 @@ impl TrameState {
         if filter_dropped {
             self.drop_filter();
         }
+        // The generations recorded after the line go with it.
+        self.axes().purge_record(&removed);
         // The line's own formatting is keyed by its uid alone: its size, and
         // for a row its filter mark (`TRAME-082`).
         let line_maps = match axis {

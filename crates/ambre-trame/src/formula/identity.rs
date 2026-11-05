@@ -183,16 +183,17 @@ impl CellAxis for Col {
     }
 }
 
-/// The line at `pos`, or the position itself past the used range.
+/// The visible element of the line at `pos`, or the position itself past the
+/// used range.
 fn bind_at<L: Line>(index: &SheetIndex, pos: Pos<L>) -> StoredAxis<Pos<L>> {
-    L::uid(index, pos).map_or(StoredAxis::At(pos), StoredAxis::Line)
+    L::element(index, pos).map_or(StoredAxis::At(pos), StoredAxis::Line)
 }
 
 /// The position of a stored axis, `None` for a line that is gone. The whole
 /// axis has no single position, so it is `None` too.
 fn position<L: Line>(index: &SheetIndex, axis: StoredAxis<Pos<L>>) -> Option<Pos<L>> {
     match axis {
-        StoredAxis::Line(uid) => L::pos(index, &uid),
+        StoredAxis::Line(element) => L::pos_of_element(index, &element),
         StoredAxis::At(pos) => Some(pos),
         StoredAxis::Whole => None,
     }
@@ -202,7 +203,7 @@ fn position<L: Line>(index: &SheetIndex, axis: StoredAxis<Pos<L>>) -> Option<Pos
 /// once it is gone. A position and the whole axis stay as they are.
 fn place<L: Line>(index: &SheetIndex, axis: StoredAxis<Pos<L>>) -> Option<StoredAxis<Pos<L>>> {
     match axis {
-        StoredAxis::Line(uid) => L::pos(index, &uid).map(StoredAxis::At),
+        StoredAxis::Line(element) => L::pos_of_element(index, &element).map(StoredAxis::At),
         other => Some(other),
     }
 }
