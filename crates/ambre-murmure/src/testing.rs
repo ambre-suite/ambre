@@ -65,7 +65,13 @@ pub fn channel_of(
     };
     let (events, from_logic) =
         local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
-    let view = MurmureView::new(Some(from_logic), None, reads, size, ThemeControl::default());
+    let view = MurmureView::new(
+        Some(ambre_bus::Inbox::direct(from_logic)),
+        None,
+        reads,
+        size,
+        ThemeControl::default(),
+    );
     let author = Id::<User>::mint();
     let messages = texts
         .iter()

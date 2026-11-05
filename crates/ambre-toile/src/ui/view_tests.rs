@@ -28,9 +28,9 @@ fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>
 /// One board view and the far ends of its two channels.
 struct Rig {
     view: ToileView,
-    to_logic: Receiver<LogicCommand>,
+    to_logic: Receiver<LogicCommand<ToileCommand>>,
     /// The Logic thread's side of the view's inbound channel.
-    from_logic: ambre_bus::conduit::Sender<UiEvent>,
+    from_logic: ambre_bus::conduit::Sender<UiEvent<ToileEvent>>,
     /// What the view asked the shell to tell the user.
     notices: NoticePublisher,
 }
@@ -49,8 +49,8 @@ impl Rig {
         let notices = NoticePublisher::new();
         let view = ToileView::new(
             Id::<Document>::mint(),
-            tx,
-            rx,
+            Port::direct(tx),
+            Inbox::direct(rx),
             ambre_core::Px::<ambre_core::Surface>::new(1200.0),
             ambre_core::Px::<ambre_core::Surface>::new(800.0),
             TextInput::detached(),
@@ -160,7 +160,7 @@ impl Rig {
     fn answer(&mut self, ev: ToileEvent) {
         let sent = self.from_logic.try_send(UiEvent::Viewport {
             document_id: self.view.document_id,
-            event: AppEvent::Toile(ev),
+            event: ev,
         });
         assert!(sent.is_ok(), "the inbound channel has room");
         self.view.update();
@@ -195,10 +195,7 @@ impl Rig {
         self.to_logic
             .try_iter()
             .filter_map(|msg| match msg {
-                LogicCommand::App {
-                    command: AppCommand::Toile(cmd),
-                    ..
-                } => Some(cmd),
+                LogicCommand::App { command: cmd, .. } => Some(cmd),
                 _ => None,
             })
             .collect()
@@ -2948,10 +2945,7 @@ impl Rig {
         self.to_logic
             .try_iter()
             .filter_map(|msg| match msg {
-                LogicCommand::App {
-                    command: AppCommand::Toile(cmd),
-                    ..
-                } => Some(cmd),
+                LogicCommand::App { command: cmd, .. } => Some(cmd),
                 _ => None,
             })
             .collect()

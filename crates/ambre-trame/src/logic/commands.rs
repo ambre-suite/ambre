@@ -368,7 +368,7 @@ impl TrameState {
     /// the call is a no-op and reports nothing: the availability the chrome
     /// holds is still true (`UNDO-009`).
     ///
-    /// [`UndoState`]: ambre_bus::TrameEvent::UndoState
+    /// [`UndoState`]: crate::message::TrameEvent::UndoState
     pub(super) fn apply_history(&mut self, step: HistoryStep) -> TrameOutcome {
         // An undo can take back the sheet the user is on, an import's above
         // all. The reader then lands where a deletion leaves them (`TRAME-075`).

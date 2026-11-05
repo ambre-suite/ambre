@@ -8,7 +8,6 @@
 // drains both the same way (`PROSE-UI-056`).
 // ============================================================================
 
-use ambre_bus::AppCommand;
 use ambre_bus::app::prose::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
 use ambre_commands::{ClipboardWrite, PasteForm};
@@ -28,10 +27,10 @@ pub struct ProseHandler {
 }
 
 impl CommandHandler for ProseHandler {
-    type Command = AppCommand;
+    type Command = ProseCommand;
 
-    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
-        let export = |format| AppCommand::Prose(ProseCommand::ExportDocument { format });
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<ProseCommand>> {
+        let export = |format| ProseCommand::ExportDocument { format };
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
             SAVE_FILE => ShellAction::Send(export(ExportFormat::Ambre)),
@@ -42,16 +41,14 @@ impl CommandHandler for ProseHandler {
             IMPORT_MARKDOWN => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Markdown,
                 unreadable: "Could not read the Markdown file",
-                read: Box::new(|data| {
-                    AppCommand::Prose(ProseCommand::ImportDocument {
-                        format: ImportFormat::Markdown,
-                        data,
-                    })
+                read: Box::new(|data| ProseCommand::ImportDocument {
+                    format: ImportFormat::Markdown,
+                    data,
                 }),
             }),
             // A menu row or the palette; the chords are the view's.
-            UNDO => ShellAction::Send(AppCommand::Prose(ProseCommand::Undo)),
-            REDO => ShellAction::Send(AppCommand::Prose(ProseCommand::Redo)),
+            UNDO => ShellAction::Send(ProseCommand::Undo),
+            REDO => ShellAction::Send(ProseCommand::Redo),
             COPY => ShellAction::Copy(ClipboardWrite::Copy),
             CUT => ShellAction::Copy(ClipboardWrite::Cut),
             PASTE => ShellAction::Paste(PasteForm::Rich),
@@ -65,7 +62,7 @@ impl CommandHandler for ProseHandler {
         &self,
         id: StaticKey<Commands>,
         target: ambre_chrome::KeyTarget,
-    ) -> KeyRoute<AppCommand> {
+    ) -> KeyRoute<ProseCommand> {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
@@ -82,7 +79,7 @@ impl CommandHandler for ProseHandler {
     fn sealed_save(
         &self,
         _passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-    ) -> Option<AppCommand> {
+    ) -> Option<ProseCommand> {
         // Prose declares no sealed save.
         None
     }

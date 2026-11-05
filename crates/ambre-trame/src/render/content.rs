@@ -24,11 +24,11 @@ pub struct CellContent<'a> {
     /// Strikethrough run drawn through the glyphs.
     pub strikethrough: Strikethrough,
     /// Horizontal alignment ([`HAlign::Auto`] resolves numbers right, text left).
-    pub h_align: ambre_bus::HAlign,
+    pub h_align: crate::message::HAlign,
     /// What the computed value is: what [`HAlign::Auto`] resolves on.
     pub numeric: CellValueKind,
     /// Vertical alignment within the cell (or the span rect for a merge master).
-    pub v_align: ambre_bus::VAlign,
+    pub v_align: crate::message::VAlign,
     /// Text colour, packed `0xRRGGBB` (`None` = the palette default).
     pub fg: Option<Rgb>,
     /// Fill colour, packed `0xRRGGBB` (`None` = the palette `content_bg`).
@@ -40,7 +40,7 @@ pub struct CellContent<'a> {
     /// Wrap onto multiple lines inside the cell instead of overflowing.
     pub wrap: WordBreak,
     /// Per-edge border (style + colour each); `None` edges are not drawn.
-    pub borders: ambre_bus::Borders,
+    pub borders: crate::message::Borders,
 }
 
 impl<'a> CellContent<'a> {
@@ -53,15 +53,15 @@ impl<'a> CellContent<'a> {
             italic: Slant::Upright,
             underline: Underline::Plain,
             strikethrough: Strikethrough::Plain,
-            h_align: ambre_bus::HAlign::Auto,
+            h_align: crate::message::HAlign::Auto,
             numeric: CellValueKind::from_bool(crate::formula::types::finite_number(text).is_some()),
-            v_align: ambre_bus::VAlign::Middle,
+            v_align: crate::message::VAlign::Middle,
             fg: None,
             bg: None,
             font: None,
             size: None,
             wrap: WordBreak::Whole,
-            borders: ambre_bus::Borders::default(),
+            borders: crate::message::Borders::default(),
         }
     }
 }
@@ -73,7 +73,7 @@ pub struct Decoration {
     pub strikethrough: Strikethrough,
 }
 
-use ambre_bus::CellValueKind;
+use crate::message::CellValueKind;
 use ambre_core::{Px, Surface};
 use ambre_core::{Slant, Weight, WordBreak};
 pub use ambre_core::{Strikethrough, Underline};
@@ -97,15 +97,14 @@ pub(super) fn rgb(packed: Rgb) -> Color {
 /// Resolve a cell's parley alignment from its [`HAlign`], deferring `Auto` to
 /// whether the cell computes to a number. The formatted text is not asked: a
 /// currency or a fraction no longer parses as one (`TRAME-UI-093`).
-pub(super) fn cell_alignment(h: ambre_bus::HAlign, numeric: CellValueKind) -> Alignment {
+pub(super) fn cell_alignment(h: crate::message::HAlign, numeric: CellValueKind) -> Alignment {
     match (h, numeric) {
-        (ambre_bus::HAlign::Left, _) | (ambre_bus::HAlign::Auto, CellValueKind::Text) => {
+        (crate::message::HAlign::Left, _) | (crate::message::HAlign::Auto, CellValueKind::Text) => {
             Alignment::Start
         }
-        (ambre_bus::HAlign::Center, _) => Alignment::Center,
-        (ambre_bus::HAlign::Right, _) | (ambre_bus::HAlign::Auto, CellValueKind::Number) => {
-            Alignment::End
-        }
+        (crate::message::HAlign::Center, _) => Alignment::Center,
+        (crate::message::HAlign::Right, _)
+        | (crate::message::HAlign::Auto, CellValueKind::Number) => Alignment::End,
     }
 }
 
@@ -120,14 +119,14 @@ pub(super) struct TextFit {
 }
 
 /// Vertical text offset of a text block inside its box, honouring the cell's
-/// [`VAlign`](ambre_bus::VAlign). Clamped to `>= 0` so oversized text never
+/// [`VAlign`](crate::message::VAlign). Clamped to `>= 0` so oversized text never
 /// lifts above the box top.
-pub(super) fn cell_v_offset(v: ambre_bus::VAlign, fit: TextFit) -> Px<Surface> {
+pub(super) fn cell_v_offset(v: crate::message::VAlign, fit: TextFit) -> Px<Surface> {
     let room = fit.box_height - fit.text_height;
     match v {
-        ambre_bus::VAlign::Top => Px::<Surface>::ZERO,
-        ambre_bus::VAlign::Middle => (room / 2.0).max(Px::<Surface>::ZERO),
-        ambre_bus::VAlign::Bottom => room.max(Px::<Surface>::ZERO),
+        crate::message::VAlign::Top => Px::<Surface>::ZERO,
+        crate::message::VAlign::Middle => (room / 2.0).max(Px::<Surface>::ZERO),
+        crate::message::VAlign::Bottom => room.max(Px::<Surface>::ZERO),
     }
 }
 
@@ -141,8 +140,8 @@ struct BorderStroke {
 }
 
 /// Resolve a [`BorderStyle`] into the stroke it draws with.
-fn border_stroke(style: ambre_bus::BorderStyle) -> BorderStroke {
-    use ambre_bus::BorderStyle as Bs;
+fn border_stroke(style: crate::message::BorderStyle) -> BorderStroke {
+    use crate::message::BorderStyle as Bs;
     let (width, dash_period) = match style {
         Bs::Solid | Bs::Double => (1.0, 0.0),
         Bs::Dashed => (1.0, 6.0),
@@ -164,9 +163,9 @@ fn styled_segment<S: DrawSurface>(
     surface: &mut S,
     segment: ambre_draw::Line,
     color: Color,
-    style: ambre_bus::BorderStyle,
+    style: crate::message::BorderStyle,
 ) {
-    use ambre_bus::BorderStyle as Bs;
+    use crate::message::BorderStyle as Bs;
     let (x0, y0, x1, y1) = (segment.p0.x, segment.p0.y, segment.p1.x, segment.p1.y);
     let stroke = border_stroke(style);
     // The surface draws in bare f64: the period unwraps once, here.
@@ -228,7 +227,7 @@ fn draw_cell_border<S: DrawSurface>(
     default_color: Color,
 ) {
     let b = &content.borders;
-    let mut edge = |cb: Option<ambre_bus::CellBorder>, from: (f64, f64), to: (f64, f64)| {
+    let mut edge = |cb: Option<crate::message::CellBorder>, from: (f64, f64), to: (f64, f64)| {
         if let Some(cb) = cb {
             let color = cb.color.map(rgb).unwrap_or(default_color);
             styled_segment(surface, ambre_draw::Line::new(from, to), color, cb.style);
@@ -241,7 +240,7 @@ fn draw_cell_border<S: DrawSurface>(
 }
 
 /// Whether any of the four edges carries a border (drives the border pass).
-fn has_border(b: &ambre_bus::Borders) -> bool {
+fn has_border(b: &crate::message::Borders) -> bool {
     b.top.is_some() || b.right.is_some() || b.bottom.is_some() || b.left.is_some()
 }
 

@@ -8,11 +8,11 @@ ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple | f32	a r
 ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed weight of one vote, which travels and is stored as the bare i32
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount | i64	a signed count of months that may run past December or below January, as DATE and EDATE read it. TimeSpan<Month> would need a Month unit over an i64 in core, which no other site uses
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority | i64	the evaluation order of conditional-format rules: it orders and counts nothing. Zero is a rank, so it is no Ordinal, and no issuer hands it out, so it is no Seq
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
+ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
+ambre-trame | src/message/calendar.rs | crate::message::calendar | MonthCount | i64	a signed count of months that may run past December or below January, as DATE and EDATE read it. TimeSpan<Month> would need a Month unit over an i64 in core, which no other site uses
+ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
+ambre-trame | src/message/event.rs | crate::message::event | CondFormatPriority | i64	the evaluation order of conditional-format rules: it orders and counts nothing. Zero is a rank, so it is no Ordinal, and no issuer hands it out, so it is no Seq
+ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for
 ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty. draw mints one from a random draw infallibly, which the public door of Validated cannot do
 ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key that orders as its text, the order the store ranges keys in, and every names the bounds of the whole store
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id of a registered font blob, private to the glyph atlas

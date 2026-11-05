@@ -9,9 +9,9 @@
 //! - [`TOTAL_ROWS`] / [`TOTAL_COLS`] -- grid dimensions shared by the logic
 //!   (bounds clamping) and the UI (virtual-scroll math).
 //!
-//! The IPC message types ([`TrameCommand`], [`TrameEvent`], [`DisplayCell`])
-//! live in `ambre-bus` (the typed application data plane) and are re-exported
-//! here for convenience.
+//! - [`message`] -- the IPC message types ([`TrameCommand`], [`TrameEvent`],
+//!   [`DisplayCell`]) and their value types. It is Trame's own vocabulary,
+//!   which the envelopes of `ambre-bus` carry as a type parameter (`BUS-032`).
 //!
 //! The UI half is consumed by `ambre-app` and the logic half by `ambre-logic`;
 //! both link into the single WASM binary.
@@ -21,6 +21,7 @@
 pub mod columns;
 pub mod formula;
 pub mod logic;
+pub mod message;
 pub mod model;
 /// Shared, `DrawSurface`-generic grid rendering primitives (`GridLayout`,
 /// `draw_cells_on`, `draw_grid_lines_on`, `draw_col_headers_on`, ...). Composed
@@ -40,13 +41,14 @@ pub mod chrome;
 #[cfg(test)]
 pub mod test_support;
 
-pub use ambre_bus::{
-    BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
-    CellStyle, ClipboardCell, ClipboardPayload, Col, CondFormatKind, CondStyle, CsvDelimiter,
-    Decimals, DecimalsStep, DefinedName, DisplayCell, EditSession, FillMode, FilterKind, FilterOp,
-    HAlign, HeaderRow, MergeSpan, Row, SelectionKind, SortKey, SortOrder, StylePatch, TabStrip,
-    TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
+pub use crate::message::{
+    BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle,
+    ClipboardCell, ClipboardPayload, CondFormatKind, CondStyle, CsvDelimiter, Decimals,
+    DecimalsStep, DefinedName, DisplayCell, EditSession, FillMode, FilterKind, FilterOp, HAlign,
+    HeaderRow, SelectionKind, SortKey, SortOrder, StylePatch, TabStrip, TrameCommand, TrameEvent,
+    VAlign, ValidationKind, ValidationOnInvalid,
 };
+pub use ambre_bus::{CellPos, CellRect, Col, MergeSpan, Row};
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Doc, Px};
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};

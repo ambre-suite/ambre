@@ -2348,6 +2348,12 @@ impl ExportFormat {
     }
 }
 
+impl crate::Mutation for ProseCommand {
+    fn is_mutating(&self) -> bool {
+        ProseCommand::is_mutating(self)
+    }
+}
+
 impl ProseCommand {
     /// Whether this command can change the document's shared CRDT state.
     ///

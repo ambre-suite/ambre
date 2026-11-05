@@ -14,8 +14,8 @@ impl TrameView {
     )]
     pub fn new(
         document_id: Id<Document>,
-        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+        to_logic: Port<TrameCommand>,
+        from_logic: Inbox<TrameEvent>,
         canvas_width: ambre_core::Px<ambre_core::Surface>,
         canvas_height: ambre_core::Px<ambre_core::Surface>,
         text_input: TextInput,
@@ -144,7 +144,7 @@ impl TrameView {
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
-            command: AppCommand::Trame(cmd),
+            command: cmd,
         };
         match ambre_bus::send_lossy(&self.to_logic, msg) {
             LossyOutcome::Sent => true,
@@ -183,7 +183,7 @@ impl TrameView {
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
-            command: AppCommand::Trame(cmd),
+            command: cmd,
         };
         match self.outbox.send(msg) {
             SendOutcome::Sent => Ok(()),

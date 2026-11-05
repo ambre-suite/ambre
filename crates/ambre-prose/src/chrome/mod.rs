@@ -124,12 +124,11 @@ impl ProseSignals {
     /// Take in the history's availability from a Prose
     /// [`UndoState`](crate::events::ProseEvent::UndoState). Every other event
     /// leaves it as it was (`UNDO-006`).
-    pub fn mirror_event(&self, ev: &ambre_bus::UiEvent) {
-        if let ambre_bus::UiEvent::Viewport {
-            event: ambre_bus::AppEvent::Prose(crate::events::ProseEvent::UndoState { undo, redo }),
-            ..
-        } = ev
-        {
+    pub fn mirror_event<S: ambre_bus::Embed<crate::events::ProseEvent>>(
+        &self,
+        ev: &ambre_bus::UiEvent<S>,
+    ) {
+        if let Some(crate::events::ProseEvent::UndoState { undo, redo }) = ev.viewport_event() {
             self.history.set(History {
                 undo: *undo,
                 redo: *redo,

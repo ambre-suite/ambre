@@ -29,7 +29,7 @@ fn bold_stays_on_the_cell_not_the_selection() {
     assert!(matches!(
         evts.display[0],
         TrameEvent::StyleApplied {
-            bold: ambre_bus::Weight::Bold,
+            bold: ambre_core::Weight::Bold,
             ..
         }
     ));
@@ -47,7 +47,7 @@ fn bold_stays_on_the_cell_not_the_selection() {
     assert!(matches!(
         evts.display[0],
         TrameEvent::StyleApplied {
-            bold: ambre_bus::Weight::Regular,
+            bold: ambre_core::Weight::Regular,
             ..
         }
     ));
@@ -71,10 +71,10 @@ fn bold_stays_on_the_cell_not_the_selection() {
         .iter()
         .find(|c| c.row == Pos::<Row>::new(1) && c.col == Pos::<Col>::new(1))
         .unwrap();
-    assert_eq!(a1.bold, ambre_bus::Weight::Bold, "A1 must stay bold");
+    assert_eq!(a1.bold, ambre_core::Weight::Bold, "A1 must stay bold");
     assert_eq!(
         b2.bold,
-        ambre_bus::Weight::Regular,
+        ambre_core::Weight::Regular,
         "B2 must not become bold"
     );
 }
@@ -94,8 +94,8 @@ fn formatting_survives_snapshot_roundtrip() {
     });
     state.handle_command(TrameCommand::SetCellStyle {
         patch: crate::StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
-            italic: Some(ambre_bus::Slant::Italic),
+            bold: Some(ambre_core::Weight::Bold),
+            italic: Some(ambre_core::Slant::Italic),
             ..Default::default()
         },
     });
@@ -123,12 +123,12 @@ fn formatting_survives_snapshot_roundtrip() {
         .unwrap();
     assert_eq!(
         a1.bold,
-        ambre_bus::Weight::Bold,
+        ambre_core::Weight::Bold,
         "A1 must stay bold after reload"
     );
     assert_eq!(
         a1.italic,
-        ambre_bus::Slant::Italic,
+        ambre_core::Slant::Italic,
         "A1 must stay italic after reload"
     );
 }
@@ -163,7 +163,7 @@ fn set_cell_style_round_trips_and_formats_numbers() {
             format: Some(CellFormat::Percent),
             decimals: Some(ambre_core::Bounded::new(1)),
             h_align: Some(HAlign::Right),
-            underline: Some(ambre_bus::Underline::Underlined),
+            underline: Some(ambre_core::Underline::Underlined),
             ..Default::default()
         },
     });
@@ -178,7 +178,7 @@ fn set_cell_style_round_trips_and_formats_numbers() {
         .expect("StyleApplied emitted");
     assert_eq!(style_ev.format, CellFormat::Percent);
     assert_eq!(style_ev.h_align, HAlign::Right);
-    assert_eq!(style_ev.underline, ambre_bus::Underline::Underlined);
+    assert_eq!(style_ev.underline, ambre_core::Underline::Underlined);
 
     // Reload from a snapshot: the style must persist in the CRDT.
     let snapshot = state.export_snapshot();
@@ -202,7 +202,7 @@ fn set_cell_style_round_trips_and_formats_numbers() {
         .unwrap();
     assert_eq!(
         a1.underline,
-        ambre_bus::Underline::Underlined,
+        ambre_core::Underline::Underlined,
         "underline must survive reload"
     );
     assert_eq!(a1.h_align, HAlign::Right, "alignment must survive reload");
@@ -679,11 +679,11 @@ fn sum_over_plain_literals_survives_reseed() {
 fn multi_sheet_isolation_and_name_lookup() {
     let mut state = TrameState::new();
     assert_eq!(
-        state.sheet_name_to_id(&ambre_bus::SheetName::stored("Sheet1".to_owned())),
+        state.sheet_name_to_id(&crate::message::SheetName::stored("Sheet1".to_owned())),
         Some(default_sheet())
     );
     assert_eq!(
-        state.sheet_name_to_id(&ambre_bus::SheetName::stored("Nope".to_owned())),
+        state.sheet_name_to_id(&crate::message::SheetName::stored("Nope".to_owned())),
         None
     );
 
@@ -723,7 +723,7 @@ fn multi_sheet_isolation_and_name_lookup() {
         loro::LoroValue::Map(ref m) if m.is_empty()
     ));
     assert_eq!(
-        state.sheet_name_to_id(&ambre_bus::SheetName::stored("Sheet2".to_owned())),
+        state.sheet_name_to_id(&crate::message::SheetName::stored("Sheet2".to_owned())),
         Some(Id::<Sheet>::from_text("s1".to_owned()))
     );
 }
@@ -886,13 +886,13 @@ fn selection_style_is_a_single_undo() {
             .unwrap();
         assert_eq!(
             cell.bold,
-            ambre_bus::Weight::Regular,
+            ambre_core::Weight::Regular,
             "col {c} still bold after ONE undo -> style was multi-undo"
         );
     }
 }
 
-use ambre_bus::{CellFormat, StylePatch};
+use crate::message::{CellFormat, StylePatch};
 
 /// Format `A1` holding `value` with `format`, the selection on it.
 fn formatted_a1(value: &str, format: CellFormat) -> TrameState {
@@ -940,7 +940,7 @@ fn a_formatted_number_aligns_as_a_number_everywhere() {
         );
         assert_eq!(
             a1.numeric,
-            ambre_bus::CellValueKind::Number,
+            crate::message::CellValueKind::Number,
             "{format:?}: the grid aligns it as a number"
         );
         let TrameEvent::StyleApplied { numeric, .. } = state.style_state_event() else {
@@ -948,14 +948,14 @@ fn a_formatted_number_aligns_as_a_number_everywhere() {
         };
         assert_eq!(
             numeric,
-            ambre_bus::CellValueKind::Number,
+            crate::message::CellValueKind::Number,
             "{format:?}: the toolbar agrees with the grid"
         );
     }
     let mut state = formatted_a1("label", CellFormat::Currency);
     assert_eq!(
         read_display(&mut state, 0, 0).numeric,
-        ambre_bus::CellValueKind::Text
+        crate::message::CellValueKind::Text
     );
 }
 
@@ -1038,7 +1038,7 @@ fn toolbar_reports_the_block_style_inside_a_merge() {
     select(&mut state, (0, 0), (0, 0));
     state.handle_command(TrameCommand::SetCellStyle {
         patch: StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
+            bold: Some(ambre_core::Weight::Bold),
             format: Some(CellFormat::Currency),
             ..Default::default()
         },
@@ -1053,8 +1053,8 @@ fn toolbar_reports_the_block_style_inside_a_merge() {
     else {
         panic!("expected StyleApplied")
     };
-    assert_eq!(merged, ambre_bus::Merge::Merged);
-    assert_eq!(bold, ambre_bus::Weight::Bold, "the block is bold");
+    assert_eq!(merged, crate::message::Merge::Merged);
+    assert_eq!(bold, ambre_core::Weight::Bold, "the block is bold");
     assert_eq!(style.format, CellFormat::Currency);
 }
 
@@ -1067,7 +1067,7 @@ fn style_beyond_the_cap_is_refused_and_not_drawn() {
     select(&mut state, (row, 0), (row, 0));
     let out = state.handle_command(TrameCommand::SetCellStyle {
         patch: StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
+            bold: Some(ambre_core::Weight::Bold),
             ..Default::default()
         },
     });
@@ -1078,7 +1078,7 @@ fn style_beyond_the_cap_is_refused_and_not_drawn() {
     );
     assert_eq!(
         read_display(&mut state, row, 0).bold,
-        ambre_bus::Weight::Regular,
+        ambre_core::Weight::Regular,
         "nothing drawn"
     );
     let TrameEvent::StyleApplied { bold, .. } = state.style_state_event() else {
@@ -1086,7 +1086,7 @@ fn style_beyond_the_cap_is_refused_and_not_drawn() {
     };
     assert_eq!(
         bold,
-        ambre_bus::Weight::Regular,
+        ambre_core::Weight::Regular,
         "the toolbar reports what the document holds"
     );
 }

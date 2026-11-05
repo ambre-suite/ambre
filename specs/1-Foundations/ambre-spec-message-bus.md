@@ -24,9 +24,9 @@ prefix is `BUS`.
 |---|---|---|---|---|---|---|
 | `BUS-002` | `INV` | A document command MUST reach the Logic thread as a variant of a closed sum, never as an opaque payload. | this spec section 2 | exhaustive-match -- `AppCommand` and `AppEvent` are closed enums, so a missing document type fails the exhaustive `match` in `ambre_logic::data::handle_app_command` | none | verified |
 | `BUS-006` | `INV` | The document registry MUST stay flat: an embedded child MUST be addressed by its own identity, in one lookup. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-084` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` -- each seeds a parent and a child side by side and asserts the child's role decides, which only holds if the child is its own entry | none | verified |
-| `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_bus::host::the_ui_to_logic_path_carries_nothing_an_encoder_takes` -- `LogicCommand`, `UiEvent` and the app envelopes implement no `Serialize` | none | verified |
+| `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_bus::host::the_ui_to_logic_path_carries_nothing_an_encoder_takes` -- `LogicCommand` and `UiEvent` implement no `Serialize`, whatever they carry; `ambre_logic::app::tests::the_sums_on_the_ui_to_logic_path_carry_nothing_an_encoder_takes` -- nor do the two sums they carry | none | verified |
 | `BUS-029` | `INV` | A message field that carries an identifier MUST carry a type of its own, never a bare string or integer. | this spec section 2; `ai/ambre-rust-style.md`; `UI-THREAD-060`, the same rule for a shell signal | ci-gate -- `scripts/crate_boundaries.py` refuses an `id`, `*_id` or `*_ids` field of a bare primitive type in `ambre-bus` above its tests; type-level -- the sheet, filter view, conditional format and paragraph style ids each carry a newtype, so a swapped name and id fail to compile | none | verified |
-| `BUS-032` | `INV` | An application's content commands and events MUST be declared in that application's crate, never in the crate that carries the envelopes. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-018` | not built | unbuilt -- lands with the `Each application owns its message vocabulary` Story (`ambre-roadmap.md` E8). The command and event enums of Trame, Toile, Prose and Murmure, and their value types, sit under `ambre-bus/src/app/` | unimplemented |
+| `BUS-032` | `INV` | An application's content commands and events MUST be declared in that application's crate, never in the crate that carries the envelopes. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-018` | not built | unbuilt -- lands with the `Each application owns its message vocabulary` Story (`ambre-roadmap.md` E8). Trame's vocabulary lives in `ambre-trame`, behind the generic envelopes. The command and event enums of Toile, Prose and Murmure, and their value types, still sit under `ambre-bus/src/app/` | unimplemented |
 | `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | exhaustive-match -- `LogicCommand::Channel` carries a `MurmureCommand`, a closed enum matched in `ambre_logic::channels::handle_channel_command`, so a new command does not build until its arm is written; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` | none | verified |
 | `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | type-level -- `LogicCommand::Channel` and `UiEvent::Channel` hold a typed `MurmureCommand` and `MurmureEvent`, and no `SyncCommand` or `LogicEvent` variant names a channel message: a channel delta is the `SendUpdate` of its document | none | verified |
 
@@ -115,16 +115,17 @@ travels towards the downstream worker and an `Event` always flows back.
 | shared service plane | `RestCommand` / `RestEvent` / `Request` | `rest.rs` | 31 / 34 |
 
 ```rust
-pub enum LogicCommand {
-    App { document_id: Id<Document>, command: AppCommand },   // content
+pub enum LogicCommand<A = Infallible> {
+    App { document_id: Id<Document>, command: A },   // content, the view's own command
     Channel { channel_id: Id<Channel>, command: MurmureCommand }, // content, a channel
     Rest { id: Seq<Request>, cmd: RestCommand },     // service, relayed
     OpenDocument { document_id: Id<Document>, doc_type: DocType },
     // control and local restore variants, one per fire-and-forget operation
 }
+pub enum Request {}  // a family of `ambre_core::Seq`; `None` answers no request
+// in `ambre-logic`, downstream of every application:
 pub enum AppCommand { Trame(TrameCommand), Toile(ToileCommand), Prose(ProseCommand) }
 pub enum AppEvent { Trame(TrameEvent), Toile(ToileEvent), Prose(ProseEvent) }
-pub enum Request {}  // a family of `ambre_core::Seq`; `None` answers no request
 ```
 
 The four envelopes and the service family are the contract. The variant lists are not restated
@@ -147,10 +148,17 @@ nothing. An embedded child is an ordinary entry of the flat registry, addressed 
 (`BUS-006`). The view layer nests while the data layer stays flat. What crosses into a focused
 child is a raw input event, never a command, because a parent view cannot name a child's view type.
 
-**Per-app modules, envelopes by direction.** The transport envelopes stay split by direction: each
-is bound to one hop. The typed content plane is grouped one module per document type under `app/`.
-A document type's command enum, event enum and value types sit together. Everything is
-re-exported flat at the crate root, so a downstream crate never names the internal layout.
+**Each application owns its vocabulary.** The transport envelopes stay split by direction: each is
+bound to one hop. The two UI to Logic envelopes are generic over the document command and event
+they carry. Each application declares its command enum, event enum and value types in its own crate
+(`BUS-032`). The Logic runtime declares the sums over them, since it sits downstream of every
+application.
+
+A view holds a `Port` and an `Inbox` typed by its own vocabulary. The launcher builds them over the
+shared queues: `Embed` wraps a view's command into the sum, and unwraps its events. So the Sync
+worker builds against no application's vocabulary (`ARCH-069`). Trame's vocabulary
+has moved to `ambre-trame`. Toile's, Prose's and Murmure's content types still sit in the `app/`
+module of `ambre-bus`, re-exported flat at its root.
 
 **The role gate.** Each open document carries this client's role on **that** document. The
 dispatcher drops a mutating command when the role is not writable (`BUS-007`). A freshly opened
@@ -221,6 +229,7 @@ The bus has no control of its own. What a user meets is what it does under load.
 | The registry is flat and nesting is a view concern | a tree of documents, with a child reached through its parent | it needs a depth bound, an unwrapping path and a rule for a cycle. A flat map needs one lookup, and the nesting the user sees is the view owning a child view |
 | The role gate is comfort, and the relay stays the authority | trusting the client gate | the client is the attacker's own machine, so a gate there proves nothing |
 | The role gate is comfort, and the relay stays the authority | offering every edit and letting the relay refuse | the interface would offer an edit the relay rejects, and the user learns it after the act rather than before |
+| A view's own command is embedded into the sum on the one UI to Logic queue | one queue per application into the Logic thread, each typed by that application's command | the launcher's own commands and a view's commands would travel on two queues, and nothing would order them. A close sent after an edit could overtake it, which is the loss `ARCH-019` forbids |
 | Nothing is encoded between the UI and the Logic threads | one encoding for every hop, so that all four queues look alike | that path carries scroll and typing, where latency is the whole budget, and the two threads share one heap. Encoding it would buy isolation the crate graph already gives |
 | The envelopes group by direction, the content plane by application | grouping every type by direction, including the per-application value types | a document type's command and its event share the whole value vocabulary, so splitting them by direction scatters each application over two modules. An envelope belongs to one hop, which is why direction is the right axis for it and the wrong one below it |
 

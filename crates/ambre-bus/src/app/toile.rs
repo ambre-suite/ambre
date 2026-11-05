@@ -2347,6 +2347,12 @@ impl fmt::Debug for ToileCommand {
     }
 }
 
+impl crate::Mutation for ToileCommand {
+    fn is_mutating(&self) -> bool {
+        ToileCommand::is_mutating(self)
+    }
+}
+
 impl ToileCommand {
     /// Whether this command can change the board's shared CRDT state
     /// (`architecture`).

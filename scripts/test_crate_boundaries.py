@@ -190,6 +190,8 @@ def scratch(tmp: str) -> Path:
     write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
     write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
     write(root, f"{cb.BUS}/lib.rs", "pub struct SheetId(pub String);\npub enum C {\n    Go { sheet_id: SheetId },\n}\n")
+    for messages in cb.APP_MESSAGES:
+        write(root, f"{messages}/mod.rs", "pub enum E {\n    Gone { sheet_id: SheetId },\n}\n")
     write(root, f"{cb.WIRE_DIRS[0]}/share.rs", WIRE_ROUTE)
     write(root, f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW)
     for rel, text in WALKS.items():
@@ -1003,8 +1005,9 @@ class CrateBoundaries(unittest.TestCase):
             "pub struct S {\n    pub target_sheet_id: Option<String>,\n}\n",
             "pub struct S {\n    pub row_ids: Vec<u64>,\n}\n",
         ):
-            errors = self.breach(f"{cb.BUS}/app/trame/command.rs", text)
-            self.assertTrue(any("carries an identifier as a bare" in e for e in errors), (text, errors))
+            for rel in (f"{cb.BUS}/app/toile.rs", f"{cb.APP_MESSAGES[0]}/command.rs"):
+                errors = self.breach(rel, text)
+                self.assertTrue(any("carries an identifier as a bare" in e for e in errors), (rel, text, errors))
 
     def test_a_bus_identifier_of_its_own_type_a_parameter_or_a_test_stays_free(self):
         text = (
@@ -1012,7 +1015,7 @@ class CrateBoundaries(unittest.TestCase):
             "pub fn go(sheet_id: &str) {}\n"
             "#[cfg(test)]\nmod tests {\n    struct T {\n        id: u32,\n    }\n}\n"
         )
-        self.assertEqual(self.breach(f"{cb.BUS}/app/trame/command.rs", text), [])
+        self.assertEqual(self.breach(f"{cb.APP_MESSAGES[0]}/command.rs", text), [])
 
     def test_a_bus_crate_gone_from_the_tree_is_an_error_not_a_pass(self):
         import tempfile
@@ -1022,6 +1025,15 @@ class CrateBoundaries(unittest.TestCase):
             (root / cb.BUS / "lib.rs").unlink()
             errors = self.run_checks(root)
         self.assertTrue(any("identifier boundary reads nothing" in e for e in errors), errors)
+
+    def test_an_application_vocabulary_gone_from_the_tree_is_an_error_not_a_pass(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            (root / cb.APP_MESSAGES[0] / "mod.rs").unlink()
+            errors = self.run_checks(root)
+        self.assertTrue(any("its identifiers go unread" in e for e in errors), errors)
 
     def test_a_view_storing_what_the_relay_writes_off_the_event_is_refused(self):
         cases = (

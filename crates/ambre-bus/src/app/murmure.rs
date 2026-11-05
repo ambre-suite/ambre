@@ -495,7 +495,7 @@ pub enum MurmureCommand {
 impl MurmureCommand {
     /// Whether the command can change a document of the channel.
     ///
-    /// The same question [`AppCommand::is_mutating`](crate::AppCommand::is_mutating)
+    /// The same question [`Mutation::is_mutating`](crate::Mutation::is_mutating)
     /// answers for a document. A load reads, and a cursor is no document.
     pub fn is_mutating(&self) -> bool {
         match self {

@@ -14,7 +14,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{Broadcast, SlidePosition, StatsRequestKind, ToileCommand, ToileEvent};
-use ambre_bus::{AppCommand, AppEvent, UiEvent};
+use ambre_bus::{Embed, UiEvent};
 use ambre_core::id::{Frame, Id, User};
 use leptos::prelude::*;
 
@@ -54,7 +54,7 @@ pub struct ToileRelay {
 impl ToileRelay {
     /// The command `intent` becomes. `None` for a note edit with no slide on
     /// screen, which has no frame to land on.
-    pub fn command(&self, intent: ToileIntent) -> Option<AppCommand> {
+    pub fn command(&self, intent: ToileIntent) -> Option<ToileCommand> {
         let command = match intent {
             ToileIntent::Find(q) => ToileCommand::Find {
                 query: q.query,
@@ -75,16 +75,12 @@ impl ToileRelay {
                 PresenterIntent::Follow(who) => ToileCommand::FollowPresenter(who),
             },
         };
-        Some(AppCommand::Toile(command))
+        Some(command)
     }
 
     /// Fill the chrome from `ev`. Any event not Toile's is a no-op.
-    pub fn absorb(&self, ev: &UiEvent) {
-        let UiEvent::Viewport {
-            event: AppEvent::Toile(te),
-            ..
-        } = ev
-        else {
+    pub fn absorb<S: Embed<ToileEvent>>(&self, ev: &UiEvent<S>) {
+        let Some(te) = ev.viewport_event::<ToileEvent>() else {
             return;
         };
         match te {

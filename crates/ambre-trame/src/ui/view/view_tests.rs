@@ -51,9 +51,9 @@ impl Clock for TestClock {
 /// One grid view, the far end of its outbound channel, and its clock.
 struct Rig {
     view: TrameView,
-    to_logic: Receiver<LogicCommand>,
+    to_logic: Receiver<LogicCommand<TrameCommand>>,
     /// The Logic thread's end of the view's inbound channel.
-    from_logic: ambre_bus::conduit::Sender<UiEvent>,
+    from_logic: ambre_bus::conduit::Sender<UiEvent<TrameEvent>>,
     clock: TestClock,
     /// The switch the chrome toggles, shared with the view.
     theme: ThemeControl,
@@ -74,8 +74,8 @@ impl Rig {
         let theme = ThemeControl::default();
         let view = TrameView::new(
             Id::<Document>::mint(),
-            tx,
-            rx,
+            ambre_bus::Port::direct(tx),
+            ambre_bus::Inbox::direct(rx),
             ambre_core::Px::<ambre_core::Surface>::new(1200.0),
             ambre_core::Px::<ambre_core::Surface>::new(800.0),
             TextInput::detached(),
@@ -136,7 +136,7 @@ impl Rig {
     fn answer(&mut self, event: TrameEvent) {
         let sent = self.from_logic.try_send(UiEvent::Viewport {
             document_id: Id::<Document>::mint(),
-            event: AppEvent::Trame(event),
+            event,
         });
         assert!(sent.is_ok(), "the view's inbound channel is open");
         self.frame();
@@ -148,10 +148,7 @@ impl Rig {
         self.to_logic
             .try_iter()
             .filter_map(|msg| match msg {
-                LogicCommand::App {
-                    command: AppCommand::Trame(cmd),
-                    ..
-                } => Some(cmd),
+                LogicCommand::App { command, .. } => Some(command),
                 _ => None,
             })
             .collect()
@@ -205,7 +202,7 @@ fn the_caret_blinks_on_the_clock_the_view_is_handed() {
 /// A blob carrying a grid payload whose `src_row` names where it came from,
 /// with `text` as its `text/plain` mirror.
 fn clip(src_row: u32, text: &str) -> ambre_bus::ClipboardBlob {
-    let payload = ambre_bus::ClipboardPayload {
+    let payload = crate::message::ClipboardPayload {
         src_row: Pos::<Row>::new(src_row),
         rows: Len::<Row>::new(1),
         cols: Len::<Col>::new(1),
@@ -222,7 +219,7 @@ fn clip(src_row: u32, text: &str) -> ambre_bus::ClipboardBlob {
 }
 
 /// The payload one `PasteRange` carried, or `None` for any other traffic.
-fn pasted(sent: &[TrameCommand]) -> Option<&ambre_bus::ClipboardPayload> {
+fn pasted(sent: &[TrameCommand]) -> Option<&crate::message::ClipboardPayload> {
     match sent {
         [TrameCommand::PasteRange { payload, .. }] => Some(payload),
         _ => None,
@@ -1178,7 +1175,7 @@ fn a_merged_fill_previews_whole_blocks() {
     let merged = |row, span| crate::DisplayCell {
         row,
         col: Pos::<Col>::new(0),
-        is_merged: ambre_bus::Merge::Merged,
+        is_merged: crate::message::Merge::Merged,
         merge_span: span,
         ..Default::default()
     };
@@ -1540,7 +1537,7 @@ fn a_menu_entry_leaves_the_selection_alone() {
         registry::DELETE_ROWS,
         registry::UNDO,
     ] {
-        let Some(AppCommand::Trame(cmd)) = registry::command_to_app(id) else {
+        let Some(cmd) = registry::command_to_app(id) else {
             panic!("{id:?} reaches the Logic thread");
         };
         let out = logic.handle_command(cmd);
@@ -1798,7 +1795,7 @@ fn a_dropped_scroll_request_is_offered_again() {
                 matches!(
                     msg,
                     LogicCommand::App {
-                        command: AppCommand::Trame(TrameCommand::ScrollViewport { .. }),
+                        command: TrameCommand::ScrollViewport { .. },
                         ..
                     }
                 )

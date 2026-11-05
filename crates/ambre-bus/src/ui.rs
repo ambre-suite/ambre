@@ -1,11 +1,10 @@
 //! UI-bound protocol -- messages addressed to the UI Thread from the Logic thread.
 //!
-//! Holds the [`UiEvent`] envelope (Logic thread -> UI Thread) plus [`AppEvent`],
-//! the closed sum over the document types. Each per-app event enum and its
-//! display types live with that app's whole data plane under
-//! [`crate::app`], such as `crate::app::trame::TrameEvent` and `DisplayCell`.
-//! A document type is therefore defined in one place, whichever direction the
-//! message travels.
+//! Holds the [`UiEvent`] envelope (Logic thread -> UI Thread), generic over
+//! the document event it carries. Each application declares its own event enum
+//! and display types in its crate (`BUS-032`), and the Logic runtime declares
+//! `AppEvent`, the closed sum over them. The launcher projects a view's own
+//! event out of the sum through [`crate::Embed`].
 //!
 //! Carried over a `conduit` queue in shared memory -- typed Rust values by move,
 //! no serialization. The symmetric UI -> Logic direction (commands) lives in
@@ -13,7 +12,7 @@
 //!
 //! # Three planes, one envelope
 //! - **Content** ([`UiEvent::Viewport`] / [`UiEvent::Presence`]): typed
-//!   [`AppEvent`]s computed by the Logic thread, routed by `Id<Document>`.
+//!   document events computed by the Logic thread, routed by `Id<Document>`.
 //! - **Service** ([`UiEvent::Rest`]): a [`RestEvent`] response forwarded from
 //!   [`crate::LogicEvent::Rest`], echoing the originating [`Request`].
 //! - **Push & status** (`ConnectionStatus`, `SyncWarning`, `MemberRevoked`,
@@ -26,6 +25,7 @@ use crate::{
     Request, RestEvent, Role, SpaceEvent,
 };
 use ambre_core::id::{Channel, Document, Id, Meeting, Message, Segment, Space, User};
+use std::convert::Infallible;
 
 // -----------------------------------------------------------------------------
 // UiEvent -- Logic thread -> UI Thread
@@ -43,23 +43,20 @@ ambre_core::define_flag! {
 }
 
 /// Message sent from the Logic thread to the UI Thread.
+///
+/// `E` is the document event `Viewport` and `Presence` carry. A receiver that
+/// takes none leaves it at [`Infallible`].
 #[derive(Debug, Clone)]
-pub enum UiEvent {
+pub enum UiEvent<E = Infallible> {
     // -- Content plane ---------------------------------------------------------
-    /// Display event produced in response to an [`crate::logic::AppCommand`]
+    /// Display event produced in response to a document command
     /// (for example a viewport scroll) or a spontaneous refresh after a remote CRDT
-    /// update. The UI Thread routes [`event`](AppEvent) to the view owning
+    /// update. The UI Thread routes `event` to the view owning
     /// `document_id`.
-    Viewport {
-        document_id: Id<Document>,
-        event: AppEvent,
-    },
+    Viewport { document_id: Id<Document>, event: E },
 
     /// Decrypted collaborator presence event (cursor position, selection, ...).
-    Presence {
-        document_id: Id<Document>,
-        event: AppEvent,
-    },
+    Presence { document_id: Id<Document>, event: E },
 
     // -- Service plane (relayed request/response) ------------------------------
     /// A [`RestEvent`] response, echoing the originating [`Request`] so the UI
@@ -234,7 +231,7 @@ pub enum UiEvent {
     UpdateRequired,
 }
 
-impl UiEvent {
+impl<E> UiEvent<E> {
     /// The `Id<Document>` this event is addressed to, for the per-document fan-out a nested
     /// `doc_embed` needs (`architecture` / `toile-embeds`). A Toile embedding another
     /// document owns a child view, whose Logic->UI stream must be demultiplexed out of the
@@ -255,22 +252,173 @@ impl UiEvent {
     }
 }
 
-// -----------------------------------------------------------------------------
-// AppEvent -- typed application event family (content plane)
-// -----------------------------------------------------------------------------
+impl<S> UiEvent<S> {
+    /// The document event of application `E` a `Viewport` carries, when the
+    /// sum `S` holds one. An application's chrome reads its own events out of
+    /// the relayed stream with it, and names no other application.
+    pub fn viewport_event<E>(&self) -> Option<&E>
+    where
+        S: crate::Embed<E>,
+    {
+        match self {
+            Self::Viewport { event, .. } => event.peek(),
+            _ => None,
+        }
+    }
+}
 
-/// Application-specific event, Logic thread -> UI Thread.
-///
-/// Carried inside [`UiEvent::Viewport`] / [`UiEvent::Presence`]. The `Command` / `Event`
-/// suffix marks the direction at both the envelope and the payload level. UI->Logic is
-/// always a `Command` (see [`AppCommand`](crate::logic::AppCommand)), Logic->UI always an
-/// `Event`.
-#[derive(Debug, Clone)]
-pub enum AppEvent {
-    /// Display event for a Trame (spreadsheet) document.
-    Trame(crate::app::trame::TrameEvent),
-    /// Display event for a Toile (whiteboard) document.
-    Toile(crate::app::toile::ToileEvent),
-    /// Display event for a Prose (word processor) document.
-    Prose(crate::app::prose::ProseEvent),
+/// A [`UiEvent`] split on whether it carries a document event.
+enum Split<E, F> {
+    Viewport(Id<Document>, E),
+    Presence(Id<Document>, E),
+    Other(UiEvent<F>),
+}
+
+impl<E> UiEvent<E> {
+    /// The document event of a `Viewport` or `Presence` variant, or every
+    /// other variant retyped, since none of them carries an `E`. The one
+    /// exhaustive list of variants the two maps below share.
+    fn split<F>(self) -> Split<E, F> {
+        Split::Other(match self {
+            Self::Viewport { document_id, event } => return Split::Viewport(document_id, event),
+            Self::Presence { document_id, event } => return Split::Presence(document_id, event),
+            Self::Rest { id, evt } => UiEvent::Rest { id, evt },
+            Self::ConnectionStatus {
+                document_id,
+                connected,
+            } => UiEvent::ConnectionStatus {
+                document_id,
+                connected,
+            },
+            Self::Activity {
+                document_id,
+                counters,
+            } => UiEvent::Activity {
+                document_id,
+                counters,
+            },
+            Self::DocumentReady { document_id, role } => {
+                UiEvent::DocumentReady { document_id, role }
+            }
+            Self::SyncWarning {
+                document_id,
+                code,
+                message,
+            } => UiEvent::SyncWarning {
+                document_id,
+                code,
+                message,
+            },
+            Self::MemberRevoked {
+                document_id,
+                revoked_user_id,
+            } => UiEvent::MemberRevoked {
+                document_id,
+                revoked_user_id,
+            },
+            Self::DocumentShared {
+                document_id,
+                doc_type,
+            } => UiEvent::DocumentShared {
+                document_id,
+                doc_type,
+            },
+            Self::Channel { channel_id, event } => UiEvent::Channel { channel_id, event },
+            Self::ChannelActivity { channels } => UiEvent::ChannelActivity { channels },
+            Self::NewMessage {
+                channel_id,
+                mention,
+                message,
+            } => UiEvent::NewMessage {
+                channel_id,
+                mention,
+                message,
+            },
+            Self::MemberChannels {
+                channels,
+                spaces,
+                names,
+                peers,
+            } => UiEvent::MemberChannels {
+                channels,
+                spaces,
+                names,
+                peers,
+            },
+            Self::MessageSearch { query, channels } => UiEvent::MessageSearch { query, channels },
+            Self::Space { space_id, event } => UiEvent::Space { space_id, event },
+            Self::DirectMessage { requested, event } => UiEvent::DirectMessage { requested, event },
+            Self::MeetingParticipantJoined {
+                meeting_id,
+                user_id,
+            } => UiEvent::MeetingParticipantJoined {
+                meeting_id,
+                user_id,
+            },
+            Self::MeetingParticipantLeft {
+                meeting_id,
+                user_id,
+            } => UiEvent::MeetingParticipantLeft {
+                meeting_id,
+                user_id,
+            },
+            Self::DocumentOpenFailed {
+                document_id,
+                message,
+            } => UiEvent::DocumentOpenFailed {
+                document_id,
+                message,
+            },
+            Self::AuthError { message } => UiEvent::AuthError { message },
+            Self::ApiError {
+                id,
+                request,
+                failure,
+                message,
+            } => UiEvent::ApiError {
+                id,
+                request,
+                failure,
+                message,
+            },
+            Self::FatalError { message } => UiEvent::FatalError { message },
+            Self::SetupRequired => UiEvent::SetupRequired,
+            Self::UpdateRequired => UiEvent::UpdateRequired,
+        })
+    }
+
+    /// The same event, its document event passed through `f`.
+    pub fn map<F>(self, f: impl FnOnce(E) -> F) -> UiEvent<F> {
+        match self.split() {
+            Split::Viewport(document_id, event) => UiEvent::Viewport {
+                document_id,
+                event: f(event),
+            },
+            Split::Presence(document_id, event) => UiEvent::Presence {
+                document_id,
+                event: f(event),
+            },
+            Split::Other(other) => other,
+        }
+    }
+
+    /// The same event with its document event projected out of the sum `E`,
+    /// or `None` when the sum holds another application's. The launcher
+    /// hands a view its own events with it.
+    pub fn project<F>(self) -> Option<UiEvent<F>>
+    where
+        E: crate::Embed<F>,
+    {
+        match self.split() {
+            Split::Viewport(document_id, event) => event
+                .project()
+                .ok()
+                .map(|event| UiEvent::Viewport { document_id, event }),
+            Split::Presence(document_id, event) => event
+                .project()
+                .ok()
+                .map(|event| UiEvent::Presence { document_id, event }),
+            Split::Other(other) => Some(other),
+        }
+    }
 }

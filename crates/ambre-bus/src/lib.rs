@@ -6,12 +6,13 @@
 //! - `LogicEvent` (Sync -> Logic) -- see [`event`].
 //!
 //! Plus the typed data planes carried inside the envelopes:
-//! - **Content** -- the `AppCommand` / `AppEvent` closed sums live next to their
-//!   envelopes ([`logic`] / [`ui`]). Each document type's whole data plane is grouped
-//!   **one module per app** under [`app`]: its command, its event, its shared value
-//!   and display types. Those modules (`app::trame`, `app::toile`) are re-exported
-//!   flat at the crate root. Document edits and viewport data, routed by
-//!   `Id<Document>`. (See `ambre-spec-message-bus.md`.)
+//! - **Content** -- the envelopes are generic over the document command and event
+//!   they carry. Each application declares its own in its crate (`BUS-032`), and
+//!   the Logic runtime sums them as `AppCommand` / `AppEvent`. [`content`] holds
+//!   the seam, and [`port`] a view's two typed ends. The applications whose
+//!   vocabulary has not moved yet keep it under [`app`], re-exported flat at the
+//!   crate root. Document edits and viewport data, routed by `Id<Document>`.
+//!   (See `ambre-spec-message-bus.md`.)
 //! - **Service** (`RestCommand`/`RestEvent` + `Request` in [`rest`]) -- the
 //!   correlatable request/response family carried by `...::Rest { id, ... }` on all
 //!   four envelopes, defined once and forwarded verbatim.
@@ -28,10 +29,12 @@ pub mod activity;
 pub mod app;
 pub mod command;
 pub mod conduit;
+pub mod content;
 pub mod event;
 pub mod logic;
 pub mod lossy;
 pub mod outbox;
+pub mod port;
 pub mod rest;
 pub mod sink;
 pub mod start;
@@ -52,33 +55,25 @@ pub use app::murmure::{
     SealedChannelKey, SearchMatch, Segments, SpaceCommand, SpaceEvent, StyleMark, TextStyle,
     ThreadHead, Unread, Unreadable,
 };
+// The grid coordinates Trame and Prose share.
+pub use app::grid::{CellPos, CellRect, Col, MergeSpan, Row};
 pub use command::SyncCommand;
+pub use content::{Embed, Mutation};
 pub use event::{
     ApiRequest, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta, SnapshotPurpose,
     SnapshotVerdict, Successor,
 };
-// Trame data plane (command + event + value types) lives under `app::trame`;
-// re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
-pub use app::trame::{
-    BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
-    CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, CondFormatKind,
-    CondFormatPriority, CondStyle, CsvDelimiter, DateParts, DayOfMonth, Decimals, DecimalsStep,
-    DefinedName, DisplayCell, EditSession, FillMode, FilterKind, FilterOp, HAlign, HeaderRow,
-    Merge, MergeSpan, Month, MonthCount, Percent, Row, RowFilter, SelectionKind, SheetName,
-    SheetNameKey, SheetNameRefusal, SheetTab, Slant, SortKey, SortOrder, Strikethrough, StylePatch,
-    TabStrip, TrameCommand, TrameEvent, Underline, VAlign, ValidationKind, ValidationOnInvalid,
-    Weight, WordBreak, Year,
-};
-pub use logic::{AppCommand, LogicCommand, StoreRoom};
+pub use logic::{LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Load, Outbox, SendOutcome};
+pub use port::{Delivery, Inbox, Port};
 pub use rest::{
     Confidential, DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, Plaintext,
     RecoveryWords, Request, RestCommand, RestEvent, RowPlace, SealedRow, UserInfo, next_request,
 };
 pub use sink::CommandSink;
 pub use token::{Token, TokenKind};
-pub use ui::{AppEvent, MentionState, UiEvent};
+pub use ui::{MentionState, UiEvent};
 
 /// App-agnostic clipboard transport carried across the host <-> view seam and, serialized,
 /// across the OS clipboard. `text` is the `text/plain` mirror for cross-app paste. `ambre`

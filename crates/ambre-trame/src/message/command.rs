@@ -1,7 +1,7 @@
 //! Trame (spreadsheet) command surface (UI Thread -> Logic thread).
 //!
 //! The full `TrameCommand` vocabulary plus its parameter value types, carried by
-//! move inside [`AppCommand::Trame`](crate::logic::AppCommand). Value types (styles,
+//! move inside `AppCommand::Trame` of the Logic runtime. Value types (styles,
 //! clipboard, feature payloads) live in the sibling modules and arrive via glob.
 
 use super::*;
@@ -20,7 +20,7 @@ use ambre_core::{Redacted, Refused, Refuses, Rule, Validated};
 /// open editor.
 pub enum EditSession {}
 
-impl crate::token::TokenKind for EditSession {
+impl ambre_bus::token::TokenKind for EditSession {
     const NAME: &'static str = "EditSessionId";
 }
 
@@ -267,7 +267,7 @@ pub enum TrameCommand {
     /// `version` is a monotonic counter: the UI Thread drops any response
     /// whose version is older than the last accepted one.
     ScrollViewport {
-        version: ambre_core::Seq<crate::ViewportVersion>,
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
         row_start: Pos<Row>,
         row_end: Pos<Row>,
         col_start: Pos<Col>,
@@ -322,7 +322,7 @@ pub enum TrameCommand {
     /// writes nothing. A later commit reaches that cell wherever a peer moved it.
     /// A new session replaces the previous one.
     BeginCellEdit {
-        session: crate::token::Token<EditSession>,
+        session: ambre_bus::token::Token<EditSession>,
         row: Pos<Row>,
         col: Pos<Col>,
     },
@@ -332,7 +332,7 @@ pub enum TrameCommand {
     /// gone, and [`EditTargetGone`](super::TrameEvent::EditTargetGone) said so.
     /// Opens the undo group [`CommitEdit`](TrameCommand::CommitEdit) seals.
     CommitCellEdit {
-        session: crate::token::Token<EditSession>,
+        session: ambre_bus::token::Token<EditSession>,
         text: String,
     },
 
@@ -340,7 +340,7 @@ pub enum TrameCommand {
     /// the selection instead. A no-op for a session the Logic thread no longer
     /// holds.
     EndCellEdit {
-        session: crate::token::Token<EditSession>,
+        session: ambre_bus::token::Token<EditSession>,
     },
 
     /// Set the plaintext content of many cells in one shot, as `(row, col, text)`
@@ -439,7 +439,7 @@ pub enum TrameCommand {
     /// [`DataReset`]: super::TrameEvent::DataReset [`ViewportData`]:
     /// super::TrameEvent::ViewportData
     ResizeCol {
-        version: ambre_core::Seq<crate::ViewportVersion>,
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
         sheet_id: Id<Sheet>,
         col: Pos<Col>,
         width: ambre_core::Px<ambre_core::Doc>,
@@ -447,7 +447,7 @@ pub enum TrameCommand {
     /// Set the height (document px, before the zoom) of row `row` on `sheet_id`. Row analogue of
     /// [`ResizeCol`](TrameCommand::ResizeCol): writes `row_heights_{sheet}`.
     ResizeRow {
-        version: ambre_core::Seq<crate::ViewportVersion>,
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
         sheet_id: Id<Sheet>,
         row: Pos<Row>,
         height: ambre_core::Px<ambre_core::Doc>,
@@ -632,12 +632,12 @@ pub enum TrameCommand {
     /// value (formula results included). The scan reads only the case and the extent of
     /// `options`: it is case-folded unless [`CaseMatch::Sensitive`](super::CaseMatch), by
     /// exact equality for [`MatchExtent::WholeCell`](super::MatchExtent), else by substring.
-    /// Produces a [`FindResult`](crate::TrameEvent::FindResult) with every match on the
+    /// Produces a [`FindResult`](crate::message::TrameEvent::FindResult) with every match on the
     /// sheet plus the index of the one to focus; no CRDT delta is emitted. The UI moves the
     /// active cell onto the focused match, so a repeated `FindNext` advances. `None` is the
     /// emptied field: the reply carries no match, which clears the highlight (`FIND-005`).
     FindNext {
-        query: Option<crate::app::find::FindQuery<super::FindOptions>>,
+        query: Option<ambre_bus::app::find::FindQuery<super::FindOptions>>,
     },
 
     /// Replace every match of `query` with `replacement` across the active sheet (or all
@@ -646,11 +646,11 @@ pub enum TrameCommand {
     /// extent of `options`, but the rewrite edits the *raw* cell text. Cells whose raw text
     /// is a formula (`=...`) are skipped unless the scope is
     /// [`SearchScope::Formulas`](super::SearchScope). Replies with
-    /// [`ReplaceDone`](crate::TrameEvent::ReplaceDone) and a
-    /// [`DataReset`](crate::TrameEvent::DataReset) so the UI re-fetches. `None` replaces
+    /// [`ReplaceDone`](crate::message::TrameEvent::ReplaceDone) and a
+    /// [`DataReset`](crate::message::TrameEvent::DataReset) so the UI re-fetches. `None` replaces
     /// nothing.
     ReplaceAll {
-        query: Option<crate::app::find::FindQuery<super::FindOptions>>,
+        query: Option<ambre_bus::app::find::FindQuery<super::FindOptions>>,
         replacement: String,
     },
 
@@ -659,11 +659,11 @@ pub enum TrameCommand {
     /// undo group, under the same raw-text rules as
     /// [`ReplaceAll`](TrameCommand::ReplaceAll), the scope gating included. The sheet
     /// scope is not read. Whether or not it matched, the reply carries a fresh
-    /// [`FindResult`](crate::TrameEvent::FindResult), so the UI moves to and highlights the
-    /// following match. Replies with [`ReplaceDone`](crate::TrameEvent::ReplaceDone) (`0`
+    /// [`FindResult`](crate::message::TrameEvent::FindResult), so the UI moves to and highlights the
+    /// following match. Replies with [`ReplaceDone`](crate::message::TrameEvent::ReplaceDone) (`0`
     /// or `1`). `None` replaces nothing.
     ReplaceOne {
-        query: Option<crate::app::find::FindQuery<super::FindOptions>>,
+        query: Option<ambre_bus::app::find::FindQuery<super::FindOptions>>,
         replacement: String,
     },
 
@@ -1246,6 +1246,12 @@ impl std::fmt::Debug for TrameCommand {
                 fields!("RemoveProtection", sheet_id, range)
             }
         }
+    }
+}
+
+impl ambre_bus::Mutation for TrameCommand {
+    fn is_mutating(&self) -> bool {
+        TrameCommand::is_mutating(self)
     }
 }
 

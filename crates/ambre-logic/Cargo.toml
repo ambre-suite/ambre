@@ -103,6 +103,8 @@ web-sys             = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+# The probe that the content sums implement no `Serialize` (`BUS-001`).
+serde = { workspace = true }
 # `Seq::nth` for a test that names a count. Test builds alone, held by
 # `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
 ambre-core = { path = "../ambre-core", features = ["testing"] }

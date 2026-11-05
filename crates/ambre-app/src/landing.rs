@@ -23,8 +23,9 @@
 // Listing requires a session, so the signed-out panel gates access.
 // ============================================================================
 
-use ambre_bus::{DocType, LogicCommand, RestCommand};
+use ambre_bus::{DocType, RestCommand};
 use ambre_core::id::{Document, Id};
+use ambre_logic::app::LogicCommand;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 

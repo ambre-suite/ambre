@@ -13,12 +13,12 @@
 use ambre_core::index::{Delta, IdxVec, Pos};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::rc::Rc;
 
-use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    Attachment, Authored, Emoji, Instant, LogicCommand, MessageAt, MessageView, MurmureCommand,
-    MurmureEvent, ReplyEcho, Request, RestEvent, TextStyle, UiEvent,
+    Attachment, Authored, Emoji, Inbox, Instant, LogicCommand, MessageAt, MessageView,
+    MurmureCommand, MurmureEvent, Port, ReplyEcho, Request, RestEvent, TextStyle, UiEvent,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
@@ -260,9 +260,9 @@ enum Drag {
 pub struct MurmureView {
     /// The events of the Logic thread. The content canvas holds the page's
     /// queue; the thread's cell holds none and reads the lists it fills.
-    from_logic: Option<Receiver<UiEvent>>,
+    from_logic: Option<Inbox<Infallible>>,
     /// Where the read cursors move.
-    to_logic: Option<Sender<LogicCommand>>,
+    to_logic: Option<Port<Infallible>>,
     reads: PageReads,
     lists: Rc<RefCell<Lists>>,
     region: Region,
@@ -394,8 +394,8 @@ impl Drop for MurmureView {
 
 impl MurmureView {
     pub fn new(
-        from_logic: Option<Receiver<UiEvent>>,
-        to_logic: Option<Sender<LogicCommand>>,
+        from_logic: Option<Inbox<Infallible>>,
+        to_logic: Option<Port<Infallible>>,
         reads: PageReads,
         size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>,
         theme_ctl: ThemeControl,
@@ -1516,9 +1516,9 @@ impl MurmureView {
     /// next paint that calls for it asks again.
     fn send(&self, command: LogicCommand) {
         if let Some(to_logic) = &self.to_logic
-            && let Err(e) = to_logic.try_send(command)
+            && !to_logic.try_send(command).sent()
         {
-            tracing::warn!("Murmure view command dropped, Logic channel full ({e:?})");
+            tracing::warn!("Murmure view command dropped, Logic channel full");
         }
     }
 
@@ -1924,6 +1924,7 @@ mod tests {
     use ambre_draw::testing::RecordingSurface;
 
     use super::*;
+    use ambre_bus::conduit::{Receiver, Sender};
     use ambre_commands::{KeyChar, KeyState};
 
     /// The pointer at `x`, `y` of the view.
@@ -2156,8 +2157,8 @@ mod tests {
         };
         let size = ambre_core::Size::new(ambre_core::Px::new(300), ambre_core::Px::new(400));
         let view = MurmureView::new(
-            Some(from_logic),
-            Some(to_logic),
+            Some(Inbox::direct(from_logic)),
+            Some(Port::direct(to_logic)),
             reads,
             size,
             ThemeControl::default(),

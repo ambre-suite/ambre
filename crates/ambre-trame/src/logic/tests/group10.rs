@@ -238,7 +238,7 @@ fn a_pasted_style_short_of_a_line_says_so() {
         rows: Len::<Row>::ONE,
         cols: Len::<Col>::ONE,
         cells: vec![crate::ClipboardCell {
-            bold: ambre_bus::Weight::Bold,
+            bold: ambre_core::Weight::Bold,
             ..Default::default()
         }],
     };
@@ -366,7 +366,7 @@ fn a_carried_style_short_of_a_line_says_so() {
     select(&mut state, 0, 0, 0, 0);
     state.handle_command(TrameCommand::SetCellStyle {
         patch: crate::StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
+            bold: Some(ambre_core::Weight::Bold),
             ..Default::default()
         },
     });

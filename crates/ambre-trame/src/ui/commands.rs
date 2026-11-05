@@ -15,7 +15,7 @@
 // shared crate.
 // ============================================================================
 
-use ambre_bus::{AppCommand, TrameCommand};
+use crate::message::TrameCommand;
 use ambre_commands::{Command, KeyBinding, KeyChar, Keymap, Locale, shared};
 use ambre_core::{Categories, Commands, Icons, StaticKey};
 
@@ -284,10 +284,10 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
     rows
 }
 
-/// Translate a Trame `StaticKey<Commands>` into the `AppCommand` IPC payload the Logic
+/// Translate a Trame `StaticKey<Commands>` into the `TrameCommand` the Logic
 /// thread expects. `None` for a command Trame does not own, and for one
 /// `chrome::TrameHandler` resolves before the bus.
-pub fn command_to_app(id: StaticKey<Commands>) -> Option<AppCommand> {
+pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
     // The identities are constants of a derived `PartialEq` type, so they are
     // patterns. That means one decision over the identity string, and no
     // literal repeated beside the table that declares it.
@@ -317,10 +317,10 @@ pub fn command_to_app(id: StaticKey<Commands>) -> Option<AppCommand> {
         // clipboard commands are UI-only intents the handler resolves first.
         // BOLD/ITALIC become a `SetCellStyle` patch toggled against the tracked
         // style state, FILTER_COLUMN opens the popover, and FIND/REPLACE open
-        // the find/replace panel. None has a direct AppCommand here.
+        // the find/replace panel. None has a direct command here.
         _ => return None,
     };
-    Some(AppCommand::Trame(cmd))
+    Some(cmd)
 }
 
 #[cfg(test)]
@@ -476,18 +476,15 @@ mod tests {
 
     #[test]
     fn command_to_app_maps_the_logic_thread_commands() {
-        // `AppCommand` carries no `PartialEq`, so the variant is matched.
-        assert!(matches!(
-            command_to_app(UNDO),
-            Some(AppCommand::Trame(TrameCommand::Undo))
-        ));
+        // `TrameCommand` carries no `PartialEq`, so the variant is matched.
+        assert!(matches!(command_to_app(UNDO), Some(TrameCommand::Undo)));
         assert!(matches!(
             command_to_app(DELETE_ROWS),
-            Some(AppCommand::Trame(TrameCommand::DeleteSelectedRows))
+            Some(TrameCommand::DeleteSelectedRows)
         ));
         assert!(matches!(
             command_to_app(SAVE_FILE),
-            Some(AppCommand::Trame(TrameCommand::ExportAmbreFile))
+            Some(TrameCommand::ExportAmbreFile)
         ));
         // A UI-only intent the launcher intercepts: no bus payload.
         assert!(command_to_app(BOLD).is_none());

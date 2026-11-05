@@ -30,6 +30,10 @@ use std::collections::{HashMap, HashSet};
 #[cfg(target_arch = "wasm32")]
 pub mod persistence;
 
+/// The closed sums of the content plane, over every application's own
+/// command and event (`BUS-002`, `BUS-032`).
+pub mod app;
+
 // The `impl LogicState` block is spread across sibling modules:
 //   - `data`:     application data plane (app commands, remote deltas, snapshots)
 //   - `dispatch`: the two inbound dispatchers (+ their host-side tests)
@@ -71,9 +75,10 @@ pub mod fixtures;
 
 use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
-    AppCommand, AppEvent, DocType, LogicCommand, LogicEvent, Relay, Request, RestCommand,
-    RestEvent, Role, Seq, SignedDelta, SnapshotPurpose, SnapshotVerdict, SyncCommand, UiEvent,
+    DocType, LogicEvent, Relay, Request, RestCommand, RestEvent, Role, Seq, SignedDelta,
+    SnapshotPurpose, SnapshotVerdict, SyncCommand,
 };
+pub use app::{AppCommand, AppEvent, LogicCommand, UiEvent};
 
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::schema::SchemaError;
@@ -234,9 +239,11 @@ impl DocState {
     /// app's, so the event is minted here rather than in the dispatcher.
     fn refusal_event(&self, error: &SchemaError) -> AppEvent {
         match self {
-            DocState::Trame(_) => AppEvent::Trame(ambre_bus::TrameEvent::DocumentRefused {
-                reason: error.to_string(),
-            }),
+            DocState::Trame(_) => {
+                AppEvent::Trame(ambre_trame::message::TrameEvent::DocumentRefused {
+                    reason: error.to_string(),
+                })
+            }
             DocState::Toile(_) => AppEvent::Toile(
                 ambre_bus::app::toile::ToileEvent::DocumentRefused(error.to_string()),
             ),
@@ -307,7 +314,7 @@ impl DocState {
     ) -> AppEvent {
         match self {
             DocState::Trame(_) => {
-                AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { filename, data })
+                AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { filename, data })
             }
             DocState::Toile(_) => {
                 AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete {
@@ -332,7 +339,9 @@ impl DocState {
     /// it says it through the generic error the chrome already toasts.
     fn export_failed_event(&self, reason: String) -> AppEvent {
         match self {
-            DocState::Trame(_) => AppEvent::Trame(ambre_bus::TrameEvent::Error { message: reason }),
+            DocState::Trame(_) => {
+                AppEvent::Trame(ambre_trame::message::TrameEvent::Error { message: reason })
+            }
             DocState::Toile(_) => {
                 AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(reason))
             }
@@ -1287,8 +1296,9 @@ fn a_logic_thread_that_cannot_wait_emits_a_fatal_event() {
 #[cfg(test)]
 mod pass_tests {
     use super::*;
+    use crate::app::{AppCommand, AppEvent};
+    use ambre_bus::DocType;
     use ambre_bus::app::prose::{ProseCommand, ProseEvent};
-    use ambre_bus::{AppCommand, AppEvent, DocType};
     use ambre_core::index::Pos;
 
     /// A state with every outbound receiver kept, and one open Prose document
@@ -1742,8 +1752,8 @@ mod authorship_tests {
     use ambre_core::index::Pos;
 
     use super::*;
-    use ambre_bus::TrameCommand;
     use ambre_bus::{Col, Row};
+    use ambre_trame::message::TrameCommand;
     use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
     const ALICE: ambre_core::PeerId = ambre_core::PeerId::new(0xA11CE);

@@ -1,5 +1,5 @@
 //! The options of a Trame find or replace (`trame-find-replace`): the four
-//! checkbox states of the panel. A [`FindQuery`](crate::app::find::FindQuery)
+//! checkbox states of the panel. A [`FindQuery`](ambre_bus::app::find::FindQuery)
 //! carries them in [`TrameCommand::FindNext`], [`TrameCommand::ReplaceOne`]
 //! and [`TrameCommand::ReplaceAll`].
 //!

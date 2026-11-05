@@ -437,11 +437,11 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
         col,
         text: String::new(),
         raw: String::new(),
-        bold: ambre_bus::Weight::Regular,
-        italic: ambre_bus::Slant::Upright,
-        is_merged: ambre_bus::Merge::Merged,
+        bold: ambre_core::Weight::Regular,
+        italic: ambre_core::Slant::Upright,
+        is_merged: crate::message::Merge::Merged,
         merge_span: span,
-        is_filtered: ambre_bus::RowFilter::Shown,
+        is_filtered: crate::message::RowFilter::Shown,
         ..Default::default()
     };
     state.on_viewport_data(TrameEvent::ViewportData {
@@ -617,7 +617,7 @@ fn select_rect_keeps_unmerged_cells_selected() {
         col,
         text: String::new(),
         raw: String::new(),
-        is_merged: ambre_bus::Merge::from_bool(span.is_some()),
+        is_merged: crate::message::Merge::from_bool(span.is_some()),
         merge_span: span,
         ..Default::default()
     };

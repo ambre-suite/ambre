@@ -52,7 +52,7 @@ fn fill_merged_source_tiles_and_remerges_blocks() {
     let a4 = read_display(&mut state, 3, 0);
     assert_eq!(
         a4.is_merged,
-        ambre_bus::Merge::Merged,
+        crate::message::Merge::Merged,
         "A4 is covered by the A3 block"
     );
     assert_eq!(a4.merge_span, None);
@@ -155,7 +155,7 @@ fn fill_multi_merged_source_continues_pattern() {
     assert_eq!(a7.text, "4");
     // Covered rows of the new blocks stay blank.
     let a6 = read_display(&mut state, 5, 0);
-    assert_eq!(a6.is_merged, ambre_bus::Merge::Merged);
+    assert_eq!(a6.is_merged, crate::message::Merge::Merged);
     assert_eq!(a6.text, "");
 }
 

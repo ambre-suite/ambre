@@ -351,7 +351,9 @@ pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
     // drives both the trigger icon and the menu's check so an `Auto` cell shows
     // its de-facto alignment.
     let effective = move || match style.h_align.get() {
-        HAlign::Auto if style.numeric.get() == ambre_bus::CellValueKind::Number => HAlign::Right,
+        HAlign::Auto if style.numeric.get() == crate::message::CellValueKind::Number => {
+            HAlign::Right
+        }
         HAlign::Auto => HAlign::Left,
         other => other,
     };

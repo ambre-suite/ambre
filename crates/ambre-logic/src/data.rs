@@ -9,6 +9,7 @@ use super::*;
 // The deck's PDF export is answered here rather than inside `ToileState`.
 // This file therefore names the two Toile bus types the rest of the module
 // reaches only through `AppCommand` / `AppEvent`.
+use ambre_bus::Mutation;
 use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 use ambre_bus::sync_warning::SyncWarningCode;
 
@@ -232,7 +233,7 @@ impl LogicState {
         if matches!(
             command,
             AppCommand::Toile(ToileCommand::ExportAmbreFile)
-                | AppCommand::Trame(ambre_bus::TrameCommand::ExportAmbreFile)
+                | AppCommand::Trame(ambre_trame::message::TrameCommand::ExportAmbreFile)
                 | AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ExportDocument {
                     format: ambre_bus::app::prose::ExportFormat::Ambre,
                 })
@@ -246,7 +247,9 @@ impl LogicState {
         // passphrase out of the command and sends it no further than Sync.
         let command = match command {
             AppCommand::Toile(ToileCommand::ExportAmbreFileSealed { passphrase })
-            | AppCommand::Trame(ambre_bus::TrameCommand::ExportAmbreFileSealed { passphrase }) => {
+            | AppCommand::Trame(ambre_trame::message::TrameCommand::ExportAmbreFileSealed {
+                passphrase,
+            }) => {
                 self.export_ambre_file_sealed(document_id, passphrase);
                 return;
             }

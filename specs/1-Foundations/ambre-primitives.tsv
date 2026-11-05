@@ -160,6 +160,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceAll.repl
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceOne.replacement | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplyToComment.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() | ret | bool	generic	predicate
+ambre-bus | src/app/prose.rs | crate::app::prose | <ProseCommand as crate::Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.html | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
@@ -221,6 +222,7 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLab
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetText.base | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetText.text | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::is_mutating() | ret | bool	generic	predicate
+ambre-bus | src/app/toile.rs | crate::app::toile | <ToileCommand as crate::Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileError::WriteFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::DocumentRefused.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.skipped | field | Vec<String>	free-text	file name / skipped item labels
@@ -231,70 +233,71 @@ ambre-bus | src/app/toile.rs | crate::app::toile | AddressError::message() | ret
 ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
 ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme(s) | param | &str	generic	generic parser/reader/formatter over text
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth.0 | field | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth::get() | ret | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth::new(day) | param | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.raw | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload::to_tsv() | ret | String	generic	TSV rendering of the payload
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	the A1 reference text the user typed; only the Trame engine parses it, against the live sheets, so no type holds its parse on the bus
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.replacement | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.replacement | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SaveFilterView.name | field | String	free-text	user label of a filter view
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellText.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellsBatch.cells | field | Vec<(CellPos,String)>	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetProtection.description | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.raw | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Error.message | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::MergeRejected.reason | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::PasteRejected.reason | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionDenied.description | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionViolationWarning.description | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationError.message | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationWarning.message | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::new(rank) | param | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::MAX | const | f32	generic	a bound of the quantity, which Bounded compares each value against
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::MIN | const | f32	generic	a bound of the quantity, which Bounded compares each value against
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Percent as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Ranks as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <TabStrip as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::MAX | const | f64	generic	a bound of the quantity, which Bounded compares each value against
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::MIN | const | f64	generic	a bound of the quantity, which Bounded compares each value against
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <CellFloat as Bounds>::Repr | assoc | f64	newtype-inner	the number a value of this quantity holds
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.high | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.low | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Contains.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Equal.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::GreaterThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::LessThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::StartsWith.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::List.0 | field | Vec<String>	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::Regex.0 | field | String	free-text	the pattern text the user typed; the workspace holds no regex engine, so nothing parses it yet
+ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth.0 | field | i64	newtype-inner	the number a calendar part wraps
+ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth::get() | ret | i64	newtype-inner	the number a calendar part wraps
+ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth::new(day) | param | i64	newtype-inner	the number a calendar part wraps
+ambre-trame | src/message/clipboard.rs | crate::message::clipboard | ClipboardCell.raw | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/clipboard.rs | crate::message::clipboard | ClipboardPayload::to_tsv() | ret | String	generic	TSV rendering of the payload
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::DefineName.reference | field | String	free-text	the A1 reference text the user typed; only the Trame engine parses it, against the live sheets, so no type holds its parse on the bus
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::ReplaceAll.replacement | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::ReplaceOne.replacement | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::SaveFilterView.name | field | String	free-text	user label of a filter view
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::SetCellText.text | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::SetCellsBatch.cells | field | Vec<(CellPos,String)>	free-text	cell text / query / user message
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::SetProtection.description | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
+ambre-trame | src/message/command.rs | crate::message::command | <TrameCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
+ambre-trame | src/message/event.rs | crate::message::event | DisplayCell.raw | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/event.rs | crate::message::event | DisplayCell.text | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::Error.message | field | String	free-text	user-facing message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::MergeRejected.reason | field | String	free-text	user-facing message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::PasteRejected.reason | field | String	free-text	user-facing message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ProtectionDenied.description | field | String	free-text	user-facing message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ProtectionViolationWarning.description | field | String	free-text	user-facing message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ValidationError.message | field | String	free-text	user-facing message
+ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ValidationWarning.message | field | String	free-text	user-facing message
+ambre-trame | src/message/event.rs | crate::message::event | CondFormatPriority.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/message/event.rs | crate::message::event | CondFormatPriority::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/message/event.rs | crate::message::event | CondFormatPriority::new(rank) | param | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/message/features.rs | crate::message::features | <Percent as Bounds>::MAX | const | f32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/message/features.rs | crate::message::features | <Percent as Bounds>::MIN | const | f32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/message/features.rs | crate::message::features | <Percent as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-trame | src/message/features.rs | crate::message::features | <Percent as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
+ambre-trame | src/message/features.rs | crate::message::features | <Ranks as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-trame | src/message/event.rs | crate::message::event | <TabStrip as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-trame | src/message/event.rs | crate::message::event | <CellFloat as Bounds>::MAX | const | f64	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/message/event.rs | crate::message::event | <CellFloat as Bounds>::MIN | const | f64	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/message/event.rs | crate::message::event | <CellFloat as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-trame | src/message/event.rs | crate::message::event | <CellFloat as Bounds>::Repr | assoc | f64	newtype-inner	the number a value of this quantity holds
+ambre-trame | src/message/features.rs | crate::message::features | CondFormatKind::Between.high | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-trame | src/message/features.rs | crate::message::features | CondFormatKind::Between.low | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-trame | src/message/features.rs | crate::message::features | CondFormatKind::Contains.0 | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-trame | src/message/features.rs | crate::message::features | CondFormatKind::Equal.0 | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-trame | src/message/features.rs | crate::message::features | CondFormatKind::GreaterThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-trame | src/message/features.rs | crate::message::features | CondFormatKind::LessThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-trame | src/message/features.rs | crate::message::features | CondFormatKind::StartsWith.0 | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-trame | src/message/features.rs | crate::message::features | ValidationKind::List.0 | field | Vec<String>	free-text	user-entered rule operand, pattern or formula text
+ambre-trame | src/message/features.rs | crate::message::features | ValidationKind::Regex.0 | field | String	free-text	the pattern text the user typed; the workspace holds no regex engine, so nothing parses it yet
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::contains() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::is_single_cell() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::overlaps() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | <Col as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-bus | src/app/grid.rs | crate::app::grid | <Row as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::Custom.0 | field | String	free-text	the user's format code; its grammar is total, so every text is a format and no parse can refuse one
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::has_decimals() | ret | bool	generic	predicate
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | FilterKind::Condition.value | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | FilterKind::Values.0 | field | Vec<String>	free-text	cell text / query / user message
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep.0 | field | i8	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/message/style.rs | crate::message::style | <Decimals as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/message/style.rs | crate::message::style | <Decimals as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/message/style.rs | crate::message::style | <Decimals as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-trame | src/message/style.rs | crate::message::style | <Decimals as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
+ambre-trame | src/message/style.rs | crate::message::style | CellFormat::Custom.0 | field | String	free-text	the user's format code; its grammar is total, so every text is a format and no parse can refuse one
+ambre-trame | src/message/style.rs | crate::message::style | CellFormat::has_decimals() | ret | bool	generic	predicate
+ambre-trame | src/message/style.rs | crate::message::style | FilterKind::Condition.value | field | String	free-text	cell text / query / user message
+ambre-trame | src/message/style.rs | crate::message::style | FilterKind::Values.0 | field | Vec<String>	free-text	cell text / query / user message
+ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep.0 | field | i8	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | Doorbell::is_current() | ret | bool	generic	predicate or internal state flag
@@ -339,14 +342,16 @@ ambre-bus | src/lib.rs | crate | CopyOutcome::Text.0 | field | String	free-text	
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_CLOSE | const | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_OPEN | const | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-bus | src/logic.rs | crate::logic | AppCommand::is_mutating() | ret | bool	generic	predicate or internal state flag
+ambre-bus | src/content.rs | crate::content | Mutation::is_mutating() | ret | bool	generic	predicate
+ambre-bus | src/content.rs | crate::content | <Infallible as Mutation>::is_mutating() | ret | bool	generic	predicate, never called: no value of the type exists
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
+ambre-bus | src/port.rs | crate::port | Delivery<A>::sent() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | is_lossy_class() | ret | bool	generic	predicate
 ambre-bus | src/outbox.rs | crate::outbox | HOLD_CAPACITY | const | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | Outbox.capacity | field | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/outbox.rs | crate::outbox | Outbox::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/outbox.rs | crate::outbox | Outbox::is_busy() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/outbox.rs | crate::outbox | Outbox::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::is_busy() | ret | bool	generic	predicate or internal state flag
+ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
@@ -356,7 +361,7 @@ ambre-bus | src/token.rs | crate::token | <Token<K> as PartialEq>::eq() | ret | 
 ambre-bus | src/app/toile.rs | crate::app::toile | <ElementCreation as crate::token::TokenKind>::NAME | const | &'static str	free-text	the family name a token prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <Reactions as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <Votes as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <EditSession as crate::token::TokenKind>::NAME | const | &'static str	free-text	the family name a token prints through Debug, for a log line
+ambre-trame | src/message/command.rs | crate::message::command | <EditSession as ambre_bus::token::TokenKind>::NAME | const | &'static str	free-text	the family name a token prints through Debug, for a log line
 ambre-bus | src/start.rs | crate::start | StartGate::is_open() | ret | bool	generic	gate state flag
 ambre-bus | src/ui.rs | crate::ui | UiEvent::ApiError.message | field | String	free-text	user-facing or log message
 ambre-bus | src/ui.rs | crate::ui | UiEvent::AuthError.message | field | String	free-text	user-facing or log message
@@ -904,8 +909,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as Rule>::a
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <ChannelTopic as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as Rule>::admit() | ret | Result<String,InvalidDefinedName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-trame | src/message/command.rs | crate::message::command | <DefinedName as Rule>::admit() | ret | Result<String,InvalidDefinedName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-trame | src/message/command.rs | crate::message::command | <DefinedName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as ambre_core::Rule>::admit() | ret | Result<String,InvalidOrgName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as ambre_core::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/name.rs | crate::name | <DisplayName as Rule>::admit() | ret | Result<String,InvalidDisplayName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
@@ -1076,6 +1081,7 @@ ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::MAX | const | u16	gene
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::MIN | const | u16	generic	a bound of the quantity, which Bounded compares each value against
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::Repr | assoc | u16	newtype-inner	the number a value of this quantity holds
+ambre-logic | src/app.rs | crate::app | <AppCommand as Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-logic | src/bin/ambre-fixtures.rs | crate | baseline(machine) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/bin/ambre-fixtures.rs | crate | display() | ret | String	generic	generic byte/text API or codec
 ambre-logic | src/bin/ambre-fixtures.rs | crate | freeze(name) | param | &str	free-text	free text: message, label, name or report
@@ -3044,12 +3050,12 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice()
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	generic	the codec of an enum that carries data: the style name the tree stores and the lookup matches back
 ambre-prose | src/doc.rs | crate::doc | RefusalCause::sentence() | ret | &'static str	free-text	log and refusal sentence of the cause
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter.0 | field | u8	newtype-inner	the byte of a validated CSV separator
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter::byte() | ret | u8	newtype-inner	hands the byte to the csv crate's reader and writer builders
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter::new(byte) | param | u8	newtype-inner	the fallible constructor that checks the byte
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount.0 | field | i64	newtype-inner	a count of months from January, past either end of the year
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount::get() | ret | i64	newtype-inner	a count of months from January, past either end of the year
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount::new(months) | param | i64	newtype-inner	a count of months from January, past either end of the year
+ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter.0 | field | u8	newtype-inner	the byte of a validated CSV separator
+ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter::byte() | ret | u8	newtype-inner	hands the byte to the csv crate's reader and writer builders
+ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter::new(byte) | param | u8	newtype-inner	the fallible constructor that checks the byte
+ambre-trame | src/message/calendar.rs | crate::message::calendar | MonthCount.0 | field | i64	newtype-inner	a count of months from January, past either end of the year
+ambre-trame | src/message/calendar.rs | crate::message::calendar | MonthCount::get() | ret | i64	newtype-inner	a count of months from January, past either end of the year
+ambre-trame | src/message/calendar.rs | crate::message::calendar | MonthCount::new(months) | param | i64	newtype-inner	a count of months from January, past either end of the year
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(DateParts)->i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	free-text	the search text the user typed, folded by the case it is compared under
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
@@ -3063,21 +3069,21 @@ ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	free-text	the formula text left unread, echoed in the message
 ambre-trame | src/formula/types.rs | crate::formula::types | <Arg as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <Value as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::FORBIDDEN | const | [char;7]	generic	the characters the SheetName parser refuses, which it reads one by one
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::as_str() | ret | &str	newtype-inner	enum/newtype own accessor or constructor
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::free_variant(taken) | param | impl Fn(&SheetNameKey)->bool	generic	predicate over typed keys
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::new(text) | param | &str	newtype-inner	the fallible constructor that checks the Excel rule
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::numbered(n) | param | usize	newtype-inner	the position a fallback SheetName writes into its text (TRAME-235)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::obeyed() | ret | bool	generic	predicate result: whether a stored name obeys the rename rule
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::stored(text) | param | String	newtype-inner	the read constructor for a name the document or a formula already holds; one the rule refuses is shown as its fallback (TRAME-235)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameRefusal::Forbidden.0 | field | char	generic	the refused value the error echoes: the forbidden character of a sheet name
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidDefinedName.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidDefinedName::as_str() | ret | &str	newtype-inner	the InvalidDefinedName newtype unwrapped, for a caller outside its module
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidDefinedName::new(value) | param | String	newtype-inner	the constructor of the InvalidDefinedName newtype
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameKey.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DelimiterByte as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DelimiterByte as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
+ambre-trame | src/message/command.rs | crate::message::command | SheetName::FORBIDDEN | const | [char;7]	generic	the characters the SheetName parser refuses, which it reads one by one
+ambre-trame | src/message/command.rs | crate::message::command | SheetName::as_str() | ret | &str	newtype-inner	enum/newtype own accessor or constructor
+ambre-trame | src/message/command.rs | crate::message::command | SheetName::free_variant(taken) | param | impl Fn(&SheetNameKey)->bool	generic	predicate over typed keys
+ambre-trame | src/message/command.rs | crate::message::command | SheetName::new(text) | param | &str	newtype-inner	the fallible constructor that checks the Excel rule
+ambre-trame | src/message/command.rs | crate::message::command | SheetName::numbered(n) | param | usize	newtype-inner	the position a fallback SheetName writes into its text (TRAME-235)
+ambre-trame | src/message/command.rs | crate::message::command | SheetName::obeyed() | ret | bool	generic	predicate result: whether a stored name obeys the rename rule
+ambre-trame | src/message/command.rs | crate::message::command | SheetName::stored(text) | param | String	newtype-inner	the read constructor for a name the document or a formula already holds; one the rule refuses is shown as its fallback (TRAME-235)
+ambre-trame | src/message/command.rs | crate::message::command | SheetNameRefusal::Forbidden.0 | field | char	generic	the refused value the error echoes: the forbidden character of a sheet name
+ambre-trame | src/message/command.rs | crate::message::command | InvalidDefinedName.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
+ambre-trame | src/message/command.rs | crate::message::command | InvalidDefinedName::as_str() | ret | &str	newtype-inner	the InvalidDefinedName newtype unwrapped, for a caller outside its module
+ambre-trame | src/message/command.rs | crate::message::command | InvalidDefinedName::new(value) | param | String	newtype-inner	the constructor of the InvalidDefinedName newtype
+ambre-trame | src/message/command.rs | crate::message::command | SheetName.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
+ambre-trame | src/message/command.rs | crate::message::command | SheetNameKey.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
+ambre-trame | src/message/command.rs | crate::message::command | <DelimiterByte as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-trame | src/message/command.rs | crate::message::command | <DelimiterByte as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
 ambre-bus | src/app/find.rs | crate::app::find | FindText.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
 ambre-bus | src/app/find.rs | crate::app::find | FindText::new(text) | param | String	newtype-inner	the text the constructor validates
 ambre-bus | src/app/find.rs | crate::app::find | FindText::as_str() | ret | &str	newtype-inner	the find text the newtype wraps
@@ -3571,17 +3577,17 @@ ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::new(c) | param
 ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::NAME | const | &'static str	free-text	the name a modifier set prints through Debug, for a log line
 ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::ALL | const | u8	generic	the three bits that name a modifier, the mask every modifier set lies in
 ambre-commands | src/keybinding.rs | crate::keybinding | <ModifierKeys as FlagsKind>::Repr | assoc | u8	newtype-inner	the integer a modifier set holds its three bits in, the inside of Flags
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | <CellText<F> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | <DisplayForm as TextForm>::NAME | const | &'static str	free-text	the name a cell text prints through Debug, for a log line
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | <SourceForm as TextForm>::NAME | const | &'static str	free-text	the name a cell text prints through Debug, for a log line
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | <StoredForm as TextForm>::NAME | const | &'static str	free-text	the name a cell text prints through Debug, for a log line
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | CellText.text | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | CellText<F>::as_str() | ret | &str	newtype-inner	CellText newtype, its text
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | CellText<F>::formula_body() | ret | Option<&str>	generic	the formula text after its =, which the parser reads
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | CellText<F>::into_string() | ret | String	newtype-inner	CellText newtype, its text
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | CellText<F>::is_empty() | ret | bool	generic	predicate result
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | CellText<F>::is_formula() | ret | bool	generic	predicate result
-ambre-bus | src/app/trame/text.rs | crate::app::trame::text | CellText<F>::new(text) | param | String	newtype-inner	CellText newtype, its text
+ambre-trame | src/message/text.rs | crate::message::text | <CellText<F> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-trame | src/message/text.rs | crate::message::text | <DisplayForm as TextForm>::NAME | const | &'static str	free-text	the name a cell text prints through Debug, for a log line
+ambre-trame | src/message/text.rs | crate::message::text | <SourceForm as TextForm>::NAME | const | &'static str	free-text	the name a cell text prints through Debug, for a log line
+ambre-trame | src/message/text.rs | crate::message::text | <StoredForm as TextForm>::NAME | const | &'static str	free-text	the name a cell text prints through Debug, for a log line
+ambre-trame | src/message/text.rs | crate::message::text | CellText.text | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
+ambre-trame | src/message/text.rs | crate::message::text | CellText<F>::as_str() | ret | &str	newtype-inner	CellText newtype, its text
+ambre-trame | src/message/text.rs | crate::message::text | CellText<F>::formula_body() | ret | Option<&str>	generic	the formula text after its =, which the parser reads
+ambre-trame | src/message/text.rs | crate::message::text | CellText<F>::into_string() | ret | String	newtype-inner	CellText newtype, its text
+ambre-trame | src/message/text.rs | crate::message::text | CellText<F>::is_empty() | ret | bool	generic	predicate result
+ambre-trame | src/message/text.rs | crate::message::text | CellText<F>::is_formula() | ret | bool	generic	predicate result
+ambre-trame | src/message/text.rs | crate::message::text | CellText<F>::new(text) | param | String	newtype-inner	CellText newtype, its text
 ambre-bus | src/app/toile.rs | crate::app::toile | <ClipSlot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <ImportSlot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | <Slide as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -4001,7 +4007,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | <OrderedStyleCode as Refuses>
 ambre-bus | src/app/prose.rs | crate::app::prose | <OrderedStyleCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
 ambre-bus | src/app/toile.rs | crate::app::toile | <Reactions as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-bus | src/app/toile.rs | crate::app::toile | <Votes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | <Ranks as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-trame | src/message/features.rs | crate::message::features | <Ranks as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-canvas | src/view.rs | crate::view | <CellsDrawn as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-canvas | src/view.rs | crate::view | <GlyphMisses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-core | src/activity.rs | crate::activity | <ContentUpdates as crate::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire

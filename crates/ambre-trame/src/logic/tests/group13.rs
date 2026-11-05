@@ -112,7 +112,7 @@ fn a_cell_back_to_the_default_style_leaves_no_entry() {
     style(
         &mut state,
         StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
+            bold: Some(ambre_core::Weight::Bold),
             bg: Some(Some(Rgb::from_bits(0x00ff_0000))),
             ..Default::default()
         },
@@ -121,7 +121,7 @@ fn a_cell_back_to_the_default_style_leaves_no_entry() {
     style(
         &mut state,
         StylePatch {
-            bold: Some(ambre_bus::Weight::Regular),
+            bold: Some(ambre_core::Weight::Regular),
             bg: Some(None),
             ..Default::default()
         },
@@ -236,7 +236,7 @@ fn styling_keeps_every_value() {
     style(
         &mut state,
         StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
+            bold: Some(ambre_core::Weight::Bold),
             format: Some(CellFormat::Number),
             decimals: Some(ambre_core::Bounded::new(0)),
             ..Default::default()

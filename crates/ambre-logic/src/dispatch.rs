@@ -759,9 +759,10 @@ mod tests {
     use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{Authored, Instant};
     use ambre_bus::{Col, Row};
-    use ambre_bus::{Request, RestCommand, RestEvent, TrameCommand};
+    use ambre_bus::{Request, RestCommand, RestEvent};
     use ambre_core::Seq;
     use ambre_core::index::Pos;
+    use ambre_trame::message::TrameCommand;
     use std::io::Cursor;
 
     /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
@@ -804,7 +805,7 @@ mod tests {
         std::iter::from_fn(|| ui.try_recv().ok())
             .find_map(|evt| match evt {
                 UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. }),
+                    event: AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. }),
                     ..
                 }
                 | UiEvent::Viewport {
@@ -832,7 +833,7 @@ mod tests {
     fn exported_file_from(state: &LogicState, document_id: Id<Document>) -> Vec<u8> {
         let doc = state.docs.get(&document_id).expect("a live document");
         match doc.state.ambre_file_event(document_id) {
-            AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. })
+            AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. })
             | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. })
             | AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady { data, .. }) => {
                 data.into_bytes()
@@ -1085,15 +1086,19 @@ mod tests {
                 version: ambre_core::Seq::nth(1),
             }),
         });
-        let kept = std::iter::from_fn(|| ui.try_recv().ok()).any(|evt| match evt {
-            UiEvent::Viewport {
-                event: AppEvent::Trame(ambre_bus::TrameEvent::ViewportData { cells, .. }),
-                ..
-            } => cells.iter().any(|c| {
-                c.row == Pos::<Row>::new(3) && c.col == Pos::<Col>::new(1) && c.text == "kept"
-            }),
-            _ => false,
-        });
+        let kept =
+            std::iter::from_fn(|| ui.try_recv().ok()).any(|evt| match evt {
+                UiEvent::Viewport {
+                    event:
+                        AppEvent::Trame(ambre_trame::message::TrameEvent::ViewportData {
+                            cells, ..
+                        }),
+                    ..
+                } => cells.iter().any(|c| {
+                    c.row == Pos::<Row>::new(3) && c.col == Pos::<Col>::new(1) && c.text == "kept"
+                }),
+                _ => false,
+            });
         assert!(kept, "the saved file reopened without the edit it carried");
     }
 
@@ -1132,7 +1137,8 @@ mod tests {
     fn export_bytes(ui: &Receiver<UiEvent>) -> Option<Vec<u8>> {
         std::iter::from_fn(|| ui.try_recv().ok()).find_map(|evt| match evt {
             UiEvent::Viewport {
-                event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. }),
+                event:
+                    AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. }),
                 ..
             }
             | UiEvent::Viewport {
@@ -1199,7 +1205,7 @@ mod tests {
                 events.iter().any(|e| matches!(
                     e,
                     UiEvent::Viewport {
-                        event: AppEvent::Trame(ambre_bus::TrameEvent::Error { .. })
+                        event: AppEvent::Trame(ambre_trame::message::TrameEvent::Error { .. })
                             | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(_)),
                         ..
                     }
@@ -1210,10 +1216,11 @@ mod tests {
                 !events.iter().any(|e| matches!(
                     e,
                     UiEvent::Viewport {
-                        event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { .. })
-                            | AppEvent::Toile(
-                                ambre_bus::app::toile::ToileEvent::ExportComplete { .. }
-                            ),
+                        event: AppEvent::Trame(
+                            ambre_trame::message::TrameEvent::ExportComplete { .. }
+                        ) | AppEvent::Toile(
+                            ambre_bus::app::toile::ToileEvent::ExportComplete { .. }
+                        ),
                         ..
                     }
                 )),
@@ -1570,7 +1577,7 @@ mod tests {
             command: AppCommand::Trame(TrameCommand::ImportCsv {
                 data: ambre_core::Payload::<ambre_core::FileBytes>::new(file.clone()),
                 delimiter: None,
-                header: ambre_bus::HeaderRow::Absent,
+                header: ambre_trame::message::HeaderRow::Absent,
                 target_sheet_id: None,
                 start_row: Pos::<Row>::new(0),
                 start_col: Pos::<Col>::new(0),

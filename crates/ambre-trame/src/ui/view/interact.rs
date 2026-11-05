@@ -491,7 +491,7 @@ impl TrameView {
             .as_ref()
             .filter(|_| source.form != ambre_core::PasteForm::Plain)
             .and_then(|bytes| {
-                postcard::from_bytes::<ambre_bus::ClipboardPayload>(bytes.as_bytes()).ok()
+                postcard::from_bytes::<crate::message::ClipboardPayload>(bytes.as_bytes()).ok()
             });
         match payload {
             Some(payload) => self.grid_paste_payload(payload),
@@ -502,7 +502,7 @@ impl TrameView {
     /// Paste a typed Ambre payload at the active cell (`trame-clipboard`). The
     /// Logic thread reindexes relative formulas and applies styles; a pending cut
     /// then clears the source range.
-    pub fn grid_paste_payload(&mut self, payload: ambre_bus::ClipboardPayload) {
+    pub fn grid_paste_payload(&mut self, payload: crate::message::ClipboardPayload) {
         let at = self.state.active_cell();
         let extent = MergeSpan::new(payload.rows, payload.cols);
         let sent = self.send_command_lossless(TrameCommand::PasteRange {
@@ -543,7 +543,7 @@ impl TrameView {
                 if field.is_empty() {
                     continue;
                 }
-                cells.push(ambre_bus::ClipboardCell {
+                cells.push(crate::message::ClipboardCell {
                     dr,
                     dc,
                     raw: field.to_owned(),
@@ -554,7 +554,7 @@ impl TrameView {
         if cells.is_empty() {
             return;
         }
-        let payload = ambre_bus::ClipboardPayload {
+        let payload = crate::message::ClipboardPayload {
             src_row: at.row,
             src_col: at.col,
             rows,

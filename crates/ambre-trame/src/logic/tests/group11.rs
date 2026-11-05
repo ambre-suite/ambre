@@ -128,7 +128,7 @@ fn a_merge_leaves_its_neighbours() {
             assert_eq!(cell.text, format!("{r}{c}"), "({r},{c}) changed");
             assert_eq!(
                 cell.is_merged,
-                ambre_bus::Merge::Single,
+                crate::message::Merge::Single,
                 "({r},{c}) joined the merge"
             );
         }
@@ -158,7 +158,7 @@ fn a_one_cell_merge_from_a_peer_is_no_merge() {
     let a1 = read_display(&mut a, 0, 0);
     assert_eq!(
         (a1.merge_span, a1.is_merged),
-        (None, ambre_bus::Merge::Single)
+        (None, crate::message::Merge::Single)
     );
     assert!(a.merges.is_empty() && a.covered.is_empty());
 }
@@ -249,7 +249,7 @@ fn a_merged_fill_clears_its_tiles_and_keeps_its_source() {
     for row in [3, 5] {
         let cell = read_display(&mut state, row, 0);
         assert_eq!(cell.raw, "", "row {row} kept a value under a tile");
-        assert_eq!(cell.is_merged, ambre_bus::Merge::Merged);
+        assert_eq!(cell.is_merged, crate::message::Merge::Merged);
     }
     assert!(state.masked_cells.is_empty(), "a tile masks a value");
     let a1 = read_display(&mut state, 0, 0);
@@ -257,7 +257,7 @@ fn a_merged_fill_clears_its_tiles_and_keeps_its_source() {
     let a2 = read_display(&mut state, 1, 0);
     assert_eq!(
         (a2.raw.as_str(), a2.is_merged),
-        ("", ambre_bus::Merge::Merged)
+        ("", crate::message::Merge::Merged)
     );
 }
 
@@ -271,7 +271,7 @@ fn a_merged_fill_carries_the_style_and_shifts_the_formula() {
     select(&mut state, 0, 0, 0, 0);
     state.handle_command(TrameCommand::SetCellStyle {
         patch: crate::StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
+            bold: Some(ambre_core::Weight::Bold),
             bg: Some(Some(Rgb::from_bits(0x00ff_0000))),
             ..Default::default()
         },
@@ -282,7 +282,7 @@ fn a_merged_fill_carries_the_style_and_shifts_the_formula() {
         assert_eq!(cell.raw, formula, "tile at row {row}");
         assert_eq!(
             cell.bold,
-            ambre_bus::Weight::Bold,
+            ambre_core::Weight::Bold,
             "tile at row {row} lost the bold"
         );
         assert_eq!(
@@ -308,7 +308,7 @@ fn a_source_of_unequal_blocks_fills_cell_by_cell() {
     for row in 5..10 {
         assert_eq!(
             read_display(&mut state, row, 0).is_merged,
-            ambre_bus::Merge::Single,
+            crate::message::Merge::Single,
             "row {row} merged"
         );
     }

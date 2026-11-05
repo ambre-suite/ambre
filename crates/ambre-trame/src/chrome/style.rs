@@ -6,7 +6,8 @@
 // are `Copy` signal bundles that may live inside the `<Router>` subtree.
 // ============================================================================
 
-use ambre_bus::{AppEvent, BorderStyle, CellFormat, HAlign, TrameEvent, UiEvent, VAlign};
+use crate::message::{BorderStyle, CellFormat, HAlign, TrameEvent, VAlign};
+use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::{Availability, CommandStates};
 use ambre_core::Rgb;
 use leptos::prelude::*;
@@ -19,7 +20,7 @@ pub(crate) trait Flip {
     fn flipped(self) -> Self;
 }
 
-impl Flip for ambre_bus::Weight {
+impl Flip for ambre_core::Weight {
     fn flipped(self) -> Self {
         match self {
             Self::Regular => Self::Bold,
@@ -28,7 +29,7 @@ impl Flip for ambre_bus::Weight {
     }
 }
 
-impl Flip for ambre_bus::Slant {
+impl Flip for ambre_core::Slant {
     fn flipped(self) -> Self {
         match self {
             Self::Upright => Self::Italic,
@@ -37,7 +38,7 @@ impl Flip for ambre_bus::Slant {
     }
 }
 
-impl Flip for ambre_bus::Underline {
+impl Flip for ambre_core::Underline {
     fn flipped(self) -> Self {
         match self {
             Self::Plain => Self::Underlined,
@@ -46,7 +47,7 @@ impl Flip for ambre_bus::Underline {
     }
 }
 
-impl Flip for ambre_bus::Strikethrough {
+impl Flip for ambre_core::Strikethrough {
     fn flipped(self) -> Self {
         match self {
             Self::Plain => Self::Struck,
@@ -55,7 +56,7 @@ impl Flip for ambre_bus::Strikethrough {
     }
 }
 
-impl Flip for ambre_bus::WordBreak {
+impl Flip for ambre_core::WordBreak {
     fn flipped(self) -> Self {
         match self {
             Self::Whole => Self::Anywhere,
@@ -101,17 +102,17 @@ impl Toggles {
 /// style event, so bold/italic live here too. Lives in the `<Router>` subtree.
 #[derive(Clone, Copy)]
 pub struct StyleState {
-    pub bold: RwSignal<ambre_bus::Weight>,
-    pub italic: RwSignal<ambre_bus::Slant>,
-    pub underline: RwSignal<ambre_bus::Underline>,
-    pub strikethrough: RwSignal<ambre_bus::Strikethrough>,
-    pub wrap: RwSignal<ambre_bus::WordBreak>,
+    pub bold: RwSignal<ambre_core::Weight>,
+    pub italic: RwSignal<ambre_core::Slant>,
+    pub underline: RwSignal<ambre_core::Underline>,
+    pub strikethrough: RwSignal<ambre_core::Strikethrough>,
+    pub wrap: RwSignal<ambre_core::WordBreak>,
     pub h_align: RwSignal<HAlign>,
     pub v_align: RwSignal<VAlign>,
     /// What the active cell's value is. Lets the alignment control resolve
     /// [`HAlign::Auto`] the way the renderer does (numbers right, text left)
     /// so an `Auto` cell shows its de-facto alignment.
-    pub numeric: RwSignal<ambre_bus::CellValueKind>,
+    pub numeric: RwSignal<crate::message::CellValueKind>,
     pub format: RwSignal<CellFormat>,
     /// Borders popover picker state: the stroke style and colour the next preset
     /// click applies. Seeded (best-effort) from the active cell's first present
@@ -124,7 +125,7 @@ pub struct StyleState {
     pub size: RwSignal<Option<ambre_core::FontSize>>,
     /// Whether the active cell is part of a merge, driving the toolbar's
     /// merge/unmerge toggle pressed state.
-    pub merged: RwSignal<ambre_bus::Merge>,
+    pub merged: RwSignal<crate::message::Merge>,
 }
 
 impl Default for StyleState {
@@ -137,14 +138,14 @@ impl StyleState {
     /// Build a fresh state with every control at its default value.
     pub fn new() -> Self {
         Self {
-            bold: RwSignal::new(ambre_bus::Weight::Regular),
-            italic: RwSignal::new(ambre_bus::Slant::Upright),
-            underline: RwSignal::new(ambre_bus::Underline::Plain),
-            strikethrough: RwSignal::new(ambre_bus::Strikethrough::Plain),
-            wrap: RwSignal::new(ambre_bus::WordBreak::Whole),
+            bold: RwSignal::new(ambre_core::Weight::Regular),
+            italic: RwSignal::new(ambre_core::Slant::Upright),
+            underline: RwSignal::new(ambre_core::Underline::Plain),
+            strikethrough: RwSignal::new(ambre_core::Strikethrough::Plain),
+            wrap: RwSignal::new(ambre_core::WordBreak::Whole),
             h_align: RwSignal::new(HAlign::Auto),
             v_align: RwSignal::new(VAlign::Middle),
-            numeric: RwSignal::new(ambre_bus::CellValueKind::Text),
+            numeric: RwSignal::new(crate::message::CellValueKind::Text),
             format: RwSignal::new(CellFormat::General),
             border_line: RwSignal::new(BorderStyle::Solid),
             border_color: RwSignal::new(None),
@@ -152,25 +153,21 @@ impl StyleState {
             bg: RwSignal::new(None),
             font: RwSignal::new(None),
             size: RwSignal::new(None),
-            merged: RwSignal::new(ambre_bus::Merge::default()),
+            merged: RwSignal::new(crate::message::Merge::default()),
         }
     }
 }
 
 /// Mirror a [`TrameEvent::StyleApplied`] into the toolbar's [`StyleState`]. A
 /// no-op for any other event; the launcher calls it for every event it relays.
-pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
-    if let UiEvent::Viewport {
-        event:
-            AppEvent::Trame(TrameEvent::StyleApplied {
-                style,
-                bold,
-                italic,
-                merged,
-                numeric,
-            }),
-        ..
-    } = ev
+pub fn apply_style_event<S: Embed<TrameEvent>>(s: &StyleState, ev: &UiEvent<S>) {
+    if let Some(TrameEvent::StyleApplied {
+        style,
+        bold,
+        italic,
+        merged,
+        numeric,
+    }) = ev.viewport_event()
     {
         s.bold.set(*bold);
         s.italic.set(*italic);

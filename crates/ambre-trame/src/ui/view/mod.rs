@@ -11,9 +11,9 @@
 // methods (see the dedicated impl block).
 // ============================================================================
 
+use crate::message::{FillMode, TrameCommand, TrameEvent};
 use ambre_bus::{
-    AppCommand, AppEvent, FillMode, LogicCommand, LossyOutcome, Outbox, PasteSource, SendOutcome,
-    TrameCommand, TrameEvent, UiEvent,
+    Inbox, LogicCommand, LossyOutcome, Outbox, PasteSource, Port, SendOutcome, UiEvent,
 };
 use ambre_canvas::{
     AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats, InputEvent,
@@ -311,15 +311,15 @@ pub struct TrameView {
     /// The document this view renders (from the active route).
     document_id: Id<Document>,
     /// Outbound queue to the Logic thread, for the lossy class only.
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: Port<TrameCommand>,
     /// The lossless send path: it keeps a command a full queue could not take,
     /// and offers it again on a later frame (`BUS-011`).
-    outbox: Outbox,
+    outbox: Outbox<TrameCommand>,
     /// The busy level the chrome reads while the outbox holds anything
     /// (`BUS-016`).
     busy_pub: BusyPublisher,
     /// Inbound queue from the Logic thread, drained each frame in `update`.
-    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    from_logic: Inbox<TrameEvent>,
 
     /// Grid navigation + cell cache.
     state: TrameUiState,

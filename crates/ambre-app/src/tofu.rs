@@ -6,11 +6,11 @@
 // passes a decision.
 
 use ambre_bus::{
-    Authored, DirectMember, DirectMessageDraft, FixedBytes, Instant, LogicCommand, RestCommand,
-    Role,
+    Authored, DirectMember, DirectMessageDraft, FixedBytes, Instant, RestCommand, Role,
 };
 use ambre_chrome::Dialog;
 use ambre_core::id::{Channel, Document, Id, User};
+use ambre_logic::app::LogicCommand;
 use leptos::prelude::*;
 
 /// What a confirmed key is for.

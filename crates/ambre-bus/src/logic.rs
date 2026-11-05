@@ -1,10 +1,11 @@
 //! Logic-bound protocol -- messages addressed to the Logic thread from the UI.
 //!
-//! Holds the [`LogicCommand`] envelope (UI Thread -> Logic thread) plus
-//! [`AppCommand`], the closed sum over the document types it carries. Each
-//! per-app command enum lives with that app's whole data plane under
-//! [`crate::app`] (for example `crate::app::trame::TrameCommand`); `AppCommand` is a
-//! thin dispatch enum referencing them.
+//! Holds the [`LogicCommand`] envelope (UI Thread -> Logic thread), generic
+//! over the document command it carries. Each application declares its own
+//! command enum in its crate (`BUS-032`). The Logic runtime declares
+//! `AppCommand`, the closed sum over them, downstream of every application. A
+//! view sends `LogicCommand<ItsCommand>`, and the launcher embeds it into the
+//! sum through [`crate::Embed`].
 //!
 //! Carried over a `conduit` queue in shared memory -- typed Rust values by move,
 //! no serialization. The symmetric Logic -> UI direction (events) lives in
@@ -13,10 +14,9 @@
 //! # Three planes, one envelope
 //! - **Content** ([`LogicCommand::App`], [`LogicCommand::Channel`]): document
 //!   edits / viewport requests, routed by `Id<Document>` inside the Logic thread,
-//!   and channel commands, routed by `Id<Channel>`. [`AppCommand`] and
-//!   [`MurmureCommand`] are closed sums: adding a document type is adding a
-//!   variant. No trait object, no `Any`, no crate cycle -- this module depends
-//!   only on `ambre-core`.
+//!   and channel commands, routed by `Id<Channel>`. The document command is the
+//!   type parameter, and [`MurmureCommand`] is a closed sum. No trait object,
+//!   no `Any`, no crate cycle -- this module depends only on `ambre-core`.
 //! - **Service** ([`LogicCommand::Rest`]): the correlatable request/response
 //!   family, defined once in [`crate::rest`] and forwarded verbatim to Sync.
 //! - **Control** (`OpenDocument`, `CloseDocument`, `OpenChannel`, `CloseChannel`):
@@ -29,11 +29,10 @@ use crate::{
 };
 use ambre_core::id::{Channel, Document, Id, Space};
 use ambre_core::{FixedBytes, Seq, SessionNonce};
+use std::convert::Infallible;
 
-// The typed application data plane carried by `LogicCommand::App` lives per-app under
-// `crate::app`, command + event + value types grouped by document type. This envelope
-// module only holds the `LogicCommand` sum and the `AppCommand` dispatch enum that
-// references those app modules.
+// The document command carried by `LogicCommand::App` is the type parameter: each
+// application declares its own, and `AppCommand` sums them in the Logic runtime.
 
 // -----------------------------------------------------------------------------
 // LogicCommand -- UI Thread -> Logic thread
@@ -59,19 +58,22 @@ pub enum StoreRoom {
 ///   `SyncCommand` counterparts.
 ///
 /// [`SyncCommand::Rest`]: crate::SyncCommand::Rest
+///
+/// `A` is the document command `App` carries. A sender that carries none, such
+/// as the launcher's own service requests, leaves it at [`Infallible`].
 #[derive(Debug, Clone)]
-pub enum LogicCommand {
+pub enum LogicCommand<A = Infallible> {
     // -- P2 -- Content plane ----------------------------------------------------
     /// Application-specific command for an open document (cell edit, viewport
     /// scroll in Trame; text insertion in Prose; element move in Toile; ...).
     ///
-    /// The Logic dispatcher routes [`command`](AppCommand) to the state owning
+    /// The Logic dispatcher routes `command` to the state owning
     /// `document_id` and replies with [`crate::ui::UiEvent::Viewport`] /
     /// [`crate::ui::UiEvent::Presence`] events.
     App {
         document_id: Id<Document>,
-        /// Typed application command (schema owned by [`crate::logic`]).
-        command: AppCommand,
+        /// Typed application command, declared by its application's crate.
+        command: A,
     },
 
     /// Command for an open Murmure channel (`BUS-027`).
@@ -230,39 +232,119 @@ pub enum LogicCommand {
 }
 
 // -----------------------------------------------------------------------------
-// AppCommand -- typed application command family (content plane)
+// Retyping the document command
 // -----------------------------------------------------------------------------
 
-/// Application-specific command, UI Thread -> Logic thread.
-///
-/// Carried inside [`LogicCommand::App`]. The Logic dispatcher matches the
-/// variant, routes it to the `Id<Document>`'s document state, and produces zero or
-/// more [`AppEvent`](crate::ui::AppEvent)s.
-#[derive(Debug, Clone)]
-pub enum AppCommand {
-    /// Command for a Trame (spreadsheet) document.
-    Trame(crate::app::trame::TrameCommand),
-    /// Command for a Toile (whiteboard) document.
-    Toile(crate::app::toile::ToileCommand),
-    /// Command for a Prose (word processor) document.
-    Prose(crate::app::prose::ProseCommand),
-    // Future document types: Murmure(MurmureCommand),
-    // Rendezvous(RendezvousCommand), ...
-    // Future plugin surface: Plugin(Box<dyn Plugin>).
+/// A [`LogicCommand`] split on whether it carries a document command.
+enum Split<A, B> {
+    App(Id<Document>, A),
+    Other(LogicCommand<B>),
 }
 
-impl AppCommand {
-    /// Whether this command can change the document's shared CRDT state.
-    ///
-    /// Used by the Logic dispatcher to gate a read-only caller
-    /// (`architecture`). Ephemeral presence and local view state are
-    /// *not* mutating: a viewer still scrolls, selects, copies and broadcasts a
-    /// cursor.
-    pub fn is_mutating(&self) -> bool {
-        match self {
-            Self::Trame(cmd) => cmd.is_mutating(),
-            Self::Toile(cmd) => cmd.is_mutating(),
-            Self::Prose(cmd) => cmd.is_mutating(),
+impl<A> LogicCommand<A> {
+    /// The document and command of an `App` variant, or every other variant
+    /// retyped, since none of them carries an `A`. The one exhaustive list of
+    /// variants the two maps below share.
+    fn split<B>(self) -> Split<A, B> {
+        Split::Other(match self {
+            Self::App {
+                document_id,
+                command,
+            } => return Split::App(document_id, command),
+            Self::Channel {
+                channel_id,
+                command,
+            } => LogicCommand::Channel {
+                channel_id,
+                command,
+            },
+            Self::Space { space_id, command } => LogicCommand::Space { space_id, command },
+            Self::RestoreLocalSnapshot {
+                document_id,
+                doc_type,
+                snapshot,
+                deltas,
+                sessions,
+            } => LogicCommand::RestoreLocalSnapshot {
+                document_id,
+                doc_type,
+                snapshot,
+                deltas,
+                sessions,
+            },
+            Self::LocalStoreFull { document_id, room } => {
+                LogicCommand::LocalStoreFull { document_id, room }
+            }
+            Self::Rest { id, cmd } => LogicCommand::Rest { id, cmd },
+            Self::OpenDocument {
+                document_id,
+                doc_type,
+            } => LogicCommand::OpenDocument {
+                document_id,
+                doc_type,
+            },
+            Self::CloseDocument { document_id } => LogicCommand::CloseDocument { document_id },
+            Self::OpenChannel { channel_id } => LogicCommand::OpenChannel { channel_id },
+            Self::CloseChannel { channel_id } => LogicCommand::CloseChannel { channel_id },
+            Self::OpenDirectMessage { draft, now } => {
+                LogicCommand::OpenDirectMessage { draft, now }
+            }
+            Self::InviteToChannel {
+                id,
+                channel_id,
+                invitee,
+                now,
+            } => LogicCommand::InviteToChannel {
+                id,
+                channel_id,
+                invitee,
+                now,
+            },
+            Self::CreateSpace {
+                space_id,
+                name,
+                now,
+            } => LogicCommand::CreateSpace {
+                space_id,
+                name,
+                now,
+            },
+            Self::OpenSpace { space_id } => LogicCommand::OpenSpace { space_id },
+            Self::CloseSpace { space_id } => LogicCommand::CloseSpace { space_id },
+            Self::FetchActivity => LogicCommand::FetchActivity,
+            Self::ListMemberChannels => LogicCommand::ListMemberChannels,
+            Self::MarkAllRead => LogicCommand::MarkAllRead,
+            Self::SearchMessages { query } => LogicCommand::SearchMessages { query },
+            Self::LoadFonts { faces } => LogicCommand::LoadFonts { faces },
+        })
+    }
+
+    /// The same command, its document command passed through `f`. The
+    /// launcher embeds a view's command into the Logic runtime's sum with it.
+    pub fn map<B>(self, f: impl FnOnce(A) -> B) -> LogicCommand<B> {
+        match self.split() {
+            Split::App(document_id, command) => LogicCommand::App {
+                document_id,
+                command: f(command),
+            },
+            Split::Other(other) => other,
+        }
+    }
+
+    /// The same command with its document command projected out of the sum
+    /// `A`, or `None` when the sum holds another application's.
+    pub fn project<B>(self) -> Option<LogicCommand<B>>
+    where
+        A: crate::Embed<B>,
+    {
+        match self.split() {
+            Split::App(document_id, command) => {
+                command.project().ok().map(|command| LogicCommand::App {
+                    document_id,
+                    command,
+                })
+            }
+            Split::Other(other) => Some(other),
         }
     }
 }

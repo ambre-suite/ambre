@@ -24,8 +24,7 @@ use ambre_core::id::{Document, Id};
 use ambre_core::{Byte, char_to_byte};
 
 use ambre_bus::app::prose::DocChar;
-use ambre_bus::logic::{AppCommand, LogicCommand};
-use ambre_bus::{Outbox, SendOutcome};
+use ambre_bus::{Delivery, LogicCommand, Outbox, Port, SendOutcome};
 
 use crate::events::{
     BandSet, BlockId, ChangeOrigin, CommentThread, CursorPosition, FindMatch, FootnoteEntry,
@@ -633,21 +632,21 @@ impl SendResult {
 /// blocks (`UI-THREAD-002`), and the draft echo the view painted stays here
 /// (`PROSE-UI-150`): what crosses is the typed command alone.
 pub fn send_command(
-    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: &Port<ProseCommand>,
     document_id: Id<Document>,
     command: ProseCommand,
 ) -> SendResult {
     let envelope = LogicCommand::App {
         document_id,
-        command: AppCommand::Prose(command),
+        command,
     };
     match to_logic.try_send(envelope) {
-        Ok(()) => SendResult::Sent,
-        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
+        Delivery::Sent => SendResult::Sent,
+        Delivery::Full(_) => {
             tracing::warn!("Prose: the Logic channel is full, the command is dropped");
             SendResult::Dropped
         }
-        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => SendResult::Disconnected,
+        Delivery::Disconnected => SendResult::Disconnected,
     }
 }
 
@@ -658,13 +657,13 @@ pub fn send_command(
 /// host refuses input while the outbox holds anything (`BUS-016`), so the
 /// order the user typed in is the order the edits land.
 pub fn send_edit(
-    outbox: &mut Outbox,
+    outbox: &mut Outbox<ProseCommand>,
     document_id: Id<Document>,
     command: ProseCommand,
 ) -> SendResult {
     let envelope = LogicCommand::App {
         document_id,
-        command: AppCommand::Prose(command),
+        command,
     };
     match outbox.send(envelope) {
         SendOutcome::Sent => SendResult::Sent,
@@ -1118,27 +1117,29 @@ mod tests {
 
     #[test]
     fn a_full_channel_drops_the_command_rather_than_holding_the_frame() {
-        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<1>());
+        let (tx, _rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<1>());
         assert_eq!(
-            send_command(&tx, a_document(), ProseCommand::Noop),
+            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
             SendResult::Sent
         );
         // The channel holds one, so the second send finds it full. It answers
         // at once rather than parking this thread.
         assert_eq!(
-            send_command(&tx, a_document(), ProseCommand::Noop),
+            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
             SendResult::Dropped
         );
     }
 
     #[test]
     fn a_full_channel_holds_an_edit_rather_than_the_frame() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<1>());
-        let mut outbox = Outbox::new(tx);
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<1>());
+        let mut outbox = Outbox::new(Port::direct(tx));
         assert_eq!(
             send_edit(&mut outbox, a_document(), ProseCommand::Noop),
             SendResult::Sent
@@ -1156,21 +1157,23 @@ mod tests {
 
     #[test]
     fn a_closed_channel_is_told_apart_from_a_full_one() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<1>());
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<1>());
         drop(rx);
         assert_eq!(
-            send_command(&tx, a_document(), ProseCommand::Noop),
+            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
             SendResult::Disconnected
         );
     }
 
     #[test]
     fn the_draft_echo_never_reaches_the_wire() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<4>());
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<4>());
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
@@ -1180,7 +1183,7 @@ mod tests {
             Pos::<DocChar>::ZERO,
         );
         send_command(
-            &tx,
+            &Port::direct(tx),
             a_document(),
             ProseCommand::InsertText {
                 block_id: block,
@@ -1195,10 +1198,7 @@ mod tests {
         // The draft is still held here, and the wire carries the typed command
         // rather than the echo.
         assert!(!state.draft.is_empty());
-        assert!(matches!(
-            command,
-            AppCommand::Prose(ProseCommand::InsertText { .. })
-        ));
+        assert!(matches!(command, ProseCommand::InsertText { .. }));
     }
 
     #[test]

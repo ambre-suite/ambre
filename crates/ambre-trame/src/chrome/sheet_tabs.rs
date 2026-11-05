@@ -13,7 +13,7 @@
 // signals, mirrored from `TrameEvent::SheetList`.
 // ============================================================================
 
-use ambre_bus::{SheetName, SheetTab, TabStrip};
+use crate::message::{SheetName, SheetTab, TabStrip};
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use leptos::prelude::*;

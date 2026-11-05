@@ -41,16 +41,15 @@ use std::rc::Rc;
 use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use ambre_bus::conduit::{self, ChannelSlots, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
-use ambre_bus::{
-    AppCommand, LogicCommand, LogicEvent, MemberInfo, RestCommand, Role, SheetTab, SyncCommand,
-    UiEvent,
-};
+use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
 use ambre_chrome::{
     AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
     Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar,
 };
 use ambre_core::id::{Document, Frame, Id, User};
 use ambre_core::{Board, Doc, Scale, View};
+use ambre_logic::app::{AppCommand, LogicCommand, UiEvent};
+use ambre_trame::message::SheetTab;
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
@@ -1093,7 +1092,7 @@ pub fn main() {
         let tx = ui_to_logic_tx.clone();
         Rc::new(move |channel, at| {
             if let Some(command) = murmure_relay.open_at(channel, at) {
-                let _ = tx.try_send(command);
+                let _ = tx.try_send(command.map(AppCommand::embed));
             }
         })
     };
@@ -1107,7 +1106,7 @@ pub fn main() {
         let refresh = Closure::<dyn FnMut()>::new(move || {
             let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
             for command in murmure_relay.refresh_presence(now) {
-                if let Err(e) = presence_tx.try_send(command) {
+                if let Err(e) = presence_tx.try_send(command.map(AppCommand::embed)) {
                     tracing::warn!("Presence refresh dropped, Logic channel full ({e:?})");
                 }
             }
@@ -1359,7 +1358,7 @@ pub fn main() {
             trame_relay.absorb(&ev);
             toile_relay.absorb(&ev);
             for command in murmure_relay.absorb(&ev) {
-                let _ = relay_tx.try_send(command);
+                let _ = relay_tx.try_send(command.map(AppCommand::embed));
             }
             if let Some(notice) = murmure_relay.notice(
                 &ev,
@@ -1405,7 +1404,7 @@ pub fn main() {
                         // A Murmure page lists its channels and their activity.
                         if boot_is_murmure {
                             for command in ambre_murmure::chrome::MurmureRelay::boot() {
-                                let _ = relay_tx.try_send(command);
+                                let _ = relay_tx.try_send(command.map(AppCommand::embed));
                             }
                         }
                     }
@@ -1803,8 +1802,8 @@ pub fn main() {
         match doc_type {
             ambre_bus::DocType::Toile => AppView::Toile(ToileView::new(
                 document_id,
-                child_to_logic.clone(),
-                child_rx,
+                ambre_bus::Port::embedded(child_to_logic.clone()),
+                ambre_bus::Inbox::embedded(child_rx),
                 ambre_core::Px::<ambre_core::Surface>::new(size.width),
                 ambre_core::Px::<ambre_core::Surface>::new(size.height),
                 text_input,
@@ -1836,8 +1835,8 @@ pub fn main() {
             // a stray type falls back to Trame rather than crash the frame).
             _ => AppView::Trame(TrameView::new(
                 document_id,
-                child_to_logic.clone(),
-                child_rx,
+                ambre_bus::Port::embedded(child_to_logic.clone()),
+                ambre_bus::Inbox::embedded(child_rx),
                 ambre_core::Px::<ambre_core::Surface>::new(size.width),
                 ambre_core::Px::<ambre_core::Surface>::new(size.height),
                 text_input,
@@ -1872,8 +1871,8 @@ pub fn main() {
             if boot_is_murmure {
                 text_input.name_content(ambre_canvas::ContentKind::Conversation);
                 AppView::Murmure(host::MurmureView::new(
-                    Some(view_rx),
-                    Some(view_tx_logic),
+                    Some(ambre_bus::Inbox::embedded(view_rx)),
+                    Some(ambre_bus::Port::embedded(view_tx_logic)),
                     host::page_reads(
                         murmure_relay,
                         text_input,
@@ -1885,8 +1884,8 @@ pub fn main() {
             } else if booted == ambre_bus::DocType::Prose {
                 AppView::Prose(host::ProseView::new(
                     initial_doc,
-                    view_tx_logic,
-                    view_rx,
+                    ambre_bus::Port::embedded(view_tx_logic),
+                    ambre_bus::Inbox::embedded(view_rx),
                     size,
                     text_input,
                     theme_ctl,
@@ -1898,8 +1897,8 @@ pub fn main() {
             } else if booted == ambre_bus::DocType::Toile {
                 AppView::Toile(ToileView::new(
                     initial_doc,
-                    view_tx_logic,
-                    view_rx,
+                    ambre_bus::Port::embedded(view_tx_logic),
+                    ambre_bus::Inbox::embedded(view_rx),
                     w,
                     h,
                     text_input,
@@ -1930,8 +1929,8 @@ pub fn main() {
             } else {
                 AppView::Trame(TrameView::new(
                     initial_doc,
-                    view_tx_logic,
-                    view_rx,
+                    ambre_bus::Port::embedded(view_tx_logic),
+                    ambre_bus::Inbox::embedded(view_rx),
                     w,
                     h,
                     text_input,
@@ -2011,10 +2010,10 @@ mod fan_out_tests {
         CHILD_BACKLOG_LIMIT, ChildBacklog, ChildRoutes, child_of, flush_child_backlog,
         send_to_child,
     };
-    use ambre_bus::UiEvent;
     use ambre_bus::conduit;
     use ambre_core::LinkState;
     use ambre_core::id::{Document, Id};
+    use ambre_logic::app::UiEvent;
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::rc::Rc;

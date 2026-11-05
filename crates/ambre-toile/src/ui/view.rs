@@ -42,7 +42,7 @@ const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was remov
 /// (`TOILE-UI-160`).
 #[cfg(any(test, target_arch = "wasm32"))]
 const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
-use ambre_bus::{AppCommand, AppEvent, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent};
+use ambre_bus::{Delivery, Inbox, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
 use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint, NoticePublisher,
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
@@ -100,23 +100,20 @@ use leptos::prelude::{GetUntracked, RwSignal, Set};
 /// `fatal` reports success on a send nobody made. The view is tearing down and
 /// no later frame will retry. A `false` here would keep a dead registry asking
 /// for ever instead of letting it go.
-fn send_session(
-    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
-    fatal: bool,
-    cmd: LogicCommand,
-) -> bool {
+fn send_session(to_logic: &Port<ToileCommand>, fatal: bool, cmd: LogicCommand) -> bool {
     if fatal {
         return true;
     }
-    match to_logic.try_send(cmd) {
-        Ok(()) => true,
-        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
+    // A session command carries no document command, so it retypes as any.
+    match to_logic.try_send(cmd.map(|never| match never {})) {
+        Delivery::Sent => true,
+        Delivery::Full(_) => {
             // Neither an open nor a close is worth blocking the UI thread for.
             // Both are worth a warning, and both come back on a later frame.
             tracing::warn!("Toile: UI->Logic channel full, embed session command deferred");
             false
         }
-        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => {
+        Delivery::Disconnected => {
             tracing::error!("Toile: UI->Logic channel disconnected");
             false
         }
@@ -296,11 +293,11 @@ thread_local! {
 
 pub struct ToileView {
     document_id: Id<Document>,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    to_logic: Port<ToileCommand>,
+    from_logic: Inbox<ToileEvent>,
     /// The lossless send path: it keeps an edit a full queue could not take,
     /// and offers it again on a later frame (`BUS-011`).
-    outbox: Outbox,
+    outbox: Outbox<ToileCommand>,
     /// The busy level the chrome reads while the outbox holds anything
     /// (`BUS-016`).
     busy_pub: BusyPublisher,
@@ -707,8 +704,8 @@ impl ToileView {
     )]
     pub fn new(
         document_id: Id<Document>,
-        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+        to_logic: Port<ToileCommand>,
+        from_logic: Inbox<ToileEvent>,
         canvas_width: ambre_core::Px<ambre_core::Surface>,
         canvas_height: ambre_core::Px<ambre_core::Surface>,
         text_input: TextInput,
@@ -924,7 +921,7 @@ impl ToileView {
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
-            command: AppCommand::Toile(cmd),
+            command: cmd,
         };
         match ambre_bus::send_lossy(&self.to_logic, msg) {
             LossyOutcome::Sent => true,
@@ -955,7 +952,7 @@ impl ToileView {
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
-            command: AppCommand::Toile(cmd),
+            command: cmd,
         };
         match self.outbox.send(msg) {
             SendOutcome::Sent => true,
@@ -3755,10 +3752,7 @@ impl ToileView {
         self.flush_outbox();
         loop {
             match self.from_logic.try_recv() {
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Toile(te),
-                    ..
-                }) => self.dispatch(te),
+                Ok(UiEvent::Viewport { event, .. }) => self.dispatch(event),
                 Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
                 // Other UiEvent variants (session, CRUD, connection) are not yet
                 // consumed by the Toile view; ignore them for now.

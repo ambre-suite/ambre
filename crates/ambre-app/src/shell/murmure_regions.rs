@@ -6,9 +6,10 @@
 use super::app_root::MurmureShell;
 use ambre_bus::{
     Authored, CatalogueEntry, CategoryView, ChannelActivity, ChannelMatches, ChannelName,
-    ChannelPlace, DirectPeers, Instant, LogicCommand, MemberChannel, MemberView, Mentions,
-    MessageView, Presence, SearchMatch, SpaceCommand, SpaceEvent, UiEvent, Unread,
+    ChannelPlace, DirectPeers, Instant, MemberChannel, MemberView, Mentions, MessageView, Presence,
+    SearchMatch, SpaceCommand, SpaceEvent, Unread,
 };
+use ambre_bus::{LogicCommand, UiEvent};
 use ambre_core::id::{Category, Channel, Id, Message, Segment, Space, User};
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::{MessageRef, MurmurePane};

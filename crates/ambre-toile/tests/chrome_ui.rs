@@ -24,13 +24,13 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_bus::UiEvent;
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
     Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
     Elements, PresencePayload, PresenceUpdate, PresentMode, Slide, SlidePosition, ToileCommand,
     ToileEvent,
 };
-use ambre_bus::{AppCommand, AppEvent, UiEvent};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
@@ -412,10 +412,10 @@ fn undo_state_mirrors_into_command_store() {
 
     let ev = UiEvent::Viewport {
         document_id: Id::<Document>::mint(),
-        event: AppEvent::Toile(ToileEvent::UndoState {
+        event: ToileEvent::UndoState {
             undo: ambre_core::Availability::Enabled,
             redo: ambre_core::Availability::Disabled,
-        }),
+        },
     };
     ambre_toile::chrome::mirror_event(&store, &ev);
     assert_eq!(
@@ -875,7 +875,7 @@ fn mount_notified(event: ToileEvent) -> web_sys::Element {
         &toasts,
         &UiEvent::Viewport {
             document_id: Id::<Document>::mint(),
-            event: AppEvent::Toile(event),
+            event: event,
         },
     );
     mount_in_container(move || view! { <ToastHost toasts=toasts /> })
@@ -1251,10 +1251,10 @@ fn relay() -> ToileRelay {
 }
 
 /// `ev` as the launcher hands it to the relay.
-fn board_event(ev: ToileEvent) -> UiEvent {
+fn board_event(ev: ToileEvent) -> UiEvent<ToileEvent> {
     UiEvent::Viewport {
         document_id: Id::<Document>::mint(),
-        event: AppEvent::Toile(ev),
+        event: ev,
     }
 }
 
@@ -1316,6 +1316,6 @@ fn a_note_edit_with_no_frame_on_screen_is_refused() {
     relay.presenter_frame.set(Some(frame.clone().into()));
     assert!(matches!(
         relay.command(edit()),
-        Some(AppCommand::Toile(ToileCommand::EditNotes { frame: f, .. })) if f == frame
+        Some(ToileCommand::EditNotes { frame: f, .. }) if f == frame
     ));
 }

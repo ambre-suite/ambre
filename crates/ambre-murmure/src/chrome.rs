@@ -13,6 +13,7 @@ use ambre_commands::Locale;
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Commands, StaticKey};
 use std::collections::{HashMap, HashSet};
+use std::convert::Infallible;
 
 use crate::commands::{
     AskedAll, COMMANDS, KEYS, KeyPlace, MARK_ALL_READ, MessageAction, MessageTarget, NEXT_ACTIVITY,
@@ -27,7 +28,7 @@ use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
 };
-use ambre_bus::{AppCommand, MentionState};
+use ambre_bus::MentionState;
 use ambre_bus::{
     Authored, ChannelMatches, ChannelPlace, DirectMessageEvent, Instant, LogicCommand, MemberView,
     MessageAt, MurmureCommand, MurmureEvent, Presence, RestCommand, RestEvent, SpaceCommand,
@@ -50,7 +51,7 @@ pub use crate::notices::{
 /// (`MURMURE-549`, `MURMURE-550`). So is a channel change or a direct message
 /// that failed (`MURMURE-580`, `MURMURE-581`). The launcher names no Murmure
 /// variant. A no-op for every other event.
-pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
+pub fn notify_event<S>(toasts: &Toasts, ev: &UiEvent<S>) {
     if let Some(text) = crate::notices::warning_of(ev) {
         toasts.warning(text);
     }
@@ -783,7 +784,7 @@ impl MurmureRelay {
     /// message that names the user notifies, and so does any message of a
     /// direct message. The channel the user is reading notifies nothing
     /// (`MURMURE-146`). A hidden page shows none to read.
-    pub fn notice(&self, ev: &UiEvent, page: PageVisibility) -> Option<Notice> {
+    pub fn notice<S>(&self, ev: &UiEvent<S>, page: PageVisibility) -> Option<Notice> {
         let UiEvent::NewMessage {
             channel_id,
             mention,
@@ -905,7 +906,7 @@ impl MurmureRelay {
 
     /// Take one event, and return the commands it calls for: a space to
     /// open for its catalogue, the channels to list again after a join.
-    pub fn absorb(&self, ev: &UiEvent) -> Vec<LogicCommand> {
+    pub fn absorb<S>(&self, ev: &UiEvent<S>) -> Vec<LogicCommand> {
         match ev {
             UiEvent::Rest {
                 evt: RestEvent::SessionReady { user_id, .. },
@@ -1443,9 +1444,11 @@ impl MurmureHandler {
 }
 
 impl CommandHandler for MurmureHandler {
-    type Command = AppCommand;
+    // Murmure's commands address the user's channels, not the routed
+    // document: they leave through `send`, and the shell sends none.
+    type Command = Infallible;
 
-    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<Infallible>> {
         if id == PALETTE {
             return vec![ShellAction::OpenPalette];
         }
@@ -1471,7 +1474,7 @@ impl CommandHandler for MurmureHandler {
         &self,
         id: StaticKey<Commands>,
         target: ambre_chrome::KeyTarget,
-    ) -> KeyRoute<AppCommand> {
+    ) -> KeyRoute<Infallible> {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
@@ -1488,7 +1491,7 @@ impl CommandHandler for MurmureHandler {
     fn sealed_save(
         &self,
         _passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-    ) -> Option<AppCommand> {
+    ) -> Option<Infallible> {
         // Murmure declares no sealed save.
         None
     }

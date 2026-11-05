@@ -14,7 +14,8 @@
 // (`ambre-spec-commands.md`).
 // ============================================================================
 
-use ambre_bus::{AppEvent, DocType, TrameEvent, UiEvent};
+use crate::message::TrameEvent;
+use ambre_bus::{DocType, Embed, UiEvent};
 use ambre_chrome::commands::{Keymap, Locale};
 use ambre_chrome::{CommandStates, MenuEntry, Toasts};
 
@@ -43,12 +44,8 @@ pub fn bind_keys(keymap: &mut Keymap) {
 /// store, so the chrome's `aria-pressed` buttons reflect the Logic thread. A
 /// no-op for any event that is not a Trame format-state notification; the
 /// launcher calls this for every event it relays, naming no Trame variant.
-pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
-    if let UiEvent::Viewport {
-        event: AppEvent::Trame(te),
-        ..
-    } = ev
-    {
+pub fn mirror_event<S: Embed<TrameEvent>>(store: &CommandStates, ev: &UiEvent<S>) {
+    if let Some(te) = ev.viewport_event::<TrameEvent>() {
         match te {
             // Loro `UndoManager` stack availability -> the Undo/Redo affordances'
             // enabled state. The Logic thread is the single source of truth.
@@ -108,12 +105,8 @@ pub fn init_command_states(store: &CommandStates) {
 /// sheet-lifecycle error, or the completion of a shared sort/filter. A no-op for
 /// every other event; the launcher calls this for each event it relays, naming
 /// no Trame variant itself.
-pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
-    let UiEvent::Viewport {
-        event: AppEvent::Trame(te),
-        ..
-    } = ev
-    else {
+pub fn notify_event<S: Embed<TrameEvent>>(toasts: &Toasts, ev: &UiEvent<S>) {
+    let Some(te) = ev.viewport_event::<TrameEvent>() else {
         return;
     };
     match te {

@@ -23,8 +23,8 @@
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
-use ambre_bus::app::prose::WordCount;
-use ambre_bus::{AppEvent, LogicCommand, Outbox, PasteSource, SendOutcome, UiEvent};
+use ambre_bus::app::prose::{ProseCommand, ProseEvent, WordCount};
+use ambre_bus::{Inbox, LogicCommand, Outbox, PasteSource, Port, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
     BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
@@ -80,14 +80,14 @@ fn canvas_origin() -> Point<Px<Css>> {
 /// One open Prose document on the canvas.
 pub struct ProseView {
     document_id: Id<Document>,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: Port<ProseCommand>,
     /// The edits' path out: a full channel holds them here (`BUS-011`).
-    outbox: Outbox,
+    outbox: Outbox<ProseCommand>,
     busy_pub: BusyPublisher,
     /// What the shell shows the user when the page cannot, such as a reply
     /// lost with its thread (`PROSE-UI-232`).
     notices: NoticePublisher,
-    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    from_logic: Inbox<ProseEvent>,
     state: ProseUiState,
     theme_ctl: ThemeControl,
     theme: Theme,
@@ -128,8 +128,8 @@ impl ProseView {
     )]
     pub fn new(
         document_id: Id<Document>,
-        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+        to_logic: Port<ProseCommand>,
+        from_logic: Inbox<ProseEvent>,
         size: Size<Px<CanvasCss>>,
         text_input: TextInput,
         theme_ctl: ThemeControl,
@@ -181,14 +181,8 @@ impl ProseView {
         loop {
             match self.from_logic.try_recv() {
                 Ok(
-                    UiEvent::Viewport {
-                        document_id,
-                        event: AppEvent::Prose(event),
-                    }
-                    | UiEvent::Presence {
-                        document_id,
-                        event: AppEvent::Prose(event),
-                    },
+                    UiEvent::Viewport { document_id, event }
+                    | UiEvent::Presence { document_id, event },
                 ) if document_id == self.document_id => {
                     let answer = if ambre_prose::probe::lays_out(&event) {
                         Answer::Layout
@@ -823,8 +817,8 @@ mod tests {
         let pipe = TextInput::create(&document, &cell);
         let mut view = ProseView::new(
             Id::<Document>::mint(),
-            to_logic,
-            from_logic,
+            Port::direct(to_logic),
+            Inbox::direct(from_logic),
             Size::new(Px::new(800), Px::new(600)),
             pipe.clone(),
             ThemeControl::new(Theme::Dark),
@@ -871,8 +865,8 @@ mod tests {
         let document_id = Id::<Document>::mint();
         let mut view = ProseView::new(
             document_id,
-            to_logic,
-            from_logic,
+            Port::direct(to_logic),
+            Inbox::direct(from_logic),
             Size::new(Px::new(800), Px::new(600)),
             TextInput::create(&document, &cell),
             ThemeControl::new(Theme::Dark),
@@ -936,8 +930,8 @@ mod tests {
         >::of::<4>());
         let mut view = ProseView::new(
             Id::<Document>::mint(),
-            to_logic,
-            from_logic,
+            Port::direct(to_logic),
+            Inbox::direct(from_logic),
             Size::new(Px::new(800), Px::new(600)),
             TextInput::create(&document, &cell),
             ThemeControl::new(Theme::Dark),

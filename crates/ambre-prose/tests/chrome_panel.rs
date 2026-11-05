@@ -12,8 +12,8 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_bus::UiEvent;
 use ambre_bus::app::prose::{DocChar, ProseError, ProseRefusal};
-use ambre_bus::{AppEvent, UiEvent};
 use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Comment, Document, Id, Reply, User};
 use ambre_core::index::Pos;
@@ -193,10 +193,10 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
         &toasts,
         &UiEvent::Viewport {
             document_id: Id::<Document>::mint(),
-            event: AppEvent::Prose(ProseEvent::Error(ProseError::new(
+            event: ProseEvent::Error(ProseError::new(
                 ambre_bus::app::prose::RefusedAction::Command(reply.name()),
                 ProseRefusal::NoSuchComment(comment_id),
-            ))),
+            )),
         },
     );
     let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });
@@ -323,7 +323,7 @@ async fn the_history_rows_follow_the_reported_state() {
     let report = |event: ProseEvent| {
         signals.mirror_event(&UiEvent::Viewport {
             document_id: Id::<Document>::mint(),
-            event: AppEvent::Prose(event),
+            event: event,
         });
     };
     leptos::task::tick().await;

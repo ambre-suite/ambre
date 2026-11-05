@@ -5,7 +5,7 @@
 // the rich-formatting controls emit a `StylePatch` through `on_style`.
 // ============================================================================
 
-use ambre_bus::{DecimalsStep, StylePatch};
+use crate::message::{DecimalsStep, StylePatch};
 use ambre_chrome::commands::Locale;
 use ambre_chrome::{Availability, FontSizeSelect, FormatToggle};
 use ambre_core::{Commands, StaticKey};
@@ -34,10 +34,10 @@ fn glyph(id: StaticKey<Commands>) -> Option<icondata::Icon> {
 
 /// The command the merge toggle sends: a merged cell splits, any other cell
 /// merges the selection.
-fn merge_command(merged: ambre_bus::Merge) -> StaticKey<Commands> {
+fn merge_command(merged: crate::message::Merge) -> StaticKey<Commands> {
     match merged {
-        ambre_bus::Merge::Single => MERGE,
-        ambre_bus::Merge::Merged => UNMERGE,
+        crate::message::Merge::Single => MERGE,
+        crate::message::Merge::Merged => UNMERGE,
     }
 }
 use super::popovers::{

@@ -576,8 +576,10 @@ SCREEN_STATE = re.compile(
     r"\b(?:\w*UiState|Viewport|ViewportTransform|TextEditor|CursorPosition|Clock|device_pixel_ratio)\b"
 )
 # The bus crate, whose identifier fields each carry a type of their own
-# (`BUS-029`).
+# (`BUS-029`), and the message vocabulary each application declares in its own
+# crate (`BUS-032`), which holds the same rule.
 BUS = "crates/ambre-bus/src"
+APP_MESSAGES = ("crates/ambre-trame/src/message",)
 BUS_ID_FIELD = re.compile(r"\b((?:\w+_)?ids?)\s*:\s*(?!:)")
 # The relay's rows and routes and the HTTP layer of Sync, whose identifiers
 # each take their newtype and reach JSON as their text (`SRV-179`).
@@ -1830,8 +1832,8 @@ def typed_fields(line: str) -> list[tuple[str, str]]:
 
 
 def check_bus_ids(errors: list[str]) -> int:
-    """`BUS-029`: no message field of `ambre-bus` carries an identifier as a
-    bare primitive.
+    """`BUS-029`: no message field of `ambre-bus`, or of an application's
+    message vocabulary, carries an identifier as a bare primitive.
 
     A field named `id`, `*_id` or `*_ids` takes a type of its own above the
     tests, so a sheet id passed where a name goes does not compile. A function
@@ -1841,6 +1843,11 @@ def check_bus_ids(errors: list[str]) -> int:
     if not files:
         errors.append(f"{BUS}: gone from the tree, so the identifier boundary reads nothing")
         return 0
+    for messages in APP_MESSAGES:
+        found = sorted((ROOT / messages).rglob("*.rs"))
+        if not found:
+            errors.append(f"{messages}: gone from the tree, so its identifiers go unread")
+        files += found
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
         text = path.read_text().splitlines()
@@ -2104,7 +2111,7 @@ def main() -> int:
         f"{copies} view files read for a second copy of a signal's state, "
         f"{event_copies} relay arms read for an event a view also keeps, "
         f"{signal_types} shell signals read for a bare primitive payload, "
-        f"{bus_ids} bus files read for an identifier field of a primitive type, "
+        f"{bus_ids} bus and message files read for an identifier field of a primitive type, "
         f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes or a closed set held as text, "
         f"{answers} relay files read for an answer built with `json!`, "
         f"{benches} fixture benchmarks read for a frame rate, "
