@@ -3336,11 +3336,15 @@ ambre-primitives | src/newtypes.rs | crate::newtypes | FIELDS | const | usize	ge
 ambre-primitives | src/newtypes.rs | crate::newtypes | HEADER | const | &str	free-text	a fixed line or path of the allowlist file
 ambre-primitives | src/newtypes.rs | crate::newtypes | NEWTYPES | const | &str	free-text	a fixed line or path of the allowlist file
 ambre-primitives | src/newtypes.rs | crate::newtypes | NUMBERS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/newtypes.rs | crate::newtypes | SCALARS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/newtypes.rs | crate::newtypes | SEPARATOR | const | &str	generic	the text a key splits on, which no normalised field can hold
+ambre-primitives | src/newtypes.rs | crate::newtypes | bytes() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/newtypes.rs | crate::newtypes | census() | ret | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/newtypes.rs | crate::newtypes | census(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/newtypes.rs | crate::newtypes | census(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/newtypes.rs | crate::newtypes | census(relative) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/newtypes.rs | crate::newtypes | family() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/newtypes.rs | crate::newtypes | is_u8() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/newtypes.rs | crate::newtypes | judge() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/newtypes.rs | crate::newtypes | judge(found) | param | &BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/newtypes.rs | crate::newtypes | judge(text) | param | Option<&str>	generic	the text of the exceptions file the census reads
@@ -3351,6 +3355,7 @@ ambre-primitives | src/newtypes.rs | crate::newtypes | primitive() | ret | bool	
 ambre-primitives | src/newtypes.rs | crate::newtypes | pruned() | ret | String	generic	the text of the exceptions file the census reads
 ambre-primitives | src/newtypes.rs | crate::newtypes | pruned(found) | param | &BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/newtypes.rs | crate::newtypes | pruned(text) | param | &str	generic	the text of the exceptions file the census reads
+ambre-primitives | src/newtypes.rs | crate::newtypes | text_or_bytes() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | Scan.newtypes | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | named() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | named(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name

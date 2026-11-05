@@ -4,11 +4,16 @@ use super::{HEADER, NEWTYPES, census, judge, pruned};
 
 /// The census of one file of the crate `demo`, at `src/lib.rs`.
 fn found(source: &str) -> Vec<String> {
+    found_in("demo", source)
+}
+
+/// The census of one file of the crate `krate`, at `src/lib.rs`.
+fn found_in(krate: &str, source: &str) -> Vec<String> {
     let tree = match syn::parse_file(source) {
         Ok(tree) => tree,
         Err(e) => panic!("the test source does not parse: {e}"),
     };
-    census("demo", "src/lib.rs", "crate", &tree)
+    census(krate, "src/lib.rs", "crate", &tree)
 }
 
 const LIB: &str = "demo | src/lib.rs | crate";
@@ -33,22 +38,82 @@ fn a_single_field_struct_over_a_primitive_is_counted() {
     );
 }
 
-/// A generic struct is a family, and its instances write no struct. A
-/// `PhantomData` marker is no field.
+/// A generic struct of `ambre-core` is a family, and its instances write no
+/// struct. A lifetime parameter makes no family. A `PhantomData` marker is no
+/// field.
 #[test]
 fn a_family_is_not_counted_and_a_marker_is_no_field() {
     assert_eq!(
-        found(
+        found_in(
+            "ambre-core",
             "pub struct Id<E>(u128, PhantomData<fn() -> E>);\n\
              pub struct Fixed<const N: usize>(u32);\n\
+             pub struct View<'a>(&'a str);\n\
              pub struct Tagged(u32, PhantomData<()>);"
         ),
-        [format!("{LIB} | Tagged | u32")]
+        [
+            "ambre-core | src/lib.rs | crate | View | &'a str".to_owned(),
+            "ambre-core | src/lib.rs | crate | Tagged | u32".to_owned(),
+        ]
     );
 }
 
-/// Two fields, no field, a typed field, a `bool`, a vector of another
-/// element and an array are each out of the census.
+/// A generic struct outside `ambre-core` is a family no line of the spec
+/// declares, so the census reads it as a newtype.
+#[test]
+fn a_generic_struct_outside_core_is_counted() {
+    assert_eq!(
+        found(
+            "pub struct Url<K: UrlKind> { text: String, kind: PhantomData<fn() -> K> }\n\
+             pub struct Fixed<const N: usize>(u32);\n\
+             pub struct Wrap<T>(T);"
+        ),
+        [
+            format!("{LIB} | Url | String"),
+            format!("{LIB} | Fixed | u32"),
+        ]
+    );
+}
+
+/// The census reads each primitive of the wider list. That holds for a
+/// `char`, a `bool`, a reference to text or to bytes, and a `Uuid`. It holds
+/// for a `Cow` of text or bytes and for an `Option` of a primitive too.
+#[test]
+fn a_wrapper_of_each_other_primitive_is_counted() {
+    assert_eq!(
+        found(
+            "pub struct KeyChar(char);\n\
+             struct Latch(bool);\n\
+             pub struct Name(&'static str);\n\
+             struct View<'a>(&'a [u8]);\n\
+             pub struct Instance(uuid::Uuid);\n\
+             pub struct Core(Uuid);\n\
+             pub struct Cursor(Cow<'static, str>);\n\
+             pub struct Bytes<'a>(std::borrow::Cow<'a, [u8]>);\n\
+             pub struct Seq(Option<i64>);\n\
+             pub struct Maybe(Option<Option<Vec<u8>>>);"
+        ),
+        [
+            format!("{LIB} | KeyChar | char"),
+            format!("{LIB} | Latch | bool"),
+            format!("{LIB} | Name | &'static str"),
+            format!("{LIB} | View | &'a[u8]"),
+            format!("{LIB} | Instance | uuid::Uuid"),
+            format!("{LIB} | Core | Uuid"),
+            format!("{LIB} | Cursor | Cow<'static,str>"),
+            format!("{LIB} | Bytes | std::borrow::Cow<'a,[u8]>"),
+            format!("{LIB} | Seq | Option<i64>"),
+            format!("{LIB} | Maybe | Option<Option<Vec<u8>>>"),
+        ]
+    );
+}
+
+/// Each shape below is out of the census:
+///
+/// * two fields, no field, or a typed field;
+/// * a vector of another element, an array or a box;
+/// * a `Cow` or an `Option` of a typed value;
+/// * a reference to a slice of another element.
 #[test]
 fn any_other_shape_is_not_counted() {
     assert!(
@@ -57,13 +122,39 @@ fn any_other_shape_is_not_counted() {
              struct Unit;\n\
              struct Empty {}\n\
              struct Typed(Port);\n\
-             struct Flag(bool);\n\
              struct Words(Vec<u32>);\n\
              struct Key([u8; 32]);\n\
-             struct Text(Box<str>);"
+             struct Text(Box<str>);\n\
+             struct Path<'a>(Cow<'a, std::path::Path>);\n\
+             struct Maybe(Option<Port>);\n\
+             struct Many<'a>(&'a [u32]);\n\
+             struct Rows<'a>(&'a [&'a str]);"
         )
         .is_empty()
     );
+}
+
+/// Each shape the census reads beyond the first four primitives fails
+/// without a line, and passes with one.
+#[test]
+fn a_wider_shape_is_refused_without_a_line_and_passes_with_one() {
+    let keys: BTreeSet<String> = found(
+        "pub struct KeyChar(char);\n\
+         pub struct Cursor(Cow<'static, str>);\n\
+         pub struct Seq(Option<i64>);\n\
+         pub struct Url<K: UrlKind> { text: String, kind: PhantomData<fn() -> K> }",
+    )
+    .into_iter()
+    .collect();
+    assert_eq!(keys.len(), 4);
+    let refused = judge(Some(&format!("{HEADER}\n")), &keys);
+    assert_eq!(refused.len(), 4);
+    assert!(refused.iter().all(|refusal| refusal.contains("no line")));
+    let listed: String = keys
+        .iter()
+        .map(|key| format!("{key}\ta reason\n"))
+        .collect();
+    assert!(judge(Some(&format!("{HEADER}\n{listed}")), &keys).is_empty());
 }
 
 #[test]
