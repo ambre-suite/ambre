@@ -44,8 +44,8 @@ ambre-app | src/host/prose.rs | crate::host::prose | ProseView.dirty | field | b
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.fatal | field | bool	generic	state flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text(text) | param | String	free-text	dropped text
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::signal_fatal(message) | param | &str	free-text	message
-ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
-ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
+ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	foreign-api	the value of the iframe allow attribute, which one set_attribute call alone reads
+ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	foreign-api	the value of the iframe sandbox attribute, which one set_attribute call alone reads
 ambre-app | src/landing.rs | crate::landing | SignInMode::from_dev_flag(dev) | param | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/landing.rs | crate::landing | SignInMode::is_dev() | ret | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/landing.rs | crate::landing | open_document(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
@@ -70,7 +70,7 @@ ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(sile
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
-ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	free-text	worker URL
+ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	local	the address of the Sync worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | doc_path() | ret | String	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | needs_reload() | ret | bool	generic	predicate result
@@ -80,7 +80,7 @@ ambre-app | src/route.rs | crate::route | type_slug() | ret | &'static str	gener
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
 ambre-app | src/shell/mod.rs | crate::shell | ShellWiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
-ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	free-text	path prefix literal
+ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	generic	the path prefix of a provider return address, which is_return_path and parse_return match back: part of the codec of that address
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_return_path() | ret | bool	generic	predicate result
