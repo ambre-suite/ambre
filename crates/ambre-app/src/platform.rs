@@ -567,12 +567,16 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
     };
     // A board's keyboard pipe is a textarea. While no editor is open it is not
     // typed text, so a bare tool key still arms its tool.
-    if target
+    let typing = target
         .dyn_ref::<web_sys::Element>()
-        .and_then(|el| el.get_attribute(ambre_canvas::TYPING_ATTR))
-        .as_deref()
-        == Some("false")
-    {
+        .and_then(|el| el.get_attribute(ambre_canvas::TYPING_ATTR));
+    if typing.as_deref() == Some("false") {
+        return false;
+    }
+    // A content pipe types no chord that holds the platform modifier, so such
+    // a chord is the page's. A page is typed text whenever it has a caret,
+    // and a chrome field, which carries no such attribute, keeps its chords.
+    if typing.is_some() && (event.ctrl_key() || event.meta_key()) {
         return false;
     }
     let tag = target
@@ -1065,5 +1069,58 @@ mod tests {
         assert!(!reads(), "a board with no editor open");
         pipe.set_typing(ambre_canvas::Typing::Text);
         assert!(reads(), "a board with an editor open");
+    }
+
+    /// Whether `target_is_editable` reads `el` as a text field, for a key
+    /// `key` with the primary modifier held or not.
+    fn reads_editable(el: &web_sys::Element, key: &str, ctrl: bool) -> bool {
+        use std::cell::Cell;
+        use std::rc::Rc;
+        use wasm_bindgen::JsCast;
+        use wasm_bindgen::closure::Closure;
+
+        let read = Rc::new(Cell::new(None));
+        let sink = read.clone();
+        let listener = Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |ev| {
+            sink.set(Some(target_is_editable(&ev)));
+        });
+        el.add_event_listener_with_callback("keydown", listener.as_ref().unchecked_ref())
+            .expect("a listener");
+        let init = web_sys::KeyboardEventInit::new();
+        init.set_key(key);
+        init.set_ctrl_key(ctrl);
+        let ev = web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init)
+            .expect("an event");
+        el.dispatch_event(&ev).expect("dispatched");
+        el.remove_event_listener_with_callback("keydown", listener.as_ref().unchecked_ref())
+            .expect("removed");
+        read.get().expect("the listener ran")
+    }
+
+    /// A page is typed text, and its pipe once yielded `Ctrl+B` as a chrome
+    /// field does, so the bold chord never reached a Prose page. A chord with
+    /// the modifier on a content pipe is the page's. A chrome field keeps it,
+    /// and a bare key stays typed text.
+    #[wasm_bindgen_test]
+    fn a_modifier_chord_on_a_typing_pipe_is_the_pages() {
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a document");
+        let body = document.body().expect("a body");
+        // A page never sets the pipe's typing: it is typed text from the start.
+        let pipe = ambre_canvas::TextInput::create(&document, &body);
+        assert!(
+            !reads_editable(pipe.element(), "b", true),
+            "Ctrl+B on the pipe"
+        );
+        assert!(reads_editable(pipe.element(), "b", false), "b on the pipe");
+
+        let field = document.create_element("input").expect("an input");
+        body.append_child(&field).expect("attached");
+        assert!(
+            reads_editable(&field, "b", true),
+            "Ctrl+B in a chrome field"
+        );
+        field.remove();
     }
 }
