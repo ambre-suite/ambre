@@ -38,7 +38,7 @@ lint:
 lint-wasm:
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --lib
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
     # `test-wasm` builds the Logic, app and chrome test targets, and no other
     # wasm line compiles them, so these three lines lint them. A broken wasm
@@ -243,8 +243,8 @@ test-wasm:
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-trame
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-chrome
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-toile
-    # The Prose unit tests are host-only (proptest, shaped fixtures): the chrome test alone.
-    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
+    # The Prose unit tests are host-only (proptest, shaped fixtures): the chrome tests alone.
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     # The Murmure unit tests are host-only too: the chrome relay test alone.
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-logic

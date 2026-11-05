@@ -191,6 +191,9 @@ impl TextInput {
             ("spellcheck", "false"),
             ("tabindex", "0"),
             ("wrap", "off"),
+            // The element says what the pipe is from the start, so the keymap
+            // listener reads a content pipe even where no view sets it.
+            (TYPING_ATTR, "true"),
         ] {
             let _ = textarea.set_attribute(k, v);
         }

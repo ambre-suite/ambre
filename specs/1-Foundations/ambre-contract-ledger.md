@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3877 rows: 3321 shipped, of which 12 loose. 556 unbuilt.**
+**3879 rows: 3323 shipped, of which 12 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 947 | 454 | 873 | 616 | 419 | 3309 |
+| `verified` | 947 | 454 | 873 | 618 | 419 | 3311 |
 | `failing` |  | 1 |  |  |  | 1 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 9 |  |  |  |  | 9 |
@@ -139,7 +139,7 @@
 | `ambre-spec-prose-clipboard.md` | 25 | 23 | 23 |  | 2 |
 | `ambre-spec-prose-comments.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |
-| `ambre-spec-prose-engine.md` | 43 | 42 | 42 |  | 1 |
+| `ambre-spec-prose-engine.md` | 45 | 44 | 44 |  | 1 |
 | `ambre-spec-prose-find-replace.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-prose-footnotes.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |
@@ -253,7 +253,7 @@
 | `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112,219..227,234..235 |
 | `ambre-spec-prose-comments.md` | PROSE-FEAT-001,009,075..081,185..204,279,295..297; PROSE-UI-049..050,144,231..232 |
 | `ambre-spec-prose-cross-references.md` | PROSE-FEAT-014,072..074,128..135; PROSE-UI-048,084..086 |
-| `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..048,050..063,098,104..106,126,129..130; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..002,010,015,149..150 |
+| `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..048,050..063,098,104..106,126,129..132; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..002,010,015,149..150 |
 | `ambre-spec-prose-find-replace.md` | PROSE-FEAT-033..036,148,150..153,155..159,289 |
 | `ambre-spec-prose-footnotes.md` | PROSE-FEAT-013,069..071,095..101,280,305..308 |
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |
