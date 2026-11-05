@@ -5,10 +5,18 @@
 //! (`ambre-spec-newtypes.md`). The census reads, in each file the walk reaches
 //! outside test code, every struct that:
 //!
-//!   * declares no generic parameter: a struct that does is a family, and an
-//!     instance of it writes no struct;
 //!   * holds exactly one field once each `PhantomData` marker is set apart;
-//!   * holds that field as an integer, a float, a `String` or a `Vec<u8>`.
+//!   * holds that field as a primitive of the census list:
+//!     * an integer, a float, a `bool`, a `char`, a `String`, a `Uuid` or a
+//!       `Vec<u8>`;
+//!     * a `str` or a `[u8]`, bare or behind a reference;
+//!     * a `Cow` of a `str` or of a `[u8]`;
+//!     * an `Option` of any of these;
+//!   * declares no type or const parameter, or lies outside `ambre-core`. A
+//!     generic struct of `ambre-core` is a family, and an instance of it writes
+//!     no struct. A generic struct of another crate is a family no line of
+//!     `ambre-spec-newtypes.md` declares, so the census reads it as a newtype.
+//!     A lifetime parameter makes no family.
 //!
 //! Each such struct needs one line of the exceptions file, with the reason it
 //! is no instance of a family. A struct no line names fails, and so does a line
@@ -23,6 +31,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use quote::ToTokens;
 use syn::visit::Visit;
 
+use crate::aliases::CORE;
 use crate::allowlist::LineNo;
 use crate::scan::{normalise, test_only};
 
@@ -43,6 +52,10 @@ const NUMBERS: &[&str] = &[
     "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32",
     "f64",
 ];
+
+/// The other primitives a newtype may hold bare, by the last segment of their
+/// path. A `str` is also the target of a reference or a `Cow`.
+const SCALARS: &[&str] = &["bool", "char", "String", "str", "Uuid"];
 
 /// The key of each hand-written newtype that `file` declares, in the crate
 /// `krate`, at the crate-relative path `relative`, in `module`.
@@ -103,7 +116,7 @@ impl<'ast> Visit<'ast> for Census<'_> {
     }
 
     fn visit_item_struct(&mut self, s: &'ast syn::ItemStruct) {
-        if test_only(&s.attrs) || !s.generics.params.is_empty() {
+        if test_only(&s.attrs) || (self.krate == CORE && family(&s.generics)) {
             return;
         }
         let mut held = s.fields.iter().filter(|field| !phantom(&field.ty));
@@ -134,30 +147,74 @@ fn phantom(ty: &syn::Type) -> bool {
         if path.path.segments.last().is_some_and(|last| last.ident == "PhantomData"))
 }
 
-/// Whether `ty` is an integer, a float, a `String` or a `Vec<u8>`, by the last
-/// segment of its path.
+/// Whether `generics` declares a type or a const parameter, which makes the
+/// struct a family. A lifetime parameter alone does not.
+fn family(generics: &syn::Generics) -> bool {
+    generics
+        .params
+        .iter()
+        .any(|param| !matches!(param, syn::GenericParam::Lifetime(_)))
+}
+
+/// Whether `ty` is a primitive the census reads, by the last segment of its
+/// path: the list of the module documentation.
 fn primitive(ty: &syn::Type) -> bool {
-    let syn::Type::Path(path) = ty else {
-        return false;
-    };
-    if path.qself.is_some() {
-        return false;
-    }
-    let Some(last) = path.path.segments.last() else {
-        return false;
-    };
-    match &last.arguments {
-        syn::PathArguments::None => {
-            last.ident == "String" || NUMBERS.iter().any(|number| last.ident == number)
+    match ty {
+        syn::Type::Reference(reference) => text_or_bytes(&reference.elem),
+        syn::Type::Slice(_) => bytes(ty),
+        syn::Type::Path(path) if path.qself.is_none() => {
+            let Some(last) = path.path.segments.last() else {
+                return false;
+            };
+            match &last.arguments {
+                syn::PathArguments::None => {
+                    NUMBERS.iter().chain(SCALARS).any(|name| last.ident == name)
+                }
+                syn::PathArguments::AngleBracketed(args) => {
+                    let types: Vec<&syn::Type> = args
+                        .args
+                        .iter()
+                        .filter_map(|arg| match arg {
+                            syn::GenericArgument::Type(ty) => Some(ty),
+                            _ => None,
+                        })
+                        .collect();
+                    let [inner] = types.as_slice() else {
+                        return false;
+                    };
+                    if last.ident == "Vec" {
+                        is_u8(inner)
+                    } else if last.ident == "Cow" {
+                        text_or_bytes(inner)
+                    } else {
+                        last.ident == "Option" && primitive(inner)
+                    }
+                }
+                syn::PathArguments::Parenthesized(_) => false,
+            }
         }
-        syn::PathArguments::AngleBracketed(args) => {
-            last.ident == "Vec"
-                && args.args.len() == 1
-                && matches!(args.args.first(), Some(syn::GenericArgument::Type(syn::Type::Path(inner)))
-                    if inner.qself.is_none() && inner.path.is_ident("u8"))
-        }
-        syn::PathArguments::Parenthesized(_) => false,
+        _ => false,
     }
+}
+
+/// Whether `ty` is a `str` or a `[u8]`, the target of a reference or a `Cow`.
+fn text_or_bytes(ty: &syn::Type) -> bool {
+    bytes(ty)
+        || matches!(ty, syn::Type::Path(path)
+        if path.qself.is_none()
+            && path.path.segments.last().is_some_and(|last| {
+                last.ident == "str" && matches!(last.arguments, syn::PathArguments::None)
+            }))
+}
+
+/// Whether `ty` is a `[u8]`.
+fn bytes(ty: &syn::Type) -> bool {
+    matches!(ty, syn::Type::Slice(slice) if is_u8(&slice.elem))
+}
+
+/// Whether `ty` is the path `u8`.
+fn is_u8(ty: &syn::Type) -> bool {
+    matches!(ty, syn::Type::Path(path) if path.qself.is_none() && path.path.is_ident("u8"))
 }
 
 /// The defects of the exceptions file against the census. A line may break
