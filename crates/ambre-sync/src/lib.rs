@@ -181,6 +181,7 @@ pub mod mock;
 pub mod mock_relay;
 mod pipeline;
 mod rekey;
+mod renewal;
 mod sharing;
 mod space_rotation;
 mod updates;
@@ -266,6 +267,14 @@ enum SyncEvent {
     Reauthenticated {
         ok: bool,
     },
+    /// Fired by the timer armed when a token pair was stored: renew it
+    /// ahead of its expiry (`SYNC-183`). A later pair makes the timer stale.
+    RenewalDue {
+        ticket: ambre_core::Seq<generation::RenewalTicket>,
+    },
+    /// A renewal replaced the pair in the store, on any path: arm the
+    /// renewal of the new pair (`SYNC-183`).
+    TokensRenewed,
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Seq<Request>>,
@@ -1095,6 +1104,15 @@ pub struct SyncState {
     /// The wall clock the lifecycle reads. A host test swaps in one it
     /// advances by hand.
     clock: Rc<dyn Fn() -> ambre_core::Instant<ambre_core::UnixMs>>,
+    /// The renewal of the access token ahead of its expiry (`SYNC-183`).
+    renewal: renewal::Renewal,
+    /// The gate every renewal passes, shared by each [`http::AuthContext`]
+    /// this state hands out: two renewals never run at once (`SYNC-184`).
+    renewing: Rc<futures_util::lock::Mutex<()>>,
+    /// The tokens each renewal ahead of the expiry was asked for, on the
+    /// native build, which sends no request: a host test reads them.
+    #[cfg(not(target_arch = "wasm32"))]
+    renewals_ahead: Vec<http::Credential<http::AccessToken>>,
     /// Set when the relay refused the socket for a key setup still owed, and
     /// cleared once a session with keys is stored. While set, no timer or
     /// renewal reopens the socket (`SYNC-133`).
@@ -1205,6 +1223,10 @@ impl SyncState {
             _reconnect_timer: None,
             lifecycle: lifecycle::Lifecycle::default(),
             clock: lifecycle::system_clock(),
+            renewal: renewal::Renewal::default(),
+            renewing: Rc::new(futures_util::lock::Mutex::new(())),
+            #[cfg(not(target_arch = "wasm32"))]
+            renewals_ahead: Vec::new(),
             setup_owed: false,
             update_owed: false,
             inbound_held: false,
@@ -1241,6 +1263,8 @@ impl SyncState {
             api_base: self.api_base.clone(),
             url_scheme: self.url_scheme,
             tokens: self.tokens.clone(),
+            renewing: self.renewing.clone(),
+            renewed: self.event_tx.clone(),
         }
     }
 
