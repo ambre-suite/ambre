@@ -2919,6 +2919,8 @@ ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::a
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_formulas() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::remove_line() | ret | Option<bool>	generic	state flag
+ambre-trame | src/logic/structural.rs | crate::logic::structural | may_qualify() | ret | bool	generic	predicate
+ambre-trame | src/logic/structural.rs | crate::logic::structural | may_qualify(body) | param | &str	generic	the stored formula text the walk reads
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::cell_is_numeric() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::displayed_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display() | ret | String	free-text	free text: user content, label, message or display string

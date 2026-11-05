@@ -48,8 +48,8 @@ impl TrameState {
                     continue;
                 };
                 // Another sheet's formula reads this one only through a
-                // qualifier, and each qualifier ends on `!`.
-                if sheet != active && !body.contains('!') {
+                // qualifier.
+                if sheet != active && !may_qualify(body) {
                     continue;
                 }
                 let Ok(ast) = parse_formula(body) else {
@@ -330,5 +330,31 @@ impl TrameState {
             update,
             ephemeral: None,
         }
+    }
+}
+
+/// Whether a stored formula body may name another sheet. Every qualifier ends
+/// on `!`, and the element separator `#` of a derived reference is no
+/// qualifier. A formula of another sheet that cites its own lines alone is
+/// then never parsed by a structural edit of this one.
+fn may_qualify(body: &str) -> bool {
+    body.contains('!')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::may_qualify;
+
+    /// A derived reference carries `#`, and a qualifier `!`: only the second
+    /// sends a formula of another sheet through the walk.
+    #[test]
+    fn only_a_qualifier_sends_another_sheets_formula_through_the_walk() {
+        assert!(
+            !may_qualify("{a1_2#b3_4|c5_6#d7_8}*2"),
+            "an element separator"
+        );
+        assert!(!may_qualify("SUM({a1_2|c5_6}:{a1_3|c5_6})"));
+        assert!(may_qualify("#s1_2!{a1_2#b3_4|c5_6}+1"), "an id qualifier");
+        assert!(may_qualify("'My Sheet'!A1"), "a name qualifier");
     }
 }
