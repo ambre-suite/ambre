@@ -42,7 +42,14 @@ impl Uid {
     /// uid under a second key. A crafted peer could shadow a cell with it, so
     /// it is refused.
     pub fn parse(s: &str) -> Option<Self> {
-        Self::parse_hex(s).filter(|uid| uid.to_key_part() == s)
+        // The canonical spelling is 16 lowercase hex digits, `_`, then 8. The
+        // check reads the bytes and allocates nothing: an index build reads
+        // every line element through it.
+        let lower_hex = |part: &str| part.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f'));
+        let (peer, counter) = s.split_once('_')?;
+        (peer.len() == 16 && counter.len() == 8 && lower_hex(peer) && lower_hex(counter))
+            .then(|| Self::parse_hex(s))
+            .flatten()
     }
 
     /// Parse the compact `"{peer:x}_{counter:x}"` a stored formula writes,

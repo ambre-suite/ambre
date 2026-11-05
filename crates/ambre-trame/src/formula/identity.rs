@@ -286,17 +286,35 @@ pub fn unbind<'a>(
 ///
 /// A reference to a line the new layout lacks is frozen into a literal
 /// `#REF!`. No element of a deleted line then stays in the text (`TRAME-277`).
+///
+/// Returns `None` when no reference moved, so the walk renders and writes
+/// nothing for the formula (`TRAME-277`).
 pub fn reanchor(
     expr: Expr,
     edited: &impl Fn(Option<&SheetQualifier>) -> bool,
     old: &SheetIndex,
     new: &SheetIndex,
     edit: AxisEdit,
-) -> Expr {
-    match edit {
-        AxisEdit::Rows(edit) => reanchor_on(expr, edited, old, new, edit),
-        AxisEdit::Cols(edit) => reanchor_on(expr, edited, old, new, edit),
-    }
+) -> Option<Expr> {
+    let moved = std::cell::Cell::new(Moved::No);
+    let after = match edit {
+        AxisEdit::Rows(edit) => reanchor_on(expr, edited, old, new, edit, &moved),
+        AxisEdit::Cols(edit) => reanchor_on(expr, edited, old, new, edit, &moved),
+    };
+    (moved.get() == Moved::Yes).then_some(after)
+}
+
+/// Whether a walk changed a reference of the formula it read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Moved {
+    No,
+    Yes,
+}
+
+/// Whether `before` and `after` name the same reference, by kind and corners.
+fn same_reference(before: &Expr, after: &Expr) -> bool {
+    std::mem::discriminant(before) == std::mem::discriminant(after)
+        && corners(before) == corners(after)
 }
 
 /// The side a removed position moves to, to its nearest survivor.
@@ -330,8 +348,28 @@ fn reanchor_on<L: CellAxis>(
     old: &SheetIndex,
     new: &SheetIndex,
     edit: LineEdit<L>,
+    moved: &std::cell::Cell<Moved>,
 ) -> Expr {
     map_refs(expr, &|q, node| {
+        let before = node.clone();
+        let after = reanchor_node(q, node, edited, old, new, edit);
+        if !same_reference(&before, &after) {
+            moved.set(Moved::Yes);
+        }
+        after
+    })
+}
+
+/// [`reanchor_on`] for one reference node.
+fn reanchor_node<L: CellAxis>(
+    q: Option<&SheetQualifier>,
+    node: Expr,
+    edited: &impl Fn(Option<&SheetQualifier>) -> bool,
+    old: &SheetIndex,
+    new: &SheetIndex,
+    edit: LineEdit<L>,
+) -> Expr {
+    {
         if !edited(q) {
             return node;
         }
@@ -389,7 +427,7 @@ fn reanchor_on<L: CellAxis>(
         L::set(&mut start, encode(lo));
         L::set(&mut end, encode(hi));
         stored_node(start, end, NodeShape::Range)
-    })
+    }
 }
 
 #[cfg(test)]

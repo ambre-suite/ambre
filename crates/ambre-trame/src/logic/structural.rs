@@ -47,17 +47,21 @@ impl TrameState {
                 let Some(body) = text.strip_prefix('=') else {
                     continue;
                 };
-                // Another sheet's formula reads this one only through a qualifier.
-                if sheet != active && !body.contains('#') {
+                // Another sheet's formula reads this one only through a
+                // qualifier, and each qualifier ends on `!`.
+                if sheet != active && !body.contains('!') {
                     continue;
                 }
                 let Ok(ast) = parse_formula(body) else {
                     continue;
                 };
-                let before = render::render(&ast);
-                let after = identity::reanchor(ast, &edited, &self.index, &new, edit);
+                // Most formulas name no line the edit moves: those render and
+                // write nothing.
+                let Some(after) = identity::reanchor(ast, &edited, &self.index, &new, edit) else {
+                    continue;
+                };
                 let after = render::render(&after);
-                if after != before {
+                if after != body {
                     let _ = map.insert(key, format!("={after}").as_str());
                     rewritten = true;
                 }
