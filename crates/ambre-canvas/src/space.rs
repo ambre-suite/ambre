@@ -2,12 +2,16 @@
 // ============================================================================
 // The pixel spaces of this crate alone.
 //
-// Three spaces: the units of a parley layout, the whole units of a paragraph
-// indent, and the size of a glyph raster.
+// Four spaces:
 //
-// `ambre_core::space` holds the spaces several crates share. These three stay
-// here, beside the layout cache and the atlas that measure in them. A length
-// of each is an `ambre_core::Px` of the marker.
+//   * the units of a parley layout;
+//   * the whole units of a paragraph indent;
+//   * the size of a glyph raster;
+//   * the whole CSS pixels of the token source.
+//
+// `ambre_core::space` holds the spaces several crates share. These four stay
+// here, as this crate alone measures in them. A length of each is an
+// `ambre_core::Px` of the marker.
 // ============================================================================
 
 use ambre_core::Space;
@@ -44,4 +48,18 @@ pub enum GlyphRaster {}
 impl Space for GlyphRaster {
     type Repr = f32;
     const NAME: &'static str = "GlyphRaster";
+}
+
+/// The whole CSS pixels the design-token source writes: a spacing, a radius,
+/// a type size or a shadow (`ambre-spec-design-tokens.md`).
+///
+/// Whole, so a fractional token cannot be read at all. The stylesheet writes
+/// a length with `px`. The Rust module writes it as a `Px<View>`, which
+/// `tokens::on_view` names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TokenCss {}
+
+impl Space for TokenCss {
+    type Repr = u32;
+    const NAME: &'static str = "TokenCss";
 }
