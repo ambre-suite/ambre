@@ -19,7 +19,7 @@
 use ambre_core::index::Pos;
 use std::path::{Path, PathBuf};
 
-use ambre_bus::{Col, Row, TrameCommand};
+use ambre_bus::{Col, Row};
 use ambre_core::docfile::{AMBRE_VERSION, DocFileError, HEADER_LEN, write_ambre_plaintext};
 use ambre_core::id::{Document, Id};
 use ambre_core::{DocType, FixtureGen, ShapeBody, seeded_document_id};
@@ -32,6 +32,7 @@ use ambre_toile::ToileState;
 use ambre_toile::logic::command::{InitContent, ToileCommand};
 use ambre_toile::logic::model::{ElementKind, ShapeKind};
 use ambre_trame::TrameState;
+use ambre_trame::message::TrameCommand;
 use kurbo::{Point, Size};
 
 // -----------------------------------------------------------------------------

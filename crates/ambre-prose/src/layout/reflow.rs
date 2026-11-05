@@ -12,7 +12,7 @@
 //! gave. Then [`Paginator::settle_toc`] is the bounded pass that brings the two
 //! into step, off the keystroke path (`PROSE-019`, `PROSE-084`).
 
-use ambre_bus::app::prose::{BlockType, Page};
+use crate::message::{BlockType, Page};
 use ambre_core::Ordinal;
 use ambre_core::id::{Footnote, Id};
 use ambre_core::index::{Len, Pos, Span};
@@ -524,7 +524,7 @@ pub(crate) fn shipped_paginator() -> Paginator {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::prose::BlockType;
+    use crate::message::BlockType;
 
     use super::*;
 
@@ -769,7 +769,7 @@ mod tests {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod convergence {
-    use ambre_bus::app::prose::BlockType;
+    use crate::message::BlockType;
     use ambre_core::Count;
     use ambre_draw::LazyFont;
     use loro::LoroDoc;

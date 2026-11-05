@@ -6,9 +6,8 @@ use ambre_bus::Char;
 use ambre_core::index::Span;
 use std::collections::HashMap;
 
-use ambre_bus::{
-    ActivityKind, Authored, Instant, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle,
-};
+use crate::message::{MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle};
+use ambre_bus::{ActivityKind, Authored, Instant};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::{LoroDoc, LoroMap, VersionVector};
@@ -237,7 +236,7 @@ fn an_edit_and_a_delete_of_a_locked_segment_write_amendments() {
     let read = messages_of(&edited.event);
     assert_eq!(
         (read[0].text.as_str(), read[0].edited),
-        ("uno", ambre_bus::Revision::Edited)
+        ("uno", crate::message::Revision::Edited)
     );
     assert!(
         matches!(alice.edit(segment, ids[0], &draft("uno"), author), Ok(None)),
@@ -247,7 +246,7 @@ fn an_edit_and_a_delete_of_a_locked_segment_write_amendments() {
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
     assert_eq!(deleted.document, amendments);
     let read = alice.messages(segment).expect("held");
-    assert_eq!(read[1].deleted, ambre_bus::Deletion::Deleted);
+    assert_eq!(read[1].deleted, crate::message::Deletion::Deleted);
     assert!(read[1].text.is_empty());
     assert!(matches!(
         alice.edit(segment, ids[1], &draft("back"), author),
@@ -327,7 +326,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
     assert_eq!(events.len(), 1);
     assert_eq!(
         messages_of(&events[0])[1].deleted,
-        ambre_bus::Deletion::Deleted
+        crate::message::Deletion::Deleted
     );
     assert_eq!(bob.messages(segment), alice.messages(segment));
 }
@@ -399,7 +398,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
     );
     assert_eq!(
         alice.messages(segment).expect("held")[0].deleted,
-        ambre_bus::Deletion::Live
+        crate::message::Deletion::Live
     );
 }
 
@@ -516,7 +515,7 @@ fn a_thread_of_a_locked_root_is_recorded_in_its_amendments() {
             &draft("late"),
             author,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let head = alice.messages(segment).expect("held")[0]
@@ -696,7 +695,7 @@ fn a_change_refused_by_the_lock_is_replayed() {
     );
     let read = alice.messages(segment).expect("held");
     assert_eq!(read[0].text, "one");
-    assert_eq!(read[1].deleted, ambre_bus::Deletion::Live);
+    assert_eq!(read[1].deleted, crate::message::Deletion::Live);
     assert!(matches!(
         alice.change_target(segment, NOW),
         Ok(ChangeTarget::Create(_))

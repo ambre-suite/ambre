@@ -87,7 +87,7 @@ names the style's, and the blob's own bytes decide the image's.
 
 * A block is identified by the `TreeID` Loro mints for the tree node (`PROSE-085`). It is stable
   through `move_to`, so an indent, a reorder and a move into a table cell all keep it
-  (`PROSE-086`). The command plane carries the same pair under `BlockId`, so `ambre-bus` names no
+  (`PROSE-086`). The command plane carries the same pair under `BlockId`, so the plane names no
   CRDT type (`features/ambre-spec-prose-engine.md section 3`).
 * A user's deletion hides a block rather than removing it (`PROSE-118`). Loro would recreate a
   removed node under a new `TreeID` on undo, and the body and every reference would keep naming

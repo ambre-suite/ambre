@@ -195,7 +195,7 @@ excludes, as Toile does (`TOILE-FEAT-017`). `Ctrl+Z` takes back the typing, and 
 collaborator may have read (`PROSE-FEAT-296`). An undo that removes the marked text orphans the
 thread, as any deletion does.
 
-**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

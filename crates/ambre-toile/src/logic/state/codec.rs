@@ -352,14 +352,10 @@ pub(super) fn read_connector(
         path_type: decode_path_type(&text(ConnectorKey::PathType)),
         // A connector that stores no cap draws none at that end.
         arrows: EndCaps {
-            start: bool_of(cm, ConnectorKey::ArrowStart).map_or(
-                ambre_bus::app::toile::Cap::Plain,
-                ambre_bus::app::toile::Cap::from_bool,
-            ),
-            end: bool_of(cm, ConnectorKey::ArrowEnd).map_or(
-                ambre_bus::app::toile::Cap::Plain,
-                ambre_bus::app::toile::Cap::from_bool,
-            ),
+            start: bool_of(cm, ConnectorKey::ArrowStart)
+                .map_or(crate::message::Cap::Plain, crate::message::Cap::from_bool),
+            end: bool_of(cm, ConnectorKey::ArrowEnd)
+                .map_or(crate::message::Cap::Plain, crate::message::Cap::from_bool),
         },
     })
 }

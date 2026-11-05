@@ -51,9 +51,9 @@ ambre_core::crdt_names! {
     }
 }
 
-/// The fields of an element map and of a connector map. They live in
-/// `ambre-bus`, because a copied element carries its fields under them.
-pub(crate) use ambre_bus::app::toile::{ConnectorKey, ElementKey};
+/// The fields of an element map and of a connector map. They live in the
+/// message vocabulary, because a copied element carries its fields under them.
+pub(crate) use crate::message::{ConnectorKey, ElementKey};
 
 ambre_core::crdt_names! {
     /// The fields of one media map.

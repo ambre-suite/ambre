@@ -2,7 +2,8 @@
 //! (`features/ambre-spec-murmure-unread.md section 3`).
 
 use crate::Receipt;
-use ambre_bus::{Authored, Instant, MessageDraft, Unread};
+use crate::message::MessageDraft;
+use ambre_bus::{Authored, Instant, Unread};
 use ambre_core::id::{Channel, Id, Segment, User};
 use ambre_core::{Payload, Relay, Seq, SnapshotBytes};
 use loro::{Container, ValueOrContainer};

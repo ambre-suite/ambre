@@ -17,12 +17,12 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::app::prose::{ActiveMarks, TriState};
 use ambre_core::id::{Id, Suggestion};
 use ambre_core::index::Pos;
 use ambre_core::{Css, Point, PrintLength, Pt, Px, View};
 use ambre_prose::chrome::{self, ProseSignals};
 use ambre_prose::events::SuggestionKind;
+use ambre_prose::message::{ActiveMarks, TriState};
 use ambre_prose::view::annotate::{AnnotationIntent, HoveredSuggestion, ScreenRect};
 use ambre_prose::view::ruler::{RulerDrag, RulerHandle, RulerHandles, RulerState};
 use ambre_prose::view::slash::SlashMenuState;

@@ -244,7 +244,7 @@ impl ProseUiState {
 }
 ```
 
-**The four commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The four commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Carries | Rule it serves |
 |---|---|---|

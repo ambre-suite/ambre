@@ -20,8 +20,9 @@ use super::types::{
     FunctionName, NameTarget, ParseError, RangeDep, SheetQualifier, StoredAxis, StoredCell,
     UnaryOpKind, alpha_to_col,
 };
+use crate::message::{DefinedName, SheetName};
 use crate::model::Uid;
-use ambre_bus::{DefinedName, Row, SheetName};
+use ambre_bus::Row;
 
 // -----------------------------------------------------------------------------
 // Whitespace

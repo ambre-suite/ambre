@@ -6,7 +6,7 @@
 // than discovered at a drop.
 // ============================================================================
 
-use ambre_bus::app::toile::{Elements, SkipReasons};
+use crate::message::{Elements, SkipReasons};
 use ambre_core::Count;
 use ambre_core::Opaque;
 use ambre_draw::Point;
@@ -101,7 +101,7 @@ mod tests {
 #[cfg(test)]
 mod message_tests {
     use super::import_message;
-    use ambre_bus::app::toile::{Elements, SkipReasons};
+    use crate::message::{Elements, SkipReasons};
     use ambre_core::Count;
     use ambre_core::Opaque;
 

@@ -4,7 +4,7 @@
 //! call is one carrier character marked with the entry's identity. The identity is minted once, by
 //! the peer that inserts the note (`PROSE-FEAT-096`, `PROSE-087`).
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::id::{Footnote, Id};
 use ambre_core::index::Pos;
 use loro::{LoroMap, LoroText, TreeID, UpdateOptions};
@@ -182,7 +182,7 @@ mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, FootnoteCall, FootnoteEntry, ProseCommand, block_id};
     use crate::logic::ProseOutcome;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::Span;
     use ambre_core::{Authored, Instant, Ordinal};
 

@@ -9,6 +9,7 @@
 // Nothing here matches on an application's id.
 // ============================================================================
 
+use ambre_bus::Embed;
 use ambre_chrome::{CommandHandler, KeyRoute, ShellAction};
 use ambre_core::{Commands, StaticKey};
 use ambre_murmure::chrome::MurmureHandler;
@@ -33,16 +34,62 @@ pub(crate) enum AppHandler {
 /// not the routed document, so they go to the Logic thread unchanged.
 pub(crate) fn murmure_send(
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-) -> Callback<LogicCommand> {
-    Callback::new(move |command: LogicCommand| {
-        if let Err(e) = to_logic.try_send(command) {
+) -> Callback<ambre_murmure::message::LogicCommand> {
+    Callback::new(move |command: ambre_murmure::message::LogicCommand| {
+        // A Murmure command carries no document command, so it retypes as any.
+        if let Err(e) = to_logic.try_send(command.map(|never| match never {})) {
             tracing::warn!("Murmure command dropped, Logic channel full ({e:?})");
         }
     })
 }
 
+/// A handler as the shell drives it. Each application answers in its own
+/// command, and the answer is embedded into the sum the Logic thread takes
+/// (`BUS-032`). The shell then never names an application's command.
+trait EmbeddedHandler {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>>;
+    fn on_key(
+        &self,
+        id: StaticKey<Commands>,
+        target: ambre_chrome::KeyTarget,
+    ) -> KeyRoute<AppCommand>;
+    fn sealed_save(
+        &self,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+    ) -> Option<AppCommand>;
+}
+
+impl<H> EmbeddedHandler for H
+where
+    H: CommandHandler,
+    H::Command: 'static,
+    AppCommand: Embed<H::Command>,
+{
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
+        CommandHandler::on_command(self, id)
+            .into_iter()
+            .map(|action| action.map(AppCommand::embed))
+            .collect()
+    }
+
+    fn on_key(
+        &self,
+        id: StaticKey<Commands>,
+        target: ambre_chrome::KeyTarget,
+    ) -> KeyRoute<AppCommand> {
+        CommandHandler::on_key(self, id, target).map(AppCommand::embed)
+    }
+
+    fn sealed_save(
+        &self,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+    ) -> Option<AppCommand> {
+        CommandHandler::sealed_save(self, passphrase).map(AppCommand::embed)
+    }
+}
+
 impl AppHandler {
-    fn get(&self) -> &dyn CommandHandler<Command = AppCommand> {
+    fn get(&self) -> &dyn EmbeddedHandler {
         match self {
             Self::Trame(h) => h,
             Self::Toile(h) => h,
@@ -114,13 +161,16 @@ impl CommandPath {
 
     /// Send `command` to the routed document. On the landing route no document
     /// is open, and nothing could receive it.
-    pub(crate) fn send(&self, command: AppCommand) {
+    pub(crate) fn send<C>(&self, command: C)
+    where
+        AppCommand: Embed<C>,
+    {
         let Some(document_id) = self.current_doc.get_untracked() else {
             return;
         };
         if let Err(e) = self.to_logic.try_send(LogicCommand::App {
             document_id,
-            command,
+            command: AppCommand::embed(command),
         }) {
             tracing::warn!("command dropped, Logic channel full ({e:?})");
         }

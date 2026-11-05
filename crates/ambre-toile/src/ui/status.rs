@@ -12,12 +12,12 @@
 // nothing" rule (`trame-status-bar`).
 // ============================================================================
 
-use ambre_bus::app::toile::Elements;
+use crate::message::Elements;
 use ambre_core::{Board, Count, Px};
 use ambre_draw::Rect;
 
 /// Selection aggregates rendered by the status bar, mirrored from
-/// [`ToileEvent::SelectionStats`](ambre_bus::app::toile::ToileEvent::SelectionStats).
+/// [`ToileEvent::SelectionStats`](crate::message::ToileEvent::SelectionStats).
 /// `count` is the number of selected elements; `bounds` is their union AABB in
 /// world units, `None` when the selection is empty (nothing to frame).
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -77,7 +77,7 @@ pub fn bounds_label(stats: &SelStats) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::Elements;
+    use crate::message::Elements;
     use ambre_draw::Rect;
 
     #[test]

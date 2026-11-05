@@ -19,12 +19,12 @@ use html5ever::tokenizer::{
 };
 use html5ever::{Attribute, LocalName, ParseOpts, local_name, ns, parse_document};
 
-use ambre_bus::app::prose::{CodeLang, HeadingLevel, OrderedStyle};
+use crate::message::{CodeLang, HeadingLevel, OrderedStyle};
 
 use super::sink::{Arena, DOCUMENT, Data, HtmlNode, Node};
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
 use crate::mark::{self, MarkRoot, MarkValue};
-use ambre_bus::app::prose::MarkKey;
+use crate::message::MarkKey;
 
 /// Elements whose whole subtree carries nothing a paste keeps.
 const SKIPPED: [LocalName; 14] = [

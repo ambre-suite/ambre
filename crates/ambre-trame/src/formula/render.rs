@@ -18,8 +18,8 @@ use super::types::{
     StoredCell, UnaryOpKind, col_to_alpha,
 };
 use crate::columns::row_label;
+use crate::message::SheetName;
 use crate::model::Uid;
-use ambre_bus::SheetName;
 use ambre_core::id::{Id, Sheet};
 
 // -----------------------------------------------------------------------------

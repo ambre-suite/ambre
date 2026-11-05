@@ -18,7 +18,7 @@
 // `RecordingSurface` with no GPU.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ReactionCounts, VoteTotal, Votes};
+use crate::message::{DisplayNode, DisplayViewport, ReactionCounts, VoteTotal, Votes};
 use ambre_canvas::{Palette, TextCache};
 use ambre_core::Count;
 use ambre_draw::{
@@ -185,7 +185,7 @@ fn rect_to_screen(b: Rect, w2s: &Affine) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{
+    use crate::message::{
         DisplayElement, DisplayGeom, ElementKind, ElementStyle, Reactions, ShapeKind, Viewport,
     };
     use ambre_canvas::theme::LIGHT;
@@ -200,7 +200,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
             link: None,

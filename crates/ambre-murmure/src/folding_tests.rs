@@ -6,10 +6,8 @@ use ambre_bus::Char;
 use ambre_core::index::Span;
 use std::collections::HashMap;
 
-use ambre_bus::{
-    Authored, FoldAnswer, Instant, MessageDraft, MessageView, MurmureEvent, SnapshotVerdict,
-    StyleMark, TextStyle,
-};
+use crate::message::{MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle};
+use ambre_bus::{Authored, FoldAnswer, Instant, SnapshotVerdict};
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
@@ -77,13 +75,22 @@ struct Amended {
 }
 
 fn amended() -> Amended {
+    let styled = MessageDraft {
+        styles: vec![bold()],
+        ..draft("uno")
+    };
+    amended_with(&draft("one"), &styled)
+}
+
+/// [`amended`], with `first` as the first message and `edit` as its edit.
+fn amended_with(first: &MessageDraft, edit: &MessageDraft) -> Amended {
     let author = Id::<User>::mint();
     let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .with_segment_size(ambre_core::Count::<ambre_bus::Messages>::new(3))
         .identify();
-    for text in ["one", "two", "three"] {
-        alice.send(&draft(text), author, NOW).expect("send");
+    for message in [first, &draft("two"), &draft("three")] {
+        alice.send(message, author, NOW).expect("send");
     }
     let segment = alice.wants_close().expect("full");
     let successor = Id::<Segment>::mint();
@@ -136,12 +143,8 @@ fn amended() -> Amended {
         .iter()
         .map(|m| m.id)
         .collect();
-    let styled = MessageDraft {
-        styles: vec![bold()],
-        ..draft("uno")
-    };
     let edited = alice
-        .edit(segment, ids[0], &styled, author)
+        .edit(segment, ids[0], edit, author)
         .expect("edit")
         .expect("a change");
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
@@ -383,8 +386,8 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         read.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
         ["uno", "", "three"]
     );
-    assert_eq!(read[0].edited, ambre_bus::Revision::Edited);
-    assert_eq!(read[1].deleted, ambre_bus::Deletion::Deleted);
+    assert_eq!(read[0].edited, crate::message::Revision::Edited);
+    assert_eq!(read[1].deleted, crate::message::Deletion::Deleted);
     // `MURMURE-562`: the fold keeps the styles of the edit.
     assert_eq!(read[0].styles, [bold()]);
     assert_eq!(read, before, "the fold reads as the amendments did");
@@ -676,4 +679,80 @@ fn amendments_still_arriving_are_dropped_once_folded() {
         .expect("meta");
     assert!(bob.settle_folds().expect("settle").is_empty());
     assert!(bob.older_ready(amendments).is_err(), "no longer arriving");
+}
+
+/// An edit that drops a mention and keeps its characters folds into a body
+/// with no mention (`MURMURE-076`).
+#[test]
+fn a_fold_drops_a_mention_the_edit_removed() {
+    let bob = Id::<User>::mint();
+    let mentioned = MessageDraft {
+        mentions: vec![crate::message::Mention {
+            target: crate::message::MentionTarget::User(bob),
+            range: Span::<Char>::from_usize_range(0..4),
+        }],
+        ..draft("@bob hi")
+    };
+    let mut amended = amended_with(&mentioned, &draft("@bob hi!"));
+    let segment = amended.segment;
+    amended.fold();
+    amended
+        .alice
+        .mark_folded(segment, amended.amendments)
+        .expect("mark")
+        .expect("a delta");
+    let settled = amended.alice.settle_folds().expect("settle");
+    let first = &messages_of(&settled[0].event)[0];
+    assert_eq!(first.text, "@bob hi!");
+    assert!(first.mentions.is_empty(), "the edit removed the mention");
+}
+
+/// A settle with no fold marked keeps the amendments still arriving, which
+/// open once every delta is in (`MURMURE-076`).
+#[test]
+fn a_settle_with_nothing_marked_keeps_the_amendments_still_arriving() {
+    let amended = amended();
+    let mut bob = amended.loading();
+    assert_eq!(bob.amendments_to_open(), [amended.amendments]);
+    assert!(bob.settle_folds().expect("settle").is_empty());
+    let signer = amended.signer();
+    for (seq, delta) in (1..).zip(&amended.deltas) {
+        bob.apply_signed(amended.amendments, Seq::<Relay>::new(seq), delta, signer)
+            .expect("waits");
+    }
+    bob.older_ready(amended.amendments).expect("still arriving");
+    assert_eq!(bob.amendments_id(amended.segment), Some(amended.amendments));
+}
+
+/// A settle ends the fold of its segment: the next amendments of it ask the
+/// fold lease at once, as the first ones did (`MURMURE-075`).
+#[test]
+fn the_next_amendments_after_a_settle_ask_the_fold_lease_at_once() {
+    let mut amended = amended();
+    let segment = amended.segment;
+    amended.fold();
+    amended
+        .alice
+        .mark_folded(segment, amended.amendments)
+        .expect("mark")
+        .expect("a delta");
+    assert_eq!(amended.alice.settle_folds().expect("settle").len(), 1);
+    let ChangeTarget::Create(next) = amended.alice.change_target(segment, NOW).expect("target")
+    else {
+        panic!("the settle dropped the amendments");
+    };
+    let peer = next_peer();
+    amended
+        .alice
+        .adopt_session(
+            next,
+            peer,
+            Payload::<PeerEntryBytes>::new(peer.get().to_le_bytes().to_vec()),
+        )
+        .expect("adopt");
+    amended
+        .alice
+        .amendments_linked(segment, next)
+        .expect("link");
+    assert_eq!(amended.alice.fold_lease_to_ask(NOW), Some(segment));
 }

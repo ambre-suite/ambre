@@ -1,12 +1,10 @@
-//! Prose (word processor) IPC contract (`features/ambre-spec-prose-engine.md`).
-//!
-//! Mirrors the Trame and Toile split. The typed command / event / display
-//! data-plane types live here in `ambre-bus`, so the `ambre-logic` dispatcher
-//! can match on `(DocState, AppCommand::Prose)` without a dependency cycle. The
-//! engine crate `ambre-prose` depends on `ambre-bus`, never the reverse. The
-//! stateful engine (`ProseState`) and its `ProseOutcome` wrapper stay in
-//! `ambre-prose`, exactly as `ToileState` / `ToileOutcome` stay in
-//! `ambre-toile`.
+//! Prose (word processor) data plane: the whole typed content vocabulary of a
+//! Prose document, both directions (`features/ambre-spec-prose-engine.md`).
+//! It lives in the application's crate, beside the engine and the view that
+//! use it, and the Sync worker never builds against it (`BUS-032`,
+//! `ARCH-070`). The Logic runtime carries it as `AppCommand::Prose` and
+//! `AppEvent::Prose`. The stateful engine (`ProseState`) and its
+//! `ProseOutcome` wrapper stay outside this module.
 //!
 //! * Pure data only: block identity, the typed block initializer, the paragraph
 //!   style register, the presence sample, and the command / event enums.
@@ -14,10 +12,9 @@
 //!
 //! **Why [`BlockId`] and not `loro::TreeID`.** A block's identity is the id the
 //! tree mints (`PROSE-085`), and [`BlockId`] is that id's two numbers under a
-//! name this crate can carry. Naming the CRDT type here would pull `loro` into
-//! `ambre-bus`, which `ambre-sync` links, and the Sync worker must compile no
-//! CRDT (`SYNC-011`, `deny.toml`). The engine converts at its own boundary, and
-//! the value is the same pair on both sides: it is one identity, not two.
+//! name of this plane. The engine converts at its own boundary, so the plane
+//! names no CRDT type and stays pure data. The value is the same pair on both
+//! sides: it is one identity, not two.
 //!
 //! **The offset unit is the Unicode code point**, everywhere below
 //! (`PROSE-FEAT-006`). It is what the CRDT indexes a body text and a cursor
@@ -35,10 +32,10 @@ use serde::{Deserialize, Serialize};
 use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
 use ambre_core::{CommandNames, Count, Pt, Rgb, StaticKey};
 
-use super::grid::{CellPos, Col, Row};
+use ambre_bus::app::grid::{CellPos, Col, Row};
 
 pub mod mark;
-use crate::{Authored, Instant};
+use ambre_core::{Authored, Instant};
 pub use mark::MarkValue;
 
 /// A code-point offset into the body of one block, as the CRDT counts it
@@ -1694,7 +1691,7 @@ pub enum ProseCommand {
     /// (`PROSE-FEAT-151`). `None` is the emptied field: it closes the open
     /// search and the highlight clears (`FIND-005`).
     FindStart {
-        query: Option<super::find::FindQuery<FindOptions>>,
+        query: Option<ambre_bus::app::find::FindQuery<FindOptions>>,
     },
     FindNext,
     FindPrev,
@@ -2348,6 +2345,12 @@ impl ExportFormat {
     }
 }
 
+impl ambre_bus::Mutation for ProseCommand {
+    fn is_mutating(&self) -> bool {
+        ProseCommand::is_mutating(self)
+    }
+}
+
 impl ProseCommand {
     /// Whether this command can change the document's shared CRDT state.
     ///
@@ -2595,11 +2598,11 @@ pub enum ProseEvent {
     /// It goes to the peer that searched and to no other (`PROSE-FEAT-148`).
     FindResults {
         matches: Vec<FindMatch>,
-        current: Option<Pos<super::find::Match>>,
+        current: Option<Pos<ambre_bus::app::find::Match>>,
     },
     /// The current match moved; the list did not (`PROSE-FEAT-152`).
     FindUpdated {
-        current: Option<Pos<super::find::Match>>,
+        current: Option<Pos<ambre_bus::app::find::Match>>,
     },
     /// What the local history holds after a command that wrote. The chrome
     /// disables its undo and redo affordances from this alone (`UNDO-006`),

@@ -30,9 +30,9 @@ use ambre_core::crdt::CrdtName;
 use ambre_core::index::Span;
 use std::collections::BTreeSet;
 
+use crate::message::{Attachment, Mention, MentionTarget, MessageDraft, StyleMark, TextStyle};
 use ambre_bus::{
-    Attachment, Authored, ChannelTopic, ContentHash, Instant, MediaType, Mention, MentionTarget,
-    MessageDraft, Octets, SealedChannelKey, StyleMark, TextStyle,
+    Authored, ChannelTopic, ContentHash, Instant, MediaType, Octets, SealedChannelKey,
 };
 use ambre_core::Count;
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN};
@@ -311,7 +311,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
             &reply,
             AUTHOR,
             Instant::<Authored>::new(1_700_000_000_005),
-            ambre_bus::ReplyEcho::AlsoInChannel,
+            crate::message::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
 }

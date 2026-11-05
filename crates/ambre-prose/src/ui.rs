@@ -23,9 +23,8 @@ use std::sync::Arc;
 use ambre_core::id::{Document, Id};
 use ambre_core::{Byte, char_to_byte};
 
-use ambre_bus::app::prose::DocChar;
-use ambre_bus::logic::{AppCommand, LogicCommand};
-use ambre_bus::{Outbox, SendOutcome};
+use crate::message::DocChar;
+use ambre_bus::{Delivery, LogicCommand, Outbox, Port, SendOutcome};
 
 use crate::events::{
     BandSet, BlockId, ChangeOrigin, CommentThread, CursorPosition, FindMatch, FootnoteEntry,
@@ -81,7 +80,7 @@ pub struct DraftBuffer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DraftEdit {
     /// The number the Logic thread acknowledges this command by.
-    seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
+    seq: ambre_core::Seq<crate::message::TextAck>,
     block: BlockId,
     at: Pos<DocChar>,
     change: Change,
@@ -129,12 +128,7 @@ impl DraftBuffer {
     /// confirmed it. The keystroke probes read it (`ambre-spec-budgets.md`).
     pub fn entries(
         &self,
-    ) -> impl Iterator<
-        Item = (
-            ambre_core::Seq<ambre_bus::app::prose::TextAck>,
-            Confirmation,
-        ),
-    > + '_ {
+    ) -> impl Iterator<Item = (ambre_core::Seq<crate::message::TextAck>, Confirmation)> + '_ {
         self.edits.iter().map(|edit| (edit.seq, edit.confirmed))
     }
 
@@ -149,7 +143,7 @@ impl DraftBuffer {
     /// its own (`PROSE-UI-138`).
     pub fn push_str(
         &mut self,
-        seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
+        seq: ambre_core::Seq<crate::message::TextAck>,
         text: &str,
         block_id: &BlockId,
         pos: Pos<DocChar>,
@@ -161,7 +155,7 @@ impl DraftBuffer {
     /// `seq`. The text typed before it stays drawn (`PROSE-UI-206`).
     pub fn push_delete(
         &mut self,
-        seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
+        seq: ambre_core::Seq<crate::message::TextAck>,
         block_id: &BlockId,
         start: Pos<DocChar>,
         end: Pos<DocChar>,
@@ -174,7 +168,7 @@ impl DraftBuffer {
 
     fn push(
         &mut self,
-        seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
+        seq: ambre_core::Seq<crate::message::TextAck>,
         block: BlockId,
         at: Pos<DocChar>,
         change: Change,
@@ -195,7 +189,7 @@ impl DraftBuffer {
 
     /// The command acknowledged as `seq` was taken as drawn
     /// (`PROSE-UI-005`). The entries confirm in the order they were sent.
-    pub fn confirm(&mut self, seq: ambre_core::Seq<ambre_bus::app::prose::TextAck>) {
+    pub fn confirm(&mut self, seq: ambre_core::Seq<crate::message::TextAck>) {
         if let Some(edit) = self.edits.iter_mut().find(|edit| edit.seq == seq) {
             edit.confirmed = Confirmation::Confirmed;
         }
@@ -552,13 +546,13 @@ pub struct ProseUiState {
     /// When the text was last seen changing, while a recount is owed.
     quiet_since: Option<Instant<PageLoad>>,
     /// The number of the last change this view did not draw and applied.
-    pub(crate) seen: ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
+    pub(crate) seen: ambre_core::Seq<crate::message::TextChangeSeq>,
     /// The number last handed back in a [`ProseCommand::Sync`].
-    pub(crate) sent_seen: ambre_core::Seq<ambre_bus::app::prose::TextChangeSeq>,
+    pub(crate) sent_seen: ambre_core::Seq<crate::message::TextChangeSeq>,
     /// The text commands sent and not yet taken, in the text this view shows.
     pub(crate) inflight: VecDeque<TextEdit>,
     /// How many text commands the Logic thread said it took.
-    pub(crate) popped: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
+    pub(crate) popped: ambre_core::Seq<crate::message::TextAck>,
     /// The syncs sent and not yet answered, oldest first. One sent after a
     /// structural command holds the input until it is answered.
     pub(crate) syncs: VecDeque<SyncHold>,
@@ -633,21 +627,21 @@ impl SendResult {
 /// blocks (`UI-THREAD-002`), and the draft echo the view painted stays here
 /// (`PROSE-UI-150`): what crosses is the typed command alone.
 pub fn send_command(
-    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: &Port<ProseCommand>,
     document_id: Id<Document>,
     command: ProseCommand,
 ) -> SendResult {
     let envelope = LogicCommand::App {
         document_id,
-        command: AppCommand::Prose(command),
+        command,
     };
     match to_logic.try_send(envelope) {
-        Ok(()) => SendResult::Sent,
-        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
+        Delivery::Sent => SendResult::Sent,
+        Delivery::Full(_) => {
             tracing::warn!("Prose: the Logic channel is full, the command is dropped");
             SendResult::Dropped
         }
-        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => SendResult::Disconnected,
+        Delivery::Disconnected => SendResult::Disconnected,
     }
 }
 
@@ -658,13 +652,13 @@ pub fn send_command(
 /// host refuses input while the outbox holds anything (`BUS-016`), so the
 /// order the user typed in is the order the edits land.
 pub fn send_edit(
-    outbox: &mut Outbox,
+    outbox: &mut Outbox<ProseCommand>,
     document_id: Id<Document>,
     command: ProseCommand,
 ) -> SendResult {
     let envelope = LogicCommand::App {
         document_id,
-        command: AppCommand::Prose(command),
+        command,
     };
     match outbox.send(envelope) {
         SendOutcome::Sent => SendResult::Sent,
@@ -846,7 +840,7 @@ impl ProseUiState {
     /// draft, whose text the change takes back.
     fn take_acked(
         &mut self,
-        acked: ambre_core::Seq<ambre_bus::app::prose::TextAck>,
+        acked: ambre_core::Seq<crate::message::TextAck>,
         origin: ChangeOrigin,
     ) {
         let mut ends_draft = false;
@@ -1041,10 +1035,10 @@ mod tests {
         ui.composing = "composed".into();
         let block = state.root_blocks()[0];
         ui.draft.push_str(
-            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<crate::message::TextAck>::nth(1),
             "drafted",
             &block,
-            Pos::<ambre_bus::app::prose::DocChar>::ZERO,
+            Pos::<crate::message::DocChar>::ZERO,
         );
         let printed = format!("{ui:?}");
         for secret in ["word", "unseen", "composed", "drafted"] {
@@ -1070,8 +1064,8 @@ mod tests {
             filename: filename.clone(),
             media_type: ambre_core::MediaType::from("application/octet-stream"),
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![1, 2, 3]),
-            report: ambre_bus::app::prose::ConversionReport::clean(
-                ambre_bus::app::prose::ConversionFormat::Ambre,
+            report: crate::message::ConversionReport::clean(
+                crate::message::ConversionFormat::Ambre,
             ),
         });
         assert_eq!(
@@ -1109,7 +1103,7 @@ mod tests {
     }
 
     use super::*;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::{Instant, PageLoad};
 
     fn a_document() -> Id<Document> {
@@ -1118,27 +1112,29 @@ mod tests {
 
     #[test]
     fn a_full_channel_drops_the_command_rather_than_holding_the_frame() {
-        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<1>());
+        let (tx, _rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<1>());
         assert_eq!(
-            send_command(&tx, a_document(), ProseCommand::Noop),
+            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
             SendResult::Sent
         );
         // The channel holds one, so the second send finds it full. It answers
         // at once rather than parking this thread.
         assert_eq!(
-            send_command(&tx, a_document(), ProseCommand::Noop),
+            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
             SendResult::Dropped
         );
     }
 
     #[test]
     fn a_full_channel_holds_an_edit_rather_than_the_frame() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<1>());
-        let mut outbox = Outbox::new(tx);
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<1>());
+        let mut outbox = Outbox::new(Port::direct(tx));
         assert_eq!(
             send_edit(&mut outbox, a_document(), ProseCommand::Noop),
             SendResult::Sent
@@ -1156,31 +1152,33 @@ mod tests {
 
     #[test]
     fn a_closed_channel_is_told_apart_from_a_full_one() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<1>());
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<1>());
         drop(rx);
         assert_eq!(
-            send_command(&tx, a_document(), ProseCommand::Noop),
+            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
             SendResult::Disconnected
         );
     }
 
     #[test]
     fn the_draft_echo_never_reaches_the_wire() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<4>());
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<4>());
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<crate::message::TextAck>::nth(1),
             "hel",
             &block,
             Pos::<DocChar>::ZERO,
         );
         send_command(
-            &tx,
+            &Port::direct(tx),
             a_document(),
             ProseCommand::InsertText {
                 block_id: block,
@@ -1195,10 +1193,7 @@ mod tests {
         // The draft is still held here, and the wire carries the typed command
         // rather than the echo.
         assert!(!state.draft.is_empty());
-        assert!(matches!(
-            command,
-            AppCommand::Prose(ProseCommand::InsertText { .. })
-        ));
+        assert!(matches!(command, ProseCommand::InsertText { .. }));
     }
 
     #[test]
@@ -1206,7 +1201,7 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<crate::message::TextAck>::nth(1),
             "hel",
             &block,
             Pos::<DocChar>::ZERO,
@@ -1227,7 +1222,7 @@ mod tests {
         state.apply_event(&ProseEvent::TextChanged {
             origin: crate::events::ChangeOrigin::Local,
             seq: ambre_core::Seq::ZERO,
-            acked: ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
+            acked: ambre_core::Seq::<crate::message::TextAck>::nth(1),
             edits: vec![typed],
             removed: Vec::new(),
         });
@@ -1242,7 +1237,7 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<crate::message::TextAck>::nth(1),
             "hel",
             &block,
             Pos::<DocChar>::ZERO,
@@ -1272,19 +1267,19 @@ mod tests {
         let other = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(1));
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
+            ambre_core::Seq::<crate::message::TextAck>::nth(1),
             "he",
             &block,
             Pos::<DocChar>::ZERO,
         );
         draft.push_str(
-            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(2),
+            ambre_core::Seq::<crate::message::TextAck>::nth(2),
             "llo",
             &block,
             Pos::<DocChar>::new(2),
         );
         draft.push_delete(
-            ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(3),
+            ambre_core::Seq::<crate::message::TextAck>::nth(3),
             &block,
             Pos::<DocChar>::new(1),
             Pos::<DocChar>::new(3),

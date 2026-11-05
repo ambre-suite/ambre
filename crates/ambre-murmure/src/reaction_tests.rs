@@ -2,7 +2,8 @@
 //! (`features/ambre-spec-murmure-reactions.md`).
 
 use crate::Receipt;
-use ambre_bus::{ActivityKind, Authored, Instant, MessageDraft, MessageView, Reaction, Unread};
+use crate::message::{MessageDraft, MessageView, Reaction};
+use ambre_bus::{ActivityKind, Authored, Instant, Unread};
 use ambre_core::id::{Channel, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, Relay, Seq};
 use loro::{Container, LoroMap, ValueOrContainer, VersionVector};

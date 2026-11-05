@@ -203,7 +203,7 @@ Eviction frees a decoding, never a fact: the address stays on the block (`PROSE-
 picture scrolled back into view is simply `Pending` again. The cap is a row of
 `ambre-spec-budgets.md section 6`.
 
-**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

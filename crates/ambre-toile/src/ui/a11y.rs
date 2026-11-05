@@ -8,8 +8,8 @@
 // result into the shared live region.
 // ============================================================================
 
+use crate::message::{DisplayElement, DisplayGeom, ElementKind, ShapeKind};
 use ambre_bus::DocType;
-use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementKind, ShapeKind};
 use ambre_core::Validated;
 use ambre_core::id::{Element, Id};
 use ambre_core::index::Len;
@@ -40,7 +40,7 @@ fn element_announcement(element: &DisplayElement) -> String {
         out.push_str(", ");
         out.extend(text.trim().chars().take(TEXT_LIMIT.to_usize()));
     }
-    if element.locked == ambre_bus::app::toile::LockState::Locked {
+    if element.locked == crate::message::LockState::Locked {
         out.push_str(", locked");
     }
     out
@@ -87,19 +87,19 @@ fn element_text(geom: &DisplayGeom) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::ElementStyle;
+    use crate::message::ElementStyle;
     use ambre_draw::{Affine, Rect};
 
     fn element(
         n: u32,
         kind: ElementKind,
         geom: DisplayGeom,
-        locked: ambre_bus::app::toile::LockState,
+        locked: crate::message::LockState,
     ) -> DisplayElement {
         DisplayElement {
             id: Id::<Element>::mint_from(
                 ambre_core::PeerId::new(1),
-                ambre_bus::app::toile::IdCounter::new(n),
+                crate::message::IdCounter::new(n),
             ),
             kind,
             transform: Affine::IDENTITY,
@@ -120,13 +120,13 @@ mod tests {
             1,
             ElementKind::Sticky,
             DisplayGeom::Sticky(" Buy milk ".into()),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         );
         let shape = element(
             2,
             ElementKind::Shape(ShapeKind::Ellipse),
             DisplayGeom::Ellipse,
-            ambre_bus::app::toile::LockState::Locked,
+            crate::message::LockState::Locked,
         );
         let (a, b) = (note.id.clone(), shape.id.clone());
         let data = vec![note, shape];
@@ -157,7 +157,7 @@ mod tests {
             1,
             ElementKind::Text,
             DisplayGeom::Text("x".repeat(500)),
-            ambre_bus::app::toile::LockState::Unlocked,
+            crate::message::LockState::Unlocked,
         );
         let id = long.id.clone();
         assert_eq!(selection_announcement(std::slice::from_ref(&id), &[]), None);

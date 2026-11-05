@@ -8,9 +8,8 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{
-    Authored, DirectMember, DirectMessageDraft, DirectMessageEvent, Instant, MurmureEvent, Role,
-};
+use ambre_bus::{Authored, DirectMember, Instant, Role};
+use ambre_murmure::message::{DirectMessageDraft, DirectMessageEvent, MurmureEvent};
 use ambre_murmure::{ChannelState, ChannelType};
 
 use crate::channels::HeldCommand;
@@ -198,7 +197,8 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{DirectMember, MurmureCommand, Notice};
+    use ambre_bus::DirectMember;
+    use ambre_murmure::message::{MurmureCommand, Notice};
 
     const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 

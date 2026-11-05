@@ -7,14 +7,12 @@
 
 use super::*;
 use ambre_bus::{Authored, Instant};
-use ambre_bus::{
-    ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelMatches, DocumentActivity,
-    HeldReply, HeldSend, MessageAt, MurmureCommand, MurmureEvent,
+use ambre_bus::{ChannelActivity, ChannelDocument, ChannelDocumentKind, DocumentActivity};
+use ambre_bus::{MemberInfo, Mentions, OpenFailure, Relay, Seq, SignedDelta, Unread};
+use ambre_murmure::message::{
+    ChannelMatches, HeldReply, HeldSend, MessageAt, MurmureCommand, MurmureEvent,
 };
-use ambre_bus::{
-    MemberInfo, Mention, MentionTarget, Mentions, OpenFailure, Relay, Seq, SignedDelta, Unread,
-    Unreadable,
-};
+use ambre_murmure::message::{Mention, MentionTarget, Unreadable};
 use ambre_murmure::{
     ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Receipt,
     Sample, Screened, SeekStep, Sent, Signer, ThreadTarget, members_only, screen,
@@ -217,7 +215,7 @@ pub(crate) enum HeldCommand {
     /// A command of an open channel.
     Channel(Id<Channel>, MurmureCommand),
     /// A command of an open space.
-    Space(Id<Space>, ambre_bus::SpaceCommand),
+    Space(Id<Space>, ambre_murmure::message::SpaceCommand),
     /// An invite into a direct message, held until its notice can be
     /// written (the Murmure channels spec).
     Invite(Seq<Request>, ambre_bus::RestCommand),
@@ -1095,14 +1093,14 @@ impl LogicState {
             MurmureCommand::SendMessage {
                 draft,
                 attachments,
-                confirmed: ambre_bus::Confirmation::Unconfirmed,
+                confirmed: ambre_murmure::message::Confirmation::Unconfirmed,
                 ..
             } => (draft, attachments.clone(), None),
             MurmureCommand::Reply {
                 root,
                 draft,
                 also_in_channel,
-                confirmed: ambre_bus::Confirmation::Unconfirmed,
+                confirmed: ambre_murmure::message::Confirmation::Unconfirmed,
                 ..
             } => {
                 let reply = HeldReply {
@@ -1126,7 +1124,7 @@ impl LogicState {
         match screen(
             draft.clone(),
             Some(&members),
-            ambre_bus::Confirmation::Unconfirmed,
+            ambre_murmure::message::Confirmation::Unconfirmed,
         ) {
             Screened::Send(_) => None,
             Screened::Confirm { members, draft } => Some(MurmureEvent::ConfirmChannelMention {
@@ -2115,9 +2113,8 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, Attachment, Authored, ContentHash, FoldAnswer, Instant, LeaseAnswer,
-        MediaType, Mention, MentionTarget, MessageDraft, MurmureEvent, Octets, RestCommand,
-        RestEvent,
+        ActivityKind, Authored, ContentHash, FoldAnswer, Instant, LeaseAnswer, MediaType, Octets,
+        RestCommand, RestEvent,
     };
     use ambre_core::Char;
     use ambre_core::Count;
@@ -2127,6 +2124,7 @@ mod tests {
     use ambre_core::index::Span;
     use ambre_core::{Ms, TimeSpan};
     use ambre_murmure::ChannelType;
+    use ambre_murmure::message::{Attachment, Mention, MentionTarget, MessageDraft, MurmureEvent};
 
     const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
@@ -2189,7 +2187,7 @@ mod tests {
             },
             attachments: Vec::new(),
             now: NOW,
-            confirmed: ambre_bus::Confirmation::Unconfirmed,
+            confirmed: ambre_murmure::message::Confirmation::Unconfirmed,
         }
     }
 
@@ -3788,8 +3786,8 @@ mod tests {
             (edited[0].text.as_str(), edited[0].edited, edited[0].deleted),
             (
                 "lunch @bob @eve?",
-                ambre_bus::Revision::Edited,
-                ambre_bus::Deletion::Live
+                ambre_murmure::message::Revision::Edited,
+                ambre_murmure::message::Deletion::Live
             )
         );
         assert_eq!(
@@ -3802,7 +3800,7 @@ mod tests {
         );
         assert_eq!(
             (deleted[0].text.as_str(), deleted[0].deleted),
-            ("", ambre_bus::Deletion::Deleted)
+            ("", ambre_murmure::message::Deletion::Deleted)
         );
 
         state.handle_logic_command(LogicCommand::Channel {
@@ -4440,7 +4438,7 @@ mod tests {
             draft: draft.clone(),
             attachments: Vec::new(),
             now: NOW,
-            confirmed: ambre_bus::Confirmation::Confirmed,
+            confirmed: ambre_murmure::message::Confirmation::Confirmed,
         };
         command(&mut state, channel_id, confirmed);
         let [summary] = summaries(&sync).try_into().expect("one update");
@@ -4452,9 +4450,9 @@ mod tests {
         let reply = MurmureCommand::Reply {
             root,
             draft: draft.clone(),
-            also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,
+            also_in_channel: ambre_murmure::message::ReplyEcho::AlsoInChannel,
             now: NOW,
-            confirmed: ambre_bus::Confirmation::Unconfirmed,
+            confirmed: ambre_murmure::message::Confirmation::Unconfirmed,
         };
         command(&mut state, channel_id, reply);
         let held = HeldSend {
@@ -4462,7 +4460,7 @@ mod tests {
             attachments: Vec::new(),
             reply: Some(HeldReply {
                 root,
-                also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,
+                also_in_channel: ambre_murmure::message::ReplyEcho::AlsoInChannel,
             }),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
@@ -5180,7 +5178,7 @@ mod tests {
         assert!(
             shown.iter().any(|(_, event)| matches!(event,
                 MurmureEvent::Messages { segment, messages }
-                    if *segment == closing && messages[0].text == "two" && messages[0].edited == ambre_bus::Revision::Edited)),
+                    if *segment == closing && messages[0].text == "two" && messages[0].edited == ambre_murmure::message::Revision::Edited)),
             "the view was told {shown:?}"
         );
     }
@@ -5421,7 +5419,7 @@ mod tests {
         assert!(
             shown.iter().any(|(_, event)| matches!(event,
                 MurmureEvent::Messages { segment: s, messages }
-                    if *s == segment && messages[0].text == "one" && messages[0].edited == ambre_bus::Revision::Original)),
+                    if *s == segment && messages[0].text == "one" && messages[0].edited == ambre_murmure::message::Revision::Original)),
             "the view reads the fold {shown:?}"
         );
         state.handle_logic_event(LogicEvent::AmendmentsFolded {
@@ -5784,12 +5782,12 @@ mod tests {
                 styles: Vec::new(),
             },
             also_in_channel: if also_in_channel {
-                ambre_bus::ReplyEcho::AlsoInChannel
+                ambre_murmure::message::ReplyEcho::AlsoInChannel
             } else {
-                ambre_bus::ReplyEcho::ThreadOnly
+                ambre_murmure::message::ReplyEcho::ThreadOnly
             },
             now: at(1),
-            confirmed: ambre_bus::Confirmation::Unconfirmed,
+            confirmed: ambre_murmure::message::Confirmation::Unconfirmed,
         }
     }
 
@@ -5989,7 +5987,10 @@ mod tests {
         else {
             panic!("the thread is held");
         };
-        assert_eq!(messages[0].deleted, ambre_bus::Deletion::Deleted);
+        assert_eq!(
+            messages[0].deleted,
+            ambre_murmure::message::Deletion::Deleted
+        );
         command(
             &mut state,
             channel_id,
@@ -6046,12 +6047,15 @@ mod tests {
             assert_eq!(sent, written, "{kind}");
             if kind == "edit" {
                 assert_eq!(copy(&state).text, "edited", "the copy reads the edit");
-                assert_eq!(copy(&state).edited, ambre_bus::Revision::Edited);
+                assert_eq!(
+                    copy(&state).edited,
+                    ambre_murmure::message::Revision::Edited
+                );
             }
         }
         assert_eq!(
             copy(&state).deleted,
-            ambre_bus::Deletion::Deleted,
+            ambre_murmure::message::Deletion::Deleted,
             "the copy is deleted with its reply"
         );
         assert!(copy(&state).text.is_empty());
@@ -6140,7 +6144,7 @@ mod tests {
                 &draft,
                 m.author,
                 NOW,
-                ambre_bus::ReplyEcho::ThreadOnly,
+                ambre_murmure::message::ReplyEcho::ThreadOnly,
             )
             .expect("reply");
         let document_id = m.active.document_id();
@@ -6355,8 +6359,8 @@ mod tests {
         let draft = MessageDraft {
             text: "@bob".to_owned(),
             styles: Vec::new(),
-            mentions: vec![ambre_bus::Mention {
-                target: ambre_bus::MentionTarget::User(bob),
+            mentions: vec![ambre_murmure::message::Mention {
+                target: ambre_murmure::message::MentionTarget::User(bob),
                 range: Span::<Char>::from_usize_range(0..4),
             }],
         };
@@ -6366,7 +6370,7 @@ mod tests {
                 &draft,
                 m.author,
                 NOW,
-                ambre_bus::ReplyEcho::ThreadOnly,
+                ambre_murmure::message::ReplyEcho::ThreadOnly,
             )
             .expect("reply");
         let document_id = m.active.document_id();

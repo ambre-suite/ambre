@@ -4,13 +4,13 @@
 key	reason
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji | std::borrow::Cow<'static,str>	one emoji as the view picked it, borrowed from a 'static table with no allocation, or owned off the wire. Every text family of core owns a String, and the engine rules on the value
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, and they would have to move into core. Its serde is the derived Vec<u8>, which the base64 of Encoded would change
-ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple | f32	a ratio that is finite and above zero. Bounded holds it with the least positive f32 as MIN, but a crate outside core names no float constant of Bounded, and SINGLE and ONE_AND_HALF are const
-ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
-ambre-bus | src/app/toile.rs | crate::app::toile | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
-ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight | i32	the signed weight of one vote, any i32, which travels and is stored as the bare i32. No family holds a signed i32 that a sum reads
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for. It moves a Bounded<Decimals> held at its bounds, an operation no family carries
+ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple | f32	a ratio that is finite and above zero. Bounded holds it with the least positive f32 as MIN, but a crate outside core names no float constant of Bounded, and SINGLE and ONE_AND_HALF are const
+ambre-prose | src/message/mod.rs | crate::message | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
+ambre-toile | src/message/mod.rs | crate::message | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
+ambre-toile | src/message/mod.rs | crate::message | VoteWeight | i32	the signed weight of one vote, any i32, which travels and is stored as the bare i32. No family holds a signed i32 that a sum reads
+ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
+ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
+ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for. It moves a Bounded<Decimals> held at its bounds, an operation no family carries
 ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty. draw mints one from a random draw infallibly, which the public door of Validated cannot do
 ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key that orders as its text, the order the store ranges keys in, and every names the bounds of the whole store
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id peniko gives a registered font blob, a u64 that crate defines, private to the glyph atlas. Id holds a Uuid or a minted text alone

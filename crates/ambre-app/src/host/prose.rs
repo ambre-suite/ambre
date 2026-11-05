@@ -23,8 +23,7 @@
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
-use ambre_bus::app::prose::WordCount;
-use ambre_bus::{AppEvent, LogicCommand, Outbox, PasteSource, SendOutcome, UiEvent};
+use ambre_bus::{Inbox, Outbox, PasteSource, Port, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
     BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
@@ -38,6 +37,7 @@ use ambre_draw::{Consumed, DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
+use ambre_prose::message::{ProseCommand, ProseEvent, WordCount};
 use ambre_prose::probe::{Answer, Dispatch, KeyProbe, Measure, ProbeName};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::paint::PagePalette;
@@ -80,14 +80,14 @@ fn canvas_origin() -> Point<Px<Css>> {
 /// One open Prose document on the canvas.
 pub struct ProseView {
     document_id: Id<Document>,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: Port<ProseCommand>,
     /// The edits' path out: a full channel holds them here (`BUS-011`).
-    outbox: Outbox,
+    outbox: Outbox<ProseCommand>,
     busy_pub: BusyPublisher,
     /// What the shell shows the user when the page cannot, such as a reply
     /// lost with its thread (`PROSE-UI-232`).
     notices: NoticePublisher,
-    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    from_logic: Inbox<ProseEvent>,
     state: ProseUiState,
     theme_ctl: ThemeControl,
     theme: Theme,
@@ -126,9 +126,9 @@ fn view_size(size: Size<Px<CanvasCss>>) -> (Px<View>, Px<View>) {
 /// and fills one per view.
 pub struct ProseWiring {
     /// The queue to the Logic thread.
-    pub to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    pub to_logic: Port<ProseCommand>,
     /// The queue from the Logic thread.
-    pub from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    pub from_logic: Inbox<ProseEvent>,
     /// The shared text pipe.
     pub text_input: TextInput,
     /// The active theme.
@@ -199,14 +199,8 @@ impl ProseView {
         loop {
             match self.from_logic.try_recv() {
                 Ok(
-                    UiEvent::Viewport {
-                        document_id,
-                        event: AppEvent::Prose(event),
-                    }
-                    | UiEvent::Presence {
-                        document_id,
-                        event: AppEvent::Prose(event),
-                    },
+                    UiEvent::Viewport { document_id, event }
+                    | UiEvent::Presence { document_id, event },
                 ) if document_id == self.document_id => {
                     let answer = if ambre_prose::probe::lays_out(&event) {
                         Answer::Layout
@@ -805,10 +799,11 @@ fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::{Graphemes, Page, Paragraphs, Words};
+    use ambre_bus::LogicCommand;
     use ambre_core::Count;
     use ambre_core::index::Len;
     use ambre_core::{Px, Size};
+    use ambre_prose::message::{Graphemes, Page, Paragraphs, Words};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.
@@ -843,8 +838,8 @@ mod tests {
             Id::<Document>::mint(),
             Size::new(Px::new(800), Px::new(600)),
             ProseWiring {
-                to_logic,
-                from_logic,
+                to_logic: Port::direct(to_logic),
+                from_logic: Inbox::direct(from_logic),
                 text_input: pipe.clone(),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures: RwSignal::new(None),
@@ -893,8 +888,8 @@ mod tests {
             document_id,
             Size::new(Px::new(800), Px::new(600)),
             ProseWiring {
-                to_logic,
-                from_logic,
+                to_logic: Port::direct(to_logic),
+                from_logic: Inbox::direct(from_logic),
                 text_input: TextInput::create(&document, &cell),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures: RwSignal::new(None),
@@ -960,8 +955,8 @@ mod tests {
             Id::<Document>::mint(),
             Size::new(Px::new(800), Px::new(600)),
             ProseWiring {
-                to_logic,
-                from_logic,
+                to_logic: Port::direct(to_logic),
+                from_logic: Inbox::direct(from_logic),
                 text_input: TextInput::create(&document, &cell),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures,

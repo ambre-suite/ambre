@@ -10,7 +10,8 @@
 // signals.
 //
 // The command type stays generic: this crate depends on no bus crate
-// (`SCHEMA-002`), so the launcher fixes it to the bus's application command.
+// (`SCHEMA-002`). Each application answers in its own command, and the launcher
+// maps the answer into the Logic runtime's sum (`BUS-032`).
 // ============================================================================
 
 use ambre_commands::{ClipboardWrite, PasteForm};
@@ -42,6 +43,24 @@ pub enum ShellAction<C> {
     PickFile(FilePick<C>),
 }
 
+impl<C: 'static> ShellAction<C> {
+    /// The same action, its command passed through `f`. The launcher embeds an
+    /// application's command into the sum the Logic thread takes with it.
+    #[must_use]
+    pub fn map<D: 'static>(self, f: fn(C) -> D) -> ShellAction<D> {
+        match self {
+            Self::Send(command) => ShellAction::Send(f(command)),
+            Self::OpenPalette => ShellAction::OpenPalette,
+            Self::OpenSealedSave => ShellAction::OpenSealedSave,
+            Self::Copy(write) => ShellAction::Copy(write),
+            Self::CopyText(text) => ShellAction::CopyText(text),
+            Self::Paste(form) => ShellAction::Paste(form),
+            Self::RefreshDocuments => ShellAction::RefreshDocuments,
+            Self::PickFile(pick) => ShellAction::PickFile(pick.map(f)),
+        }
+    }
+}
+
 /// A file picker the shell opens on an application's behalf.
 pub struct FilePick<C> {
     /// What the application reads, the picker's `accept` attribute.
@@ -50,6 +69,19 @@ pub struct FilePick<C> {
     pub unreadable: &'static str,
     /// The command the file's bytes become.
     pub read: Box<dyn Fn(ambre_core::Payload<ambre_core::FileBytes>) -> C>,
+}
+
+impl<C: 'static> FilePick<C> {
+    /// The same picker, the command its bytes become passed through `f`.
+    #[must_use]
+    pub fn map<D: 'static>(self, f: fn(C) -> D) -> FilePick<D> {
+        let read = self.read;
+        FilePick {
+            accept: self.accept,
+            unreadable: self.unreadable,
+            read: Box::new(move |bytes| f(read(bytes))),
+        }
+    }
 }
 
 /// The kinds of file a picker offers. Each names the extensions and media
@@ -93,6 +125,19 @@ pub enum KeyRoute<C> {
     /// Prevent the key's default, then perform these, possibly none. An empty
     /// list leaves the key to the canvas listener alone.
     Run(Vec<ShellAction<C>>),
+}
+
+impl<C: 'static> KeyRoute<C> {
+    /// The same route, each action's command passed through `f`.
+    #[must_use]
+    pub fn map<D: 'static>(self, f: fn(C) -> D) -> KeyRoute<D> {
+        match self {
+            Self::Yield => KeyRoute::Yield,
+            Self::Run(actions) => {
+                KeyRoute::Run(actions.into_iter().map(|action| action.map(f)).collect())
+            }
+        }
+    }
 }
 
 /// An application's half of the command path (`ARCH-018`). The shell routes

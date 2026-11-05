@@ -120,7 +120,7 @@ impl TrameUiState {
     /// Replace the live selection with `rect`, collapsing the active cell onto
     /// its top-left corner. Used when the Logic thread dictates a selection the
     /// canvas cannot derive locally, such as a
-    /// [`SelectRange`](ambre_bus::TrameEvent::SelectRange) after an unmerge.
+    /// [`SelectRange`](crate::message::TrameEvent::SelectRange) after an unmerge.
     /// The freed cells must stay selected though the span-defining merge is
     /// gone.
     pub fn select_rect(&mut self, rect: CellRect) {
@@ -522,7 +522,7 @@ impl TrameUiState {
         let mut rows: Vec<Pos<Row>> = self
             .cell_cache
             .iter()
-            .filter(|(_, c)| c.is_filtered == ambre_bus::RowFilter::Filtered)
+            .filter(|(_, c)| c.is_filtered == crate::message::RowFilter::Filtered)
             .map(|(at, _)| at.row)
             .collect();
         rows.sort_unstable();

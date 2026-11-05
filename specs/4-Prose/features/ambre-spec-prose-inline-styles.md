@@ -176,7 +176,7 @@ what is stored and writes only the keys that differ (`PROSE-FEAT-025`). The comm
 and the storage stays granular, which is what lets two authors change two properties of one
 paragraph at once (`PROSE-FEAT-176`).
 
-**The four commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The four commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Carries |
 |---|---|
@@ -218,7 +218,7 @@ carries an identity or a binding that a formatting reset must not destroy (`PROS
 Removing one of them is its own command.
 
 **Code:** `crates/ambre-prose/src/style.rs` for the cascade, `crates/ambre-prose/src/mark.rs` for
-the registry, `crates/ambre-bus/src/app/prose/mark.rs` for the value grammars, and
+the registry, `crates/ambre-prose/src/message/mark.rs` for the value grammars, and
 `crates/ambre-prose/src/logic/marks.rs` for the write path.
 
 ---

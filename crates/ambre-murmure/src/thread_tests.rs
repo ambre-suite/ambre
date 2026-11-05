@@ -7,10 +7,8 @@ use ambre_core::crdt::CrdtName;
 use ambre_core::index::Span;
 use std::collections::HashMap;
 
-use ambre_bus::{
-    ActivityKind, Authored, Instant, Mention, MentionTarget, Mentions, MessageAt, MessageDraft,
-    MessageView, MurmureEvent,
-};
+use crate::message::{Mention, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent};
+use ambre_bus::{ActivityKind, Authored, Instant, Mentions};
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Relay, Seq, SnapshotBytes};
 use loro::json::{JsonOpContent, MapOp};
@@ -128,12 +126,12 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
         Ok(ThreadTarget::Write(thread))
     );
     assert!(matches!(
-        state.reply(root, &draft("early"), alice, NOW, ambre_bus::ReplyEcho::ThreadOnly),
+        state.reply(root, &draft("early"), alice, NOW, crate::message::ReplyEcho::ThreadOnly),
         Err(MurmureError::NoSession(id)) if id == thread
     ));
     let other = message_at(&state, 1).id;
     assert!(matches!(
-        state.reply(other, &draft("lost"), alice, NOW, ambre_bus::ReplyEcho::ThreadOnly),
+        state.reply(other, &draft("lost"), alice, NOW, crate::message::ReplyEcho::ThreadOnly),
         Err(MurmureError::NoThread(id)) if id == other
     ));
     assert!(matches!(
@@ -162,7 +160,7 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
                 &draft(text),
                 alice,
                 NOW,
-                ambre_bus::ReplyEcho::ThreadOnly,
+                crate::message::ReplyEcho::ThreadOnly,
             )
             .expect("reply");
         assert_eq!(replied.reply.document, thread);
@@ -191,6 +189,10 @@ fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
     let ThreadTarget::Create(own) = state.reply_target(other, NOW).expect("target") else {
         panic!("created");
     };
+    assert!(
+        !state.thread_failed(other, Id::<Document>::mint()),
+        "another thread keeps this one"
+    );
     assert!(state.thread_failed(other, own));
     assert!(!state.thread_failed(other, own), "already dropped");
     let segment = state.active_id();
@@ -231,7 +233,7 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
             &draft("first"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let replied = state
@@ -240,7 +242,7 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
             &draft("second"),
             bob,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let MurmureEvent::Messages { messages, .. } = &replied.head else {
@@ -368,7 +370,7 @@ fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
             &draft("also here"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::AlsoInChannel,
+            crate::message::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
     let copy = replied.copy.expect("a copy");
@@ -379,6 +381,36 @@ fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
         ("also here", Some(thread))
     );
     assert_eq!(message_at(&state, 0).also_in_thread, None);
+}
+
+/// Before the PeerID of the active segment lands, a reply to the thread
+/// alone leaves. A reply also sent to the channel waits for that PeerID
+/// (`MURMURE-109`).
+#[test]
+fn a_reply_to_its_thread_alone_needs_no_active_session() {
+    let alice = Id::<User>::mint();
+    let mut state = channel_with(&["root"], alice);
+    let root = message_at(&state, 0).id;
+    let (thread, _, _) = threaded(&mut state, root);
+    let successor = Id::<Segment>::mint();
+    state
+        .close_into(state.active_id(), successor, crate::Successor::Created, NOW)
+        .expect("close");
+    assert!(matches!(
+        state.reply(root, &draft("both"), alice, NOW, crate::message::ReplyEcho::AlsoInChannel),
+        Err(MurmureError::NoSession(id)) if id == successor.document_id()
+    ));
+    let replied = state
+        .reply(
+            root,
+            &draft("alone"),
+            alice,
+            NOW,
+            crate::message::ReplyEcho::ThreadOnly,
+        )
+        .expect("the thread has its session");
+    assert_eq!(replied.reply.document, thread);
+    assert!(replied.copy.is_none());
 }
 
 // --- MURMURE-538 ---
@@ -397,7 +429,7 @@ fn a_copy_is_found_from_its_reply() {
             &draft("also here"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::AlsoInChannel,
+            crate::message::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
     state
@@ -406,7 +438,7 @@ fn a_copy_is_found_from_its_reply() {
             &draft("here alone"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let Some(MurmureEvent::ThreadMessages { messages, .. }) = state.thread_view(thread) else {
@@ -500,7 +532,7 @@ fn a_reply_takes_no_thread_field_from_another_member() {
             &draft("reply"),
             alice_user,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let mut bob = peer_of(&alice);
@@ -604,7 +636,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
             &draft("hi"),
             alice,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let reply = replies_of(&state, thread)[0].id;
@@ -622,7 +654,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     let read = &replies_of(&state, thread)[0];
     assert_eq!(
         (read.text.as_str(), read.edited),
-        ("hello", ambre_bus::Revision::Edited)
+        ("hello", crate::message::Revision::Edited)
     );
     let reacted = state
         .react(at, reply, &ambre_bus::Emoji::from("\u{1F44D}"), alice, NOW)
@@ -641,7 +673,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     assert!(in_thread(&deleted));
     assert_eq!(
         replies_of(&state, thread)[0].deleted,
-        ambre_bus::Deletion::Deleted
+        crate::message::Deletion::Deleted
     );
     let Some(MurmureEvent::Messages { messages, .. }) = state.root_view(root) else {
         panic!("the root's segment");
@@ -687,7 +719,7 @@ fn another_member_reacts_to_a_reply_and_never_edits_it() {
             &draft("hi"),
             alice_user,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let mut bob = peer_with_thread(&alice, thread, &[&first, &replied.reply.delta], alice_user);
@@ -756,7 +788,7 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
             &draft("hi"),
             alice_user,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     let events = bob
@@ -826,7 +858,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
             &mentioning,
             bob,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     state
@@ -835,7 +867,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
             &draft("plain"),
             bob,
             NOW,
-            ambre_bus::ReplyEcho::ThreadOnly,
+            crate::message::ReplyEcho::ThreadOnly,
         )
         .expect("reply");
     // The relay numbers the mention with its echo.
@@ -922,6 +954,7 @@ fn the_reply_on_a_far_copy_loads_down_to_its_root() {
     let (thread, first, _) = threaded(&mut alice, root);
     let old = alice.active_id();
     assert_eq!(alice.seek_root(thread), None, "the root is held");
+    assert!(!alice.is_probe(thread), "a held thread is no probe");
     let found = SeekStep::Found {
         thread,
         segment: old,
@@ -944,12 +977,14 @@ fn the_reply_on_a_far_copy_loads_down_to_its_root() {
     .expect("waits");
     assert_eq!(bob.probe_ready(thread), Ok(()));
     assert!(!bob.holds(thread), "the probe is dropped");
+    assert!(!bob.is_probe(thread));
     assert_eq!(bob.seek_step(), Some(SeekStep::Load(middle)));
     assert_eq!(bob.seek_step(), Some(SeekStep::Wait), "one at a time");
     load(&mut bob, middle, &empty_segment(alice.channel_id()));
     assert_eq!(bob.seek_step(), Some(SeekStep::Load(old)));
     let bytes = alice.snapshot(old.document_id()).expect("bytes");
     load(&mut bob, old, &bytes);
+    assert_eq!(bob.seek_root(thread), None, "the root is held now");
     assert_eq!(bob.seek_step(), Some(found));
     assert_eq!(bob.seek_step(), None, "a found root ends the seek");
     assert_eq!(bob.threads_to_open(), [thread], "the thread opens anew");
@@ -1010,6 +1045,23 @@ fn a_seek_ends_on_what_it_cannot_follow() {
         empty.probe_ready(thread),
         Err(MurmureError::NotHeld(thread))
     );
+}
+
+/// A probe of another thread that fails leaves the seek waiting on its own
+/// probe (`MURMURE-547`).
+#[test]
+fn a_failed_probe_of_another_thread_leaves_the_seek_waiting() {
+    let alice_user = Id::<User>::mint();
+    let mut alice = channel_with(&["root"], alice_user);
+    let root = message_at(&alice, 0).id;
+    let (thread, _, _) = threaded(&mut alice, root);
+    let old = alice.active_id();
+    let (mut bob, _) = far_copy(&alice, Some(old));
+    let other = Id::<Document>::mint();
+    assert_eq!(bob.seek_root(other), Some(other));
+    assert_eq!(bob.seek_root(thread), Some(thread));
+    assert!(bob.cancel_older(other));
+    assert_eq!(bob.seek_step(), Some(SeekStep::Wait));
 }
 
 // --- AUTHOR-026 ---

@@ -7,7 +7,8 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{Authored, Instant, Mentions, MurmureEvent, Relay, Seq};
+use ambre_bus::{Authored, Instant, Mentions, Relay, Seq};
+use ambre_murmure::message::MurmureEvent;
 use ambre_murmure::{ChannelState, Replied};
 
 impl LogicState {

@@ -407,7 +407,7 @@ impl ProseUiState {
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use crate::layout::run::RunChar;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::id::{self, Comment, Id, User};
     use ambre_core::index::{Pos, Span};
     use ambre_core::{Doc, Point, Px, View};

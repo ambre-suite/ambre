@@ -15,8 +15,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use ambre_bus::conduit::Sender;
-use ambre_bus::{DocType, LogicCommand, RowPlace, SealedRow};
+use ambre_bus::{DocType, RowPlace, SealedRow};
 use ambre_core::id::{Document, Id};
+use ambre_logic::app::LogicCommand;
 use ambre_logic::persistence::{PersistenceStore, Stored};
 use ambre_logic::seal_queue::SealQueue;
 use ambre_logic::store_ledger::{QuotaAttempt, Refusal, RowChange, StoreLedger};

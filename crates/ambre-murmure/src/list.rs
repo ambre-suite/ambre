@@ -9,10 +9,12 @@ use ambre_core::Count;
 use ambre_core::index::{Axis, IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use ambre_bus::{
-    Attachment, Authored, Deletion, Instant, LogicCommand, MessageView, MurmureCommand,
-    MurmureEvent, Notice, Reaction, Revision, TextStyle, UiEvent, Unreadable,
+use crate::message::{
+    Attachment, Deletion, MessageView, MurmureCommand, MurmureEvent, Notice, Reaction, Revision,
+    TextStyle, Unreadable,
 };
+use crate::message::{LogicCommand, UiEvent};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{self, Channel, Document, Id, Message, User};
 use ambre_core::{Byte, Char, Px, View};
 
@@ -427,7 +429,7 @@ impl<'a> Row<'a> {
         };
         let replies = message
             .thread
-            .filter(|t| t.replies > ambre_core::Count::<ambre_bus::Replies>::ZERO)
+            .filter(|t| t.replies > ambre_core::Count::<crate::message::Replies>::ZERO)
             .map(|t| match t.replies.get() {
                 1 => "1 reply".to_owned(),
                 n => format!("{n} replies"),
@@ -891,7 +893,7 @@ impl ReadMarks {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use ambre_bus::ThreadHead;
+    use crate::message::ThreadHead;
 
     use super::*;
     use ambre_core::{Authored, Instant};
@@ -908,8 +910,8 @@ pub(crate) mod tests {
             attachments: Vec::new(),
             reactions: Vec::new(),
             notice: None,
-            edited: ambre_bus::Revision::Original,
-            deleted: ambre_bus::Deletion::Live,
+            edited: crate::message::Revision::Original,
+            deleted: crate::message::Deletion::Live,
             thread: None,
             also_in_thread: None,
         }
@@ -1157,7 +1159,7 @@ pub(crate) mod tests {
     #[test]
     fn a_deleted_message_shows_a_muted_line() {
         let mut gone = message(Id::<User>::mint(), Instant::<Authored>::new(7), "");
-        gone.deleted = ambre_bus::Deletion::Deleted;
+        gone.deleted = crate::message::Deletion::Deleted;
         let row = words(&gone, true);
         assert_eq!(row.body, DELETED);
         assert_eq!(row.ink, BodyInk::Muted);
@@ -1175,7 +1177,7 @@ pub(crate) mod tests {
     #[test]
     fn an_edited_message_carries_the_marker() {
         let mut edited = message(Id::<User>::mint(), Instant::<Authored>::new(0), "fixed");
-        edited.edited = ambre_bus::Revision::Edited;
+        edited.edited = crate::message::Revision::Edited;
         assert_eq!(words(&edited, false).body, format!("fixed {EDITED}"));
         let plain = words(
             &message(Id::<User>::mint(), Instant::<Authored>::new(0), "plain"),
@@ -1201,7 +1203,7 @@ pub(crate) mod tests {
         assert_eq!(row.announcement(name_of, time_of), "Ada, t7: hello");
         grouped.thread = Some(ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_core::Count::<ambre_bus::Replies>::new(2),
+            replies: ambre_core::Count::<crate::message::Replies>::new(2),
             last_replier: None,
         });
         let row = Row::Message {
@@ -1255,7 +1257,7 @@ pub(crate) mod tests {
         let mut root = message(Id::<User>::mint(), Instant::<Authored>::new(0), "root");
         let head = |replies| ThreadHead {
             document: Id::<Document>::mint(),
-            replies: ambre_core::Count::<ambre_bus::Replies>::new(replies),
+            replies: ambre_core::Count::<crate::message::Replies>::new(replies),
             last_replier: None,
         };
         root.thread = Some(head(0));

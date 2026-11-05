@@ -111,7 +111,7 @@ than over its own contents. The rule and its cost are
 * `crates/ambre-toile/src/logic/state/elements.rs` -- the reorder handler;
 * `logic/state/caches.rs` -- the materialization, the de-duplication and the removal rewrite;
 * `logic/state/derive.rs` -- the walk that turns the order into what the UI paints;
-* `crates/ambre-bus/src/app/toile.rs` -- the entry encoding and its decoder.
+* `crates/ambre-toile/src/message/mod.rs` -- the entry encoding and its decoder.
 
 ---
 

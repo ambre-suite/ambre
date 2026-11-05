@@ -19,8 +19,8 @@
 //! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
 //! is the reading belt's, in `schema_reading.rs`, over this same scenario.
 
-use ambre_bus::app::prose::DocChar;
-use ambre_bus::app::prose::MarkKey;
+use crate::message::DocChar;
+use crate::message::MarkKey;
 use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::BTreeSet;
@@ -346,7 +346,7 @@ pub(super) fn document_of_every_key() -> ProseState {
     });
     state.handle_command(ProseCommand::SetBlockStyle {
         block_id: root,
-        style_id: ambre_bus::app::prose::StyleId::new("Body".to_owned()),
+        style_id: crate::message::StyleId::new("Body".to_owned()),
     });
     state.handle_command(ProseCommand::SetParagraphStyle {
         block_id: root,
@@ -376,7 +376,7 @@ pub(super) fn document_of_every_key() -> ProseState {
             style: ListStyle::Todo(crate::events::TodoMark::Done),
         },
         BlockInit::CodeBlock {
-            lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
+            lang: ambre_core::Validated::<crate::message::CodeLang>::parse("rust").ok(),
         },
         BlockInit::HRule,
         BlockInit::PageBreak,

@@ -12,7 +12,7 @@ use crate::events::{
 };
 use crate::logic::ProseState;
 use crate::logic::tables::tests::{cell_at, document_with_table, texts, type_in};
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::index::{Delta, Pos, Span};
 use ambre_core::{PrintLength, Pt};
 
@@ -229,7 +229,7 @@ fn a_converged_document_holds_only_the_parentages_the_format_declares() {
             parent_id: None,
             after_id: Some(first),
             init: BlockInit::CodeBlock {
-                lang: ambre_core::Validated::<ambre_bus::app::prose::CodeLang>::parse("rust").ok(),
+                lang: ambre_core::Validated::<crate::message::CodeLang>::parse("rust").ok(),
             },
             style_id: None,
         })

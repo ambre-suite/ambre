@@ -26,15 +26,16 @@ use crate::formula::text::{DisplayForm, SourceForm, StoredForm};
 use crate::formula::types::CellValue;
 use crate::formula::types::Expr;
 use crate::formula::{AxisId, CellId, EngineSheet, FormulaCtx, FormulaEngine, NameTarget, render};
+use crate::message::{
+    BorderPreset, CellBorder, CellFormat, CellStyle, CellValueKind, ClipboardCell,
+    ClipboardPayload, Decimals, FilterKind, FilterOp, Merge, RowFilter, SelectionKind, SheetName,
+    SheetNameKey, SheetTab, SortKey, StylePatch, TabStrip,
+};
+pub(crate) use crate::message::{HeaderRow, SortOrder};
 use crate::model::{CellKey, Line, SheetIndex, Uid, parse_cell_key};
 use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
-use ambre_bus::{
-    BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, CellValueKind,
-    ClipboardCell, ClipboardPayload, Col, Decimals, FilterKind, FilterOp, Merge, MergeSpan, Row,
-    RowFilter, SelectionKind, SheetName, SheetNameKey, SheetTab, Slant, SortKey, StylePatch,
-    TabStrip, Weight,
-};
-pub(crate) use ambre_bus::{HeaderRow, SortOrder};
+use ambre_bus::{CellPos, CellRect, Col, MergeSpan, Row};
+use ambre_core::{Slant, Weight};
 pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
 // -----------------------------------------------------------------------------

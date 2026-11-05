@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 /// per-attribute blend.
 #[derive(Serialize, Deserialize, Default)]
 pub(super) struct StyleRecord {
-    pub(super) bold: ambre_bus::Weight,
-    pub(super) italic: ambre_bus::Slant,
+    pub(super) bold: ambre_core::Weight,
+    pub(super) italic: ambre_core::Slant,
     pub(super) style: CellStyle,
 }
 
@@ -36,8 +36,8 @@ impl TrameState {
     /// intervening ops out of the broadcast delta (mirrors [`write_cell`]).
     pub(super) fn write_cell_style(&mut self, pos: CellPos) -> Option<()> {
         let record = StyleRecord {
-            bold: ambre_bus::Weight::from_bool(self.bold.contains(&pos)),
-            italic: ambre_bus::Slant::from_bool(self.italic.contains(&pos)),
+            bold: ambre_core::Weight::from_bool(self.bold.contains(&pos)),
+            italic: ambre_core::Slant::from_bool(self.italic.contains(&pos)),
             style: self.styles.get(&pos).cloned().unwrap_or_default(),
         };
         // Styling a cell pins an identity to it, so it must be materialized just
@@ -47,8 +47,8 @@ impl TrameState {
         let map = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::CellStyle, &self.active_sheet).as_str());
-        if record.bold == ambre_bus::Weight::Regular
-            && record.italic == ambre_bus::Slant::Upright
+        if record.bold == ambre_core::Weight::Regular
+            && record.italic == ambre_core::Slant::Upright
             && record.style == CellStyle::default()
         {
             let _ = map.delete(key.as_str());
@@ -80,8 +80,7 @@ impl TrameState {
         // A size outside the cell range is refused whole, as a spreadsheet
         // refuses a typed one (`CANVAS-088`).
         if let Some(Some(size)) = patch.size
-            && !(ambre_bus::app::trame::CELL_FONT_SIZE_MIN
-                ..=ambre_bus::app::trame::CELL_FONT_SIZE_MAX)
+            && !(crate::message::CELL_FONT_SIZE_MIN..=crate::message::CELL_FONT_SIZE_MAX)
                 .contains(&size)
         {
             return TrameOutcome::display_only(vec![TrameEvent::Error {

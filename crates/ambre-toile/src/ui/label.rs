@@ -11,7 +11,7 @@
 // Pure geometry -- host-tested, no `cfg(wasm32)`, no GPU.
 // ============================================================================
 
-use ambre_bus::app::toile::DisplayNode;
+use crate::message::DisplayNode;
 use ambre_core::id::{Connector, Id};
 use ambre_core::{Board, Px};
 use ambre_draw::{BezPath, Point, Rect};
@@ -98,7 +98,7 @@ pub fn connector_at(
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::toile::{DisplayConnector, ElementStyle, EndCaps};
+    use crate::message::{DisplayConnector, ElementStyle, EndCaps};
 
     use super::*;
     use crate::ui::viewport::ViewportTransform;
@@ -122,8 +122,8 @@ mod tests {
             path,
             style: ElementStyle::default(),
             arrows: EndCaps {
-                start: ambre_bus::app::toile::Cap::Plain,
-                end: ambre_bus::app::toile::Cap::Arrow,
+                start: crate::message::Cap::Plain,
+                end: crate::message::Cap::Arrow,
             },
             label: label.to_owned(),
         })

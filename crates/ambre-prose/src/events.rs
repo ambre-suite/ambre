@@ -1,17 +1,15 @@
 //! Prose's IPC contract, and the one engine-local value that is not part of it.
 //!
-//! The command and event types live in `ambre-bus` (`ambre_bus::app::prose`) so
-//! the `ambre-logic` dispatcher can match on `(DocState, AppCommand::Prose)`
-//! without a dependency cycle. This module re-exports them, keeping the
-//! engine's `crate::events::...` paths, and adds [`ProseOutcome`].
+//! The command and event types live in [`crate::message`]. This module
+//! re-exports them, keeping the engine's `crate::events::...` paths, and adds
+//! [`ProseOutcome`].
 //!
 //! [`ProseOutcome`] stays here, like `ToileOutcome` and `TrameOutcome` stay in
 //! their own crates. It carries raw CRDT and ephemeral bytes; the `ambre-logic`
 //! dispatcher wraps them into `SyncCommand`s under the owning `Id<Document>`,
 //! which the engine does not hold (`PROSE-024`).
 
-pub use ambre_bus::app::grid;
-pub use ambre_bus::app::prose::{
+pub use crate::message::{
     ActiveMarks, Align, AnchorState, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
     ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition, DateFieldFormat,
     EditMode, FindMatch, FindOptions, FirstPage, FootnoteCall, FootnoteEntry, Graphemes,
@@ -22,6 +20,7 @@ pub use ambre_bus::app::prose::{
     SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering,
     TodoMark, TriState, VAlign, WordCount, Words,
 };
+pub use ambre_bus::app::grid;
 
 use ambre_core::{CommandNames, StaticKey};
 use loro::TreeID;

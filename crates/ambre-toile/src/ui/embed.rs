@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::toile::{
+use crate::message::{
     DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementKind, InitContent,
     InputFocus, ToileCommand, WebAddress,
 };
@@ -585,7 +585,7 @@ pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayEleme
             _ => None,
         })
         .find(|e| {
-            e.locked == ambre_bus::app::toile::LockState::Unlocked
+            e.locked == crate::message::LockState::Unlocked
                 && e.bounds.contains(e.transform.inverse() * world)
         })
 }
@@ -597,7 +597,7 @@ pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayEleme
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{ElementKind, ElementStyle, Viewport};
+    use crate::message::{ElementKind, ElementStyle, Viewport};
     use ambre_core::{Board, Px};
     use ambre_core::{Instant, PageLoad};
     use ambre_draw::{Affine, Vec2};
@@ -620,13 +620,13 @@ mod tests {
                 * Affine::rotate(rot)
                 * Affine::translate(-bounds.center().to_vec2()),
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::DocEmbed {
                 document_id,
                 doc_type: DocType::Trame,
                 // Never true off the CRDT: focus is view-local.
-                focused: ambre_bus::app::toile::InputFocus::Board,
+                focused: crate::message::InputFocus::Board,
             },
             link: None,
             group: None,
@@ -793,8 +793,8 @@ mod tests {
         ]);
         let out = visible_embeds(&dv, &cam, Some(&Id::<Element>::from_text("e2".into())));
         assert_eq!(out.len(), 2);
-        assert_eq!(out[0].focused, ambre_bus::app::toile::InputFocus::Board);
-        assert_eq!(out[1].focused, ambre_bus::app::toile::InputFocus::Entered);
+        assert_eq!(out[0].focused, crate::message::InputFocus::Board);
+        assert_eq!(out[1].focused, crate::message::InputFocus::Entered);
         // The published id is the CHILD's, not the board element's: it is the key
         // into FrameHost's child views and the id the child's commands carry.
         assert_eq!(out[1].document_id, b);
@@ -813,7 +813,7 @@ mod tests {
         let (a, b) = (Id::<Document>::mint(), Id::<Document>::mint());
         let over = Rect::new(0.0, 0.0, 50.0, 50.0);
         let mut locked = doc_embed("e3", Id::<Document>::mint(), over, 0.0);
-        locked.locked = ambre_bus::app::toile::LockState::Locked;
+        locked.locked = crate::message::LockState::Locked;
 
         // Two overlapping embeds: the later node is on top (`derive.rs` walks
         // z-order back to front).
@@ -1223,7 +1223,7 @@ mod tests {
 #[cfg(test)]
 mod address_tests {
     use super::{Validated, WebAddress};
-    use ambre_bus::app::toile::AddressError;
+    use crate::message::AddressError;
 
     /// A host typed on its own is the common case, and it is https.
     #[test]
@@ -1365,7 +1365,7 @@ mod address_tests {
 
 #[cfg(test)]
 mod web_embed_tests {
-    use ambre_bus::app::toile::{DisplayGeom, DisplayNode};
+    use crate::message::{DisplayGeom, DisplayNode};
     use ambre_core::id::{Document, Id};
     use ambre_draw::{Rect, Size};
 
@@ -1568,9 +1568,9 @@ mod routing_tests {
 #[cfg(test)]
 mod placement_tests {
     use super::{DEFAULT_EMBED_SIZE, EmbedTarget, PlacedEmbed, placement};
+    use crate::message::{ElementKind, InitContent, ToileCommand};
     use crate::ui::viewport::ViewportTransform;
     use ambre_bus::DocType;
-    use ambre_bus::app::toile::{ElementKind, InitContent, ToileCommand};
     use ambre_core::id::{Document, Id};
     use ambre_draw::{Point, Size};
 

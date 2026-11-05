@@ -239,7 +239,7 @@ compares them at a generated camera that culls (`TOILE-206`). A removal descends
 ### D. The seam
 
 A command goes down, an outcome comes up. Each command and each event is declared by the feature
-that owns it, in `ambre-bus::app::toile`, where the code is authoritative.
+that owns it, in `ambre-toile::message`, where the code is authoritative.
 
 ```rust
 /// What a handler returns. The `ambre-logic` dispatcher is the only place that

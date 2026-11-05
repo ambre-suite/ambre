@@ -12,7 +12,7 @@
 // result shows the mistake.
 
 use crate::formula::text::LiteralText;
-use ambre_bus::DateParts;
+use crate::message::DateParts;
 use ambre_core::{Instant, SheetDateTime};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.

@@ -6,8 +6,8 @@
 //! that paints (`PROSE-UI-006`, `PROSE-UI-114`). A run holds no GPU handle
 //! and nothing bound to a thread, so it crosses by move (`PROSE-UI-113`).
 
+use crate::message::{DocChar, Page};
 use ambre_bus::app::grid::Row;
-use ambre_bus::app::prose::{DocChar, Page};
 use ambre_core::Rgba;
 use ambre_core::index::{Axis, Delta, IdxVec, Len, MapsTo, MeasuresAs, Pos, Span};
 use std::collections::HashMap;
@@ -1298,7 +1298,7 @@ pub struct CellStyle {
     pub border: Option<CellBorderPx>,
     /// The inset on each of the four sides.
     pub padding: Px<Doc>,
-    pub valign: ambre_bus::app::prose::VAlign,
+    pub valign: crate::message::VAlign,
 }
 
 impl Default for CellStyle {
@@ -1307,7 +1307,7 @@ impl Default for CellStyle {
             fill: None,
             border: None,
             padding: Px::<Doc>::ZERO,
-            valign: ambre_bus::app::prose::VAlign::Top,
+            valign: crate::message::VAlign::Top,
         }
     }
 }
@@ -1340,7 +1340,7 @@ mod tests {
     use crate::doc;
     use crate::layout::measure::{EffectiveStyle, shipped_measurer};
     use crate::layout::run::RunChar;
-    use ambre_bus::app::prose::ParagraphStyle;
+    use crate::message::ParagraphStyle;
     use ambre_core::index::{Pos, Span};
     use ambre_core::{Doc, Point, Px};
 

@@ -102,11 +102,9 @@ dependencies = [
  "ambre-core",
  "atomic-waker",
  "crossbeam-queue",
- "kurbo",
  "postcard",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -311,6 +309,7 @@ dependencies = [
  "proptest",
  "pulldown-cmark",
  "serde",
+ "thiserror 2.0.18",
  "tracing",
  "unicode-segmentation",
  "wasm-bindgen-test",
@@ -461,6 +460,8 @@ dependencies = [
  "postcard",
  "proptest",
  "serde",
+ "serde_json",
+ "thiserror 2.0.18",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",

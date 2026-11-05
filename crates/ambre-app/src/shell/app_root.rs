@@ -38,7 +38,7 @@ pub(crate) fn MurmureShell(
     /// The pane, the sidebar, and the channels this page opened.
     relay: MurmureRelay,
     /// Carries what the channel list asks of the Logic thread.
-    send: Callback<LogicCommand>,
+    send: Callback<ambre_murmure::message::LogicCommand>,
     /// The shared header.
     children: ChildrenFn,
 ) -> impl IntoView {

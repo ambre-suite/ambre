@@ -10,7 +10,8 @@
 //! sequenced comes back as a replay, so nothing is dropped (`MURMURE-077`).
 //! The engine reads no clock: each delay is stamped by the next tick.
 
-use ambre_bus::{Authored, FoldAnswer, Instant, MessageView, MurmureEvent, SnapshotVerdict};
+use crate::message::{MessageView, MurmureEvent};
+use ambre_bus::{Authored, FoldAnswer, Instant, SnapshotVerdict};
 use ambre_core::id::{Channel, Document, Id, Lease, Segment};
 use ambre_core::{Count, DeltaBytes, Failures, Ms, Payload, Relay, Seq, SnapshotBytes, TimeSpan};
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};

@@ -19,7 +19,8 @@ use ambre_core::{Payload, SnapshotBytes, Version};
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::{CellRect, Col, FilterKind, Row};
+use crate::message::FilterKind;
+use ambre_bus::{CellRect, Col, Row};
 use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
     migration_peer, verdict,
@@ -528,7 +529,7 @@ mod tests {
     #[test]
     fn a_workbook_from_a_newer_client_is_refused_and_changes_nothing() {
         let mut st = TrameState::new();
-        st.handle_command(ambre_bus::TrameCommand::SetCellText {
+        st.handle_command(crate::message::TrameCommand::SetCellText {
             row: Pos::<Row>::new(0),
             col: Pos::<Col>::new(0),
             text: "kept".to_owned(),
@@ -558,7 +559,7 @@ mod tests {
     /// read a workbook that looks intact and is not.
     #[test]
     fn a_register_that_cannot_be_decoded_reaches_the_user() {
-        use ambre_bus::{TrameCommand, TrameEvent};
+        use crate::message::{TrameCommand, TrameEvent};
 
         // A real styled cell first, so the register sits under the cell key the
         // reseed resolves through its own index. The reseed skips an invented
@@ -574,7 +575,7 @@ mod tests {
         });
         source.handle_command(TrameCommand::SetCellStyle {
             patch: crate::StylePatch {
-                bold: Some(ambre_bus::Weight::Bold),
+                bold: Some(ambre_core::Weight::Bold),
                 ..Default::default()
             },
         });
@@ -621,7 +622,7 @@ mod tests {
         assert!(
             !events
                 .iter()
-                .any(|e| matches!(e, ambre_bus::TrameEvent::UndecodableRecords))
+                .any(|e| matches!(e, crate::message::TrameEvent::UndecodableRecords))
         );
     }
 

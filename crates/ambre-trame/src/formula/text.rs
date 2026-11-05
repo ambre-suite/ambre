@@ -3,7 +3,7 @@
 //! form; this module keeps their engine path. It also holds the case fold
 //! that every comparison ignoring case reads.
 
-pub use ambre_bus::app::trame::{CellText, DisplayForm, SourceForm, StoredForm};
+pub use crate::message::{CellText, DisplayForm, SourceForm, StoredForm};
 
 /// The text of a literal a user typed: a string in a formula, or the printed
 /// part of a number format. It is document content, so its Debug form is its

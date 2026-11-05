@@ -2,10 +2,9 @@
 //! (`features/ambre-spec-murmure-messages.md`).
 
 use crate::Receipt;
+use crate::message::{Mention, MentionTarget, MessageDraft, MessageView, Reaction};
 use ambre_bus::Char;
-use ambre_bus::{
-    ActivityKind, Authored, Instant, Mention, MentionTarget, MessageDraft, MessageView, Reaction,
-};
+use ambre_bus::{ActivityKind, Authored, Instant};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::index::Span;
 use ambre_core::{Relay, Seq};
@@ -141,7 +140,10 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
             range: Span::<Char>::from_usize_range(0..6),
         }],
     });
-    assert_eq!(alice.only_message().edited, ambre_bus::Revision::Original);
+    assert_eq!(
+        alice.only_message().edited,
+        crate::message::Revision::Original
+    );
     let draft = MessageDraft {
         text: "lunch at noon, @dave?".to_owned(),
         styles: Vec::new(),
@@ -169,8 +171,8 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
             (
                 "lunch at noon, @dave?",
                 &draft.mentions,
-                ambre_bus::Revision::Edited,
-                ambre_bus::Deletion::Live
+                crate::message::Revision::Edited,
+                crate::message::Deletion::Live
             )
         );
     }
@@ -260,7 +262,7 @@ fn an_edit_and_a_concurrent_reaction_both_hold() {
             (before.id, before.author, before.ts, "lunch at noon?")
         );
         assert_eq!(shown.reactions, vec![reaction.clone()]);
-        assert_eq!(shown.edited, ambre_bus::Revision::Edited);
+        assert_eq!(shown.edited, crate::message::Revision::Edited);
     }
 }
 
@@ -283,7 +285,7 @@ fn a_delete_empties_the_body_and_marks_the_message_deleted() {
         let shown = member.only_message();
         assert_eq!(
             (shown.text.as_str(), shown.deleted),
-            ("", ambre_bus::Deletion::Deleted)
+            ("", crate::message::Deletion::Deleted)
         );
     }
     let segment = alice.segment();
@@ -363,7 +365,7 @@ fn a_delete_keeps_the_thread_and_the_reactions() {
             Some(thread.as_str())
         );
         let shown = member.only_message();
-        assert_eq!(shown.deleted, ambre_bus::Deletion::Deleted);
+        assert_eq!(shown.deleted, crate::message::Deletion::Deleted);
         assert_eq!(shown.reactions.len(), 1, "the reaction stays");
     }
 }

@@ -12,10 +12,10 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::app::toile::{Broadcast, DeckFrame, DeckView, PresentMode, Slide, SlidePosition};
 use ambre_core::id::{Frame, Id};
 use ambre_core::index::{Len, Pos};
 use ambre_toile::chrome::{DeckIntent, DeckPanel, PresenterIntent, PresenterPanel};
+use ambre_toile::message::{Broadcast, DeckFrame, DeckView, PresentMode, Slide, SlidePosition};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;

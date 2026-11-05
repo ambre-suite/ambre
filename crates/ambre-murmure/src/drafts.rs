@@ -16,7 +16,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_bus::{DraftKey, Mention, MentionTarget, MessageDraft, StyleMark, TextStyle};
+use crate::message::{Mention, MentionTarget, MessageDraft, StyleMark, TextStyle};
+use ambre_bus::DraftKey;
 use ambre_core::id::{Channel, Id, Message, User};
 use ambre_core::{Char, Opaque, OpaqueKind, OpaqueLength, SealedAtRest, Seq, SeqKind};
 use serde::{Deserialize, Serialize};

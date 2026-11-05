@@ -712,12 +712,12 @@ impl FrameHost {
 mod tests {
     use super::{paint_children, reconcile_children, remap_with, send_faces};
     use ambre_bus::DocType;
-    use ambre_bus::LogicCommand;
     use ambre_canvas::InputEvent;
     use ambre_chrome::commands::{Key, KeyChar, ModifierKeys};
     use ambre_core::id::{Document, Element, Id};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Affine, Color, DrawSurface, Point, Rect, Size};
+    use ambre_logic::app::LogicCommand;
     use ambre_toile::ui::embed::VisibleEmbed;
     use std::collections::HashMap;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -730,7 +730,7 @@ mod tests {
             screen_rect: Rect::new(10.0, 20.0, 110.0, 80.0),
             child_size: Size::new(100.0, 60.0),
             to_screen,
-            focused: ambre_bus::app::toile::InputFocus::Board,
+            focused: ambre_toile::message::InputFocus::Board,
         }
     }
 

@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-001` | `INV` | The document CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | structural -- `ambre_prose::logic::ProseState::export_snapshot` and the outcome's two byte fields are the only ways out, and no public signature of the engine names a `LoroDoc`; crate-graph -- `ambre-bus` carries the plane and no document handle | none | verified |
+| `PROSE-001` | `INV` | The document CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | structural -- `ambre_prose::logic::ProseState::export_snapshot` and the outcome's two byte fields are the only ways out, and no public signature of the engine names a `LoroDoc`; crate-graph -- `ambre-bus` carries the envelopes and depends on no `loro`; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path into `loro` or a Loro type but the payload bytes in `ambre_prose::message` above its tests | none | verified |
 | `PROSE-003` | `INV` | Exported deltas MUST be treated as opaque bytes: `ambre-prose` MUST NOT inspect them after serialization. | this spec section 3 | structural -- `ambre_prose::logic::ProseState::flush_delta` reads the exported bytes for emptiness alone, and hands the same buffer to the event and to the outcome | none | verified |
 | `PROSE-024` | `INV` | A command handler MUST NOT send on a queue: it returns an outcome, and the Logic dispatcher fans it out. | this spec section 3; `ambre-spec-message-bus.md` | structural -- `ambre_prose::logic::ProseState` declares no sender and no `SyncCommand`, and every handler answers a `ProseOutcome`; crate-graph -- `ambre-prose` reaches no queue to Sync | none | verified |
 | `PROSE-025` | `INV` | `ambre-prose` MUST NOT contact the network. | this spec section 3 | crate-graph -- `crates/ambre-prose/Cargo.toml` names no transport crate, so no call to one can be written | none | verified |
@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-045` | `PRE` | Every offset a command carries MUST address the body text of the block the command names. | this spec section 3 | `ambre_prose::logic::text::tests::an_offset_past_the_body_is_refused`; `ambre_prose::logic::marks::tests::an_empty_range_is_refused` | none | verified |
 | `PROSE-046` | `POST` | A command MUST answer with one outcome carrying every display event it produced, the delta it exported and the presence sample it built. | this spec section 3 | type-level -- `ambre_prose::events::ProseOutcome` is the one return type of `handle_command`, and it carries the three; `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
 | `PROSE-023` | `POST` | The confirmed-change event of a local command MUST carry the delta that command exported, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
-| `PROSE-105` | `POST` | A refusal MUST name the command that drew it. | this spec section 3 | `ambre_prose::logic::tests::a_refusal_names_the_command_it_refused`; `ambre_prose::logic::tests::two_commands_refused_for_one_reason_name_themselves_apart` -- the second refuses two commands for one reason and requires the two names to differ, so a refusal that named the reason alone fails it; `ambre_bus::app::prose::tests::each_refused_action_keeps_its_label` -- each refused action prints the words it printed as a string | none | verified |
+| `PROSE-105` | `POST` | A refusal MUST name the command that drew it. | this spec section 3 | `ambre_prose::logic::tests::a_refusal_names_the_command_it_refused`; `ambre_prose::logic::tests::two_commands_refused_for_one_reason_name_themselves_apart` -- the second refuses two commands for one reason and requires the two names to differ, so a refusal that named the reason alone fails it; `ambre_prose::message::tests::each_refused_action_keeps_its_label` -- each refused action prints the words it printed as a string | none | verified |
 | `PROSE-106` | `POST` | A refusal MUST carry its reason as a value the view can tell from every other reason. | this spec section 3 | `ambre_prose::logic::tests::a_mark_value_the_grammar_refuses_is_not_a_range_failure` -- it requires the mark-value refusal, which used to travel as the range failure, so a reason folded into a neighbour fails it | none | verified |
 | `PROSE-047` | `FRAME` | A command that does not mutate the document MUST NOT produce a delta. | this spec section 3 | `ambre_prose::logic::tests::a_command_that_changes_nothing_exports_no_delta`; `ambre_prose::logic::blocks::tests::a_paragraph_style_naming_no_property_writes_nothing` | none | verified |
 
@@ -168,9 +168,8 @@ pub fn expand_type_for(mark_key: &MarkKey) -> ExpandType;
 ```
 
 **The block on the plane is a [`BlockId`], never a `TreeID`.** It carries the same pair the tree
-mints -- the peer and the counter -- under a type that pulls no CRDT into `ambre-bus`. The Sync
-worker links that crate and must compile no CRDT (`SYNC-011`), which `deny.toml` holds. The engine
-converts at its own boundary, so the value is one identity and not two.
+mints -- the peer and the counter -- under a type that names no CRDT. The plane stays pure data.
+The engine converts at its own boundary, so the value is one identity and not two.
 
 **Dependencies** the engine pulls into `ambre-prose`:
 
@@ -179,12 +178,12 @@ converts at its own boundary, so the value is one identity and not two.
 | `loro` | the single-document CRDT | `LoroTree` for the block hierarchy, `LoroText` for a body, `LoroMap` for the registers, `UndoManager` for the local history |
 | `parley` | the typographic layout the Logic thread measures with | pagination needs line breaking and glyph metrics, not just the run types `DrawSurface` exposes, so the dependency is direct and not through `ambre-draw` |
 | `ambre-core` | the identity and document types | `Uuid`, `DocType`, reached through the `ambre-bus` re-export |
-| `ambre-bus` | the typed IPC shapes | the two planes of sections 3.B and 3.C, and the envelopes that carry them |
+| `ambre-bus` | the typed IPC envelopes | the envelopes that carry the two planes of sections 3.B and 3.C, which `ambre_prose::message` declares (`BUS-032`) |
 | `ambre-draw` | the `DrawSurface` trait and the geometry re-exports | one page-drawing path for the screen and for the exported page (`features/ambre-spec-prose-pdf-export.md`). The page painter draws through it, and a test drives it on the recording surface |
 | `ambre-bus` | the UI-to-Logic queue the view sends on, `ambre_bus::conduit` | shared memory between the two threads, so a command moves rather than serializes (`PROSE-UI-002`, `PROSE-UI-149`) |
 | `postcard` | the presence sample alone | the only Prose value serialized for the wire; a CRDT delta is already bytes |
 | `serde` | the derives that sample needs | on the wire types of section 3.D, and on nothing that travels between the two threads |
-| `thiserror` | the typed engine error | `ProseError` and `ProseRefusal` derive it, in `ambre-bus`, and the one error event of section 3.C carries them |
+| `thiserror` | the typed engine error | `ProseError` and `ProseRefusal` derive it, in `ambre_prose::message`, and the one error event of section 3.C carries them |
 
 **There is no dependency graph.** A block carries its own content and derives from no other block, so
 a write invalidates nothing but the layout of what it touched. That is the whole difference from a
@@ -328,7 +327,7 @@ pictures and the spell checker. Each of those arrives with the Story that builds
 list is `ambre-roadmap.md` E5.
 
 ```rust
-// ambre_bus::app::prose -- re-exported by `ambre-prose`. Move on a link, no serde.
+// ambre_prose::message -- the content plane. Move on a link, no serde.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProseCommand {
     Noop,
@@ -540,8 +539,7 @@ two places and leave the dispatch with a hole. `PROSE-UI-001` bans the second mo
 side.
 
 ```rust
-// ambre_bus::app::prose -- the content plane, re-exported by `ambre-prose`. Move on a link,
-// no serde.
+// ambre_prose::message -- the content plane. Move on a link, no serde.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProseEvent {
     // -- Engine --

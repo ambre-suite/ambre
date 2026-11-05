@@ -233,10 +233,7 @@ impl TrameView {
                 // dispatcher (`dispatch_trame`) decides the canvas-side reaction.
                 // The chrome side (toasts / toolbar / command store) consumes the
                 // same event in the per-frame relay; the two never overlap.
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(te),
-                    ..
-                }) => self.dispatch_trame(te),
+                Ok(UiEvent::Viewport { event, .. }) => self.dispatch_trame(event),
                 Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
                 // Other UiEvent variants (session, CRUD, channels...) are not yet
                 // consumed by the Trame view; ignore them for now.

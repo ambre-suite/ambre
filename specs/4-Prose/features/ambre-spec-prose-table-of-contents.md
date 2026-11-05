@@ -133,7 +133,7 @@ the settling as a bounded pass, never inline on the keystroke path: the rule is 
 the algorithm is `features/ambre-spec-prose-pagination.md section 2`. The engine runs it after
 `InsertToc` and `UpdateTocConfig`; a run after the author stops typing lands with the painter.
 
-**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

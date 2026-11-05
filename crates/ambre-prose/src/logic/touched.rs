@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use loro::TextDelta;
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, Index, LoroDoc, Subscription, TreeExternalDiff, TreeID, TreeParentId};

@@ -12,7 +12,7 @@ use ambre_core::{Doc, Point, Px, View};
 use ambre_draw::kinetic::EdgeSpeed;
 
 use crate::events::{BlockId, CursorPosition, block_id, tree_id};
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 
 use crate::layout::run::{Affinity, LineEdge, ParleyRunData, RunChar, RunLine};
 use crate::ui::ProseUiState;

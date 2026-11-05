@@ -20,7 +20,7 @@ use crate::events::{BlockId, Page, tree_id};
 use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
 use crate::layout::run::LayoutVersion;
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::{Byte, char_len, char_to_byte};
 use ambre_core::{Doc, Px};
 

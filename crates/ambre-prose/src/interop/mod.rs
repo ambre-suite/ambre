@@ -14,7 +14,7 @@
 pub mod markdown_read;
 pub mod markdown_write;
 
-use ambre_bus::app::prose::{
+use crate::message::{
     CodeLang, ConversionFormat, ConversionLosses, ConversionReport, ConversionWarning,
     DroppedElement, FootnoteCall, LiftedBlock, UnsupportedFeature,
 };

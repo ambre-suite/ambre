@@ -35,7 +35,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
-use ambre_bus::{DocType, LogicCommand, PasteSource};
+use ambre_bus::{DocType, PasteSource};
 use ambre_canvas::{
     ContentRepaint, DensityWatch, FATAL_BACKDROP, FrameStats, GpuState, InputEvent, Layer,
     LayerRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache, TextInput, Tick,
@@ -46,6 +46,7 @@ use ambre_chrome::commands::ClipboardWrite;
 use ambre_core::id::{Document, Element, Id};
 use ambre_core::{CanvasCss, Canvases, Device, Px, StaticKey, View};
 use ambre_draw::{Consumed, DrawSurface, Point, Rect, Size};
+use ambre_logic::app::LogicCommand;
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
 use ambre_trame::ui::TrameView;
@@ -108,7 +109,7 @@ pub(crate) enum ClipboardFormat {
     /// The `text/html` a view wrote for another editor.
     Html,
     /// Private type carrying the base64 postcard
-    /// [`ClipboardPayload`](ambre_bus::ClipboardPayload) for an internal
+    /// [`ClipboardPayload`](ambre_trame::message::ClipboardPayload) for an internal
     /// round-trip on the *synchronous* `copy`/`paste` events (Ctrl+C/Ctrl+V).
     /// Browsers that reject it fall back to `text/plain`.
     Ambre,

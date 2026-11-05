@@ -28,6 +28,7 @@ prefix is `ARCH`.
 | `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-logic/Cargo.toml` that declares `ambre-canvas`, `wgpu`, `leptos` or another render or toolkit crate; cargo-deny -- `deny.toml` grants `wgpu` to `ambre-canvas` and `ambre-app`, and the CI `deny` job fails any other crate that takes it | none | verified |
 | `ARCH-005` | `INV` | Every network call of the two instances MUST leave from the Sync worker. A macro sandbox calls on its own, held by the browser to the domains its user approved. | this spec section 2; `ZK-001`; `1-Foundations/ambre-spec-macros.md section 3` (`MACRO-010`) | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a transport crate declared, or a network call written, outside the worker and the relay. The launcher's two reads of `UI-THREAD-004` are its stated exception | none | verified |
 | `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a type of `ambre-protocol` redeclared in `ambre-sync` or `ambre-server` | none | verified |
+| `ARCH-070` | `INV` | The Sync worker MUST NOT depend on a crate that declares an application's content commands or events. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-021` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a Sync worker whose dependencies reach an application crate, and a command or event enum of `ambre-bus` other than the envelopes and the service family (`BUS-032`) | none | verified |
 | `ARCH-007` | `INV` | The Main thread MUST drain the Logic to Sync queue once per frame, before it draws. | this spec section 2 | `ambre_canvas::frame::tests::each_tick_relays_once_before_it_draws`; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a frame loop that does not run `pre_frame` as the relay of `drive_frame`, and a `pre_frame` that does not drain `logic_to_sync_rx` | none | verified |
 | `ARCH-010` | `INV` | The engine MUST be created once per session. | this spec section 2 | `ambre_app::route::tests::path_doc_roundtrip`; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a launcher that starts the Logic runtime other than once | none | verified |
 | `ARCH-016` | `INV` | The engine MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::a_route_walk_reuses_the_one_engine` -- each route change is a close, an open and a show; `::cross_kind_open_needs_reload` -- the one change allowed to end it | none | verified |
@@ -118,12 +119,12 @@ The user types, then closes the document before the Logic thread has answered th
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 60 `verified`, 9 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 61 `verified`, 9 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
-  application logic in the launcher too, a failure path that waits on a queue, and a write on a
-  failing thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full
-  queue, each queue's disconnection and two tabs of one user. Seven fuzz targets read random bytes
-  from the relay or a file, a gate ties each primitive to a line, and a reviewer its category.
+  application logic in the launcher, a failure path that waits on a queue, and a write on a failing
+  thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
+  each queue's disconnection and two tabs of one user. Seven fuzz targets read random bytes from the
+  relay or a file, a gate ties each primitive to a line, and a reviewer its category.
 
 ---
 
@@ -243,14 +244,14 @@ separation is carried by what each crate is allowed to declare.
 | `ambre-core` | nothing of ours | the identifiers and the document kinds, shared by the client and the relay |
 | `ambre-protocol` | `ambre-core` | the wire types, defined once (`ARCH-006`). Every payload in them is opaque |
 | `ambre-crypto` | nothing of ours | the primitives and the key types, reachable from the Sync worker alone (`ARCH-004`) |
-| `ambre-bus` | `ambre-core` | the four envelopes and the typed content plane (`ambre-spec-message-bus.md`) |
+| `ambre-bus` | `ambre-core` | the four envelopes, generic over the document command and event they carry and over the channel plane, and the value types shared by nature: the grid, the find query, the channel types of the service plane (`ambre-spec-message-bus.md`) |
 | `ambre-draw` | geometry, colour and text layout, plus `ambre-core` | the drawing abstraction, with no graphics and no document dependency |
 | `ambre-commands` | `ambre-core` | the command identities, a leaf every application and the toolkit depend on |
 | `ambre-canvas` | `ambre-draw` plus the graphics stack, and `ambre-commands` for the keys an input event carries | the content runtime of the UI thread. It names no application |
 | `ambre-chrome` | the page framework, plus `ambre-commands` and `ambre-core` | the interface toolkit. It names no application either |
 | `ambre-crdt` | `ambre-core` and the CRDT engine | the map handles typed by the keys of one schema, written once for every application. It joins the two crates no other shared crate may join, since `ambre-core` reaches the relay and the Sync worker (`ZK-004`, `SYNC-011`) |
-| each application crate | `ambre-bus`, `ambre-draw`, `ambre-canvas`, `ambre-chrome`, `ambre-commands`, `ambre-crdt` | one crate per application, holding its state, its view and its own interface. It knows neither the Logic runtime nor the worker |
-| `ambre-logic` | `ambre-bus` plus the application crates | the Logic runtime, pure Rust with no browser glue (`ARCH-003`) |
+| each application crate | `ambre-bus`, `ambre-draw`, `ambre-canvas`, `ambre-chrome`, `ambre-commands`, `ambre-crdt` | one crate per application, holding its state, its view, its own interface and its message vocabulary (`BUS-032`). It knows neither the Logic runtime nor the worker |
+| `ambre-logic` | `ambre-bus` plus the application crates | the Logic runtime, pure Rust with no browser glue (`ARCH-003`). It declares the content sums over every application's vocabulary |
 | `ambre-sync` | `ambre-bus`, `ambre-protocol`, `ambre-crypto`, the transport crates | the Sync worker, and its own entry point |
 | `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the queues, spawns both workers and relays between them. It integrates the applications and holds none of their logic (`ARCH-018`) |
 | `ambre-server` | `ambre-core`, `ambre-protocol`, and one signature crate | the relay. It links nothing that could read a document (`ZK-004`) |

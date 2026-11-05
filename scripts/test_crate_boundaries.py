@@ -190,6 +190,8 @@ def scratch(tmp: str) -> Path:
     write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
     write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
     write(root, f"{cb.BUS}/lib.rs", "pub struct SheetId(pub String);\npub enum C {\n    Go { sheet_id: SheetId },\n}\n")
+    for messages in cb.APP_MESSAGES:
+        write(root, f"{messages}/mod.rs", "pub enum E {\n    Gone { sheet_id: SheetId },\n}\n")
     write(root, f"{cb.WIRE_DIRS[0]}/share.rs", WIRE_ROUTE)
     write(root, f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW)
     for rel, text in WALKS.items():
@@ -230,6 +232,8 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_one_event_copy(errors)
             cb.check_signal_types(errors)
             cb.check_bus_ids(errors)
+            cb.check_message_crdt(errors)
+            cb.check_bus_vocabulary(errors)
             cb.check_wire_ids(errors)
             cb.check_typed_answers(errors)
             cb.check_bench_frame_rate(errors)
@@ -1003,8 +1007,9 @@ class CrateBoundaries(unittest.TestCase):
             "pub struct S {\n    pub target_sheet_id: Option<String>,\n}\n",
             "pub struct S {\n    pub row_ids: Vec<u64>,\n}\n",
         ):
-            errors = self.breach(f"{cb.BUS}/app/trame/command.rs", text)
-            self.assertTrue(any("carries an identifier as a bare" in e for e in errors), (text, errors))
+            for rel in (f"{cb.BUS}/app/grid.rs", f"{cb.APP_MESSAGES[0]}/command.rs"):
+                errors = self.breach(rel, text)
+                self.assertTrue(any("carries an identifier as a bare" in e for e in errors), (rel, text, errors))
 
     def test_a_bus_identifier_of_its_own_type_a_parameter_or_a_test_stays_free(self):
         text = (
@@ -1012,7 +1017,7 @@ class CrateBoundaries(unittest.TestCase):
             "pub fn go(sheet_id: &str) {}\n"
             "#[cfg(test)]\nmod tests {\n    struct T {\n        id: u32,\n    }\n}\n"
         )
-        self.assertEqual(self.breach(f"{cb.BUS}/app/trame/command.rs", text), [])
+        self.assertEqual(self.breach(f"{cb.APP_MESSAGES[0]}/command.rs", text), [])
 
     def test_a_bus_crate_gone_from_the_tree_is_an_error_not_a_pass(self):
         import tempfile
@@ -1022,6 +1027,43 @@ class CrateBoundaries(unittest.TestCase):
             (root / cb.BUS / "lib.rs").unlink()
             errors = self.run_checks(root)
         self.assertTrue(any("identifier boundary reads nothing" in e for e in errors), errors)
+
+    def test_an_application_message_declared_in_the_bus_is_refused(self):
+        text = "pub enum TrameCommand {\n    Undo,\n}\n"
+        errors = self.breach(f"{cb.BUS}/app/trame.rs", text)
+        self.assertTrue(any("declares an application's message" in e for e in errors), errors)
+
+    def test_an_envelope_or_a_test_enum_in_the_bus_stays_free(self):
+        text = (
+            "pub enum LogicCommand<A> {\n    App(A),\n}\npub enum RestEvent {\n    Done,\n}\n"
+            "#[cfg(test)]\nmod tests {\n    pub enum ProbeCommand {\n        Go,\n    }\n}\n"
+        )
+        self.assertEqual(self.breach(f"{cb.BUS}/logic.rs", text), [])
+
+    def test_a_message_naming_a_crdt_handle_is_refused(self):
+        for text in (
+            "pub enum E {\n    Doc { doc: loro::LoroDoc },\n}\n",
+            "pub struct S {\n    pub tree: LoroTree,\n}\n",
+        ):
+            errors = self.breach(f"{cb.APP_MESSAGES[-1]}/mod.rs", text)
+            self.assertTrue(any("names a CRDT handle" in e for e in errors), (text, errors))
+
+    def test_a_message_carrying_payload_bytes_or_naming_loro_in_a_comment_stays_free(self):
+        text = (
+            "//! No `loro::LoroDoc` handle here.\n"
+            "pub enum E {\n    Updated { payload: ambre_core::LoroPayload },\n}\n"
+            "#[cfg(test)]\nmod tests {\n    fn t(_: loro::LoroDoc) {}\n}\n"
+        )
+        self.assertEqual(self.breach(f"{cb.APP_MESSAGES[-1]}/mod.rs", text), [])
+
+    def test_an_application_vocabulary_gone_from_the_tree_is_an_error_not_a_pass(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            (root / cb.APP_MESSAGES[0] / "mod.rs").unlink()
+            errors = self.run_checks(root)
+        self.assertTrue(any("its identifiers go unread" in e for e in errors), errors)
 
     def test_a_view_storing_what_the_relay_writes_off_the_event_is_refused(self):
         cases = (

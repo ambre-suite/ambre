@@ -3,7 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
-use ambre_bus::SheetTab;
+use crate::message::SheetTab;
 use ambre_core::id::Sheet;
 use ambre_core::index::{Len, Pos};
 
@@ -1215,7 +1215,7 @@ fn deleted_sheet_leaves_no_data() {
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: gone.clone(),
         col: Pos::<Col>::new(0),
-        kind: ambre_bus::FilterKind::Values(vec!["a".to_owned()]),
+        kind: crate::message::FilterKind::Values(vec!["a".to_owned()]),
     });
     let filled = |state: &TrameState, name: &SheetContainer| !matches!(state.doc.get_map(name.as_str()).get_value(), LoroValue::Map(m) if m.is_empty());
     for name in [

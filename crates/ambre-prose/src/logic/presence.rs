@@ -19,7 +19,7 @@ use loro::{ContainerTrait, TreeID};
 
 use ambre_core::id::{Id, User};
 
-use ambre_bus::app::prose::{DocChar, EncodedCursor};
+use crate::message::{DocChar, EncodedCursor};
 use ambre_core::Payload;
 
 use crate::doc;

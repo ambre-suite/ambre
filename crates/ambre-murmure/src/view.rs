@@ -13,13 +13,14 @@
 use ambre_core::index::{Delta, IdxVec, Pos};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::rc::Rc;
 
-use ambre_bus::conduit::{Receiver, Sender};
-use ambre_bus::{
-    Attachment, Authored, Emoji, Instant, LogicCommand, MessageAt, MessageView, MurmureCommand,
-    MurmureEvent, ReplyEcho, Request, RestEvent, TextStyle, UiEvent,
+use crate::message::{
+    Attachment, MessageAt, MessageView, MurmureCommand, MurmureEvent, ReplyEcho, TextStyle,
 };
+use crate::message::{LogicCommand, Murmure, UiEvent};
+use ambre_bus::{Authored, Emoji, Inbox, Instant, Port, Request, RestEvent};
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
     TextInput, Theme, ThemeControl,
@@ -260,9 +261,9 @@ enum Drag {
 pub struct MurmureView {
     /// The events of the Logic thread. The content canvas holds the page's
     /// queue; the thread's cell holds none and reads the lists it fills.
-    from_logic: Option<Receiver<UiEvent>>,
+    from_logic: Option<Inbox<Infallible, Murmure>>,
     /// Where the read cursors move.
-    to_logic: Option<Sender<LogicCommand>>,
+    to_logic: Option<Port<Infallible, Murmure>>,
     reads: PageReads,
     lists: Rc<RefCell<Lists>>,
     region: Region,
@@ -394,8 +395,8 @@ impl Drop for MurmureView {
 
 impl MurmureView {
     pub fn new(
-        from_logic: Option<Receiver<UiEvent>>,
-        to_logic: Option<Sender<LogicCommand>>,
+        from_logic: Option<Inbox<Infallible, Murmure>>,
+        to_logic: Option<Port<Infallible, Murmure>>,
         reads: PageReads,
         size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>,
         theme_ctl: ThemeControl,
@@ -1519,9 +1520,9 @@ impl MurmureView {
     /// next paint that calls for it asks again.
     fn send(&self, command: LogicCommand) {
         if let Some(to_logic) = &self.to_logic
-            && let Err(e) = to_logic.try_send(command)
+            && !to_logic.try_send(command).sent()
         {
-            tracing::warn!("Murmure view command dropped, Logic channel full ({e:?})");
+            tracing::warn!("Murmure view command dropped, Logic channel full");
         }
     }
 
@@ -1917,16 +1918,18 @@ mod tests {
     use ambre_core::{Flags, Validated};
     use std::cell::Cell;
 
-    use ambre_bus::conduit::local;
-    use ambre_bus::{
-        ContentHash, HeldReply, HeldSend, MediaType, Mention, MentionTarget, MessageView,
-        MurmureEvent, StyleMark, TextStyle, Unreadable,
+    use crate::message::{
+        HeldReply, HeldSend, Mention, MentionTarget, MessageView, MurmureEvent, StyleMark,
+        TextStyle, Unreadable,
     };
+    use ambre_bus::conduit::local;
+    use ambre_bus::{ContentHash, MediaType};
     use ambre_canvas::theme;
     use ambre_draw::kinetic::LONG_PRESS;
     use ambre_draw::testing::RecordingSurface;
 
     use super::*;
+    use ambre_bus::conduit::{Receiver, Sender};
     use ambre_commands::{KeyChar, KeyState};
 
     /// The pointer at `x`, `y` of the view.
@@ -1966,8 +1969,8 @@ mod tests {
             .map(|focus| (focus.top.get(), focus.bottom.get()))
     }
     use crate::list::tests::message;
+    use crate::message::ThreadHead;
     use ambre_bus::Authored;
-    use ambre_bus::ThreadHead;
     use ambre_core::{Instant, Ms, PageLoad, TimeSpan};
 
     struct Page {
@@ -2159,8 +2162,8 @@ mod tests {
         };
         let size = ambre_core::Size::new(ambre_core::Px::new(300), ambre_core::Px::new(400));
         let view = MurmureView::new(
-            Some(from_logic),
-            Some(to_logic),
+            Some(Inbox::direct(from_logic)),
+            Some(Port::direct(to_logic)),
             reads,
             size,
             ThemeControl::default(),
@@ -2528,11 +2531,11 @@ mod tests {
         let channel = Id::<Channel>::mint();
         let mut reacted = message(ada, Instant::<Authored>::new(1), "hello");
         reacted.reactions = vec![
-            ambre_bus::Reaction {
+            crate::message::Reaction {
                 emoji: ambre_bus::Emoji::from("\u{1F44D}"),
                 users: vec![ada],
             },
-            ambre_bus::Reaction {
+            crate::message::Reaction {
                 emoji: ambre_bus::Emoji::from("\u{1F389}"),
                 users: vec![me],
             },
@@ -3473,7 +3476,7 @@ mod tests {
             mentions: Vec::new(),
             styles: Vec::new(),
             writer: Writer::Member,
-            deleted: ambre_bus::Deletion::Live,
+            deleted: crate::message::Deletion::Live,
             pressed: None,
             canvas: CHANNEL_CANVAS,
             from_thread: None,
@@ -3544,7 +3547,7 @@ mod tests {
             mentions: Vec::new(),
             styles: Vec::new(),
             writer: Writer::Member,
-            deleted: ambre_bus::Deletion::Live,
+            deleted: crate::message::Deletion::Live,
             pressed: Some(pointer(10.0, y)),
             canvas: THREAD_CANVAS,
             from_thread: None,
@@ -3753,7 +3756,7 @@ mod tests {
             {
                 assert_eq!(
                     confirmed,
-                    ambre_bus::Confirmation::Unconfirmed,
+                    crate::message::Confirmation::Unconfirmed,
                     "a plain send asks no confirmation"
                 );
                 assert!(draft.mentions.is_empty());
@@ -4032,7 +4035,7 @@ mod tests {
     /// frame loop repaints when its next frame is due, and not before.
     #[test]
     fn a_picture_on_screen_is_asked_once_and_plays_its_frames() {
-        use ambre_bus::{Picture, PictureFrame};
+        use crate::message::{Picture, PictureFrame};
         let channel = Id::<Channel>::mint();
         let mut page = page();
         let file = gif_list(&page, channel, &["see"]);
@@ -4073,7 +4076,7 @@ mod tests {
     /// and the frame loop never repaints for it.
     #[test]
     fn under_reduced_motion_a_picture_never_asks_a_frame() {
-        use ambre_bus::{Picture, PictureFrame};
+        use crate::message::{Picture, PictureFrame};
         let channel = Id::<Channel>::mint();
         let mut page = page();
         page.motion.set(crate::pictures::Motion::Reduced);
@@ -4339,7 +4342,7 @@ mod tests {
     /// opens the picker, as `Ctrl` does elsewhere.
     #[test]
     fn the_command_key_holds_the_composer_chords() {
-        use ambre_bus::TextStyle::Bold;
+        use crate::message::TextStyle::Bold;
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
@@ -4488,7 +4491,7 @@ mod tests {
     fn edits(
         page: &Page,
     ) -> (
-        Vec<(MessageAt, Id<Message>, ambre_bus::MessageDraft)>,
+        Vec<(MessageAt, Id<Message>, crate::message::MessageDraft)>,
         usize,
     ) {
         let (mut edits, mut messages) = (Vec::new(), 0);
@@ -4515,8 +4518,8 @@ mod tests {
     /// hand it to the page.
     fn ask_edit(page: &Page, channel: Id<Channel>, message: Id<Message>, text: &str) -> MessageAt {
         let at = MessageAt::Segment(Id::<Segment>::mint());
-        let ada = ambre_bus::Mention {
-            target: ambre_bus::MentionTarget::User(Id::<User>::mint()),
+        let ada = crate::message::Mention {
+            target: crate::message::MentionTarget::User(Id::<User>::mint()),
             range: Span::<Char>::from_usize_range(3..7),
         };
         *page.editing.borrow_mut() = Some(PendingEdit {
@@ -4746,7 +4749,7 @@ mod tests {
         page.me.set(Some(me));
         let own = message(me, Instant::<Authored>::new(0), "mine");
         let deleted = MessageView {
-            deleted: ambre_bus::Deletion::Deleted,
+            deleted: crate::message::Deletion::Deleted,
             text: String::new(),
             ..message(me, Instant::<Authored>::new(1), "gone")
         };
@@ -5179,7 +5182,7 @@ mod tests {
                     );
                     assert_eq!(
                         confirmed,
-                        ambre_bus::Confirmation::Unconfirmed,
+                        crate::message::Confirmation::Unconfirmed,
                         "a plain reply asks no confirmation"
                     );
                     replies.push((root, draft.text, now.get()));
@@ -5625,7 +5628,7 @@ mod tests {
         let root = MessageView {
             thread: Some(ThreadHead {
                 document: thread,
-                replies: ambre_core::Count::<ambre_bus::Replies>::new(1),
+                replies: ambre_core::Count::<crate::message::Replies>::new(1),
                 last_replier: Some(ada),
             }),
             ..message(ada, Instant::<Authored>::new(0), "root")
@@ -5697,7 +5700,7 @@ mod tests {
     }
 
     /// The drafts sent since the last call.
-    fn drafts_sent(page: &Page) -> Vec<ambre_bus::MessageDraft> {
+    fn drafts_sent(page: &Page) -> Vec<crate::message::MessageDraft> {
         let mut drafts = Vec::new();
         while let Ok(command) = page.commands.try_recv() {
             if let LogicCommand::Channel {
@@ -5864,8 +5867,11 @@ mod tests {
         assert_eq!(mentions, vec![(MentionTarget::User(bob), 2..6)]);
     }
 
-    fn styled(style: ambre_bus::TextStyle, range: std::ops::Range<usize>) -> ambre_bus::StyleMark {
-        ambre_bus::StyleMark {
+    fn styled(
+        style: crate::message::TextStyle,
+        range: std::ops::Range<usize>,
+    ) -> crate::message::StyleMark {
+        crate::message::StyleMark {
             style,
             range: Span::<Char>::from_usize_range(range),
         }
@@ -5876,7 +5882,7 @@ mod tests {
     /// mark (`MURMURE-197`).
     #[test]
     fn a_closed_marker_becomes_its_mark_and_an_undo_gives_it_back() {
-        use ambre_bus::TextStyle::{Bold, Italic};
+        use crate::message::{TextStyle::Bold, TextStyle::Italic};
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
@@ -6008,7 +6014,7 @@ mod tests {
     /// A marker typed inside inline code stays text (`MURMURE-198`).
     #[test]
     fn a_marker_typed_in_code_stays_text() {
-        use ambre_bus::TextStyle::Code;
+        use crate::message::TextStyle::Code;
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
@@ -6059,7 +6065,7 @@ mod tests {
     /// code on its tint (`MURMURE-564`).
     #[test]
     fn a_block_marker_becomes_its_mark_and_the_field_draws_it() {
-        use ambre_bus::TextStyle::{CodeBlock, List, Quote};
+        use crate::message::{TextStyle::CodeBlock, TextStyle::List, TextStyle::Quote};
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
@@ -6171,7 +6177,7 @@ mod tests {
     /// mark over the draft of the inline editor, sent with it (`MURMURE-193`).
     #[test]
     fn a_chord_puts_its_style_on_the_selection() {
-        use ambre_bus::TextStyle::{Bold, Italic};
+        use crate::message::{TextStyle::Bold, TextStyle::Italic};
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
@@ -6218,7 +6224,7 @@ mod tests {
     #[test]
     fn a_selection_shows_the_format_bar_and_a_press_toggles_its_style() {
         use crate::markers::Cover;
-        use ambre_bus::TextStyle::{Bold, Code, Italic};
+        use crate::message::{TextStyle::Bold, TextStyle::Code, TextStyle::Italic};
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
@@ -6482,7 +6488,7 @@ mod tests {
     /// alone is sent, and one that changes nothing is not (`MURMURE-562`).
     #[test]
     fn an_edit_of_the_styles_alone_is_sent() {
-        use ambre_bus::TextStyle::Bold;
+        use crate::message::TextStyle::Bold;
         let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
@@ -6615,7 +6621,7 @@ mod tests {
     fn a_cancelled_at_channel_gives_its_draft_back() {
         let channel = Id::<Channel>::mint();
         let (mut page, bob, _) = mentioning(channel);
-        let draft = ambre_bus::MessageDraft {
+        let draft = crate::message::MessageDraft {
             text: "@channel @Bob hi".to_owned(),
             styles: Vec::new(),
             mentions: vec![

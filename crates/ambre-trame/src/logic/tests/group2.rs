@@ -478,7 +478,7 @@ fn a_spent_uid_counter_answers_each_line_write_with_its_notice() {
     });
     let style = state.handle_command(TrameCommand::SetCellStyle {
         patch: crate::StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
+            bold: Some(ambre_core::Weight::Bold),
             ..Default::default()
         },
     });
@@ -730,13 +730,13 @@ fn merge_marks_master_span_and_blanks_covered() {
 
     let master = read_display(&mut state, 0, 0);
     assert_eq!(master.merge_span, Some(span(2, 2)), "master spans 2x2");
-    assert_eq!(master.is_merged, ambre_bus::Merge::Merged);
+    assert_eq!(master.is_merged, crate::message::Merge::Merged);
     assert_eq!(master.text, "title");
 
     let covered = read_display(&mut state, 1, 1);
     assert_eq!(
         covered.is_merged,
-        ambre_bus::Merge::Merged,
+        crate::message::Merge::Merged,
         "covered cell flags merged"
     );
     assert_eq!(covered.merge_span, None, "covered cell has no span");
@@ -800,7 +800,7 @@ fn unmerge_restores_covered_cells() {
     assert_eq!(read_display(&mut state, 0, 0).merge_span, None);
     assert_eq!(
         read_display(&mut state, 0, 1).is_merged,
-        ambre_bus::Merge::Single,
+        crate::message::Merge::Single,
         "covered cell freed"
     );
 }

@@ -374,8 +374,8 @@ mod tests {
     fn uncoloured_border_follows_the_theme() {
         let mut state = fixture(&[(0, 0, "x")]);
         if let Some(cell) = state.cell_cache.get_mut(&at(0, 0)) {
-            cell.borders.top = Some(ambre_bus::CellBorder {
-                style: ambre_bus::BorderStyle::Solid,
+            cell.borders.top = Some(crate::message::CellBorder {
+                style: crate::message::BorderStyle::Solid,
                 color: None,
             });
         }
@@ -611,14 +611,14 @@ mod tests {
     /// merge repaint, so neither can paint over it (`TRAME-100`).
     #[test]
     fn a_border_is_drawn_after_the_grid_and_the_merges() {
-        let edge = Some(ambre_bus::CellBorder {
-            style: ambre_bus::BorderStyle::Solid,
+        let edge = Some(crate::message::CellBorder {
+            style: crate::message::BorderStyle::Solid,
             color: None,
         });
         let mut state = fixture(&[(0, 0, "m"), (0, 1, ""), (1, 0, ""), (1, 1, ""), (3, 3, "x")]);
         let master = state.cell_cache.get_mut(&at(0, 0)).unwrap();
         master.merge_span = Some(span(2, 2));
-        master.borders = ambre_bus::Borders {
+        master.borders = crate::message::Borders {
             top: edge,
             right: edge,
             bottom: edge,

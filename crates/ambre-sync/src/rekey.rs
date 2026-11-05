@@ -385,6 +385,41 @@ mod tests {
         r
     }
 
+    /// `SYNC-129`: a frame sealed again answers to its new signature alone,
+    /// and no other frame changes.
+    #[test]
+    fn a_frame_sealed_again_is_echoed_under_its_new_signature() {
+        let mut r = three_sent();
+        r.resealed(Seq::<DeltaAuthor>::new(2), sig(22));
+        r.confirm(&sig(2));
+        assert_eq!(r.unconfirmed(), 3, "the old signature confirmed a frame");
+        r.confirm(&sig(22));
+        assert_eq!(r.unconfirmed(), 1, "clock 3 still waits");
+        r.confirm(&sig(3));
+        assert_eq!(r.unconfirmed(), 0);
+    }
+
+    /// `SYNC-129`: a key refusal is resent once the key lands, unless the
+    /// frame left the log first. An echo of an earlier frame keeps the
+    /// refusal. A clock refusal at or below it takes the refusal, so a frame
+    /// sealed again at that clock never leaves twice.
+    #[test]
+    fn a_key_refusal_resends_only_the_frames_still_refused() {
+        let mut echoed = three_sent();
+        echoed.refused(key(1), Seq::<DeltaAuthor>::new(3), key(1));
+        echoed.confirm(&sig(2));
+        let (resend, _) = echoed.key_installed(key(2));
+        assert_eq!(resend, vec![(Seq::<DeltaAuthor>::new(3), body(3))]);
+
+        let mut fenced = three_sent();
+        fenced.refused(key(1), Seq::<DeltaAuthor>::new(3), key(1));
+        assert_eq!(fenced.clock_refused(&sig(2)), Some(vec![body(2), body(3)]));
+        fenced.record_sent(frame(2, 12));
+        fenced.record_sent(frame(3, 13));
+        let (resend, _) = fenced.key_installed(key(2));
+        assert!(resend.is_empty(), "a frame sealed again left twice");
+    }
+
     /// A refusal under the current key pays the debt once and holds the edits
     /// made meanwhile. The refused frames are resent first, at their own clocks
     /// (`SYNC-128`, `SYNC-129`).

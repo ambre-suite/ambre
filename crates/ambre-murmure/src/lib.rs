@@ -7,8 +7,9 @@
 //! and no key: the view stamps the time, and the Sync worker seals and routes
 //! the deltas this crate exports.
 //!
-//! The commands and events the engine answers live in `ambre_bus::app::murmure`,
-//! as pure data (`BUS-027`).
+//! The commands and events the engine answers live in [`message`], as pure
+//! data, and travel through the [`message::Murmure`] channel plane (`BUS-027`,
+//! `BUS-032`).
 
 #![forbid(unsafe_code)]
 
@@ -31,6 +32,7 @@ pub mod markers;
 mod members;
 mod mention;
 pub mod mention_list;
+pub mod message;
 pub mod notices;
 mod opening;
 pub mod paint;

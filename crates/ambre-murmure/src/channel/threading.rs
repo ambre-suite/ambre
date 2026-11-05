@@ -6,9 +6,8 @@
 //! (`MURMURE-107`), the one field of it another member may write
 //! (`MURMURE-255`).
 
-use ambre_bus::{
-    Authored, Deletion, Instant, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead,
-};
+use crate::message::{Deletion, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes};
 use loro::LoroDoc;
@@ -441,10 +440,8 @@ impl ChannelState {
             asked: None,
             trail: Trail::Open,
         });
-        if self.root_naming(thread).is_some()
-            || self.is_thread(thread)
-            || self.threads_pending.contains_key(&thread)
-        {
+        // `is_thread` counts a thread still arriving, a probe among them.
+        if self.root_naming(thread).is_some() || self.is_thread(thread) {
             return None;
         }
         self.threads_pending.insert(thread, Pending::probe());
@@ -745,7 +742,7 @@ fn thread_head(document: Id<Document>, thread: &LoroDoc, channel: Id<Channel>) -
         .collect();
     ThreadHead {
         document,
-        replies: ambre_core::Count::<ambre_bus::Replies>::of(replies.len()),
+        replies: ambre_core::Count::<crate::message::Replies>::of(replies.len()),
         last_replier: replies.last().map(|reply| reply.author),
     }
 }
@@ -777,4 +774,29 @@ fn named_threads(doc: &LoroDoc) -> Vec<(Id<Message>, Id<Document>)> {
         }
     });
     named
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod copy_id_tests {
+    use ambre_core::id::{Id, Message};
+    use proptest::prelude::*;
+
+    use super::copy_id;
+
+    proptest! {
+        /// A copy never takes the identifier of its reply, and the turn is its
+        /// own inverse, so two replies never share a copy (`MURMURE-538`).
+        #[test]
+        fn a_copy_differs_from_its_reply_and_from_every_other_copy(
+            bytes in any::<[u8; 16]>(),
+            other in any::<[u8; 16]>(),
+        ) {
+            let reply = Id::<Message>::from_bytes(bytes);
+            let copy = copy_id(reply);
+            prop_assert_ne!(copy, reply);
+            prop_assert_eq!(copy_id(copy), reply);
+            let other = Id::<Message>::from_bytes(other);
+            prop_assert_eq!(copy == copy_id(other), reply == other);
+        }
+    }
 }

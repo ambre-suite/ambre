@@ -45,7 +45,7 @@ fn col_label(col: Pos<Col>) -> String {
 /// distinct visible values) and a minimal "by condition" mode (operator + value).
 /// Applying fires `on_apply` with the chosen [`FilterKind`]; "Clear filter"
 /// routes through `on_command`, the shared command path. `values` is fed by the
-/// launcher from [`ambre_bus::TrameEvent::ColumnValues`].
+/// launcher from [`crate::message::TrameEvent::ColumnValues`].
 #[component]
 pub fn FilterPopover(
     state: RwSignal<Option<FilterPopoverState>>,

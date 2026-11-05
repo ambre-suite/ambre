@@ -14,8 +14,8 @@ use ambre_core::Version;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::{BTreeMap, HashMap};
 
+use crate::message::DocChar;
 use ambre_bus::app::grid::{CellPos, Col, Row};
-use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Footnote, Id, User};
 use ambre_core::{
     Char, Count, DocBlocks, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Generator,
@@ -582,7 +582,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::FixtureGen;
     use ambre_core::index::{Len, Pos};
 

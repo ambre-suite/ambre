@@ -4,7 +4,7 @@
 // dialog listing ordered sort levels (primary, secondary, ...), each a column
 // picker + ascending/descending direction. It also carries a "data has header
 // row" toggle and add/remove level. Applying emits a `SortApply` the launcher
-// forwards as [`ambre_bus::TrameCommand::SortRangeMulti`], over the snapshotted
+// forwards as [`crate::message::TrameCommand::SortRangeMulti`], over the snapshotted
 // selection rectangle. The Logic thread sorts the rows lexicographically by the
 // keys (`trame-sort`) and replies `SortComplete`.
 //
@@ -14,7 +14,8 @@
 // (`0` = the selection's left column), matching the `SortRangeMulti` contract.
 // ============================================================================
 
-use ambre_bus::{Col, HeaderRow, Row, SortKey, SortOrder};
+use crate::message::{HeaderRow, SortKey, SortOrder};
+use ambre_bus::{Col, Row};
 use ambre_core::index::{Len, Pos};
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -34,7 +35,7 @@ pub struct SortDialogState {
 }
 
 /// A multi-column sort request. The launcher forwards it as the parameterless
-/// [`ambre_bus::TrameCommand::SortSelectionMulti`] (the Logic thread resolves the
+/// [`crate::message::TrameCommand::SortSelectionMulti`] (the Logic thread resolves the
 /// range from the tracked selection). `sort_keys` is in decreasing priority
 /// (`[primary, secondary, ...]`); each `col` is range-relative (`0` = the
 /// selection's left column), matching the snapshot the dialog was opened over.

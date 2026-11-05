@@ -17,7 +17,7 @@ use ambre_core::Redacted;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
 
-pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
+pub use crate::message::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
 /// The query folded by `case`, the form every comparison takes: lowercased for
 /// an insensitive match, verbatim otherwise. The find text is never empty: an

@@ -20,7 +20,8 @@ use ambre_core::index::{Len, Pos};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_bus::{CommandSink, SyncCommand, TrameEvent};
+use crate::message::TrameEvent;
+use ambre_bus::{CommandSink, SyncCommand};
 use ambre_core::id::{Document, Id};
 
 use crate::{TrameOutcome, TrameState};
@@ -143,6 +144,6 @@ pub fn name(text: &str) -> ambre_core::Validated<crate::DefinedName> {
 /// # Panics
 ///
 /// When the rule refuses `text`.
-pub fn sheet(text: &str) -> ambre_bus::SheetName {
-    ambre_bus::SheetName::new(text).expect("a test sheet name obeys the rule")
+pub fn sheet(text: &str) -> crate::message::SheetName {
+    crate::message::SheetName::new(text).expect("a test sheet name obeys the rule")
 }

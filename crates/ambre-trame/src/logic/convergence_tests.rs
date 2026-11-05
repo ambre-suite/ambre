@@ -29,7 +29,7 @@ use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
 use proptest::prelude::*;
 
-use ambre_bus::{
+use crate::message::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellFormat, CellStyle, ClipboardCell,
     ClipboardPayload, FillMode, FilterKind, FilterOp, HAlign, HeaderRow, SortOrder, StylePatch,
     VAlign,
@@ -219,8 +219,8 @@ impl Op {
                             dr: Len::<Row>::new(dr as u32),
                             dc: Len::<Col>::new(0),
                             raw,
-                            bold: ambre_bus::Weight::Regular,
-                            italic: ambre_bus::Slant::Upright,
+                            bold: ambre_core::Weight::Regular,
+                            italic: ambre_core::Slant::Upright,
                             style: CellStyle::default(),
                         })
                         .collect(),
@@ -337,10 +337,10 @@ fn program_strategy() -> impl Strategy<Value = Vec<(bool, Op)>> {
 type Snapshot = Vec<(
     CellPos,
     String,
-    ambre_bus::Weight,
-    ambre_bus::Merge,
+    ambre_core::Weight,
+    crate::message::Merge,
     Option<MergeSpan>,
-    ambre_bus::RowFilter,
+    crate::message::RowFilter,
 )>;
 
 fn read_window(state: &mut TrameState) -> Snapshot {
@@ -459,13 +459,13 @@ proptest! {
 /// the Logic thread folds them into `text`. They cannot be asserted here even
 /// though the register carries them.
 type StyleView = (
-    ambre_bus::Weight,
-    ambre_bus::Slant,
-    ambre_bus::Underline,
-    ambre_bus::Strikethrough,
+    ambre_core::Weight,
+    ambre_core::Slant,
+    ambre_core::Underline,
+    ambre_core::Strikethrough,
     HAlign,
     VAlign,
-    ambre_bus::WordBreak,
+    ambre_core::WordBreak,
     Option<Rgb>,
     Option<Rgb>,
     Option<ambre_core::FontFamily>,
@@ -529,9 +529,9 @@ fn apply_style(state: &mut TrameState, patch: StylePatch) {
 /// the race would never happen.
 fn base_style() -> StylePatch {
     StylePatch {
-        bold: Some(ambre_bus::Weight::Bold),
-        underline: Some(ambre_bus::Underline::Underlined),
-        wrap: Some(ambre_bus::WordBreak::Anywhere),
+        bold: Some(ambre_core::Weight::Bold),
+        underline: Some(ambre_core::Underline::Underlined),
+        wrap: Some(ambre_core::WordBreak::Anywhere),
         h_align: Some(HAlign::Right),
         v_align: Some(VAlign::Bottom),
         fg: Some(Some(Rgb::from_bits(0x00FF_0000))),
@@ -551,11 +551,11 @@ fn base_style() -> StylePatch {
 /// Peer A's edit: clear the cell's style back to the grid defaults.
 fn clear_style() -> StylePatch {
     StylePatch {
-        bold: Some(ambre_bus::Weight::Regular),
-        italic: Some(ambre_bus::Slant::Upright),
-        underline: Some(ambre_bus::Underline::Plain),
-        strikethrough: Some(ambre_bus::Strikethrough::Plain),
-        wrap: Some(ambre_bus::WordBreak::Whole),
+        bold: Some(ambre_core::Weight::Regular),
+        italic: Some(ambre_core::Slant::Upright),
+        underline: Some(ambre_core::Underline::Plain),
+        strikethrough: Some(ambre_core::Strikethrough::Plain),
+        wrap: Some(ambre_core::WordBreak::Whole),
         h_align: Some(HAlign::default()),
         v_align: Some(VAlign::default()),
         fg: Some(None),
@@ -576,11 +576,11 @@ fn clear_style() -> StylePatch {
 /// differs from [`base_style`], so a register B loses is observable.
 fn other_style() -> StylePatch {
     StylePatch {
-        bold: Some(ambre_bus::Weight::Regular),
-        italic: Some(ambre_bus::Slant::Italic),
-        underline: Some(ambre_bus::Underline::Plain),
-        strikethrough: Some(ambre_bus::Strikethrough::Struck),
-        wrap: Some(ambre_bus::WordBreak::Whole),
+        bold: Some(ambre_core::Weight::Regular),
+        italic: Some(ambre_core::Slant::Italic),
+        underline: Some(ambre_core::Underline::Plain),
+        strikethrough: Some(ambre_core::Strikethrough::Struck),
+        wrap: Some(ambre_core::WordBreak::Whole),
         h_align: Some(HAlign::Left),
         v_align: Some(VAlign::Top),
         fg: Some(Some(Rgb::from_bits(0x0000_00FF))),
@@ -696,7 +696,7 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
     apply_style(
         &mut b,
         StylePatch {
-            bold: Some(ambre_bus::Weight::Bold),
+            bold: Some(ambre_core::Weight::Bold),
             fg: Some(Some(Rgb::from_bits(0x0000_00FF))),
             bg: Some(Some(Rgb::from_bits(0x0044_5566))),
             ..Default::default()

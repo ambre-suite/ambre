@@ -20,12 +20,12 @@ use ambre_core::{Board, Px};
 use std::collections::HashMap;
 use std::hint::black_box;
 
-use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, ElementStyle, ShapeKind};
 use ambre_canvas::{TextCache, Theme};
 use ambre_core::id::{Element, Id};
 use ambre_draw::FontContext;
 use ambre_draw::testing::RecordingSurface;
 use ambre_toile::logic::command::DisplayViewport;
+use ambre_toile::message::{DisplayElement, DisplayGeom, DisplayNode, ElementStyle, ShapeKind};
 use ambre_toile::ui::render::{Scene, paint_content};
 use ambre_toile::ui::viewport::ViewportTransform;
 use ambre_toile::ui::walk::BoardWalk;
@@ -170,7 +170,7 @@ fn busy_node(i: usize) -> DisplayNode {
         kind,
         transform: Affine::IDENTITY,
         bounds: Rect::new(x, y, x + 20.0, y + 20.0),
-        locked: ambre_bus::app::toile::LockState::Unlocked,
+        locked: ambre_toile::message::LockState::Unlocked,
         style: ElementStyle::default(),
         geom,
         link: None,
@@ -211,7 +211,7 @@ fn walk(
             text_cache: cache,
         },
         None,
-        ambre_bus::app::toile::PresentMode::Editing,
+        ambre_toile::message::PresentMode::Editing,
     );
     surface.ops().len()
 }

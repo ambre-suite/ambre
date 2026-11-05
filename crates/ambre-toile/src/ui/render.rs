@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::toile::{
+use crate::message::{
     DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, PresentMode, ShapeKind,
 };
 use ambre_canvas::{Palette, TextCache};
@@ -670,12 +670,10 @@ mod tests {
         ambre_core::Validated::<ambre_core::ContentHash>::parse(digit.to_string().repeat(64))
             .expect("a hex digit")
     }
+    use crate::message::{DisplayConnector, DisplayElement, ElementKind, ElementStyle, ShapeKind};
     use crate::ui::walk::{
         STICKY_INK, STICKY_SHADOW, TextHost, anim_transform, contrast, resolved_text_ink,
         sticky_font_size, sticky_or_style_font_size, style_color,
-    };
-    use ambre_bus::app::toile::{
-        DisplayConnector, DisplayElement, ElementKind, ElementStyle, ShapeKind,
     };
     use ambre_core::Px;
     use ambre_core::Rgba;
@@ -688,7 +686,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom,
             link: None,
@@ -918,7 +916,7 @@ mod tests {
             kind,
             transform: Affine::IDENTITY,
             bounds: Rect::new(0.0, 0.0, 100.0, 80.0),
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style,
             geom,
             link: None,
@@ -969,9 +967,9 @@ mod tests {
                     id: Id::<Connector>::from_text("c".into()),
                     path,
                     style: ElementStyle::default(),
-                    arrows: ambre_bus::app::toile::EndCaps {
-                        start: ambre_bus::app::toile::Cap::Plain,
-                        end: ambre_bus::app::toile::Cap::Arrow,
+                    arrows: crate::message::EndCaps {
+                        start: crate::message::Cap::Plain,
+                        end: crate::message::Cap::Arrow,
                     },
                     label: "yes".to_owned(),
                 }),
@@ -1064,8 +1062,8 @@ mod tests {
     fn sticky_font_size_auto_unless_overridden() {
         let bounds = Rect::new(0.0, 0.0, 120.0, 120.0);
         let auto = ElementStyle {
-            font: ambre_bus::app::toile::FontSpec {
-                size: ambre_bus::app::toile::FontSizeChoice::AUTO,
+            font: crate::message::FontSpec {
+                size: crate::message::FontSizeChoice::AUTO,
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -1077,8 +1075,8 @@ mod tests {
         );
         // A positive size overrides the auto-sizing.
         let manual = ElementStyle {
-            font: ambre_bus::app::toile::FontSpec {
-                size: ambre_bus::app::toile::FontSizeChoice::from_whole_points(Some(30)),
+            font: crate::message::FontSpec {
+                size: crate::message::FontSizeChoice::from_whole_points(Some(30)),
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -1610,9 +1608,9 @@ mod tests {
                 id: Id::<Connector>::from_text("c".into()),
                 path,
                 style: ElementStyle::default(),
-                arrows: ambre_bus::app::toile::EndCaps {
-                    start: ambre_bus::app::toile::Cap::Plain,
-                    end: ambre_bus::app::toile::Cap::Arrow,
+                arrows: crate::message::EndCaps {
+                    start: crate::message::Cap::Plain,
+                    end: crate::message::Cap::Arrow,
                 },
                 label: String::new(),
             })],
@@ -1663,9 +1661,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 50.0, 50.0);
         let mut linked = elem("l", DisplayGeom::Rect, bounds);
         if let DisplayNode::Element(e) = &mut linked {
-            e.link = Some(ambre_bus::app::toile::LinkTarget::Url(
-                "https://x.test/".into(),
-            ));
+            e.link = Some(crate::message::LinkTarget::Url("https://x.test/".into()));
         }
         let vp = DisplayViewport {
             version: ambre_core::Seq::ZERO,
@@ -1838,7 +1834,7 @@ mod tests {
             kind: ElementKind::Sticky,
             transform,
             bounds,
-            locked: ambre_bus::app::toile::LockState::Unlocked,
+            locked: crate::message::LockState::Unlocked,
             style: ElementStyle::default(),
             geom,
             link: None,
@@ -2012,9 +2008,9 @@ mod tests {
                 stroke: Some(stroke),
                 ..ElementStyle::default()
             },
-            arrows: ambre_bus::app::toile::EndCaps {
-                start: ambre_bus::app::toile::Cap::Plain,
-                end: ambre_bus::app::toile::Cap::Arrow,
+            arrows: crate::message::EndCaps {
+                start: crate::message::Cap::Plain,
+                end: crate::message::Cap::Arrow,
             },
             label: String::new(),
         })
@@ -2146,14 +2142,12 @@ mod tests {
         let doc = DisplayGeom::DocEmbed {
             document_id: Id::<ambre_core::id::Document>::mint(),
             doc_type: ambre_bus::DocType::Trame,
-            focused: ambre_bus::app::toile::InputFocus::Board,
+            focused: crate::message::InputFocus::Board,
         };
         for geom in [
             DisplayGeom::Embed(
-                ambre_core::Validated::<ambre_bus::app::toile::WebAddress>::parse(
-                    "https://example.org",
-                )
-                .ok(),
+                ambre_core::Validated::<crate::message::WebAddress>::parse("https://example.org")
+                    .ok(),
             ),
             doc,
         ] {

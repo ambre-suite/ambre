@@ -30,7 +30,7 @@ use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use std::collections::BTreeSet;
 
-use ambre_bus::{CellBorder, CellStyle, TrameCommand};
+use crate::message::{CellBorder, CellStyle, TrameCommand};
 use ambre_core::schema::verdict;
 use loro::{ExportMode, LoroValue};
 
@@ -136,19 +136,19 @@ fn colour(rgb: Rgb) -> String {
 /// A number format, spelled as its derived `Debug` once printed it. The type
 /// now prints a custom pattern by its length, and the frozen reading keeps the
 /// pattern itself.
-fn format_reading(format: &ambre_bus::CellFormat) -> String {
+fn format_reading(format: &crate::message::CellFormat) -> String {
     match format {
-        ambre_bus::CellFormat::Custom(pattern) => format!("Custom({:?})", pattern.as_str()),
+        crate::message::CellFormat::Custom(pattern) => format!("Custom({:?})", pattern.as_str()),
         other => format!("{other:?}"),
     }
 }
 
 /// A filter, spelled as its derived `Debug` once printed it, for the reason
 /// [`format_reading`] gives.
-fn filter_reading(kind: &ambre_bus::FilterKind) -> String {
+fn filter_reading(kind: &crate::message::FilterKind) -> String {
     match kind {
-        ambre_bus::FilterKind::Values(values) => format!("Values({values:?})"),
-        ambre_bus::FilterKind::Condition { op, value } => {
+        crate::message::FilterKind::Values(values) => format!("Values({values:?})"),
+        crate::message::FilterKind::Condition { op, value } => {
             format!("Condition {{ op: {op:?}, value: {:?} }}", value.as_str())
         }
     }

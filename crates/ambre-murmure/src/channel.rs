@@ -10,11 +10,13 @@ use ambre_core::Count;
 use ambre_core::Validated;
 use std::collections::{HashMap, HashSet};
 
+use crate::message::{
+    Attachment, ChannelMatches, Deletion, Mention, MentionTarget, MessageAt, MessageDraft,
+    MessageView, MurmureEvent, Notice, Revision, SearchMatch, StyleMark, ThreadHead, Unreadable,
+};
 use ambre_bus::{
-    ActivityKind, ActivitySummary, Attachment, Authored, ChannelMatches, ContentHash, Deletion,
-    Emoji, Instant, Mention, MentionTarget, Mentions, MessageAt, MessageDraft, MessageView,
-    Messages, MurmureEvent, Notice, Revision, SearchMatch, StyleMark, ThreadHead, Unread,
-    Unreadable,
+    ActivityKind, ActivitySummary, Authored, ContentHash, Emoji, Instant, Mentions, Messages,
+    Unread,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
 use ambre_core::{
@@ -962,7 +964,7 @@ impl ChannelState {
         ChannelMatches {
             channel_id: self.channel_id,
             covered,
-            listed: ambre_core::Count::<ambre_bus::Segments>::of(listed.len()),
+            listed: ambre_core::Count::<crate::message::Segments>::of(listed.len()),
             matches,
         }
     }
@@ -1048,8 +1050,8 @@ impl ChannelState {
                     attachments: attachments.to_vec(),
                     reactions: Vec::new(),
                     notice: None,
-                    edited: ambre_bus::Revision::Original,
-                    deleted: ambre_bus::Deletion::Live,
+                    edited: crate::message::Revision::Original,
+                    deleted: crate::message::Deletion::Live,
                     thread: None,
                     also_in_thread: copy.map(|(thread, _)| thread),
                 }],
@@ -1104,8 +1106,8 @@ impl ChannelState {
                     attachments: Vec::new(),
                     reactions: Vec::new(),
                     notice: Some(Notice::MemberAdded { member }),
-                    edited: ambre_bus::Revision::Original,
-                    deleted: ambre_bus::Deletion::Live,
+                    edited: crate::message::Revision::Original,
+                    deleted: crate::message::Deletion::Live,
                     thread: None,
                     also_in_thread: None,
                 }],
@@ -2060,7 +2062,7 @@ fn read_message(item: ValueOrContainer, channel: Id<Channel>) -> Option<MessageV
         // (`MURMURE-106`).
         thread: document_of(&map, MessageKey::Thread).map(|document| ThreadHead {
             document,
-            replies: ambre_core::Count::<ambre_bus::Replies>::ZERO,
+            replies: ambre_core::Count::<crate::message::Replies>::ZERO,
             last_replier: None,
         }),
         also_in_thread: document_of(&map, MessageKey::AlsoInThread),

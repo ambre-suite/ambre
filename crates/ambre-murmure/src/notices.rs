@@ -5,7 +5,8 @@
 //! fixed sentence. The cause stays in the log, where Logic wrote it. So no
 //! identifier in a cause reaches the user.
 
-use ambre_bus::{DirectMessageEvent, MurmureEvent, SpaceEvent, UiEvent};
+use crate::message::{DirectMessageEvent, MurmureEvent, SpaceEvent};
+use ambre_bus::UiEvent;
 
 /// What the user reads when the root of a copy could not be reached. Replying
 /// again starts a fresh seek (the Murmure threads spec).
@@ -31,7 +32,7 @@ pub const DIRECT_MESSAGE_NOT_OPENED: &str = "The direct message could not open. 
 
 /// The warning `ev` raises, if any. A no-op for every other event.
 #[must_use]
-pub fn warning_of(ev: &UiEvent) -> Option<&'static str> {
+pub fn warning_of<S>(ev: &ambre_bus::UiEvent<S, crate::message::Murmure>) -> Option<&'static str> {
     match ev {
         UiEvent::Channel {
             event: MurmureEvent::RootLost { .. },
@@ -68,7 +69,7 @@ mod tests {
     #[test]
     fn a_direct_message_that_failed_is_told_without_its_cause() {
         let member = Id::<User>::mint();
-        let failed = UiEvent::DirectMessage {
+        let failed: crate::message::UiEvent = UiEvent::DirectMessage {
             requested: Id::<Channel>::mint(),
             event: DirectMessageEvent::Failed {
                 message: format!("the exchange key of {member} is not the one pinned"),
@@ -79,7 +80,7 @@ mod tests {
         assert!(!text.contains(&member.to_string()));
         assert!(!text.contains("pinned"));
 
-        let opened = UiEvent::DirectMessage {
+        let opened: crate::message::UiEvent = UiEvent::DirectMessage {
             requested: Id::<Channel>::mint(),
             event: DirectMessageEvent::Opened {
                 channel_id: Id::<Channel>::mint(),

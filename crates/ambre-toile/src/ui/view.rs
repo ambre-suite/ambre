@@ -21,8 +21,8 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 #[cfg(any(test, target_arch = "wasm32"))]
-use ambre_bus::app::toile::CommentAnchor;
-use ambre_bus::app::toile::{
+use crate::message::CommentAnchor;
+use crate::message::{
     ClipboardPayload as ToileClipboardPayload, DisplayConnector, DisplayElement, DisplayGeom,
     DisplayNode, DisplayViewport, ElementCreation, ElementKind, End, LinkTarget, PresencePayload,
     PresentMode, StatsRequestKind, ToileCommand, ToileError, ToileEvent, Viewport,
@@ -42,7 +42,7 @@ const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was remov
 /// (`TOILE-UI-160`).
 #[cfg(any(test, target_arch = "wasm32"))]
 const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
-use ambre_bus::{AppCommand, AppEvent, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent};
+use ambre_bus::{Delivery, Inbox, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
 use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint, NoticePublisher,
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
@@ -101,23 +101,20 @@ use leptos::prelude::{GetUntracked, RwSignal, Set};
 /// `fatal` reports success on a send nobody made. The view is tearing down and
 /// no later frame will retry. A `false` here would keep a dead registry asking
 /// for ever instead of letting it go.
-fn send_session(
-    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
-    fatal: bool,
-    cmd: LogicCommand,
-) -> bool {
+fn send_session(to_logic: &Port<ToileCommand>, fatal: bool, cmd: LogicCommand) -> bool {
     if fatal {
         return true;
     }
-    match to_logic.try_send(cmd) {
-        Ok(()) => true,
-        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
+    // A session command carries no document command, so it retypes as any.
+    match to_logic.try_send(cmd.map(|never| match never {})) {
+        Delivery::Sent => true,
+        Delivery::Full(_) => {
             // Neither an open nor a close is worth blocking the UI thread for.
             // Both are worth a warning, and both come back on a later frame.
             tracing::warn!("Toile: UI->Logic channel full, embed session command deferred");
             false
         }
-        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => {
+        Delivery::Disconnected => {
             tracing::error!("Toile: UI->Logic channel disconnected");
             false
         }
@@ -316,7 +313,7 @@ pub struct ToileSignals {
     /// The common style of the selection, read by the inspector.
     pub style_model: RwSignal<Option<super::style::StyleModel>>,
     /// A whole-style edit from the inspector.
-    pub restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
+    pub restyle: RwSignal<Option<crate::message::ElementStyle>>,
     /// The placement of the floating selection toolbar.
     pub float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
     /// A single-field style edit from the floating toolbar.
@@ -334,9 +331,9 @@ pub struct ToileSignals {
     /// A followed link the board cannot perform, for the shell.
     pub followed_link: RwSignal<Option<super::link::ShellNav>>,
     /// The presentation mode the view publishes.
-    pub present_mode: RwSignal<ambre_bus::app::toile::PresentMode>,
+    pub present_mode: RwSignal<crate::message::PresentMode>,
     /// The find counters.
-    pub find_result: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
+    pub find_result: RwSignal<Option<crate::message::FindResults>>,
 }
 
 /// The wiring of a board view: its channels to the Logic thread, its text
@@ -344,9 +341,9 @@ pub struct ToileSignals {
 /// and fills one per view.
 pub struct ToileWiring {
     /// The queue to the Logic thread.
-    pub to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    pub to_logic: Port<ToileCommand>,
     /// The queue from the Logic thread.
-    pub from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    pub from_logic: Inbox<ToileEvent>,
     /// The shared text pipe.
     pub text_input: TextInput,
     /// When embedded as a `doc_embed` child (`toile-embeds`), the child view
@@ -369,11 +366,11 @@ pub struct ToileWiring {
 
 pub struct ToileView {
     document_id: Id<Document>,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
+    to_logic: Port<ToileCommand>,
+    from_logic: Inbox<ToileEvent>,
     /// The lossless send path: it keeps an edit a full queue could not take,
     /// and offers it again on a later frame (`BUS-011`).
-    outbox: Outbox,
+    outbox: Outbox<ToileCommand>,
     /// The busy level the chrome reads while the outbox holds anything
     /// (`BUS-016`).
     busy_pub: BusyPublisher,
@@ -588,7 +585,7 @@ pub struct ToileView {
     /// register (`toile-styles`), and the view attaches the ids the DOM lacks.
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
+    restyle: RwSignal<Option<crate::message::ElementStyle>>,
     /// The content-anchored floating selection toolbar's placement + flags
     /// (`toile-styles`), republished every frame so the bar follows the
     /// selection as the board pans and zooms (transform-synced). `None` hides
@@ -640,9 +637,9 @@ pub struct ToileView {
     /// view keeps both, so it alone writes these signals (`UI-THREAD-003`).
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    present_mode: RwSignal<ambre_bus::app::toile::PresentMode>,
+    present_mode: RwSignal<crate::message::PresentMode>,
     #[cfg(target_arch = "wasm32")]
-    find_result: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
+    find_result: RwSignal<Option<crate::message::FindResults>>,
 
     /// The element that anchors a thread the panel opened, awaiting the
     /// `SelectionStats` reply that carries its bounds. The camera then comes to
@@ -992,7 +989,7 @@ impl ToileView {
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
-            command: AppCommand::Toile(cmd),
+            command: cmd,
         };
         match ambre_bus::send_lossy(&self.to_logic, msg) {
             LossyOutcome::Sent => true,
@@ -1023,7 +1020,7 @@ impl ToileView {
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
-            command: AppCommand::Toile(cmd),
+            command: cmd,
         };
         match self.outbox.send(msg) {
             SendOutcome::Sent => true,
@@ -2229,7 +2226,7 @@ impl ToileView {
     /// members included: the refusal belongs to the write (`TOILE-UI-182`).
     /// The selection itself is left as it was (`TOILE-UI-176`).
     #[cfg(any(test, target_arch = "wasm32"))]
-    fn apply_restyle(&mut self, style: ambre_bus::app::toile::ElementStyle) {
+    fn apply_restyle(&mut self, style: crate::message::ElementStyle) {
         if self.selection.is_empty() {
             // An arrow takes the same edit through its own command
             // (`toile-connectors`).
@@ -2431,19 +2428,19 @@ impl ToileView {
 
     /// Publish the board-wide list the panel renders.
     #[cfg(target_arch = "wasm32")]
-    fn publish_comment_list(&mut self, list: Vec<ambre_bus::app::toile::CommentSummary>) {
+    fn publish_comment_list(&mut self, list: Vec<crate::message::CommentSummary>) {
         self.comments.list.set(list);
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn publish_comment_list(&mut self, _list: Vec<ambre_bus::app::toile::CommentSummary>) {}
+    fn publish_comment_list(&mut self, _list: Vec<crate::message::CommentSummary>) {}
 
     /// Publish the one thread the panel shows whole.
     #[cfg(target_arch = "wasm32")]
-    fn publish_comment_thread(&mut self, thread: ambre_bus::app::toile::CommentThread) {
+    fn publish_comment_thread(&mut self, thread: crate::message::CommentThread) {
         self.comments.open.set(Some(thread));
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn publish_comment_thread(&mut self, _thread: ambre_bus::app::toile::CommentThread) {}
+    fn publish_comment_thread(&mut self, _thread: crate::message::CommentThread) {}
 
     /// Open the composer the comment tool dropped (`TOILE-UI-307`).
     #[cfg(target_arch = "wasm32")]
@@ -2556,11 +2553,11 @@ impl ToileView {
 
     /// Publish the frames the panel renders.
     #[cfg(target_arch = "wasm32")]
-    fn publish_deck(&mut self, view: ambre_bus::app::toile::DeckView) {
+    fn publish_deck(&mut self, view: crate::message::DeckView) {
         self.deck.view.set(view);
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn publish_deck(&mut self, _view: ambre_bus::app::toile::DeckView) {}
+    fn publish_deck(&mut self, _view: crate::message::DeckView) {}
 
     /// Drain the intent the deck panel emitted this frame. Each edit answers
     /// with the whole new order, which is the only shape `SetSlideOrder` takes.
@@ -3779,7 +3776,7 @@ impl ToileView {
                         // while the editor was open (`TOILE-UI-381`).
                         let locked = self
                             .find_element(&id)
-                            .is_some_and(|e| e.locked == ambre_bus::app::toile::LockState::Locked);
+                            .is_some_and(|e| e.locked == crate::message::LockState::Locked);
                         if !locked {
                             self.patch_element_text(&id, &base, &text);
                         }
@@ -3823,10 +3820,7 @@ impl ToileView {
         self.flush_outbox();
         loop {
             match self.from_logic.try_recv() {
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Toile(te),
-                    ..
-                }) => self.dispatch(te),
+                Ok(UiEvent::Viewport { event, .. }) => self.dispatch(event),
                 Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
                 // Other UiEvent variants (session, CRUD, connection) are not yet
                 // consumed by the Toile view; ignore them for now.
@@ -4275,7 +4269,7 @@ impl ToileView {
 
     /// Drain the embed the shell resolved for us this frame (`TOILE-086`,
     /// `TOILE-087`). The address has already been through
-    /// [`WebAddress`](ambre_bus::app::toile::WebAddress) on the
+    /// [`WebAddress`](crate::message::WebAddress) on the
     /// shell's side. The dialog refuses what it cannot accept. The user learns
     /// of a bad address while it is still on screen, rather than after a box
     /// lands on the board. Placing writes a reference and nothing else, so it

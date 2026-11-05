@@ -126,7 +126,7 @@ impl TrameState {
     /// as such a number.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
         use crate::formula::functions::exact_sum;
-        use ambre_bus::app::trame::{CellFloat, Cells, NumericStats};
+        use crate::message::{CellFloat, Cells, NumericStats};
         use ambre_core::Bounded;
         // Make sure evaluated values are current before reading them.
         let indices = self.engine_indices();

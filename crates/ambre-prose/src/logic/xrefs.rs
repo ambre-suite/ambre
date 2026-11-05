@@ -8,7 +8,7 @@
 use ambre_core::index::Pos;
 use loro::TreeID;
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 
 use crate::doc;
 use crate::events::{CrossRefKind, ProseEvent, ProseOutcome, ProseRefusal, block_id};
@@ -84,7 +84,7 @@ mod tests {
     use super::*;
     use crate::events::HeadingLevel;
     use crate::events::{BlockId, BlockInit, ProseCommand, ResolvedCrossRef, tree_id};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::Span;
 
     /// A heading "Intro", a paragraph, and a second heading "Details".

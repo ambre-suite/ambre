@@ -35,7 +35,7 @@ use loro::LoroValue;
 
 use crate::ToileError;
 use crate::logic::command::{Reaction, ReactionCounts, ReactionKind, ToileEvent, ToileOutcome};
-use ambre_bus::app::toile::Reactions;
+use crate::message::Reactions;
 use ambre_core::id::{Element, Id};
 
 use super::ToileState;

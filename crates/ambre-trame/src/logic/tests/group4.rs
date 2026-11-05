@@ -267,7 +267,7 @@ fn sort_range_query_spans_the_used_width_of_a_row_band() {
     ));
     // A key on the third column the dialog offered orders the rows by it.
     state.handle_command(TrameCommand::SortSelectionMulti {
-        sort_keys: vec![ambre_bus::SortKey {
+        sort_keys: vec![crate::message::SortKey {
             col: Len::<Col>::new(2),
             order: SortOrder::Ascending,
         }],
@@ -742,12 +742,12 @@ fn disjoint_selection_styles_every_rectangle() {
     });
     assert_eq!(
         read_display(&mut state, 0, 0).bold,
-        ambre_bus::Weight::Bold,
+        ambre_core::Weight::Bold,
         "A1 is styled"
     );
     assert_eq!(
         read_display(&mut state, 2, 2).bold,
-        ambre_bus::Weight::Bold,
+        ambre_core::Weight::Bold,
         "C3 is styled"
     );
 }

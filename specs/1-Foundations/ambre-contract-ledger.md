@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3891 rows: 3332 shipped, of which 12 loose. 559 unbuilt.**
+**3913 rows: 3346 shipped, of which 21 loose. 567 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 956 | 454 | 873 | 618 | 419 | 3320 |
-| `failing` |  | 1 |  |  |  | 1 |
-| `untested` |  |  |  |  |  | 0 |
+| `verified` | 961 | 454 | 873 | 618 | 419 | 3325 |
+| `failing` |  | 5 |  |  |  | 5 |
+| `untested` |  | 5 |  |  |  | 5 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 198 | 57 | 29 | 109 | 166 | 559 |
+| `unimplemented` | 198 | 65 | 29 | 109 | 166 | 567 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -40,7 +40,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 7 |  | 1 |
-| `ambre-spec-architecture.md` | 69 | 69 | 60 | 9 |  |
+| `ambre-spec-architecture.md` | 70 | 70 | 61 | 9 |  |
 | `ambre-spec-broadcast.md` | 28 | 27 | 27 |  | 1 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 19 | 18 | 18 |  | 1 |
@@ -59,7 +59,7 @@
 | `ambre-spec-launcher.md` | 27 | 23 | 23 |  | 4 |
 | `ambre-spec-media.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-membership.md` | 35 | 35 | 35 |  |  |
-| `ambre-spec-message-bus.md` | 31 | 31 | 31 |  |  |
+| `ambre-spec-message-bus.md` | 32 | 32 | 32 |  |  |
 | `ambre-spec-object-store.md` | 18 | 17 | 17 |  | 1 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-organizations.md` | 14 | 12 | 12 |  | 2 |
@@ -67,19 +67,19 @@
 | `ambre-spec-presence.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-profile.md` | 9 | 1 | 1 |  | 8 |
 | `ambre-spec-render-assets.md` | 23 | 20 | 20 |  | 3 |
-| `ambre-spec-residency.md` | 27 | 27 | 27 |  |  |
+| `ambre-spec-residency.md` | 28 | 28 | 28 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-sequencer.md` | 70 | 70 | 70 |  |  |
 | `ambre-spec-server.md` | 95 | 89 | 88 | 1 | 6 |
 | `ambre-spec-session.md` | 22 | 22 | 22 |  |  |
-| `ambre-spec-sync.md` | 57 | 56 | 56 |  | 1 |
+| `ambre-spec-sync.md` | 59 | 58 | 58 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
 | `ambre-spec-undo.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-zero-knowledge.md` | 20 | 19 | 19 |  | 1 |
-| `ambre-spec-trame-schema.md` | 7 | 7 | 7 |  |  |
+| `ambre-spec-trame-schema.md` | 11 | 7 | 7 |  | 4 |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 37 |  | 1 |
@@ -98,7 +98,7 @@
 | `ambre-spec-trame-number-formats.md` | 14 | 11 | 11 |  | 3 |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  | 3 |
 | `ambre-spec-trame-resize.md` | 11 | 11 | 11 |  |  |
-| `ambre-spec-trame-rows-and-columns.md` | 21 | 21 | 20 | 1 |  |
+| `ambre-spec-trame-rows-and-columns.md` | 34 | 30 | 20 | 10 | 4 |
 | `ambre-spec-trame-selection.md` | 12 | 11 | 11 |  | 1 |
 | `ambre-spec-trame-shared-filter.md` | 37 | 34 | 34 |  | 3 |
 | `ambre-spec-trame-sheets.md` | 23 | 23 | 23 |  |  |
@@ -191,7 +191,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..069 |
+| `ambre-spec-architecture.md` | ARCH-001..070 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057 |
@@ -213,7 +213,7 @@
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176 |
 | `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173 |
-| `ambre-spec-message-bus.md` | BUS-001..031 |
+| `ambre-spec-message-bus.md` | BUS-001..032 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
 | `ambre-spec-murmure-calls.md` | MURMURE-407..413 |
@@ -279,13 +279,13 @@
 | `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132,211..212,217..218 |
 | `ambre-spec-prose-word-count.md` | PROSE-FEAT-018,038..040,119..127,312 |
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069,073,081,084,086..088 |
-| `ambre-spec-residency.md` | RESID-001..027 |
+| `ambre-spec-residency.md` | RESID-001..028 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..247 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236 |
-| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..185 |
+| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..187 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064,102..103 |
 | `ambre-spec-toile-auto-layout.md` | TOILE-FEAT-005,009,029..032,038..054,099,102..104 |
@@ -336,8 +336,8 @@
 | `ambre-spec-trame-number-formats.md` | TRAME-102..110,157..158,223,237..238 |
 | `ambre-spec-trame-pdf-export.md` | TRAME-IO-021..023,031 |
 | `ambre-spec-trame-resize.md` | TRAME-UI-036..042,126..128,181 |
-| `ambre-spec-trame-rows-and-columns.md` | TRAME-080..091,170..177,261 |
-| `ambre-spec-trame-schema.md` | TRAME-003,010,016,025,221..222,242 |
+| `ambre-spec-trame-rows-and-columns.md` | TRAME-080..091,170..177,261..269,273..274,276..278 |
+| `ambre-spec-trame-schema.md` | TRAME-003,010,016,025,221..222,242,270..272,275 |
 | `ambre-spec-trame-selection.md` | TRAME-UI-019,030..035,129..132,182 |
 | `ambre-spec-trame-shared-filter.md` | TRAME-256..257; TRAME-FEAT-002..009,014..016,025..027,029..046; TRAME-UI-008,154,173 |
 | `ambre-spec-trame-sheets.md` | TRAME-022,070..079,159..165,232,234..236,241 |

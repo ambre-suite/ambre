@@ -224,7 +224,7 @@ const S5: Pos<EngineSheet> = Pos::<EngineSheet>::new(5);
 /// canonical id `#s2` -> index 2 (`#gone` resolves to nothing).
 struct TestCtx;
 impl FormulaCtx for TestCtx {
-    fn resolve_sheet(&self, name: &ambre_bus::SheetName) -> Option<Pos<EngineSheet>> {
+    fn resolve_sheet(&self, name: &crate::message::SheetName) -> Option<Pos<EngineSheet>> {
         match name.as_str() {
             "Sheet1" => Some(S0),
             "Sheet2" => Some(S2),
@@ -240,7 +240,7 @@ impl FormulaCtx for TestCtx {
     }
     fn resolve_name(
         &self,
-        name: &ambre_core::Validated<ambre_bus::DefinedName>,
+        name: &ambre_core::Validated<crate::message::DefinedName>,
     ) -> Option<NameTarget> {
         match name.as_str() {
             "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(

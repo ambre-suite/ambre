@@ -5,7 +5,8 @@
 //! with its answer (`MURMURE-011`). Every client that writes the answer
 //! writes the same entries, so two writers converge on one successor.
 
-use ambre_bus::{Authored, Instant, Messages, MurmureEvent};
+use crate::message::MurmureEvent;
+use ambre_bus::{Authored, Instant, Messages};
 use ambre_core::id::{Id, Segment};
 use ambre_core::{Count, DeltaBytes, Failures, Ms, Octets, Payload, PeerEntryBytes, TimeSpan};
 use loro::{ExportMode, LoroDoc};
@@ -44,7 +45,7 @@ pub(super) struct Retry {
     at: Option<Instant<Authored>>,
 }
 
-pub use ambre_bus::app::murmure::Successor;
+pub use ambre_bus::Successor;
 
 /// What writing a close produced: the `meta` delta to send, and the successor
 /// to fetch when another client created it.

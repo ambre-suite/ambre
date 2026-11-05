@@ -10,10 +10,8 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{
-    Authored, ChannelDocument, ChannelDocumentKind, FoldAnswer, Instant, LeaseAnswer,
-    MurmureCommand, MurmureEvent,
-};
+use ambre_bus::{Authored, ChannelDocument, ChannelDocumentKind, FoldAnswer, Instant, LeaseAnswer};
+use ambre_murmure::message::{MurmureCommand, MurmureEvent};
 
 impl LogicState {
     /// Ask the Sync worker to close the active segment of `channel_id` once

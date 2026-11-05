@@ -1,8 +1,7 @@
 // ambre-bus host tests (tier `host`, `ambre-spec-message-bus.md`).
 // ============================================================================
 // Pure, native (`cargo test -p ambre-bus`) coverage of the bus data plane:
-//   - the two pure helpers carried on the content plane (`to_tsv`,
-//     `has_decimals`),
+//   - the bounded values the shared content plane carries,
 //   - the request id issuer invariant (monotonic, one shared issuer),
 //   - postcard round-trips of the Logic <-> Sync envelopes. The contract:
 //     `SyncCommand` / `LogicEvent`, and the `Rest*` family they carry, survive the
@@ -16,218 +15,18 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::app::toile::{PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::next_request;
 use ambre_bus::{
-    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, Authored, CellFormat, ChannelMeta,
-    ChannelName, ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, FoldAnswer,
-    Instant, LeaseAnswer, LogicEvent, MemberChannel, MemberInfo, MemberStanding, OpenFailure,
-    RestCommand, RestEvent, Role, SelectionKind, SyncCommand, TrameCommand,
+    ActivityAnchor, ActivityKind, ActivitySummary, Authored, ChannelMeta, ChannelName,
+    ChannelPlace, DirectPeers, DocType, FoldAnswer, Instant, LeaseAnswer, LogicEvent,
+    MemberChannel, MemberInfo, MemberStanding, OpenFailure, RestCommand, RestEvent, Role,
+    SyncCommand,
 };
-use ambre_bus::{Col, Decimals, DecimalsStep, Row};
-use ambre_core::Bounded;
-use ambre_core::id::Sheet;
+use ambre_core::Seq;
 use ambre_core::id::{
-    Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
+    Channel, Document, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
-use ambre_core::index::{Len, Pos};
-use ambre_core::{Board, Px, Seq};
-use ambre_core::{Ms, PageLoad, TimeSpan};
-
-// -- Content plane: ClipboardPayload::to_tsv ---------------------------------
-
-fn cell(dr: u32, dc: u32, raw: &str) -> ClipboardCell {
-    ClipboardCell {
-        dr: Len::<Row>::new(dr),
-        dc: Len::<Col>::new(dc),
-        raw: raw.to_string(),
-        ..Default::default()
-    }
-}
-
-#[test]
-fn to_tsv_full_grid() {
-    let payload = ClipboardPayload {
-        rows: Len::<Row>::new(2),
-        cols: Len::<Col>::new(2),
-        cells: vec![
-            cell(0, 0, "a"),
-            cell(0, 1, "b"),
-            cell(1, 0, "c"),
-            cell(1, 1, "d"),
-        ],
-        ..Default::default()
-    };
-    assert_eq!(payload.to_tsv(), "a\tb\nc\td");
-}
-
-#[test]
-fn to_tsv_gaps_render_as_empty_fields() {
-    // Blank source cells are omitted from `cells`; they must appear as empty
-    // fields, not collapse the row.
-    let payload = ClipboardPayload {
-        rows: Len::<Row>::new(2),
-        cols: Len::<Col>::new(2),
-        cells: vec![cell(0, 0, "a"), cell(1, 1, "d")],
-        ..Default::default()
-    };
-    assert_eq!(payload.to_tsv(), "a\t\n\td");
-}
-
-#[test]
-fn to_tsv_formula_cell_keeps_raw_text() {
-    let payload = ClipboardPayload {
-        rows: Len::<Row>::new(1),
-        cols: Len::<Col>::new(1),
-        cells: vec![cell(0, 0, "=SUM(A1:B1)")],
-        ..Default::default()
-    };
-    assert_eq!(payload.to_tsv(), "=SUM(A1:B1)");
-}
-
-#[test]
-fn to_tsv_zero_dimensions_clamp_to_one() {
-    // `rows`/`cols` of 0 still produce a 1x1 grid (the `.max(1)`), never panic.
-    let payload = ClipboardPayload::default();
-    assert_eq!(payload.to_tsv(), "");
-}
-
-#[test]
-fn to_tsv_out_of_bounds_offsets_are_ignored() {
-    // A cell whose offset exceeds the declared range must not panic or grow the
-    // grid; `get_mut` returns `None` and the cell is dropped.
-    let payload = ClipboardPayload {
-        rows: Len::<Row>::new(1),
-        cols: Len::<Col>::new(1),
-        cells: vec![cell(0, 0, "a"), cell(5, 5, "stray")],
-        ..Default::default()
-    };
-    assert_eq!(payload.to_tsv(), "a");
-}
-
-// -- Content plane: CellFormat::has_decimals (exhaustive) ---------------------
-
-#[test]
-fn has_decimals_is_true_only_for_numeric_families() {
-    for fmt in [
-        CellFormat::Number,
-        CellFormat::Currency,
-        CellFormat::Percent,
-        CellFormat::Scientific,
-    ] {
-        assert!(fmt.has_decimals(), "{fmt:?} should honour decimals");
-    }
-    for fmt in [
-        CellFormat::General,
-        CellFormat::Fraction,
-        CellFormat::Date,
-        CellFormat::Time,
-        CellFormat::Text,
-        CellFormat::Custom("dd/mm".to_string()),
-    ] {
-        assert!(!fmt.has_decimals(), "{fmt:?} should ignore decimals");
-    }
-}
-
-/// A decimal count holds between zero and fifteen places, stepped or decoded.
-#[test]
-fn a_decimal_count_stays_within_fifteen_places() {
-    let two = Bounded::<Decimals>::new(2).unwrap();
-    assert_eq!(Bounded::<Decimals>::new(16), None);
-    assert_eq!(DecimalsStep::MORE.apply_to(Bounded::MAX), Bounded::MAX);
-    assert_eq!(DecimalsStep::FEWER.apply_to(Bounded::MIN), Bounded::MIN);
-    assert_eq!(DecimalsStep::MORE.apply_to(two).get(), 3);
-    assert_eq!(DecimalsStep::new(i8::MAX).apply_to(two), Bounded::MAX);
-    assert_eq!(DecimalsStep::new(i8::MIN).apply_to(two), Bounded::MIN);
-    let past: Result<Bounded<Decimals>, _> = postcard::from_bytes(&[16]);
-    assert!(past.is_err(), "a decoded count past fifteen is refused");
-    let bytes = postcard::to_allocvec(&two).unwrap();
-    assert_eq!(bytes, [2], "the count travels as one byte");
-}
-
-/// A decimal count keeps the bytes and the words of its hand-written type. It
-/// travels as one bare byte in postcard and a bare number in JSON. `Debug`
-/// prints `Decimals(n)`, and a refusal keeps its text.
-#[test]
-fn a_decimal_count_keeps_its_wire_form_and_its_refusal() {
-    for places in 0..=15_u8 {
-        let count = Bounded::<Decimals>::new(places).unwrap();
-        let bytes = postcard::to_allocvec(&count).unwrap();
-        assert_eq!(bytes, [places]);
-        assert_eq!(
-            postcard::from_bytes::<Bounded<Decimals>>(&bytes).unwrap(),
-            count
-        );
-        let json = serde_json::to_string(&count).unwrap();
-        assert_eq!(json, places.to_string());
-        assert_eq!(
-            serde_json::from_str::<Bounded<Decimals>>(&json).unwrap(),
-            count
-        );
-    }
-    let refused = serde_json::from_str::<Bounded<Decimals>>("16").unwrap_err();
-    assert!(
-        refused
-            .to_string()
-            .starts_with("a cell carries at most 15 decimal places, not 16"),
-        "{refused}"
-    );
-    assert!(postcard::from_bytes::<Bounded<Decimals>>(&[255]).is_err());
-    assert_eq!(
-        Bounded::<Decimals>::try_new(16).unwrap_err().to_string(),
-        "a cell carries at most 15 decimal places, not 16"
-    );
-    assert_eq!(format!("{:?}", Bounded::<Decimals>::MAX), "Decimals(15)");
-}
-
-/// A line-height multiple is finite and above zero, and a stored number that
-/// is not reads as no setting at all.
-#[test]
-fn a_line_height_multiple_is_finite_and_above_zero() {
-    use ambre_bus::app::prose::{LineHeight, LineHeightMode, LineSpacingMultiple};
-    for refused in [0.0, -1.0, f32::NAN, f32::INFINITY] {
-        assert_eq!(LineSpacingMultiple::new(refused), None);
-        assert_eq!(
-            LineHeight::from_stored(LineHeightMode::Multiple, refused),
-            None
-        );
-    }
-    for mode in [LineHeightMode::Exact, LineHeightMode::AtLeast] {
-        for refused in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
-            assert_eq!(LineHeight::from_stored(mode, refused), None, "{refused}");
-        }
-        assert!(LineHeight::from_stored(mode, 12.0).is_some());
-    }
-    let read = LineHeight::from_stored(LineHeightMode::Multiple, 1.5);
-    assert_eq!(
-        read,
-        Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_HALF))
-    );
-    assert_eq!(read.map(LineHeight::stored_value), Some(1.5));
-}
-
-/// A fraction of a side lies in 0..=1, and a decoded one outside it is
-/// refused.
-#[test]
-fn a_fraction_of_a_side_lies_between_zero_and_one() {
-    use ambre_bus::app::toile::UnitFraction;
-    for refused in [-0.1, 1.1, f32::NAN] {
-        assert_eq!(Bounded::<UnitFraction>::new(refused), None);
-    }
-    assert_eq!(
-        Bounded::<UnitFraction>::HALF.along(Px::<Board>::new(10.0), Px::<Board>::new(30.0)),
-        Px::<Board>::new(20.0)
-    );
-    let past: Result<Bounded<UnitFraction>, _> =
-        postcard::from_bytes(&postcard::to_allocvec(&2.0_f32).unwrap());
-    assert!(past.is_err(), "a decoded fraction past one is refused");
-    let bytes = postcard::to_allocvec(&Bounded::<UnitFraction>::HALF).unwrap();
-    assert_eq!(
-        bytes,
-        postcard::to_allocvec(&0.5_f32).unwrap(),
-        "it travels as an f32"
-    );
-}
+use ambre_core::{Ms, TimeSpan};
 
 // -- Service plane: request id issuer -----------------------------------------
 
@@ -785,7 +584,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             closing: segment,
             active: Id::<Segment>::from_document(Id::<Document>::mint()),
-            successor: ambre_bus::app::murmure::Successor::Fetched,
+            successor: ambre_bus::Successor::Fetched,
         },
         LogicEvent::SegmentCloseFailed {
             channel_id: chan,
@@ -963,19 +762,19 @@ impl<T: serde::Serialize> Encodable<T> {
     const ENCODES: bool = true;
 }
 
-/// `BUS-001`: nothing on the UI to Logic path can be encoded. The four
-/// messages that cross it implement no `Serialize`, so no encoder has a
-/// value to take. The probe reads true for an envelope of the worker hop.
+/// `BUS-001`: nothing on the UI to Logic path can be encoded. The two
+/// envelopes that cross it implement no `Serialize`, whatever document command
+/// or event they carry, so no encoder has a value to take. The probe reads
+/// true for an envelope of the worker hop. The Logic runtime probes the two
+/// sums it declares the same way.
 #[test]
 fn the_ui_to_logic_path_carries_nothing_an_encoder_takes() {
-    use ambre_bus::{AppEvent, LogicCommand, UiEvent};
+    use ambre_bus::{LogicCommand, UiEvent};
 
     // Each probe is a constant, so a derive added tomorrow fails the build.
     const {
         assert!(!Encodable::<LogicCommand>::ENCODES);
-        assert!(!Encodable::<AppCommand>::ENCODES);
         assert!(!Encodable::<UiEvent>::ENCODES);
-        assert!(!Encodable::<AppEvent>::ENCODES);
         assert!(Encodable::<SyncCommand>::ENCODES);
     }
 }
@@ -1003,92 +802,6 @@ fn request_id_echo_is_preserved_across_the_hop() {
     assert_eq!(id, back);
 }
 
-// -- Role gate: AppCommand::is_mutating (`architecture`) ---------
-//
-// The classification decides what a viewer may still do, and getting it wrong is silent in
-// both directions. A misclassified read-only command costs a viewer its navigation, and a
-// misclassified write slips past the client gate. The two ends of each family are pinned
-// here rather than trusted to review.
-
-#[test]
-fn read_only_and_local_commands_are_not_mutating() {
-    let cases: Vec<AppCommand> = vec![
-        // Trame: local view state.
-        AppCommand::Trame(TrameCommand::ScrollViewport {
-            version: ambre_core::Seq::nth(1),
-            row_start: Pos::<Row>::new(0),
-            row_end: Pos::<Row>::new(4),
-            col_start: Pos::<Col>::new(0),
-            col_end: Pos::<Col>::new(4),
-        }),
-        AppCommand::Trame(TrameCommand::SetActiveCell {
-            row: Pos::<Row>::new(0),
-            col: Pos::<Col>::new(0),
-            anchor_row: Pos::<Row>::new(0),
-            anchor_col: Pos::<Col>::new(0),
-            extra: vec![],
-            kind: SelectionKind::Cells,
-        }),
-        AppCommand::Trame(TrameCommand::ActivateSheet {
-            sheet_id: Id::<Sheet>::from_text("s1".to_owned()),
-        }),
-        // Trame: read-only queries.
-        AppCommand::Trame(TrameCommand::RequestSelectionStats),
-        AppCommand::Trame(TrameCommand::CopyRange),
-        AppCommand::Trame(TrameCommand::ExportActiveSheetCsv),
-        // Toile: local playback and view state.
-        AppCommand::Toile(ToileCommand::NextSlide),
-        AppCommand::Toile(ToileCommand::ExitPresent),
-        AppCommand::Toile(ToileCommand::SetViewport(ToileViewport::default())),
-        // Toile: pure reads a viewer must keep (`toile-comments`,
-        // `toile-presentation`): both answer with a projection and write nothing.
-        AppCommand::Toile(ToileCommand::ReadComments { thread: None }),
-        AppCommand::Toile(ToileCommand::ReadDeck),
-        // Toile: ephemeral only -- a viewer still shows a cursor (`toile-presence`).
-        AppCommand::Toile(ToileCommand::Presence {
-            payload: PresencePayload::default(),
-            now: Instant::<PageLoad>::new(0.0),
-        }),
-    ];
-    for cmd in cases {
-        assert!(
-            !cmd.is_mutating(),
-            "a viewer must keep this command: {cmd:?}"
-        );
-    }
-}
-
-#[test]
-fn writing_commands_are_mutating() {
-    let cases: Vec<AppCommand> = vec![
-        AppCommand::Trame(TrameCommand::SetCellText {
-            row: Pos::<Row>::new(0),
-            col: Pos::<Col>::new(0),
-            text: "x".into(),
-        }),
-        AppCommand::Trame(TrameCommand::InsertRowAbove),
-        AppCommand::Trame(TrameCommand::PasteText { text: "x".into() }),
-        AppCommand::Trame(TrameCommand::Undo),
-        AppCommand::Toile(ToileCommand::DeleteElements { ids: Vec::new() }),
-        AppCommand::Toile(ToileCommand::DuplicateElements {
-            ids: Vec::new(),
-            delta: Default::default(),
-        }),
-        AppCommand::Toile(ToileCommand::Undo),
-        // Reacting writes a per-user CRDT entry (`toile-reactions`): not presence.
-        AppCommand::Toile(ToileCommand::React {
-            target: Id::<Element>::mint_from(
-                ambre_core::PeerId::new(1),
-                ambre_bus::app::toile::IdCounter::new(1),
-            ),
-            reaction: None,
-        }),
-    ];
-    for cmd in cases {
-        assert!(cmd.is_mutating(), "this command writes the CRDT: {cmd:?}");
-    }
-}
-
 /// A registry entry whose every byte is `fill`; no test checks its signature.
 fn an_entry(fill: u8) -> ambre_core::PeerEntry {
     ambre_core::PeerEntry {
@@ -1096,29 +809,4 @@ fn an_entry(fill: u8) -> ambre_core::PeerEntry {
         nonce: ambre_core::FixedBytes::from_array([fill; 16]),
         signature: ambre_core::FixedBytes::from_array([fill; 64]),
     }
-}
-
-/// A catalogue rank keeps the integer a Loro map stored before the rank
-/// family, and the `Debug` text the hand-written type printed.
-#[test]
-fn a_catalogue_rank_keeps_its_stored_integer_and_its_debug_text() {
-    use ambre_bus::{CatalogPosition, Rank};
-    let rank = Rank::<CatalogPosition>::new(7);
-    assert_eq!(rank.to_stored(), 7_i64);
-    assert_eq!(Rank::<CatalogPosition>::from_stored(7), rank);
-    assert_eq!(Rank::<CatalogPosition>::FIRST.to_stored(), 0_i64);
-    assert_eq!(format!("{rank:?}"), "CatalogPosition(7)");
-    assert_eq!(rank.to_string(), "7");
-}
-
-/// A conditional-format rank keeps the `Debug` text the hand-written type
-/// printed. A log reads that form alone, since the UI to Logic hop moves the
-/// command and serializes nothing.
-#[test]
-fn a_cond_format_rank_keeps_its_debug_text() {
-    use ambre_bus::{CondFormatPriority, Rank};
-    let rank = Rank::<CondFormatPriority>::new(-2);
-    assert_eq!(rank.get(), -2_i64);
-    assert!(rank < Rank::new(0));
-    assert_eq!(format!("{rank:?}"), "CondFormatPriority(-2)");
 }
