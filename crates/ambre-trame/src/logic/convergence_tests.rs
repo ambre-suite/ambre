@@ -42,7 +42,11 @@ use crate::{TrameCommand, TrameEvent};
 /// Bounded grid the generators address. Kept small so a sort/merge/fill spans a
 /// handful of cells and shrinking stays fast, while still forcing overlapping
 /// structural edits between the two peers.
-const ROWS: u32 = 5;
+const ROWS: u32 = 6;
+
+/// The rows the shared base writes. Every row from here to the edge of the
+/// window is past the used range, so a write there is a first write.
+const SEEDED: u32 = 4;
 const COLS: u32 = 4;
 
 /// The default (implicit-first) sheet id every fresh `TrameState` carries.
@@ -277,6 +281,10 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         // Weight value edits highest so structural ops act on populated cells.
         4 => (0..ROWS, 0..COLS, text_strategy())
             .prop_map(|(row, col, text)| Op::SetText { row, col, text }),
+        // A first write past the used range: two peers writing at once in one
+        // new row must add one row (`TRAME-261`).
+        2 => (SEEDED..ROWS, 0..COLS, text_strategy())
+            .prop_map(|(row, col, text)| Op::SetText { row, col, text }),
         1 => (0..ROWS).prop_map(|at| Op::InsertRow { at }),
         1 => (0..ROWS).prop_map(|at| Op::DeleteRow { at }),
         1 => (0..COLS).prop_map(|at| Op::InsertColumn { at }),
@@ -419,6 +427,7 @@ proptest! {
         b.import_snapshot(&sa)
         .expect("the snapshot imports");
 
+        prop_assert_eq!(a.index.row_len(), b.index.row_len(), "the peers count other rows");
         let grid_a = read_window(&mut a);
         let grid_b = read_window(&mut b);
         prop_assert_eq!(

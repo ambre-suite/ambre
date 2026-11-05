@@ -275,17 +275,14 @@ impl TrameState {
         let map = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str());
-        let mut edits: Vec<(CellKey, Option<CellText<StoredForm>>)> = Vec::new();
+        let mut edits: Vec<(CellPos, Option<CellText<StoredForm>>)> = Vec::new();
         let mut refusals = Vec::new();
         let lines = self.sheet_lines();
         for at in index.used_range().into_iter().flat_map(CellRect::cells) {
             let Some((rl, cl)) = index.resolve(at) else {
                 continue;
             };
-            let raw = match map
-                .get(CellKey::of(rl, cl).as_str())
-                .map(|v| v.get_deep_value())
-            {
+            let raw = match super::cells::cell_value(&map, &index, at) {
                 Some(LoroValue::String(s)) => CellText::<StoredForm>::new(s.to_string()),
                 _ => continue,
             };
@@ -310,7 +307,7 @@ impl TrameState {
                     raw.as_str().to_owned()
                 };
                 // The displayed value, format included (`TRAME-UI-078`).
-                match self.stored_style(sheet_id, rl, cl) {
+                match self.stored_style(sheet_id, &index, at) {
                     Some(style) => self.format_display(at, text, &style),
                     None => text,
                 }
@@ -331,19 +328,28 @@ impl TrameState {
                         }
                     }
                 };
-                edits.push((CellKey::of(rl, cl), stored));
+                edits.push((at, stored));
             }
         }
         drop(lines);
         self.write_refusals.extend(refusals);
         let count = Len::<Match>::of(edits.len());
-        for (key, stored) in edits {
+        for (at, stored) in edits {
             match stored {
+                // A replace writes under the visible element of each line.
                 Some(text) => {
-                    let _ = map.insert(key.as_str(), text.as_str());
+                    if let Some(key) = index.key_at(at) {
+                        let _ = map.insert(key.as_str(), text.as_str());
+                    }
                 }
+                // A replace that empties the cell clears it under every live
+                // element, as a clear does (`TRAME-279`).
                 None => {
-                    let _ = map.delete(key.as_str());
+                    for key in index.keys_at(at) {
+                        if map.get(key.as_str()).is_some() {
+                            let _ = map.delete(key.as_str());
+                        }
+                    }
                 }
             }
         }

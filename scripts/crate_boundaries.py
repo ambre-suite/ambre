@@ -114,6 +114,13 @@ scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
 a friction or a velocity of its own. So no Rust line outside that file names
 one above its tests.
 
+**One door to a line order** (`TRAME-275`). Two peers that derive one new
+line push two elements of one uid, and only the axis module reads that repeat
+as one line. A string names a container anywhere, so no Rust line of Trame
+outside `model/axis.rs` names an axis container above its tests: the family
+path, the raw list call, or the container name as a literal. The registry of
+names in `logic/schema.rs` spells each name once, on its declaration line.
+
 **One composed name** (`CHROME-080`). The placeholder of an unnamed document
 is spelled in `composed.rs` alone, whose type converts to no `String`. So no
 Rust line outside that file spells it above its tests.
@@ -453,6 +460,17 @@ BENCH_FIXTURE = re.compile(r"fixture", re.IGNORECASE)
 FRAME_RATE = re.compile(r"(?<![a-z])fps(?![a-z])|frames?[_ ]?per[_ ]?second|frame[_ ]?rate", re.IGNORECASE)
 
 KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
+
+# The one module that reads and writes a Trame line order, and the names that
+# reach a raw axis list: the family path, the list call, the name as a literal.
+TRAME_SOURCES = "crates/ambre-trame/src"
+AXIS_MODULE = "crates/ambre-trame/src/model/axis.rs"
+AXIS_REGISTRY = "crates/ambre-trame/src/logic/schema.rs"
+AXIS_NAME = re.compile(
+    r"\bSheetRoot::(?:Rows|Cols|LineGen)\b|\bget_movable_list\b|\"(?:rows|cols|line_gen)(?:_|\")"
+)
+AXIS_DECLARATION = re.compile(r'^\s*(?:Rows|Cols|LineGen) = "(?:rows|cols|line_gen)",\s*$')
+SHEET_ORDER = re.compile(r"\bRoot::SheetOrder\b")
 KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|damping)\w*\b", re.IGNORECASE)
 
 # The drawing trait, and the closed list a primitive's parameters are held to.
@@ -1544,6 +1562,29 @@ def check_kinetic_copy(errors: list[str]) -> int:
     return len(files)
 
 
+def check_axis_lists(errors: list[str]) -> int:
+    """`TRAME-275`: no Trame line outside the axis module names an axis list."""
+    if not AXIS_NAME.search(read(AXIS_MODULE)):
+        errors.append(f"{AXIS_MODULE}: names no axis list, so the axis boundary holds nothing")
+        return 0
+    files = sources((TRAME_SOURCES,))
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == AXIS_MODULE:
+            continue
+        for number, line in above_tests(path):
+            found = AXIS_NAME.search(line)
+            if not found:
+                continue
+            if rel == AXIS_REGISTRY and AXIS_DECLARATION.match(line):
+                continue
+            # The tab strip is a movable list too, and holds no line.
+            if found.group(0) == "get_movable_list" and SHEET_ORDER.search(line):
+                continue
+            errors.append(f"{rel}:{number}: an axis list reached outside `model/axis.rs`: `{found.group(0)}`")
+    return len(files)
+
+
 def check_primitives(errors: list[str]) -> int:
     """`CANVAS-056`: every parameter of a drawing primitive is geometry or paint.
 
@@ -2115,6 +2156,7 @@ def main() -> int:
     access = check_accessibility(errors)
     relay_logs = check_payload_logs(errors)
     kinetic = check_kinetic_copy(errors)
+    axes = check_axis_lists(errors)
     primitives = check_primitives(errors)
     scrolls = check_scroll_sources(errors)
     composed = check_composed_names(errors)
@@ -2158,6 +2200,7 @@ def main() -> int:
         f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe, "
         f"{relay_logs} relay files read for a payload in a log line, "
         f"{kinetic} Rust files read for a second kinetic model, "
+        f"{axes} Trame files read for an axis list outside its module, "
         f"{primitives} drawing primitives read for a screen-only parameter, "
         f"{scrolls} application files read for a scroll with no model step, "
         f"{composed} Rust files read for a name composed outside its type, "
@@ -2202,7 +2245,8 @@ def main() -> int:
             "alone hashes a key, an invitation waits on the trust decision, a "
             "two-state attribute says false, only the shared dialog is a "
             "modal, a menu answers the keyboard, the pipe stays reachable, the "
-            "relay logs no payload, one file holds the kinetic model, a drawing "
+            "relay logs no payload, one file holds the kinetic model, one module "
+            "reaches a Trame line order, a drawing "
             "primitive takes geometry and paint alone, one file "
             "composes a document's name, no view "
             "holds the state a shell signal holds, no event feeds both a view "

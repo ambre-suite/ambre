@@ -161,11 +161,14 @@ fn broken() -> Expr {
 
 /// One axis of a stored cell, read and written by its position type.
 trait CellAxis: Line {
+    /// The axis a structural edit of this one leaves in place.
+    type Other: CellAxis;
     fn get(cell: &StoredCell) -> StoredAxis<Pos<Self>>;
     fn set(cell: &mut StoredCell, value: StoredAxis<Pos<Self>>);
 }
 
 impl CellAxis for Row {
+    type Other = Col;
     fn get(cell: &StoredCell) -> StoredAxis<Pos<Self>> {
         cell.row
     }
@@ -175,6 +178,7 @@ impl CellAxis for Row {
 }
 
 impl CellAxis for Col {
+    type Other = Row;
     fn get(cell: &StoredCell) -> StoredAxis<Pos<Self>> {
         cell.col
     }
@@ -183,16 +187,17 @@ impl CellAxis for Col {
     }
 }
 
-/// The line at `pos`, or the position itself past the used range.
+/// The visible element of the line at `pos`, or the position itself past the
+/// used range.
 fn bind_at<L: Line>(index: &SheetIndex, pos: Pos<L>) -> StoredAxis<Pos<L>> {
-    L::uid(index, pos).map_or(StoredAxis::At(pos), StoredAxis::Line)
+    L::element(index, pos).map_or(StoredAxis::At(pos), StoredAxis::Line)
 }
 
 /// The position of a stored axis, `None` for a line that is gone. The whole
 /// axis has no single position, so it is `None` too.
 fn position<L: Line>(index: &SheetIndex, axis: StoredAxis<Pos<L>>) -> Option<Pos<L>> {
     match axis {
-        StoredAxis::Line(uid) => L::pos(index, &uid),
+        StoredAxis::Line(element) => L::pos_of_element(index, &element),
         StoredAxis::At(pos) => Some(pos),
         StoredAxis::Whole => None,
     }
@@ -202,8 +207,16 @@ fn position<L: Line>(index: &SheetIndex, axis: StoredAxis<Pos<L>>) -> Option<Pos
 /// once it is gone. A position and the whole axis stay as they are.
 fn place<L: Line>(index: &SheetIndex, axis: StoredAxis<Pos<L>>) -> Option<StoredAxis<Pos<L>>> {
     match axis {
-        StoredAxis::Line(uid) => L::pos(index, &uid).map(StoredAxis::At),
+        StoredAxis::Line(element) => L::pos_of_element(index, &element).map(StoredAxis::At),
         other => Some(other),
+    }
+}
+
+/// Whether axis `L` of `cell` names an element `index` no longer holds.
+fn gone<L: CellAxis>(index: &SheetIndex, cell: &StoredCell) -> bool {
+    match L::get(cell) {
+        StoredAxis::Line(element) => L::pos_of_element(index, &element).is_none(),
+        StoredAxis::At(_) | StoredAxis::Whole => false,
     }
 }
 
@@ -270,17 +283,38 @@ pub fn unbind<'a>(
 /// each corner keeps its line, so lines inserted inside it widen it
 /// (`TRAME-171`). Through a delete a removed corner moves to the nearest line
 /// left inside it, and a range with none left reads `#REF!`.
+///
+/// A reference to a line the new layout lacks is frozen into a literal
+/// `#REF!`. No element of a deleted line then stays in the text (`TRAME-277`).
+///
+/// Returns `None` when no reference moved, so the walk renders and writes
+/// nothing for the formula (`TRAME-277`).
 pub fn reanchor(
     expr: Expr,
     edited: &impl Fn(Option<&SheetQualifier>) -> bool,
     old: &SheetIndex,
     new: &SheetIndex,
     edit: AxisEdit,
-) -> Expr {
-    match edit {
-        AxisEdit::Rows(edit) => reanchor_on(expr, edited, old, new, edit),
-        AxisEdit::Cols(edit) => reanchor_on(expr, edited, old, new, edit),
-    }
+) -> Option<Expr> {
+    let moved = std::cell::Cell::new(Moved::No);
+    let after = match edit {
+        AxisEdit::Rows(edit) => reanchor_on(expr, edited, old, new, edit, &moved),
+        AxisEdit::Cols(edit) => reanchor_on(expr, edited, old, new, edit, &moved),
+    };
+    (moved.get() == Moved::Yes).then_some(after)
+}
+
+/// Whether a walk changed a reference of the formula it read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Moved {
+    No,
+    Yes,
+}
+
+/// Whether `before` and `after` name the same reference, by kind and corners.
+fn same_reference(before: &Expr, after: &Expr) -> bool {
+    std::mem::discriminant(before) == std::mem::discriminant(after)
+        && corners(before) == corners(after)
 }
 
 /// The side a removed position moves to, to its nearest survivor.
@@ -314,17 +348,46 @@ fn reanchor_on<L: CellAxis>(
     old: &SheetIndex,
     new: &SheetIndex,
     edit: LineEdit<L>,
+    moved: &std::cell::Cell<Moved>,
 ) -> Expr {
     map_refs(expr, &|q, node| {
+        let before = node.clone();
+        let after = reanchor_node(q, node, edited, old, new, edit);
+        if !same_reference(&before, &after) {
+            moved.set(Moved::Yes);
+        }
+        after
+    })
+}
+
+/// [`reanchor_on`] for one reference node.
+fn reanchor_node<L: CellAxis>(
+    q: Option<&SheetQualifier>,
+    node: Expr,
+    edited: &impl Fn(Option<&SheetQualifier>) -> bool,
+    old: &SheetIndex,
+    new: &SheetIndex,
+    edit: LineEdit<L>,
+) -> Expr {
+    {
         if !edited(q) {
             return node;
         }
         let Some((mut start, mut end)) = corners(&node) else {
             return node;
         };
+        // A reference to a line the new layout lacks freezes into a literal
+        // `#REF!`: the deleted line, or one a concurrent delete removed. A
+        // formula then holds no element of a deleted line (`TRAME-277`).
+        if [start, end].iter().any(|c| gone::<L::Other>(new, c)) {
+            return broken();
+        }
         if shape_of(&node) == NodeShape::Single {
+            if gone::<L>(new, &start) {
+                return broken();
+            }
             let next = match L::get(&start) {
-                // A line follows itself; one that is gone already reads `#REF!`.
+                // A line follows itself.
                 StoredAxis::Line(_) | StoredAxis::Whole => return node,
                 StoredAxis::At(pos) if pos < L::len(old).as_end() => bind_at(old, pos),
                 StoredAxis::At(pos) => match moved(edit, pos, Survivor::After) {
@@ -341,8 +404,8 @@ fn reanchor_on<L: CellAxis>(
         }
         let (Some(a), Some(b)) = (position(old, L::get(&start)), position(old, L::get(&end)))
         else {
-            // A corner whose line is already gone: it reads `#REF!` as it is.
-            return node;
+            // A corner whose line was gone before this edit freezes too.
+            return broken();
         };
         let (lo, hi) = (a.min(b), a.max(b));
         let (Some(lo), Some(hi)) = (
@@ -364,7 +427,7 @@ fn reanchor_on<L: CellAxis>(
         L::set(&mut start, encode(lo));
         L::set(&mut end, encode(hi));
         stored_node(start, end, NodeShape::Range)
-    })
+    }
 }
 
 #[cfg(test)]

@@ -45,20 +45,19 @@ and status values are normative in `ambre-spec-template.md`.
 | `TRAME-221` | `CONC` | Two peers that exchanged their whole history MUST show the same computed value, and a peer rebuilt from the converged snapshot MUST show it too. | this spec section 3 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over 256 interleavings, comparing the rendered text of both peers, then of a third peer imported from the converged snapshot; `logic::tests::group1::sum_over_plain_literals_survives_reseed` -- the worked example; `ambre_belt::trame_grid::tests::two_peers_typing_at_once_converge_on_both_screens` -- two users in two browsers, two edits crossing, the text and the status bar total read on both screens | none | verified |
 | `TRAME-016` | `INV` | A cell's whole style MUST be one binary register, keyed by that cell's identity. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::subset_style_edit_does_not_tear_a_whole_cell_rewrite` -- it goes red on a split register, because a partial patch racing a whole rewrite is what a second style container tears on; `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` -- the key | none | verified |
 | `TRAME-222` | `CONC` | Two concurrent restyles of one cell MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | none | verified |
-| `TRAME-270` | `INV` | A uid that one axis list holds twice MUST read as one line, at the position of its element with the smallest element id. | this spec section 2; `features/ambre-spec-trame-rows-and-columns.md section 3` (`TRAME-261`) | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7). Its planned mechanism is the four-peer proptest of `features/ambre-spec-trame-rows-and-columns.md section 3`, driven through `TrameState` and the formula engine, not through raw Loro documents alone | unimplemented |
-| `TRAME-271` | `INV` | A derived uid MUST NOT repeat a uid derived after the same line in the history the deriving peer holds. | this spec section 2; `features/ambre-spec-trame-rows-and-columns.md section 3` (`TRAME-267`) | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `TRAME-272` | `IO` | A document of schema version 1 MUST read under version 2 with every line at its position and every cell on its line. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-018`) | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `TRAME-275` | `INV` | Trame code outside the axis module MUST NOT reach an axis list except through the deduplicated axis view. | this spec section 5; `TRAME-270`; `features/ambre-spec-trame-rows-and-columns.md section 3` | not built | unbuilt -- lands with the `Two first writes in one new row keep one row` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `TRAME-270` | `INV` | A uid that one axis list holds twice MUST read as one line, at the position of its element with the smallest element id. | this spec section 2; `features/ambre-spec-trame-rows-and-columns.md section 3` (`TRAME-261`) | `ambre_trame::logic::tests::group14::a_uid_pushed_twice_reads_as_one_line_at_its_smallest_element`; `ambre_trame::model::axis::tests::a_repeated_uid_reads_as_one_line_at_its_smallest_element`; `ambre_trame::logic::tests::group14::four_peers::every_reference_reads_its_live_element_or_ref` -- the four-peer proptest, 512 cases, driven through `TrameState` and the formula engine | none | verified |
+| `TRAME-271` | `INV` | A derived uid MUST NOT repeat a uid derived after the same line in the history the deriving peer holds. | this spec section 2; `features/ambre-spec-trame-rows-and-columns.md section 3` (`TRAME-267`) | `ambre_trame::logic::tests::group14::no_uid_comes_back::a_derived_uid_never_repeats_one_derived_after_the_same_line` -- a proptest, 256 cases: first writes, deletes and moves on one peer, and no derived uid seen twice | none | verified |
+| `TRAME-272` | `IO` | A document of schema version 1 MUST read under version 2 with every line at its position and every cell on its line. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-018`) | `ambre_trame::logic::tests::group14::a_version_1_document_reads_with_every_line_and_cell_in_place`; ci-gate -- `just fixtures-check`, run in the CI host job, migrates `fixtures/frozen/trame/formula_dag@v1-s1.ambre` and compares its dump with the live artifact (`FIXTURE-019`) | none | verified |
+| `TRAME-275` | `INV` | Trame code outside the axis module MUST NOT reach an axis list except through the deduplicated axis view. | this spec section 5; `TRAME-270`; `features/ambre-spec-trame-rows-and-columns.md section 3` | type-level -- `ambre_trame::model::AxisView` keeps its fields and its reader private to `model/axis.rs`, and two `compile_fail` doctests of that module show a read of a list and a struct literal refused outside it; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses an axis family path, a raw list call and an axis container name as a literal in any Trame file outside `model/axis.rs`, above its tests; `ambre_trame::model::axis::tests::a_delete_drops_every_element_and_a_move_moves_the_visible_one` | none | verified |
 | `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7; `ambre-spec-schema-version.md`, the protocol it obeys | `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- `schema::stamp` writes the key inside the scaffolding commit of `from_doc`, alongside the implicit sheet, so a workbook carries it before any user edit | none | verified |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 7 `verified`, 4 `unimplemented`. What holds is the shape a merge reads back.
-  The identity a cell keeps, and the single register a style lives in. The key set a build writes,
-  which a CI gate holds append-only. A computed value is looked for in the whole document, beside
-  the raw text too.
+* **Verification.** 11 `verified`. What holds is the shape a merge reads back. The identity a cell
+  keeps, and the single register a style lives in. The key set a build writes, which a CI gate holds
+  append-only. A computed value is looked for in the whole document, beside the raw text too.
 
 ---
 
@@ -78,7 +77,9 @@ One identity type serves rows, columns and sheets.
   reader holds to (`TRAME-248`). A minted line's element is the bare uid.
 * A session mints each counter once, and past `u32::MAX` it mints no uid, so a uid never repeats
   (`TRAME-242`). What a write answers then is `TRAME-243`, in the engine feature.
-* A cell key joins two halves with `:`: `"{row_uid}:{col_uid}"`, 51 characters, fixed length.
+* A cell key joins two halves with `:`: `"{row_element}:{col_element}"`, each half the spelling of
+  the line's element. Two minted lines make the 51-character key of version 1. A derived half
+  adds 26 characters (`features/ambre-spec-trame-rows-and-columns.md section 3`).
 * A key or a line element reads back from that spelling alone. Another spelling of one uid
   would give it a second key, so a reader refuses it and says so (`TRAME-248`, in the engine
   feature). A stored formula writes its line uids in compact hex, a separate spelling its own
@@ -105,12 +106,12 @@ race: the last writer takes that whole unit.
 | `sheets` | Map | `sheet_id` | sheet name (String) | the sheet entry | `trame-sheets` | built |
 | `rows_{sheet}` | MovableList | position | `row_uid` | list order, no LWW | `trame-rows-and-columns` | built |
 | `cols_{sheet}` | MovableList | position | `col_uid` | list order, no LWW | `trame-rows-and-columns` | built |
-| `cells_{sheet}` | Map | `"{row_uid}:{col_uid}"` | raw text (String) | the cell | `trame-cell-editing` | built |
-| `cellstyle_{sheet}` | Map | `"{row_uid}:{col_uid}"` | `Binary(postcard(StyleRecord))` | the whole cell style | `trame-cell-styles` | built |
-| `merges_{sheet}` | Map | master `"{row_uid}:{col_uid}"` | bottom-right `"{row_uid}:{col_uid}"` | the merge | `trame-cell-merges` | built |
+| `cells_{sheet}` | Map | `"{row_element}:{col_element}"` | raw text (String) | the cell | `trame-cell-editing` | built |
+| `cellstyle_{sheet}` | Map | `"{row_element}:{col_element}"` | `Binary(postcard(StyleRecord))` | the whole cell style | `trame-cell-styles` | built |
+| `merges_{sheet}` | Map | master `"{row_element}:{col_element}"` | bottom-right `"{row_element}:{col_element}"` | the merge | `trame-cell-merges` | built |
 | `col_widths_{sheet}` | Map | `col_uid` | width in px (`f64`) | the column | `trame-resize` | built |
 | `row_heights_{sheet}` | Map | `row_uid` | height in px (`f64`) | the row | `trame-resize` | built |
-| `line_gen_{sheet}` | Map | `"{uid}:{generation:08x}"`, or the axis root for an empty axis | `true` | the key | `trame-rows-and-columns` | design |
+| `line_gen_{sheet}` | Map | `"{uid}:{generation:08x}"`; the axis root of an empty axis spells `rows` or `cols` in place of the uid | `true` | the key | `trame-rows-and-columns` | built |
 | `filters_{sheet}` | Map | `active` | `Binary(postcard(FilterRecord))` | the whole filter | `trame-shared-filter` | built |
 | `filter_hidden_{sheet}` | Map | `row_uid` | `true` | the row | `trame-shared-filter` | built |
 | `named_ranges` | Map | range name | A1 reference (String) | the name | `trame-named-ranges` | built |
@@ -218,12 +219,12 @@ stops the eventual container being keyed positionally by whoever writes it first
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TRAME-025` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
-| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout, so the registry is empty | architecture section 2.D; `SCHEMA-010` |
+| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
-| Next bump, version 2 | three changes. `line_gen_{sheet}` is a new key. A uid listed twice changes its meaning: a version-1 reader would show the line twice. A derived element spells `"{uid}#{element}"`, which a version-1 reader refuses (`TRAME-248`). The migration from 1 rewrites nothing: a version-1 element is a bare minted uid, and its element id is that uid. A version-1 reference carries no element id and binds to that element, which no derived uid can equal. A version-1 fixture is frozen in the commit that bumps |
+| Bump to version 2 | four changes. A cell, style or merge key spells each line's element, so a cell follows its element through a delete (`TRAME-265`). `line_gen_{sheet}` is a new key. A uid listed twice changes its meaning: a version-1 reader would show the line twice. A derived element spells `"{uid}#{element}"`, which a version-1 reader refuses (`TRAME-248`). The migration from 1 rewrites nothing: a version-1 element is a bare minted uid, and its element id is that uid. A version-1 cell key therefore names its elements already. A version-1 reference carries no element id and binds to that element, which no derived uid can equal. A version-1 fixture is frozen in the commit that bumps |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so a `StyleRecord` written by a newer client is skipped -- no longer silently: the reseed raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, axes | the used range grows by at most 10 000 lines per write, and holds at most 1 000 columns | `features/ambre-spec-trame-rows-and-columns.md` |
-| Size, keys | a cell key is 51 bytes, a uid 25; a 100 000-row axis is 2.5 MB of element values alone. A generation key is 34 bytes, and the record keeps about one per line that has derived a line after it. A derived element is 51 bytes, and a reference to it carries up to 26 more | this spec section 2 |
+| Size, keys | a cell key is 51 bytes on two minted lines, and up to 103 on two derived ones; a uid is 25; a 100 000-row axis is 2.5 MB of element values alone. A generation key is 34 bytes, and the record keeps about one per line that has derived a line after it. A derived element is 51 bytes, and a reference to it carries up to 26 more | this spec section 2 |
 | Deltas | a remote delta carries no version and applies blind; mixed-version live editing is bounded, not solved | architecture section 2.D |
 
 ---

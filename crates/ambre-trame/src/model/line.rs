@@ -10,9 +10,8 @@ use std::fmt::Debug;
 
 use ambre_bus::{Col, Row};
 use ambre_core::index::{Axis, Len, Pos};
-use loro::LoroMovableList;
 
-use super::{SheetIndex, Uid};
+use super::{Element, SheetIndex, Uid};
 
 /// One axis of a sheet: [`Row`] or [`Col`].
 ///
@@ -27,6 +26,13 @@ pub trait Line: Axis + Copy + Debug {
 
     /// How many lines the axis holds.
     fn len(index: &SheetIndex) -> Len<Self>;
+
+    /// The visible element of the line at `pos`: the one a reference binds to.
+    fn element(index: &SheetIndex, pos: Pos<Self>) -> Option<Element>;
+
+    /// Where the line of `element` sits: `None` once that element is gone,
+    /// whatever uid another element carries (`TRAME-278`).
+    fn pos_of_element(index: &SheetIndex, element: &Element) -> Option<Pos<Self>>;
 }
 
 impl Line for Row {
@@ -38,6 +44,12 @@ impl Line for Row {
     }
     fn len(index: &SheetIndex) -> Len<Row> {
         index.row_len()
+    }
+    fn element(index: &SheetIndex, pos: Pos<Row>) -> Option<Element> {
+        index.rows().element(pos)
+    }
+    fn pos_of_element(index: &SheetIndex, element: &Element) -> Option<Pos<Row>> {
+        index.rows().pos_of_element(element)
     }
 }
 
@@ -51,21 +63,10 @@ impl Line for Col {
     fn len(index: &SheetIndex) -> Len<Col> {
         index.col_len()
     }
-}
-
-/// Insert the line `uid` at `at` of `list`, the list that orders an axis.
-/// `None` when the list refuses it, or `at` lies past the indices the list
-/// takes.
-pub(crate) fn insert_line<A: Axis>(list: &LoroMovableList, at: Pos<A>, uid: &Uid) -> Option<()> {
-    list.insert(at.to_index()?, uid.to_key_part().as_str()).ok()
-}
-
-/// Delete the line at `at` of `list`. `None` as for [`insert_line`].
-pub(crate) fn delete_line<A: Axis>(list: &LoroMovableList, at: Pos<A>) -> Option<()> {
-    list.delete(at.to_index()?, 1).ok()
-}
-
-/// Move the line at `from` of `list` to `to`. `None` as for [`insert_line`].
-pub(crate) fn move_line<A: Axis>(list: &LoroMovableList, from: Pos<A>, to: Pos<A>) -> Option<()> {
-    list.mov(from.to_index()?, to.to_index()?).ok()
+    fn element(index: &SheetIndex, pos: Pos<Col>) -> Option<Element> {
+        index.cols().element(pos)
+    }
+    fn pos_of_element(index: &SheetIndex, element: &Element) -> Option<Pos<Col>> {
+        index.cols().pos_of_element(element)
+    }
 }
