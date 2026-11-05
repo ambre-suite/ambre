@@ -59,6 +59,17 @@ exclude_re = [
     'replace SyncState::send_wire with \(\)',
     'replace run_wasm with \(\)',
     'in SyncState::wire_ws_callbacks',
+    # Host-unreachable: each mutant sits in the `spawn_local` task of the
+    # browser path, which only a socket handle reaches.
+    'match guard resp\.setup_owed\(\) with (true|false) in SyncState::handle_unlock',
+    'delete ! in SyncState::handle_provider_return',
+    # Equivalent: placeholders until their flows land. Each argument drops,
+    # and zeroizes, at the end of the call either way.
+    'replace SyncState::handle_change_passphrase with \(\)',
+    'replace SyncState::handle_recover_account with \(\)',
+    # Equivalent on the host: with no relay the rename only logs. The request
+    # leaves from the browser path alone.
+    'replace SyncState::handle_name_channel with \(\)',
     # The browser transport: host tests drive a scripted transport in its
     # place, and the browser tier drives this one.
     '<impl MediaHttp for GlooHttp>',

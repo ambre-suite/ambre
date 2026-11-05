@@ -384,6 +384,36 @@ fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
     assert_eq!(message_at(&state, 0).also_in_thread, None);
 }
 
+/// Before the PeerID of the active segment lands, a reply to the thread
+/// alone leaves. A reply also sent to the channel waits for that PeerID
+/// (`MURMURE-109`).
+#[test]
+fn a_reply_to_its_thread_alone_needs_no_active_session() {
+    let alice = Id::<User>::mint();
+    let mut state = channel_with(&["root"], alice);
+    let root = message_at(&state, 0).id;
+    let (thread, _, _) = threaded(&mut state, root);
+    let successor = Id::<Segment>::mint();
+    state
+        .close_into(state.active_id(), successor, crate::Successor::Created, NOW)
+        .expect("close");
+    assert!(matches!(
+        state.reply(root, &draft("both"), alice, NOW, ambre_bus::ReplyEcho::AlsoInChannel),
+        Err(MurmureError::NoSession(id)) if id == successor.document_id()
+    ));
+    let replied = state
+        .reply(
+            root,
+            &draft("alone"),
+            alice,
+            NOW,
+            ambre_bus::ReplyEcho::ThreadOnly,
+        )
+        .expect("the thread has its session");
+    assert_eq!(replied.reply.document, thread);
+    assert!(replied.copy.is_none());
+}
+
 // --- MURMURE-538 ---
 
 /// A copy is found from its reply, under an identifier of its own. A reply

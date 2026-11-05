@@ -2021,6 +2021,112 @@ pub(crate) mod tests {
         assert_eq!(state.log_rule(meta).space, Some(word));
     }
 
+    fn bare_state() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
+        let (sink, rx) = LogicSink::channel();
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        (state, rx)
+    }
+
+    /// `SYNC-183`: a request for a new document of a channel answers its
+    /// failure at once when no relay is there to take it.
+    #[test]
+    fn a_channel_document_request_with_no_relay_answers_its_failure_at_once() {
+        let (state, rx) = bare_state();
+        let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
+        let (segment, root) = (Id::<Segment>::mint(), Id::<Message>::mint());
+        let document = Id::<Document>::mint();
+        let no_relay = SyncError::NoRelay.to_string();
+        let answered = || rx.try_iter().collect::<Vec<LogicEvent>>();
+        state.handle_close_segment(channel_id, meta, segment, Id::<Segment>::mint());
+        assert!(matches!(
+            answered().as_slice(),
+            [LogicEvent::SegmentCloseFailed { closing, message, .. }]
+                if *closing == segment && *message == no_relay
+        ));
+        state.handle_create_amendments(channel_id, meta, segment, document);
+        assert!(matches!(
+            answered().as_slice(),
+            [LogicEvent::AmendmentsLinkFailed { amendments, message, .. }]
+                if *amendments == document && *message == no_relay
+        ));
+        state.handle_create_thread(channel_id, meta, segment, root, document);
+        assert!(matches!(
+            answered().as_slice(),
+            [LogicEvent::ThreadLinkFailed { root: answered_root, message, .. }]
+                if *answered_root == root && *message == no_relay
+        ));
+    }
+
+    /// `SYNC-184`: a public channel needs the key of a space the relay
+    /// holds, and a private one needs no space at all.
+    #[test]
+    fn a_public_channel_needs_its_space_on_the_relay_and_a_private_one_does_not() {
+        let (mut state, rx) = bare_state();
+        let (tx, _events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        state.set_event_tx(tx);
+        let space_id = Id::<Space>::mint();
+        let create = |state: &SyncState, visibility| {
+            let channel_id = Id::<Channel>::mint();
+            let ids = (Id::<Meta>::mint(), Id::<Segment>::mint());
+            state.handle_create_channel(channel_id, space_id, ids, visibility, None);
+            match rx.try_iter().collect::<Vec<_>>().as_slice() {
+                [LogicEvent::ChannelRequestFailed { message, .. }] => message.clone(),
+                other => panic!("one failure expected, got {other:?}"),
+            }
+        };
+        let public = ambre_core::Visibility::Public;
+        let private = ambre_core::Visibility::Private;
+        assert_eq!(create(&state, public), SyncError::NotOpen.to_string());
+        assert_eq!(
+            create(&state, private),
+            SyncError::SessionLocked.to_string()
+        );
+        let space = |existence| {
+            SyncDocumentState::new(
+                space_id.document_id(),
+                DocumentKey::generate(),
+                DocType::Murmure,
+                existence,
+            )
+        };
+        state
+            .documents
+            .insert(space_id.document_id(), space(crate::Existence::LocalOnly));
+        assert_eq!(create(&state, public), SyncError::NotOnRelay.to_string());
+        state
+            .documents
+            .insert(space_id.document_id(), space(crate::Existence::OnRelay));
+        assert_eq!(create(&state, public), SyncError::SessionLocked.to_string());
+    }
+
+    /// `SYNC-106`: a listing marks the log of its channel's meta as one that
+    /// admits a self-join, never a segment's. The mark goes once no
+    /// catalogue lists the channel.
+    #[test]
+    fn a_listing_marks_the_meta_of_a_listed_channel_alone() {
+        let (mut state, _rx) = bare_state();
+        let (meta, segment) = (Id::<Document>::mint(), Id::<Document>::mint());
+        let documents = vec![
+            ChannelDocument {
+                document_id: meta,
+                kind: ChannelDocumentKind::Meta,
+            },
+            ChannelDocument {
+                document_id: segment,
+                kind: ChannelDocumentKind::Segment,
+            },
+        ];
+        let (channel_id, space_id) = (Id::<Channel>::mint(), Id::<Space>::mint());
+        state.channel_listed(channel_id, Some(space_id), Ok(documents.clone()));
+        assert_eq!(state.self_join_logs.get(&meta), Some(&space_id));
+        assert!(!state.self_join_logs.contains_key(&segment));
+        state.channel_listed(channel_id, None, Ok(documents));
+        assert!(state.self_join_logs.is_empty());
+    }
+
     #[test]
     fn with_no_relay_the_open_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
