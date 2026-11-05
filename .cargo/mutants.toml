@@ -65,6 +65,22 @@ exclude_re = [
     'replace SyncState::send_wire with \(\)',
     'replace run_wasm with \(\)',
     'in SyncState::wire_ws_callbacks',
+    'replace SyncState::wire_ws_callbacks with \(\)',
+    # The wasm twins of the socket shell: each line names the twin compiled
+    # for wasm32 alone, so a host build never holds its mutant. The native
+    # twin of each stays in scope.
+    'websocket\.rs:(6|7|8)[0-9]:.* in SyncState::open_websocket',
+    'websocket\.rs:(6|7|8)[0-9]:.*replace SyncState::open_websocket with',
+    'websocket\.rs:23[0-9]:.*replace SyncState::jitter',
+    'websocket\.rs:39[0-9]:.*replace SyncState::reauthenticate with',
+    'replace SyncState::(arm_reconnect_timer|arm_event_timer) with \(\)',
+    # Equivalent: the lifecycle clamps the jitter to [0, 1], so a native
+    # jitter of -1 reads as the 0 it replaces.
+    'replace SyncState::jitter -> f64 with -1\.0',
+    # The fetch of a rotated key runs in the `spawn_local` task of the
+    # browser path, and with no relay the host returns before it.
+    'replace SyncState::fetch_rotated_key with \(\)',
+    'in SyncState::fetch_rotated_key',
     # Host-unreachable: each mutant sits in the `spawn_local` task of the
     # browser path, which only a socket handle reaches.
     'match guard resp\.setup_owed\(\) with (true|false) in SyncState::handle_unlock',

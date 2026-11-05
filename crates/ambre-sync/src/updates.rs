@@ -2457,6 +2457,38 @@ mod tests {
             .collect()
     }
 
+    /// An edit buffered before the session waits, for a relay document, until
+    /// the replay brought its clock up: the open sends nothing of it.
+    #[test]
+    fn an_edit_buffered_before_the_session_waits_for_the_replay() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"early".to_vec());
+        state.signing_key = Some(sk);
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key,
+            snapshot_payload: None,
+            snapshot_id: Id::<Snapshot>::mint(),
+            covered_seq: Seq::<Relay>::new(0),
+            held_snapshot: None,
+            doc_type: DocType::Trame,
+            existence: crate::Existence::OnRelay,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            links: Vec::new(),
+        });
+        assert!(
+            !drain_ws(&ws_rx)
+                .iter()
+                .any(|m| matches!(m, WsClientMsg::Update(_))),
+            "the edit left before the replay"
+        );
+        assert_eq!(state.pending_pre_session_updates.len(), 1);
+    }
+
     /// A downloaded snapshot covering up to seq N must make the post-open
     /// `RequestMissing` start AFTER N. Only the deltas the snapshot does not
     /// already contain are replayed, not the whole history since genesis.
@@ -3438,8 +3470,8 @@ mod tests {
         );
     }
 
-    /// `SYNC-185`: a reconnect subscribes the document again and asks for
-    /// what came after the last number it holds.
+    /// `SYNC-033`, `SYNC-086`: a reconnect subscribes the document again and
+    /// asks for what came after the last number it holds.
     #[test]
     fn a_reconnect_subscribes_again_and_asks_after_the_last_number() {
         let (mut state, _rx, doc, _key, _sk, _snap) = setup();
