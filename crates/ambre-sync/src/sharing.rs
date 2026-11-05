@@ -3100,6 +3100,77 @@ mod tests {
         ));
     }
 
+    /// `SYNC-143`: a rotation that keeps meeting newcomers ends after its
+    /// tries, an owed one and a channel's alike. Another refusal ends a
+    /// channel's at once.
+    #[tokio::test]
+    async fn a_rotation_that_keeps_meeting_newcomers_ends_after_the_tries() {
+        let (my_xk, my_pub) = keypair(1);
+        let members = serde_json::json!({ "rotation_owed": true, "members": [
+            member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
+        ] });
+        let refused = |code| {
+            http::HttpError::refused(
+                http::Method::Post,
+                &crate::http::Target::relay("x"),
+                ambre_core::HttpStatus::new(409),
+                code,
+            )
+        };
+        let mut script = Vec::new();
+        for _ in 0..ROTATION_TRIES {
+            script.extend([
+                Ok(members.clone()),
+                Err(refused(Some(RefusalCode::MembersChanged))),
+            ]);
+        }
+        let http = FakeHttp::new(script);
+        let (etx, erx, _sink, _lrx) = channels();
+        settle_task(&http, settle_params(&my_xk), &etx).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::DebtUnsettled { .. })
+        ));
+        assert_eq!(http.calls().len(), 2 * ROTATION_TRIES);
+
+        let head = serde_json::json!({
+            "meta_id": Id::<Meta>::mint().to_string(), "role": "editor", "length": 1,
+        });
+        let params = || RotateChannelParams {
+            space_id: Id::<Space>::mint(),
+            channel_id: Id::<Channel>::mint(),
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: my_xk.clone(),
+            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+            previous: DocumentKey::generate(),
+            anchor: FixedBytes::from_array([5; 32]),
+            space_key: DocumentKey::generate(),
+        };
+        let mut script = vec![Ok(head.clone())];
+        for _ in 0..ROTATION_TRIES {
+            script.extend([
+                Ok(members.clone()),
+                Err(refused(Some(RefusalCode::MembersChanged))),
+            ]);
+        }
+        let http = FakeHttp::new(script);
+        rotate_channel_task(&http, params(), &etx).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::ChannelRotated { result: Err(_), .. })
+        ));
+        assert_eq!(http.calls().len(), 1 + 2 * ROTATION_TRIES);
+
+        let http = FakeHttp::new(vec![Ok(head), Ok(members), Err(refused(None))]);
+        rotate_channel_task(&http, params(), &etx).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::ChannelRotated { result: Err(_), .. })
+        ));
+        assert_eq!(http.calls().len(), 3, "another refusal is not tried again");
+    }
+
     /// A debt already paid posts nothing, and a failed payment leaves the debt
     /// for the next edit (`SYNC-128`).
     #[tokio::test]
@@ -3779,6 +3850,47 @@ mod tests {
         assert!(erx.try_recv().is_err(), "nothing was left");
         assert!(matches!(lrx.try_recv(), Ok(LogicEvent::ApiError { .. })));
         assert_eq!(http.calls().len(), 2 * ROTATION_TRIES);
+    }
+
+    /// `SYNC-132`: a role change whose log keeps moving ends after its
+    /// tries, and another refusal ends it at once.
+    #[tokio::test]
+    async fn a_role_change_ends_after_its_tries() {
+        let owner = Peer::new(1);
+        let bob = Peer::new(2);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &bob, Role::Editor);
+        let params = || RoleChangeParams {
+            id: ambre_bus::next_request(),
+            document_id: logged.document_id,
+            user_id: bob.author.user_id,
+            role: Role::Viewer,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: owner.xk.clone(),
+            author: same(&owner.author),
+        };
+        let mut script = Vec::new();
+        for _ in 0..ROTATION_TRIES {
+            script.extend([Ok(logged.answer()), Err(log_moved())]);
+        }
+        let http = FakeHttp::new(script);
+        let (etx, erx, sink, lrx) = channels();
+        role_change_task(&http, params(), &etx, &sink).await;
+        assert!(erx.try_recv().is_err());
+        assert!(matches!(lrx.try_recv(), Ok(LogicEvent::ApiError { .. })));
+        assert_eq!(http.calls().len(), 2 * ROTATION_TRIES);
+
+        let forbidden = http::HttpError::refused(
+            http::Method::Patch,
+            &crate::http::Target::relay("x"),
+            ambre_core::HttpStatus::new(403),
+            None,
+        );
+        let http = FakeHttp::new(vec![Ok(logged.answer()), Err(forbidden)]);
+        role_change_task(&http, params(), &etx, &sink).await;
+        assert!(matches!(lrx.try_recv(), Ok(LogicEvent::ApiError { .. })));
+        assert_eq!(http.calls().len(), 2, "another refusal is not tried again");
     }
 
     /// Holds `SYNC-108` and `SYNC-110` at the list: a row no valid entry

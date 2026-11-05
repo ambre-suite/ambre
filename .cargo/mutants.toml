@@ -82,6 +82,16 @@ exclude_re = [
     'replace SyncState::(handle_mark_read|handle_move_read_cursors|handle_mark_thread_read|move_cursors|handle_mark_all_read|handle_fetch_activity|fetch_activity|handle_list_space_channels) with \(\)',
     'replace put_cursors with \(\)',
     'delete ! in SyncState::handle_mark_read',
+    # The same host path for snapshots: with no relay the fetch and the
+    # vouch only log.
+    'replace SyncState::(fetch_announced_snapshot|post_snapshot_vouch) with \(\)',
+    # Host-unreachable: with no relay a space step ends in a payment that
+    # fails or a key that stays, which leaves the state as it was. With a
+    # relay the step spawns a browser task.
+    'replace SyncState::(drive_space_rotation|start_channel_rotation) with \(\)',
+    'delete match arm .* in SyncState::start_channel_rotation',
+    # Log only: a count of rows skipped decides a warning, and nothing else.
+    'delete ! in (settle_task|rotate_channel)',
     'replace == with != in SyncState::fetch_activity',
     'delete match arm .* in SyncState::handle_list_documents',
     # Cost only, and in the browser path: the mutant fetches the key links

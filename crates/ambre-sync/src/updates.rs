@@ -3394,6 +3394,20 @@ mod tests {
         assert!(!state.documents[&doc].known_snapshots.contains(&announced));
     }
 
+    /// The cause a held document warns with names the refusal, or the
+    /// failures counted.
+    #[test]
+    fn a_hold_cause_prints_what_the_warning_reads() {
+        let refused = HoldCause::Refused(ambre_core::RefusalCode::LogMoved);
+        assert_eq!(
+            refused.to_string(),
+            ambre_core::RefusalCode::LogMoved.to_string()
+        );
+        assert!(!refused.to_string().is_empty());
+        let failed = HoldCause::Failed(ambre_core::Count::<ambre_core::Failures>::new(5));
+        assert_eq!(failed.to_string(), "sequencing failed 5 times");
+    }
+
     /// The quarantine asks for the missing history once per gap, however many
     /// arrivals follow past the threshold (`SYNC-031`).
     #[test]
@@ -3402,18 +3416,21 @@ mod tests {
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let parent = Id::<Snapshot>::mint();
-        for clock in 1..=(QUARANTINE_ALERT as u64 + 50) {
-            state.receive_update(
-                Seq::<Relay>::new(clock),
-                make_update(doc, parent, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk),
-            );
-        }
         let asks = |rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>| {
             drain_ws(rx)
                 .iter()
                 .filter(|m| matches!(m, WsClientMsg::RequestMissing { .. }))
                 .count()
         };
+        for clock in 1..=(QUARANTINE_ALERT as u64 + 50) {
+            if clock == QUARANTINE_ALERT as u64 {
+                assert_eq!(asks(&ws_rx), 0, "nothing asked below the threshold");
+            }
+            state.receive_update(
+                Seq::<Relay>::new(clock),
+                make_update(doc, parent, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk),
+            );
+        }
         assert_eq!(asks(&ws_rx), 1, "one request for the gap");
         // The gap closes; the next one asks again.
         state.snapshot_known(doc, parent);
