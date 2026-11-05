@@ -28,6 +28,7 @@ prefix is `ARCH`.
 | `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-logic/Cargo.toml` that declares `ambre-canvas`, `wgpu`, `leptos` or another render or toolkit crate; cargo-deny -- `deny.toml` grants `wgpu` to `ambre-canvas` and `ambre-app`, and the CI `deny` job fails any other crate that takes it | none | verified |
 | `ARCH-005` | `INV` | Every network call of the two instances MUST leave from the Sync worker. A macro sandbox calls on its own, held by the browser to the domains its user approved. | this spec section 2; `ZK-001`; `1-Foundations/ambre-spec-macros.md section 3` (`MACRO-010`) | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a transport crate declared, or a network call written, outside the worker and the relay. The launcher's two reads of `UI-THREAD-004` are its stated exception | none | verified |
 | `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a type of `ambre-protocol` redeclared in `ambre-sync` or `ambre-server` | none | verified |
+| `ARCH-069` | `INV` | The Sync worker MUST NOT depend on a crate that declares an application's content commands or events. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-021` | not built | unbuilt -- lands with the `Each application owns its message vocabulary` Story (`ambre-roadmap.md` E8). `ambre-sync` depends on `ambre-bus`, which declares them, so a regex of `scripts/crate_boundaries.py` holds `BUS-021` where the crate graph could | unimplemented |
 | `ARCH-007` | `INV` | The Main thread MUST drain the Logic to Sync queue once per frame, before it draws. | this spec section 2 | `ambre_canvas::frame::tests::each_tick_relays_once_before_it_draws`; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a frame loop that does not run `pre_frame` as the relay of `drive_frame`, and a `pre_frame` that does not drain `logic_to_sync_rx` | none | verified |
 | `ARCH-010` | `INV` | The engine MUST be created once per session. | this spec section 2 | `ambre_app::route::tests::path_doc_roundtrip`; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a launcher that starts the Logic runtime other than once | none | verified |
 | `ARCH-016` | `INV` | The engine MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::a_route_walk_reuses_the_one_engine` -- each route change is a close, an open and a show; `::cross_kind_open_needs_reload` -- the one change allowed to end it | none | verified |
@@ -117,12 +118,12 @@ The user types, then closes the document before the Logic thread has answered th
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 59 `verified`, 9 `human-review`. The build refuses a cycle, a misplaced
-  cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
-  application logic in the launcher too, a failure path that waits on a queue, and a write on a
-  failing thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full
-  queue, each queue's disconnection and two tabs of one user. Seven fuzz targets read random bytes
-  from the relay or a file, a gate ties each primitive to a line, and a reviewer its category.
+* **Verification.** 59 `verified`, 9 `human-review`, 1 `unimplemented`. The build refuses a cycle, a
+  misplaced cryptographic dependency, a missing atomics flag and a lock on a client queue. It
+  refuses application logic in the launcher, a failure path that waits on a queue, and a write on a
+  failing thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the
+  full queue, each queue's disconnection and two tabs of one user. Seven fuzz targets read random
+  bytes from the relay or a file, a gate ties each primitive to a line, and a reviewer its category.
 
 ---
 

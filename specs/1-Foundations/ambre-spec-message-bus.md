@@ -26,6 +26,7 @@ prefix is `BUS`.
 | `BUS-006` | `INV` | The document registry MUST stay flat: an embedded child MUST be addressed by its own identity, in one lookup. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-084` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` -- each seeds a parent and a child side by side and asserts the child's role decides, which only holds if the child is its own entry | none | verified |
 | `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_bus::host::the_ui_to_logic_path_carries_nothing_an_encoder_takes` -- `LogicCommand`, `UiEvent` and the app envelopes implement no `Serialize` | none | verified |
 | `BUS-029` | `INV` | A message field that carries an identifier MUST carry a type of its own, never a bare string or integer. | this spec section 2; `ai/ambre-rust-style.md`; `UI-THREAD-060`, the same rule for a shell signal | ci-gate -- `scripts/crate_boundaries.py` refuses an `id`, `*_id` or `*_ids` field of a bare primitive type in `ambre-bus` above its tests; type-level -- the sheet, filter view, conditional format and paragraph style ids each carry a newtype, so a swapped name and id fail to compile | none | verified |
+| `BUS-032` | `INV` | An application's content commands and events MUST be declared in that application's crate, never in the crate that carries the envelopes. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-018` | not built | unbuilt -- lands with the `Each application owns its message vocabulary` Story (`ambre-roadmap.md` E8). The command and event enums of Trame, Toile, Prose and Murmure, and their value types, sit under `ambre-bus/src/app/` | unimplemented |
 | `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | exhaustive-match -- `LogicCommand::Channel` carries a `MurmureCommand`, a closed enum matched in `ambre_logic::channels::handle_channel_command`, so a new command does not build until its arm is written; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` | none | verified |
 | `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | type-level -- `LogicCommand::Channel` and `UiEvent::Channel` hold a typed `MurmureCommand` and `MurmureEvent`, and no `SyncCommand` or `LogicEvent` variant names a channel message: a channel delta is the `SendUpdate` of its document | none | verified |
 
@@ -82,10 +83,11 @@ is what a full queue means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 31 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
-  viewer's edit, a child's role. They also drive a service round trip, a late response, the lossy
-  gate and a full queue. Native views drive the input gate, the re-offer and the refused commit. A
-  gate refuses a handler that sends on a queue, and the browser tier reads the busy notice.
+* **Verification.** 31 `verified`, 1 `unimplemented`. Host tests drive the Logic dispatcher: an
+  unknown document, a viewer's edit, a child's role. They also drive a service round trip, a late
+  response, the lossy gate and a full queue. Native views drive the input gate, the re-offer and the
+  refused commit. A gate refuses a handler that sends on a queue, and the browser tier reads the
+  busy notice.
 ---
 
 ## 2. MODEL
