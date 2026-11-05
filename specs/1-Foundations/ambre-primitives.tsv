@@ -119,71 +119,142 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::to_stored() | ret | i64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
-ambre-bus | src/app/prose.rs | crate::app::prose | <ConversionLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
-ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
-ambre-bus | src/app/prose.rs | crate::app::prose | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | Align::code() | ret | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | Align::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepted_at_root() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepts() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::code() | ret | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::has_body() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | CommandName.0 | field | &'static str	newtype-inner	newtype inner
-ambre-bus | src/app/prose.rs | crate::app::prose | CommandName::label() | ret | &'static str	free-text	the words a refusal prints for a command
-ambre-bus | src/app/prose.rs | crate::app::prose | CommentReply.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | CrossRefKind::CustomText.0 | field | String	free-text	cross-reference display text
-ambre-bus | src/app/prose.rs | crate::app::prose | FootnoteEntry.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | HeadingNumber.0 | field | Vec<u32>	newtype-inner	the counters of a heading number, outermost level first
-ambre-bus | src/app/prose.rs | crate::app::prose | HeadingNumber::new(parts) | param | Vec<u32>	newtype-inner	the counters a heading number is checked from
-ambre-bus | src/app/prose.rs | crate::app::prose | HeadingNumber::parts() | ret | &[u32]	newtype-inner	the counters a heading number reads as
-ambre-bus | src/app/prose.rs | crate::app::prose | InteropError::ParseFailed.0 | field | String	free-text	refusal / parse message
-ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey.0 | field | String	newtype-inner	MarkKey newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey::as_str() | ret | &str	newtype-inner	MarkKey newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey::new(text) | param | String	newtype-inner	MarkKey newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey::root() | ret | &str	newtype-inner	MarkKey newtype: the root part of the key
-ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::code() | ret | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | <OrderedStyle as TryFrom<u8>>::try_from(code) | param | u8	newtype-inner	the code the fallible constructor of OrderedStyle reads, as a clipboard payload carries it
-ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle::is_empty() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::AddComment.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertFootnote.note_text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertText.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.html | field | Option<String>	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceAll.replacement | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceOne.replacement | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplyToComment.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | <ProseCommand as crate::Mutation>::is_mutating() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.html | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
-ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
-ambre-bus | src/app/prose.rs | crate::app::prose | <TextChangeSeq as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue::as_str() | ret | &str	newtype-inner	MarkValue accessor, for the Loro mark call and the clipboard payload that carry text
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadColor.0 | field | String	generic	the refused value the error echoes
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadFontSize.0 | field | String	generic	the refused value the error echoes
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_color() | ret | String	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | String	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | read_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell() | ret | String	free-text	the canonical spelling of a number, wrapped into a MarkValue by its callers
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell(value) | param | f32	math	a typed size's points, or the number a stored or command string reads as
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
+ambre-prose | src/message/mod.rs | crate::message | <ConversionLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
+ambre-prose | src/message/mod.rs | crate::message | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
+ambre-prose | src/message/mod.rs | crate::message | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
+ambre-prose | src/message/mod.rs | crate::message | Align::code() | ret | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | Align::from_code(code) | param | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | BlockType::accepted_at_root() | ret | bool	generic	predicate
+ambre-prose | src/message/mod.rs | crate::message | BlockType::accepts() | ret | bool	generic	predicate
+ambre-prose | src/message/mod.rs | crate::message | BlockType::code() | ret | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | BlockType::from_code(code) | param | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | BlockType::has_body() | ret | bool	generic	predicate
+ambre-prose | src/message/mod.rs | crate::message | CommandName.0 | field | &'static str	newtype-inner	newtype inner
+ambre-prose | src/message/mod.rs | crate::message | CommandName::label() | ret | &'static str	free-text	the words a refusal prints for a command
+ambre-prose | src/message/mod.rs | crate::message | CommentReply.text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | CrossRefKind::CustomText.0 | field | String	free-text	cross-reference display text
+ambre-prose | src/message/mod.rs | crate::message | FootnoteEntry.text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | HeadingNumber.0 | field | Vec<u32>	newtype-inner	the counters of a heading number, outermost level first
+ambre-prose | src/message/mod.rs | crate::message | HeadingNumber::new(parts) | param | Vec<u32>	newtype-inner	the counters a heading number is checked from
+ambre-prose | src/message/mod.rs | crate::message | HeadingNumber::parts() | ret | &[u32]	newtype-inner	the counters a heading number reads as
+ambre-prose | src/message/mod.rs | crate::message | InteropError::ParseFailed.0 | field | String	free-text	refusal / parse message
+ambre-prose | src/message/mod.rs | crate::message | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | LineHeightMode::from_code(code) | param | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | MarkKey.0 | field | String	newtype-inner	MarkKey newtype
+ambre-prose | src/message/mod.rs | crate::message | MarkKey::as_str() | ret | &str	newtype-inner	MarkKey newtype
+ambre-prose | src/message/mod.rs | crate::message | MarkKey::new(text) | param | String	newtype-inner	MarkKey newtype
+ambre-prose | src/message/mod.rs | crate::message | MarkKey::root() | ret | &str	newtype-inner	MarkKey newtype: the root part of the key
+ambre-prose | src/message/mod.rs | crate::message | OrderedStyle::code() | ret | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | OrderedStyle::from_code(code) | param | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | <OrderedStyle as TryFrom<u8>>::try_from(code) | param | u8	newtype-inner	the code the fallible constructor of OrderedStyle reads, as a clipboard payload carries it
+ambre-prose | src/message/mod.rs | crate::message | ParagraphStyle::is_empty() | ret | bool	generic	predicate
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::AddComment.text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::InsertFootnote.note_text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::InsertText.text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::Paste.html | field | Option<String>	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::Paste.text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::ReplaceAll.replacement | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::ReplaceOne.replacement | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::ReplyToComment.text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::is_mutating() | ret | bool	generic	predicate
+ambre-prose | src/message/mod.rs | crate::message | <ProseCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
+ambre-prose | src/message/mod.rs | crate::message | ProseEvent::Clipboard.html | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseEvent::Clipboard.text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
+ambre-prose | src/message/mod.rs | crate::message | ProseRefusal::BadMarkValue.value | field | String	free-text	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
+ambre-prose | src/message/mod.rs | crate::message | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
+ambre-prose | src/message/mod.rs | crate::message | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
+ambre-prose | src/message/mod.rs | crate::message | <TextChangeSeq as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | TocEntry.text | field | String	free-text	user content
+ambre-prose | src/message/mod.rs | crate::message | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mod.rs | crate::message | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
+ambre-prose | src/message/mark.rs | crate::message::mark | MarkValue.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
+ambre-prose | src/message/mark.rs | crate::message::mark | MarkValue::as_str() | ret | &str	newtype-inner	MarkValue accessor, for the Loro mark call and the clipboard payload that carry text
+ambre-prose | src/message/mark.rs | crate::message::mark | MarkValueError::BadColor.0 | field | String	generic	the refused value the error echoes
+ambre-prose | src/message/mark.rs | crate::message::mark | MarkValueError::BadFontSize.0 | field | String	generic	the refused value the error echoes
+ambre-prose | src/message/mark.rs | crate::message::mark | canonical_color() | ret | String	free-text	text content / label / parser input
+ambre-prose | src/message/mark.rs | crate::message::mark | canonical_number() | ret | String	free-text	text content / label / parser input
+ambre-prose | src/message/mark.rs | crate::message::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
+ambre-prose | src/message/mark.rs | crate::message::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
+ambre-prose | src/message/mark.rs | crate::message::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
+ambre-prose | src/message/mark.rs | crate::message::mark | read_font_size(raw) | param | &str	free-text	text content / label / parser input
+ambre-prose | src/message/mark.rs | crate::message::mark | spell() | ret | String	free-text	the canonical spelling of a number, wrapped into a MarkValue by its callers
+ambre-prose | src/message/mark.rs | crate::message::mark | spell(value) | param | f32	math	a typed size's points, or the number a stored or command string reads as
+ambre-prose | src/message/mark.rs | crate::message::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
+ambre-toile | src/message/mod.rs | crate::message | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
+ambre-toile | src/message/mod.rs | crate::message | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
+ambre-toile | src/message/mod.rs | crate::message | ClipElement.notes | field | Option<String>	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ClipKey::parse_key(word) | param | &str	generic	a stored field word read back into its schema key, or none
+ambre-toile | src/message/mod.rs | crate::message | ClipValue::Bool.0 | field | bool	newtype-inner	clipboard field value variant
+ambre-toile | src/message/mod.rs | crate::message | ClipValue::F64.0 | field | f64	newtype-inner	clipboard field value variant
+ambre-toile | src/message/mod.rs | crate::message | ClipValue::Str.0 | field | String	newtype-inner	clipboard field value variant
+ambre-toile | src/message/mod.rs | crate::message | CommentMessage.body | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | CommentSummary.preview | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | DeckFrame.name | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | DisplayConnector.label | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | DisplayGeom::Frame.0 | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | DisplayGeom::Sticky.0 | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | DisplayGeom::Text.0 | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ElementKind::type_tag() | ret | &'static str	generic	the codec of an enum that carries data: the type tag the store holds and the reader matches back, where every shape maps to one tag
+ambre-toile | src/message/mod.rs | crate::message | ElementStyle::to_bytes() | ret | Vec<u8>	generic	byte codec
+ambre-toile | src/message/mod.rs | crate::message | ElementStyle::try_from_bytes(bytes) | param | &[u8]	generic	byte codec
+ambre-toile | src/message/mod.rs | crate::message | FontSizeChoice::from_whole_points(points) | param | Option<u16>	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
+ambre-toile | src/message/mod.rs | crate::message | FontSizeChoice::whole_points() | ret | Option<u16>	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
+ambre-toile | src/message/mod.rs | crate::message | InitContent::Text.0 | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | LinkTarget::from_bytes(bytes) | param | &[u8]	generic	byte codec
+ambre-toile | src/message/mod.rs | crate::message | LinkTarget::to_bytes() | ret | Vec<u8>	generic	byte codec
+ambre-toile | src/message/mod.rs | crate::message | NodeId::decode(s) | param | &str	generic	enum<->stored string codec at the CRDT boundary: the text a layers entry holds, parsed into a NodeId
+ambre-toile | src/message/mod.rs | crate::message | NodeId::encode() | ret | String	generic	enum<->stored string codec at the CRDT boundary: the text a layers entry holds for a NodeId
+ambre-toile | src/message/mod.rs | crate::message | PresentMode::is_presenting() | ret | bool	generic	named flag, setter of a flag, or predicate
+ambre-toile | src/message/mod.rs | crate::message | ShapeKind::from_tag(s) | param | &str	newtype-inner	closed-set enum tag codec
+ambre-toile | src/message/mod.rs | crate::message | ShapeKind::tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
+ambre-toile | src/message/mod.rs | crate::message | SlideChange.notes | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | TextDelta.insert | field | String	free-text	inserted text of the splice
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::CreateComment.body | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::EditNotes.base | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::RenameFrame.name | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::ReplyComment.body | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetConnectorLabel.base | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetConnectorLabel.text | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetText.base | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetText.text | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | ToileCommand::is_mutating() | ret | bool	generic	predicate
+ambre-toile | src/message/mod.rs | crate::message | <ToileCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
+ambre-toile | src/message/mod.rs | crate::message | ToileError::WriteFailed.0 | field | String	free-text	error message
+ambre-toile | src/message/mod.rs | crate::message | ToileEvent::DocumentRefused.0 | field | String	free-text	error message
+ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ExportComplete.skipped | field | Vec<String>	free-text	file name / skipped item labels
+ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ExportFailed.0 | field | String	free-text	error message
+ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ImportFailed.0 | field | String	free-text	error message
+ambre-toile | src/message/mod.rs | crate::message | ToileEvent::NotesChanged.notes | field | String	free-text	user text
+ambre-toile | src/message/mod.rs | crate::message | AddressError::message() | ret | &'static str	free-text	AddressError message text
+ambre-toile | src/message/mod.rs | crate::message | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
+ambre-toile | src/message/mod.rs | crate::message | split_scheme(s) | param | &str	generic	generic parser/reader/formatter over text
+ambre-toile | src/message/mod.rs | crate::message | FontSpec::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
+ambre-toile | src/message/mod.rs | crate::message | <ElementCreation as ambre_bus::token::TokenKind>::NAME | const | &'static str	free-text	the family name a token prints through Debug, for a log line
+ambre-toile | src/message/mod.rs | crate::message | <Reactions as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-toile | src/message/mod.rs | crate::message | <Votes as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-toile | src/message/mod.rs | crate::message | <WebAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-toile | src/message/mod.rs | crate::message | <WebAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-toile | src/message/mod.rs | crate::message | LockState::is_locked() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-toile | src/message/mod.rs | crate::message | LockState::locked_if(locked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-toile | src/message/mod.rs | crate::message | VoteTotal.0 | field | i64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-toile | src/message/mod.rs | crate::message | VoteTotal::get() | ret | i64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-toile | src/message/mod.rs | crate::message | VoteTotal::new(total) | param | i64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-toile | src/message/mod.rs | crate::message | VoteWeight.0 | field | i32	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-toile | src/message/mod.rs | crate::message | VoteWeight::get() | ret | i32	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-toile | src/message/mod.rs | crate::message | VoteWeight::new(weight) | param | i32	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-toile | src/message/mod.rs | crate::message | <ClipBytes as ambre_core::PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-toile | src/message/mod.rs | crate::message | <ClipSlot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-toile | src/message/mod.rs | crate::message | <ImportSlot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-toile | src/message/mod.rs | crate::message | <Slide as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-toile | src/message/mod.rs | crate::message | <ThreadMessage as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-toile | src/message/mod.rs | crate::message | <ZOrder as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-toile | src/message/mod.rs | crate::message | <Reactions as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-toile | src/message/mod.rs | crate::message | <Votes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-toile | src/message/mod.rs | crate::message | <SkipReasons as ambre_core::OpaqueKind>::NAME | const | &'static str	free-text	the name a skip reason prints through Debug, for a log line
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth.0 | field | i64	newtype-inner	the number a calendar part wraps
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth::get() | ret | i64	newtype-inner	the number a calendar part wraps
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth::new(day) | param | i64	newtype-inner	the number a calendar part wraps
@@ -2513,77 +2584,6 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region() | re
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region(base) | param | &[char]	free-text	the base user text as chars, which a side's hunks apply to
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run() | ret | &[char]	free-text	a slice of the base user text, copied into the merge
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run(base) | param | &[char]	free-text	the base user text as chars
-ambre-toile | src/message/mod.rs | crate::message | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
-ambre-toile | src/message/mod.rs | crate::message | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
-ambre-toile | src/message/mod.rs | crate::message | ClipElement.notes | field | Option<String>	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ClipKey::parse_key(word) | param | &str	generic	a stored field word read back into its schema key, or none
-ambre-toile | src/message/mod.rs | crate::message | ClipValue::Bool.0 | field | bool	newtype-inner	clipboard field value variant
-ambre-toile | src/message/mod.rs | crate::message | ClipValue::F64.0 | field | f64	newtype-inner	clipboard field value variant
-ambre-toile | src/message/mod.rs | crate::message | ClipValue::Str.0 | field | String	newtype-inner	clipboard field value variant
-ambre-toile | src/message/mod.rs | crate::message | CommentMessage.body | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | CommentSummary.preview | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | DeckFrame.name | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | DisplayConnector.label | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | DisplayGeom::Frame.0 | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | DisplayGeom::Sticky.0 | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | DisplayGeom::Text.0 | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ElementKind::type_tag() | ret | &'static str	generic	the codec of an enum that carries data: the type tag the store holds and the reader matches back, where every shape maps to one tag
-ambre-toile | src/message/mod.rs | crate::message | ElementStyle::to_bytes() | ret | Vec<u8>	generic	byte codec
-ambre-toile | src/message/mod.rs | crate::message | ElementStyle::try_from_bytes(bytes) | param | &[u8]	generic	byte codec
-ambre-toile | src/message/mod.rs | crate::message | FontSizeChoice::from_whole_points(points) | param | Option<u16>	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
-ambre-toile | src/message/mod.rs | crate::message | FontSizeChoice::whole_points() | ret | Option<u16>	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
-ambre-toile | src/message/mod.rs | crate::message | InitContent::Text.0 | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | LinkTarget::from_bytes(bytes) | param | &[u8]	generic	byte codec
-ambre-toile | src/message/mod.rs | crate::message | LinkTarget::to_bytes() | ret | Vec<u8>	generic	byte codec
-ambre-toile | src/message/mod.rs | crate::message | NodeId::decode(s) | param | &str	generic	enum<->stored string codec at the CRDT boundary: the text a layers entry holds, parsed into a NodeId
-ambre-toile | src/message/mod.rs | crate::message | NodeId::encode() | ret | String	generic	enum<->stored string codec at the CRDT boundary: the text a layers entry holds for a NodeId
-ambre-toile | src/message/mod.rs | crate::message | PresentMode::is_presenting() | ret | bool	generic	named flag, setter of a flag, or predicate
-ambre-toile | src/message/mod.rs | crate::message | ShapeKind::from_tag(s) | param | &str	newtype-inner	closed-set enum tag codec
-ambre-toile | src/message/mod.rs | crate::message | ShapeKind::tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
-ambre-toile | src/message/mod.rs | crate::message | SlideChange.notes | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | TextDelta.insert | field | String	free-text	inserted text of the splice
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::CreateComment.body | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::EditNotes.base | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::RenameFrame.name | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::ReplyComment.body | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetConnectorLabel.base | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetConnectorLabel.text | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetText.base | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetText.text | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | ToileCommand::is_mutating() | ret | bool	generic	predicate
-ambre-toile | src/message/mod.rs | crate::message | <ToileCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
-ambre-toile | src/message/mod.rs | crate::message | ToileError::WriteFailed.0 | field | String	free-text	error message
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::DocumentRefused.0 | field | String	free-text	error message
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ExportComplete.skipped | field | Vec<String>	free-text	file name / skipped item labels
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ExportFailed.0 | field | String	free-text	error message
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ImportFailed.0 | field | String	free-text	error message
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::NotesChanged.notes | field | String	free-text	user text
-ambre-toile | src/message/mod.rs | crate::message | AddressError::message() | ret | &'static str	free-text	AddressError message text
-ambre-toile | src/message/mod.rs | crate::message | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
-ambre-toile | src/message/mod.rs | crate::message | split_scheme(s) | param | &str	generic	generic parser/reader/formatter over text
-ambre-toile | src/message/mod.rs | crate::message | FontSpec::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
-ambre-toile | src/message/mod.rs | crate::message | <ElementCreation as ambre_bus::token::TokenKind>::NAME | const | &'static str	free-text	the family name a token prints through Debug, for a log line
-ambre-toile | src/message/mod.rs | crate::message | <Reactions as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-toile | src/message/mod.rs | crate::message | <Votes as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-toile | src/message/mod.rs | crate::message | <WebAddress as Rule>::admit() | ret | Result<String,AddressError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-toile | src/message/mod.rs | crate::message | <WebAddress as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-toile | src/message/mod.rs | crate::message | LockState::is_locked() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-toile | src/message/mod.rs | crate::message | LockState::locked_if(locked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-toile | src/message/mod.rs | crate::message | VoteTotal.0 | field | i64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-toile | src/message/mod.rs | crate::message | VoteTotal::get() | ret | i64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-toile | src/message/mod.rs | crate::message | VoteTotal::new(total) | param | i64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-toile | src/message/mod.rs | crate::message | VoteWeight.0 | field | i32	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-toile | src/message/mod.rs | crate::message | VoteWeight::get() | ret | i32	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-toile | src/message/mod.rs | crate::message | VoteWeight::new(weight) | param | i32	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-toile | src/message/mod.rs | crate::message | <ClipBytes as ambre_core::PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
-ambre-toile | src/message/mod.rs | crate::message | <ClipSlot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-toile | src/message/mod.rs | crate::message | <ImportSlot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-toile | src/message/mod.rs | crate::message | <Slide as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-toile | src/message/mod.rs | crate::message | <ThreadMessage as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-toile | src/message/mod.rs | crate::message | <ZOrder as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-toile | src/message/mod.rs | crate::message | <Reactions as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-toile | src/message/mod.rs | crate::message | <Votes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-toile | src/message/mod.rs | crate::message | <SkipReasons as ambre_core::OpaqueKind>::NAME | const | &'static str	free-text	the name a skip reason prints through Debug, for a log line
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_announcement() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_text() | ret | Option<&str>	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | kind_name() | ret | &'static str	free-text	label, message or user text
@@ -3039,20 +3039,20 @@ ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conve
 ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate.0 | field | f64	newtype-inner	the log-zoom rate per wheel pixel
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about
-ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::from_stored(value) | param | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
-ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::stored_value() | ret | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
-ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
-ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
-ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
-ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::new(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose | src/message/mod.rs | crate::message | LineHeight::from_stored(value) | param | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
+ambre-prose | src/message/mod.rs | crate::message | LineHeight::stored_value() | ret | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
+ambre-prose | src/message/mod.rs | crate::message | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose | src/message/mod.rs | crate::message | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose | src/message/mod.rs | crate::message | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose | src/message/mod.rs | crate::message | HeadingLevel::new(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-prose | src/doc.rs | crate::doc | StoredLevel.0 | field | u8	newtype-inner	a heading level as the document stores it, kept raw when an import wrote one past six
 ambre-prose | src/doc.rs | crate::doc | StoredLevel::from_stored(level) | param | u8	newtype-inner	a heading level as the document stores it, kept raw when an import wrote one past six
 ambre-prose | src/doc.rs | crate::doc | StoredLevel::get() | ret | u8	newtype-inner	a heading level as the document stores it, for an export and a diagnostic
 ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_regions_cornered_in(doomed) | param | impl Fn(CellPos)->bool	generic	predicate result: whether a grid position is doomed
-ambre-bus | src/app/prose.rs | crate::app::prose | <LineSpacingMultiple as TryFrom<f32>>::try_from(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::new(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-prose | src/message/mod.rs | crate::message | <LineSpacingMultiple as TryFrom<f32>>::try_from(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple::new(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/layout/run.rs | crate::layout::run | <LayoutVersion as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/layout/run.rs | crate::layout::run | <CellBlock as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/layout/run.rs | crate::layout::run | <Flow as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -3130,30 +3130,30 @@ ambre-murmure | src/paint.rs | crate::paint | RowBounds::holds() | ret | bool	ge
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.hours | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.minutes | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.seconds | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
-ambre-bus | src/app/prose.rs | crate::app::prose | BandState::is_on() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | BandState::on_if(shown) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | DroppedElement::label() | ret | &'static str	free-text	the closed set's display label
-ambre-bus | src/app/prose.rs | crate::app::prose | FindRefusal::label() | ret | &'static str	free-text	the closed set's display label
-ambre-bus | src/app/prose.rs | crate::app::prose | FirstPage::has_own() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | FirstPage::own_if(own) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | LiftedBlock::label() | ret | &'static str	free-text	the closed set's display label
-ambre-bus | src/app/prose.rs | crate::app::prose | TocNumbering::is_numbered() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | TocNumbering::numbered_if(numbered) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | TodoMark::done_if(ticked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | TodoMark::is_done() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/prose.rs | crate::app::prose | UnsupportedFeature::label() | ret | &'static str	free-text	the closed set's display label
-ambre-bus | src/app/prose.rs | crate::app::prose | RefusedAction::label() | ret | &'static str	free-text	the words a refusal prints for what it refused
-ambre-bus | src/app/prose.rs | crate::app::prose | <EncodedCursor as ambre_core::PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
-ambre-bus | src/app/prose.rs | crate::app::prose | <FootnoteCall as ambre_core::OrdinalKind>::NAME | const | &'static str	free-text	the name an ordinal prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <Graphemes as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <Paragraphs as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <Words as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | StyleId.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
-ambre-bus | src/app/prose.rs | crate::app::prose | StyleId::as_str() | ret | &str	newtype-inner	the StyleId newtype unwrapped, for a caller outside its module
-ambre-bus | src/app/prose.rs | crate::app::prose | StyleId::new(value) | param | String	newtype-inner	the constructor of the StyleId newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | <DocChar as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <Page as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <Page as OrdinalKind>::NAME | const | &'static str	free-text	the name an ordinal prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | BandState::is_on() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose | src/message/mod.rs | crate::message | BandState::on_if(shown) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose | src/message/mod.rs | crate::message | DroppedElement::label() | ret | &'static str	free-text	the closed set's display label
+ambre-prose | src/message/mod.rs | crate::message | FindRefusal::label() | ret | &'static str	free-text	the closed set's display label
+ambre-prose | src/message/mod.rs | crate::message | FirstPage::has_own() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose | src/message/mod.rs | crate::message | FirstPage::own_if(own) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose | src/message/mod.rs | crate::message | LiftedBlock::label() | ret | &'static str	free-text	the closed set's display label
+ambre-prose | src/message/mod.rs | crate::message | TocNumbering::is_numbered() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose | src/message/mod.rs | crate::message | TocNumbering::numbered_if(numbered) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose | src/message/mod.rs | crate::message | TodoMark::done_if(ticked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose | src/message/mod.rs | crate::message | TodoMark::is_done() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose | src/message/mod.rs | crate::message | UnsupportedFeature::label() | ret | &'static str	free-text	the closed set's display label
+ambre-prose | src/message/mod.rs | crate::message | RefusedAction::label() | ret | &'static str	free-text	the words a refusal prints for what it refused
+ambre-prose | src/message/mod.rs | crate::message | <EncodedCursor as ambre_core::PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-prose | src/message/mod.rs | crate::message | <FootnoteCall as ambre_core::OrdinalKind>::NAME | const | &'static str	free-text	the name an ordinal prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | <Graphemes as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | <Paragraphs as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | <Words as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | StyleId.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
+ambre-prose | src/message/mod.rs | crate::message | StyleId::as_str() | ret | &str	newtype-inner	the StyleId newtype unwrapped, for a caller outside its module
+ambre-prose | src/message/mod.rs | crate::message | StyleId::new(value) | param | String	newtype-inner	the constructor of the StyleId newtype
+ambre-prose | src/message/mod.rs | crate::message | <DocChar as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | <Page as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | <Page as OrdinalKind>::NAME | const | &'static str	free-text	the name an ordinal prints through Debug, for a log line
 ambre-chrome | src/font.rs | crate::font | DEFAULT_LABEL | const | &str	free-text	UI label of the picker entry that names no family
 ambre-chrome | src/font.rs | crate::font | FamilyChoice.css | field | &'static str	foreign-api	the CSS font-family stack the browser previews the entry in
 ambre-chrome | src/font.rs | crate::font | FamilyChoice::label() | ret | &'static str	free-text	the closed set's display label
@@ -3921,7 +3921,7 @@ ambre-core | src/unit.rs | crate::unit | ViewSpeed::get() | ret | f32	newtype-in
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::new(value) | param | f32	newtype-inner	the number of view pixels per millisecond a speed wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Mentions as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-bus | src/app/prose.rs | crate::app::prose | <TextAck as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/message/mod.rs | crate::message | <TextAck as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-core | src/id.rs | crate::id | <CondFormat as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
 ambre-core | src/id.rs | crate::id | <CondFormat as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
 ambre-core | src/id.rs | crate::id | <FilterView as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
@@ -3998,16 +3998,16 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as CountKind>::
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Replies as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Segments as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/prose.rs | crate::app::prose | <ConversionLosses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/prose.rs | crate::app::prose | <Graphemes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/prose.rs | crate::app::prose | <Paragraphs as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/prose.rs | crate::app::prose | <Words as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevelCode as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevelCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
-ambre-bus | src/app/prose.rs | crate::app::prose | <LineSpacingRatio as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-bus | src/app/prose.rs | crate::app::prose | <LineSpacingRatio as Refuses>::Raw | assoc | f32	generic	the refused value the error echoes
-ambre-bus | src/app/prose.rs | crate::app::prose | <OrderedStyleCode as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-bus | src/app/prose.rs | crate::app::prose | <OrderedStyleCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
+ambre-prose | src/message/mod.rs | crate::message | <ConversionLosses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-prose | src/message/mod.rs | crate::message | <Graphemes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-prose | src/message/mod.rs | crate::message | <Paragraphs as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-prose | src/message/mod.rs | crate::message | <Words as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-prose | src/message/mod.rs | crate::message | <HeadingLevelCode as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-prose | src/message/mod.rs | crate::message | <HeadingLevelCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
+ambre-prose | src/message/mod.rs | crate::message | <LineSpacingRatio as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-prose | src/message/mod.rs | crate::message | <LineSpacingRatio as Refuses>::Raw | assoc | f32	generic	the refused value the error echoes
+ambre-prose | src/message/mod.rs | crate::message | <OrderedStyleCode as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-prose | src/message/mod.rs | crate::message | <OrderedStyleCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
 ambre-trame | src/message/features.rs | crate::message::features | <Ranks as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-canvas | src/view.rs | crate::view | <CellsDrawn as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-canvas | src/view.rs | crate::view | <GlyphMisses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
@@ -4090,8 +4090,8 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | <Pending
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | <BoardWalks as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <FormulaNesting as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <Operators as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-bus | src/app/prose.rs | crate::app::prose | <CodeLang as Rule>::admit() | ret | Result<String,EmptyCodeLang>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/prose.rs | crate::app::prose | <CodeLang as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-prose | src/message/mod.rs | crate::message | <CodeLang as Rule>::admit() | ret | Result<String,EmptyCodeLang>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-prose | src/message/mod.rs | crate::message | <CodeLang as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit() | ret | Result<String,NotALangTag>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
@@ -4105,7 +4105,7 @@ ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::admit(te
 ambre-logic | src/fixtures.rs | crate::fixtures | <CommitHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::admit() | ret | Result<String,NotAFunctionName>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-trame | src/formula/types.rs | crate::formula::types | <FunctionName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-bus | src/app/prose.rs | crate::app::prose | stored_code_lang() | ret | &str	generic	the stored spelling of an optional tag, empty for plain, read back through the CodeLang rule
+ambre-prose | src/message/mod.rs | crate::message | stored_code_lang() | ret | &str	generic	the stored spelling of an optional tag, empty for plain, read back through the CodeLang rule
 ambre-core | src/lang.rs | crate::lang | is_lang_tag() | ret | bool	generic	whether a text has the shape of RFC 5646, the check of the LangTag rule
 ambre-core | src/lang.rs | crate::lang | is_lang_tag(text) | param | &str	generic	the raw text the LangTag rule checks
 ambre-core | src/lang.rs | crate::lang | primary_subtag() | ret | String	generic	the primary subtag of a tag, lowercased, which a caller matches against language codes

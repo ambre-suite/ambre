@@ -13,8 +13,6 @@ ambre-core = { path = "../ambre-core" }
 serde = { workspace = true }
 # The host round-trip of the Logic <-> Sync envelopes below.
 postcard = { workspace = true }
-# `ProseError` derives `thiserror::Error`.
-thiserror = { workspace = true }
 # The queues under the `conduit` channels, every client thread's. They take no
 # lock: flume's `std::sync::Mutex`, once contended on the page's main thread,
 # ends in `Atomics.wait`, which the browser refuses there (`ARCH-020`).

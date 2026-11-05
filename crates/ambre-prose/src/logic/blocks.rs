@@ -8,7 +8,7 @@
 use ambre_core::Validated;
 use loro::{TreeID, TreeParentId};
 
-use ambre_bus::app::prose::CodeLang;
+use crate::message::CodeLang;
 
 use crate::doc;
 use crate::doc::StoredLevel;
@@ -207,7 +207,7 @@ impl ProseState {
             }
             BlockInit::CodeBlock { lang } => attrs(
                 doc::AttrKey::Lang,
-                ambre_bus::app::prose::stored_code_lang(lang.as_ref()).into(),
+                crate::message::stored_code_lang(lang.as_ref()).into(),
             ),
             BlockInit::ListItem { style } => {
                 let map = doc::attrs_at(&node)
@@ -325,7 +325,7 @@ impl ProseState {
     pub(super) fn set_block_style(
         &mut self,
         id: &TreeID,
-        style_id: &ambre_bus::app::prose::StyleId,
+        style_id: &crate::message::StyleId,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let Some(node) = doc::node_of(&tree, id) else {
@@ -403,12 +403,12 @@ impl ProseState {
     pub(super) fn set_code_lang(
         &mut self,
         id: &TreeID,
-        lang: Option<&ambre_core::Validated<ambre_bus::app::prose::CodeLang>>,
+        lang: Option<&ambre_core::Validated<crate::message::CodeLang>>,
     ) -> ProseOutcome {
         if doc::block_type_of(&doc::blocks(&self.doc), id) != Some(BlockType::CodeBlock) {
             return Self::err_no_block(id);
         }
-        let stored = ambre_bus::app::prose::stored_code_lang(lang);
+        let stored = crate::message::stored_code_lang(lang);
         self.write_attr(id, doc::AttrKey::Lang, stored.into())
     }
 
@@ -541,7 +541,7 @@ mod tests {
     use crate::doc::StoredLevel;
     use crate::events::{BlockInit, BlockType, HeadingLevel, ProseCommand};
     use crate::logic::ProseState;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::Pos;
 
     #[test]

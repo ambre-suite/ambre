@@ -115,7 +115,7 @@ status values are normative in `ambre-spec-template.md`.
 **The caret and the selection** (`ambre-prose`, UI thread):
 
 ```rust
-/// The caret, and the fixed end of the selection when there is one (`ambre-bus`).
+/// The caret, and the fixed end of the selection when there is one (`ambre_prose::message`).
 pub struct CursorPosition {
     pub block_id: BlockId,
     pub offset:   Pos<DocChar>,

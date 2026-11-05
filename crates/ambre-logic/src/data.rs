@@ -234,8 +234,8 @@ impl LogicState {
             command,
             AppCommand::Toile(ToileCommand::ExportAmbreFile)
                 | AppCommand::Trame(ambre_trame::message::TrameCommand::ExportAmbreFile)
-                | AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ExportDocument {
-                    format: ambre_bus::app::prose::ExportFormat::Ambre,
+                | AppCommand::Prose(ambre_prose::message::ProseCommand::ExportDocument {
+                    format: ambre_prose::message::ExportFormat::Ambre,
                 })
         ) {
             self.export_ambre_file(document_id);

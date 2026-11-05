@@ -15,14 +15,14 @@
 //! document (`PROSE-IO-001`), and nothing reaches the relay but the one
 //! encrypted delta the commit produces (`PROSE-IO-043`).
 
-use ambre_bus::app::prose::{DocChar, FootnoteCall, HeadingLevel};
+use crate::message::{DocChar, FootnoteCall, HeadingLevel};
 use ambre_core::Ordinal;
 use ambre_core::id::{Footnote, Id};
 use ambre_core::index::{Axis, Len, Pos};
 use loro::{LoroValue, TreeID};
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::{
+use crate::message::{
     BlockInit, BlockType, DroppedElement, ExportFormat, ImportFormat, LiftedBlock, ListStyle,
     OrderedStyle,
 };
@@ -641,10 +641,8 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, ProseCommand, tree_id};
+    use crate::message::{ConversionWarning, InteropError, MarkdownFlavor, UnsupportedFeature};
     use crate::view::tests::append;
-    use ambre_bus::app::prose::{
-        ConversionWarning, InteropError, MarkdownFlavor, UnsupportedFeature,
-    };
 
     fn document() -> ProseState {
         ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built")
@@ -803,7 +801,7 @@ mod tests {
             paragraph(Parent::Root, "second"),
             paragraph(Parent::Op(Pos::<Op>::new(1)), "refused"),
         ];
-        let warnings = Warnings::new(ambre_bus::app::prose::ConversionFormat::Markdown);
+        let warnings = Warnings::new(crate::message::ConversionFormat::Markdown);
         let outcome = state.apply_import(&ops, warnings);
         assert!(outcome.update.is_none());
         assert!(matches!(outcome.display.as_slice(), [ProseEvent::Error(_)]));

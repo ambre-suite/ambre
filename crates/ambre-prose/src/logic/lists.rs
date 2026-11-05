@@ -157,7 +157,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, OrderedStyle, ProseCommand, ProseEvent};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::Pos;
 
     /// Every live block in document order, with what a list gesture is allowed

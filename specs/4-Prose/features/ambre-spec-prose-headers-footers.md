@@ -149,7 +149,7 @@ written there. Pagination reads this one setting
 to decide, on the first page alone, which of the two blocks a side draws. Whether a side is drawn
 at all is that side's own setting.
 
-**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

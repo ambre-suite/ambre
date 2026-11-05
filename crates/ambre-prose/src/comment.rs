@@ -10,7 +10,7 @@ use ambre_core::StoredAsI64;
 use ambre_core::index::{self, Axis, Len, Pos};
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::DocChar;
+use crate::message::DocChar;
 use ambre_core::id::{Comment, Id, Reply, User};
 use loro::{Container, LoroDoc, LoroList, TreeID, ValueOrContainer};
 
@@ -19,7 +19,7 @@ use ambre_core::ThreadState;
 
 use crate::events::{AnchorState, CommentReply, CommentThread, block_id};
 use crate::mark::MarkRoot;
-use ambre_bus::app::prose::MarkKey;
+use crate::message::MarkKey;
 use ambre_bus::{Authored, Instant};
 
 /// The mark key of thread `id`.

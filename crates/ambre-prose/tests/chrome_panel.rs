@@ -13,12 +13,12 @@
 )]
 
 use ambre_bus::UiEvent;
-use ambre_bus::app::prose::{DocChar, ProseError, ProseRefusal};
 use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Comment, Document, Id, Reply, User};
 use ambre_core::index::Pos;
 use ambre_prose::chrome::{self, ProseCommentsPanel, ProseSignals};
 use ambre_prose::events::{CommentReply, CommentThread, ProseEvent};
+use ambre_prose::message::{DocChar, ProseError, ProseRefusal};
 use ambre_prose::ui::ProseUiState;
 use ambre_prose::view::annotate::{LostReply, PanelThread};
 use leptos::mount::mount_to;
@@ -54,7 +54,7 @@ fn thread(id: Id<Comment>, replies: &[&str]) -> CommentThread {
         anchor_block: None,
         anchor_start: Pos::<DocChar>::ZERO,
         anchor_end: Pos::<DocChar>::new(3),
-        orphaned: ambre_bus::app::prose::AnchorState::Anchored,
+        orphaned: ambre_prose::message::AnchorState::Anchored,
         resolved: ambre_core::ThreadState::Open,
         replies: replies
             .iter()
@@ -184,7 +184,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     owner.set();
     let toasts = ambre_chrome::Toasts::new();
     let comment_id = Id::<Comment>::mint();
-    let reply = ambre_bus::app::prose::ProseCommand::ReplyToComment {
+    let reply = ambre_prose::message::ProseCommand::ReplyToComment {
         comment_id,
         text: String::new(),
         now: Instant::<Authored>::new(0),
@@ -194,7 +194,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
         &UiEvent::Viewport {
             document_id: Id::<Document>::mint(),
             event: ProseEvent::Error(ProseError::new(
-                ambre_bus::app::prose::RefusedAction::Command(reply.name()),
+                ambre_prose::message::RefusedAction::Command(reply.name()),
                 ProseRefusal::NoSuchComment(comment_id),
             )),
         },
@@ -344,7 +344,7 @@ async fn the_history_rows_follow_the_reported_state() {
     assert!(rows.iter().any(|row| row.contains("Redo")), "{rows:?}");
 
     report(ProseEvent::Synced {
-        acked: ambre_core::Seq::<ambre_bus::app::prose::TextAck>::nth(1),
+        acked: ambre_core::Seq::<ambre_prose::message::TextAck>::nth(1),
     });
     leptos::task::tick().await;
     assert_eq!(disabled_rows(&root), rows);

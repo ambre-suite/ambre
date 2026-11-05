@@ -162,7 +162,7 @@ found in the grid the table has now (`PROSE-009`). A cell inside the rectangle t
 describe is **covered**: it is not painted, it is not measured, and it keeps its text
 (`PROSE-FEAT-048`).
 
-**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

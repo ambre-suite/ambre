@@ -170,9 +170,9 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::DocChar;
     use ambre_bus::conduit::Receiver;
     use ambre_core::index::Pos;
+    use ambre_prose::message::DocChar;
 
     fn drain<T>(rx: &Receiver<T>) -> Vec<T> {
         rx.try_iter().collect()
@@ -342,7 +342,7 @@ mod tests {
     /// takes the change again, or once the relay holds it.
     #[test]
     fn a_full_store_pauses_editing_until_the_change_is_safe() {
-        use ambre_bus::app::prose::ProseCommand;
+        use ambre_prose::message::ProseCommand;
         let (mut state, document_id, _sync, persist, ui) = opened();
         let DocState::Prose(prose) = &state.docs[&document_id].state else {
             panic!("the rig opened a Prose document");

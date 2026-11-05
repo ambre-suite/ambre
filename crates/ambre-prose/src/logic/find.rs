@@ -6,8 +6,8 @@
 //! (`PROSE-FEAT-035`). Every offset is a count of code points, the unit a
 //! block's text is indexed in (`PROSE-045`).
 
+use crate::message::{DocChar, FindRefusal};
 use ambre_bus::app::find::{FindQuery, Match};
-use ambre_bus::app::prose::{DocChar, FindRefusal};
 use ambre_core::StepDirection;
 use ambre_core::index::Delta;
 use ambre_core::index::{Len, Pos, Span};
@@ -260,7 +260,7 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
-    fn pairs(spans: Vec<Span<ambre_bus::app::prose::DocChar>>) -> Vec<(u32, u32)> {
+    fn pairs(spans: Vec<Span<crate::message::DocChar>>) -> Vec<(u32, u32)> {
         spans
             .into_iter()
             .map(|span| (span.start.get(), span.end.get()))
@@ -269,7 +269,7 @@ mod tests {
 
     use super::*;
     use crate::events::{BlockId, BlockInit, ProseCommand};
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
 
     fn query(text: &str) -> Option<FindQuery<FindOptions>> {
         ambre_bus::app::find::FindText::new(text.to_owned())

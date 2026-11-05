@@ -7,7 +7,7 @@
 //! refused here rather than left to the CRDT engine, so the refusal names the
 //! registry.
 
-use ambre_bus::app::prose::{DocChar, MarkKey};
+use crate::message::{DocChar, MarkKey};
 use ambre_core::Opaque;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::BTreeMap;
@@ -218,7 +218,7 @@ impl ProseState {
         anchor: (BlockId, Pos<DocChar>),
         focus: (BlockId, Pos<DocChar>),
         key: &MarkKey,
-        action: ambre_bus::app::prose::MarkAction,
+        action: crate::message::MarkAction,
     ) -> ProseOutcome {
         // The whole key, not its root: `b:x` names no control of the bar.
         if !MarkRoot::parse(key.as_str()).is_some_and(|root| BAR_KEYS.contains(&root)) {
@@ -242,8 +242,8 @@ impl ProseState {
                 return Self::err_bad_range();
             }
             let written = match action {
-                ambre_bus::app::prose::MarkAction::Apply => body.mark(start..end, key.as_str(), ""),
-                ambre_bus::app::prose::MarkAction::Remove => body.unmark(start..end, key.as_str()),
+                crate::message::MarkAction::Apply => body.mark(start..end, key.as_str(), ""),
+                crate::message::MarkAction::Remove => body.unmark(start..end, key.as_str()),
             };
             if let Err(e) = written {
                 return Self::err_write(e);
@@ -431,7 +431,7 @@ fn ordered(range: Span<DocChar>) -> Span<DocChar> {
 pub(crate) mod tests {
     use crate::events::{Align, ParagraphStyle, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::{Pos, Span};
     use ambre_core::{PrintLength, Pt};
 
@@ -440,7 +440,7 @@ pub(crate) mod tests {
     #[test]
     fn a_folded_key_reads_as_the_counts_of_its_runs() {
         use super::KeySeen;
-        use ambre_bus::app::prose::TriState;
+        use crate::message::TriState;
         for runs in 0_u32..(1 << 4) {
             for len in 0..=4 {
                 let carried: Vec<bool> = (0..len).map(|at| runs & (1 << at) != 0).collect();

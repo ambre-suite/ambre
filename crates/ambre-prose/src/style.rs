@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use crate::doc::DocDefaults;
 use crate::events::{BlockType, HeadingLevel};
-use ambre_bus::app::prose::MarkKey;
+use crate::message::MarkKey;
 
 use crate::mark::{self, InlineCode, MarkRoot, Script};
 

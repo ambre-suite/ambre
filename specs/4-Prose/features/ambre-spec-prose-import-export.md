@@ -401,7 +401,7 @@ pub enum IrImageAlign { Block, Left, Right, Center }
 finished. An error is what a caller gets when no document could be produced at all:
 
 ```rust
-// ambre_bus::app::prose
+// ambre_prose::message
 /// A conversion that produced nothing answers an `InteropError` instead: the two are never
 /// one type (`PROSE-IO-047`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -463,7 +463,8 @@ document is where the first block lands, and it refuses before anything is writt
 the writer. The walk is shared by all four writers (`PROSE-IO-046`). That is what makes it one
 budget row rather than four, and what keeps a writer from reading the document (`PROSE-IO-045`).
 
-**The commands and the events** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands and the events** (`ambre_prose::message`, declared in
+`features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Direction | Carries |
 |---|---|---|
@@ -474,7 +475,7 @@ budget row rather than four, and what keeps a writer from reading the document (
 | `ProseEvent::ImportProgress`, `::ExportProgress` | Logic to UI | a percentage, past one megabyte (`PROSE-IO-021`) |
 
 ```rust
-// ambre_bus::app::prose. A reader or a writer adds its variant on the day it lands, so the
+// ambre_prose::message. A reader or a writer adds its variant on the day it lands, so the
 // view never offers a format no code reads or writes: Word, HTML and the PDF join with their
 // Stories (`ambre-roadmap.md` E5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -3,8 +3,8 @@
 //! `features/ambre-spec-prose-selection.md`).
 
 use crate::layout::run::{Affinity, RunChar};
+use crate::message::DocChar;
 use ambre_bus::PasteSource;
-use ambre_bus::app::prose::DocChar;
 use ambre_commands::{ClipboardWrite, ModifierFold, ModifierKeys};
 use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Commands, StaticKey};
@@ -1618,7 +1618,7 @@ fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
             anchor: (first, Pos::<DocChar>::ZERO),
             focus: (second, Pos::<DocChar>::new(6)),
             key: "b".into(),
-            action: ambre_bus::app::prose::MarkAction::Apply,
+            action: crate::message::MarkAction::Apply,
         })
     );
     assert!(rig.all_marked(first, "b") && rig.all_marked(second, "b"));
@@ -1628,7 +1628,7 @@ fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
     assert!(matches!(
         sent,
         Some(ProseCommand::FormatSelection {
-            action: ambre_bus::app::prose::MarkAction::Remove,
+            action: crate::message::MarkAction::Remove,
             ..
         })
     ));

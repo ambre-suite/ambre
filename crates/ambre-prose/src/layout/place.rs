@@ -5,7 +5,7 @@
 //! (`PROSE-078`). A constraint it cannot meet is resolved by moving forward,
 //! and the constraint order of section 2 decides which one gives way.
 
-use ambre_bus::app::prose::{BlockType, FootnoteCall, KeepTogether, KeepWithNext, Page};
+use crate::message::{BlockType, FootnoteCall, KeepTogether, KeepWithNext, Page};
 use ambre_core::id::{Footnote, Id};
 use ambre_core::index::{Len, Pos, Span};
 use ambre_core::{Doc, Ordinal, Px};

@@ -104,7 +104,7 @@ peers converge on the text and then agree on the numbers (`PROSE-FEAT-097`).
   (`PROSE-FEAT-071`): a band repeated on every page cannot own a note belonging to one page's
   foot. The refusal is reported.
 
-**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands** (`ambre_prose::message`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Behaviour |
 |---|---|

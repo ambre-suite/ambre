@@ -1,6 +1,7 @@
 //! Per-application data planes carried by the IPC envelopes, for the
 //! applications whose vocabulary has not moved into their own crate yet
-//! (`BUS-032`). Trame's lives in `ambre-trame` and Toile's in `ambre-toile`;
+//! (`BUS-032`). Trame's lives in `ambre-trame`, Toile's in `ambre-toile` and
+//! Prose's in `ambre-prose`;
 //! `grid` and `find` stay here, shared by more than one application.
 //!
 //! One module per document type, each holding **that app's whole typed data
@@ -21,4 +22,3 @@
 pub mod find;
 pub mod grid;
 pub mod murmure;
-pub mod prose;

@@ -13,10 +13,10 @@ use loro::TreeID;
 use crate::events::{BlockId, Page, block_id, tree_id};
 use crate::layout::place::BlockLayout;
 use crate::layout::run::{CellShape, RunChar, TableShape};
+use crate::message::{DocChar, VAlign};
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
 use crate::view::provisional::PieceRuns;
-use ambre_bus::app::prose::{DocChar, VAlign};
 
 /// The part of a block one page shows.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -382,7 +382,7 @@ impl ProseUiState {
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use crate::layout::run::RunChar;
-    use ambre_bus::app::prose::DocChar;
+    use crate::message::DocChar;
     use ambre_core::index::Pos;
     use ambre_core::{Doc, Point, Px, View};
     use ambre_draw::HitTest;
