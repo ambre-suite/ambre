@@ -38,7 +38,11 @@ use kurbo::{Point, Vec2};
 /// A panic rather than a skip: a bench that quietly measures nothing reports a
 /// figure of zero, which reads as an improvement.
 fn corpus(name: &str) -> DocState {
-    match load_bench_fixture(name) {
+    let fixture = match ambre_core::Validated::<ambre_core::FixtureName>::parse(name) {
+        Ok(fixture) => fixture,
+        Err(e) => panic!("{e}"),
+    };
+    match load_bench_fixture(&fixture) {
         Ok((_, state)) => state,
         Err(e) => panic!("{name}: {e}. Run `just fixtures-bench-corpus`"),
     }

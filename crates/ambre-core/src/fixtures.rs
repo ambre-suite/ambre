@@ -23,35 +23,61 @@ use serde::{Deserialize, Serialize};
 // Generator identity
 // -----------------------------------------------------------------------------
 
-/// The stable name of one generator, for example `"trame/formula_dag_deep"`.
-/// It is also the artifact stem.
+/// The rule of the stable name of one generator, for example
+/// `"trame/formula_dag_deep"`. A `Validated<FixtureName>` holds one.
 ///
-/// A generator names itself with a `'static` literal. A manifest read back off
-/// disk owns its copy, because owned deserialization cannot borrow `'static`.
-/// Transparent to serde, so the manifest carries the bare string.
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
-#[serde(transparent)]
-pub struct FixtureName(std::borrow::Cow<'static, str>);
+/// The name is also the artifact stem, so it forms a file path. The rule
+/// admits two parts joined by one `/`: the app, then a `snake_case` stem.
+/// Each part starts with a lowercase ASCII letter, and holds only lowercase
+/// ASCII letters, digits and `_`. So no name holds `..`, a leading `/`, an
+/// empty part, an upper-case letter or another separator.
+///
+/// A generator names itself through [`FixtureGen::name`], a manifest through
+/// its decode, and the corpus tooling through each stem it reads off disk. The
+/// serde form is the bare string.
+pub enum FixtureName {}
 
-impl FixtureName {
-    /// The name a generator declares for itself.
-    #[must_use]
-    pub const fn declared(name: &'static str) -> Self {
-        Self(std::borrow::Cow::Borrowed(name))
+/// A text that is no fixture name. The error, `Refused<FixtureName>`, echoes
+/// the refused text.
+impl crate::Refuses for FixtureName {
+    type Raw = String;
+    const NAME: &'static str = "InvalidFixtureName";
+
+    fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{raw:?} is not a fixture name: two lowercase snake_case parts, <app>/<stem>"
+        )
     }
+}
 
-    /// The name, for a path or a message.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
+impl crate::Rule for FixtureName {
+    type Error = crate::Refused<FixtureName>;
+
+    const LOGGED_AS: Option<&'static str> = Some("FixtureName");
+
+    fn admit(text: String) -> Result<String, crate::Refused<FixtureName>> {
+        let part = |part: &str| {
+            part.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        };
+        let mut parts = text.split('/');
+        let admitted = match (parts.next(), parts.next(), parts.next()) {
+            (Some(app), Some(stem), None) => part(app) && part(stem),
+            _ => false,
+        };
+        if admitted {
+            Ok(text)
+        } else {
+            Err(crate::Refused::new(text))
+        }
     }
 }
 
-impl std::fmt::Display for FixtureName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
+/// A fixture name is a public identifier the tooling prints in a report.
+impl crate::Displayed for FixtureName {}
 
 /// The constant a generator author picks once. It pins the `PeerID`, the
 /// commit clock and the `document_id` (I1). Transparent to serde.
@@ -226,7 +252,15 @@ pub trait FixtureGen {
     /// Stable identity: the manifest's [`FixtureManifest::generator`] and the
     /// artifact **stem** -- the whole filename in `current/`, the part before the
     /// `@` in `frozen/`.
-    fn name(&self) -> FixtureName;
+    ///
+    /// The generator parses its own literal, so the rule of [`FixtureName`]
+    /// runs at this door too, and no generator unwraps.
+    ///
+    /// # Errors
+    ///
+    /// The refused literal, when it breaks the rule of [`FixtureName`]. The
+    /// driver then fails the run with that reason.
+    fn name(&self) -> Result<crate::Validated<FixtureName>, crate::Refused<FixtureName>>;
 
     /// Which app's engine this generator drives, and therefore which importer
     /// reads the artifact back.
@@ -276,8 +310,9 @@ pub trait FixtureGen {
 pub struct FixtureManifest {
     /// Generator identity, for example `"trame/formula_dag_deep"`. Also the artifact
     /// **stem**: the whole filename in `current/`, the part before the `@` in
-    /// `frozen/`.
-    pub generator: FixtureName,
+    /// `frozen/`. The decode runs the rule of [`FixtureName`], so a manifest
+    /// that names a bad generator is refused on read.
+    pub generator: crate::Validated<FixtureName>,
 
     /// Bumped by the generator author when the produced document changes on
     /// purpose. Frozen into the artifact too: that is how detects a frozen
@@ -351,7 +386,7 @@ mod tests {
 
     fn sample() -> FixtureManifest {
         FixtureManifest {
-            generator: FixtureName::declared("trame/formula_dag_deep"),
+            generator: crate::Validated::parse("trame/formula_dag_deep").unwrap(),
             generator_version: Version::<Generator>::new(3),
             seed: FixtureSeed::new(0x0123_4567_89AB_CDEF),
             doc_type: DocType::Trame,
@@ -409,6 +444,61 @@ mod tests {
         let mut value: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&sample()).unwrap()).unwrap();
         value["digest"] = serde_json::Value::String("abcd".to_owned());
+        assert!(serde_json::from_value::<FixtureManifest>(value).is_err());
+    }
+
+    #[test]
+    fn the_fixture_name_rule_admits_the_app_and_a_snake_case_stem() {
+        for name in [
+            "trame/formula_dag_deep",
+            "toile/bench_board_50k",
+            "prose/styled_document",
+            "trame/gate_alpha",
+        ] {
+            assert!(
+                crate::Validated::<FixtureName>::parse(name).is_ok(),
+                "{name} is a fixture name"
+            );
+        }
+    }
+
+    #[test]
+    fn the_fixture_name_rule_refuses_every_path_that_escapes_or_breaks_the_grammar() {
+        for name in [
+            "",
+            "trame",
+            "../trame/grid",
+            "trame/../grid",
+            "trame/..",
+            "/trame/grid",
+            "trame/grid/",
+            "/etc/passwd",
+            "trame//grid",
+            "trame/",
+            "/grid",
+            "trame/a/b",
+            "Trame/grid",
+            "trame/Grid",
+            "trame\\grid",
+            "trame/grid-literals",
+            "trame/grid.literals",
+            "trame/grid literals",
+            "trame/_grid",
+            "trame/1grid",
+        ] {
+            let refused = crate::Validated::<FixtureName>::parse(name);
+            assert!(refused.is_err(), "{name:?} is no fixture name");
+            if let Err(error) = refused {
+                assert_eq!(error.as_str(), name, "the error echoes the refused text");
+            }
+        }
+    }
+
+    #[test]
+    fn a_manifest_that_names_a_bad_generator_is_refused_on_read() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&sample()).unwrap()).unwrap();
+        value["generator"] = serde_json::Value::String("../../etc/passwd".to_owned());
         assert!(serde_json::from_value::<FixtureManifest>(value).is_err());
     }
 

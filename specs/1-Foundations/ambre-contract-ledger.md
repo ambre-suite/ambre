@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3914 rows: 3355 shipped, of which 11 loose. 559 unbuilt.**
+**3915 rows: 3356 shipped, of which 11 loose. 559 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 961 | 473 | 873 | 618 | 419 | 3344 |
+| `verified` | 962 | 473 | 873 | 618 | 419 | 3345 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 9 |  |  |  |  | 9 |
@@ -50,7 +50,7 @@
 | `ambre-spec-docfile.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-drawing-surface.md` | 16 | 12 | 12 |  | 4 |
 | `ambre-spec-find.md` | 15 | 10 | 10 |  | 5 |
-| `ambre-spec-fixtures.md` | 36 | 36 | 36 |  |  |
+| `ambre-spec-fixtures.md` | 37 | 37 | 37 |  |  |
 | `ambre-spec-frame.md` | 21 | 20 | 19 | 1 | 1 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-key-rotation.md` | 29 | 28 | 28 |  | 1 |
@@ -201,7 +201,7 @@
 | `ambre-spec-docfile.md` | DOCFILE-001..020 |
 | `ambre-spec-drawing-surface.md` | CANVAS-002,025..030,055..056,061..066,074 |
 | `ambre-spec-find.md` | FIND-001..015 |
-| `ambre-spec-fixtures.md` | FIXTURE-001..036 |
+| `ambre-spec-fixtures.md` | FIXTURE-001..037 |
 | `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070,072,075..076 |
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046,071 |
 | `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143,168 |
