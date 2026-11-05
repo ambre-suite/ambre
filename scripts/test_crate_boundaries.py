@@ -232,6 +232,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_one_event_copy(errors)
             cb.check_signal_types(errors)
             cb.check_bus_ids(errors)
+            cb.check_message_crdt(errors)
             cb.check_wire_ids(errors)
             cb.check_typed_answers(errors)
             cb.check_bench_frame_rate(errors)
@@ -1025,6 +1026,22 @@ class CrateBoundaries(unittest.TestCase):
             (root / cb.BUS / "lib.rs").unlink()
             errors = self.run_checks(root)
         self.assertTrue(any("identifier boundary reads nothing" in e for e in errors), errors)
+
+    def test_a_message_naming_a_crdt_handle_is_refused(self):
+        for text in (
+            "pub enum E {\n    Doc { doc: loro::LoroDoc },\n}\n",
+            "pub struct S {\n    pub tree: LoroTree,\n}\n",
+        ):
+            errors = self.breach(f"{cb.APP_MESSAGES[-1]}/mod.rs", text)
+            self.assertTrue(any("names a CRDT handle" in e for e in errors), (text, errors))
+
+    def test_a_message_carrying_payload_bytes_or_naming_loro_in_a_comment_stays_free(self):
+        text = (
+            "//! No `loro::LoroDoc` handle here.\n"
+            "pub enum E {\n    Updated { payload: ambre_core::LoroPayload },\n}\n"
+            "#[cfg(test)]\nmod tests {\n    fn t(_: loro::LoroDoc) {}\n}\n"
+        )
+        self.assertEqual(self.breach(f"{cb.APP_MESSAGES[-1]}/mod.rs", text), [])
 
     def test_an_application_vocabulary_gone_from_the_tree_is_an_error_not_a_pass(self):
         import tempfile

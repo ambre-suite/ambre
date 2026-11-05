@@ -585,6 +585,9 @@ APP_MESSAGES = (
     "crates/ambre-toile/src/message",
     "crates/ambre-prose/src/message",
 )
+# A document handle of the CRDT engine, by path or by name. A message carries
+# bytes, so the payload newtype `LoroPayload` is no handle (`PROSE-001`).
+MESSAGE_CRDT = re.compile(r"\bloro\s*::|\bLoro(?!Payload\b)\w+")
 BUS_ID_FIELD = re.compile(r"\b((?:\w+_)?ids?)\s*:\s*(?!:)")
 # The relay's rows and routes and the HTTP layer of Sync, whose identifiers
 # each take their newtype and reach JSON as their text (`SRV-179`).
@@ -1836,6 +1839,24 @@ def typed_fields(line: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def check_message_crdt(errors: list[str]) -> int:
+    """`PROSE-001`: an application's message vocabulary names no CRDT handle.
+
+    The application crate depends on `loro`, so the crate graph no longer
+    keeps a document handle out of the messages its views and engine share.
+    Above its tests, no line of a vocabulary names a path into `loro` or a
+    Loro type other than the payload bytes.
+    """
+    files = sources(APP_MESSAGES)
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            found = MESSAGE_CRDT.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a message names a CRDT handle: `{found.group(0)}`")
+    return len(files)
+
+
 def check_bus_ids(errors: list[str]) -> int:
     """`BUS-029`: no message field of `ambre-bus`, or of an application's
     message vocabulary, carries an identifier as a bare primitive.
@@ -2076,6 +2097,7 @@ def main() -> int:
     event_copies = check_one_event_copy(errors)
     signal_types = check_signal_types(errors)
     bus_ids = check_bus_ids(errors)
+    message_crdt = check_message_crdt(errors)
     wire_ids = check_wire_ids(errors)
     answers = check_typed_answers(errors)
     benches = check_bench_frame_rate(errors)
@@ -2117,6 +2139,7 @@ def main() -> int:
         f"{event_copies} relay arms read for an event a view also keeps, "
         f"{signal_types} shell signals read for a bare primitive payload, "
         f"{bus_ids} bus and message files read for an identifier field of a primitive type, "
+        f"{message_crdt} message files read for a CRDT handle, "
         f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes or a closed set held as text, "
         f"{answers} relay files read for an answer built with `json!`, "
         f"{benches} fixture benchmarks read for a frame rate, "
