@@ -3282,12 +3282,11 @@ ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(krate) | par
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(renamed) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-draw | src/testing.rs | crate::testing | <Glyphs as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-draw | src/testing.rs | crate::testing | <Ops as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-draw | src/testing.rs | crate::testing | <OpenPushes as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | param | impl Fn(&DrawOp)->bool	generic	a predicate over the recorded operations
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::clips_balanced() | ret | bool	generic	predicate result
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::holds_walk() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::transforms_balanced() | ret | bool	generic	predicate result
-ambre-draw | src/testing.rs | crate::testing | StackDepth.0 | field | u32	newtype-inner	the inside of a stack depth, which never goes below zero
-ambre-draw | src/testing.rs | crate::testing | StackDepth::is_balanced() | ret | bool	generic	predicate result
 ambre-murmure | src/testing.rs | crate::testing | channel_of(texts) | param | &[&str]	free-text	message texts a test channel is built from
 ambre-primitives | src/secrets.rs | crate::secrets | RELAY_SECRETS | const | (&str,&str)	generic	the crate name and the directory path a check admits, matched against the scanned file
 ambre-primitives | src/secrets.rs | crate::secrets | INCLUDE | const | &[&str]	generic	a word list the scanner matches Rust tokens against
@@ -4068,6 +4067,7 @@ ambre-core | src/refused.rs | crate::refused | <Refused<K> as PartialEq>::eq() |
 ambre-core | src/refused.rs | crate::refused | Refused<K>::as_str() | ret | &str	generic	the refused text the error echoes
 ambre-draw | src/testing.rs | crate::testing | <Glyphs as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-draw | src/testing.rs | crate::testing | <Ops as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-draw | src/testing.rs | crate::testing | <OpenPushes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count
 ambre-logic | src/lib.rs | crate::logged | <LoggedDeltas as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-murmure | src/drafts.rs | crate::drafts | <DraftRows as OpaqueKind>::NAME | const | &'static str	free-text	the name a draft row prints through Debug, for a log line

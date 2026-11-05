@@ -38,7 +38,6 @@ ambre-core | src/status.rs | crate::status | HttpStatus | u16	an HTTP status the
 ambre-core | src/unit.rs | crate::unit | Radians | f64	the one angle unit of the workspace, with to_degrees for a format that takes degrees
 ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millisecond: Px::per writes it and ViewSpeed::over turns it back into a move
 ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller chooses, read for equality alone and never a hash of the pixels
-ambre-draw | src/testing.rs | crate::testing | StackDepth | u32	the open pushes of a test double: popped answers None below zero, the renderer bug the double catches. Count::minus saturates, which would hide a pop below zero
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports, a length only once WheelDelta::to_px reads it
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to, one per kind, which Opaque::new would open
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
