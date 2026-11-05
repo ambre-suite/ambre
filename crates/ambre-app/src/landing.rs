@@ -518,7 +518,11 @@ fn DeleteConfirm(
         pending.set(None);
     };
     view! {
-        <ambre_chrome::Dialog open=open on_close=on_close class="ambre-confirm-dialog">
+        <ambre_chrome::Dialog
+            open=open
+            on_close=on_close
+            class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-confirm-dialog")}
+        >
             <h3>"Delete document?"</h3>
             <p>
                 "\""

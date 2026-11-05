@@ -129,7 +129,7 @@ pub fn PassphraseDialog(
     };
 
     view! {
-        <Dialog open=open class="ambre-passphrase">
+        <Dialog open=open class={ambre_core::StaticKey::<ambre_core::CssClasses>::new("ambre-passphrase")}>
             <div class="ambre-passphrase-panel">
                 <h2>{heading}</h2>
                 <p class="ambre-passphrase-note">{note}</p>

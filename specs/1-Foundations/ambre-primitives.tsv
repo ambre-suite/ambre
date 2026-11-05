@@ -586,7 +586,6 @@ ambre-chrome | src/composed.rs | crate::composed | UNTITLED | const | &str	free-
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.disabled | field | bool	generic	state flag/predicate
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.label | field | String	free-text	text, label or user content
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem::label() | ret | &str	free-text	text, label or user content
-ambre-chrome | src/dialog.rs | crate::dialog | Dialog(class) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/dialog.rs | crate::dialog | Dialog(label) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/dialog.rs | crate::dialog | ModalHold.0 | field | Arc<dyn Fn(bool)+Send+Sync>	newtype-inner	newtype inner
 ambre-chrome | src/dialog.rs | crate::dialog | ModalHold::new(set) | param | impl Fn(bool)+Send+Sync+'static	newtype-inner	ModalHold constructor

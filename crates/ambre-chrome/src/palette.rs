@@ -226,7 +226,11 @@ pub fn CommandPalette(
     view! {
         // The shared modal traps the focus and leaves the page inert
         // (`CHROME-028`, `CHROME-068`); its backdrop and Escape close it.
-        <crate::dialog::Dialog open=open class="ambre-palette-modal" label="Command palette">
+        <crate::dialog::Dialog
+            open=open
+            class={StaticKey::<ambre_core::CssClasses>::new("ambre-palette-modal")}
+            label="Command palette"
+        >
             <div class="ambre-palette">
                 <input
                     node_ref=input_ref

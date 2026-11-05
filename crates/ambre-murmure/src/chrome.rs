@@ -1600,7 +1600,7 @@ pub fn DeleteConfirm(
         <ambre_chrome::Dialog
             open=open
             on_close=Callback::new(move |()| cancel())
-            class="murmure-delete"
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-delete")}
             label="Delete message"
         >
             <h2>"Delete this message?"</h2>
@@ -1646,7 +1646,7 @@ pub fn ChannelMentionConfirm(
         <ambre_chrome::Dialog
             open=open
             on_close=Callback::new(move |()| relay.cancel_all())
-            class="murmure-all"
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-all")}
             label="Mention the whole channel"
         >
             <h2>{title}</h2>
@@ -1792,7 +1792,7 @@ pub fn EmojiPicker(
         <ambre_chrome::Dialog
             open=open
             on_close=Callback::new(move |()| relay.picking.set(None))
-            class="murmure-emoji"
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-emoji")}
             label="Emoji"
         >
             <h2>{title}</h2>
@@ -1850,7 +1850,11 @@ pub fn EmojiPicker(
 pub fn KeyList(relay: MurmureRelay) -> impl IntoView {
     let rows = key_list(&Locale::En);
     view! {
-        <ambre_chrome::Dialog open=relay.keys class="murmure-keys" label="Keyboard shortcuts">
+        <ambre_chrome::Dialog
+            open=relay.keys
+            class={StaticKey::<ambre_core::CssClasses>::new("murmure-keys")}
+            label="Keyboard shortcuts"
+        >
             <h2>"Keyboard shortcuts"</h2>
             <table class="murmure-keys-table">
                 <thead>
