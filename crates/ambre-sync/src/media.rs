@@ -490,6 +490,40 @@ async fn download_leg(
 mod tests {
     use super::*;
 
+    /// `SYNC-183`: with no relay, a download and an erase each answer the
+    /// Logic thread at once, so no view waits on them.
+    #[test]
+    fn a_media_request_with_no_relay_answers_at_once() {
+        let (sink, rx) = LogicSink::channel();
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let document_id = Id::<Document>::mint();
+        let hash = || {
+            ambre_core::Validated::<ambre_core::ContentHash>::parse("cd".repeat(32)).expect("hex")
+        };
+        state.handle_download_media(Seq::<Request>::new(1), document_id, hash());
+        state.handle_erase_media(Seq::<Request>::new(2), document_id, hash());
+        let answers: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                answers.as_slice(),
+                [
+                    LogicEvent::Rest {
+                        evt: RestEvent::MediaDownloaded { .. },
+                        ..
+                    },
+                    LogicEvent::Rest {
+                        evt: RestEvent::MediaErased { .. },
+                        ..
+                    },
+                ]
+            ),
+            "{answers:?}"
+        );
+    }
+
     /// The address the worker answers with is keyed by the document key: the
     /// same bytes in two documents get two addresses (`SYNC-050`).
     #[test]
