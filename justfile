@@ -21,12 +21,15 @@ default:
 #
 # Every non-default feature is on, so the code behind one is linted too: the
 # fixture machinery, the PDF export and the relay's database half. A panic lint
-# that never sees a file holds nothing there (`ARCH-028`).
+# that never sees a file holds nothing there (`ARCH-028`). `just primitives`
+# refuses a feature a manifest declares that no lint line turns on, unless
+# `specs/1-Foundations/ambre-features.tsv` excludes it with its reason
+# (`ARCH-033`).
 
 # Lint (native): fmt + clippy with warnings denied.
 lint:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz -- -D warnings
+    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz,ambre-belt/browser -- -D warnings
 
 # Lint (wasm): the code only the browser compiles -- the application chrome, the
 # canvas host, the workers -- which host clippy never reads. `RUSTFLAGS` drops
