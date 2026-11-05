@@ -311,8 +311,8 @@ pub enum ProseFixture {
 pub const PROSE_FIXTURES: &[&dyn FixtureGen] = &[&ProseFixture::StyledDocument];
 
 impl FixtureGen for ProseFixture {
-    fn name(&self) -> FixtureName {
-        FixtureName::declared(match self {
+    fn name(&self) -> Result<ambre_core::Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+        ambre_core::Validated::parse(match self {
             Self::StyledDocument => "prose/styled_document",
         })
     }

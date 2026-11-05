@@ -28,6 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `FIXTURE-007` | `INV` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate-graph -- `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly, so the surface is unreachable from the wasm artifact today; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses the client naming the feature and any crate folding it into its own `default`, the two manifest lines that would make it reachable | none | verified |
 | `FIXTURE-010` | `INV` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | `fixtures_corpus::the_shipping_registry_has_no_duplicate_names` -- over the seven shipping generators, and it refuses an empty registry first: the dedup alone passes on nothing at all; `fixtures_bench::no_generator_shares_a_name_or_a_seed_with_another` -- across the shipping and the scale registries | none | verified |
+| `FIXTURE-037` | `INV` | A fixture name MUST be two lowercase `snake_case` parts, `<app>/<stem>`. The rule MUST hold at each entry: a generator, a manifest, a command line and a file of the corpus. A refused name MUST NOT form a path. | this spec section 2 | `ambre_core::fixtures::tests::the_fixture_name_rule_admits_the_app_and_a_snake_case_stem`; `::the_fixture_name_rule_refuses_every_path_that_escapes_or_breaks_the_grammar`; `::a_manifest_that_names_a_bad_generator_is_refused_on_read`; `fixtures_corpus::every_declared_generator_name_meets_the_rule`; `::a_manifest_that_names_a_bad_generator_is_refused_on_read` -- a path takes a `Validated<FixtureName>` or a frozen entry alone, so no unchecked text reaches it | none | verified |
 | `FIXTURE-036` | `INV` | Every artifact of `current/` MUST regenerate byte for byte from the generator and the seed its manifest names. | this spec section 2 | `fixtures_gate::a_generator_that_changes_its_output_drifts_against_the_committed_bytes` -- every artifact of `current/` is regenerated from its seed and diffed by `just fixtures-check` | none | verified |
 | `FIXTURE-005` | `INV` | Every frozen artifact MUST trace to a generator run from a seed. | this spec section 2 | ci-gate -- `scripts/freeze_provenance.py`, run by `just freeze-provenance` in the CI `lint` job, which resolves each frozen artifact to the commit that added it, finds its bytes in the live corpus at or before that commit's parent, and reruns the generator there from its seed in a throwaway worktree. Bytes that never sat there, or that the generator rebuilds otherwise, are refused. Only the artifacts the base branch lacks are rebuilt, a frozen artifact never changing (`FIXTURE-018`) | none | verified |
 | `FIXTURE-032` | `INV` | A committed artifact MUST NOT come from a real user document. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses a line of a generator module that reads a file, embeds one or reads the host's environment; ci-gate -- `scripts/freeze_provenance.py`, run by `just freeze-provenance` in the CI `lint` job, which applies the same scan at the commit a frozen artifact was rebuilt from. An artifact rebuilt from its seed by a generator that reads nothing else came from no user | none | verified |
@@ -94,7 +95,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machinery is host-only and gated behind a non-default `fixtures` feature
   that `ambre-app` never names (`FIXTURE-007`), so it links into no shipped binary. The one key it
   touches is derived at test setup and never written to disk (section 2).
-* **Verification.** 36 `verified`. Determinism is held on four axes, the whole loader is held, and
+* **Verification.** 37 `verified`. Determinism is held on four axes, the whole loader is held, and
   each gate runs over a throwaway corpus root. A gate refuses the machinery in the client build and
   a frame rate in a fixture benchmark. It refuses a generator that writes to the CRDT or reads a
   file. A frozen artifact's seed and origin are read at its freeze commit, where its generator
@@ -152,9 +153,9 @@ diff, so a binary encoding would defeat the sidecar's only purpose.
 pub struct FixtureManifest {
     /// Generator identity, for example "trame/formula_dag_deep". Also the
     /// artifact **stem**: the whole filename in `current/`, the part before the
-    /// `@` in `frozen/`. A borrowed literal in a generator, owned once a
-    /// manifest is read back off disk. Serde sees the bare string.
-    pub generator: FixtureName,
+    /// `@` in `frozen/`. Serde sees the bare string, and the decode runs the
+    /// rule of `FixtureName` (`FIXTURE-037`).
+    pub generator: Validated<FixtureName>,
     /// Bumped by the generator author when the produced document changes on
     /// purpose. Frozen into the artifact too: that is how a frozen fixture and
     /// the current one are found to be no longer comparable (`FIXTURE-020`).
@@ -208,8 +209,10 @@ trait objects, and a trait of bare constants is not object-safe.
 
 pub trait FixtureGen {
     /// Stable identity: the manifest's `generator` and the artifact stem. Unique
-    /// across the registry (`FIXTURE-010`).
-    fn name(&self) -> FixtureName;
+    /// across the registry (`FIXTURE-010`). The generator parses its own
+    /// literal, so the rule runs at this door too, and no generator unwraps
+    /// (`FIXTURE-037`).
+    fn name(&self) -> Result<Validated<FixtureName>, Refused<FixtureName>>;
     fn doc_type(&self) -> DocType;
 
     /// A constant the generator author picks once. It belongs to the generator
@@ -279,10 +282,11 @@ pub fn canonical_dump(state: &DocState) -> String;
 pub fn corpus_root() -> Result<PathBuf, FixtureError>;
 
 /// Load a committed fixture by name -- the entry point every consumer uses.
-pub fn load_fixture(name: &str) -> Result<(Id<Document>, DocState), FixtureError>;
+pub fn load_fixture(name: &Validated<FixtureName>) -> Result<(Id<Document>, DocState), FixtureError>;
 
 /// The same, against a caller-supplied directory: what a test drives.
-pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(Id<Document>, DocState), FixtureError>;
+pub fn load_fixture_from(dir: &Path, name: &Validated<FixtureName>)
+    -> Result<(Id<Document>, DocState), FixtureError>;
 
 /// The production import path over bytes already in hand: `read_ambre_plaintext`
 /// for the header, `DocState::new(doc_type)` for the empty state, then the
@@ -297,9 +301,17 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(Id<Document>, DocSta
 /// carried out verbatim (`FIXTURE-014`).
 pub fn import_fixture(container: &PlaintextContainer) -> Result<(Id<Document>, DocState), FixtureError>;
 
-pub fn artifact_path(dir: &Path, name: &str) -> PathBuf;
-pub fn manifest_path(dir: &Path, name: &str) -> PathBuf;
-pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureError>;
+/// The stem of an artifact: a `Validated<FixtureName>` in `current/` and
+/// `bench/`, a `FrozenEntry` in `frozen/`. The one way a stem reaches a path,
+/// and a file read off the tree goes through its rule (`FIXTURE-037`).
+pub trait Stem: Sized {
+    fn read(relative: &Path) -> Result<Self, FixtureError>;
+    fn relative(&self) -> PathBuf;
+}
+
+pub fn artifact_path(dir: &Path, stem: &impl Stem) -> PathBuf;
+pub fn manifest_path(dir: &Path, stem: &impl Stem) -> PathBuf;
+pub fn read_manifest(dir: &Path, stem: &impl Stem) -> Result<FixtureManifest, FixtureError>;
 pub fn manifest_for(generator: &dyn FixtureGen, container: &PlaintextContainer)
     -> Result<FixtureManifest, FixtureError>;
 pub fn digest_of(container: &PlaintextContainer) -> FileDigest;
@@ -312,7 +324,11 @@ pub fn generate_into(registry: &[&dyn FixtureGen], dir: &Path) -> Result<Vec<Fix
 #[derive(Debug, thiserror::Error)]
 pub enum FixtureError {
     /// No such artifact under the corpus root.
-    NotFound { name: String },
+    NotFound { path: PathBuf },
+    /// A generator or a command line names a fixture the rule refuses.
+    Name(Refused<FixtureName>),
+    /// A file of the corpus tree carries no fixture stem.
+    Stem { path: PathBuf, reason: String },
     /// Unreadable corpus root, permissions, IO.
     Io(std::io::Error),
     /// The bytes are not a valid `.ambre`. Carried verbatim, never reinterpreted.
@@ -322,7 +338,7 @@ pub enum FixtureError {
     /// present so the loader degrades cleanly when they arrive.
     NoEngine { doc_type: DocType },
     /// The sidecar is missing, or is not the JSON the manifest describes.
-    Manifest { name: String, reason: String },
+    Manifest { path: PathBuf, reason: String },
 }
 ```
 

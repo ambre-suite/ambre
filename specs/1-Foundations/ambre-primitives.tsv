@@ -1057,7 +1057,6 @@ ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::NAME | const | &'stati
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::Repr | assoc | u16	newtype-inner	the number a value of this quantity holds
 ambre-logic | src/bin/ambre-fixtures.rs | crate | baseline(machine) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/bin/ambre-fixtures.rs | crate | display() | ret | String	generic	generic byte/text API or codec
-ambre-logic | src/bin/ambre-fixtures.rs | crate | freeze(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | ClosedChannel::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | ClosedChannel::watch() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1096,35 +1095,16 @@ ambre-logic | src/fixtures.rs | crate::fixtures | CURRENT_DIR | const | &str	gen
 ambre-logic | src/fixtures.rs | crate::fixtures | CorpusReport.frozen_held | field | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/fixtures.rs | crate::fixtures | CorpusReport::is_clean() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/fixtures.rs | crate::fixtures | Degraded.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Degraded.stem | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Bytes.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Frozen.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Frozen.stem | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | Drift::FrozenOverflow.kept | field | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Manifest.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Manifest.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Missing.name | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Orphan.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | FROZEN_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | FROZEN_KEEP_PER_TYPE | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Manifest.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Manifest.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::NotFound.name | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry.generator | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry.stem | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry::parse(stem) | param | &str	free-text	free text: message, label, name or report
+ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Stem.reason | field | String	free-text	the words that say why a file of the corpus tree carries no artifact stem
 ambre-logic | src/fixtures.rs | crate::fixtures | MANIFEST_EXT | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | REGISTRY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/fixtures.rs | crate::fixtures | artifact_path(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | artifact_stems() | ret | Result<Vec<String>,FixtureError>	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | canonical_dump() | ret | String	generic	generic byte/text API or codec
-ambre-logic | src/fixtures.rs | crate::fixtures | collect_stems(out) | param | &mut Vec<String>	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | freeze(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | load_bench_fixture(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | load_fixture(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | load_fixture_from(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | manifest_path(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | read_manifest(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | DocState::export_failed_event(reason) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -3555,9 +3535,11 @@ ambre-core | src/fixtures.rs | crate::fixtures | <Generator as crate::version::V
 ambre-core | src/fixtures.rs | crate::fixtures | <Generator as crate::version::VersionKind>::Repr | assoc | u32	newtype-inner	the number a version of this space holds
 ambre-core | src/fixtures.rs | crate::fixtures | <Peers as crate::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-core | src/fixtures.rs | crate::fixtures | <Sheets as crate::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureName.0 | field | std::borrow::Cow<'static,str>	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::declared(name) | param | &'static str	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Refuses>::Raw | assoc | String	generic	the refused value the error echoes
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Rule>::admit() | ret | Result<String,crate::Refused<FixtureName>>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed.0 | field | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed::new(seed) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor

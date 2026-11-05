@@ -249,8 +249,8 @@ pub const TOILE_FIXTURES: &[&dyn FixtureGen] = &[
 ];
 
 impl FixtureGen for ToileFixture {
-    fn name(&self) -> FixtureName {
-        FixtureName::declared(match self {
+    fn name(&self) -> Result<ambre_core::Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+        ambre_core::Validated::parse(match self {
             Self::ShapesAndFrame => "toile/shapes_and_frame",
             Self::ConnectorsAndGroups => "toile/connectors_and_groups",
         })
@@ -471,8 +471,8 @@ pub const TOILE_BENCH_FIXTURES: &[&dyn FixtureGen] = &[
 ];
 
 impl FixtureGen for ToileBenchFixture {
-    fn name(&self) -> FixtureName {
-        FixtureName::declared(match self {
+    fn name(&self) -> Result<ambre_core::Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+        ambre_core::Validated::parse(match self {
             Self::Board50k => "toile/bench_board_50k",
             Self::DenseViewport2k => "toile/bench_dense_viewport_2k",
             Self::Deck50 => "toile/bench_deck_50",

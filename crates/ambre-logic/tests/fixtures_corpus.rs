@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use ambre_bus::{Col, Row};
 use ambre_core::docfile::{AMBRE_VERSION, DocFileError, HEADER_LEN, write_ambre_plaintext};
 use ambre_core::id::{Document, Id};
-use ambre_core::{DocType, FixtureGen, ShapeBody, seeded_document_id};
+use ambre_core::{DocType, FixtureGen, FixtureName, ShapeBody, Validated, seeded_document_id};
 use ambre_logic::DocState;
 use ambre_logic::fixtures::{
     self, FixtureError, canonical_dump, digest_of, generate_into, load_fixture_from, manifest_for,
@@ -44,6 +44,17 @@ use kurbo::{Point, Size};
 // same driver code path meanwhile -- the pattern `ambre_core::docfile` already
 // uses for its (equally empty) migration registry.
 
+/// The name `generator` gives itself. Every generator of this belt spells
+/// its name right.
+fn name_of(generator: &dyn FixtureGen) -> Validated<FixtureName> {
+    generator.name().expect("a fixture name")
+}
+
+/// The fixture name `text`, which the belt spells right.
+fn fixture(text: &str) -> Validated<FixtureName> {
+    Validated::parse(text).expect("a fixture name")
+}
+
 /// A Trame generator: literals plus a formula over them, so the artifact has
 /// both cell representations to dump.
 struct TrameGen {
@@ -53,8 +64,8 @@ struct TrameGen {
 }
 
 impl FixtureGen for TrameGen {
-    fn name(&self) -> ambre_core::FixtureName {
-        ambre_core::FixtureName::declared(self.name)
+    fn name(&self) -> Result<Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+        Validated::parse(self.name)
     }
     fn doc_type(&self) -> DocType {
         DocType::Trame
@@ -87,8 +98,8 @@ struct ToileGen {
 }
 
 impl FixtureGen for ToileGen {
-    fn name(&self) -> ambre_core::FixtureName {
-        ambre_core::FixtureName::declared(self.name)
+    fn name(&self) -> Result<Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+        Validated::parse(self.name)
     }
     fn doc_type(&self) -> DocType {
         DocType::Toile
@@ -174,8 +185,8 @@ fn the_manifest_describes_the_artifact_beside_it() {
     let dir = TempCorpus::new("manifest");
     let manifest = write_fixture(&TRAME, dir.path()).expect("the generator builds and writes");
 
-    let bytes = std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name().as_str()))
-        .expect("artifact");
+    let bytes =
+        std::fs::read(fixtures::artifact_path(dir.path(), &name_of(&TRAME))).expect("artifact");
 
     // `digest` matches the whole `.ambre` file, header included (C8).
     assert_eq!(
@@ -189,7 +200,7 @@ fn the_manifest_describes_the_artifact_beside_it() {
     assert_eq!(manifest.ambre_version.get(), bytes[4]);
     // The identity fields are the generator's, copied verbatim -- the driver has
     // no other source for them.
-    assert_eq!(manifest.generator, TRAME.name());
+    assert_eq!(manifest.generator, name_of(&TRAME));
     assert_eq!(manifest.generator_version, TRAME.generator_version());
     assert_eq!(manifest.seed, TRAME.seed());
     assert_eq!(manifest.doc_type, DocType::Trame);
@@ -202,7 +213,7 @@ fn the_manifest_describes_the_artifact_beside_it() {
 
     // `shape` matches `shape_of` recomputed from the decoded state, which is what
     // catches a manifest committed out of sync with its artifact.
-    let (_id, state) = load_fixture_from(dir.path(), TRAME.name().as_str()).expect("loads");
+    let (_id, state) = load_fixture_from(dir.path(), &name_of(&TRAME)).expect("loads");
     assert_eq!(manifest.shape, shape_of(&state));
 }
 
@@ -210,7 +221,7 @@ fn the_manifest_describes_the_artifact_beside_it() {
 fn the_sidecar_is_readable_json_and_reads_back_equal() {
     let dir = TempCorpus::new("sidecar");
     let written = write_fixture(&TOILE, dir.path()).expect("writes");
-    let path = fixtures::manifest_path(dir.path(), TOILE.name().as_str());
+    let path = fixtures::manifest_path(dir.path(), &name_of(&TOILE));
     let text = std::fs::read_to_string(&path).expect("a sidecar");
 
     // The whole reason the sidecar is JSON: a reviewer reads this diff.
@@ -225,7 +236,7 @@ fn the_sidecar_is_readable_json_and_reads_back_equal() {
     );
 
     assert_eq!(
-        read_manifest(dir.path(), TOILE.name().as_str()).unwrap(),
+        read_manifest(dir.path(), &name_of(&TOILE)).unwrap(),
         written
     );
 }
@@ -254,8 +265,8 @@ fn a_generator_whose_doc_type_contradicts_its_bytes_is_refused() {
     // written. It is not committed and discovered later by a confused importer.
     struct Liar;
     impl FixtureGen for Liar {
-        fn name(&self) -> ambre_core::FixtureName {
-            ambre_core::FixtureName::declared("liar")
+        fn name(&self) -> Result<Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+            Validated::parse("toile/liar")
         }
         fn doc_type(&self) -> DocType {
             DocType::Toile
@@ -289,14 +300,14 @@ fn the_driver_walks_a_whole_registry_and_creates_its_subdirectories() {
     let manifests = generate_into(registry, dir.path()).expect("the registry runs");
 
     assert_eq!(manifests.len(), 2, "one manifest per generator, in order");
-    assert_eq!(manifests[0].generator, TRAME.name());
-    assert_eq!(manifests[1].generator, TOILE.name());
+    assert_eq!(manifests[0].generator, name_of(&TRAME));
+    assert_eq!(manifests[1].generator, name_of(&TOILE));
     for generator in registry {
         // A generator name carries a `/`, which is a subdirectory the driver
         // creates. It is not an escape. It is not a flat filename with a slash
         // in it.
-        assert!(fixtures::artifact_path(dir.path(), generator.name().as_str()).is_file());
-        assert!(fixtures::manifest_path(dir.path(), generator.name().as_str()).is_file());
+        assert!(fixtures::artifact_path(dir.path(), &name_of(*generator)).is_file());
+        assert!(fixtures::manifest_path(dir.path(), &name_of(*generator)).is_file());
     }
     assert!(dir.path().join("trame").is_dir());
 }
@@ -307,11 +318,10 @@ fn regenerating_rewrites_the_same_bytes() {
     // second run over an existing tree reproduces it exactly.
     let dir = TempCorpus::new("regen");
     let first = write_fixture(&TRAME, dir.path()).expect("writes");
-    let first_bytes =
-        std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name().as_str())).unwrap();
+    let first_bytes = std::fs::read(fixtures::artifact_path(dir.path(), &name_of(&TRAME))).unwrap();
     let second = write_fixture(&TRAME, dir.path()).expect("rewrites");
     let second_bytes =
-        std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name().as_str())).unwrap();
+        std::fs::read(fixtures::artifact_path(dir.path(), &name_of(&TRAME))).unwrap();
     assert_eq!(first, second);
     assert_eq!(first_bytes, second_bytes);
 }
@@ -321,15 +331,47 @@ fn the_shipping_registry_has_no_duplicate_names() {
     // A name is the artifact stem, so two generators sharing one would silently
     // overwrite each other's fixture on every run. The emptiness check is part of
     // the rule here: an empty registry passes the dedup and verifies nothing.
-    let mut names: Vec<String> = fixtures::REGISTRY
-        .iter()
-        .map(|g| g.name().to_string())
-        .collect();
+    let mut names: Vec<Validated<FixtureName>> =
+        fixtures::REGISTRY.iter().map(|g| name_of(*g)).collect();
     assert!(!names.is_empty(), "an empty registry verifies nothing here");
     let count = names.len();
     names.sort_unstable();
     names.dedup();
     assert_eq!(names.len(), count, "two generators share a name");
+}
+
+#[test]
+fn every_declared_generator_name_meets_the_rule() {
+    // The rule runs at the door of each generator. A name that broke it would
+    // fail `just fixtures` with its reason; this belt names it first.
+    let registries = [fixtures::REGISTRY, fixtures::BENCH_REGISTRY];
+    let generators: Vec<&dyn FixtureGen> =
+        registries.iter().flat_map(|r| r.iter().copied()).collect();
+    assert!(
+        !generators.is_empty(),
+        "an empty registry verifies nothing here"
+    );
+    for generator in generators {
+        assert!(generator.name().is_ok(), "{:?}", generator.name());
+    }
+}
+
+#[test]
+fn a_manifest_that_names_a_bad_generator_is_refused_on_read() {
+    let dir = TempCorpus::new("badname");
+    let written = write_fixture(&TRAME, dir.path()).expect("writes");
+    let path = fixtures::manifest_path(dir.path(), &name_of(&TRAME));
+    let text = std::fs::read_to_string(&path).expect("a sidecar");
+    let forged = text.replace(
+        &format!("\"generator\": \"{}\"", written.generator),
+        "\"generator\": \"../../etc/passwd\"",
+    );
+    assert_ne!(forged, text, "the sidecar names its generator");
+    std::fs::write(&path, forged).expect("rewrites the sidecar");
+    match read_manifest(dir.path(), &name_of(&TRAME)) {
+        Err(FixtureError::Manifest { path: refused, .. }) => assert_eq!(refused, path),
+        other => panic!("expected Manifest, got {other:?}"),
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -340,7 +382,7 @@ fn the_shipping_registry_has_no_duplicate_names() {
 fn a_written_fixture_loads_back_through_the_production_importer() {
     let dir = TempCorpus::new("load");
     write_fixture(&TRAME, dir.path()).expect("writes");
-    let (id, state) = load_fixture_from(dir.path(), TRAME.name().as_str()).expect("loads");
+    let (id, state) = load_fixture_from(dir.path(), &name_of(&TRAME)).expect("loads");
     // The `document_id` survives the round trip and is the one the seed derives.
     assert_eq!(id, seeded_document_id(TRAME.seed()));
     assert_eq!(state.doc_type(), DocType::Trame);
@@ -349,11 +391,14 @@ fn a_written_fixture_loads_back_through_the_production_importer() {
 #[test]
 fn a_missing_name_is_not_found_not_an_io_error() {
     let dir = TempCorpus::new("missing");
-    match load_fixture_from(dir.path(), "trame/no_such_thing") {
-        Err(FixtureError::NotFound { name }) => assert_eq!(name, "trame/no_such_thing"),
+    let missing = fixture("trame/no_such_thing");
+    match load_fixture_from(dir.path(), &missing) {
+        Err(FixtureError::NotFound { path }) => {
+            assert_eq!(path, fixtures::artifact_path(dir.path(), &missing));
+        }
         other => panic!("expected NotFound, got {other:?}"),
     }
-    match read_manifest(dir.path(), "trame/no_such_thing") {
+    match read_manifest(dir.path(), &missing) {
         Err(FixtureError::NotFound { .. }) => {}
         other => panic!("expected NotFound, got {other:?}"),
     }
@@ -368,7 +413,7 @@ fn an_unreadable_corpus_root_is_an_io_error() {
     // NotADirectory, never with NotFound.
     let as_file = dir.path().join("not-a-dir");
     std::fs::write(&as_file, b"x").unwrap();
-    match load_fixture_from(&as_file, "anything") {
+    match load_fixture_from(&as_file, &fixture("trame/anything")) {
         Err(FixtureError::Io(_)) => {}
         other => panic!("expected Io, got {other:?}"),
     }
@@ -383,11 +428,11 @@ fn a_container_failure_arrives_intact_never_flattened_into_a_string() {
     // Long enough to clear `HEADER_LEN`, so the failure is the magic and not a
     // truncation. The two are different conditions, and the belt names one.
     std::fs::write(
-        fixtures::artifact_path(dir.path(), "trame/soup"),
+        fixtures::artifact_path(dir.path(), &fixture("trame/soup")),
         b"XXXX definitely not an ambre container at all",
     )
     .unwrap();
-    match load_fixture_from(dir.path(), "trame/soup") {
+    match load_fixture_from(dir.path(), &fixture("trame/soup")) {
         Err(FixtureError::Container(DocFileError::InvalidMagic)) => {}
         other => panic!("expected Container(InvalidMagic), got {other:?}"),
     }
@@ -398,12 +443,17 @@ fn a_malformed_sidecar_is_reported_as_a_manifest_failure() {
     let dir = TempCorpus::new("badjson");
     std::fs::create_dir_all(dir.path().join("trame")).unwrap();
     std::fs::write(
-        fixtures::manifest_path(dir.path(), "trame/bad"),
+        fixtures::manifest_path(dir.path(), &fixture("trame/bad")),
         b"{ not json",
     )
     .unwrap();
-    match read_manifest(dir.path(), "trame/bad") {
-        Err(FixtureError::Manifest { name, .. }) => assert_eq!(name, "trame/bad"),
+    match read_manifest(dir.path(), &fixture("trame/bad")) {
+        Err(FixtureError::Manifest { path, .. }) => {
+            assert_eq!(
+                path,
+                fixtures::manifest_path(dir.path(), &fixture("trame/bad"))
+            );
+        }
         other => panic!("expected Manifest, got {other:?}"),
     }
 }

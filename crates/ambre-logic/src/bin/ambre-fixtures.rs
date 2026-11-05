@@ -39,7 +39,11 @@ fn main() -> ExitCode {
             }
         },
         Some("freeze") => match args.get(1) {
-            Some(name) => freeze(name),
+            // The argument meets the rule of a fixture name before it forms a
+            // path: a refused text stops the run with its reason.
+            Some(name) => ambre_core::Validated::parse(name.as_str())
+                .map_err(FixtureError::from)
+                .and_then(|name| freeze(&name)),
             None => {
                 eprintln!("freeze needs the name of an artifact in {CORPUS_DIR}/{CURRENT_DIR}");
                 return ExitCode::FAILURE;
@@ -133,9 +137,8 @@ fn bench_corpus() -> Result<ExitCode, FixtureError> {
     // name megabytes rather than milliseconds. `criterion` measures wall clock
     // alone, so this line is the only reading those two rows have.
     for generator in BENCH_REGISTRY {
-        let name = generator.name();
-        let name = name.as_str();
-        let bytes = std::fs::metadata(fixtures::artifact_path(&dir, name))?.len();
+        let name = generator.name()?;
+        let bytes = std::fs::metadata(fixtures::artifact_path(&dir, &name))?.len();
         println!("{name}: {:.2} MB", bytes as f64 / (1024.0 * 1024.0));
     }
     println!(
@@ -186,7 +189,7 @@ fn baseline(machine: &str) -> Result<ExitCode, FixtureError> {
         });
     let path = dir.join(format!("{}.json", stem.trim_matches('-')));
     let mut json = serde_json::to_string_pretty(&baseline).map_err(|e| FixtureError::Manifest {
-        name: path.to_string_lossy().into_owned(),
+        path: path.clone(),
         reason: e.to_string(),
     })?;
     json.push('\n');
@@ -227,7 +230,7 @@ fn head_commit() -> Option<ambre_core::Validated<fixtures::CommitHash>> {
 
 /// Copy one artifact into `frozen/`, then run the retention pass. The cap holds
 /// at the moment the set grows, not at the next regeneration.
-fn freeze(name: &str) -> Result<ExitCode, FixtureError> {
+fn freeze(name: &ambre_core::Validated<ambre_core::FixtureName>) -> Result<ExitCode, FixtureError> {
     let root = fixtures::corpus_root()?;
     let path = fixtures::freeze(&root, name)?;
     println!("froze {}", display(&path));

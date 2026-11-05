@@ -24,11 +24,28 @@ use ambre_core::index::Pos;
 use std::path::{Path, PathBuf};
 
 use ambre_bus::{CellPos, Col, Row};
-use ambre_core::{Container, DocType, FixtureGen, seeded_document_id};
+use ambre_core::{
+    Container, DocType, FixtureGen, FixtureName, Schema, Validated, seeded_document_id,
+};
 use ambre_logic::fixtures::{
-    self, Drift, FROZEN_KEEP_PER_TYPE, REGISTRY, check_corpus, freeze, generate_into,
+    self, Drift, FROZEN_KEEP_PER_TYPE, FrozenEntry, REGISTRY, check_corpus, freeze, generate_into,
     retain_frozen, unfrozen_versions, write_fixture,
 };
+
+/// The name `generator` gives itself. Every generator of this belt spells
+/// its name right.
+fn name_of(generator: &dyn FixtureGen) -> Validated<FixtureName> {
+    generator.name().expect("a fixture name")
+}
+
+/// `ALPHA` frozen at container version `ambre` and schema version `schema`.
+fn alpha_frozen(ambre: u8, schema: u32) -> FrozenEntry {
+    FrozenEntry::new(
+        name_of(&ALPHA),
+        Version::<Container>::new(ambre),
+        Version::<Schema>::new(schema),
+    )
+}
 use ambre_trame::TrameState;
 use ambre_trame::message::TrameCommand;
 
@@ -47,8 +64,8 @@ struct Gen {
 }
 
 impl FixtureGen for Gen {
-    fn name(&self) -> ambre_core::FixtureName {
-        ambre_core::FixtureName::declared(self.name)
+    fn name(&self) -> Result<Validated<FixtureName>, ambre_core::Refused<FixtureName>> {
+        Validated::parse(self.name)
     }
     fn doc_type(&self) -> DocType {
         DocType::Trame
@@ -162,7 +179,7 @@ fn a_generator_that_changes_its_output_drifts_against_the_committed_bytes() {
     assert!(
         report.drifts.iter().any(|d| matches!(
             d,
-            Drift::Bytes { name } if name == ALPHA.name().as_str()
+            Drift::Bytes { name } if name == &name_of(&ALPHA)
         )),
         "expected a byte drift, got {:?}",
         report.drifts
@@ -180,7 +197,7 @@ fn a_committed_artifact_with_no_generator_left_fails_the_gate() {
     assert!(
         report.drifts.iter().any(|d| matches!(
             d,
-            Drift::Orphan { name } if name == BETA.name().as_str()
+            Drift::Orphan { name } if name == &name_of(&BETA)
         )),
         "expected an orphan, got {:?}",
         report.drifts
@@ -199,7 +216,7 @@ fn a_generator_with_no_committed_artifact_fails_the_gate() {
     assert!(
         report.drifts.iter().any(|d| matches!(
             d,
-            Drift::Missing { name } if name == BETA.name().as_str()
+            Drift::Missing { name } if name == &name_of(&BETA)
         )),
         "expected a missing artifact, got {:?}",
         report.drifts
@@ -212,20 +229,14 @@ fn a_generator_with_no_committed_artifact_fails_the_gate() {
 fn a_red_gate_leaves_the_committed_tree_untouched() {
     let root = TempRoot::new("readonly");
     seed_corpus(&root, &[&ALPHA]);
-    let before = std::fs::read(fixtures::artifact_path(
-        &root.current(),
-        ALPHA.name().as_str(),
-    ))
-    .expect("the committed artifact");
+    let before = std::fs::read(fixtures::artifact_path(&root.current(), &name_of(&ALPHA)))
+        .expect("the committed artifact");
 
     let report = check_corpus(&[&ALPHA_EDITED], root.path(), &root.scratch()).expect("runs");
     assert!(!report.is_clean());
 
-    let after = std::fs::read(fixtures::artifact_path(
-        &root.current(),
-        ALPHA.name().as_str(),
-    ))
-    .expect("the committed artifact");
+    let after = std::fs::read(fixtures::artifact_path(&root.current(), &name_of(&ALPHA)))
+        .expect("the committed artifact");
     assert_eq!(before, after, "the gate rewrote the corpus it was judging");
 }
 
@@ -239,7 +250,7 @@ fn a_red_gate_leaves_the_committed_tree_untouched() {
 fn a_frozen_artifact_dumps_like_the_live_one_it_names() {
     let root = TempRoot::new("frozen-holds");
     seed_corpus(&root, &[&ALPHA]);
-    freeze(root.path(), ALPHA.name().as_str()).expect("the artifact freezes");
+    freeze(root.path(), &name_of(&ALPHA)).expect("the artifact freezes");
 
     let report = check_corpus(&[&ALPHA], root.path(), &root.scratch()).expect("runs");
 
@@ -254,7 +265,7 @@ fn a_frozen_artifact_dumps_like_the_live_one_it_names() {
 fn a_frozen_artifact_that_no_longer_matches_the_live_one_fails_the_gate() {
     let root = TempRoot::new("frozen-breaks");
     seed_corpus(&root, &[&ALPHA]);
-    freeze(root.path(), ALPHA.name().as_str()).expect("the artifact freezes");
+    freeze(root.path(), &name_of(&ALPHA)).expect("the artifact freezes");
 
     // Regenerate `current/` from the edited generator. That settles the byte
     // drift and leaves the frozen comparison as the only thing left to fail.
@@ -278,7 +289,7 @@ fn a_frozen_artifact_that_no_longer_matches_the_live_one_fails_the_gate() {
 fn a_generator_version_bump_retires_the_frozen_comparison() {
     let root = TempRoot::new("frozen-bumped");
     seed_corpus(&root, &[&ALPHA]);
-    freeze(root.path(), ALPHA.name().as_str()).expect("the artifact freezes");
+    freeze(root.path(), &name_of(&ALPHA)).expect("the artifact freezes");
 
     // A contributor commits a bump like any other change. `just fixtures`
     // rewrites the sidecar, the only part of `current/` a bare bump touches.
@@ -299,19 +310,13 @@ fn a_generator_version_bump_retires_the_frozen_comparison() {
 fn a_frozen_artifact_whose_generator_vanished_degrades_then_drops() {
     let root = TempRoot::new("frozen-gone");
     seed_corpus(&root, &[&ALPHA]);
-    let frozen = freeze(root.path(), ALPHA.name().as_str()).expect("the artifact freezes");
+    let frozen = freeze(root.path(), &name_of(&ALPHA)).expect("the artifact freezes");
 
     // The generator is gone, so the live artifact goes with it.
-    std::fs::remove_file(fixtures::artifact_path(
-        &root.current(),
-        ALPHA.name().as_str(),
-    ))
-    .expect("removes");
-    std::fs::remove_file(fixtures::manifest_path(
-        &root.current(),
-        ALPHA.name().as_str(),
-    ))
-    .expect("removes");
+    std::fs::remove_file(fixtures::artifact_path(&root.current(), &name_of(&ALPHA)))
+        .expect("removes");
+    std::fs::remove_file(fixtures::manifest_path(&root.current(), &name_of(&ALPHA)))
+        .expect("removes");
 
     let report = check_corpus(&[], root.path(), &root.scratch()).expect("runs");
     assert_eq!(report.degraded.len(), 1, "{report:?}");
@@ -329,13 +334,13 @@ fn a_frozen_artifact_whose_generator_vanished_degrades_then_drops() {
 fn freezing_the_same_version_pair_twice_is_refused() {
     let root = TempRoot::new("write-once");
     seed_corpus(&root, &[&ALPHA]);
-    let frozen = freeze(root.path(), ALPHA.name().as_str()).expect("the first freeze writes");
+    let frozen = freeze(root.path(), &name_of(&ALPHA)).expect("the first freeze writes");
     let bytes = std::fs::read(&frozen).expect("the frozen artifact");
 
     // A later revision of the same generator at the same version pair: the one
     // case where an overwrite would destroy the record.
     generate_into(&[&ALPHA_EDITED], &root.current()).expect("regenerates");
-    let second = freeze(root.path(), ALPHA.name().as_str());
+    let second = freeze(root.path(), &name_of(&ALPHA));
 
     assert!(second.is_err(), "a second freeze must be refused");
     assert_eq!(
@@ -357,9 +362,7 @@ fn retention_keeps_the_newest_three_frozen_artifacts_per_doc_type() {
     // Five schema versions of one generator, oldest to newest. Written by hand
     // rather than by five freezes: `freeze` derives the suffix from the
     // manifest, and nothing here can bump a schema version.
-    let stems: Vec<String> = (1..=5)
-        .map(|s| format!("{}@v1-s{s}", ALPHA.name()))
-        .collect();
+    let stems: Vec<FrozenEntry> = (1..=5).map(|s| alpha_frozen(1, s)).collect();
     for stem in &stems {
         std::fs::create_dir_all(
             fixtures::artifact_path(&frozen_dir, stem)
@@ -368,12 +371,12 @@ fn retention_keeps_the_newest_three_frozen_artifacts_per_doc_type() {
         )
         .expect("creates the frozen tree");
         std::fs::copy(
-            fixtures::artifact_path(&root.current(), ALPHA.name().as_str()),
+            fixtures::artifact_path(&root.current(), &name_of(&ALPHA)),
             fixtures::artifact_path(&frozen_dir, stem),
         )
         .expect("copies the artifact");
         std::fs::copy(
-            fixtures::manifest_path(&root.current(), ALPHA.name().as_str()),
+            fixtures::manifest_path(&root.current(), &name_of(&ALPHA)),
             fixtures::manifest_path(&frozen_dir, stem),
         )
         .expect("copies the sidecar");
@@ -417,9 +420,9 @@ fn retention_reads_the_version_suffix_as_numbers_not_as_text() {
     seed_corpus(&root, &[&ALPHA]);
     let frozen_dir = root.path().join(fixtures::FROZEN_DIR);
 
-    let stems: Vec<String> = [2u32, 9, 10, 11]
+    let stems: Vec<FrozenEntry> = [2u32, 9, 10, 11]
         .iter()
-        .map(|s| format!("{}@v1-s{s}", ALPHA.name()))
+        .map(|s| alpha_frozen(1, *s))
         .collect();
     for stem in &stems {
         std::fs::create_dir_all(
@@ -429,12 +432,12 @@ fn retention_reads_the_version_suffix_as_numbers_not_as_text() {
         )
         .expect("creates the frozen tree");
         std::fs::copy(
-            fixtures::artifact_path(&root.current(), ALPHA.name().as_str()),
+            fixtures::artifact_path(&root.current(), &name_of(&ALPHA)),
             fixtures::artifact_path(&frozen_dir, stem),
         )
         .expect("copies the artifact");
         std::fs::copy(
-            fixtures::manifest_path(&root.current(), ALPHA.name().as_str()),
+            fixtures::manifest_path(&root.current(), &name_of(&ALPHA)),
             fixtures::manifest_path(&frozen_dir, stem),
         )
         .expect("copies the sidecar");
@@ -456,17 +459,17 @@ fn retention_reads_the_version_suffix_as_numbers_not_as_text() {
 
 /// Copy `ALPHA`'s live artifact into `frozen/` under `stem`, as a freeze at
 /// that version pair would. By hand, because nothing here can bump a version.
-fn plant_frozen(root: &TempRoot, stem: &str) {
+fn plant_frozen(root: &TempRoot, stem: &FrozenEntry) {
     let frozen_dir = root.path().join(fixtures::FROZEN_DIR);
     let target = fixtures::artifact_path(&frozen_dir, stem);
     std::fs::create_dir_all(target.parent().expect("a parent")).expect("creates the tree");
     std::fs::copy(
-        fixtures::artifact_path(&root.current(), ALPHA.name().as_str()),
+        fixtures::artifact_path(&root.current(), &name_of(&ALPHA)),
         &target,
     )
     .expect("copies the artifact");
     std::fs::copy(
-        fixtures::manifest_path(&root.current(), ALPHA.name().as_str()),
+        fixtures::manifest_path(&root.current(), &name_of(&ALPHA)),
         fixtures::manifest_path(&frozen_dir, stem),
     )
     .expect("copies the sidecar");
@@ -490,7 +493,7 @@ fn a_superseded_container_version_with_no_frozen_artifact_fails_the_gate() {
         }]
     );
 
-    freeze(root.path(), ALPHA.name().as_str()).expect("the artifact freezes");
+    freeze(root.path(), &name_of(&ALPHA)).expect("the artifact freezes");
     let owed = unfrozen_versions(&[&ALPHA], root.path(), Version::<Container>::new(2))
         .expect("the check runs");
     assert!(owed.is_empty(), "the freeze pays the version: {owed:?}");
@@ -503,8 +506,8 @@ fn a_superseded_container_version_with_no_frozen_artifact_fails_the_gate() {
 fn a_version_retention_has_moved_past_owes_nothing() {
     let root = TempRoot::new("unfrozen-window");
     seed_corpus(&root, &[&ALPHA]);
-    for stem in ["@v2-s1", "@v4-s1", "@v4-s2"] {
-        plant_frozen(&root, &format!("{}{stem}", ALPHA.name()));
+    for (ambre, schema) in [(2, 1), (4, 1), (4, 2)] {
+        plant_frozen(&root, &alpha_frozen(ambre, schema));
     }
 
     let owed = unfrozen_versions(&[&ALPHA], root.path(), Version::<Container>::new(5))
@@ -531,7 +534,7 @@ fn every_shipping_generator_builds_and_round_trips() {
     let root = TempRoot::new("registry");
     for generator in REGISTRY {
         let manifest = write_fixture(*generator, &root.current()).expect("builds and writes");
-        assert_eq!(manifest.generator, generator.name());
+        assert_eq!(manifest.generator, name_of(*generator));
         assert_eq!(manifest.doc_type, generator.doc_type());
         assert_eq!(manifest.seed, generator.seed());
     }
