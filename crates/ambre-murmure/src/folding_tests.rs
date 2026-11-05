@@ -536,6 +536,13 @@ fn a_change_past_the_fold_leaves_it_unchecked() {
     assert_eq!(bob.amendments_id(segment), Some(amendments));
 }
 
+/// A client waits out one week after its own fold, the delay of the budget
+/// row the relay holds too.
+#[test]
+fn the_fold_delay_is_one_week() {
+    assert_eq!(FOLD_DELAY.get(), 604_800_000);
+}
+
 // --- MURMURE-076, MURMURE-077 ---
 
 /// `meta` marks the amendments folded, and every member folds its own copy

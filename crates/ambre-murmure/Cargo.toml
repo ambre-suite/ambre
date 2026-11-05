@@ -46,6 +46,12 @@ ambre-core = { path = "../ambre-core", features = ["testing"] }
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 serde_json = { workspace = true }
 
+# The convergence property of a channel over generated interleavings
+# (`MURMURE-582`). proptest pulls `wait-timeout`, which does not build on
+# wasm32, so it is gated to the host target as ambre-trame does.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest = { workspace = true }
+
 # The relay tests drive the chrome state in headless Chrome
 # (`tests/chrome_relay.rs`, `just test-wasm`), as ambre-prose's do.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

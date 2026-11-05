@@ -480,6 +480,127 @@ pub(crate) mod tests {
         assert_eq!(view.standing(alice.id).0, MemberStanding::Unverified);
     }
 
+    /// Appends the entry `by` signs over `draft`, at the next place of `log`.
+    fn append_draft(log: &mut Vec<MembershipEntry>, by: &Person, draft: Draft) {
+        let next = LogHead {
+            position: place_after(log.len()),
+            previous: log.last().and_then(digest),
+        };
+        log.push(sign(draft, next, by.id, &by.key).unwrap());
+    }
+
+    /// The draft of `act` about `member` at `role`, in the test document.
+    fn draft(member: &Person, act: MembershipAct, role: Role) -> Draft {
+        Draft {
+            document: DOC,
+            member: member.id,
+            member_key: member.public(),
+            act,
+            role,
+            key: Some(FixedBytes::from_array([0; 16])),
+        }
+    }
+
+    /// Holds `SYNC-103` at the first entry: only an owner creating the log
+    /// for themselves, under their own key, roots it. Any other first entry
+    /// verifies nothing, its own member included.
+    #[test]
+    fn only_an_owner_creating_for_themselves_roots_the_log() {
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let firsts = [
+            // Not a creation.
+            draft(&alice, MembershipAct::Invite, Role::Owner),
+            // Below the owning role.
+            draft(&alice, MembershipAct::Create, Role::Editor),
+            // For another member.
+            draft(&bob, MembershipAct::Create, Role::Owner),
+            // Under a key that is not the creator's.
+            Draft {
+                member_key: bob.public(),
+                ..draft(&alice, MembershipAct::Create, Role::Owner)
+            },
+        ];
+        for first in firsts {
+            let mut log = Vec::new();
+            append_draft(&mut log, &alice, first);
+            let view = walk(&log);
+            for member in [alice.id, bob.id] {
+                assert_eq!(view.standing(member).0, MemberStanding::Unverified);
+            }
+        }
+    }
+
+    /// Holds `SYNC-103` past the first entry: an entry signed for another
+    /// document ends the chain, even at the right place and link.
+    #[test]
+    fn an_entry_signed_for_another_document_ends_the_chain() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut log = created(&alice, &bob);
+        append_draft(
+            &mut log,
+            &alice,
+            Draft {
+                document: Id::<Document>::from_bytes([8; 16]),
+                ..draft(&carol, MembershipAct::Invite, Role::Viewer)
+            },
+        );
+        assert_eq!(walk(&log).standing(carol.id).0, MemberStanding::Unverified);
+    }
+
+    /// Holds `SYNC-108` at the walk. An editor touches no member above their
+    /// own rank. An owner revokes no one who is not a member. Each such entry
+    /// ends the chain.
+    #[test]
+    fn an_entry_beyond_its_authors_standing_ends_the_chain() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut log = created(&alice, &bob);
+        append(&mut log, &bob, &alice, MembershipAct::Invite, Role::Viewer);
+        assert_eq!(
+            walk(&log).standing(alice.id),
+            (MemberStanding::Verified, Some(Role::Owner)),
+            "the owner keeps the owning role"
+        );
+        let mut log = created(&alice, &bob);
+        append(
+            &mut log,
+            &alice,
+            &carol,
+            MembershipAct::Revoke,
+            Role::Viewer,
+        );
+        append(
+            &mut log,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        assert_eq!(walk(&log).standing(carol.id).0, MemberStanding::Unverified);
+    }
+
+    /// Holds `SYNC-106` for a public channel: a member joins alone at no role
+    /// above editor.
+    #[test]
+    fn a_public_channel_admits_a_self_join_up_to_editor() {
+        let dave = Person::new(4);
+        let joins = |role| public_channel_self_join(&draft_entry(&dave, role));
+        assert!(joins(Role::Viewer));
+        assert!(joins(Role::Editor));
+        assert!(!joins(Role::Owner));
+        assert!(!joins(Role::Admin));
+    }
+
+    /// The self-join `member` signs at `role`, as the first entry of a log.
+    fn draft_entry(member: &Person, role: Role) -> MembershipEntry {
+        let mut log = Vec::new();
+        append_draft(
+            &mut log,
+            member,
+            draft(member, MembershipAct::SelfJoin, role),
+        );
+        log.remove(0)
+    }
+
     /// Holds `SYNC-108` at the walk. An entry another key signed, or that the
     /// author's rank does not allow, ends the chain. The row it would add is
     /// then unverified.

@@ -4170,6 +4170,29 @@ mod tests {
         }
     }
 
+    /// `SYNC-087`: the record of applied numbers keeps the latest
+    /// `APPLIED_WINDOW` of them. The oldest leaves once the window is full,
+    /// and every number inside it still counts as applied.
+    #[test]
+    fn the_applied_window_keeps_the_latest_numbers() {
+        let mut doc = SyncDocumentState::new(
+            Id::<Document>::mint(),
+            DocumentKey::generate(),
+            DocType::Prose,
+            crate::Existence::LocalOnly,
+        );
+        let window = u64::try_from(crate::APPLIED_WINDOW).expect("fits");
+        for seq in 1..=window + 1 {
+            assert!(doc.first_arrival(Seq::<Relay>::new(seq)));
+        }
+        assert_eq!(doc.ingested.len(), crate::APPLIED_WINDOW);
+        assert!(
+            !doc.first_arrival(Seq::<Relay>::new(2)),
+            "inside the window"
+        );
+        assert!(doc.first_arrival(Seq::<Relay>::new(1)), "left the window");
+    }
+
     /// Holds `SYNC-087`: a reconnect replay that overlaps a broadcast already
     /// received delivers the overlap once. A copy held in quarantine is not
     /// held a second time either.

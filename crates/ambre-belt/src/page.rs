@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use crate::driver::Browser;
+use crate::driver::{Browser, Engine as BrowserEngine};
 use crate::relay::Relay;
 use crate::serve;
 
@@ -170,24 +170,36 @@ impl Page {
         use base64::Engine;
 
         let (ox, oy) = self.canvas_origin().await;
-        let shot = self
-            .browser
-            .cdp(
-                "Page.captureScreenshot",
-                json!({
-                    "format": "png",
-                    "clip": { "x": ox + at.0, "y": oy + at.1, "width": 1, "height": 1, "scale": 1 },
-                }),
-            )
-            .await;
-        let data = shot["data"].as_str().expect("a screenshot");
-        let png = base64::engine::general_purpose::STANDARD
-            .decode(data)
-            .expect("a base64 screenshot");
-        let pixel = image::load_from_memory(&png)
+        let png = match self.browser.engine() {
+            BrowserEngine::Chrome => {
+                let shot = self
+                    .browser
+                    .cdp(
+                        "Page.captureScreenshot",
+                        json!({
+                            "format": "png",
+                            "clip": { "x": ox + at.0, "y": oy + at.1, "width": 1, "height": 1, "scale": 1 },
+                        }),
+                    )
+                    .await;
+                let data = shot["data"].as_str().expect("a screenshot");
+                base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .expect("a base64 screenshot")
+            }
+            // Firefox has no DevTools Protocol to clip with: the whole
+            // viewport is shot, and the pixel read out of it. The headless
+            // window has a device pixel ratio of 1.
+            BrowserEngine::Firefox => self.browser.screenshot().await,
+        };
+        let shot = image::load_from_memory(&png)
             .expect("a PNG screenshot")
             .to_rgb8();
-        pixel.get_pixel(0, 0).0
+        let (x, y) = match self.browser.engine() {
+            BrowserEngine::Chrome => (0, 0),
+            BrowserEngine::Firefox => ((ox + at.0) as u32, (oy + at.1) as u32),
+        };
+        shot.get_pixel(x, y).0
     }
 
     /// The text of the live region a screen reader hears beside the canvas.
@@ -333,26 +345,31 @@ impl Page {
     }
 
     /// Waits for one finished download, and answers its name and its bytes.
+    ///
+    /// A download in progress leaves a partial file. Chrome writes a
+    /// `.crdownload`, and Firefox a `.part` beside an empty file under the
+    /// final name. So a download is finished once no partial file is left.
     pub async fn download(&self) -> (String, Vec<u8>) {
         let deadline = std::time::Instant::now() + STEP;
         loop {
-            let done = std::fs::read_dir(&self.downloads)
+            let files: Vec<PathBuf> = std::fs::read_dir(&self.downloads)
                 .expect("the download directory")
                 .filter_map(Result::ok)
                 .map(|e| e.path())
-                .find(|p| {
-                    let hidden = p
-                        .file_name()
-                        .is_some_and(|n| n.to_string_lossy().starts_with('.'));
-                    !hidden
-                        && p.extension()
-                            .is_none_or(|e| e != "crdownload" && e != "tmp")
-                });
-            if let Some(path) = done {
+                .filter(|p| {
+                    !p.file_name()
+                        .is_some_and(|n| n.to_string_lossy().starts_with('.'))
+                })
+                .collect();
+            let partial = files.iter().any(|p| {
+                p.extension()
+                    .is_some_and(|e| e == "crdownload" || e == "tmp" || e == "part")
+            });
+            if let (false, Some(path)) = (partial, files.first()) {
                 let name = path
                     .file_name()
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-                return (name, std::fs::read(&path).expect("the downloaded file"));
+                return (name, std::fs::read(path).expect("the downloaded file"));
             }
             assert!(std::time::Instant::now() < deadline, "no download arrived");
             tokio::time::sleep(Duration::from_millis(50)).await;

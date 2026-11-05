@@ -87,6 +87,7 @@ impl TrameView {
             editor: None,
             next_edit_session: ambre_bus::Token::FIRST,
             pending_commit: None,
+            deferred_input: Vec::new(),
             editor_text_drag: false,
             selecting_drag: false,
             axis_drag: None,

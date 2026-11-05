@@ -615,6 +615,53 @@ mod provider_tests {
         assert!(!heard.contains("s3cr3t"), "a token reached Logic: {heard}");
     }
 
+    /// The message Logic heard of a sign-in that had no relay to ask.
+    fn no_relay(rx: &ambre_bus::conduit::Receiver<LogicEvent>) -> bool {
+        rx.try_iter().any(|event| {
+            matches!(
+                event,
+                LogicEvent::AuthError { message } if message == "Sign-in failed: no relay to ask"
+            )
+        })
+    }
+
+    /// With no relay to ask, a provider sign-in and a provider return each
+    /// fail at once, and say so. No answer would ever come.
+    #[test]
+    fn a_provider_sign_in_with_no_relay_fails_at_once() {
+        let (mut state, rx) = worker();
+        state.handle_provider_sign_in(ambre_bus::next_request(), ambre_core::OidcProvider::Google);
+        assert!(no_relay(&rx), "the sign-in");
+        state.handle_provider_return(
+            ambre_bus::next_request(),
+            ambre_core::OidcProvider::Google,
+            ambre_core::Credential::new("code".to_owned()),
+            ambre_core::Credential::new("state".to_owned()),
+        );
+        assert!(no_relay(&rx), "the return");
+    }
+
+    /// With no relay, a development sign-in adopts the identity its username
+    /// derives, and answers that the session is ready.
+    #[test]
+    fn a_dev_login_with_no_relay_adopts_the_identity_of_its_username() {
+        let (mut state, rx) = worker();
+        let name = ambre_core::Validated::<ambre_core::DisplayName>::parse("Ada").unwrap();
+        state.handle_dev_login(Some(ambre_bus::next_request()), name.clone());
+        let derived = ambre_crypto::hash::dev_seed(&name).derive_signing_key();
+        assert_eq!(
+            state.signing_key.as_ref().map(|key| key.verifying_key()),
+            Some(derived.verifying_key())
+        );
+        assert!(rx.try_iter().any(|event| matches!(
+            event,
+            LogicEvent::Rest {
+                evt: RestEvent::SessionReady { display_name, .. },
+                ..
+            } if display_name.as_str() == "Ada"
+        )));
+    }
+
     /// An account that owes its keys is marked so, which keeps the socket
     /// closed until the setup stores them.
     #[test]

@@ -1832,6 +1832,40 @@ mod run_tests {
             })
             .await;
     }
+
+    /// `SYNC-058`: the loop hands each command it waits on to the worker. A
+    /// sign-out sent before the commands close is answered once the loop
+    /// returns.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_loop_hands_each_command_to_the_worker() {
+        let (sink, logic_rx) = LogicSink::channel();
+        let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
+        cmd_tx
+            .send(SyncCommand::Rest {
+                id: Seq::<ambre_bus::Request>::new(7),
+                cmd: ambre_bus::RestCommand::Logout,
+            })
+            .expect("send");
+        drop(cmd_tx);
+        run(
+            cmd_rx,
+            SyncState::new(
+                sink,
+                crate::http::Url::<crate::RelayHost>::new(String::new()),
+            ),
+        )
+        .await;
+        let answered = std::iter::from_fn(|| logic_rx.try_recv().ok()).any(|event| {
+            matches!(
+                event,
+                LogicEvent::Rest {
+                    evt: ambre_bus::RestEvent::LoggedOut,
+                    ..
+                }
+            )
+        });
+        assert!(answered, "the sign-out reached the worker");
+    }
 }
 
 #[cfg(test)]
@@ -1980,6 +2014,40 @@ mod ephemeral_tests {
             assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
+    }
+
+    /// The signing key of author `i`, distinct for each `i`.
+    fn author(i: u64) -> FixedBytes<PublicKey> {
+        let mut bytes = [0u8; 32];
+        bytes[..8].copy_from_slice(&i.to_le_bytes());
+        FixedBytes::from_array(bytes)
+    }
+
+    /// Below the cap, a new author evicts nobody: each author keeps the
+    /// baseline its replay is refused against.
+    #[test]
+    fn below_the_cap_each_author_keeps_its_counter() {
+        let mut d = doc_state();
+        assert!(d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)));
+        assert!(d.accept_ephemeral_counter(&author(1), Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)));
+        assert!(!d.accept_ephemeral_counter(&author(1), Seq::<Ephemerals>::new(1)));
+    }
+
+    /// At the cap, a known author's next counter evicts nobody: only a new
+    /// author makes room.
+    #[test]
+    fn at_the_cap_a_known_author_evicts_nobody() {
+        let mut d = doc_state();
+        let cap = MAX_EPHEMERAL_REMOTE_AUTHORS as u64;
+        for i in 0..cap {
+            assert!(d.accept_ephemeral_counter(&author(i), Seq::<Ephemerals>::new(i + 1)));
+        }
+        assert!(d.accept_ephemeral_counter(&author(cap - 1), Seq::<Ephemerals>::new(cap + 1)));
+        assert!(
+            !d.accept_ephemeral_counter(&author(0), Seq::<Ephemerals>::new(1)),
+            "the least active author is still known"
+        );
     }
 
     // -- Presence identity resolution (`sync`, "Presence identity") ------------
