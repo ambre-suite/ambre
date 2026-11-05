@@ -300,12 +300,19 @@ and syn does not.
 | **host** | `just test-native` | the default tier. Pure logic, zero external dependency. The Logic thread, the Sync pipeline, every formula and CRDT handler, and the render feed | fast |
 | **db** | `just test-db` | `ambre-server` integration behind the Cargo feature `db`. `just services-up` (postgres, redis and a prepared garage), then `#[sqlx::test]` per test | medium |
 | **wasm** | `just test-wasm` | every `cfg(target_arch = "wasm32")` surface: DOM and Leptos, GPU. `cargo test --target wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, in headless Chrome | slow: `-Z build-std` rebuilds `std`, then Chrome starts |
-| **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`). A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
+| **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`), and by headless Firefox through geckodriver under the Cargo feature `firefox` (`just test-browser-firefox`). A canvas surface is read through what the page exposes: the live region, the status bar, the formula bar's name box, an export. A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
 
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
 pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser
 behaviour no driver can produce, such as a full quota, is a page script in the test. The row's
-`Mechanism` note says so.
+`Mechanism` note says so. A test that pauses a worker runs on Chrome alone, and reads `ignored` under
+Firefox, which WebDriver gives no route to pause one.
+
+**A composition and a frame loop are driven, not assumed.** A composition goes through the DevTools
+input methods, `Input.imeSetComposition` then `Input.insertText`, which raise the composition events
+through Chrome's own pipeline. A page script installed before boot counts the WebGL draw calls,
+and that count reads the frame loop back. A paused loop still takes its animation frames, so a count
+of those reads nothing.
 
 **The db tier is a Cargo feature, never a bare `#[ignore]`.** The engraved pattern is
 `#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]`. A bare
@@ -418,13 +425,13 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-canvas` | yes | GPU not unit-tested, by design | `RecordingSurface` | `TextCache` hit and LRU eviction, `GlyphAtlas` eviction, the dirty flag skipping the batch build, font fallback on an absent codepoint, and the compiled icon blob covering every SVG of `assets/icons/` with a non-zero vertex count per icon |
 | `ambre-commands` | yes | -- | -- | registry lookup, keybinding resolution, derived `CommandState` |
 | `ambre-trame` | yes (`proptest`) | yes (`tests/chrome_ui.rs`) | `MockSyncHandle`, `TrameState::with_peer`, `RecordingSurface`, a `TrameView` on a detached pipe and a test clock | **CRDT convergence** over generated interleavings. **Formula properties**: totality, exactness, order independence over generated trees. **Cache against rebuild** on the `SheetIndex`. A **geometry round trip**: drawn rect against hit test, under zoom and variable metrics. A `RecordingSurface` assertion for anything painted. **Per feature**: a view feature lands with a positive case, a no-op guard, a convergence case and a proof that it changes no data; a mutation feature lands with the permutation assertion, a header-pin case, a no-delta case and a references-follow case |
-| `ambre-chrome` | yes (`key_from_dom`, `place_menu`, `vet`) | yes (`tests/chrome_ui.rs`) | section 5.A | the reactive store over real signals, the toast ARIA live region, the shell canvas cell, and the menu flip on viewport overflow |
+| `ambre-chrome` | yes (`key_from_dom`, `place_menu`, `vet`) | yes (`tests/chrome_ui.rs`) | section 5.A | the reactive store over real signals, the toast ARIA live region, the shell canvas cell and its toolbar and sidebar slots, the menu flip on viewport overflow, the modal, the floating menu driven by keys and presses, and the palette driven by keys |
 | `ambre-app` | -- | yes (inline) | -- | `route` round trip and malformed fallback, the base64 codec, the FPS sliding window. A re-render is read after `leptos::task::tick`, and a width by mounting in a frame of that width, since a width query reads the frame's viewport |
 | `ambre-server` | yes | -- (db tier) | `#[sqlx::test]`, a local Redis | ACL per role **and per membership**, Ed25519 accept and refuse, the Redis Lua clock cases (valid, mismatch, first update, two concurrent clients), the rank clamp on both the granted and the target role, the size cap on both durable paths, and a postcard round trip per message variant -- the document plane only: the four channel variants and the share notice have none |
 | `ambre-toile` | yes | yes (`tests/chrome_ui.rs`, `tests/chrome_effects.rs`) | `ToileState::with_peer`, `RecordingSurface` | CRDT convergence, and the spatial index against a full rebuild |
 | `ambre-draw`, `ambre-pdf` | tooling | -- | they **are** the seam | `RecordingSurface` is exercised by every consumer |
-| `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel is mounted in Chrome |
-| `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user |
+| `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`, `tests/chrome_ui.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel, the suggestion popover, the format bar, the slash menu and the ruler are mounted in Chrome |
+| `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user. Trame and Prose are typed into end to end, and each converges across two browsers whose edits cross; Toile carries a board between two |
 | `ambre-primitives` | yes | -- | `Tree`, a source tree held in memory | the primitive gate itself: every kind of site read, a module resolved where rustc finds it, test code and macro output never read, a file rustc reads and the walk misses failing the gate, and a file no compile reads, the allowlist failing on a missing site, a stale line and a word outside the set, and a secret read or wiped outside the code that may |
 | `ambre-murmure` | yes (`proptest`, `criterion`) | yes (`tests/chrome_relay.rs`) | a `ChannelState` peer forked from another, a `MurmureRelay` fed by hand | CRDT convergence of a channel across its `meta`, segment and thread documents over generated interleavings, a forged delta refused by the authorship check, and a false final snapshot caught by the second client. Eviction is the shared residency's belt, and the decoded pictures hold their own cap. The browser tier drives two users through the relay |
 
@@ -449,7 +456,7 @@ run the same command.
 | `test-native` | the host tier, plus `ambre-server` on the native target |
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
 | `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
-| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` |
+| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 
@@ -489,8 +496,10 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 
 | Debt | Why it is not built |
 | :--- | :--- |
-| Two browser cases of the canvas and DOM boundary | the browser tier boots the whole application and runs commands from the palette to the board. Two cases are left: one IME composition cycle (`CHROME-007`), which a driver cannot compose, and rAF suspension and resumption behind a modal, which no page reads back |
-| `ambre-chrome` DOM interactions | the reactive store, the toast and the shell cell are covered. `Dialog` (modal, Escape, backdrop click, the canvas suspend and resume) and `ContextMenu` (keyboard navigation, typeahead, outside close) need richer driving. `CommandPalette`, `Sidebar` and `Toolbar` are unbuilt, and get a belt when they land |
+| One IME composition in a Toile text element | an `Escape` sent just after a commit closes the editor without the committed text, so a browser test of it fails one run in a few. A Prose page and a Trame cell compose in the browser tier |
+| A Prose comment between two browsers | no gesture opens a thread, and a thread read from a file stays in a document no peer holds: the browser tier posts a reply in one browser alone |
+| Murmure in the browser tier | no interface creates a space or a channel, so no user gesture reaches one, and the belt drives no Murmure path |
+| The wasm tier on Firefox | Trame, the chrome, Toile, Prose and Logic pass under geckodriver. Eleven `ambre-app` tests build synthetic clipboard, pointer and layout events that Firefox handles differently, so the tier runs in Chrome alone |
 | The GPU "how to draw" half | section 5.B: the upload and the shaders need a real device. The CPU work beside them is extracted and host-tested |
 | `ambre-sync` benchmarks, and further pipeline tiers | they land when the pipeline exits placeholder |
 

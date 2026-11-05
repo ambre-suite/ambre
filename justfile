@@ -30,6 +30,7 @@ default:
 lint:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz,ambre-belt/browser -- -D warnings
+    cargo clippy -p ambre-belt --all-targets --features ambre-belt/firefox -- -D warnings
 
 # Lint (wasm): the code only the browser compiles -- the application chrome, the
 # canvas host, the workers -- which host clippy never reads. `RUSTFLAGS` drops
