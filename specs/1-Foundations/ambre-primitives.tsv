@@ -2148,7 +2148,7 @@ ambre-server | src/error.rs | crate::error | AppError::Oidc.0 | field | String	f
 ambre-server | src/error.rs | crate::error | AppError::PayloadTooLarge.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Redis.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::S3.0 | field | String	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	free-text	the path segment that named no provider, echoed in the refusal
+ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	generic	the path segment that named no provider, echoed in the refusal
 ambre-server | src/error.rs | crate::error | AppError::caller_message() | ret | String	free-text	message
 ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret | bool	generic	predicate result
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
@@ -2159,15 +2159,15 @@ ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch() | ret | Resul
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch(keep) | param | Option<usize>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark() | ret | bool	generic	predicate result
 ambre-server | src/hot_tail.rs | crate::hot_tail | trim() | ret | Result<u64,AppError>	math	trimmed count
-ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	free-text	config list text
-ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	free-text	config list text
+ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	generic	the configured list of allowed origins, before parse_cors_origins reads it into header values
+ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	generic	the configured list of allowed origins, the input of its parse into header values
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | <Requests as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Peer::forwarded(entry) | param | &str	free-text	one X-Forwarded-For entry before its parse: an address, or a socket address whose port is dropped
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Peer::forwarded(entry) | param | &str	generic	one X-Forwarded-For entry before its parse: an address, or a socket address whose port is dropped
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::classify(path) | param | &str	generic	path classifier
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::fail_closed() | ret | bool	generic	predicate result
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	free-text	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	generic	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
 ambre-server | src/payload.rs | crate::payload | StoredPayload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | StoredPayload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
@@ -2233,7 +2233,7 @@ ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::try_consume() | ret | bool	generic	predicate result
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | <Topic as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of Topic, lent through Borrow
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId.0 | field | String	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNEL | const | &str	free-text	private hub channel name constant
+ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNEL | const | &str	foreign-api	the name of the private Redis channel of the hub, which one subscribe call alone reads
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_keys.rs | crate::redis_keys | DocumentStateKeys::texts() | ret | [&str;8]	foreign-api	the key texts a DEL, EXISTS or EVAL of the store takes
