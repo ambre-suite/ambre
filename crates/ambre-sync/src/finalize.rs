@@ -183,7 +183,7 @@ mod tests {
     use crate::http::scripted::{Scripted, session};
     use ambre_core::{Ms, TimeSpan};
 
-    /// `SYNC-183`: with no relay, a finalize lease request answers its
+    /// `SYNC-186`: with no relay, a finalize lease request answers its
     /// failure at once.
     #[test]
     fn a_finalize_lease_with_no_relay_answers_its_failure_at_once() {

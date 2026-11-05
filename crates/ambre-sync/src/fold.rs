@@ -145,7 +145,7 @@ mod tests {
     use crate::updates::{Vouch, send_vouch};
     use ambre_core::{Ms, TimeSpan};
 
-    /// `SYNC-183`: with no relay, a fold lease request and a fold of a
+    /// `SYNC-186`: with no relay, a fold lease request and a fold of a
     /// segment not open each answer the fold's failure at once.
     #[test]
     fn a_fold_with_no_relay_answers_its_failure_at_once() {

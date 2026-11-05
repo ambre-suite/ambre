@@ -419,7 +419,7 @@ mod tests {
         (state, rx)
     }
 
-    /// `SYNC-183`: with no relay, each member request answers the Logic
+    /// `SYNC-186`: with no relay, each member request answers the Logic
     /// thread at once, so no view waits on it.
     #[test]
     fn a_member_request_with_no_relay_answers_at_once() {

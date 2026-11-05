@@ -2030,7 +2030,7 @@ pub(crate) mod tests {
         (state, rx)
     }
 
-    /// `SYNC-183`: a request for a new document of a channel answers its
+    /// `SYNC-186`: a request for a new document of a channel answers its
     /// failure at once when no relay is there to take it.
     #[test]
     fn a_channel_document_request_with_no_relay_answers_its_failure_at_once() {
@@ -2060,7 +2060,7 @@ pub(crate) mod tests {
         ));
     }
 
-    /// `SYNC-184`: a public channel needs the key of a space the relay
+    /// `SYNC-187`: a public channel needs the key of a space the relay
     /// holds, and a private one needs no space at all.
     #[test]
     fn a_public_channel_needs_its_space_on_the_relay_and_a_private_one_does_not() {

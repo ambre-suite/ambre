@@ -490,7 +490,7 @@ async fn download_leg(
 mod tests {
     use super::*;
 
-    /// `SYNC-183`: with no relay, a download and an erase each answer the
+    /// `SYNC-186`: with no relay, a download and an erase each answer the
     /// Logic thread at once, so no view waits on them.
     #[test]
     fn a_media_request_with_no_relay_answers_at_once() {
