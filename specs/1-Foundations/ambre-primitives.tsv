@@ -395,7 +395,7 @@ ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>
 ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
 ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | url_flag() | ret | bool	generic	predicate result
-ambre-canvas | src/host.rs | crate::host | url_flag(flag) | param | &str	free-text	text, label or message
+ambre-canvas | src/host.rs | crate::host | url_flag(flag) | param | &str	local	the name of the one flag this private function looks for in the query of the page address
 ambre-canvas | src/intent.rs | crate::intent | FilterOpenPublisher.slot | field | Rc<Cell<bool>>	generic	named state or style flag, local
 ambre-canvas | src/intent.rs | crate::intent | FilterOpenPublisher::take() | ret | bool	generic	predicate result
 ambre-canvas | src/intent.rs | crate::intent | NoticePublisher.queue | field | Rc<RefCell<Vec<String>>>	free-text	text, label or message
@@ -552,7 +552,7 @@ ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit() | re
 ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused colour text
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	free-text	the Palette field name of each typed colour, written into the generated Rust module
+ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	generic	the codec of a struct that is no newtype: the Palette field name of each typed colour, which the generated Rust module spells and the compiler matches back
 ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);13]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated files the stylesheets read
 ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'static str,&dyn fmt::Display);4]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed effect, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
