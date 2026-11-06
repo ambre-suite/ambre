@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-085` | `INV` | A merge MUST cover the same cells after a line is inserted, deleted or moved. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` -- it drives the insert alone, the delete and the drag reaching the same rebuild with no test reading a merge after either | none | verified |
-| `TRAME-280` | `INV` | After an insert, a delete, a move or a sort, each formula outside a loop closed through a range MUST read the value it reads once the workbook is reopened. | this spec section 3; `TRAME-042` | `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- a proptest, 256 cases over two sheets: inserts, deletes of one line and of several, moves, sorts, merges, undos, formula writes and remote merges. After each step the carried state matches a state that walks every formula and reseeds, on the stored text, each value, each dependency and each cycle refusal. A cell on a loop closed through a range reads an error on both | none | verified |
+| `TRAME-280` | `INV` | After an insert, a delete, a move or a sort, each formula MUST read the value it reads once the workbook is reopened. | this spec section 3; `TRAME-042` | `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- a proptest, 256 cases over two sheets: inserts, deletes of one line and of several, moves, sorts, merges, undos, formula writes and remote merges. After each step the carried state matches a state that walks every formula and reseeds, on the stored text, each value, each dependency and each cycle refusal | none | verified |
 | `TRAME-170` | `INV` | The height, the width and the hidden mark of a line MUST follow that line when the lines move. | this spec section 3 | `ambre_trame::logic::tests::group11::a_line_keeps_its_size_and_its_hidden_mark_when_it_moves` | none | verified |
 | `TRAME-091` | `CONC` | Two users inserting at the same position MUST both get a line. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op set carries an insert and a delete on both axes | none | verified |
 | `TRAME-261` | `CONC` | Two peers writing at once in one line past the used range MUST both land on that line. | this spec section 3 | `ambre_trame::logic::tests::group14::two_first_writes_in_one_new_row_land_on_one_row`; `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- its op set writes past the used range on both peers at once, and it compares the row counts | none | verified |
@@ -152,6 +152,11 @@ say whether an edit frees it. A masked cell, or a cell under a second key (`TRAM
 engine, so no dependency names it. A structural edit that meets any of the three walks every formula
 and reseeds the whole engine. So does a carried step that meets a new cycle. The feed order then
 decides which cell of a cycle is refused, as on every reseed.
+
+**A remote change still reseeds the whole engine.** A delta from a peer goes through the full
+reseed, a peer's structural edit among them. It does until the story that carries it lands:
+the `Incremental remote apply` Story (`ambre-roadmap.md` E6). So do an undo, a redo and a snapshot
+import. Only a structural edit made on this peer takes the carried path above.
 
 **Virtual space**, past the used range:
 

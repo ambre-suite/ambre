@@ -650,4 +650,53 @@ mod tests {
             "ref follows the data, not the position"
         );
     }
+
+    /// A loop closed through a range shows `#CIRCULAR!` on each of its cells
+    /// and on each cell downstream of it, whatever order the pass takes. The
+    /// range also holds `#DIV/0!`, which a pass entering from outside the loop
+    /// meets first (`TRAME-281`).
+    #[test]
+    fn a_loop_through_a_range_shows_circular_in_every_order() {
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+        for (at, text) in [
+            (cell(0, 1), "=1/0"),
+            (cell(1, 0), "=SUM(B1:B3)"),
+            (cell(1, 1), "=A2*2"),
+            (cell(0, 3), "=SUM(B2:B3)"),
+            (cell(0, 2), "=B2+1"),
+        ] {
+            engine.on_cell_changed(at, stored(text), &idx, &SingleSheetCtx);
+        }
+        let looped = [cell(1, 0), cell(1, 1), cell(0, 3), cell(0, 2)];
+        let orders = [
+            looped.to_vec(),
+            looped.iter().rev().copied().collect::<Vec<_>>(),
+        ];
+        for order in orders {
+            let cache = engine.formula_cache.borrow();
+            let mut ctx = EvalContext::new(
+                &engine.bytecode,
+                &cache,
+                &idx,
+                Instant::<SheetDateTime>::from_unix_days(0.0),
+            );
+            for &at in &order {
+                ctx.eval_cell(at);
+            }
+            for at in looped {
+                let shown = ctx.eval_cell(at).to_display();
+                assert_eq!(shown, "#CIRCULAR!", "{at:?} in the order {order:?}");
+            }
+        }
+        // A cell the loop does not reach keeps its own error.
+        let cache = engine.formula_cache.borrow();
+        let mut ctx = EvalContext::new(
+            &engine.bytecode,
+            &cache,
+            &idx,
+            Instant::<SheetDateTime>::from_unix_days(0.0),
+        );
+        assert_eq!(ctx.eval_cell(cell(0, 1)).to_display(), "#DIV/0!");
+    }
 }

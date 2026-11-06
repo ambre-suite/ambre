@@ -14,12 +14,10 @@
 // engines must agree too: each value, each edge, each range a formula reads,
 // and each formula a cycle refused.
 //
-// A loop closed through a range is caught while evaluating (`TRAME-042`). Which
-// error such a loop shows depends on the order of the evaluation pass. A cell
-// read from outside the loop first meets another error, one read from inside
-// meets the loop. The two paths evaluate in different orders. Each cell on such
-// a loop, or downstream of one, must therefore read an error on both. Every
-// other cell must read the same value.
+// A loop closed through a range shows `#CIRCULAR!` on each of its cells and
+// downstream of it, whatever order a pass takes (`TRAME-281`). The two paths
+// evaluate in different orders, so the generator writes such loops on purpose,
+// and every value must still match.
 //
 // The generator writes no clock
 // function, and no function that hides an error, such as `COUNT` or `IFERROR`.
@@ -312,76 +310,15 @@ fn values(st: &TrameState) -> HashMap<CellId, (String, String)> {
         .collect()
 }
 
-/// The cells on a loop closed through a range, and each cell downstream of
-/// one. Whatever reads a cell is downstream of it, through an edge of the
-/// graph or through a range that contains the cell.
-fn order_dependent(st: &TrameState) -> HashSet<CellId> {
-    let e = &st.engine;
-    let indices = st.engine_indices();
-    let mut readers: HashMap<CellId, Vec<CellId>> = HashMap::new();
-    for edge in e.deps.cell_dag.edge_indices() {
-        if let Some((a, b)) = e.deps.cell_dag.edge_endpoints(edge) {
-            readers
-                .entry(e.deps.cell_dag[a])
-                .or_default()
-                .push(e.deps.cell_dag[b]);
-        }
-    }
-    for (formula, deps) in &e.deps.range_deps {
-        for dep in deps {
-            let Some(index) = indices.get(&dep.sheet) else {
-                continue;
-            };
-            for &row in index.rows().lines().iter() {
-                for &col in index.cols().lines().iter() {
-                    if dep.contains(row, col, index) {
-                        readers
-                            .entry(CellId::bound(dep.sheet, row, col))
-                            .or_default()
-                            .push(*formula);
-                    }
-                }
-            }
-        }
-    }
-    let reach = |from: CellId| {
-        let mut seen = HashSet::new();
-        let mut queue = vec![from];
-        while let Some(cur) = queue.pop() {
-            for &next in readers.get(&cur).into_iter().flatten() {
-                if seen.insert(next) {
-                    queue.push(next);
-                }
-            }
-        }
-        seen
-    };
-    let mut out = HashSet::new();
-    for &cell in readers.keys() {
-        if !out.contains(&cell) && reach(cell).contains(&cell) {
-            out.extend(reach(cell));
-        }
-    }
-    out
-}
-
-/// The two engines hold the same values. Outside every loop closed through a
-/// range they are equal. Inside one, or downstream of one, both are errors.
+/// The two engines hold the same value for each cell, errors included. A
+/// cell on a loop closed through a range shows `#CIRCULAR!` on both, whatever
+/// order each pass took (`TRAME-281`).
 fn same_values(carried: &TrameState, rebuilt: &TrameState) -> Result<(), String> {
     let (a, b) = (values(carried), values(rebuilt));
-    let loose = order_dependent(rebuilt);
     let keys: HashSet<&CellId> = a.keys().chain(b.keys()).collect();
     for cell in keys {
         let (va, vb) = (a.get(cell), b.get(cell));
-        if loose.contains(cell) {
-            let error =
-                |v: Option<&(String, String)>| v.is_some_and(|(k, _)| k.starts_with("Error"));
-            if !(error(va) && error(vb)) {
-                return Err(format!(
-                    "{cell:?} on a loop: carried {va:?}, rebuilt {vb:?}"
-                ));
-            }
-        } else if va != vb {
+        if va != vb {
             return Err(format!("{cell:?}: carried {va:?}, rebuilt {vb:?}"));
         }
     }
