@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-085` | `INV` | A merge MUST cover the same cells after a line is inserted, deleted or moved. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` -- it drives the insert alone, the delete and the drag reaching the same rebuild with no test reading a merge after either | none | verified |
-| `TRAME-280` | `INV` | After an insert, a delete, a move or a sort, each formula MUST read the value it reads once the workbook is reopened. | this spec section 3; `TRAME-042` | `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- a proptest, 256 cases over two sheets: inserts, deletes of one line and of several, moves, sorts, merges, undos, formula writes and remote merges. After each step the carried state matches a state that walks every formula and reseeds, on the stored text, each value, each dependency and each cycle refusal | none | verified |
+| `TRAME-280` | `INV` | After an insert, a delete, a move or a sort, each formula MUST read the value it reads once the workbook is reopened. | this spec section 3; `TRAME-042` | `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- a proptest, 256 cases over two sheets: inserts, deletes of one line and of several, moves, sorts, merges, undos, formula writes and remote merges. After each step the carried state matches a state that walks every formula and reseeds, on the stored text, each value, each dependency and each cycle refusal; `ambre_trame::logic::structural_tests::a_row_insert_rewrites_a_formula_left_under_a_removed_column` -- the shrunk seed of the proptest; `::a_column_insert_rewrites_a_formula_left_under_a_removed_row`; `::a_move_rewrites_a_formula_left_under_a_removed_row`; `::a_sort_rewrites_a_formula_left_under_a_removed_row`; `::a_column_delete_rewrites_a_formula_left_under_a_removed_column` -- a formula stored under a line an undo removed, then an edit of each kind; `ambre_trame::logic::remote_tests::a_purge_drops_a_formula_left_under_a_removed_column` -- a delete takes such a formula with its line | none | verified |
 | `TRAME-170` | `INV` | The height, the width and the hidden mark of a line MUST follow that line when the lines move. | this spec section 3 | `ambre_trame::logic::tests::group11::a_line_keeps_its_size_and_its_hidden_mark_when_it_moves` | none | verified |
 | `TRAME-091` | `CONC` | Two users inserting at the same position MUST both get a line. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op set carries an insert and a delete on both axes | none | verified |
 | `TRAME-261` | `CONC` | Two peers writing at once in one line past the used range MUST both land on that line. | this spec section 3 | `ambre_trame::logic::tests::group14::two_first_writes_in_one_new_row_land_on_one_row`; `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- its op set writes past the used range on both peers at once, and it compares the row counts | none | verified |
@@ -138,10 +138,16 @@ and a sort (`TRAME-004`).
 two live lines follows those cells. Its text changes only when one of its lines goes, and its value
 only when a cell it reads changes. Every other formula reads positions. It reads a range, a
 whole-line span, a position past the used range, a defined name, `ROW()` or `COLUMN()`, or a line
-already gone. The edit therefore reads two sets of formulas, and no other:
+already gone. The edit therefore reads three sets of formulas, and no other:
 
 1. each formula that reads a cell of a removed line, found through the dependency graph;
-2. each formula that reads positions, which the engine keeps as a set.
+2. each formula that reads positions, which the engine keeps as a set;
+3. each stored formula that places on no cell, which the state keeps as a set per sheet.
+
+A formula of the third set sits under an element no line carries any more. An undo of an insert
+leaves one, and so does a peer that wrote into a line while another deleted it. No reseed feeds it,
+so the graph names it nowhere. The full walk reads it all the same, and freezes each of its
+references to a gone line (`TRAME-277`). A reseed computes the set, and a remote batch keeps it.
 
 The re-anchor walk rewrites the text of those formulas alone, before the commit. After the commit
 the engine clears the removed cells and compiles those formulas again from their text. It then
@@ -153,10 +159,13 @@ engine, so no dependency names it. A structural edit that meets any of the three
 and reseeds the whole engine. So does a carried step that meets a new cycle. The feed order then
 decides which cell of a cycle is refused, as on every reseed.
 
-**A remote change still reseeds the whole engine.** A delta from a peer goes through the full
-reseed, a peer's structural edit among them. It does until the story that carries it lands:
-the `Incremental remote apply` Story (`ambre-roadmap.md` E6). So do an undo, a redo and a snapshot
-import. Only a structural edit made on this peer takes the carried path above.
+**A peer's structural edit takes the carried step too** (`ambre-spec-trame-engine.md section 3.F`,
+`TRAME-282`). A remote batch may insert, delete or move a line of the sheet on screen. The engine
+then clears the cells of each gone line, and compiles again each formula that read one or reads
+positions.
+The peer's walk already rewrote the text it saw, and that text arrives in the batch. A peer's
+structural edit of a sheet off the screen still reseeds the whole engine. So do an undo, a redo and
+a snapshot import.
 
 **Virtual space**, past the used range:
 

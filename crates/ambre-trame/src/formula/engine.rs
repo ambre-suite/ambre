@@ -158,6 +158,29 @@ impl FormulaEngine {
         indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
         ctx: &dyn FormulaCtx,
     ) -> Carry {
+        self.apply_remote(removed, reread, &[], indices, ctx)
+    }
+
+    /// Carry the engine across a remote batch, without a reseed
+    /// (`TRAME-282`).
+    ///
+    /// `removed` and `reread` are what a structural edit of the batch leaves,
+    /// as for [`apply_structural`](Self::apply_structural). `written` are the
+    /// cells the batch wrote, each with the text it now shows, which no
+    /// formula of `reread` repeats. A written cell compiles from its text as
+    /// a local write does, so a text it already compiled from costs nothing
+    /// (`TRAME-212`).
+    ///
+    /// Returns [`Carry::CycleMet`] when a formula was refused for a cycle, as
+    /// [`apply_structural`](Self::apply_structural) does.
+    pub fn apply_remote(
+        &mut self,
+        removed: &HashSet<CellId>,
+        reread: &[(CellId, CellText<StoredForm>)],
+        written: &[(CellId, CellText<StoredForm>)],
+        indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
+        ctx: &dyn FormulaCtx,
+    ) -> Carry {
         for &cell in removed {
             if self.knows(cell) {
                 self.on_cell_changed(cell, CellText::new(String::new()), indices, ctx);
@@ -165,6 +188,9 @@ impl FormulaEngine {
         }
         for (cell, raw) in reread {
             self.bytecode.forget_source(*cell);
+            self.on_cell_changed(*cell, raw.clone(), indices, ctx);
+        }
+        for (cell, raw) in written {
             self.on_cell_changed(*cell, raw.clone(), indices, ctx);
         }
         if self.bytecode.has_cyclic() {

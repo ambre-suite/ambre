@@ -76,13 +76,49 @@ impl TrameState {
             }) else {
                 continue;
             };
-            self.reanchor_one(&map, sheet, key.as_str(), &text, &new, edit);
-            reread.push(Reread {
-                cell,
-                sheet: sheet.clone(),
-                key,
-            });
+            reread.push((
+                Reread {
+                    cell,
+                    sheet: sheet.clone(),
+                    key,
+                },
+                text,
+            ));
         }
+        // A formula that places on no cell is one the engine names nowhere,
+        // and the full walk reads it all the same. Its text changes like any
+        // other: a reference to a gone line is frozen (`TRAME-277`).
+        let mut walked: Vec<(Id<Sheet>, CellKey, String)> = reread
+            .iter()
+            .map(|(r, text)| (r.sheet.clone(), r.key.clone(), text.clone()))
+            .collect();
+        for sheet in &self.sheets_by_idx {
+            let Some(keys) = self.unplaced.get(sheet) else {
+                continue;
+            };
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str());
+            walked.extend(keys.iter().filter_map(|key| {
+                match map.get(key.as_str()).map(|v| v.get_deep_value()) {
+                    Some(LoroValue::String(text)) => {
+                        Some((sheet.clone(), key.clone(), text.to_string()))
+                    }
+                    _ => None,
+                }
+            }));
+        }
+        // The reach comes out of a hash set. Writing in key order makes the
+        // operations of one edit the same on every run, whatever the order the
+        // set hands the formulas out in.
+        walked.sort_unstable_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+        for (sheet, key, text) in &walked {
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str());
+            self.reanchor_one(&map, sheet, key.as_str(), text, &new, edit);
+        }
+        let reread = reread.into_iter().map(|(r, _)| r).collect();
         Walk {
             index: new,
             step: EngineStep::Carry { removed, reread },
@@ -210,6 +246,13 @@ impl TrameState {
         if self.structural_path == StructuralPath::Reseed {
             return true;
         }
+        self.engine_holds_a_skip()
+    }
+
+    /// Whether the engine holds what no dependency names: a formula refused
+    /// for a cycle, a masked cell, or a cell the last reseed left out. Neither
+    /// a structural edit nor a remote batch can carry such an engine.
+    pub(super) fn engine_holds_a_skip(&self) -> bool {
         self.engine.has_cyclic() || self.engine_skipped || !self.masked_cells.is_empty()
     }
 
@@ -500,6 +543,14 @@ impl TrameState {
                 .collect();
             for key in stale {
                 let _ = map.delete(&key);
+                // A formula under a gone line of the other axis goes too, and
+                // the walk no longer reads it (`TRAME-280`).
+                if root == SheetRoot::Cells
+                    && let Some((row, col)) = parse_cell_key(&key)
+                    && let Some(keys) = self.unplaced.get_mut(&self.active_sheet)
+                {
+                    keys.remove(&CellKey::of(row, col));
+                }
             }
         }
         // A filter on the removed column goes with it (`TRAME-FEAT-030`).
