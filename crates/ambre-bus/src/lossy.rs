@@ -12,7 +12,6 @@
 // the screen ahead of the document, which is the state `BUS-018` bans.
 // ============================================================================
 
-use crate::port::Delivery;
 use crate::{ChannelPlane, LogicCommand, Mutation, Port, Traffic};
 
 /// What one lossy send did.
@@ -63,7 +62,8 @@ fn lossy<C: Mutation>(command: &C) -> bool {
 ///
 /// Never blocks: the UI thread runs the frame. A full queue drops the
 /// command rather than holding it, because the next frame carries the same
-/// request over a state that has moved on. A view reaches it through
+/// request over a state that has moved on. So does a lane that holds an older
+/// command, which the request must not overtake (`BUS-037`). A view reaches it through
 /// [`Outbox::send_lossy`](crate::Outbox::send_lossy).
 pub(crate) fn send_lossy<A: Mutation, P: ChannelPlane>(
     to_logic: &Port<A, P>,
@@ -72,11 +72,7 @@ pub(crate) fn send_lossy<A: Mutation, P: ChannelPlane>(
     if !is_lossy_class(&cmd) {
         return LossyOutcome::Refused;
     }
-    match to_logic.try_send(cmd) {
-        Delivery::Sent => LossyOutcome::Sent,
-        Delivery::Full(_) => LossyOutcome::Dropped,
-        Delivery::Disconnected => LossyOutcome::Disconnected,
-    }
+    to_logic.send_now(cmd)
 }
 
 #[cfg(test)]
@@ -231,5 +227,28 @@ mod tests {
         let (tx, rx) = port(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
         drop(rx);
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Disconnected);
+    }
+    /// A request never passes a command the lane holds for another sender.
+    /// It drops while the lane holds, and the next frame offers it again.
+    #[test]
+    fn a_lossy_request_never_overtakes_a_held_command() {
+        let (tx, rx) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
+        let lane = crate::Lane::<Probe>::new(tx);
+        let mut launcher = crate::Outbox::new(lane.port());
+        let view = crate::Outbox::new(lane.port());
+        assert_eq!(launcher.send(app(Probe::Select)), crate::SendOutcome::Sent);
+        assert_eq!(launcher.send(app(Probe::Select)), crate::SendOutcome::Held);
+        assert!(rx.try_recv().is_ok());
+        assert_eq!(view.send_lossy(viewport()), LossyOutcome::Dropped);
+        assert_eq!(launcher.flush(), crate::SendOutcome::Sent);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicCommand::App {
+                command: Probe::Select,
+                ..
+            })
+        ));
+        assert_eq!(view.send_lossy(viewport()), LossyOutcome::Sent);
     }
 }
