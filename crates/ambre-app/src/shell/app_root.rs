@@ -301,7 +301,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         let to_logic = to_logic.clone();
         move |()| {
             if let Some(document_id) = current_doc.get_untracked() {
-                let _ = to_logic.try_send(LogicCommand::Rest {
+                to_logic.send(LogicCommand::Rest {
                     id: ambre_bus::next_request(),
                     cmd: RestCommand::ListDocumentMembers { document_id },
                 });
@@ -557,7 +557,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let member_send = Callback::new({
         let tx = to_logic.clone();
         move |cmd| {
-            let _ = tx.try_send(LogicCommand::Rest {
+            tx.send(LogicCommand::Rest {
                 id: ambre_bus::next_request(),
                 cmd,
             });
@@ -740,14 +740,18 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             // invitee's key + fingerprint without wrapping. The role
                             // is kept in `invite_role`; the relay dispatches phase 2
                             // (the actual share) once the trust decision is made.
-                            let _ = tx.try_send(LogicCommand::Rest {
+                            let sent = tx.send(LogicCommand::Rest {
                                 id: ambre_bus::next_request(),
                                 cmd: RestCommand::FetchInviteeKey {
                                     document_id,
                                     invitee_email,
                                 },
                             });
-                            invitee_input.set(String::new());
+                            // A refused invite keeps the address typed, so the
+                            // user can send it again (`BUS-018`).
+                            if sent.accepted() {
+                                invitee_input.set(String::new());
+                            }
                         }
                     }
                 >

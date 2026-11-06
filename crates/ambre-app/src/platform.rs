@@ -142,8 +142,7 @@ pub(crate) async fn read_clipboard_blob(
         if has(host::ClipboardFormat::WebAmbre)
             && let Some(b64) = read_clipboard_item(&item, host::ClipboardFormat::WebAmbre).await
         {
-            blob.ambre = host::base64_decode(&b64)
-                .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::new);
+            blob.ambre = host::base64_decode(&b64);
             found = true;
         }
         if has(host::ClipboardFormat::WebAmbreToken)

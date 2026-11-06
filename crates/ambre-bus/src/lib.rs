@@ -60,7 +60,7 @@ pub use event::{
 };
 pub use logic::{LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, is_lossy_class};
-pub use outbox::{Load, Outbox, SendOutcome};
+pub use outbox::{Outbox, SendOutcome};
 pub use plane::{ChannelPlane, NoChannels, PlaneOf};
 pub use port::{Inbox, Port};
 pub use rest::{

@@ -166,12 +166,7 @@ impl Created {
                 active,
                 now,
             } => {
-                schema::write_header(
-                    doc,
-                    DocumentKind::Meta,
-                    channel_id,
-                    Instant::<Authored>::new(now.get()),
-                )?;
+                schema::write_header(doc, DocumentKind::Meta, channel_id, *now)?;
                 let channel = crate::schema::channel(doc);
                 channel.insert(ChannelKey::Type, channel_type.as_str())?;
                 if let Some(name) = name {
@@ -180,30 +175,15 @@ impl Created {
                 push_segment_entry(doc, *active, *now, SegmentState::Active)?;
             }
             Self::Segment { now } => {
-                schema::write_header(
-                    doc,
-                    DocumentKind::Segment,
-                    channel_id,
-                    Instant::<Authored>::new(now.get()),
-                )?;
+                schema::write_header(doc, DocumentKind::Segment, channel_id, *now)?;
             }
             Self::Amendments { segment, now } => {
-                schema::write_header(
-                    doc,
-                    DocumentKind::Amendments,
-                    channel_id,
-                    Instant::<Authored>::new(now.get()),
-                )?;
+                schema::write_header(doc, DocumentKind::Amendments, channel_id, *now)?;
                 crate::schema::header(doc)
                     .insert(schema::HeaderKey::Segment, segment.to_string())?;
             }
             Self::Thread { segment, root, now } => {
-                schema::write_header(
-                    doc,
-                    DocumentKind::Thread,
-                    channel_id,
-                    Instant::<Authored>::new(now.get()),
-                )?;
+                schema::write_header(doc, DocumentKind::Thread, channel_id, *now)?;
                 let header = crate::schema::header(doc);
                 header.insert(schema::HeaderKey::Segment, segment.to_string())?;
                 header.insert(schema::HeaderKey::Root, root.to_string())?;

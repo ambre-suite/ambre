@@ -40,7 +40,7 @@ pub fn run_with<F, C, P>(
     pre_frame: P,
     raf: RafControl,
     paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: crate::outbox::ShellOutbox,
 ) -> DocSwitcher
 where
     F: FnOnce(ambre_core::Size<Px<CanvasCss>>, TextInput) -> AppView,

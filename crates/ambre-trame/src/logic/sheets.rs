@@ -512,9 +512,7 @@ impl TrameState {
             .into_iter()
             .map(|id| {
                 // A sheet whose document holds no name shows its id, verbatim.
-                let name = names
-                    .remove(&id)
-                    .unwrap_or_else(|| SheetName::stored(id.as_str().to_owned()));
+                let name = names.remove(&id).unwrap_or_else(|| SheetName::of_id(&id));
                 SheetTab { id, name }
             })
             .collect();

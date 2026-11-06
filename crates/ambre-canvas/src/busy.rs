@@ -12,9 +12,10 @@
 // Pure value plumbing (an `Rc<Cell<BusyLevel>>`) that compiles on every
 // target, reaches no UI framework, and stays `!Send` on the UI thread.
 //
-// The level is a type of this crate, not the outbox's `ambre_bus::Load`. The
-// renderer knows no thread protocol (`ARCH-071`). So the view that owns the
-// outbox converts its load into a `BusyLevel` before it publishes.
+// The level is a type of this crate. The renderer knows no thread protocol
+// (`ARCH-071`), so it takes the outbox's answer to `is_busy` as a plain
+// predicate, through `BusyLevel::from_busy`. That one constructor is the whole
+// seam: no view writes a conversion of its own.
 // ============================================================================
 
 use std::cell::Cell;
@@ -29,6 +30,13 @@ pub enum BusyLevel {
     /// The view refuses input: its outbox holds a command the Logic thread
     /// has not taken.
     Busy,
+}
+
+impl BusyLevel {
+    /// The level of an outbox that answers `busy` to `is_busy` (`BUS-016`).
+    pub fn from_busy(busy: bool) -> Self {
+        if busy { Self::Busy } else { Self::Free }
+    }
 }
 
 /// The level signal a view uses to say it cannot take more input.
@@ -71,5 +79,12 @@ mod tests {
         assert!(busy.is_busy());
         assert!(busy.publish(BusyLevel::Free));
         assert!(!busy.publish(BusyLevel::Free));
+    }
+
+    #[test]
+    fn a_busy_outbox_reads_as_a_busy_level() {
+        let outbox_busy = [false, true];
+        let levels = outbox_busy.map(BusyLevel::from_busy);
+        assert_eq!(levels, [BusyLevel::Free, BusyLevel::Busy]);
     }
 }

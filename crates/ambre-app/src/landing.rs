@@ -98,7 +98,7 @@ pub struct LandingSignals {
 /// thread without a page reload.
 pub fn landing_view(
     signals: LandingSignals,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: crate::outbox::ShellOutbox,
 ) -> impl IntoView {
     let LandingSignals {
         docs,
@@ -142,7 +142,7 @@ pub fn landing_view(
                     return;
                 };
                 sealed_file.set(None);
-                let _ = to_logic.try_send(LogicCommand::Rest {
+                to_logic.send(LogicCommand::Rest {
                     id: ambre_bus::next_request(),
                     cmd: RestCommand::OpenDocFile { sealed, passphrase },
                 });
@@ -164,12 +164,16 @@ pub fn landing_view(
     let confirm_delete = {
         let to_logic = to_logic.clone();
         Callback::new(move |document_id: Id<Document>| {
-            let _ = to_logic.try_send(LogicCommand::Rest {
+            let sent = to_logic.send(LogicCommand::Rest {
                 id: ambre_bus::next_request(),
                 cmd: RestCommand::DeleteDocument { document_id },
             });
             // Optimistic removal -- the relay also re-lists on `DocumentDeleted`.
-            docs.update(|v| v.retain(|d| d.document_id != document_id));
+            // A refused delete leaves the card, which the user can try again
+            // (`BUS-018`).
+            if sent.accepted() {
+                docs.update(|v| v.retain(|d| d.document_id != document_id));
+            }
         })
     };
 
@@ -344,7 +348,7 @@ pub fn NewDocPicker(
 fn doc_card(
     d: DocItem,
     docs: RwSignal<Vec<DocItem>>,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: crate::outbox::ShellOutbox,
     pending_delete: RwSignal<Option<(Id<Document>, ComposedName)>>,
     booted: DocType,
     toasts: Toasts,
@@ -387,7 +391,7 @@ fn doc_card(
             };
             editing.set(false);
             if !ambre_core::name_is_empty(&name) {
-                let _ = to_logic.try_send(LogicCommand::Rest {
+                let sent = to_logic.send(LogicCommand::Rest {
                     id: ambre_bus::next_request(),
                     cmd: RestCommand::RenameDocument {
                         document_id: id,
@@ -395,11 +399,14 @@ fn doc_card(
                     },
                 });
                 // Optimistic update -- the relay also re-lists on `DocumentRenamed`.
-                docs.update(|v| {
-                    if let Some(item) = v.iter_mut().find(|x| x.document_id == id) {
-                        item.name = Some(name);
-                    }
-                });
+                // A refused rename keeps the old name on the card (`BUS-018`).
+                if sent.accepted() {
+                    docs.update(|v| {
+                        if let Some(item) = v.iter_mut().find(|x| x.document_id == id) {
+                            item.name = Some(name);
+                        }
+                    });
+                }
             }
         }
     };
@@ -572,7 +579,7 @@ fn rel_time(updated_at: Option<Instant<Relayed>>) -> String {
 /// The sign-out control (`CHROME-107`). It asks the live threads to end the
 /// session, once: the page boots home afresh when the Sync worker confirms,
 /// so nothing here clears anything.
-fn sign_out_control(to_logic: ambre_bus::conduit::Sender<LogicCommand>) -> impl IntoView {
+fn sign_out_control(to_logic: crate::outbox::ShellOutbox) -> impl IntoView {
     let leaving = RwSignal::new(false);
     view! {
         <button
@@ -582,11 +589,14 @@ fn sign_out_control(to_logic: ambre_bus::conduit::Sender<LogicCommand>) -> impl 
                 if leaving.get_untracked() {
                     return;
                 }
-                leaving.set(true);
-                let _ = to_logic.try_send(LogicCommand::Rest {
+                // A refused sign-out leaves the button live (`BUS-018`).
+                let sent = to_logic.send(LogicCommand::Rest {
                     id: ambre_bus::next_request(),
                     cmd: RestCommand::Logout,
                 });
+                if sent.accepted() {
+                    leaving.set(true);
+                }
             }
         >
             {move || if leaving.get() { "Signing out..." } else { "Sign out" }}
@@ -596,7 +606,7 @@ fn sign_out_control(to_logic: ambre_bus::conduit::Sender<LogicCommand>) -> impl 
 
 fn sign_in_panel(
     dev_mode: RwSignal<Option<SignInMode>>,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: crate::outbox::ShellOutbox,
 ) -> impl IntoView {
     move || match dev_mode.get() {
         None => view! {
@@ -620,7 +630,7 @@ fn sign_in_panel(
                     // Remember the dev identity so a later refresh re-establishes
                     // the session without `?user=` in the URL.
                     crate::remember_dev_user(&name);
-                    let _ = to_logic.try_send(LogicCommand::Rest {
+                    to_logic.send(LogicCommand::Rest {
                         id: ambre_bus::next_request(),
                         cmd: RestCommand::DevLogin { username: name },
                     });
@@ -663,7 +673,7 @@ fn sign_in_panel(
                     <button
                         class="ambre-signin-btn"
                         on:click=move |_| {
-                            let _ = to_logic.try_send(LogicCommand::Rest {
+                            to_logic.send(LogicCommand::Rest {
                                 id: ambre_bus::next_request(),
                                 cmd: RestCommand::ProviderSignIn {
                                     provider: ambre_core::OidcProvider::Google,
@@ -870,7 +880,9 @@ mod tests {
         let dev_mode = RwSignal::new(Some(SignInMode::Oidc));
         let before = web_sys::window().unwrap().location().href().unwrap();
 
-        let container = mount_in_container(move || sign_in_panel(dev_mode, tx));
+        let container = mount_in_container(move || {
+            sign_in_panel(dev_mode, crate::outbox::ShellOutbox::new(tx))
+        });
         let button = container
             .query_selector(".ambre-signin-btn")
             .unwrap()
@@ -904,7 +916,8 @@ mod tests {
         >::of::<8>());
         let before = web_sys::window().unwrap().location().href().unwrap();
 
-        let container = mount_in_container(move || sign_out_control(tx));
+        let container =
+            mount_in_container(move || sign_out_control(crate::outbox::ShellOutbox::new(tx)));
         let button = container
             .query_selector(".ambre-sign-out")
             .unwrap()
@@ -1032,7 +1045,9 @@ mod tests {
             ambre_bus::conduit::ChannelSlots,
         >::of::<8>());
         let dev_mode = RwSignal::new(None);
-        let container = mount_in_container(move || sign_in_panel(dev_mode, tx));
+        let container = mount_in_container(move || {
+            sign_in_panel(dev_mode, crate::outbox::ShellOutbox::new(tx))
+        });
         let routes = |c: &web_sys::Element| {
             (
                 c.query_selector(".ambre-signin-input").unwrap().is_some(),
@@ -1094,7 +1109,7 @@ mod tests {
         let container = mount_in_container(move || {
             view! {
                 <leptos_router::components::Router>
-                    {doc_card(item, docs, tx, pending_delete, DocType::Prose, toasts)}
+                    {doc_card(item, docs, crate::outbox::ShellOutbox::new(tx), pending_delete, DocType::Prose, toasts)}
                     <ambre_chrome::ToastHost toasts=toasts />
                 </leptos_router::components::Router>
             }
