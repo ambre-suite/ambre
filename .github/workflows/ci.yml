@@ -217,6 +217,11 @@ jobs:
           # from main without consuming the shared 10 GB budget (avoids eviction).
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: just test-native
+      # The fixture corpus regenerated against its committed bytes and
+      # manifests, and each frozen artifact against its kept version. A drift
+      # is a change of document meaning no test reads, so it fails here and a
+      # human accepts the regenerated golden (`ambre-spec-fixtures.md`).
+      - run: just fixtures-check
 
   # ---------------------------------------------------------------------------
   # test-db -- server integration behind the `db` Cargo feature against real

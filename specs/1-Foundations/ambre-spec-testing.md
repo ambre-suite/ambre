@@ -453,7 +453,7 @@ run the same command.
 | Job | Runs |
 | :--- | :--- |
 | `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, and the primitive gate |
-| `test-native` | the host tier, plus `ambre-server` on the native target |
+| `test-native` | the host tier, plus `ambre-server` on the native target, then `just fixtures-check`: the corpus regenerated against its committed bytes and manifests |
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
 | `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
 | `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display |
