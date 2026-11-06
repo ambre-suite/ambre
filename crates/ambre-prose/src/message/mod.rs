@@ -2361,11 +2361,82 @@ impl ambre_bus::Mutation for ProseCommand {
     /// The marks query and the word count are lossy. The page asks the first
     /// again on a later frame, and the second on a later change. Every other
     /// command carries intent, or a request the page records as asked before
-    /// it leaves, as the page window does.
+    /// it leaves, as the page window does. The match is exhaustive, so a new
+    /// command does not build until it is classed.
     fn traffic(&self) -> ambre_bus::Traffic {
         match self {
             Self::ReadMarks { .. } | Self::CountWords => ambre_bus::Traffic::Lossy,
-            _ => ambre_bus::Traffic::Lossless,
+            Self::Noop
+            | Self::Sync { .. }
+            | Self::InsertText { .. }
+            | Self::DeleteText { .. }
+            | Self::DeleteRange { .. }
+            | Self::SplitBlock { .. }
+            | Self::ApplyMark { .. }
+            | Self::RemoveMark { .. }
+            | Self::ClearInlineMarks { .. }
+            | Self::InsertBlock { .. }
+            | Self::DeleteBlock { .. }
+            | Self::MoveBlock { .. }
+            | Self::SetBlockStyle { .. }
+            | Self::SetHeadingLevel { .. }
+            | Self::SetCodeLang { .. }
+            | Self::SetListStyle { .. }
+            | Self::IndentList { .. }
+            | Self::UnindentList { .. }
+            | Self::SetParagraphStyle { .. }
+            | Self::InsertTable { .. }
+            | Self::InsertTableRow { .. }
+            | Self::DeleteTableRow { .. }
+            | Self::InsertTableCol { .. }
+            | Self::DeleteTableCol { .. }
+            | Self::ResizeTableCol { .. }
+            | Self::MergeTableCells { .. }
+            | Self::UnmergeTableCell { .. }
+            | Self::SetCellStyle { .. }
+            | Self::StepTableCell { .. }
+            | Self::InsertToc { .. }
+            | Self::UpdateTocConfig { .. }
+            | Self::ShowPages { .. }
+            | Self::ShowBlock { .. }
+            | Self::CopyRange { .. }
+            | Self::Paste { .. }
+            | Self::FormatSelection { .. }
+            | Self::SetHeaderEnabled { .. }
+            | Self::SetFooterEnabled { .. }
+            | Self::SetDifferentFirstPage { .. }
+            | Self::InsertHeaderField { .. }
+            | Self::InsertFooterField { .. }
+            | Self::SetBandAlign { .. }
+            | Self::StampModified { .. }
+            | Self::FindStart { .. }
+            | Self::FindNext
+            | Self::FindPrev
+            | Self::FindClose
+            | Self::ReplaceOne { .. }
+            | Self::ReplaceAll { .. }
+            | Self::InsertFootnote { .. }
+            | Self::EditFootnote { .. }
+            | Self::DeleteFootnote { .. }
+            | Self::AddComment { .. }
+            | Self::ReplyToComment { .. }
+            | Self::ResolveComment { .. }
+            | Self::ReopenComment { .. }
+            | Self::DeleteComment { .. }
+            | Self::DeleteReply { .. }
+            | Self::EditCommentReply { .. }
+            | Self::EnableTrackChanges { .. }
+            | Self::AcceptSuggestion { .. }
+            | Self::RejectSuggestion { .. }
+            | Self::AcceptAllSuggestions
+            | Self::RejectAllSuggestions
+            | Self::InsertCrossRef { .. }
+            | Self::FollowCrossRef { .. }
+            | Self::UpdateCursor { .. }
+            | Self::Undo
+            | Self::Redo
+            | Self::ExportDocument { .. }
+            | Self::ImportDocument { .. } => ambre_bus::Traffic::Lossless,
         }
     }
 }

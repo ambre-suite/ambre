@@ -48,13 +48,14 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
 /// Ship font faces to the Logic thread, which measures on a context of its own
 /// and cannot fetch. The base faces at boot leave through here, and so does
 /// each script face fetched later: a late face travels the base path
-/// (`CANVAS-068`). A full channel drops the faces rather than stall the frame;
-/// the next fetch is a fresh delivery. Whether they were sent.
+/// (`CANVAS-068`). A full channel holds the faces in the launcher's outbox
+/// rather than stall the frame, and the relay sends them on a later turn. A
+/// face lost would leave a script in tofu until the next fetch of it.
 pub(crate) fn send_faces(
-    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: &crate::outbox::ShellOutbox,
     faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
-) -> bool {
-    to_logic.try_send(LogicCommand::LoadFonts { faces }).is_ok()
+) -> ambre_bus::SendOutcome {
+    to_logic.send(LogicCommand::LoadFonts { faces })
 }
 
 /// [`remap_for_child`] with the board's mapping supplied, so the rewrite is
@@ -173,11 +174,11 @@ pub struct FrameHost {
     /// Drained once per frame and routed to the active view (`UI-THREAD-024`).
     paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
 
-    /// The command channel to the Logic thread, held for one purpose. A font
+    /// The launcher's outbox to the Logic thread, held for one purpose. A font
     /// face fetched after boot has to reach the threads that measure on a
     /// context of their own (`CANVAS-068`). Only this thread can fetch, and
     /// Prose paginates on the Logic thread.
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: crate::outbox::ShellOutbox,
 
     /// The live child views behind the top-level document's visible `doc_embed`s,
     /// keyed by the **board element** that carries each reference. Reconciled
@@ -234,7 +235,7 @@ impl FrameHost {
         make_child: Option<MakeChild>,
         clip_token: ambre_bus::ClipToken,
         paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
-        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+        to_logic: crate::outbox::ShellOutbox,
     ) -> Self {
         Self {
             gpu: None,
@@ -921,30 +922,31 @@ mod tests {
     }
 
     /// `CANVAS-068`: a face fetched after boot reaches the Logic thread as the
-    /// load a base face is, with its bytes intact. A full channel drops it
-    /// rather than wait.
+    /// load a base face is, with its bytes intact. A full channel holds it
+    /// rather than wait, and the relay's flush sends it.
     #[wasm_bindgen_test]
     fn a_late_face_reaches_the_logic_thread_as_a_base_face_does() {
-        let (to_logic, from_ui) = ambre_bus::conduit::local(ambre_core::Bounded::<
+        let (tx, from_ui) = ambre_bus::conduit::local(ambre_core::Bounded::<
             ambre_bus::conduit::ChannelSlots,
         >::of::<1>());
-        assert!(send_faces(
-            &to_logic,
-            vec![ambre_core::Payload::<ambre_core::FontBytes>::new(vec![
-                1, 2, 3
-            ])]
-        ));
-        assert!(
-            !send_faces(
-                &to_logic,
-                vec![ambre_core::Payload::<ambre_core::FontBytes>::new(vec![4])]
-            ),
-            "a full channel took the face"
+        let to_logic = crate::outbox::ShellOutbox::new(tx);
+        let face = |bytes: Vec<u8>| vec![ambre_core::Payload::<ambre_core::FontBytes>::new(bytes)];
+        assert_eq!(
+            send_faces(&to_logic, face(vec![1, 2, 3])),
+            ambre_bus::SendOutcome::Sent
+        );
+        assert_eq!(
+            send_faces(&to_logic, face(vec![4])),
+            ambre_bus::SendOutcome::Held
         );
         match from_ui.try_recv() {
             Ok(LogicCommand::LoadFonts { faces }) => assert_eq!(faces, [vec![1, 2, 3]]),
             other => panic!("not a font load: {other:?}"),
         }
-        assert!(from_ui.try_recv().is_err(), "the dropped face arrived");
+        assert_eq!(to_logic.flush(), ambre_bus::SendOutcome::Sent);
+        match from_ui.try_recv() {
+            Ok(LogicCommand::LoadFonts { faces }) => assert_eq!(faces, [vec![4]]),
+            other => panic!("the held face did not arrive: {other:?}"),
+        }
     }
 }

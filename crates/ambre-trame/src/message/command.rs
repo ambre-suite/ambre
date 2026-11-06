@@ -1261,11 +1261,82 @@ impl ambre_bus::Mutation for TrameCommand {
 
     /// The viewport fetch and the selection aggregates are lossy: the grid
     /// re-offers the first (`BUS-024`) and clears the band of the second
-    /// (`TRAME-UI-136`). Every other command carries intent.
+    /// (`TRAME-UI-136`). Every other command carries intent. The match is
+    /// exhaustive, so a new command does not build until it is classed.
     fn traffic(&self) -> ambre_bus::Traffic {
         match self {
             Self::ScrollViewport { .. } | Self::RequestSelectionStats => ambre_bus::Traffic::Lossy,
-            _ => ambre_bus::Traffic::Lossless,
+            Self::SetActiveCell { .. }
+            | Self::SetCellText { .. }
+            | Self::BeginCellEdit { .. }
+            | Self::CommitCellEdit { .. }
+            | Self::EndCellEdit { .. }
+            | Self::SetCellsBatch { .. }
+            | Self::CommitEdit
+            | Self::SetCellStyle { .. }
+            | Self::InsertRow { .. }
+            | Self::DeleteRow { .. }
+            | Self::InsertColumn { .. }
+            | Self::DeleteColumn { .. }
+            | Self::MoveRow { .. }
+            | Self::MoveColumn { .. }
+            | Self::MergeCells { .. }
+            | Self::UnmergeCells { .. }
+            | Self::ResizeCol { .. }
+            | Self::ResizeRow { .. }
+            | Self::InsertRowAbove
+            | Self::InsertRowBelow
+            | Self::InsertColLeft
+            | Self::InsertColRight
+            | Self::DeleteSelectedRows
+            | Self::DeleteSelectedCols
+            | Self::MergeSelection
+            | Self::UnmergeActive
+            | Self::SortSelectionAsc
+            | Self::SortSelectionDesc
+            | Self::SortSheetAsc
+            | Self::SortSheetDesc
+            | Self::SortSelectionMulti { .. }
+            | Self::RequestActiveColumnValues
+            | Self::RequestSortRange
+            | Self::RequestColumnContent { .. }
+            | Self::CopyRange
+            | Self::ApplyFilterToActiveColumn { .. }
+            | Self::ClearActiveFilter
+            | Self::PasteRange { .. }
+            | Self::PasteText { .. }
+            | Self::PasteClipboardAtActive { .. }
+            | Self::FillRange { .. }
+            | Self::FindNext { .. }
+            | Self::ReplaceAll { .. }
+            | Self::ReplaceOne { .. }
+            | Self::Undo
+            | Self::Redo
+            | Self::DefineName { .. }
+            | Self::DeleteName { .. }
+            | Self::ActivateSheet { .. }
+            | Self::CreateSheet { .. }
+            | Self::RenameSheet { .. }
+            | Self::MoveSheet { .. }
+            | Self::SortRange { .. }
+            | Self::DeleteSheet { .. }
+            | Self::ApplyFilter { .. }
+            | Self::ClearFilter { .. }
+            | Self::ImportCsv { .. }
+            | Self::ExportActiveSheetCsv
+            | Self::ExportCsv { .. }
+            | Self::ExportAmbreFile
+            | Self::ExportAmbreFileSealed { .. }
+            | Self::SaveFilterView { .. }
+            | Self::ActivateFilterView { .. }
+            | Self::SortRangeMulti { .. }
+            | Self::AddCondFormat { .. }
+            | Self::UpdateCondFormat { .. }
+            | Self::RemoveCondFormat { .. }
+            | Self::AddValidation { .. }
+            | Self::RemoveValidation { .. }
+            | Self::SetProtection { .. }
+            | Self::RemoveProtection { .. } => ambre_bus::Traffic::Lossless,
         }
     }
 }

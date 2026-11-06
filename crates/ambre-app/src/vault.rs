@@ -8,15 +8,16 @@
 //! before any view sees them.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use ambre_core::{Payload, SealedRowBytes};
 
-use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::{Confidential, Plaintext, Request, RestCommand, RestEvent, RowPlace, SealedRow};
 use ambre_core::Seq;
 use ambre_logic::app::LogicCommand;
+
+use crate::outbox::ShellOutbox;
 
 /// What rows read back open to, one slot each: `None` when the store is
 /// locked.
@@ -37,19 +38,18 @@ pub(crate) struct Vault {
 }
 
 struct Inner {
-    to_logic: Sender<LogicCommand>,
+    /// The launcher's outbox, which holds a request the channel to Logic did
+    /// not take, in order with every other launcher command (`BUS-011`).
+    to_logic: ShellOutbox,
     waiting: HashMap<Seq<Request>, Pending>,
-    /// Requests the channel to Logic did not take, in order.
-    outbox: VecDeque<LogicCommand>,
 }
 
 impl Vault {
-    pub(crate) fn new(to_logic: Sender<LogicCommand>) -> Self {
+    pub(crate) fn new(to_logic: ShellOutbox) -> Self {
         Self {
             inner: Rc::new(RefCell::new(Inner {
                 to_logic,
                 waiting: HashMap::new(),
-                outbox: VecDeque::new(),
             })),
         }
     }
@@ -82,17 +82,18 @@ impl Vault {
         );
     }
 
+    /// Send one request. A request the outbox refuses answers `None` at once,
+    /// as a locked store does, and so does one no Logic thread will read. Its
+    /// caller then keeps the row for a later turn (`BUS-018`).
     fn ask(&self, cmd: RestCommand, pending: Pending) {
         let id = ambre_bus::next_request();
-        let mut inner = self.inner.borrow_mut();
-        inner.waiting.insert(id, pending);
-        inner.outbox.push_back(LogicCommand::Rest { id, cmd });
-        inner.send();
-    }
-
-    /// Offer again what the channel to Logic did not take.
-    pub(crate) fn flush(&self) {
-        self.inner.borrow_mut().send();
+        let to_logic = self.inner.borrow().to_logic.clone();
+        self.inner.borrow_mut().waiting.insert(id, pending);
+        // The borrow ends before the send, and before an answer that may ask
+        // again.
+        if !to_logic.send(LogicCommand::Rest { id, cmd }).accepted() {
+            let _ = self.answer(Some(id), RestEvent::LocalStoreLocked);
+        }
     }
 
     /// Take the answer to one of this vault's requests, by value. Each opened
@@ -112,25 +113,6 @@ impl Vault {
             (Pending::Open(done), _) => done(None),
         }
         None
-    }
-}
-
-impl Inner {
-    fn send(&mut self) {
-        while let Some(cmd) = self.outbox.pop_front() {
-            match self.to_logic.try_send(cmd) {
-                Ok(()) => {}
-                Err(TrySendError::Full(cmd)) => {
-                    self.outbox.push_front(cmd);
-                    return;
-                }
-                // Logic is gone, and no answer will come.
-                Err(TrySendError::Disconnected(_)) => {
-                    self.outbox.clear();
-                    return;
-                }
-            }
-        }
     }
 }
 
@@ -159,7 +141,7 @@ mod tests {
     fn a_seal_asks_the_worker_and_takes_its_answer() {
         let (tx, rx) =
             conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
-        let vault = Vault::new(tx);
+        let vault = Vault::new(ShellOutbox::new(tx));
         let got = Rc::new(RefCell::new(None));
         let doc = Id::<Document>::mint();
         vault.seal(
@@ -202,7 +184,7 @@ mod tests {
     fn a_locked_store_answers_nothing() {
         let (tx, rx) =
             conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
-        let vault = Vault::new(tx);
+        let vault = Vault::new(ShellOutbox::new(tx));
         let sealed = Rc::new(Cell::new(false));
         let opened = Rc::new(Cell::new(false));
         vault.seal(
@@ -238,7 +220,7 @@ mod tests {
     fn an_opened_row_moves_out_with_no_copy() {
         let (tx, rx) =
             conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
-        let vault = Vault::new(tx);
+        let vault = Vault::new(ShellOutbox::new(tx));
         let moved = Rc::new(Cell::new(None));
         let row = SealedRow {
             place: RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
@@ -261,13 +243,14 @@ mod tests {
         assert_eq!(moved.take().map(|bytes| bytes.as_ptr()), Some(before));
     }
 
-    /// A request the channel to Logic does not take waits, and leaves in
-    /// order once the channel has room.
+    /// A request the channel to Logic does not take waits in the launcher's
+    /// outbox, and leaves in order on the relay's flush.
     #[wasm_bindgen_test]
     fn a_full_channel_holds_the_requests_in_order() {
         let (tx, rx) =
             conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>());
-        let vault = Vault::new(tx);
+        let outbox = ShellOutbox::new(tx);
+        let vault = Vault::new(outbox.clone());
         for key in ["a", "b"] {
             vault.seal(
                 RowPlace::Draft(ambre_bus::DraftKey::new(key.into())),
@@ -284,7 +267,7 @@ mod tests {
             RowPlace::Draft(ambre_bus::DraftKey::new("a".into()))
         );
         assert!(rx.try_recv().is_err(), "the second waits for room");
-        vault.flush();
+        outbox.flush();
         assert_eq!(
             place(&rx),
             RowPlace::Draft(ambre_bus::DraftKey::new("b".into()))
@@ -296,7 +279,7 @@ mod tests {
     fn no_rows_open_at_once() {
         let (tx, rx) =
             conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
-        let vault = Vault::new(tx);
+        let vault = Vault::new(ShellOutbox::new(tx));
         let opened = Rc::new(Cell::new(false));
         vault.open(Vec::new(), {
             let opened = Rc::clone(&opened);

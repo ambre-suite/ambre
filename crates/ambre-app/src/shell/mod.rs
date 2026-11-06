@@ -53,7 +53,7 @@ pub(crate) struct ShellSlots {
 /// builds and the mount hands to the widget that reads it. The signals the
 /// shell shares with a view travel as that view's own set.
 pub(crate) struct ShellWiring {
-    pub(crate) to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    pub(crate) to_logic: crate::outbox::ShellOutbox,
     pub(crate) clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     pub(crate) raf: ambre_canvas::RafControl,
     pub(crate) theme_ctl: ambre_canvas::ThemeControl,

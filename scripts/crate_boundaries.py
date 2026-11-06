@@ -125,6 +125,14 @@ names in `logic/schema.rs` spells each name once, on its declaration line.
 is spelled in `composed.rs` alone, whose type converts to no `String`. So no
 Rust line outside that file spells it above its tests.
 
+**The launcher writes through one outbox** (`BUS-035`). A sender of the
+launcher that owns no frame shares one outbox, flushed by the per-frame
+relay. So the queue's raw end moves into that outbox on the line after its
+creation, and no other launcher line names it. Above its tests, no file of
+`ambre-app` but `outbox.rs` names a raw sender of that queue or builds a port
+over one. The relay in `lib.rs` flushes that outbox and tells the user of a
+refusal (`BUS-036`).
+
 **An identifier typed on the bus** (`BUS-029`). Two identifiers carried as
 two strings swap without a compile error. So no field of `ambre-bus` named
 `id`, `*_id` or `*_ids` carries a bare string or integer above its tests.
@@ -696,6 +704,20 @@ CARGO_CONFIG = ".cargo/config.toml"
 BUILD_STD = re.compile(r"build-std\s*=\s*\[([^\]]*)\]")
 EXIT_WRITERS = ("crates/ambre-logic/src", "crates/*/src/logic", "crates/ambre-sync/src")
 DESTRUCTOR = re.compile(r"\bimpl\b[^{]*\bDrop\s+for\b")
+
+# The launcher's one writer on the UI to Logic queue, and what a second
+# writer would need: a raw sender of the queue, or a port built over one
+# (`BUS-035`).
+SHELL_OUTBOX = "crates/ambre-app/src/outbox.rs"
+LAUNCHER_QUEUE = re.compile(r"\bSender<\s*LogicCommand\b|\bPort::(?:embedded|direct)\b")
+# The relay's two calls on that outbox: the flush of what it holds, and the
+# refusal it tells the user of. A queue's own flush through a borrow is not
+# the outbox's, so the receiver must be a bare name.
+OUTBOX_FLUSH = re.compile(r"(?<![\w).])[a-z_][a-z0-9_]*\.flush\(\)")
+OUTBOX_REFUSAL = re.compile(r"\.take_refusal\(\)")
+UI_QUEUE_BINDING = re.compile(
+    r"let\s*\(\s*(\w+)\s*,\s*\w+\s*\)\s*=\s*conduit::to_worker::<LogicCommand>"
+)
 
 # The engines' command handlers, found by layout so an engine added later is read
 # too, and the names a handler that sends on a queue would need.
@@ -1582,6 +1604,47 @@ def check_handlers(errors: list[str]) -> int:
     return len(files)
 
 
+def check_launcher_outbox(errors: list[str]) -> int:
+    """`BUS-035`: the launcher writes to the Logic thread through one outbox.
+
+    The raw end of the UI to Logic queue moves into the outbox where it is
+    made, so the compiler refuses a later use of it. No other launcher file
+    names a raw sender of that queue or builds a port over one. The relay
+    flushes the outbox, and tells the user of a refusal (`BUS-036`)."""
+    if not (ROOT / SHELL_OUTBOX).exists():
+        errors.append(f"{SHELL_OUTBOX}: gone from the tree, so the launcher outbox reads nothing")
+        return 0
+    files = sources((LAUNCHER,))
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == SHELL_OUTBOX:
+            continue
+        lines = above_tests(path)
+        for number, line in lines:
+            found = LAUNCHER_QUEUE.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: the launcher writes past its outbox: `{found.group(0)}`")
+        if rel != APP_LIB:
+            continue
+        binding = UI_QUEUE_BINDING.search(" ".join(line for _, line in lines))
+        if not binding:
+            errors.append(f"{rel}: creates no UI to Logic queue, so the outbox rule reads nothing")
+            continue
+        name = re.compile(rf"\b{re.escape(binding.group(1))}\b")
+        moved = re.compile(rf"ShellOutbox::new\(\s*{re.escape(binding.group(1))}\s*\)")
+        uses = [(number, line) for number, line in lines if name.search(line)]
+        for number, line in uses[1:]:
+            if not moved.search(line):
+                errors.append(f"{rel}:{number}: the raw UI to Logic sender is used past its outbox")
+        if not any(moved.search(line) for _, line in uses):
+            errors.append(f"{rel}: the raw UI to Logic sender never moves into the outbox")
+        if not any(OUTBOX_FLUSH.search(line) for _, line in lines):
+            errors.append(f"{rel}: the relay does not flush the launcher's outbox")
+        if not any(OUTBOX_REFUSAL.search(line) for _, line in lines):
+            errors.append(f"{rel}: the relay tells the user of no refusal of the launcher's outbox")
+    return len(files)
+
+
 def check_kinetic_copy(errors: list[str]) -> int:
     """`KINETIC-012`: no Rust line outside the shared model names a decay or a velocity."""
     if not KINETIC_TERM.search(read(KINETIC_MODEL)):
@@ -2212,6 +2275,7 @@ def main() -> int:
     worker_messages = check_worker_messages(errors)
     engine = check_engine_and_relay(errors)
     handlers = check_handlers(errors)
+    outboxes = check_launcher_outbox(errors)
     latches = check_failure_latches(errors)
     exits = check_exit_writes(errors)
     walks = check_walks(errors)
@@ -2257,6 +2321,7 @@ def main() -> int:
         f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
         f"{engine} launcher files read for a second engine or a relay out of the frame, "
         f"{handlers} engine files read for a handler that sends on a queue, "
+        f"{outboxes} launcher files read for a write past its outbox, "
         f"{latches} launcher files read for a failure that waits on a queue, "
         f"{exits} build and thread files read for a write on the way out, "
         f"{walks} walks read for a screen module or screen state"
@@ -2298,7 +2363,8 @@ def main() -> int:
             "protocol, and the worker redeclares no "
             "wire type, allocates no request id and names no app message. The launcher "
             "starts one engine, and every frame relays before it draws. A command "
-            "handler returns an outcome and names no queue. A panic and a failed "
+            "handler returns an outcome and names no queue. The launcher writes "
+            "to the Logic thread through its one outbox. A panic and a failed "
             "worker each latch the fatal screen without a queue, and a failing thread "
             "writes nothing on its way out. A walk reaches no screen state.",
             file=sys.stderr,

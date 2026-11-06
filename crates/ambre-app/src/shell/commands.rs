@@ -31,15 +31,15 @@ pub(crate) enum AppHandler {
 }
 
 /// The sink of a Murmure page. Its commands address the user's channels,
-/// not the routed document, so they go to the Logic thread unchanged.
+/// not the routed document, so they go to the Logic thread unchanged, through
+/// the launcher's outbox. A refusal there reaches the user through the relay
+/// (`BUS-018`).
 pub(crate) fn murmure_send(
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    to_logic: crate::outbox::ShellOutbox,
 ) -> Callback<ambre_murmure::message::LogicCommand> {
     Callback::new(move |command: ambre_murmure::message::LogicCommand| {
         // A Murmure command carries no document command, so it retypes as any.
-        if let Err(e) = to_logic.try_send(command.map(|never| match never {})) {
-            tracing::warn!("Murmure command dropped, Logic channel full ({e:?})");
-        }
+        to_logic.send(command.map(|never| match never {}));
     })
 }
 
@@ -121,7 +121,7 @@ impl AppHandler {
 pub(crate) struct CommandPath {
     pub(crate) handler: AppHandler,
     pub(crate) current_doc: RwSignal<Option<Id<Document>>>,
-    pub(crate) to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    pub(crate) to_logic: crate::outbox::ShellOutbox,
     pub(crate) clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     pub(crate) toasts: Toasts,
     /// The command palette, a shell overlay.
@@ -160,7 +160,9 @@ impl CommandPath {
     }
 
     /// Send `command` to the routed document. On the landing route no document
-    /// is open, and nothing could receive it.
+    /// is open, and nothing could receive it. A full queue holds the command
+    /// in the launcher's outbox, and a refusal there reaches the user through
+    /// the relay (`BUS-011`, `BUS-018`).
     pub(crate) fn send<C>(&self, command: C)
     where
         AppCommand: Embed<C>,
@@ -168,12 +170,10 @@ impl CommandPath {
         let Some(document_id) = self.current_doc.get_untracked() else {
             return;
         };
-        if let Err(e) = self.to_logic.try_send(LogicCommand::App {
+        self.to_logic.send(LogicCommand::App {
             document_id,
             command: AppCommand::embed(command),
-        }) {
-            tracing::warn!("command dropped, Logic channel full ({e:?})");
-        }
+        });
     }
 
     fn perform(&self, action: ShellAction<AppCommand>) {
@@ -191,7 +191,7 @@ impl CommandPath {
                 read_clipboard(self.clipboard_paste.clone(), self.toasts, form);
             }
             ShellAction::RefreshDocuments => {
-                let _ = self.to_logic.try_send(LogicCommand::Rest {
+                self.to_logic.send(LogicCommand::Rest {
                     id: ambre_bus::next_request(),
                     cmd: RestCommand::ListDocuments,
                 });
@@ -207,15 +207,12 @@ impl CommandPath {
                 let read = Rc::new(pick.read);
                 open_file_picker(pick.accept, pick.unreadable, toasts, move |data| {
                     let command = read(data);
-                    // A full queue loses the file: say so, and the user picks
-                    // it again.
-                    if let Err(e) = tx.try_send(LogicCommand::App {
+                    // A full queue holds the file. Past the outbox's bound it
+                    // is lost, and the relay tells the user to try again.
+                    tx.send(LogicCommand::App {
                         document_id,
                         command,
-                    }) {
-                        tracing::warn!("file import dropped, Logic channel full ({e:?})");
-                        toasts.warning("The file did not import: the document is busy. Try again.");
-                    }
+                    });
                 });
             }
         }
