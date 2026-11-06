@@ -1366,11 +1366,13 @@ pub(crate) mod tests {
         }
     }
 
-    /// Whether two keys are one: what one seals, the other opens.
+    /// Whether two keys are one: what one seals, the other opens. The probe
+    /// seals `a` under itself through the typed key sealer, so no test hands
+    /// bare bytes to the cipher.
     fn same_key(a: &DocumentKey, b: &DocumentKey) -> bool {
-        let (nonce, ct) =
-            ambre_crypto::aead::seal(b"probe", &ambre_core::Aad::of(b""), a).expect("seal");
-        ambre_crypto::aead::open(&nonce, &ct, &ambre_core::Aad::of(b""), b).is_ok()
+        let aad = ambre_core::Aad::of(b"");
+        let (nonce, ct) = ambre_crypto::aead::seal_document_key(a, &aad, a).expect("seal");
+        ambre_crypto::aead::open_document_key(&nonce, &ct, &aad, b).is_ok()
     }
 
     // --- The Murmure spaces spec: the sealed catalogue key and a self-join ---

@@ -23,11 +23,15 @@ const _: () = assert!(FixedBytes::<Nonce>::SIZE.get() == NONCE_LEN as u64);
 /// Encrypts `plaintext` under `key` with the given `aad`, returning a freshly
 /// generated nonce and the ciphertext (Poly1305 tag appended).
 ///
+/// Private to this crate: the plaintext is bare bytes, so each caller here
+/// types what it hands over. Another crate seals through a typed door, such as
+/// `envelope::seal` or [`seal_document_key`].
+///
 /// # Errors
 ///
 /// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
 /// XChaCha20-Poly1305. The cipher raises nothing else.
-pub fn seal(
+pub(crate) fn seal(
     plaintext: &[u8],
     aad: &ambre_core::Aad,
     key: &DocumentKey,
@@ -42,11 +46,15 @@ pub fn seal(
 /// `Confidential::<Plaintext>::with_plaintext`, or moves it into a role that keeps it in the
 /// clear through `Confidential::<Plaintext>::into_plaintext` (`ARCH-047`).
 ///
+/// Private to this crate, as [`seal`] is. The ciphertext of an envelope opens
+/// through `envelope::open`, which checks the signature and the commitment tag
+/// first.
+///
 /// # Errors
 ///
 /// [`CryptoError::AeadFailed`] when the tag does not verify: a wrong key,
 /// wrong `aad`, or a modified ciphertext. Poly1305 cannot tell a caller which.
-pub fn open(
+pub(crate) fn open(
     nonce: &FixedBytes<Nonce>,
     ciphertext: &ambre_core::Payload<Ciphertext>,
     aad: &ambre_core::Aad,
@@ -58,7 +66,7 @@ pub fn open(
 
 /// Seals one passphrase-sealed `.ambre` file under its own [`FileKey`].
 ///
-/// A separate entry point from [`seal`], not a generic one: the two keys are
+/// A separate entry point from `seal`, not a generic one: the two keys are
 /// not interchangeable (`ambre-spec-docfile.md section 5`). Two functions with
 /// two key types turn a swap into a compile error rather than a review note.
 ///
@@ -154,7 +162,7 @@ pub fn open_row(
 /// Seals one document key under another, as a catalogue holds the key of a
 /// public channel under the key of its space.
 ///
-/// A pair of its own rather than [`seal`] over the key bytes. Those bytes
+/// A pair of its own rather than `seal` over the key bytes. Those bytes
 /// stay private to this crate, so no caller holds a key as a plain buffer.
 ///
 /// # Errors
