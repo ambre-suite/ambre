@@ -46,7 +46,6 @@ criterion = { workspace = true }
 ambre-core = { path = "../ambre-core", features = ["testing"] }
 # Headless paint tests: the RecordingSurface mock of the drawing surface.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
-serde_json = { workspace = true }
 
 # The convergence property of a channel over generated interleavings
 # (`MURMURE-582`). proptest pulls `wait-timeout`, which does not build on

@@ -2349,6 +2349,17 @@ impl ambre_bus::Mutation for ProseCommand {
     fn is_mutating(&self) -> bool {
         ProseCommand::is_mutating(self)
     }
+
+    /// The marks query and the word count are lossy. The page asks the first
+    /// again on a later frame, and the second on a later change. Every other
+    /// command carries intent, or a request the page records as asked before
+    /// it leaves, as the page window does.
+    fn traffic(&self) -> ambre_bus::Traffic {
+        match self {
+            Self::ReadMarks { .. } | Self::CountWords => ambre_bus::Traffic::Lossy,
+            _ => ambre_bus::Traffic::Lossless,
+        }
+    }
 }
 
 impl ProseCommand {

@@ -337,7 +337,8 @@ pub struct TrameSignals {
 /// pipe, its publishers, its clock and its chrome signals. ambre-app builds
 /// the parts and fills one per view.
 pub struct TrameWiring {
-    /// The queue to the Logic thread.
+    /// The queue to the Logic thread. The view moves it into its outbox,
+    /// its one way to write (`BUS-011`).
     pub to_logic: Port<TrameCommand>,
     /// The queue from the Logic thread.
     pub from_logic: Inbox<TrameEvent>,
@@ -369,10 +370,9 @@ pub struct TrameWiring {
 pub struct TrameView {
     /// The document this view renders (from the active route).
     document_id: Id<Document>,
-    /// Outbound queue to the Logic thread, for the lossy class only.
-    to_logic: Port<TrameCommand>,
-    /// The lossless send path: it keeps a command a full queue could not take,
-    /// and offers it again on a later frame (`BUS-011`).
+    /// The one send path to the Logic thread. It keeps a lossless command a
+    /// full queue could not take, and offers it again on a later frame
+    /// (`BUS-011`). It drops a lossy one (`BUS-023`).
     outbox: Outbox<TrameCommand>,
     /// The busy level the chrome reads while the outbox holds anything
     /// (`BUS-016`).

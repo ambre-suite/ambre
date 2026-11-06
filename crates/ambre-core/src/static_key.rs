@@ -162,6 +162,24 @@ impl KeyKind for Attributes {
     const NAME: &'static str = "AttributeName";
 }
 
+/// A same-origin path that the page fetches an asset from. The server matches
+/// the path back to the file the build copied there, so a typo loses the
+/// asset, and no person reads the path.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AssetPaths {}
+
+impl sealed::Sealed for AssetPaths {}
+impl KeyKind for AssetPaths {
+    const NAME: &'static str = "AssetPath";
+}
+
+/// The bare path, as a log line names the asset it fetched.
+impl fmt::Display for StaticKey<AssetPaths> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.text)
+    }
+}
+
 impl StaticKey<Canvases> {
     /// The content canvas, the central one that every application paints.
     pub const CONTENT: Self = Self::new("ambre-canvas");
@@ -201,7 +219,10 @@ mod tests {
 
     #[test]
     fn each_new_kind_prints_its_own_name() {
-        use super::{Attributes, CssClasses, StorageKeys};
+        use super::{AssetPaths, Attributes, CssClasses, StorageKeys};
+        let asset = StaticKey::<AssetPaths>::new("/fonts/a.ttf");
+        assert_eq!(format!("{asset:?}"), "AssetPath(\"/fonts/a.ttf\")");
+        assert_eq!(asset.to_string(), "/fonts/a.ttf");
         assert_eq!(
             format!("{:?}", StaticKey::<StorageKeys>::new("a.b")),
             "StorageKey(\"a.b\")"

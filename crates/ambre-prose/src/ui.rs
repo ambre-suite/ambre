@@ -6,10 +6,11 @@
 //! neither enters the document, so two collaborators scroll independently and
 //! read the same document (`PROSE-UI-010`).
 //!
-//! **It never blocks on the Logic channel** (`UI-THREAD-002`). Every send is a
-//! `try_send`. An edit goes through the lossless outbox of
-//! `ambre-spec-message-bus.md`, which holds it on a full channel (`BUS-011`,
-//! `PROSE-UI-149`). Any other command is dropped and asked again later.
+//! **It never blocks on the Logic channel** (`UI-THREAD-002`). Every send goes
+//! through the view's outbox of `ambre-spec-message-bus.md`, and only tries.
+//! An edit takes its lossless send, which holds it on a full channel
+//! (`BUS-011`, `PROSE-UI-149`). A request the page asks again later takes its
+//! lossy send, which drops it (`BUS-023`).
 //!
 //! The draft below holds what was typed and not yet confirmed. A remote
 //! change shifts it, a deleted block drops it, and a layout that carries its
@@ -24,7 +25,7 @@ use ambre_core::id::{Document, Id};
 use ambre_core::{Byte, char_to_byte};
 
 use crate::message::DocChar;
-use ambre_bus::{Delivery, LogicCommand, Outbox, Port, SendOutcome};
+use ambre_bus::{LogicCommand, LossyOutcome, Outbox, SendOutcome};
 
 use crate::events::{
     BandSet, BlockId, ChangeOrigin, CommentThread, CursorPosition, FindMatch, FootnoteEntry,
@@ -606,8 +607,9 @@ pub enum SendResult {
     /// The channel was full, and the outbox holds the edit for a later frame
     /// (`BUS-011`). It is on its way, and the view refuses input meanwhile.
     Held,
-    /// Nothing carries the command: a full channel dropped a command outside
-    /// the edit class, or the outbox refused an edit at its bound (`BUS-018`).
+    /// Nothing carries the command (`BUS-018`). A full channel dropped a
+    /// lossy request, the lossy class refused a lossless command, or the
+    /// outbox refused an edit at its bound.
     Dropped,
     /// The Logic thread is gone. This channel carries nothing again.
     Disconnected,
@@ -621,13 +623,14 @@ impl SendResult {
     }
 }
 
-/// Send one command to the Logic thread (`PROSE-UI-002`).
+/// Send one lossy request to the Logic thread through the outbox
+/// (`BUS-023`).
 ///
-/// Every mutation leaves this thread this way, and no other. The send never
-/// blocks (`UI-THREAD-002`), and the draft echo the view painted stays here
-/// (`PROSE-UI-150`): what crosses is the typed command alone.
-pub fn send_command(
-    to_logic: &Port<ProseCommand>,
+/// A full channel drops it, and the page asks again on a later frame. A
+/// command `ProseCommand::traffic` leaves lossless never leaves this way: it
+/// owes [`send_edit`]. The send never blocks (`UI-THREAD-002`).
+pub fn send_request(
+    outbox: &Outbox<ProseCommand>,
     document_id: Id<Document>,
     command: ProseCommand,
 ) -> SendResult {
@@ -635,18 +638,27 @@ pub fn send_command(
         document_id,
         command,
     };
-    match to_logic.try_send(envelope) {
-        Delivery::Sent => SendResult::Sent,
-        Delivery::Full(_) => {
-            tracing::warn!("Prose: the Logic channel is full, the command is dropped");
+    match outbox.send_lossy(envelope) {
+        LossyOutcome::Sent => SendResult::Sent,
+        LossyOutcome::Dropped => {
+            tracing::warn!("Prose: the Logic channel is full, the request is dropped");
             SendResult::Dropped
         }
-        Delivery::Disconnected => SendResult::Disconnected,
+        LossyOutcome::Refused => {
+            tracing::error!("Prose: a lossless command was offered to the lossy class");
+            SendResult::Dropped
+        }
+        LossyOutcome::Disconnected => SendResult::Disconnected,
     }
 }
 
 /// Send one edit to the Logic thread through the lossless outbox
-/// (`PROSE-UI-149`, `BUS-011`).
+/// (`PROSE-UI-002`, `PROSE-UI-149`, `BUS-011`).
+///
+/// Every mutation leaves this thread this way, and no other. So does a
+/// request the page records as asked before it leaves. The draft echo the
+/// view painted stays here (`PROSE-UI-150`): what crosses is the typed
+/// command alone.
 ///
 /// A full channel holds the edit rather than the frame or the keystroke. The
 /// host refuses input while the outbox holds anything (`BUS-016`), so the
@@ -1104,6 +1116,7 @@ mod tests {
 
     use super::*;
     use crate::message::DocChar;
+    use ambre_bus::Port;
     use ambre_core::{Instant, PageLoad};
 
     fn a_document() -> Id<Document> {
@@ -1116,16 +1129,32 @@ mod tests {
             ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
                 ambre_bus::conduit::ChannelSlots,
             >::of::<1>());
+        let outbox = Outbox::new(Port::direct(tx));
         assert_eq!(
-            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
+            send_request(&outbox, a_document(), ProseCommand::CountWords),
             SendResult::Sent
         );
         // The channel holds one, so the second send finds it full. It answers
         // at once rather than parking this thread.
         assert_eq!(
-            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
+            send_request(&outbox, a_document(), ProseCommand::CountWords),
             SendResult::Dropped
         );
+        assert!(!outbox.is_busy());
+    }
+
+    #[test]
+    fn a_lossless_command_never_leaves_as_a_request() {
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand<ProseCommand>>(ambre_core::Bounded::<
+                ambre_bus::conduit::ChannelSlots,
+            >::of::<4>());
+        let outbox = Outbox::new(Port::direct(tx));
+        assert_eq!(
+            send_request(&outbox, a_document(), ProseCommand::Noop),
+            SendResult::Dropped
+        );
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]
@@ -1157,8 +1186,13 @@ mod tests {
                 ambre_bus::conduit::ChannelSlots,
             >::of::<1>());
         drop(rx);
+        let mut outbox = Outbox::new(Port::direct(tx));
         assert_eq!(
-            send_command(&Port::direct(tx.clone()), a_document(), ProseCommand::Noop),
+            send_edit(&mut outbox, a_document(), ProseCommand::Noop),
+            SendResult::Disconnected
+        );
+        assert_eq!(
+            send_request(&outbox, a_document(), ProseCommand::CountWords),
             SendResult::Disconnected
         );
     }
@@ -1177,8 +1211,8 @@ mod tests {
             &block,
             Pos::<DocChar>::ZERO,
         );
-        send_command(
-            &Port::direct(tx),
+        send_edit(
+            &mut Outbox::new(Port::direct(tx)),
             a_document(),
             ProseCommand::InsertText {
                 block_id: block,

@@ -1,19 +1,25 @@
 // ambre-bus/src/outbox.rs
 // ============================================================================
-// The send discipline of the lossless class (`BUS-011`, `BUS-016`, `BUS-018`).
+// A view's one way to write to the Logic thread (`BUS-011`, `BUS-016`,
+// `BUS-018`, `BUS-023`).
 //
-// A view holds a bounded sender to the Logic thread and must never block, so
-// every send is a `try_send`. A lossy command drops itself on a full queue,
-// and the next frame resends the state; a lossless one carries intent the user
-// gave once. The outbox holds such a command instead,
-// reads busy while it holds anything, and the view refuses input until the queue
-// drains. Past `HOLD_CAPACITY` it refuses the command and says so, and the view
-// then leaves its own state alone (`BUS-018`).
+// A view holds a bounded queue to the Logic thread and must never block, so
+// every send is a try. The outbox owns the view's `Port`, which has no send of
+// its own outside this crate, and offers two sends.
+//
+// A lossy command drops itself on a full queue, and the next frame resends the
+// state. A lossless one carries intent the user gave once. The outbox holds
+// such a command instead, reads busy while it holds anything, and the view
+// refuses input until the queue drains. Past `HOLD_CAPACITY` it refuses the
+// command and says so, and the view then leaves its own state alone
+// (`BUS-018`).
 // ============================================================================
 
 use std::collections::VecDeque;
 
-use crate::{Delivery, LogicCommand, Port};
+use crate::lossy::send_lossy;
+use crate::port::Delivery;
+use crate::{ChannelPlane, LogicCommand, LossyOutcome, Mutation, NoChannels, Port};
 
 /// Commands one outbox holds before it refuses the next.
 ///
@@ -47,15 +53,15 @@ impl SendOutcome {
     }
 }
 
-/// The lossless send path from one view to the Logic thread.
+/// The send path from one view to the Logic thread, and the only one.
 ///
-/// Wraps the bounded sender and the hold queue a full queue feeds. A view
-/// owns one per open document and drives it from two places: the command
-/// emitters call [`send`](Self::send), and the frame hook calls
-/// [`flush`](Self::flush).
-pub struct Outbox<A> {
-    to_logic: Port<A>,
-    held: VecDeque<LogicCommand<A>>,
+/// Wraps the view's port and the hold queue a full queue feeds. A view owns
+/// one per open document and drives it from two places. The command emitters
+/// call [`send`](Self::send) or [`send_lossy`](Self::send_lossy), and the
+/// frame hook calls [`flush`](Self::flush).
+pub struct Outbox<A, P: ChannelPlane = NoChannels> {
+    to_logic: Port<A, P>,
+    held: VecDeque<LogicCommand<A, P>>,
     capacity: usize,
 }
 
@@ -68,15 +74,15 @@ pub enum Load {
     Busy,
 }
 
-impl<A> Outbox<A> {
+impl<A, P: ChannelPlane> Outbox<A, P> {
     /// An outbox over `to_logic`, holding up to [`HOLD_CAPACITY`] commands.
-    pub fn new(to_logic: Port<A>) -> Self {
+    pub fn new(to_logic: Port<A, P>) -> Self {
         Self::with_capacity(to_logic, HOLD_CAPACITY)
     }
 
     /// An outbox with an explicit hold bound. A test drives the refusal branch
     /// through a small one instead of filling sixty-four slots.
-    pub fn with_capacity(to_logic: Port<A>, capacity: usize) -> Self {
+    pub fn with_capacity(to_logic: Port<A, P>, capacity: usize) -> Self {
         Self {
             to_logic,
             held: VecDeque::new(),
@@ -110,7 +116,7 @@ impl<A> Outbox<A> {
     /// A command sent while the outbox holds anything joins the back of the
     /// queue. The Logic thread applies an edit stream in the order the user
     /// typed it, and a command overtaking a held one would reorder that stream.
-    pub fn send(&mut self, cmd: LogicCommand<A>) -> SendOutcome {
+    pub fn send(&mut self, cmd: LogicCommand<A, P>) -> SendOutcome {
         if self.is_busy() {
             return self.hold(cmd);
         }
@@ -142,8 +148,22 @@ impl<A> Outbox<A> {
         SendOutcome::Sent
     }
 
+    /// Send one lossy command, or drop it on a full queue (`BUS-024`).
+    ///
+    /// Refuses, and sends nothing, unless the command's application names it
+    /// lossy and it changes nothing (`BUS-023`). The refused command owes
+    /// [`send`](Self::send). A lossy command does not wait behind the held
+    /// ones: it changes nothing, and its answer carries a version the view
+    /// checks (`BUS-017`).
+    pub fn send_lossy(&self, cmd: LogicCommand<A, P>) -> LossyOutcome
+    where
+        A: Mutation,
+    {
+        send_lossy(&self.to_logic, cmd)
+    }
+
     /// Take one command into the hold queue, or refuse it at the bound.
-    fn hold(&mut self, cmd: LogicCommand<A>) -> SendOutcome {
+    fn hold(&mut self, cmd: LogicCommand<A, P>) -> SendOutcome {
         if self.held.len() >= self.capacity {
             return SendOutcome::Refused;
         }

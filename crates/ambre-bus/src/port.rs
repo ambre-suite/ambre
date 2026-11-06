@@ -6,15 +6,17 @@
 //! embeds it on the way in. An [`Inbox`] projects the view's own event out of
 //! what the launcher forwards. Both erase the sum, so a view type names its
 //! own vocabulary and nothing downstream of it.
-
-use std::sync::Arc;
+//!
+//! A [`Port`] has no send of its own outside this crate. A view moves it into
+//! its one [`Outbox`](crate::Outbox), whose two sends are the only way a
+//! view writes to the Logic thread (`BUS-011`, `BUS-023`).
 
 use crate::conduit::{Receiver, Sender, TryRecvError, TrySendError};
 use crate::{ChannelPlane, Embed, LogicCommand, NoChannels, PlaneOf, UiEvent};
 
 /// What became of a command offered through [`Port::try_send`].
 #[must_use]
-pub enum Delivery<A, P: ChannelPlane = NoChannels> {
+pub(crate) enum Delivery<A, P: ChannelPlane = NoChannels> {
     /// The queue took it.
     Sent,
     /// The queue is at capacity: the command comes back.
@@ -23,29 +25,17 @@ pub enum Delivery<A, P: ChannelPlane = NoChannels> {
     Disconnected,
 }
 
-impl<A, P: ChannelPlane> Delivery<A, P> {
-    /// Whether the queue took the command.
-    pub fn sent(&self) -> bool {
-        matches!(self, Self::Sent)
-    }
-}
-
 type SendFn<A, P> = dyn Fn(LogicCommand<A, P>) -> Delivery<A, P> + Send + Sync;
 
 /// A view's sending end of the UI to Logic queue, for commands of type `A`
 /// and the channel plane `P`.
 ///
-/// Only tries, as every end the Main thread holds (`ARCH-021`).
+/// Only tries, as every end the Main thread holds (`ARCH-021`). It has no
+/// `Clone` and no public send. A port moves into one
+/// [`Outbox`](crate::Outbox), so no second path reaches its queue. No second
+/// hold queue then reorders what the first one holds.
 pub struct Port<A, P: ChannelPlane = NoChannels> {
-    send: Arc<SendFn<A, P>>,
-}
-
-impl<A, P: ChannelPlane> Clone for Port<A, P> {
-    fn clone(&self) -> Self {
-        Self {
-            send: Arc::clone(&self.send),
-        }
-    }
+    send: Box<SendFn<A, P>>,
 }
 
 impl<A: Send + 'static, P: ChannelPlane + 'static> Port<A, P>
@@ -70,7 +60,7 @@ impl<A: 'static, P: ChannelPlane + 'static> Port<A, P> {
         LogicCommand<S, Q>: Send,
     {
         Self {
-            send: Arc::new(move |cmd: LogicCommand<A, P>| {
+            send: Box::new(move |cmd: LogicCommand<A, P>| {
                 match to_logic.try_send(cmd.embed_into()) {
                     Ok(()) => Delivery::Sent,
                     // The projection of a value just embedded never refuses it.
@@ -87,8 +77,9 @@ impl<A: 'static, P: ChannelPlane + 'static> Port<A, P> {
 }
 
 impl<A, P: ChannelPlane> Port<A, P> {
-    /// Offer `cmd` to the Logic thread, without waiting.
-    pub fn try_send(&self, cmd: LogicCommand<A, P>) -> Delivery<A, P> {
+    /// Offer `cmd` to the Logic thread, without waiting. The outbox calls it,
+    /// and nothing outside this crate can.
+    pub(crate) fn try_send(&self, cmd: LogicCommand<A, P>) -> Delivery<A, P> {
         (self.send)(cmd)
     }
 }

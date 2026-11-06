@@ -25,9 +25,8 @@
 // every geometry is read from it (`CANVAS-078`).
 // ============================================================================
 
-use ambre_bus::Byte;
 use ambre_core::index::{Pos, Span};
-use ambre_core::{Doc, Px, Scale, View};
+use ambre_core::{Byte, Doc, Px, Scale, View};
 use ambre_draw::{
     Affine, Alignment, BezPath, BoundingBox, Brush, Color, DrawSurface, FontContext, FontFamily,
     FontFamilyName, FontStyle, FontWeight, LayoutContext, PlainEditor, Point, PositionedLayoutItem,
@@ -35,7 +34,7 @@ use ambre_draw::{
 };
 use parley::{Affinity, AlignmentOptions, Cursor, Layout, Selection};
 
-use crate::registered_family_name;
+use crate::registered_face;
 use crate::text_cache::{SpanShape, TextLength, break_indented, push_shape};
 
 /// Caret bar width in screen pixels.
@@ -130,7 +129,7 @@ pub enum EditIntent {
 /// The pinned visual style of an edit, captured by the host at open and re-applied
 /// to the editor's default style each frame. The in-edit body then matches the
 /// committed look. `base_size` is in world units (zoom is applied per paint);
-/// `family` resolves to a face through [`registered_family_name`].
+/// `family` resolves to a face through [`registered_face`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextEditorStyle {
     pub weight: ambre_core::Bounded<ambre_core::FontWeight>,
@@ -609,7 +608,7 @@ impl TextEditor {
     /// size. The family resolves to the registered face the static render
     /// uses, so the in-edit body matches its committed look.
     fn base_styles(&self, zoom: Scale<Doc, View>) -> [StyleProperty<'static, Brush>; 5] {
-        let face = registered_family_name(Some(&self.style.family));
+        let face = registered_face(Some(&self.style.family)).face_name();
         [
             StyleProperty::FontSize(self.style.base_size.get() * zoom.get() as f32),
             StyleProperty::FontWeight(FontWeight::new(f32::from(self.style.weight.get()))),

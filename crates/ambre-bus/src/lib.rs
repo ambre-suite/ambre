@@ -53,16 +53,16 @@ pub use app::murmure::{
 // The grid coordinates Trame and Prose share.
 pub use app::grid::{CellPos, CellRect, Col, MergeSpan, Row};
 pub use command::SyncCommand;
-pub use content::{Embed, Mutation};
+pub use content::{Embed, Mutation, Traffic};
 pub use event::{
     ApiRequest, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta, SnapshotPurpose,
     SnapshotVerdict, Successor,
 };
 pub use logic::{LogicCommand, StoreRoom};
-pub use lossy::{LossyOutcome, send_lossy};
+pub use lossy::{LossyOutcome, is_lossy_class};
 pub use outbox::{Load, Outbox, SendOutcome};
 pub use plane::{ChannelPlane, NoChannels, PlaneOf};
-pub use port::{Delivery, Inbox, Port};
+pub use port::{Inbox, Port};
 pub use rest::{
     Confidential, DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, Plaintext,
     RecoveryWords, Request, RestCommand, RestEvent, RowPlace, SealedRow, UserInfo, next_request,

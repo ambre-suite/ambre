@@ -61,7 +61,6 @@ dependencies = [
 name = "ambre-canvas"
 version = "0.1.0"
 dependencies = [
- "ambre-bus",
  "ambre-commands",
  "ambre-core",
  "ambre-draw",
@@ -271,6 +270,7 @@ dependencies = [
  "ambre-core",
  "ambre-crdt",
  "ambre-draw",
+ "blake2",
  "csv",
  "icondata",
  "js-sys",

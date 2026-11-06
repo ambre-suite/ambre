@@ -77,7 +77,7 @@ pub mod request_registry;
 // -- Convenience re-exports --------------------------------------------------
 pub use ambre_draw::wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode};
 pub use anchor::AnchorPublisher;
-pub use busy::BusyPublisher;
+pub use busy::{BusyLevel, BusyPublisher};
 pub use density::SurfaceSize;
 #[cfg(target_arch = "wasm32")]
 pub use density::{DensityWatch, density_query, size_backing_store};
@@ -97,7 +97,7 @@ pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, WgpuSurface}
 pub use request_registry::{RequestRegistry, RequestTag};
 pub use space::{Parley, WholeParley};
 pub use text_cache::{
-    Look, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_family_name,
+    Look, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_face,
 };
 pub use text_input::{Composition, ContentKind, Embedding, TYPING_ATTR, TextInput, Typing};
 pub use theme::{Palette, Theme, ThemeControl};

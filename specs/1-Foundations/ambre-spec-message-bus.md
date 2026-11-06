@@ -29,6 +29,7 @@ prefix is `BUS`.
 | `BUS-032` | `INV` | An application's content commands and events MUST be declared in that application's crate, never in the crate that carries the envelopes. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-018` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a command or event enum of `ambre-bus` other than the four envelopes and the service family, above its tests; type-level -- `LogicCommand` and `UiEvent` take the document command and event as a parameter and the channel types through a `ChannelPlane`, so the bus names none of an application's | none | verified |
 | `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | exhaustive-match -- `LogicCommand::Channel` carries the `Murmure` plane's `MurmureCommand`, a closed enum matched in `ambre_logic::channels::handle_channel_command`, so a new command does not build until its arm is written; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` | none | verified |
 | `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | type-level -- `LogicCommand::Channel` and `UiEvent::Channel` hold the typed `MurmureCommand` and `MurmureEvent` of the `Murmure` plane, and no `SyncCommand` or `LogicEvent` variant names a channel message: a channel delta is the `SendUpdate` of its document | none | verified |
+| `BUS-033` | `INV` | A view MUST write to the Logic thread through its outbox alone. | this spec section 2; `BUS-011` | type-level -- `Port` keeps `try_send` private to `ambre-bus` and implements no `Clone`, so a view moves its one port into one `Outbox`. The outbox's `send` and `send_lossy` are the two sends a view can name, and no wiring hands a view a queue sender | none | verified |
 
 ### 1.2 The interface sends a command
 
@@ -39,12 +40,13 @@ is what a full queue means.
 |---|---|---|---|---|---|---|
 | `BUS-012` | `POST` | A lossy command MUST be coalesced to one send per frame. | this spec section 2 | `ambre_toile::ui::view::view_tests::two_camera_moves_in_one_frame_send_one_viewport_request`; `ambre_trame::ui::view::tests::two_scrolls_in_one_frame_flush_as_one_request` | none | verified |
 | `BUS-017` | `POST` | A stale answer to a lossy request MUST be dropped by its version. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_stale_viewport_answer_is_dropped_by_its_version`; `ambre_trame::ui::grid::tests::group2::a_stale_viewport_answer_is_dropped_by_its_version` | none | verified |
-| `BUS-011` | `POST` | A lossless command MUST NOT be dropped. | this spec section 2 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::a_flush_after_the_reader_drains_sends_the_held_command`; `::a_held_queue_keeps_the_order_the_user_typed`; `::a_send_while_busy_never_overtakes_a_held_command` | none | verified |
+| `BUS-011` | `POST` | A lossless command MUST NOT be dropped. | this spec section 2 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::a_flush_after_the_reader_drains_sends_the_held_command`; `::a_held_queue_keeps_the_order_the_user_typed`; `::a_send_while_busy_never_overtakes_a_held_command`; `ambre_murmure::view::tests::a_full_channel_holds_a_channel_command_and_the_page_takes_no_input` -- a channel command, through the outbox the two regions of a page share; type-level -- a view sends through its outbox alone (`BUS-033`) | none | verified |
 | `BUS-016` | `POST` | A full command queue MUST reach the user as a busy signal. | this spec section 2 | `ambre_canvas::busy::tests::only_the_first_frame_of_an_episode_reports_a_change` -- the publisher reports the edge once per episode, so the shell raises one notice and clears it once; `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it` -- the level the publisher carries; `ambre_belt::busy::tests::a_full_queue_reaches_the_user_as_a_busy_notice` -- browser tier: the Logic worker paused, a flood of edits raises the notice, and its resume clears it. The same flood with the worker running raises none | none | verified |
-| `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | `ambre_trame::ui::view::view_tests::a_busy_grid_takes_no_input`; `ambre_toile::ui::view::view_tests::a_busy_board_takes_no_input`; `ambre_app::host::prose::tests::a_busy_page_takes_no_input` | none | verified |
-| `BUS-024` | `POST` | A lossy command the queue dropped MUST be offered again on a later frame. | this spec section 2; derived | `ambre_trame::ui::view::tests::a_dropped_request_is_re_offered_not_doubled` -- the slot Trame re-offers from; `ambre_trame::ui::view::view_tests::a_dropped_scroll_request_is_offered_again`; `ambre_toile::ui::view::view_tests::a_dropped_viewport_request_is_offered_again`; `ambre_toile::ui::view::view_tests::a_dropped_media_request_is_offered_again` | none | verified |
+| `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | `ambre_trame::ui::view::view_tests::a_busy_grid_takes_no_input`; `ambre_toile::ui::view::view_tests::a_busy_board_takes_no_input`; `ambre_app::host::prose::tests::a_busy_page_takes_no_input`; `ambre_murmure::view::tests::a_full_channel_holds_a_channel_command_and_the_page_takes_no_input` | none | verified |
+| `BUS-024` | `POST` | A lossy command the queue dropped MUST be offered again on a later frame. | this spec section 2; derived | `ambre_trame::ui::view::tests::a_dropped_request_is_re_offered_not_doubled` -- the slot Trame re-offers from; `ambre_trame::ui::view::view_tests::a_dropped_scroll_request_is_offered_again`; `ambre_toile::ui::view::view_tests::a_dropped_viewport_request_is_offered_again`; `ambre_toile::ui::view::view_tests::a_dropped_media_request_is_offered_again`; `ambre_murmure::view::tests::a_full_channel_drops_a_typing_beat_and_holds_nothing` -- the beat the next key offers again | none | verified |
 | `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | `ambre_trame::ui::view::view_tests::a_refused_clear_leaves_the_cell`; `ambre_trame::ui::view::view_tests::a_refused_resize_leaves_the_width`; `ambre_trame::ui::view::view_tests::a_refused_paste_leaves_the_cut_source` | none | verified |
-| `BUS-023` | `FRAME` | A command that changes the document MUST NOT travel on the lossy class. | this spec section 2; derived | `ambre_bus::lossy::tests::a_command_that_changes_the_document_never_reaches_the_channel` -- one insert, one move and one resize, and the queue stays empty; `::a_command_of_another_plane_is_refused_with_the_mutations`; `::an_open_channel_takes_a_request_that_changes_nothing` -- the other side of the gate | none | verified |
+| `BUS-023` | `FRAME` | A command that changes the document MUST NOT travel on the lossy class. | this spec section 2; derived | `ambre_bus::lossy::tests::a_command_that_changes_the_document_never_reaches_the_channel` -- one insert, one move and one resize, and the queue stays empty; `::a_command_of_another_plane_is_refused_with_the_mutations`; `::a_mutation_named_lossy_is_still_refused`; `::an_open_channel_takes_a_request_that_changes_nothing` -- the other side of the gate | none | verified |
+| `BUS-034` | `FRAME` | A command its application does not name lossy MUST NOT travel on the lossy class. | this spec section 2; derived | `ambre_bus::lossy::tests::a_command_that_changes_nothing_but_is_not_named_lossy_is_refused` -- a selection changes nothing and still stays off the class; `::a_channel_command_takes_the_class_its_application_names`; `ambre_prose::ui::tests::a_lossless_command_never_leaves_as_a_request`; exhaustive-match -- `Mutation::traffic` has no default body, and `MurmureCommand` answers it with a `match` that names every command | none | verified |
 
 ### 1.3 Logic routes a content command
 
@@ -83,7 +85,7 @@ is what a full queue means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 32 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
+* **Verification.** 34 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
   viewer's edit, a child's role. They also drive a service round trip, a late response, the lossy
   gate and a full queue. Native views drive the input gate, the re-offer and the refused commit. A
   gate refuses a handler that sends on a queue, and the browser tier reads the busy notice.
@@ -156,7 +158,8 @@ application.
 
 A view holds a `Port` and an `Inbox` typed by its own vocabulary. The launcher builds them over the
 shared queues: `Embed` wraps a view's command into the sum, and unwraps its events. So the Sync
-worker builds against no application's vocabulary (`ARCH-070`).
+worker builds against no application's vocabulary (`ARCH-070`). A `Port` has no send outside the
+bus and no `Clone`: the view moves it into its one outbox (`BUS-033`).
 
 **Murmure's content rides a channel plane.** Its commands and events are addressed to a channel or
 a space, never to a document (`BUS-027`), so they keep variants of their own. The envelopes take
@@ -180,11 +183,24 @@ means.
 | lossy | a viewport request, a hit test | drop it: the next frame offers the request again, and a stale answer is dropped by its version |
 | lossless | an edit, a selection, a paste, an undo group boundary | never drop it: surface a busy signal and stop accepting input |
 
-Each class is one function, and the function decides what a full queue does. `Outbox::send` holds
-a lossless command for a later frame (`BUS-011`). `send_lossy` drops a lossy one, and refuses a
-command that changes the document, because the lossy class carries no intent the user gave
-(`BUS-023`). The caller reads the outcome: it writes nothing into the view for a command that did
-not leave (`BUS-018`), and re-offers a dropped request (`BUS-024`).
+Each class is one send of the view's outbox, and the send decides what a full queue does. The
+outbox is the view's one way to write (`BUS-033`). `Outbox::send` holds a lossless command for a
+later frame (`BUS-011`). `Outbox::send_lossy` drops a lossy one. It refuses any other command,
+because the lossy class carries no intent the user gave (`BUS-023`, `BUS-034`). The caller reads
+the outcome: it writes nothing into the view for a command that did not leave (`BUS-018`), and
+re-offers a dropped request (`BUS-024`).
+
+**The application names its lossy commands.** `Mutation::traffic` answers lossy or lossless for each
+command, and has no default. A command that changes nothing is not lossy for that reason alone: a
+selection or a read mark carries intent. A request the view records as asked before it leaves is
+lossless too, since nothing would offer it again.
+
+| Application | Lossy commands |
+|---|---|
+| Trame | the viewport fetch, the selection aggregates |
+| Toile | the viewport fetch, the media fetch, the presence beat |
+| Prose | the marks query, the word count |
+| Murmure | the tick, the typing beat |
 
 **The Sync events are lossless too.** A delta or a service answer arrives through the worker's
 `postMessage` handler on the Main thread, which may not wait for room (`ambre-spec-architecture.md`,
@@ -245,14 +261,10 @@ The bus has no control of its own. What a user meets is what it does under load.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Nothing refuses a lossless send routed around the outbox.** Each view still holds a raw
-  `ambre_bus::conduit::Sender`, which the lossy class and the session commands need. A call site
-  added tomorrow can `try_send` a lossless command on it, and drop it silently. The
-  outbox holds `BUS-011` for every caller that goes through it, and no type refuses the caller that
-  does not.
-* **The lossy gate refuses a mutation, and nothing more.** Presence and view state are not mutating,
-  so a selection offered to `send_lossy` passes the gate and a full queue drops it. No call site
-  does so today, and the class table is what says it must not (`BUS-023`).
+* **The shell and the launcher still send on the raw queue.** A command the chrome resolves, a
+  route change and a service request leave through a `conduit::Sender`, not a view's outbox. A full
+  queue drops such a command with a warning, so `BUS-011` holds for the views alone. No outbox
+  serves a sender with no frame of its own to flush it.
 * **The hold queue has a bound, and past it the command is refused.** Sixty-four commands, after
   which the outbox reports a refusal rather than growing without limit. The input gate closes on the
   first held command, so reaching the bound takes a saturation no test has produced.

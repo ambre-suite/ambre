@@ -10,7 +10,7 @@
 // Trame's cell formatting share the very same control (mirrors `ColorPopover`).
 // The control is value-agnostic: it takes the current family as a signal (`None`
 // = the app's default) and reports picks through `on_pick`. The caller owns what
-// a family means to its renderer (`registered_family_name` in `ambre-canvas`
+// a family means to its renderer (`registered_face` in `ambre-canvas`
 // maps the families to registered faces).
 // ============================================================================
 
