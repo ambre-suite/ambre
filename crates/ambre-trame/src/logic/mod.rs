@@ -206,10 +206,23 @@ pub struct TrameState {
     /// any sheet, or one shown under a second key (`TRAME-279`). A structural
     /// edit then reseeds, since no dependency names such a cell (`TRAME-280`).
     engine_skipped: bool,
+    /// The stored formulas that place on no cell, per sheet. Each one sits
+    /// under an element no line carries any more, as an undo of an insert
+    /// leaves one. No reseed feeds them, so the engine names none of them, and the
+    /// narrowed walk of a structural edit reads them here (`TRAME-280`).
+    unplaced: HashMap<Id<Sheet>, HashSet<crate::model::CellKey>>,
     /// The path a structural edit takes. Only the test of `TRAME-280` sets the
     /// reference model, which walks every formula and reseeds.
     #[cfg(test)]
     structural_path: structural::StructuralPath,
+    /// How many full engine reseeds ran, for the tests that hold a remote
+    /// batch to its carried path (`TRAME-282`).
+    #[cfg(test)]
+    reseeds: usize,
+    /// The path a remote batch takes. Only the test of `TRAME-282` sets the
+    /// reference model, which reseeds after every batch.
+    #[cfg(test)]
+    remote_path: remote::RemotePath,
     /// CRDT sheet id per local engine index (`sheets_by_idx[i]` has index `i`).
     /// The **active sheet is always index 0**, so single-sheet code paths keep
     /// using [`CellRef::new`] (sheet 0); other sheets take 1.. in sorted-id
@@ -284,6 +297,11 @@ pub struct TrameState {
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
     entry_end: Option<ambre_core::OpCounter>,
+    /// What the imports since the last remote batch wrote, noted by a
+    /// subscription to [`Self::doc`] (`TRAME-282`).
+    imported: remote::ImportSink,
+    /// Held so the subscription lives as long as the state.
+    _imports: loro::Subscription,
 }
 
 /// The workbook scaffolding, which every peer writes on open, before any edit.
@@ -398,6 +416,7 @@ impl TrameState {
         // The registry entry is bookkeeping, not an edit: an undo never
         // retracts it (`AUTHOR-009`).
         undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
+        let (imported, imports) = remote::watch(&doc);
         let mut state = Self {
             active: CellPos::ORIGIN,
             selection: TrackedSelection {
@@ -420,8 +439,13 @@ impl TrameState {
             hidden_rows: HashSet::new(),
             masked_cells: HashSet::new(),
             engine_skipped: false,
+            unplaced: HashMap::new(),
             #[cfg(test)]
             structural_path: structural::StructuralPath::Carry,
+            #[cfg(test)]
+            reseeds: 0,
+            #[cfg(test)]
+            remote_path: remote::RemotePath::Carry,
             sheets_by_idx: Vec::new(),
             engine_sheet_by_name: HashMap::new(),
             engine_sheet_by_id: HashMap::new(),
@@ -435,6 +459,8 @@ impl TrameState {
             sheet_list_sent: false,
             undecodable: std::cell::Cell::new(false),
             entry_end: None,
+            imported,
+            _imports: imports,
         };
         // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
         state.rebuild_sheet_maps();
@@ -566,6 +592,7 @@ mod merges;
 mod metrics;
 mod number_format;
 mod packing;
+mod remote;
 /// Container naming, the packed style layout, and the workbook's persisted
 /// schema version (`ambre-spec-schema-version.md`). Public for the version half
 /// alone -- the container names stay `pub(crate)`.
@@ -595,6 +622,12 @@ mod convergence_tests;
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod structural_tests;
+
+// Host-only, on `proptest` like the structural tests: the carried remote apply
+// against a full rebuild (`TRAME-282`).
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod remote_tests;
 
 /// The schema shape belt (`SCHEMA-018`): the key set, the value types and the
 /// `postcard` layouts a build writes, frozen per `SCHEMA_VERSION`. Test-only,
