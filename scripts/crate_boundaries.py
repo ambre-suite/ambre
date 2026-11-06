@@ -109,6 +109,11 @@ starts the Logic runtime from one line. The frame loop hands the route-free
 relay to `drive_frame` as its first step, and that relay drains the Logic to
 Sync queue.
 
+**The relay decides on the host** (`ARCH-072`). The per-frame relay asks
+`relay.rs` what each event calls for, and applies the answer. So no line of
+that file above its tests names a browser API, the interface toolkit or a
+signal, and its decisions stay testable on the host.
+
 **One kinetic model** (`KINETIC-012`). Pan, flick, wheel momentum and edge
 scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
 a friction or a velocity of its own. So no Rust line outside that file names
@@ -124,6 +129,15 @@ names in `logic/schema.rs` spells each name once, on its declaration line.
 **One composed name** (`CHROME-080`). The placeholder of an unnamed document
 is spelled in `composed.rs` alone, whose type converts to no `String`. So no
 Rust line outside that file spells it above its tests.
+
+**The launcher writes through one outbox** (`BUS-035`). A sender of the
+launcher that owns no frame shares one outbox, flushed by the per-frame
+relay. So the queue's raw end moves into that outbox on the line after its
+creation, and no other launcher line names it. Above its tests, no file of
+`ambre-app` but `outbox.rs` names a raw sender of that queue or builds a port
+over one. Nor does it build a lane, since a second lane on that queue holds
+apart from the first (`BUS-037`). The relay in `lib.rs` flushes that outbox
+and tells the user of a refusal (`BUS-036`).
 
 **An identifier typed on the bus** (`BUS-029`). Two identifiers carried as
 two strings swap without a compile error. So no field of `ambre-bus` named
@@ -455,6 +469,13 @@ FRAME_RELAY = re.compile(
     r"drive_frame\(\s*&\w+,\s*(?:&mut pre_frame\b|\|\|\s*\(pre_frame\.borrow_mut\(\)\)\(\))"
 )
 SYNC_DRAIN = re.compile(r"\.drain\(&logic_to_sync_rx\b")
+# The relay's decisions, and what would tie them to the browser: a browser
+# API, the interface toolkit, or a signal of it (`ARCH-072`).
+RELAY_DECISIONS = "crates/ambre-app/src/relay.rs"
+BROWSER_BOUND = re.compile(
+    r"\b(?:web_sys|js_sys|wasm_bindgen\w*|leptos\w*|gloo\w*)\b"
+    r"|\b(?:Rw|Read|Write|Arc)?Signal\b|\bStoredValue\b"
+)
 APP_MESSAGE = re.compile(
     r"\bambre_bus::app\b|\b(?:Trame|Toile|Prose|Murmure|App)(?:Command|Event)\b|\bLogicCommand\b|\bUiEvent\b"
 )
@@ -696,6 +717,22 @@ CARGO_CONFIG = ".cargo/config.toml"
 BUILD_STD = re.compile(r"build-std\s*=\s*\[([^\]]*)\]")
 EXIT_WRITERS = ("crates/ambre-logic/src", "crates/*/src/logic", "crates/ambre-sync/src")
 DESTRUCTOR = re.compile(r"\bimpl\b[^{]*\bDrop\s+for\b")
+
+# The launcher's one writer on the UI to Logic queue, and what a second
+# writer would need: a raw sender of the queue, or a port built over one
+# (`BUS-035`).
+SHELL_OUTBOX = "crates/ambre-app/src/outbox.rs"
+LAUNCHER_QUEUE = re.compile(
+    r"\bSender<\s*LogicCommand\b|\bPort::(?:embedded|direct)\b|\bLane::(?:new|with_capacity)\b"
+)
+# The relay's two calls on that outbox: the flush of what it holds, and the
+# refusal it tells the user of. A queue's own flush through a borrow is not
+# the outbox's, so the receiver must be a bare name.
+OUTBOX_FLUSH = re.compile(r"(?<![\w).])[a-z_][a-z0-9_]*\.flush\(\)")
+OUTBOX_REFUSAL = re.compile(r"\.take_refusal\(\)")
+UI_QUEUE_BINDING = re.compile(
+    r"let\s*\(\s*(\w+)\s*,\s*\w+\s*\)\s*=\s*conduit::to_worker::<LogicCommand>"
+)
 
 # The engines' command handlers, found by layout so an engine added later is read
 # too, and the names a handler that sends on a queue would need.
@@ -1530,6 +1567,20 @@ def check_engine_and_relay(errors: list[str]) -> int:
     return len(files)
 
 
+def check_relay_decisions(errors: list[str]) -> int:
+    """`ARCH-072`: the relay's decisions name no browser API, no toolkit and
+    no signal, so the host builds them for their tests."""
+    path = ROOT / RELAY_DECISIONS
+    if not path.exists():
+        errors.append(f"{RELAY_DECISIONS}: gone from the tree, so the relay's decisions are unread")
+        return 0
+    for number, line in above_tests(path):
+        found = BROWSER_BOUND.search(line)
+        if found:
+            errors.append(f"{RELAY_DECISIONS}:{number}: the relay's decisions name the browser: `{found.group(0)}`")
+    return 1
+
+
 def check_failure_latches(errors: list[str]) -> int:
     """`ARCH-014`: each thread failure latches the page without a queue. A panic
     latches from the hook, and a failed Sync worker from its error event."""
@@ -1579,6 +1630,48 @@ def check_handlers(errors: list[str]) -> int:
             found = QUEUE_SEND.search(line)
             if found:
                 errors.append(f"{rel}:{number}: a command handler sends on a queue: `{found.group(0)}`")
+    return len(files)
+
+
+def check_launcher_outbox(errors: list[str]) -> int:
+    """`BUS-035`: the launcher writes to the Logic thread through one outbox.
+
+    The raw end of the UI to Logic queue moves into the outbox where it is
+    made, so the compiler refuses a later use of it. No other launcher file
+    names a raw sender of that queue, builds a port over one, or builds a
+    lane (`BUS-037`). The relay flushes the outbox, and tells the user of a
+    refusal (`BUS-036`)."""
+    if not (ROOT / SHELL_OUTBOX).exists():
+        errors.append(f"{SHELL_OUTBOX}: gone from the tree, so the launcher outbox reads nothing")
+        return 0
+    files = sources((LAUNCHER,))
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == SHELL_OUTBOX:
+            continue
+        lines = above_tests(path)
+        for number, line in lines:
+            found = LAUNCHER_QUEUE.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: the launcher writes past its outbox: `{found.group(0)}`")
+        if rel != APP_LIB:
+            continue
+        binding = UI_QUEUE_BINDING.search(" ".join(line for _, line in lines))
+        if not binding:
+            errors.append(f"{rel}: creates no UI to Logic queue, so the outbox rule reads nothing")
+            continue
+        name = re.compile(rf"\b{re.escape(binding.group(1))}\b")
+        moved = re.compile(rf"ShellOutbox::new\(\s*{re.escape(binding.group(1))}\s*\)")
+        uses = [(number, line) for number, line in lines if name.search(line)]
+        for number, line in uses[1:]:
+            if not moved.search(line):
+                errors.append(f"{rel}:{number}: the raw UI to Logic sender is used past its outbox")
+        if not any(moved.search(line) for _, line in uses):
+            errors.append(f"{rel}: the raw UI to Logic sender never moves into the outbox")
+        if not any(OUTBOX_FLUSH.search(line) for _, line in lines):
+            errors.append(f"{rel}: the relay does not flush the launcher's outbox")
+        if not any(OUTBOX_REFUSAL.search(line) for _, line in lines):
+            errors.append(f"{rel}: the relay tells the user of no refusal of the launcher's outbox")
     return len(files)
 
 
@@ -2211,7 +2304,9 @@ def main() -> int:
     renderer_reach = check_renderer_reach(errors)
     worker_messages = check_worker_messages(errors)
     engine = check_engine_and_relay(errors)
+    decisions = check_relay_decisions(errors)
     handlers = check_handlers(errors)
+    outboxes = check_launcher_outbox(errors)
     latches = check_failure_latches(errors)
     exits = check_exit_writes(errors)
     walks = check_walks(errors)
@@ -2256,7 +2351,9 @@ def main() -> int:
         f"{renderer_reach} manifests read for the renderer reaching the thread protocol, "
         f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
         f"{engine} launcher files read for a second engine or a relay out of the frame, "
+        f"{decisions} relay decision file read for a browser API, "
         f"{handlers} engine files read for a handler that sends on a queue, "
+        f"{outboxes} launcher files read for a write past its outbox, "
         f"{latches} launcher files read for a failure that waits on a queue, "
         f"{exits} build and thread files read for a write on the way out, "
         f"{walks} walks read for a screen module or screen state"
@@ -2297,8 +2394,10 @@ def main() -> int:
             "nor the worker reaches the rendering, the renderer reaches no thread "
             "protocol, and the worker redeclares no "
             "wire type, allocates no request id and names no app message. The launcher "
-            "starts one engine, and every frame relays before it draws. A command "
-            "handler returns an outcome and names no queue. A panic and a failed "
+            "starts one engine, and every frame relays before it draws. The relay "
+            "decides in a module that names no browser API. A command "
+            "handler returns an outcome and names no queue. The launcher writes "
+            "to the Logic thread through its one outbox. A panic and a failed "
             "worker each latch the fatal screen without a queue, and a failing thread "
             "writes nothing on its way out. A walk reaches no screen state.",
             file=sys.stderr,

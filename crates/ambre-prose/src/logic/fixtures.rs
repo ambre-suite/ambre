@@ -19,7 +19,7 @@ use ambre_bus::app::grid::{CellPos, Col, Row};
 use ambre_core::id::{Footnote, Id, User};
 use ambre_core::{
     Char, Count, DocBlocks, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Generator,
-    ShapeBody, fixture_peer_count, seeded_document_id,
+    ShapeBody, fixture_peer_count, seeded_document_id, seeded_id,
 };
 use loro::{LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -410,9 +410,7 @@ fn root_after(state: &ProseState, after: TreeID) -> Result<TreeID, FixtureError>
 fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> {
     let mut state =
         ProseState::with_peer(seed.peer()).ok_or(FixtureError::Missing("no document"))?;
-    state.set_user_id(Id::<User>::from_uuid(
-        seeded_document_id(AUTHOR_SEED).uuid(),
-    ));
+    state.set_user_id(seeded_id::<User>(AUTHOR_SEED));
     state.set_display_name(
         ambre_core::Validated::<ambre_core::DisplayName>::parse("Fixture Author")
             .map_err(FixtureError::Name)?,

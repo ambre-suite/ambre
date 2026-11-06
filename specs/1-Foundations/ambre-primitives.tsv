@@ -17,16 +17,13 @@ ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::render_fatal(mes
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::sync_children() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children() | ret | bool	generic	a fact, selects no mode: whether the board must recomposite
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children(pump) | param | impl FnMut(&mut C)->bool	generic	a fact, selects no mode: whether the pumped child changed on its own
-ambre-app | src/host/frame.rs | crate::host::frame | send_faces() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::drags_text() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text(text) | param | String	free-text	dropped text
 ambre-app | src/host/mod.rs | crate::host | AppView::takes_text() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(published) | param | Rc<std::cell::Cell<bool>>	generic	flag cell
-ambre-app | src/host/mod.rs | crate::host | base64_decode() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_decode(s) | param | &str	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_encode() | ret | String	generic	generic codec/parser/bytes API
-ambre-app | src/host/mod.rs | crate::host | base64_encode(bytes) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | desktop() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | desktop_in() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | is_other_editable() | ret | bool	generic	predicate result
@@ -50,7 +47,6 @@ ambre-app | src/landing.rs | crate::landing | SignInMode::from_dev_flag(dev) | p
 ambre-app | src/landing.rs | crate::landing | SignInMode::is_dev() | ret | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/landing.rs | crate::landing | open_document(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/landing.rs | crate::landing | rel_time() | ret | String	free-text	relative time label
-ambre-app | src/lib.rs | crate | CHILD_BACKLOG_LIMIT | const | usize	math	backlog count
 ambre-app | src/lib.rs | crate | ChromeStatus.hydrating | field | bool	generic	a fact that selects no mode: whether the first sync is still landing; the link itself is LinkState, and no caller writes it as a literal
 ambre-app | src/lib.rs | crate | ChromeStatus::dot_class() | ret | &'static str	generic	the codec of a struct that is no newtype: the CSS class of the status dot, derived from both fields, which the stylesheet matches
 ambre-app | src/lib.rs | crate | ChromeStatus::label() | ret | &'static str	free-text	label
@@ -59,19 +55,24 @@ ambre-app | src/lib.rs | crate | Wiring.filter_values | field | RwSignal<Vec<Str
 ambre-app | src/lib.rs | crate | Wiring.formula_ref | field | RwSignal<String>	free-text	formula bar label
 ambre-app | src/lib.rs | crate | Wiring.formula_text | field | RwSignal<String>	free-text	formula bar text
 ambre-app | src/lib.rs | crate | Wiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
-ambre-app | src/lib.rs | crate | offer_to_child() | ret | bool	generic	predicate result
 ambre-app | src/local_store.rs | crate::local_store | Inner.frames | field | Cell<u32>	math	frame count
 ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32	math	frame count
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
+ambre-app | src/outbox.rs | crate::outbox | ShellOutbox::is_busy() | ret | bool	generic	predicate result
+ambre-app | src/outbox.rs | crate::outbox | ShellOutbox::take_refusal() | ret | bool	generic	predicate result, whether a refusal is still untold
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
-ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	local	the address of the Sync worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
+ambre-app | src/relay.rs | crate::relay | CHILD_BACKLOG_LIMIT | const | usize	math	backlog count
+ambre-app | src/relay.rs | crate::relay | ChildFanOut::offer() | ret | bool	generic	predicate result
+ambre-app | src/relay.rs | crate::relay | sync_warning_message() | ret | &'static str	free-text	message
+ambre-app | src/relay.rs | crate::relay | Notice.text | field | String	free-text	the words of a notice the user reads
+ambre-app | src/relay.rs | crate::relay | Notice::new(text) | param | impl Into<String>	free-text	the words of a notice the user reads
 ambre-app | src/route.rs | crate::route | doc_path() | ret | String	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | needs_reload() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | parse(path) | param | &str	generic	generic codec/parser/bytes API
@@ -167,8 +168,6 @@ ambre-prose | src/message/mark.rs | crate::message::mark | canonical_value(raw) 
 ambre-prose | src/message/mark.rs | crate::message::mark | parse_color(raw) | param | &str	generic	the raw text of a colour mark value, the input of its parse
 ambre-prose | src/message/mark.rs | crate::message::mark | parse_font_size(raw) | param | &str	generic	the raw text of a size mark value, the input of its parse
 ambre-prose | src/message/mark.rs | crate::message::mark | read_font_size(raw) | param | &str	generic	the raw text of a size mark value, the input of its parse
-ambre-prose | src/message/mark.rs | crate::message::mark | spell() | ret | String	generic	the canonical spelling of a number, wrapped into a MarkValue by its callers
-ambre-prose | src/message/mark.rs | crate::message::mark | spell(value) | param | f32	math	a typed size's points, or the number a stored or command string reads as
 ambre-prose | src/message/mark.rs | crate::message::mark | validate_value(raw) | param | Option<&str>	generic	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-toile | src/message/mod.rs | crate::message | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-toile | src/message/mod.rs | crate::message | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
@@ -327,7 +326,7 @@ ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::SeqKind>::NAME 
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | is_lossy_class() | ret | bool	generic	predicate
 ambre-bus | src/outbox.rs | crate::outbox | HOLD_CAPACITY | const | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/outbox.rs | crate::outbox | Outbox.capacity | field | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Held.capacity | field | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
@@ -346,6 +345,7 @@ ambre-bus | src/ui.rs | crate::ui | UiEvent::FatalError.message | field | String
 ambre-bus | src/ui.rs | crate::ui | UiEvent::SyncWarning.message | field | String	free-text	user-facing or log message
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::is_busy() | ret | bool	generic	predicate result
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::publish() | ret | bool	generic	predicate result
+ambre-canvas | src/busy.rs | crate::busy | BusyLevel::from_busy(busy) | param | bool	newtype-inner	fieldless enum, its constructor from the outbox's busy predicate
 ambre-canvas | src/density.rs | crate::density | density_query() | ret | String	free-text	a CSS media query that the browser alone parses and no code matches back, free text as a SQL query is
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Compose.0 | field | String	free-text	user text or error message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::ComposeEnd.0 | field | String	free-text	user text or error message
@@ -507,8 +507,6 @@ ambre-canvas | src/render/surface.rs | crate::render::surface | screen_vertex() 
 ambre-canvas | src/render/surface.rs | crate::render::surface | split_linear() | ret | Option<(f64,Affine)>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | stroke_mesh() | ret | Option<Mesh>	foreign-api	the lyon tessellation buffers: vertex positions and indices, which the renderer copies to the GPU as they are
 ambre-canvas | src/render/surface.rs | crate::render::surface | stroke_mesh(tolerance) | param | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/request_registry.rs | crate::request_registry | RequestRegistry<T,Id>::pending_count() | ret | usize	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/request_registry.rs | crate::request_registry | RequestRegistry<T,Id>::try_recv() | ret | bool	generic	predicate result
 ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.font_size_x100 | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.max_width_x10 | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.text | field | Box<str>	free-text	text, label or message
@@ -858,6 +856,7 @@ ambre-core | src/id.rs | crate::id | Id<E>::from_text(text) | param | String	new
 ambre-core | src/id.rs | crate::id | Id<E>::from_uuid(uuid) | param | Uuid	newtype-inner	the Uuid an identifier wraps
 ambre-core | src/id.rs | crate::id | Id<E>::parse_str(s) | param | &str	newtype-inner	the identifier's own UUID text, read back
 ambre-core | src/id.rs | crate::id | Id<E>::to_hyphenated() | ret | String	newtype-inner	the identifier's own hyphenated UUID text
+ambre-core | src/id.rs | crate::id | Id<E>::to_simple() | ret | String	newtype-inner	the identifier's own UUID text in 32 hex digits, without hyphens
 ambre-core | src/id.rs | crate::id | Id<E>::uuid() | ret | Uuid	newtype-inner	the Uuid an identifier holds, its one way out
 ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	generic	length of the [u8;N] KeyId array, read only as an array length in KeyId's own signatures; a crate that frames a key id uses KeyId::SIZE and KeyId::split_from
 ambre-core | src/link.rs | crate::link | <LinkUrl as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of LinkUrl copies into its text
@@ -1024,8 +1023,6 @@ ambre-crypto | src/random.rs | crate::random | fill(buf) | param | &mut[u8]	gene
 ambre-crypto | src/signature.rs | crate::signature | message() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | sign_message(message) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | verify_message(message) | param | &[u8]	generic	generic byte/text API or codec
 ambre-draw | src/consumed.rs | crate::consumed | Consumed::is_yes() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/consumed.rs | crate::consumed | Consumed::yes_if(taken) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	generic	predicate or handled-flag result
@@ -1119,7 +1116,6 @@ ambre-logic | src/lib.rs | crate::logged | <LoggedDeltas as ambre_core::CountKin
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_at() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
-ambre-logic | src/persistence.rs | crate::persistence | bytes_to_js(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | session_of(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | DbName.0 | field | &'a str	newtype-inner	DbName newtype
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey.0 | field | String	newtype-inner	IdbKey newtype
@@ -3072,6 +3068,7 @@ ambre-core | src/envelope.rs | crate::envelope | Aad.0 | field | Vec<u8>	newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::as_bytes() | ret | &[u8]	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u8>	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	newtype-inner	Aad newtype, from a fixed domain tag
+ambre-core | src/envelope.rs | crate::envelope | Transcript::covered_bytes() | ret | &[u8]	generic	the bytes one signature covers, which the Ed25519 signer and verifier of ambre-crypto hand to the foreign call
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the bool the one constructor of Visibility reads into its variant
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to Count<Members> at once
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	foreign-api	the column bytes sqlx hands a decoder, read into a MasterKeySalt at once
@@ -3453,6 +3450,7 @@ ambre-primitives | src/scan.rs | crate::scan | ends_on_metavariable() | ret | bo
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript.0 | field | Vec<u8>	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::as_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::new(bytes) | param | Vec<u8>	newtype-inner	the bytes one signature covers
+ambre-protocol | src/transcript.rs | crate::transcript | <SignedTranscript as ambre_core::Transcript>::covered_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers, through the door the signer of ambre-crypto takes
 ambre-sync | src/pipeline.rs | crate::pipeline | <SealedBlob as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedBlob's own accessor, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::Encoded<ambre_core::SealedName> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed name's own bytes, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<ambre_core::SealedPreviousKey> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed previous key's own bytes, through the object trait
@@ -3570,7 +3568,6 @@ ambre-core | src/color.rs | crate::color | Alpha.0 | field | u8	newtype-inner	th
 ambre-core | src/color.rs | crate::color | Alpha::get() | ret | u8	newtype-inner	the one way out of an alpha, to a renderer that takes the channel byte
 ambre-core | src/color.rs | crate::color | Alpha::new(byte) | param | u8	newtype-inner	the constructor of an alpha; every byte is one
 ambre-core | src/color.rs | crate::color | Bounded<Opacity>::clamped(value) | param | f32	newtype-inner	the opacity unwrapped: the raw fraction it clamps into range
-ambre-core | src/color.rs | crate::color | Bounded<Opacity>::lerp(t) | param | f64	math	interpolation parameter
 ambre-core | src/color.rs | crate::color | Bounded<Opacity>::scaled(factor) | param | f32	math	scalar multiplier
 ambre-core | src/ordinal.rs | crate::ordinal | <Ordinal<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/ordinal.rs | crate::ordinal | Ordinal<K>::from_position(position) | param | usize	generic	the 0-based position of an item on any axis, which the ordinal numbers from one
@@ -4144,8 +4141,11 @@ ambre-trame | src/message/command.rs | crate::message::command | <TrameCommand a
 ambre-bus | src/content.rs | crate::content | Mutation::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/content.rs | crate::content | <Infallible as Mutation>::is_mutating() | ret | bool	generic	predicate, never called: no value of the type exists
 ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | <Held<S,Q> as Queue<A,P>>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Queue::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/port.rs | crate::port | Port<A,P>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::is_busy() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Lane<S,Q>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-logic | src/app.rs | crate::app | <AppCommand as Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | lossy() | ret | bool	generic	predicate
 ambre-murmure | src/message/mod.rs | crate::message | <MurmureCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate

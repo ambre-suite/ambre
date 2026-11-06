@@ -100,6 +100,14 @@ impl<K: OrdinalKind + crate::index::Axis> Ordinal<K> {
     pub const fn index(self) -> crate::index::Pos<K> {
         crate::index::Pos::new(self.position())
     }
+
+    /// The ordinal of the item at `pos`, saturating at the top: the inverse
+    /// of [`index`](Self::index), and the typed form of
+    /// [`from_position`](Self::from_position).
+    #[must_use]
+    pub const fn of_index(pos: crate::index::Pos<K>) -> Self {
+        Self::at(NonZeroU32::MIN.saturating_add(pos.get()))
+    }
 }
 
 // By hand, every impl below: a derive would bound the marker, which has no
@@ -194,5 +202,18 @@ mod tests {
         let third = Ordinal::<Shelf>::from_position(2);
         assert_eq!(third.index(), crate::index::Pos::<Shelf>::new(2));
         assert_eq!(Ordinal::<Shelf>::FIRST.index(), crate::index::Pos::new(0));
+    }
+
+    #[test]
+    fn a_position_numbers_as_its_bare_count_does_and_saturates_at_the_top() {
+        for raw in [0, 1, 2, 41, u32::MAX - 1, u32::MAX] {
+            let pos = crate::index::Pos::<Shelf>::new(raw);
+            assert_eq!(
+                Ordinal::<Shelf>::of_index(pos),
+                Ordinal::<Shelf>::from_position(pos.to_usize())
+            );
+        }
+        let third = crate::index::Pos::<Shelf>::new(2);
+        assert_eq!(Ordinal::<Shelf>::of_index(third).index(), third);
     }
 }

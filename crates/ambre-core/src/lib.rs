@@ -138,7 +138,9 @@ pub use encoded::{
     Encoded, EncodedKeyLink, EncodedKind, EncodedLogEntry, EscrowedKey, MASTER_KEY_SALT_LEN,
     MasterKeySalt, SealedName, SealedShare, WrappedDocKey, WrappedMasterKey,
 };
-pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
+pub use envelope::{
+    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, Transcript,
+};
 pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, FileBytes};
 pub use fingerprint::KeyFingerprints;
@@ -147,7 +149,7 @@ pub use fixed_bytes::{ByteArray, DebugForm, FixedBytes, FixedBytesError, FixedRo
 pub use fixtures::{
     BoardFrames, Connectors, DocBlocks, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest,
     FixtureName, FixtureSeed, FixtureShape, Formulas, Generator, Peers, ShapeBody, Sheets,
-    fixture_peer_count, seeded_document_id,
+    fixture_peer_count, seeded_document_id, seeded_id,
 };
 pub use flags::{Flags, FlagsKind, FlagsRepr};
 pub use font::{

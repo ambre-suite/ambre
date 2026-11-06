@@ -10,7 +10,6 @@
 
 use super::MarkKey;
 use ambre_core::Redacted;
-use ambre_core::crdt::CrdtName;
 use ambre_core::{FontSize, Rgb, Rgba};
 
 ambre_core::crdt_names! {
@@ -53,7 +52,7 @@ impl MarkRoot {
     /// declare.
     #[must_use]
     pub fn of(key: &MarkKey) -> Option<Self> {
-        Self::parse(key.root())
+        key.mark_root()
     }
 
     /// The key that is this root alone.
@@ -73,16 +72,10 @@ impl MarkRoot {
 /// A size is finite, so every size has one.
 #[must_use]
 pub fn canonical_number(size: FontSize) -> String {
-    spell(size.points())
-}
-
-/// The spelling of [`canonical_number`], over any finite number: a typed
-/// size, or the number a stored or command string reads as. The caller
-/// refuses a value that is not finite before it reaches here.
-fn spell(value: f32) -> String {
-    // `f32::to_string` prints the shortest decimal that reads back as the same
-    // value, with no trailing zero and never an exponent.
-    value.to_string()
+    // A size displays as its `f32` does. That is the shortest decimal that
+    // reads back as the same value, with no trailing zero and no exponent.
+    // `canonical_value` spells a raw number the same way.
+    size.to_string()
 }
 
 /// The keys whose presence alone is the formatting, and which therefore take
@@ -263,5 +256,6 @@ pub fn canonical_value(mark_key: &MarkKey, raw: &str) -> Option<MarkValue> {
         return Some(MarkValue(Redacted::new(raw.to_owned())));
     }
     let value = raw.parse::<f32>().ok().filter(|value| value.is_finite())?;
-    Some(MarkValue(Redacted::new(spell(value))))
+    // The spelling of `canonical_number`, with no size range.
+    Some(MarkValue(Redacted::new(value.to_string())))
 }

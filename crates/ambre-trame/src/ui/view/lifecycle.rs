@@ -2,7 +2,7 @@
 // TrameView: construction and inline-edit lifecycle (begin/commit/cancel).
 
 use super::*;
-use ambre_bus::{Instant, Load, PageLoad};
+use ambre_bus::{Instant, PageLoad};
 use ambre_canvas::BusyLevel;
 use ambre_core::index::{Delta, Pos};
 
@@ -211,7 +211,11 @@ impl TrameView {
             self.signal_fatal("UI->Logic channel disconnected");
             return;
         }
-        if self.busy_pub.publish(busy_level(self.outbox.load())) && !self.outbox.is_busy() {
+        if self
+            .busy_pub
+            .publish(BusyLevel::from_busy(self.outbox.is_busy()))
+            && !self.outbox.is_busy()
+        {
             tracing::info!("Trame: the UI->Logic channel cleared, input resumes");
         }
     }
@@ -632,15 +636,6 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")]
         self.formula_text.set(text.clone());
         self.formula.text = text;
-    }
-}
-
-/// The busy level the renderer shows for an outbox load (`BUS-016`). The
-/// renderer knows no thread protocol, so the view converts the load here.
-fn busy_level(load: Load) -> BusyLevel {
-    match load {
-        Load::Free => BusyLevel::Free,
-        Load::Busy => BusyLevel::Busy,
     }
 }
 

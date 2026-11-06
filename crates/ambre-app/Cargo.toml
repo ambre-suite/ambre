@@ -63,10 +63,10 @@ js-sys = { workspace = true }
 
 console_error_panic_hook = { workspace = true }
 
-# The whole crate is `#![cfg(target_arch = "wasm32")]` (web_sys/wgpu/leptos), so
-# even its pure helpers (route parsing, base64, FPS window) can only be exercised
-# on the wasm target. Tests run in headless Chrome (`just test-wasm`); on host
-# the crate is empty and the native tier skips it. See ambre-spec-testing.md.
+# The crate is wasm-only (web_sys/wgpu/leptos) save the per-frame relay's
+# decisions (`relay`), which the host builds for its tests (`ARCH-072`). The
+# other pure helpers (route parsing, base64, FPS window) still run on the wasm
+# target, in headless Chrome (`just test-wasm`). See ambre-spec-testing.md.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 # `Seq::nth` for a test that names a count. Test builds alone, held by

@@ -2354,13 +2354,70 @@ impl ambre_bus::Mutation for ToileCommand {
 
     /// The viewport fetch, the media fetch and the presence beat are lossy:
     /// the board offers each again on a later frame (`BUS-024`). Every other
-    /// command carries intent.
+    /// command carries intent. The match is exhaustive, so a new command does
+    /// not build until it is classed.
     fn traffic(&self) -> ambre_bus::Traffic {
         match self {
             Self::SetViewport(_) | Self::RequestMedia { .. } | Self::Presence { .. } => {
                 ambre_bus::Traffic::Lossy
             }
-            _ => ambre_bus::Traffic::Lossless,
+            Self::CreateElement { .. }
+            | Self::MoveElements { .. }
+            | Self::AlignElements { .. }
+            | Self::ResizeElement { .. }
+            | Self::RotateElement { .. }
+            | Self::RestyleElements { .. }
+            | Self::DeleteElements { .. }
+            | Self::SetText { .. }
+            | Self::LockElements { .. }
+            | Self::Reorder { .. }
+            | Self::GroupElements { .. }
+            | Self::UngroupElements { .. }
+            | Self::SetFrameChildren { .. }
+            | Self::RemoveFromFrames { .. }
+            | Self::RenameFrame { .. }
+            | Self::SetSlideOrder { .. }
+            | Self::NextSlide
+            | Self::PrevSlide
+            | Self::GotoSlide(..)
+            | Self::EnterPresent { .. }
+            | Self::ExitPresent
+            | Self::SetPresentBroadcast(..)
+            | Self::FollowPresenter(..)
+            | Self::EditNotes { .. }
+            | Self::SetAutoLayout { .. }
+            | Self::React { .. }
+            | Self::CreateComment { .. }
+            | Self::ReplyComment { .. }
+            | Self::EditComment { .. }
+            | Self::ResolveThread { .. }
+            | Self::ReadComments { .. }
+            | Self::ReadDeck
+            | Self::BooleanOp { .. }
+            | Self::Undo
+            | Self::Redo
+            | Self::CreateConnector { .. }
+            | Self::RetargetConnector { .. }
+            | Self::DeleteConnector { .. }
+            | Self::SetLink { .. }
+            | Self::RestyleConnector { .. }
+            | Self::SetConnectorLabel { .. }
+            | Self::CommitStroke { .. }
+            | Self::CopyElements { .. }
+            | Self::PasteElements { .. }
+            | Self::DuplicateElements { .. }
+            | Self::Find { .. }
+            | Self::RequestSelectionStats { .. }
+            | Self::RequestSelectionData { .. }
+            | Self::RequestBoardIds
+            | Self::ImportSvg { .. }
+            | Self::ImportImage { .. }
+            | Self::ImportFigma { .. }
+            | Self::ImportMiro { .. }
+            | Self::ExportSvg
+            | Self::ExportPdf
+            | Self::ExportAmbreFile
+            | Self::ExportAmbreFileSealed { .. } => ambre_bus::Traffic::Lossless,
         }
     }
 }

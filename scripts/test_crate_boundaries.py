@@ -117,9 +117,19 @@ def scratch(tmp: str) -> Path:
         "fn keys() { register(trame_chrome::COMMANDS); }\n"
         "fn boot() { spawn(move || ambre_logic::run(bell)); }\n"
         "fn pre() { start.drain(&logic_to_sync_rx, post); }\n"
-        "fn hook() { std::panic::set_hook(Box::new(|i| { ambre_canvas::signal_fatal(&m); })); }\n",
+        "fn hook() { std::panic::set_hook(Box::new(|i| { ambre_canvas::signal_fatal(&m); })); }\n"
+        "fn queues() {\n    let (ui_tx, ui_rx) =\n        conduit::to_worker::<LogicCommand>(CAP, &bell);\n"
+        "    let shell = outbox::ShellOutbox::new(ui_tx);\n}\n"
+        "fn turn() {\n    relay_tx.flush();\n    if relay_tx.take_refusal() { toasts.error(M); }\n}\n",
+    )
+    write(
+        root,
+        cb.SHELL_OUTBOX,
+        "pub(crate) struct ShellOutbox { hold: StoredValue<Hold, LocalStorage> }\n"
+        "fn new(to_logic: Sender<LogicCommand>) -> Self { Self::with_lane(Lane::new(to_logic)) }\n",
     )
     write(root, cb.FRAME_HOST, "fn go() { drive_frame(&raf_c, &mut pre_frame, render); }\n")
+    write(root, cb.RELAY_DECISIONS, "pub(crate) fn decide(ev: &UiEvent) -> Vec<Effect> { Vec::new() }\n")
     write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
     write(root, f"{cb.RENDERER}/mod.rs", "fn quad(c: Color) -> [f32; 4] { c.components }\n")
     write(
@@ -245,7 +255,9 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_renderer_reach(errors)
             cb.check_worker_messages(errors)
             cb.check_engine_and_relay(errors)
+            cb.check_relay_decisions(errors)
             cb.check_handlers(errors)
+            cb.check_launcher_outbox(errors)
             cb.check_failure_latches(errors)
             cb.check_exit_writes(errors)
             cb.check_walks(errors)
@@ -863,6 +875,60 @@ class CrateBoundaries(unittest.TestCase):
     def test_a_handler_that_returns_an_outcome_stays_free(self):
         text = "fn h(&mut self, c: Command) -> Outcome { Outcome::default() }\n"
         self.assertEqual(self.breach("crates/ambre-toile/src/logic/state.rs", text), [])
+
+    def test_a_launcher_writing_past_its_outbox_is_refused(self):
+        for line in (
+            "struct W { to_logic: ambre_bus::conduit::Sender<LogicCommand> }\n",
+            "fn view() { let p = Port::embedded(tx); }\n",
+            "fn rig() { let p = ambre_bus::Port::direct(tx); }\n",
+            "fn second() { let lane = ambre_bus::Lane::new(tx); }\n",
+            "fn bound() { let lane = Lane::with_capacity(tx, 4); }\n",
+        ):
+            errors = self.breach(f"{cb.LAUNCHER}/landing.rs", line)
+            self.assertTrue(any("writes past its outbox" in e for e in errors), (line, errors))
+
+    def test_a_raw_sender_kept_past_the_outbox_is_refused(self):
+        text = (
+            "fn queues() {\n    let (ui_tx, ui_rx) =\n        conduit::to_worker::<LogicCommand>(CAP, &bell);\n"
+            "    let relay = ui_tx.clone();\n    let shell = outbox::ShellOutbox::new(ui_tx);\n}\n"
+        )
+        errors = self.breach(cb.APP_LIB, text)
+        self.assertTrue(any("used past its outbox" in e for e in errors), errors)
+        kept = "fn queues() {\n    let (ui_tx, ui_rx) =\n        conduit::to_worker::<LogicCommand>(CAP, &bell);\n}\n"
+        errors = self.breach(cb.APP_LIB, kept)
+        self.assertTrue(any("never moves into the outbox" in e for e in errors), errors)
+
+    def test_a_relay_that_neither_flushes_nor_tells_is_refused(self):
+        text = (
+            "fn queues() {\n    let (ui_tx, ui_rx) =\n        conduit::to_worker::<LogicCommand>(CAP, &bell);\n"
+            "    let shell = outbox::ShellOutbox::new(ui_tx);\n}\n"
+            "fn turn() { sync_inbox.borrow_mut().flush(); }\n"
+        )
+        errors = self.breach(cb.APP_LIB, text)
+        self.assertTrue(any("does not flush the launcher's outbox" in e for e in errors), errors)
+        self.assertTrue(any("no refusal of the launcher's outbox" in e for e in errors), errors)
+
+    def test_a_relay_decision_naming_the_browser_is_refused(self):
+        for line in (
+            "fn go() { let w = web_sys::window(); }\n",
+            "fn now() -> f64 { js_sys::Date::now() }\n",
+            "use leptos::prelude::*;\n",
+            "struct S { shown: RwSignal<Option<Id<Document>>> }\n",
+            "fn spawn() { wasm_bindgen_futures::spawn_local(f); }\n",
+        ):
+            errors = self.breach(cb.RELAY_DECISIONS, line)
+            self.assertTrue(any("name the browser" in e for e in errors), (line, errors))
+
+    def test_a_relay_decision_in_words_or_in_a_test_stays_free(self):
+        text = (
+            "// The wiring reads web_sys; this file does not.\n"
+            "fn decide() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { let s = RwSignal::new(0); }\n}\n"
+        )
+        self.assertEqual(self.breach(cb.RELAY_DECISIONS, text), [])
+
+    def test_a_port_built_in_a_test_or_the_outbox_stays_free(self):
+        text = "fn f() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { Port::direct(tx); }\n}\n"
+        self.assertEqual(self.breach(f"{cb.LAUNCHER}/host/prose.rs", text), [])
 
     def test_a_panic_hook_that_latches_nothing_is_refused(self):
         text = "fn hook() { std::panic::set_hook(Box::new(|i| { tracing::error!(\"{i}\"); })); }\n"

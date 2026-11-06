@@ -13,7 +13,9 @@
 //! `ws/handler/message.rs::verify_update_signature` (it must not link
 //! `ambre-crypto`); the two layouts MUST stay byte-identical.
 
-use ambre_core::{Ciphertext, CommitmentTag, FixedBytes, Nonce, Payload, PublicKey, Signature};
+use ambre_core::{
+    Ciphertext, CommitmentTag, FixedBytes, Nonce, Payload, PublicKey, Signature, Transcript,
+};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 
 use crate::error::CryptoError;
@@ -93,10 +95,11 @@ pub fn verify(
         .map_err(|_| CryptoError::InvalidSignature)
 }
 
-/// Signs `message` whole with `signing_key`. The caller's message opens with
-/// its own domain, so the signature serves no other use.
-pub fn sign_message(signing_key: &SigningKey, message: &[u8]) -> FixedBytes<Signature> {
-    FixedBytes::from_array(signing_key.sign(message).to_bytes())
+/// Signs the covered bytes of `message` whole with `signing_key`. The
+/// transcript opens with its own domain, so the signature serves no other
+/// use. Bare bytes are no [`Transcript`], so they never reach the signer.
+pub fn sign_message<T: Transcript>(signing_key: &SigningKey, message: &T) -> FixedBytes<Signature> {
+    FixedBytes::from_array(signing_key.sign(message.covered_bytes()).to_bytes())
 }
 
 /// Verifies a signature [`sign_message`] made, strictly, as [`verify`] does.
@@ -106,16 +109,16 @@ pub fn sign_message(signing_key: &SigningKey, message: &[u8]) -> FixedBytes<Sign
 /// [`CryptoError::InvalidSignature`] for a key that is not a point, or a
 /// signature that does not verify. A signature of the wrong length is not a
 /// [`Signature`], so it never reaches here.
-pub fn verify_message(
+pub fn verify_message<T: Transcript>(
     author_pub: &FixedBytes<PublicKey>,
-    message: &[u8],
+    message: &T,
     signature: &FixedBytes<Signature>,
 ) -> Result<(), CryptoError> {
     let verifying_key = VerifyingKey::from_bytes(author_pub.as_array())
         .map_err(|_| CryptoError::InvalidSignature)?;
     let sig = ed25519_dalek::Signature::from_bytes(signature.as_array());
     verifying_key
-        .verify_strict(message, &sig)
+        .verify_strict(message.covered_bytes(), &sig)
         .map_err(|_| CryptoError::InvalidSignature)
 }
 
@@ -130,15 +133,35 @@ mod tests {
     fn a_message_signature_checks_under_its_author_alone() {
         let sk = test_key();
         let pk = FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes());
-        let sig = sign_message(&sk, b"entry");
-        assert!(verify_message(&pk, b"entry", &sig).is_ok());
-        assert!(verify_message(&pk, b"entrY", &sig).is_err());
+        let sig = sign_message(&sk, &Bytes(b"entry"));
+        assert!(verify_message(&pk, &Bytes(b"entry"), &sig).is_ok());
+        assert!(verify_message(&pk, &Bytes(b"entrY"), &sig).is_err());
         let other = FixedBytes::<PublicKey>::from_array(
             SigningKey::from_bytes(&[8u8; 32])
                 .verifying_key()
                 .to_bytes(),
         );
-        assert!(verify_message(&other, b"entry", &sig).is_err());
+        assert!(verify_message(&other, &Bytes(b"entry"), &sig).is_err());
+    }
+
+    /// The signature over a transcript is the Ed25519 signature over its
+    /// covered bytes, unchanged: the trait adds no framing.
+    #[test]
+    fn a_transcript_signature_is_the_signature_of_its_covered_bytes() {
+        let sk = test_key();
+        assert_eq!(
+            *sign_message(&sk, &Bytes(b"entry")).as_array(),
+            sk.sign(b"entry").to_bytes()
+        );
+    }
+
+    /// A test transcript: the bytes as written.
+    struct Bytes(&'static [u8]);
+
+    impl Transcript for Bytes {
+        fn covered_bytes(&self) -> &[u8] {
+            self.0
+        }
     }
 
     fn test_key() -> SigningKey {

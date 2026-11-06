@@ -9,78 +9,70 @@
 //!
 //! A [`Port`] has no send of its own outside this crate. A view moves it into
 //! its one [`Outbox`](crate::Outbox), whose two sends are the only way a
-//! view writes to the Logic thread (`BUS-011`, `BUS-023`).
+//! view writes to the Logic thread (`BUS-011`, `BUS-023`). Every port over
+//! one queue holds through that queue's one [`Lane`] (`BUS-037`).
 
-use crate::conduit::{Receiver, Sender, TryRecvError, TrySendError};
-use crate::{ChannelPlane, Embed, LogicCommand, NoChannels, PlaneOf, UiEvent};
+use std::rc::Rc;
 
-/// What became of a command offered through [`Port::try_send`].
-#[must_use]
-pub(crate) enum Delivery<A, P: ChannelPlane = NoChannels> {
-    /// The queue took it.
-    Sent,
-    /// The queue is at capacity: the command comes back.
-    Full(LogicCommand<A, P>),
-    /// The Logic thread is gone, and so is the command.
-    Disconnected,
-}
-
-type SendFn<A, P> = dyn Fn(LogicCommand<A, P>) -> Delivery<A, P> + Send + Sync;
+use crate::conduit::{Receiver, TryRecvError};
+use crate::outbox::{Lane, Queue};
+use crate::{
+    ChannelPlane, Embed, LogicCommand, LossyOutcome, NoChannels, PlaneOf, SendOutcome, UiEvent,
+};
 
 /// A view's sending end of the UI to Logic queue, for commands of type `A`
 /// and the channel plane `P`.
 ///
 /// Only tries, as every end the Main thread holds (`ARCH-021`). It has no
 /// `Clone` and no public send. A port moves into one
-/// [`Outbox`](crate::Outbox), so no second path reaches its queue. No second
-/// hold queue then reorders what the first one holds.
+/// [`Outbox`](crate::Outbox), so no second path reaches its queue. Every port
+/// over one queue shares the queue's one [`Lane`], so no second hold queue
+/// reorders what the first one holds (`BUS-037`).
 pub struct Port<A, P: ChannelPlane = NoChannels> {
-    send: Box<SendFn<A, P>>,
+    lane: Rc<dyn Queue<A, P>>,
 }
 
-impl<A: Send + 'static, P: ChannelPlane + 'static> Port<A, P>
-where
-    P: PlaneOf<P>,
-    LogicCommand<A, P>: Send,
-{
-    /// A port over a queue that carries `A` and `P` themselves, as a test
-    /// rig's does.
-    pub fn direct(to_logic: Sender<LogicCommand<A, P>>) -> Self {
-        Self::embedded(to_logic)
+impl<A: 'static, P: ChannelPlane + PlaneOf<P> + 'static> Port<A, P> {
+    /// A port over a queue that carries `A` and `P` themselves, on a lane of
+    /// its own, as a test rig's is.
+    pub fn direct(to_logic: crate::conduit::Sender<LogicCommand<A, P>>) -> Self {
+        Lane::new(to_logic).port()
     }
-}
 
-impl<A: 'static, P: ChannelPlane + 'static> Port<A, P> {
-    /// A port over a queue that carries the sum `S`, which embeds `A`, and
-    /// the plane `Q`, which embeds `P`.
-    pub fn embedded<S, Q>(to_logic: Sender<LogicCommand<S, Q>>) -> Self
-    where
-        S: Embed<A> + 'static,
-        Q: PlaneOf<P> + 'static,
-        LogicCommand<S, Q>: Send,
-    {
-        Self {
-            send: Box::new(move |cmd: LogicCommand<A, P>| {
-                match to_logic.try_send(cmd.embed_into()) {
-                    Ok(()) => Delivery::Sent,
-                    // The projection of a value just embedded never refuses it.
-                    // Were it to, the command is lost as a disconnection would
-                    // lose it.
-                    Err(TrySendError::Full(cmd)) => {
-                        cmd.project().map_or(Delivery::Disconnected, Delivery::Full)
-                    }
-                    Err(TrySendError::Disconnected(_)) => Delivery::Disconnected,
-                }
-            }),
-        }
+    /// A port over no queue: every send reports the Logic thread gone. A
+    /// launcher whose lane is already dropped hands this one out.
+    pub fn closed() -> Self {
+        let (to_logic, gone) =
+            crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
+        drop(gone);
+        Self::direct(to_logic)
     }
 }
 
 impl<A, P: ChannelPlane> Port<A, P> {
-    /// Offer `cmd` to the Logic thread, without waiting. The outbox calls it,
-    /// and nothing outside this crate can.
-    pub(crate) fn try_send(&self, cmd: LogicCommand<A, P>) -> Delivery<A, P> {
-        (self.send)(cmd)
+    /// A port over `lane`. Only a [`Lane`] builds one.
+    pub(crate) fn over(lane: Rc<dyn Queue<A, P>>) -> Self {
+        Self { lane }
+    }
+
+    /// Send one lossless command through the lane, or hold it there.
+    pub(crate) fn send(&self, cmd: LogicCommand<A, P>) -> SendOutcome {
+        self.lane.send(cmd)
+    }
+
+    /// Offer one lossy command to the queue, and never hold it.
+    pub(crate) fn send_now(&self, cmd: LogicCommand<A, P>) -> LossyOutcome {
+        self.lane.send_now(cmd)
+    }
+
+    /// Offer what the lane holds to the queue, oldest first.
+    pub(crate) fn flush(&self) -> SendOutcome {
+        self.lane.flush()
+    }
+
+    /// How many commands the lane holds, whichever port sent them.
+    pub(crate) fn held(&self) -> usize {
+        self.lane.held()
     }
 }
 

@@ -14,7 +14,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use ambre_bus::conduit::Sender;
 use ambre_bus::{DocType, RowPlace, SealedRow};
 use ambre_core::id::{Document, Id};
 use ambre_logic::app::LogicCommand;
@@ -64,7 +63,9 @@ struct Inner {
     held: RefCell<Vec<(Id<Document>, SealedWrite)>>,
     /// Frames since the held writes were last tried.
     frames: Cell<u32>,
-    to_logic: Sender<LogicCommand>,
+    /// The launcher's outbox, which holds what a full queue refuses
+    /// (`BUS-011`).
+    to_logic: crate::outbox::ShellOutbox,
     vault: Vault,
     /// The writes on their way to the store, behind their seals.
     queue: RefCell<SealQueue>,
@@ -78,7 +79,7 @@ impl LocalStore {
     /// reload, and ask the browser to keep the store (`RESID-020`).
     pub(crate) async fn open(
         store: PersistenceStore,
-        to_logic: Sender<LogicCommand>,
+        to_logic: crate::outbox::ShellOutbox,
         vault: Vault,
         boot: Option<(DocType, Id<Document>)>,
     ) -> Self {
@@ -222,10 +223,10 @@ impl LocalStore {
                 if moment == ReadBack::Boot && snapshot.is_none() && deltas.is_empty() {
                     return;
                 }
-                let _ = opened_by
+                opened_by
                     .inner
                     .to_logic
-                    .try_send(LogicCommand::RestoreLocalSnapshot {
+                    .send(LogicCommand::RestoreLocalSnapshot {
                         document_id,
                         doc_type,
                         snapshot: snapshot.map(Into::into),
@@ -318,12 +319,11 @@ impl LocalStore {
 
     /// Tell Logic whether the store refuses the document's unsent change.
     fn tell_logic(&self, document_id: Id<Document>, room: ambre_bus::StoreRoom) {
-        if self
+        let sent = self
             .inner
             .to_logic
-            .try_send(LogicCommand::LocalStoreFull { document_id, room })
-            .is_err()
-        {
+            .send(LogicCommand::LocalStoreFull { document_id, room });
+        if !sent.accepted() {
             tracing::warn!("Persistence: Logic did not take the store state");
         }
     }
@@ -394,8 +394,13 @@ mod tests {
             conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
         let (vault_tx, vault_rx) =
             conduit::local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
-        let local =
-            LocalStore::open(store.clone(), logic_tx, Vault::new(vault_tx.clone()), None).await;
+        let local = LocalStore::open(
+            store.clone(),
+            crate::outbox::ShellOutbox::new(logic_tx),
+            Vault::new(crate::outbox::ShellOutbox::new(vault_tx.clone())),
+            None,
+        )
+        .await;
         // The answers reach the vault as the per-frame relay hands them.
         let vault = local.inner.vault.clone();
         let doc = Id::<Document>::mint();

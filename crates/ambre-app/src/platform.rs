@@ -142,8 +142,7 @@ pub(crate) async fn read_clipboard_blob(
         if has(host::ClipboardFormat::WebAmbre)
             && let Some(b64) = read_clipboard_item(&item, host::ClipboardFormat::WebAmbre).await
         {
-            blob.ambre = host::base64_decode(&b64)
-                .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::new);
+            blob.ambre = host::base64_decode(&b64);
             found = true;
         }
         if has(host::ClipboardFormat::WebAmbreToken)
@@ -244,29 +243,6 @@ pub(crate) fn remember_dev_user(username: &ambre_core::Validated<ambre_core::Dis
 pub(crate) fn forget_dev_user() {
     if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
         let _ = storage.remove_item(DEV_USER_KEY.as_str());
-    }
-}
-
-/// Map a `SyncWarningCode` (the closed `ambre-bus` contract) to a user-facing
-/// notice. All are non-fatal, and all but an unreadable document correct
-/// themselves, so the wording reassures rather than alarms. Exhaustive by
-/// design: a new variant is a compile error here until it gets a message.
-pub(crate) fn sync_warning_message(code: SyncWarningCode) -> &'static str {
-    match code {
-        SyncWarningCode::QuarantineOverflow => {
-            "Syncing is catching up - some changes are taking longer to arrive."
-        }
-        SyncWarningCode::DecryptFailed => "A remote change could not be read and was skipped.",
-        SyncWarningCode::DocumentUnreadable => {
-            "Some changes were made by a different version of Ambre and cannot be shown here."
-        }
-        SyncWarningCode::LocalStoreFull => {
-            "This device is out of storage. Editing is paused until your changes are saved."
-        }
-        SyncWarningCode::UpdateRefused => "A change could not be sent: its document is not open.",
-        SyncWarningCode::EditRefused => {
-            "The server refused a change. Reopen the document before editing it again."
-        }
     }
 }
 
