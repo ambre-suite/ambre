@@ -20,7 +20,9 @@ use crate::message::{
     Attachment, MessageAt, MessageView, MurmureCommand, MurmureEvent, ReplyEcho, TextStyle,
 };
 use crate::message::{LogicCommand, Murmure, UiEvent};
-use ambre_bus::{Authored, Emoji, Inbox, Instant, Port, Request, RestEvent};
+use ambre_bus::{
+    Authored, Emoji, Inbox, Instant, LossyOutcome, Outbox, Port, Request, RestEvent, SendOutcome,
+};
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
     TextInput, Theme, ThemeControl,
@@ -262,8 +264,12 @@ pub struct MurmureView {
     /// The events of the Logic thread. The content canvas holds the page's
     /// queue; the thread's cell holds none and reads the lists it fills.
     from_logic: Option<Inbox<Infallible, Murmure>>,
-    /// Where the read cursors move.
-    to_logic: Option<Port<Infallible, Murmure>>,
+    /// The page's one way to write to the Logic thread. The two regions share
+    /// it, so a held command keeps its place before what either sends next
+    /// (`BUS-011`).
+    outbox: Option<Rc<RefCell<Outbox<Infallible, Murmure>>>>,
+    /// The level a held command raises, which the shell shows (`BUS-016`).
+    busy_pub: ambre_canvas::BusyPublisher,
     reads: PageReads,
     lists: Rc<RefCell<Lists>>,
     region: Region,
@@ -397,6 +403,7 @@ impl MurmureView {
     pub fn new(
         from_logic: Option<Inbox<Infallible, Murmure>>,
         to_logic: Option<Port<Infallible, Murmure>>,
+        busy_pub: ambre_canvas::BusyPublisher,
         reads: PageReads,
         size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>,
         theme_ctl: ThemeControl,
@@ -404,7 +411,8 @@ impl MurmureView {
         let theme = theme_ctl.get();
         Self {
             from_logic,
-            to_logic,
+            outbox: to_logic.map(|port| Rc::new(RefCell::new(Outbox::new(port)))),
+            busy_pub,
             reads,
             lists: Rc::default(),
             region: Region::Channel,
@@ -444,9 +452,10 @@ impl MurmureView {
     /// The view of the thread's region: the same theme and the same lists,
     /// and no queue of its own (`MURMURE-420`).
     pub fn region(&self, size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>) -> Self {
-        let (to_logic, reads) = (self.to_logic.clone(), self.reads.clone());
+        let (busy_pub, reads) = (self.busy_pub.clone(), self.reads.clone());
         let theme_ctl = self.theme_ctl.clone();
-        let mut view = Self::new(None, to_logic, reads, size, theme_ctl);
+        let mut view = Self::new(None, None, busy_pub, reads, size, theme_ctl);
+        view.outbox = self.outbox.clone();
         view.lists = Rc::clone(&self.lists);
         view.region = Region::Thread;
         view.parked = Rc::clone(&self.parked);
@@ -1178,6 +1187,7 @@ impl MurmureView {
         now: Instant<PageLoad>,
         _hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
+        self.flush_outbox();
         let theme = self.theme_ctl.get();
         if theme != self.theme {
             self.theme = theme;
@@ -1516,14 +1526,55 @@ impl MurmureView {
         (self.reads.show_mentions)(self.region, list);
     }
 
-    /// Hand `command` to the Logic thread. A full channel drops it, and the
-    /// next paint that calls for it asks again.
+    /// Hand a lossless `command` to the Logic thread. A full channel holds
+    /// it in the outbox for a later frame (`BUS-011`), and the page refuses
+    /// input until the channel drains (`BUS-022`).
     fn send(&self, command: LogicCommand) {
-        if let Some(to_logic) = &self.to_logic
-            && !to_logic.try_send(command).sent()
-        {
-            tracing::warn!("Murmure view command dropped, Logic channel full");
+        let Some(outbox) = &self.outbox else {
+            return;
+        };
+        match outbox.borrow_mut().send(command) {
+            SendOutcome::Sent => {}
+            SendOutcome::Held => tracing::warn!("Murmure: the Logic channel is full, command held"),
+            SendOutcome::Refused => tracing::error!("Murmure: the outbox is full, command refused"),
+            SendOutcome::Disconnected => tracing::error!("Murmure: the Logic channel is gone"),
         }
+    }
+
+    /// Hand a lossy `command` to the Logic thread. A full channel drops it,
+    /// and the view offers it again on a later tick or key (`BUS-024`).
+    fn send_lossy(&self, command: LogicCommand) {
+        let Some(outbox) = &self.outbox else {
+            return;
+        };
+        match outbox.borrow().send_lossy(command) {
+            LossyOutcome::Sent => {}
+            LossyOutcome::Dropped => tracing::warn!("Murmure: the Logic channel is full, dropped"),
+            LossyOutcome::Refused => {
+                tracing::error!("Murmure: a lossless command was offered to the lossy class");
+            }
+            LossyOutcome::Disconnected => tracing::error!("Murmure: the Logic channel is gone"),
+        }
+    }
+
+    /// Whether the outbox holds a command the Logic thread has not taken.
+    fn busy(&self) -> bool {
+        self.outbox
+            .as_ref()
+            .is_some_and(|outbox| outbox.borrow().is_busy())
+    }
+
+    /// Offer the held commands to the channel, then publish the level the
+    /// shell reads (`BUS-016`).
+    fn flush_outbox(&self) {
+        let Some(outbox) = &self.outbox else {
+            return;
+        };
+        let mut outbox = outbox.borrow_mut();
+        if outbox.flush() == SendOutcome::Disconnected {
+            tracing::error!("Murmure: the Logic channel is gone");
+        }
+        self.busy_pub.publish(outbox.load());
     }
 
     /// The wall clock, as the engine dates a sample or a message.
@@ -1546,7 +1597,7 @@ impl MurmureView {
         if due {
             self.ticked = Some((channel_id, now));
             let now = self.now();
-            self.send(LogicCommand::Channel {
+            self.send_lossy(LogicCommand::Channel {
                 channel_id,
                 command: MurmureCommand::Tick { now },
             });
@@ -1566,7 +1617,7 @@ impl MurmureView {
             None => return,
         };
         let now = self.now();
-        self.send(LogicCommand::Channel {
+        self.send_lossy(LogicCommand::Channel {
             channel_id,
             command: MurmureCommand::Typing { now, thread },
         });
@@ -1686,6 +1737,12 @@ impl MurmureView {
     /// it holds the focus, it takes the keys it edits with. Page Up and Page
     /// Down still move the list.
     pub fn handle_input(&mut self, ev: &InputEvent) -> Consumed {
+        // A command waits in the outbox, so the page refuses input until it
+        // drains (`BUS-022`). Consuming the event is what makes the refusal
+        // visible, as on the page, the board and the grid.
+        if self.busy() {
+            return Consumed::Yes;
+        }
         if let Some(consumed) = self.composer_input(ev) {
             self.typed();
             self.dirty = Repaint::Due;
@@ -2039,10 +2096,14 @@ mod tests {
     type Listed = (Region, Option<MentionList>);
 
     fn page() -> Page {
+        page_over(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>())
+    }
+
+    /// A page whose queue to the Logic thread holds `slots` commands.
+    fn page_over(slots: ambre_core::Bounded<ambre_bus::conduit::ChannelSlots>) -> Page {
         let (events, from_logic) =
             local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>());
-        let (to_logic, commands) =
-            local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>());
+        let (to_logic, commands) = local(slots);
         let pane = Rc::new(Cell::new(MurmurePane::default()));
         let shown = Rc::clone(&pane);
         let back = Rc::clone(&pane);
@@ -2164,6 +2225,7 @@ mod tests {
         let view = MurmureView::new(
             Some(Inbox::direct(from_logic)),
             Some(Port::direct(to_logic)),
+            ambre_canvas::BusyPublisher::new(),
             reads,
             size,
             ThemeControl::default(),
@@ -2645,6 +2707,70 @@ mod tests {
         mouse(&mut page.view, (10.0, 200.0), (10.0, -50.0));
         frame(&mut page.view);
         assert!(page.view.resting_on().is_some(), "the list moved up");
+    }
+
+    /// `BUS-011`, `BUS-022`: a full channel holds a channel command in the
+    /// outbox rather than drop it. The page takes no input while it holds
+    /// one, and a frame after the channel drains sends it.
+    #[test]
+    fn a_full_channel_holds_a_channel_command_and_the_page_takes_no_input() {
+        let (mut page, channel, _) = long_channel(200);
+        frame(&mut page.view);
+        while page.commands.try_recv().is_ok() {}
+        let mark = || LogicCommand::Channel {
+            channel_id: channel,
+            command: MurmureCommand::MarkUnread {
+                segment: Id::<Segment>::mint(),
+                message: Id::<Message>::mint(),
+            },
+        };
+        // The page's queue holds sixty-four commands, so the last one waits.
+        for _ in 0..65 {
+            page.view.send(mark());
+        }
+        assert!(page.view.busy(), "the last mark waits in the outbox");
+        wheel(&mut page, -3.0, 1, Instant::<PageLoad>::new(10.0));
+        frame(&mut page.view);
+        assert_eq!(
+            page.view.resting_on(),
+            None,
+            "the refused wheel moved nothing"
+        );
+        assert_eq!(
+            std::iter::from_fn(|| page.commands.try_recv().ok()).count(),
+            64
+        );
+        frame(&mut page.view);
+        assert!(!page.view.busy(), "the frame sent what the outbox held");
+        assert!(page.commands.try_recv().is_ok());
+        wheel(&mut page, -3.0, 1, Instant::<PageLoad>::new(20.0));
+        frame(&mut page.view);
+        assert!(
+            page.view.resting_on().is_some(),
+            "a free page takes the wheel"
+        );
+    }
+
+    /// `BUS-024`: a full channel drops a typing beat rather than hold it, so
+    /// the page stays free and the next key offers the beat again.
+    #[test]
+    fn a_full_channel_drops_a_typing_beat_and_holds_nothing() {
+        let page = page_over(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>());
+        let beat = || LogicCommand::Channel {
+            channel_id: Id::<Channel>::mint(),
+            command: MurmureCommand::Typing {
+                now: Instant::<Authored>::new(0),
+                thread: None,
+            },
+        };
+        page.view.send_lossy(beat());
+        page.view.send_lossy(beat());
+        assert!(!page.view.busy());
+        assert!(page.commands.try_recv().is_ok());
+        assert!(
+            page.commands.try_recv().is_err(),
+            "the second beat was dropped"
+        );
     }
 
     /// A wheel event at `now`, `delta_mode` as the browser names it.

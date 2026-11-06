@@ -45,6 +45,14 @@ impl Mutation for AppCommand {
             Self::Prose(cmd) => cmd.is_mutating(),
         }
     }
+
+    fn traffic(&self) -> ambre_bus::Traffic {
+        match self {
+            Self::Trame(cmd) => cmd.traffic(),
+            Self::Toile(cmd) => cmd.traffic(),
+            Self::Prose(cmd) => cmd.traffic(),
+        }
+    }
 }
 
 /// Application-specific event, Logic thread -> UI Thread.
