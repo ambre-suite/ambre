@@ -10,7 +10,9 @@ when the code does (`ambre-spec-testing.md section 2`).
 operation inside a function that is never inlined and whose name is unique. The
 binary takes the operation's name as its argument and runs only that one, and
 `--toggle-collect` counts only inside its function. The setup of the operation
-therefore costs nothing.
+therefore costs nothing. An operation whose budget covers two phases of one
+command names a function for each, `symbol` and `also`: the count is their sum,
+and what runs between them falls outside it.
 
 **A ceiling is a budget converted, not a measure recorded.** It is the row's
 target times `PER_MS`, the instructions of the native build that fit in one
@@ -53,6 +55,9 @@ class Ceiling:
     symbol: str
     row: str
     ceiling: int
+    # Further functions counted with `symbol`, each matched the same way. None
+    # of them may call another, or the toggle turns the count off inside it.
+    also: tuple[str, ...] = ()
 
 
 CEILINGS = [
@@ -85,19 +90,17 @@ CEILINGS = [
         row="Toile board paint, 2 000 visible elements, its content walk (< 5 ms of the 16 ms)",
         ceiling=5 * PER_MS,
     ),
-    # Not a budget: a regression guard at today's measure. The walk alone, counted
-    # inside the private method by its own name, the purge and the engine reseed
-    # falling outside it. Its budget row targets < 10 ms for the whole structural
-    # edit, which the measure of 2026-11-05 (276 M instructions) far exceeds. The
-    # ceiling only stops it growing until the story that narrows the walk lands,
-    # then drops to `10 * PER_MS`.
+    # The walk and the engine step of one structural edit, the two phases its
+    # budget row covers. The purge, the commit and the caches of positions,
+    # merges, styles and sizes fall outside the count.
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
-        operation="reanchor_walk",
+        operation="structural_edit",
         symbol="reanchor_formulas",
-        row="Trame re-anchor walk, 10k formula cells (a guard at today's measure, not the budget)",
-        ceiling=290_000_000,
+        row="Trame structural edit, 10k formula cells, its walk and its engine step (< 10 ms)",
+        ceiling=10 * PER_MS,
+        also=("carry_engine",),
     ),
     Ceiling(
         crate="ambre-prose",
@@ -174,6 +177,11 @@ def build(c: Ceiling) -> str:
     return exe
 
 
+def toggles(c: Ceiling) -> list[str]:
+    """One `--toggle-collect` per function `c` counts in."""
+    return [f"--toggle-collect=*{s}*" for s in (c.symbol, *c.also)]
+
+
 def count(exe: str, c: Ceiling) -> int:
     """Run one operation under `callgrind` and return what it counted."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -182,7 +190,7 @@ def count(exe: str, c: Ceiling) -> int:
             [
                 "valgrind",
                 "--tool=callgrind",
-                f"--toggle-collect=*{c.symbol}*",
+                *toggles(c),
                 f"--callgrind-out-file={profile}",
                 exe,
                 c.operation,

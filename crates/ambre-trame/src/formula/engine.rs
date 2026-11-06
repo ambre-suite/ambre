@@ -23,6 +23,16 @@ use crate::model::SheetIndex;
 use ambre_core::index::Pos;
 use ambre_core::{Instant, SheetDateTime};
 
+/// How [`FormulaEngine::apply_structural`] ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Carry {
+    /// The engine holds what a full reseed would.
+    Done,
+    /// A formula compiled again met a cycle, and only a reseed can say which
+    /// cell of it is refused.
+    CycleMet,
+}
+
 /// Central orchestrator for the Trame formula engine.
 pub struct FormulaEngine {
     /// Two-level dependency graph (cell-to-cell + ranges).
@@ -102,6 +112,148 @@ impl FormulaEngine {
             .chain(self.formula_cache.borrow().keys().copied())
             .collect();
         self.dirty.extend(cells);
+    }
+
+    /// The formulas a structural edit must re-read, given the cells it removed.
+    ///
+    /// Two kinds qualify. A formula that reads a removed cell names a line that
+    /// is gone, so its text and its value change. A formula that reads
+    /// positions may move with any edit ([`BytecodeCache::positional`]). Any
+    /// other formula reads its cells by their lines, which the edit leaves in
+    /// place, so neither its text nor its value changes. The search costs the
+    /// edges out of the removed cells and the positional formulas, never the
+    /// whole graph (`TRAME-280`).
+    pub fn structural_reach(&self, removed: &HashSet<CellId>) -> Vec<CellId> {
+        let mut reach: HashSet<CellId> = HashSet::new();
+        for cell in removed {
+            let Some(&node) = self.deps.cell_to_node.get(cell) else {
+                continue;
+            };
+            reach.extend(
+                self.deps
+                    .cell_dag
+                    .neighbors_directed(node, petgraph::Direction::Outgoing)
+                    .map(|n| self.deps.cell_dag[n]),
+            );
+        }
+        reach.extend(self.bytecode.positional().copied());
+        reach.retain(|cell| !removed.contains(cell));
+        reach.into_iter().collect()
+    }
+
+    /// Carry the engine across one structural edit, without a reseed.
+    ///
+    /// `removed` are the cells of the lines the edit removed, and `reread` the
+    /// formulas [`structural_reach`](Self::structural_reach) named, each with
+    /// its text after the edit. Each removed cell is cleared, each formula of
+    /// `reread` compiles again from its text, and the dirty cells recompute.
+    ///
+    /// Returns [`Carry::CycleMet`] when a formula was refused for a cycle. A
+    /// full reseed then decides which cell of the cycle is refused, by its
+    /// feed order, and the caller runs one.
+    pub fn apply_structural(
+        &mut self,
+        removed: &HashSet<CellId>,
+        reread: &[(CellId, CellText<StoredForm>)],
+        indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
+        ctx: &dyn FormulaCtx,
+    ) -> Carry {
+        for &cell in removed {
+            if self.knows(cell) {
+                self.on_cell_changed(cell, CellText::new(String::new()), indices, ctx);
+            }
+        }
+        for (cell, raw) in reread {
+            self.bytecode.forget_source(*cell);
+            self.on_cell_changed(*cell, raw.clone(), indices, ctx);
+        }
+        if self.bytecode.has_cyclic() {
+            self.dirty.clear();
+            return Carry::CycleMet;
+        }
+        // A removed cell kept its node while a formula still read it. Each of
+        // those formulas compiled again above and reads it no more.
+        for &cell in removed {
+            self.deps.drop_if_isolated(cell);
+        }
+        self.compute_dirty_closure(indices);
+        Carry::Done
+    }
+
+    /// Whether the engine holds anything for `cell`: a value, bytecode or a
+    /// node of the graph.
+    fn knows(&self, cell: CellId) -> bool {
+        self.formula_cache.borrow().contains_key(&cell)
+            || self.bytecode.get(&cell).is_some()
+            || self.deps.cell_to_node.contains_key(&cell)
+    }
+
+    /// Whether a formula is refused for a static cycle. The graph keeps no
+    /// edge of such a formula, so only a full reseed can say whether a later
+    /// edit frees it.
+    pub fn has_cyclic(&self) -> bool {
+        self.bytecode.has_cyclic()
+    }
+
+    /// Recompute the `dirty` set in topological order of the graph that the
+    /// dirty cells induce, never walking the rest of the graph.
+    ///
+    /// The evaluation pass reads each cell it needs on demand and keeps what
+    /// it computed, so the order changes no value of an acyclic graph. The
+    /// order is still topological, so a cell reads each dependency computed
+    /// once.
+    fn compute_dirty_closure(&mut self, indices: &HashMap<Pos<EngineSheet>, SheetIndex>) {
+        let dag = &self.deps.cell_dag;
+        let mut nodes: Vec<petgraph::graph::NodeIndex> = self
+            .dirty
+            .iter()
+            .filter_map(|cell| self.deps.cell_to_node.get(cell))
+            .copied()
+            .collect();
+        nodes.sort_unstable();
+        let inside: HashSet<petgraph::graph::NodeIndex> = nodes.iter().copied().collect();
+        let mut waiting: HashMap<petgraph::graph::NodeIndex, usize> = nodes
+            .iter()
+            .map(|&n| {
+                let deps = dag
+                    .neighbors_directed(n, petgraph::Direction::Incoming)
+                    .filter(|d| inside.contains(d))
+                    .count();
+                (n, deps)
+            })
+            .collect();
+        let mut ready: Vec<_> = nodes
+            .iter()
+            .rev()
+            .copied()
+            .filter(|n| waiting.get(n) == Some(&0))
+            .collect();
+
+        let mut results: Vec<(CellId, CellValue)> = Vec::new();
+        {
+            let cache_ref = self.formula_cache.borrow();
+            let mut ctx = EvalContext::new(&self.bytecode, &cache_ref, indices, now_serial());
+            while let Some(node) = ready.pop() {
+                let cell = dag[node];
+                if self.bytecode.get(&cell).is_some() {
+                    results.push((cell, ctx.eval_cell(cell)));
+                }
+                for next in dag.neighbors_directed(node, petgraph::Direction::Outgoing) {
+                    if let Some(left) = waiting.get_mut(&next) {
+                        *left = left.saturating_sub(1);
+                        if *left == 0 {
+                            ready.push(next);
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut cache = self.formula_cache.borrow_mut();
+        for (cell, value) in results {
+            cache.insert(cell, value);
+        }
+        self.dirty.clear();
     }
 
     /// Recompute every cell in the `dirty` set in topological order.
@@ -497,5 +649,54 @@ mod tests {
             "10",
             "ref follows the data, not the position"
         );
+    }
+
+    /// A loop closed through a range shows `#CIRCULAR!` on each of its cells
+    /// and on each cell downstream of it, whatever order the pass takes. The
+    /// range also holds `#DIV/0!`, which a pass entering from outside the loop
+    /// meets first (`TRAME-281`).
+    #[test]
+    fn a_loop_through_a_range_shows_circular_in_every_order() {
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+        for (at, text) in [
+            (cell(0, 1), "=1/0"),
+            (cell(1, 0), "=SUM(B1:B3)"),
+            (cell(1, 1), "=A2*2"),
+            (cell(0, 3), "=SUM(B2:B3)"),
+            (cell(0, 2), "=B2+1"),
+        ] {
+            engine.on_cell_changed(at, stored(text), &idx, &SingleSheetCtx);
+        }
+        let looped = [cell(1, 0), cell(1, 1), cell(0, 3), cell(0, 2)];
+        let orders = [
+            looped.to_vec(),
+            looped.iter().rev().copied().collect::<Vec<_>>(),
+        ];
+        for order in orders {
+            let cache = engine.formula_cache.borrow();
+            let mut ctx = EvalContext::new(
+                &engine.bytecode,
+                &cache,
+                &idx,
+                Instant::<SheetDateTime>::from_unix_days(0.0),
+            );
+            for &at in &order {
+                ctx.eval_cell(at);
+            }
+            for at in looped {
+                let shown = ctx.eval_cell(at).to_display();
+                assert_eq!(shown, "#CIRCULAR!", "{at:?} in the order {order:?}");
+            }
+        }
+        // A cell the loop does not reach keeps its own error.
+        let cache = engine.formula_cache.borrow();
+        let mut ctx = EvalContext::new(
+            &engine.bytecode,
+            &cache,
+            &idx,
+            Instant::<SheetDateTime>::from_unix_days(0.0),
+        );
+        assert_eq!(ctx.eval_cell(cell(0, 1)).to_display(), "#DIV/0!");
     }
 }

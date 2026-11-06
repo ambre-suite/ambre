@@ -338,6 +338,78 @@ impl<L: Axis> AxisView<L> {
         slots
     }
 
+    /// Remove every element of the line `uid` from the view, as
+    /// [`Axes::delete`] removes them from the list, with no read of the list.
+    /// `None` when the view skipped an element it could not read, where its
+    /// slots and the list's differ, or when `uid` shows no line. The view is
+    /// then left half edited, so the caller drops it.
+    fn remove_line(&mut self, uid: &Uid) -> Option<()> {
+        if self.read == LineRead::Skipped {
+            return None;
+        }
+        let pos = self.pos(uid)?;
+        let removed: Vec<Pos<Slot>> = self
+            .elements
+            .iter_enumerated()
+            .filter(|(_, e)| e.uid == *uid)
+            .map(|(slot, _)| slot)
+            .collect();
+        let next = self;
+        for slot in removed.iter().rev() {
+            let element = next.elements.remove(*slot)?;
+            next.owner.remove(&element.id);
+        }
+        next.lines.remove(pos)?;
+        next.shown.remove(pos)?;
+        next.at.remove(uid);
+        next.hidden_of.remove(uid);
+        for shown in next.shown.iter_mut() {
+            let before = *shown;
+            for _ in removed.iter().filter(|r| **r < before) {
+                *shown = shown.prev()?;
+            }
+        }
+        next.renumber_from(pos);
+        Some(())
+    }
+
+    /// Insert the minted line `uid` before the line at `at`, as
+    /// [`Axes::insert`] writes it, with no read of the list. `None` where the
+    /// view and the list may differ, as for
+    /// [`remove_line`](Self::remove_line), or when `uid` already names a line.
+    fn insert_minted(&mut self, at: Pos<L>, uid: Uid) -> Option<()> {
+        let element = Element::minted(uid);
+        if self.read == LineRead::Skipped
+            || self.at.contains_key(&uid)
+            || self.owner.contains_key(&element.id)
+        {
+            return None;
+        }
+        let slot = self.insert_slot(at)?;
+        let next = self;
+        next.elements.insert(slot, element).ok()?;
+        next.owner.insert(element.id, uid);
+        for shown in next.shown.iter_mut() {
+            if *shown >= slot {
+                *shown += Len::<Slot>::ONE;
+            }
+        }
+        next.lines.insert(at, uid).ok()?;
+        next.shown.insert(at, slot).ok()?;
+        next.renumber_from(at);
+        Some(())
+    }
+
+    /// Record the position of every line from `from` on, after an edit
+    /// shifted them.
+    fn renumber_from(&mut self, from: Pos<L>) {
+        let lines = &self.lines;
+        let at = &mut self.at;
+        for (pos, uid) in lines.iter_enumerated().skip(from.to_usize()) {
+            at.insert(*uid, pos);
+        }
+    }
+
     /// The slot an insert at `at` writes to: before the line now at `at`, or at
     /// the end of the list.
     fn insert_slot(&self, at: Pos<L>) -> Option<Pos<Slot>> {
@@ -609,6 +681,22 @@ impl SheetIndex {
     #[must_use]
     pub fn contains_col(&self, id: &Uid) -> bool {
         self.cols.pos(id).is_some()
+    }
+
+    /// The index after the line `uid` of axis `L` is deleted, derived from
+    /// this one with no read of the document. `None` when only a read can tell
+    /// ([`AxisView::remove_line`]).
+    pub(crate) fn without_line<L: AxisOrder>(mut self, uid: &Uid) -> Option<SheetIndex> {
+        L::view_mut(&mut self).remove_line(uid)?;
+        Some(self)
+    }
+
+    /// The index after the minted line `uid` of axis `L` is inserted before
+    /// position `at`, derived from this one with no read of the document.
+    /// `None` when only a read can tell ([`AxisView::insert_minted`]).
+    pub(crate) fn with_line<L: AxisOrder>(mut self, at: Pos<L>, uid: Uid) -> Option<SheetIndex> {
+        L::view_mut(&mut self).insert_minted(at, uid)?;
+        Some(self)
     }
 
     /// Record a minted row appended at the end, with no document. Unit tests

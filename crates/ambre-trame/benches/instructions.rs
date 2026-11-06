@@ -5,10 +5,12 @@
 //! `callgrind` is stable, so `scripts/instructions.py` fails the build when an
 //! operation outgrows its ceiling (`ambre-spec-testing.md section 2`).
 //!
-//! The re-anchor walk is a private method of the state. The script counts
-//! inside that method by its own name. The rest of the delete falls outside
-//! the count: the purge, and the engine reseed after it. Run with no operation
-//! named, as `cargo bench` does, every operation runs once: a smoke test.
+//! A structural edit is counted in two private methods of the state, each by
+//! its own name. They are the re-anchor walk and the engine step after the
+//! commit. The
+//! rest of the delete falls outside the count: the purge, the commit, and the
+//! caches of positions, merges, styles and sizes. Run with no operation named,
+//! as `cargo bench` does, every operation runs once: a smoke test.
 
 use ambre_core::index::{Len, Pos};
 use ambre_trame::logic::TrameState;
@@ -34,6 +36,13 @@ fn sheet() -> TrameState {
         }
     }
     let mut st = TrameState::new();
+    // One write on the last row materializes every row at once. A paste that
+    // grows the sheet one row at a time costs far more under `callgrind`.
+    st.handle_command(TrameCommand::SetCellText {
+        row: Pos::<Row>::new(FORMULAS - 1),
+        col: Pos::<Col>::new(1),
+        text: "0".to_owned(),
+    });
     st.handle_command(TrameCommand::PasteRange {
         target_row: Pos::<Row>::new(0),
         target_col: Pos::<Col>::new(0),
@@ -48,16 +57,17 @@ fn sheet() -> TrameState {
     st
 }
 
-/// Delete the middle row: the walk parses each formula of the sheet, and
-/// re-anchors none but the one on the deleted row.
+/// Delete the middle row. The formulas of the deleted row go with it. No other
+/// formula reads a cell of it, so the walk and the engine step carry the
+/// removed cells alone.
 #[inline(never)]
-fn ambre_budget_trame_reanchor_walk(st: &mut TrameState) {
+fn ambre_budget_trame_structural_edit(st: &mut TrameState) {
     black_box(st.handle_command(TrameCommand::DeleteRow {
         at: Pos::<Row>::new(FORMULAS / 2),
     }));
 }
 
-/// The sheet holds every formula the paste wrote, so the walk has its work.
+/// The sheet holds every formula the paste wrote, so the edit meets them.
 fn checked(st: &mut TrameState) {
     let out = st.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Seq::nth(u64::MAX),
@@ -75,10 +85,10 @@ fn checked(st: &mut TrameState) {
 }
 
 /// Each operation the script may name, with the function that runs it.
-const OPERATIONS: &[(&str, fn())] = &[("reanchor_walk", || {
+const OPERATIONS: &[(&str, fn())] = &[("structural_edit", || {
     let mut st = sheet();
     checked(&mut st);
-    ambre_budget_trame_reanchor_walk(&mut st);
+    ambre_budget_trame_structural_edit(&mut st);
 })];
 
 fn main() {

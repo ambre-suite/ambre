@@ -39,6 +39,7 @@ impl TrameState {
         // row/column uid is absent from the sheet index (a deleted line) is
         // skipped.
         let indices = self.engine_indices();
+        self.engine_skipped = false;
         let sheets: Vec<(Id<Sheet>, Pos<EngineSheet>)> = self
             .sheets_by_idx
             .iter()
@@ -68,7 +69,15 @@ impl TrameState {
             // otherwise flag a different culprit on each reseed.
             // Each key reads on the cell of its elements, and of two keys on
             // one cell the visible elements' wins (`TRAME-279`).
+            let placed = cells
+                .keys()
+                .filter(|key| index.place(key.as_str()).is_some())
+                .count();
             let (shown, read) = super::cells::shown_cells(index, cells.iter());
+            // A cell under a second key is a formula no dependency names.
+            if placed > shown.len() || !masked.is_empty() {
+                self.engine_skipped = true;
+            }
             if read == crate::model::LineRead::Skipped {
                 // A key no build writes, a crafted peer's among them, is said,
                 // never read in silence (`SCHEMA-003`).

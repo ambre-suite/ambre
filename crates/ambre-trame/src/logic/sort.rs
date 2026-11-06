@@ -189,10 +189,10 @@ impl TrameState {
         if self.axes().reorder_rows(sort_start, &target).is_none() {
             return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);
         }
-        let rewritten = self.reanchor_formulas(AxisEdit::Rows(LineEdit::Reorder));
+        let walk = self.reanchor_formulas(AxisEdit::Rows(LineEdit::Reorder), &[], None);
         self.doc.commit();
 
-        let mut outcome = self.after_reorder(rewritten);
+        let mut outcome = self.after_reorder(walk);
         outcome.display.push(TrameEvent::SortComplete);
         outcome
     }
@@ -200,10 +200,10 @@ impl TrameState {
     /// Shared tail of any whole-line reorder (sort, drag move): refresh the position<->uid
     /// cache and the position-keyed derived caches (merges, formatting, filter) for the new
     /// order. The compiled bytecode is uid-anchored, so a cell reference already follows
-    /// its moved data, and recomputing is enough. A formula whose range was re-anchored
-    /// (`rewritten`, `TRAME-227`) changed its text, so the engine is reseeded from it.
-    pub(super) fn after_reorder(&mut self, rewritten: bool) -> TrameOutcome {
-        self.rebuild_index();
+    /// its moved data and keeps its value. The engine step compiles again each formula
+    /// that reads positions, a range re-anchored by the walk among them (`TRAME-227`).
+    pub(super) fn after_reorder(&mut self, walk: super::structural::Walk) -> TrameOutcome {
+        let step = self.adopt_walk(walk);
         let mut display = self.rebuild_merges();
         self.reseed_styles();
         // The hidden set is keyed by row uid, so it follows the rows across the
@@ -211,13 +211,7 @@ impl TrameState {
         self.rebuild_filter();
         // So are the sizes: each follows its own line (`TRAME-170`).
         self.reseed_metrics();
-        if rewritten {
-            self.reseed_engine();
-        } else {
-            let indices = self.engine_indices();
-            self.engine.mark_all_dirty();
-            self.engine.compute_all_dirty(&indices);
-        }
+        self.carry_engine(step);
         let update = self.flush_delta();
         display.push(TrameEvent::DataReset);
         TrameOutcome {
