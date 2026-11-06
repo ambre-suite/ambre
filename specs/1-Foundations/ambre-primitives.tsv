@@ -2885,11 +2885,8 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_st
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	generic	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::name_target(reference) | param | &str	generic	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_formulas() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::remove_line() | ret | Option<bool>	generic	state flag
 ambre-trame | src/logic/structural.rs | crate::logic::structural | may_qualify() | ret | bool	generic	predicate
 ambre-trame | src/logic/structural.rs | crate::logic::structural | may_qualify(body) | param | &str	generic	the stored formula text the walk reads
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::cell_is_numeric() | ret | bool	generic	predicate or did-it-change return
@@ -4154,3 +4151,13 @@ ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::held() | ret | usize	math
 ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::is_busy() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/outbox.rs | crate::outbox | Outbox<A>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-logic | src/app.rs | crate::app | <AppCommand as Mutation>::is_mutating() | ret | bool	generic	predicate
+ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::has_cyclic() | ret | bool	generic	predicate
+ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::has_cyclic() | ret | bool	generic	predicate
+ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::knows() | ret | bool	generic	predicate
+ambre-trame | src/formula/identity.rs | crate::formula::identity | follows_its_lines() | ret | bool	generic	predicate
+ambre-trame | src/formula/identity.rs | crate::formula::identity | follows_on() | ret | bool	generic	predicate
+ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_skipped | field | bool	local	whether the last reseed left a stored cell out of the engine; only the impl of TrameState writes it, and it never leaves the Logic thread
+ambre-trame | src/logic/structural.rs | crate::logic::structural | Removal.filter_dropped | field | bool	local	whether the active filter went with the removed line; a private struct that lives inside one structural edit
+ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::engine_needs_reseed() | ret | bool	generic	predicate
+ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_one(key) | param | &str	foreign-api	a stored cell key as Loro reports it, handed back to the map insert of the rewrite
+ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_one(text) | param | &str	generic	the stored formula text the walk reads, before it is parsed

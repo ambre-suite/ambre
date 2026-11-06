@@ -6,9 +6,12 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use crate::formula::ACTIVE_SHEET;
 use crate::formula::SheetQualifier;
+use crate::formula::engine::Carry;
 use crate::formula::identity::{self, AxisEdit, LineEdit};
-use crate::model::{Axes, Removed};
+use crate::formula::text::{CellText, StoredForm};
+use crate::model::{Axes, CellKey, Removed};
 use ambre_core::index::{Len, Pos};
 
 impl TrameState {
@@ -18,11 +21,125 @@ impl TrameState {
     /// (`TRAME-227`), widen on an insert inside them (`TRAME-171`) and shrink
     /// on a delete (`TRAME-230`). Runs before the commit, so the rewrite and
     /// the edit are one undo step. Only a formula whose text changes is
-    /// written. Returns whether any was.
-    pub(super) fn reanchor_formulas(&self, edit: AxisEdit) -> bool {
-        let active = &self.active_sheet;
-        let new = self.build_sheet_index(active);
-        let mut rewritten = false;
+    /// written.
+    ///
+    /// `gone` names the lines the edit removed. The walk reads only the
+    /// formulas the engine names for them. Those read a cell of a gone line,
+    /// or read positions (`TRAME-280`). Any other
+    /// formula names its cells by lines the edit leaves in place, so its text
+    /// cannot change. When the engine cannot name them, the walk reads every
+    /// formula, and the engine reseeds.
+    pub(super) fn reanchor_formulas(
+        &self,
+        edit: AxisEdit,
+        gone: &[Uid],
+        inserted: Option<Uid>,
+    ) -> Walk {
+        let new = self.next_index(edit, gone, inserted);
+        if self.engine_needs_reseed() {
+            self.reanchor_every_formula(edit, &new);
+            return Walk {
+                index: new,
+                step: EngineStep::Reseed,
+            };
+        }
+        let removed = self.removed_cells(edit, gone);
+        let mut others: HashMap<Pos<EngineSheet>, SheetIndex> = HashMap::new();
+        let mut reread = Vec::new();
+        for cell in self.engine.structural_reach(&removed) {
+            let Some(sheet) = self.sheets_by_idx.get(cell.sheet.to_usize()) else {
+                continue;
+            };
+            let index = if cell.sheet == ACTIVE_SHEET {
+                &self.index
+            } else {
+                others
+                    .entry(cell.sheet)
+                    .or_insert_with(|| self.build_sheet_index(sheet))
+            };
+            let (Some(row), Some(col)) = (cell.row_uid(), cell.col_uid()) else {
+                continue;
+            };
+            let Some(at) = index.pos_of(&row, &col) else {
+                continue;
+            };
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str());
+            // The key the engine was fed: the first one the map holds, as
+            // every reader takes it (`TRAME-279`).
+            let Some((key, text)) = index.keys_at(at).into_iter().find_map(|key| {
+                match map.get(key.as_str()).map(|v| v.get_deep_value()) {
+                    Some(LoroValue::String(text)) => Some((key, text.to_string())),
+                    _ => None,
+                }
+            }) else {
+                continue;
+            };
+            self.reanchor_one(&map, sheet, key.as_str(), &text, &new, edit);
+            reread.push(Reread {
+                cell,
+                sheet: sheet.clone(),
+                key,
+            });
+        }
+        Walk {
+            index: new,
+            step: EngineStep::Carry { removed, reread },
+        }
+    }
+
+    /// The layout of the active sheet after `edit`, whose lists already hold
+    /// it. An insert of the line `inserted` and a delete of the lines `gone`
+    /// derive it from the layout before, with no read of the lists. A reorder,
+    /// or a view the derivation cannot follow, reads the lists.
+    fn next_index(&self, edit: AxisEdit, gone: &[Uid], inserted: Option<Uid>) -> SheetIndex {
+        let derived = match (edit, inserted) {
+            (AxisEdit::Rows(LineEdit::Insert { at, .. }), Some(uid)) => {
+                self.index.clone().with_line::<Row>(at, uid)
+            }
+            (AxisEdit::Cols(LineEdit::Insert { at, .. }), Some(uid)) => {
+                self.index.clone().with_line::<Col>(at, uid)
+            }
+            (AxisEdit::Rows(LineEdit::Delete { .. }), _) => {
+                gone.iter().try_fold(self.index.clone(), |index, uid| {
+                    index.without_line::<Row>(uid)
+                })
+            }
+            (AxisEdit::Cols(LineEdit::Delete { .. }), _) => {
+                gone.iter().try_fold(self.index.clone(), |index, uid| {
+                    index.without_line::<Col>(uid)
+                })
+            }
+            _ => None,
+        };
+        derived.unwrap_or_else(|| self.build_sheet_index(&self.active_sheet))
+    }
+
+    /// Take what the walk left once the edit commits. Its layout becomes the
+    /// position cache. Its engine step goes back to the caller, which runs it
+    /// after the merges are rebuilt.
+    pub(super) fn adopt_walk(&mut self, walk: Walk) -> EngineStep {
+        self.adopt_index(walk.index);
+        walk.step
+    }
+
+    /// Take the layout the walk derived as the position cache. Each test
+    /// checks it against a read of the lists.
+    fn adopt_index(&mut self, index: SheetIndex) {
+        #[cfg(test)]
+        assert_eq!(
+            index,
+            self.axes().index(),
+            "the derived layout is the lists'"
+        );
+        self.note_index_read(&index);
+        self.index = index;
+    }
+
+    /// The walk over every formula of every sheet, for an engine that cannot
+    /// name the formulas an edit moves.
+    fn reanchor_every_formula(&self, edit: AxisEdit, new: &SheetIndex) {
         for sheet in &self.sheets_by_idx {
             let map = self
                 .doc
@@ -30,44 +147,140 @@ impl TrameState {
             let LoroValue::Map(cells) = map.get_value() else {
                 continue;
             };
-            let edited = |q: Option<&SheetQualifier>| match q {
-                None => sheet == active,
-                Some(SheetQualifier::Id(id)) => id == active,
-                Some(SheetQualifier::Name(name)) => {
-                    self.engine_sheet_by_name
-                        .get(&name.key())
-                        .and_then(|idx| self.sheets_by_idx.get(idx.to_usize()))
-                        == Some(active)
-                }
-            };
             for (key, value) in cells.iter() {
                 let LoroValue::String(text) = value else {
                     continue;
                 };
-                let Some(body) = text.strip_prefix('=') else {
-                    continue;
-                };
-                // Another sheet's formula reads this one only through a
-                // qualifier.
-                if sheet != active && !may_qualify(body) {
-                    continue;
-                }
-                let Ok(ast) = parse_formula(body) else {
-                    continue;
-                };
-                // Most formulas name no line the edit moves: those render and
-                // write nothing.
-                let Some(after) = identity::reanchor(ast, &edited, &self.index, &new, edit) else {
-                    continue;
-                };
-                let after = render::render(&after);
-                if after != body {
-                    let _ = map.insert(key, format!("={after}").as_str());
-                    rewritten = true;
-                }
+                self.reanchor_one(&map, sheet, key, text, new, edit);
             }
         }
-        rewritten
+    }
+
+    /// Re-anchor the stored text `text` of the cell `key` of `sheet`, and
+    /// write it back when it changed.
+    fn reanchor_one(
+        &self,
+        map: &loro::LoroMap,
+        sheet: &Id<Sheet>,
+        key: &str,
+        text: &str,
+        new: &SheetIndex,
+        edit: AxisEdit,
+    ) {
+        let active = &self.active_sheet;
+        let Some(body) = text.strip_prefix('=') else {
+            return;
+        };
+        // Another sheet's formula reads this one only through a qualifier.
+        if sheet != active && !may_qualify(body) {
+            return;
+        }
+        let Ok(ast) = parse_formula(body) else {
+            return;
+        };
+        let edited = |q: Option<&SheetQualifier>| match q {
+            None => sheet == active,
+            Some(SheetQualifier::Id(id)) => id == active,
+            Some(SheetQualifier::Name(name)) => {
+                self.engine_sheet_by_name
+                    .get(&name.key())
+                    .and_then(|idx| self.sheets_by_idx.get(idx.to_usize()))
+                    == Some(active)
+            }
+        };
+        // Most formulas name no line the edit moves: those render and write
+        // nothing.
+        let Some(after) = identity::reanchor(ast, &edited, &self.index, new, edit) else {
+            return;
+        };
+        let after = render::render(&after);
+        if after != body {
+            let _ = map.insert(key, format!("={after}").as_str());
+        }
+    }
+
+    /// Whether the engine cannot carry a structural edit and must reseed.
+    ///
+    /// A formula refused for a cycle keeps no edge, so the graph cannot say
+    /// whether the edit frees it. A reseed decides it by its feed order.
+    /// A cell the last reseed left out of the engine, a masked one or one
+    /// under a second key, is a formula no dependency names.
+    fn engine_needs_reseed(&self) -> bool {
+        #[cfg(test)]
+        if self.structural_path == StructuralPath::Reseed {
+            return true;
+        }
+        self.engine.has_cyclic() || self.engine_skipped || !self.masked_cells.is_empty()
+    }
+
+    /// The engine cells of the active sheet on the lines `gone`: each line
+    /// crossed with every line of the other axis in the old layout. The
+    /// engine feeds a stored cell under its two lines, so no other cell of a
+    /// gone line holds a value.
+    fn removed_cells(&self, edit: AxisEdit, gone: &[Uid]) -> HashSet<CellId> {
+        let mut cells = HashSet::new();
+        for &line in gone {
+            match edit {
+                AxisEdit::Rows(_) => cells.extend(
+                    self.index
+                        .cols()
+                        .lines()
+                        .iter()
+                        .map(|&col| CellId::bound(ACTIVE_SHEET, line, col)),
+                ),
+                AxisEdit::Cols(_) => cells.extend(
+                    self.index
+                        .rows()
+                        .lines()
+                        .iter()
+                        .map(|&row| CellId::bound(ACTIVE_SHEET, row, line)),
+                ),
+            }
+        }
+        cells
+    }
+
+    /// Carry the engine across a committed structural edit: the step the walk
+    /// chose. A carried step that meets a cycle reseeds after all, so the
+    /// feed order decides which cell of it is refused.
+    pub(super) fn carry_engine(&mut self, step: EngineStep) {
+        let EngineStep::Carry { removed, reread } = step else {
+            self.reseed_engine();
+            return;
+        };
+        // An edit can mask a cell that held a value: the masked cell leaves the
+        // engine, which only a reseed does.
+        if !self.masked_cells.is_empty() {
+            self.reseed_engine();
+            return;
+        }
+        let indices = self.engine_indices();
+        let texts: Vec<(CellId, CellText<StoredForm>)> = reread
+            .into_iter()
+            .map(|r| {
+                let text = match self
+                    .doc
+                    .get_map(SheetContainer::of(SheetRoot::Cells, &r.sheet).as_str())
+                    .get(r.key.as_str())
+                    .map(|v| v.get_deep_value())
+                {
+                    Some(LoroValue::String(text)) => text.to_string(),
+                    _ => String::new(),
+                };
+                (r.cell, CellText::<StoredForm>::new(text))
+            })
+            .collect();
+        let ctx = TrameCtx {
+            engine_sheet_by_name: &self.engine_sheet_by_name,
+            engine_sheet_by_id: &self.engine_sheet_by_id,
+            named: &self.named,
+        };
+        let carried = self
+            .engine
+            .apply_structural(&removed, &texts, &indices, &ctx);
+        if carried == Carry::CycleMet {
+            self.reseed_engine();
+        }
     }
 
     /// Insert a blank row/column at grid position `at`, shifting later elements
@@ -86,9 +299,13 @@ impl TrameState {
         if self.axes().insert(at, uid).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
-        self.reanchor_formulas(L::edit(LineEdit::Insert { at, n: Len::ONE }));
+        let walk = self.reanchor_formulas(
+            L::edit(LineEdit::Insert { at, n: Len::ONE }),
+            &[],
+            Some(uid),
+        );
         self.doc.commit();
-        self.after_structural()
+        self.after_structural(Some(walk))
     }
 
     /// Delete the row/column at grid position `at`, shifting later elements
@@ -98,18 +315,22 @@ impl TrameState {
     /// ([`reanchor_formulas`](Self::reanchor_formulas)). A no-op in virtual
     /// space.
     pub(super) fn delete_axis<L: SheetLine>(&mut self, at: Pos<L>) -> TrameOutcome {
-        let Some(filter_dropped) = self.remove_line(at) else {
+        let Some(removal) = self.remove_line(at) else {
             return TrameOutcome::display_only(vec![]);
         };
-        self.reanchor_formulas(L::edit(LineEdit::Delete { at, n: Len::ONE }));
+        let walk = self.reanchor_formulas(
+            L::edit(LineEdit::Delete { at, n: Len::ONE }),
+            &[removal.uid],
+            None,
+        );
         self.doc.commit();
-        self.after_line_removal(filter_dropped)
+        self.after_line_removal(walk, removal.filter_dropped)
     }
 
     /// The outcome of a committed removal: the structural refresh, and the
     /// notice that the filter went with its column when it did.
-    fn after_line_removal(&mut self, filter_dropped: bool) -> TrameOutcome {
-        let mut outcome = self.after_structural();
+    fn after_line_removal(&mut self, walk: Walk, filter_dropped: bool) -> TrameOutcome {
+        let mut outcome = self.after_structural(Some(walk));
         if filter_dropped {
             outcome.display.push(TrameEvent::FilterCleared);
         }
@@ -123,13 +344,16 @@ impl TrameState {
 
     /// Remove the row/column at grid position `at` and purge what it carried,
     /// with no commit, so several removals land as one. `None` when the line is
-    /// virtual and nothing was removed, else whether the active filter went
-    /// with it.
-    fn remove_line<L: SheetLine>(&mut self, at: Pos<L>) -> Option<bool> {
+    /// virtual and nothing was removed.
+    fn remove_line<L: SheetLine>(&mut self, at: Pos<L>) -> Option<Removal> {
         // A virtual line has nothing materialized to remove. Every element of
         // the line goes, the hidden ones too (`TRAME-269`).
         let removed = self.axes().delete(at)?;
-        Some(self.purge_axis(&removed, L::AXIS))
+        let filter_dropped = self.purge_axis(&removed, L::AXIS);
+        Some(Removal {
+            uid: removed.uid,
+            filter_dropped,
+        })
     }
 
     /// Move the row/column at grid position `from` to grid position `to`
@@ -147,9 +371,9 @@ impl TrameState {
         if self.axes().move_line(from, to).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
-        let rewritten = self.reanchor_formulas(L::edit(LineEdit::Reorder));
+        let walk = self.reanchor_formulas(L::edit(LineEdit::Reorder), &[], None);
         self.doc.commit();
-        self.after_reorder(rewritten)
+        self.after_reorder(walk)
     }
 
     /// Delete every row/column spanned by the current selection rectangle,
@@ -168,7 +392,7 @@ impl TrameState {
         else {
             return TrameOutcome::display_only(vec![]);
         };
-        let mut removals: Vec<bool> = Vec::new();
+        let mut removals: Vec<Removal> = Vec::new();
         let mut at = Some(end);
         while let Some(line) = at.filter(|line| *line >= start) {
             removals.extend(self.remove_line(line));
@@ -179,9 +403,10 @@ impl TrameState {
         }
         // The removed lines are the materialized run from `start`.
         let n = Len::of(removals.len());
-        self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }));
+        let gone: Vec<Uid> = removals.iter().map(|r| r.uid).collect();
+        let walk = self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }), &gone, None);
         self.doc.commit();
-        self.after_line_removal(removals.contains(&true))
+        self.after_line_removal(walk, removals.iter().any(|r| r.filter_dropped))
     }
 
     /// The range [`sort_selection`](Self::sort_selection) and the multi-key sort
@@ -306,16 +531,23 @@ impl TrameState {
     }
 
     /// Shared tail of every structural op. It rebuilds the position <-> id
-    /// cache, since positions shifted. It reseeds the formula engine, which
-    /// reads each stored line at its new position, and the formatting sets
-    /// from the new layout. It then flushes
-    /// the CRDT delta and asks the UI to re-fetch its viewport.
-    pub(super) fn after_structural(&mut self) -> TrameOutcome {
-        self.rebuild_index();
+    /// cache, since positions shifted. It carries the formula engine across
+    /// the edit through `step`, and reseeds the formatting sets from the new
+    /// layout. It then flushes the CRDT delta and asks the UI to re-fetch its
+    /// viewport. With no walk, as after an undo, it reads the lists and
+    /// reseeds the engine.
+    pub(super) fn after_structural(&mut self, walk: Option<Walk>) -> TrameOutcome {
+        let step = match walk {
+            Some(walk) => self.adopt_walk(walk),
+            None => {
+                self.rebuild_index();
+                EngineStep::Reseed
+            }
+        };
         // Merges resolve through the freshly rebuilt index; do this before the
-        // engine reseed so masked cells are excluded from the DAG.
+        // engine step so masked cells are excluded from the DAG.
         let mut display = self.rebuild_merges();
-        self.reseed_engine();
+        self.carry_engine(step);
         self.reseed_styles();
         // The hidden set is keyed by stable row uid, so a structural shift just
         // remaps it to the new positions (no recompute).
@@ -331,6 +563,51 @@ impl TrameState {
             ephemeral: None,
         }
     }
+}
+
+/// What a structural edit leaves the engine to do once it commits.
+pub(super) enum EngineStep {
+    /// Reseed the whole engine from the document.
+    Reseed,
+    /// Clear the cells of the gone lines, and compile the re-read formulas
+    /// again from their text.
+    Carry {
+        removed: HashSet<CellId>,
+        reread: Vec<Reread>,
+    },
+}
+
+/// What the walk leaves for the tail of a structural edit.
+pub(super) struct Walk {
+    /// The layout of the active sheet after the edit.
+    index: SheetIndex,
+    /// What the engine does once the edit commits.
+    step: EngineStep,
+}
+
+/// A formula the walk read, and where its text lives.
+pub(super) struct Reread {
+    cell: CellId,
+    sheet: Id<Sheet>,
+    key: CellKey,
+}
+
+/// The path a structural edit takes, for the test that holds the carried
+/// engine against a full rebuild (`TRAME-280`).
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum StructuralPath {
+    /// The walk narrowed to the formulas the engine names, then a carried step.
+    Carry,
+    /// The reference model: the walk over every formula, then a full reseed.
+    Reseed,
+}
+
+/// One line removed, before the commit.
+struct Removal {
+    uid: Uid,
+    /// Whether the active filter went with the line.
+    filter_dropped: bool,
 }
 
 /// Whether a stored formula body may name another sheet. Every qualifier ends

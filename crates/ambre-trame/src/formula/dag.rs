@@ -164,6 +164,25 @@ impl DependencyGraph {
         self.clear_range_deps(cell);
     }
 
+    /// Drop the node of `cell` once no edge touches it. A cell of a deleted
+    /// line keeps its node while a formula still reads it. Once no formula
+    /// reads it, the node goes: a full reseed never creates it.
+    pub fn drop_if_isolated(&mut self, cell: CellId) {
+        let Some(&node) = self.cell_to_node.get(&cell) else {
+            return;
+        };
+        let touched = self
+            .cell_dag
+            .edges_directed(node, Direction::Incoming)
+            .next()
+            .is_some()
+            || self.cell_dag.edges(node).next().is_some();
+        if !touched {
+            self.cell_dag.remove_node(node);
+            self.cell_to_node.remove(&cell);
+        }
+    }
+
     /// Remove every edge pointing *into* `node`, that is, the dependencies its own
     /// formula declared. Outgoing edges (its dependents) are untouched.
     fn clear_incoming(&mut self, node: petgraph::graph::NodeIndex) {

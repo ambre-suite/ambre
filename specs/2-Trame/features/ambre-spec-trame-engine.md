@@ -339,13 +339,14 @@ Each viewport answer carries a version, and the UI drops one older than the last
   (`ambre-spec-trame-named-ranges.md`). **The target interns a sheet index at first sight**, stable
   for the document lifetime. A tab switch then rebuilds the active sheet's display caches alone and
   resets no engine. Answered by the `Stable engine sheet indexes` Story (`ambre-roadmap.md` E6).
-* **The recompute walks the whole graph.** The topological walk covers every formula cell rather
-  than the dirty closure. The static cycle check is already bounded to the descendants of the edited
-  formula (`TRAME-012`).
+* **The recompute of a cell edit walks the whole graph.** The topological walk after a cell write
+  covers every formula cell rather than the dirty closure. The static cycle check is already bounded
+  to the descendants of the edited formula (`TRAME-012`). The engine step of a structural edit
+  already walks the dirty closure alone (`ambre-spec-trame-rows-and-columns.md`, `TRAME-280`).
 
-  **The target bounds the walk too.** A Kahn walk over the dirty closure's induced subgraph costs
-  the dirty set rather than the DAG. Two further defects sit in
-  the same path, and they belong to the graph:
+  **The target bounds the walk of a cell edit too.** A Kahn walk over the dirty closure's induced
+  subgraph costs the dirty set rather than the DAG. Two further defects sit in the same path, and
+  they belong to the graph:
   `features/ambre-spec-trame-formula-engine.md section 6`. Answered by the "A recompute bounded by
   what changed" story.
 * **A local edit costs the whole viewport too** (`TRAME-002`). Section 3.C says P2 answers with a

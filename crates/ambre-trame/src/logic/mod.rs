@@ -202,6 +202,14 @@ pub struct TrameState {
     /// formula engine
     /// and not displayed, but never destroyed; reappear on unmerge.
     masked_cells: HashSet<CellPos>,
+    /// Whether the last engine reseed left out a stored cell: a masked one on
+    /// any sheet, or one shown under a second key (`TRAME-279`). A structural
+    /// edit then reseeds, since no dependency names such a cell (`TRAME-280`).
+    engine_skipped: bool,
+    /// The path a structural edit takes. Only the test of `TRAME-280` sets the
+    /// reference model, which walks every formula and reseeds.
+    #[cfg(test)]
+    structural_path: structural::StructuralPath,
     /// CRDT sheet id per local engine index (`sheets_by_idx[i]` has index `i`).
     /// The **active sheet is always index 0**, so single-sheet code paths keep
     /// using [`CellRef::new`] (sheet 0); other sheets take 1.. in sorted-id
@@ -411,6 +419,9 @@ impl TrameState {
             row_heights: HashMap::new(),
             hidden_rows: HashSet::new(),
             masked_cells: HashSet::new(),
+            engine_skipped: false,
+            #[cfg(test)]
+            structural_path: structural::StructuralPath::Carry,
             sheets_by_idx: Vec::new(),
             engine_sheet_by_name: HashMap::new(),
             engine_sheet_by_id: HashMap::new(),
@@ -578,6 +589,12 @@ mod tests;
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod convergence_tests;
+
+// Host-only, on `proptest` like the convergence tests: the incremental
+// structural path against a full rebuild (`TRAME-280`).
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod structural_tests;
 
 /// The schema shape belt (`SCHEMA-018`): the key set, the value types and the
 /// `postcard` layouts a build writes, frozen per `SCHEMA_VERSION`. Test-only,

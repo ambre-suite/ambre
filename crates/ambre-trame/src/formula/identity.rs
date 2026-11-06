@@ -271,6 +271,55 @@ pub fn unbind<'a>(
     })
 }
 
+/// Whether a structural edit can change `expr`, its compiled form or its value
+/// only through the cells it reads.
+///
+/// That holds when each reference of `expr` names a cell by two lines that
+/// `index_of` still holds, and `expr` calls neither `ROW` nor `COLUMN`. Such a
+/// formula follows its cells. [`reanchor`] rewrites it only when one of those
+/// lines goes, and its value moves only when a cell it reads does. Anything
+/// else reads positions. That covers a range, a whole-line span, a position
+/// past the used range, a defined name, its own position and a line already
+/// gone. A structural edit re-reads each of those (`TRAME-280`).
+pub fn follows_its_lines<'a>(
+    expr: &Expr,
+    index_of: &impl Fn(Option<&SheetQualifier>) -> Option<&'a SheetIndex>,
+) -> bool {
+    follows_on(expr, None, index_of)
+}
+
+/// [`follows_its_lines`] under the qualifier `q` of the enclosing reference.
+fn follows_on<'a>(
+    expr: &Expr,
+    q: Option<&SheetQualifier>,
+    index_of: &impl Fn(Option<&SheetQualifier>) -> Option<&'a SheetIndex>,
+) -> bool {
+    match expr {
+        Expr::Literal(_) => true,
+        Expr::StoredCell(cell) => match (cell.row, cell.col, index_of(q)) {
+            (StoredAxis::Line(row), StoredAxis::Line(col), Some(index)) => {
+                Row::pos_of_element(index, &row).is_some()
+                    && Col::pos_of_element(index, &col).is_some()
+            }
+            _ => false,
+        },
+        Expr::SheetRef { sheet, inner } => follows_on(inner, Some(sheet), index_of),
+        Expr::BinOp { lhs, rhs, .. } => {
+            follows_on(lhs, q, index_of) && follows_on(rhs, q, index_of)
+        }
+        Expr::UnaryOp { operand, .. } => follows_on(operand, q, index_of),
+        Expr::FnCall { name, args } => {
+            !matches!(name.as_str(), "ROW" | "COLUMN")
+                && args.iter().all(|a| follows_on(a, q, index_of))
+        }
+        Expr::CellRef(_)
+        | Expr::Range(_)
+        | Expr::StoredRange(..)
+        | Expr::AxisSpan(_)
+        | Expr::Name(_) => false,
+    }
+}
+
 /// Carry the references of `expr` that read the edited sheet across one
 /// structural edit, from the `old` layout to the `new` one.
 ///

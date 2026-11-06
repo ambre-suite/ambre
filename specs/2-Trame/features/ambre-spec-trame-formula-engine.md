@@ -337,8 +337,10 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   re-anchors ranges, and only those it holds. A range another peer types meanwhile keeps the lines
   it was typed against, so after the merge it covers wherever those lines went. It reads a sound
   rectangle, but not always the block its author saw. No rule covers it yet.
-* **Every structural edit parses every formula that reads its sheet.** The re-anchoring pass costs
-  what a reseed already costs, which the edit pays too. No budget row covers either.
+* **Which error a loop closed through a range shows depends on the evaluation order** (`TRAME-042`).
+  A cell read from outside the loop first meets the other errors its range holds; a cell read from
+  inside meets the loop. A pass that starts elsewhere can show `#REF!` where a full reseed shows
+  `#CIRCULAR!`. Every cell of the loop reads an error either way. No rule says which one.
 * **A defined name stays positional.** A name stores `A1` text, re-read on each reseed, so an insert
   above its target moves it (`features/ambre-spec-trame-named-ranges.md`).
 * **A defined name cannot take whole lines.** A name's body is a cell or a range, so `=A:A` is
