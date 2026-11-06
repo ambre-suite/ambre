@@ -37,11 +37,11 @@ use crate::{CellPos, CellRect, Col, Row, TrameCommand};
 
 /// The window the generator addresses: small, so a structural edit meets the
 /// formulas that read the lines it edits.
-const ROWS: u32 = 6;
-const COLS: u32 = 4;
+pub(super) const ROWS: u32 = 6;
+pub(super) const COLS: u32 = 4;
 
 /// The peer both states write under, so both mint the same uids.
-const PEER: u64 = 7;
+pub(super) const PEER: u64 = 7;
 
 /// One step of a program.
 #[derive(Debug, Clone)]
@@ -88,7 +88,9 @@ enum Step {
         col: u32,
     },
     Undo,
-    /// A peer writes a cell, and the delta merges into both states.
+    /// A peer writes a cell, and the delta merges into both states. Both
+    /// carry it, as both carry a local write: the remote path has its own
+    /// reference model (`TRAME-282`).
     Remote {
         row: u32,
         col: u32,
@@ -99,7 +101,7 @@ enum Step {
 /// What a cell holds: numbers and formulas. The formulas read cells, ranges,
 /// whole lines, positions past the used range, their own position, a name and
 /// the other sheet. Cycles, static or through a range, come out of the mix.
-fn text() -> impl Strategy<Value = String> {
+pub(super) fn text() -> impl Strategy<Value = String> {
     prop_oneof![
         (0i64..9).prop_map(|n| n.to_string()),
         Just("=A1+B2".to_owned()),
@@ -138,11 +140,11 @@ fn step() -> impl Strategy<Value = Step> {
     ]
 }
 
-fn at(row: u32, col: u32) -> CellPos {
+pub(super) fn at(row: u32, col: u32) -> CellPos {
     CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col))
 }
 
-fn write(row: u32, col: u32, text: &str) -> TrameCommand {
+pub(super) fn write(row: u32, col: u32, text: &str) -> TrameCommand {
     TrameCommand::SetCellText {
         row: Pos::<Row>::new(row),
         col: Pos::<Col>::new(col),
@@ -206,7 +208,7 @@ fn commands(step: &Step) -> Vec<TrameCommand> {
 
 /// A workbook of two sheets: numbers and formulas on the first, and on the
 /// second, formulas that read the first through a qualifier.
-fn seeded(path: StructuralPath) -> TrameState {
+pub(super) fn seeded(path: StructuralPath) -> TrameState {
     let mut st = TrameState::with_peer(ambre_core::PeerId::new(PEER));
     st.structural_path = path;
     let first = st.active_sheet.clone();
@@ -254,7 +256,7 @@ fn seeded(path: StructuralPath) -> TrameState {
 }
 
 /// The stored text of every cell of every sheet.
-fn stored(st: &TrameState) -> Vec<LoroValue> {
+pub(super) fn stored(st: &TrameState) -> Vec<LoroValue> {
     st.sheets_by_idx
         .iter()
         .map(|sheet| {
@@ -267,14 +269,14 @@ fn stored(st: &TrameState) -> Vec<LoroValue> {
 
 /// Everything the engine holds that a later edit depends on, values aside.
 #[derive(Debug, PartialEq)]
-struct Engine {
-    edges: HashMap<(CellId, CellId), usize>,
-    ranges: HashMap<CellId, Vec<String>>,
-    formulas: Vec<String>,
-    cyclic: bool,
+pub(super) struct Engine {
+    pub(super) edges: HashMap<(CellId, CellId), usize>,
+    pub(super) ranges: HashMap<CellId, Vec<String>>,
+    pub(super) formulas: Vec<String>,
+    pub(super) cyclic: bool,
 }
 
-fn engine(st: &TrameState) -> Engine {
+pub(super) fn engine(st: &TrameState) -> Engine {
     let e = &st.engine;
     let mut edges = HashMap::new();
     for edge in e.deps.cell_dag.edge_indices() {
@@ -313,7 +315,7 @@ fn values(st: &TrameState) -> HashMap<CellId, (String, String)> {
 /// The two engines hold the same value for each cell, errors included. A
 /// cell on a loop closed through a range shows `#CIRCULAR!` on both, whatever
 /// order each pass took (`TRAME-281`).
-fn same_values(carried: &TrameState, rebuilt: &TrameState) -> Result<(), String> {
+pub(super) fn same_values(carried: &TrameState, rebuilt: &TrameState) -> Result<(), String> {
     let (a, b) = (values(carried), values(rebuilt));
     let keys: HashSet<&CellId> = a.keys().chain(b.keys()).collect();
     for cell in keys {
@@ -359,4 +361,129 @@ proptest! {
             prop_assert!(same.is_ok(), "a value differs after {:?}: {:?}", step, same);
         }
     }
+}
+
+/// Run `before`, a remote write of `text` at `row`, `col`, an undo, then
+/// `edit`, on a carried state and on the reference model. The undo removes
+/// the line `before` added. The remote formula then stays stored under an
+/// element no line carries any more. It places on no cell, and the engine
+/// holds nothing of it. The two must still store the same text after `edit`.
+fn orphan_then(before: TrameCommand, row: u32, col: u32, text: &str, edit: &[TrameCommand]) {
+    let mut carried = seeded(StructuralPath::Carry);
+    let mut rebuilt = seeded(StructuralPath::Reseed);
+    for st in [&mut carried, &mut rebuilt] {
+        st.handle_command(before.clone());
+    }
+    let mut peer = TrameState::with_peer(ambre_core::PeerId::new(PEER + 1));
+    peer.import_snapshot(&carried.export_snapshot())
+        .expect("a snapshot this build wrote reads back");
+    let delta = peer
+        .handle_command(write(row, col, text))
+        .update
+        .expect("a write sends a delta");
+    for st in [&mut carried, &mut rebuilt] {
+        st.apply_remote(&delta);
+        st.handle_command(TrameCommand::Undo);
+    }
+    assert_eq!(
+        stored(&carried),
+        stored(&rebuilt),
+        "the undo leaves both alike"
+    );
+    for command in edit {
+        carried.handle_command(command.clone());
+        rebuilt.handle_command(command.clone());
+    }
+    assert_eq!(
+        stored(&carried),
+        stored(&rebuilt),
+        "the walk reads the stored formula"
+    );
+}
+
+/// The shrunk seed of `a_carried_engine_equals_a_full_rebuild`: a formula
+/// left under a column an undo removed, then a row insert (`TRAME-280`).
+#[test]
+fn a_row_insert_rewrites_a_formula_left_under_a_removed_column() {
+    orphan_then(
+        TrameCommand::InsertColumn {
+            at: Pos::<Col>::new(2),
+        },
+        0,
+        2,
+        "=A3-C1",
+        &[TrameCommand::InsertRow {
+            at: Pos::<Row>::new(0),
+        }],
+    );
+}
+
+/// A formula left under a row an undo removed, then a column insert.
+#[test]
+fn a_column_insert_rewrites_a_formula_left_under_a_removed_row() {
+    orphan_then(
+        TrameCommand::InsertRow {
+            at: Pos::<Row>::new(1),
+        },
+        1,
+        0,
+        "=B2+A1",
+        &[TrameCommand::InsertColumn {
+            at: Pos::<Col>::new(0),
+        }],
+    );
+}
+
+/// A formula left under a row an undo removed, then a move.
+#[test]
+fn a_move_rewrites_a_formula_left_under_a_removed_row() {
+    orphan_then(
+        TrameCommand::InsertRow {
+            at: Pos::<Row>::new(1),
+        },
+        1,
+        0,
+        "=B2+A1",
+        &[TrameCommand::MoveRow {
+            from: Pos::<Row>::new(0),
+            to: Pos::<Row>::new(2),
+        }],
+    );
+}
+
+/// A formula left under a row an undo removed, then a sort.
+#[test]
+fn a_sort_rewrites_a_formula_left_under_a_removed_row() {
+    orphan_then(
+        TrameCommand::InsertRow {
+            at: Pos::<Row>::new(1),
+        },
+        1,
+        0,
+        "=B2+A1",
+        &[TrameCommand::SortRange {
+            sheet_id: super::default_sheet(),
+            rect: CellRect::spanning(at(0, 0), at(ROWS - 1, COLS - 1)),
+            sort_col: Len::<Col>::new(0),
+            order: SortOrder::Descending,
+            header: HeaderRow::Absent,
+        }],
+    );
+}
+
+/// A formula left under a column an undo removed, then a delete of another
+/// column.
+#[test]
+fn a_column_delete_rewrites_a_formula_left_under_a_removed_column() {
+    orphan_then(
+        TrameCommand::InsertColumn {
+            at: Pos::<Col>::new(2),
+        },
+        0,
+        2,
+        "=A3-C1",
+        &[TrameCommand::DeleteColumn {
+            at: Pos::<Col>::new(0),
+        }],
+    );
 }

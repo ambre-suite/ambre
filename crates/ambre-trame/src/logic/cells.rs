@@ -380,10 +380,25 @@ impl TrameState {
             let Some(key) = self.index.key_at(at) else {
                 return;
             };
-            let _ = self
+            let map = self
                 .doc
-                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())
-                .insert(key.as_str(), stored.as_str());
+                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
+            let _ = map.insert(key.as_str(), stored.as_str());
+            // A value a peer wrote under a hidden element of the same lines
+            // stays (`TRAME-279`), and the cell then sits under two keys. A
+            // reseed leaves such a cell out and marks the engine, so the next
+            // structural edit reseeds too (`TRAME-280`). The write marks it
+            // the same way.
+            if self
+                .index
+                .keys_at(at)
+                .iter()
+                .filter(|k| map.get(k.as_str()).is_some())
+                .nth(1)
+                .is_some()
+            {
+                self.engine_skipped = true;
+            }
             let cell = CellId::bound(ACTIVE_SHEET, rl, cl);
             let indices = self.engine_indices();
             let ctx = TrameCtx {
