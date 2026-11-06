@@ -138,7 +138,9 @@ pub use encoded::{
     Encoded, EncodedKeyLink, EncodedKind, EncodedLogEntry, EscrowedKey, MASTER_KEY_SALT_LEN,
     MasterKeySalt, SealedName, SealedShare, WrappedDocKey, WrappedMasterKey,
 };
-pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
+pub use envelope::{
+    Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature, Transcript,
+};
 pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, FileBytes};
 pub use fingerprint::KeyFingerprints;

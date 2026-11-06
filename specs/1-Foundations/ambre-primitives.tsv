@@ -1023,8 +1023,6 @@ ambre-crypto | src/random.rs | crate::random | fill(buf) | param | &mut[u8]	gene
 ambre-crypto | src/signature.rs | crate::signature | message() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | sign_message(message) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | verify_message(message) | param | &[u8]	generic	generic byte/text API or codec
 ambre-draw | src/consumed.rs | crate::consumed | Consumed::is_yes() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/consumed.rs | crate::consumed | Consumed::yes_if(taken) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	generic	predicate or handled-flag result
@@ -3070,6 +3068,7 @@ ambre-core | src/envelope.rs | crate::envelope | Aad.0 | field | Vec<u8>	newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::as_bytes() | ret | &[u8]	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u8>	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	newtype-inner	Aad newtype, from a fixed domain tag
+ambre-core | src/envelope.rs | crate::envelope | Transcript::covered_bytes() | ret | &[u8]	generic	the bytes one signature covers, which the Ed25519 signer and verifier of ambre-crypto hand to the foreign call
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the bool the one constructor of Visibility reads into its variant
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to Count<Members> at once
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	foreign-api	the column bytes sqlx hands a decoder, read into a MasterKeySalt at once
@@ -3451,6 +3450,7 @@ ambre-primitives | src/scan.rs | crate::scan | ends_on_metavariable() | ret | bo
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript.0 | field | Vec<u8>	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::as_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::new(bytes) | param | Vec<u8>	newtype-inner	the bytes one signature covers
+ambre-protocol | src/transcript.rs | crate::transcript | <SignedTranscript as ambre_core::Transcript>::covered_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers, through the door the signer of ambre-crypto takes
 ambre-sync | src/pipeline.rs | crate::pipeline | <SealedBlob as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedBlob's own accessor, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::Encoded<ambre_core::SealedName> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed name's own bytes, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<ambre_core::SealedPreviousKey> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed previous key's own bytes, through the object trait
