@@ -37,7 +37,7 @@ impl Numbered for EngineSheet {
     type Number = Ordinal<EngineSheet>;
 
     fn number_of(pos: Pos<EngineSheet>) -> Ordinal<EngineSheet> {
-        Ordinal::<EngineSheet>::from_position(pos.to_usize())
+        Ordinal::<EngineSheet>::of_index(pos)
     }
 }
 

@@ -14,7 +14,7 @@
 //! `fixtures` feature. No client build names it, so none of it can reach a wasm
 //! artifact.
 
-use crate::id::{Document, Id};
+use crate::id::{Document, Entity, Id};
 use crate::index::Len;
 use crate::{Cells, Char, Count, DocType, Elements, Version};
 use serde::{Deserialize, Serialize};
@@ -183,6 +183,13 @@ impl crate::CountKind for DocBlocks {
 /// short and dependency-free. It is **not** a hash and nothing here relies on it
 /// being one -- a fixture's identity is public by construction.
 pub fn seeded_document_id(seed: FixtureSeed) -> Id<Document> {
+    seeded_id(seed)
+}
+
+/// The id of any kind that a generator derives from its seed, as
+/// [`seeded_document_id`] does. A fixture author takes the same bytes on
+/// every run.
+pub fn seeded_id<E: Entity<Repr = crate::uuid::Uuid>>(seed: FixtureSeed) -> Id<E> {
     let mut state = seed.get();
     let mut bytes = [0u8; 16];
     for chunk in bytes.chunks_mut(8) {
@@ -519,6 +526,13 @@ mod tests {
         let all: std::collections::HashSet<[u8; 16]> =
             (0..256u64).map(|s| *id(s).as_bytes()).collect();
         assert_eq!(all.len(), 256, "seeds must not collide");
+    }
+
+    #[test]
+    fn a_seeded_id_of_another_kind_holds_the_bytes_of_the_document_id() {
+        let seed = FixtureSeed::new(0x5EED);
+        let user: Id<crate::id::User> = seeded_id(seed);
+        assert_eq!(user.as_bytes(), seeded_document_id(seed).as_bytes());
     }
 
     #[test]

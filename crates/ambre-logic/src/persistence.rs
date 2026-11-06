@@ -144,12 +144,12 @@ struct IdbKey(String);
 impl IdbKey {
     /// A document's row: its id as 32 lowercase hex digits.
     fn document(id: Id<Document>) -> Self {
-        Self(id.uuid().to_simple())
+        Self(id.to_simple())
     }
 
     /// A user's row: its id as 32 lowercase hex digits.
     fn user(id: Id<User>) -> Self {
-        Self(id.uuid().to_simple())
+        Self(id.to_simple())
     }
 
     /// A key no other delta of `document` holds. It is the document's key,
@@ -345,7 +345,9 @@ impl PersistenceStore {
         let Ok(store) = txn.object_store(IdbStore::Deltas.name()) else {
             return outcome(None);
         };
-        if let Err(e) = store.put_with_key(bytes_to_js(delta.as_bytes()).as_ref(), &key.to_js()) {
+        if let Err(e) =
+            store.put_with_key(Uint8Array::from(delta.as_bytes()).as_ref(), &key.to_js())
+        {
             tracing::warn!("Persistence: delta put failed for {key}: {e:?}");
             return outcome(None);
         }
@@ -361,7 +363,10 @@ impl PersistenceStore {
             .transaction_with_str_and_mode(IdbStore::Meta.name(), IdbTransactionMode::Readwrite)
             .and_then(|txn| txn.object_store(IdbStore::Meta.name()))
             .and_then(|store| {
-                store.put_with_key(bytes_to_js(&meta.encode()).as_ref(), &key.to_js())
+                store.put_with_key(
+                    Uint8Array::from(meta.encode().as_slice()).as_ref(),
+                    &key.to_js(),
+                )
             })
         {
             tracing::warn!("Persistence: meta put failed for {key}: {e:?}");
@@ -468,7 +473,7 @@ impl PersistenceStore {
             return None;
         };
         if let Err(e) =
-            snapshots.put_with_key(bytes_to_js(snapshot.as_bytes()).as_ref(), &key.to_js())
+            snapshots.put_with_key(Uint8Array::from(snapshot.as_bytes()).as_ref(), &key.to_js())
         {
             tracing::warn!("Persistence: save put failed for {key}: {e:?}");
             return None;
@@ -658,7 +663,9 @@ impl PersistenceStore {
         let (head, tail) = value.split_at_mut(8);
         head.copy_from_slice(&peer.get().to_le_bytes());
         tail.copy_from_slice(nonce.as_slice());
-        if let Err(e) = store.put_with_key(bytes_to_js(&value).as_ref(), &key.to_js()) {
+        if let Err(e) =
+            store.put_with_key(Uint8Array::from(value.as_slice()).as_ref(), &key.to_js())
+        {
             tracing::warn!("Persistence: session put failed for {key}: {e:?}");
         }
     }
@@ -878,7 +885,7 @@ impl PersistenceStore {
     pub fn save_draft(&self, key: &DraftKey, row: &Payload<SealedRowBytes>) {
         if let Some(store) = self.drafts_store()
             && let Err(e) = store.put_with_key(
-                &bytes_to_js(row.as_bytes()),
+                &Uint8Array::from(row.as_bytes()),
                 &JsValue::from_str(key.as_str()),
             )
         {
@@ -1055,13 +1062,6 @@ fn rows_of(document: Id<Document>) -> Option<web_sys::IdbKeyRange> {
         &JsValue::from_str(&format!("{key};")),
     )
     .ok()
-}
-
-/// Copy `bytes` into a fresh JS array.
-fn bytes_to_js(bytes: &[u8]) -> Uint8Array {
-    let array = Uint8Array::new_with_length(bytes.len() as u32);
-    array.copy_from(bytes);
-    array
 }
 
 /// Extract the `IdbDatabase` from an IndexedDB open-request event target.

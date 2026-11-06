@@ -181,10 +181,18 @@ impl Bounded<Opacity> {
         Self::clamped(self.get() * factor)
     }
 
-    /// The opacity a fraction `t` of the way from `self` to `to`.
+    /// The opacity a fraction `t` of the way from `self` to `to`. The
+    /// quantity of `t` spans `0.0 ..= 1.0`, and the build refuses one that
+    /// spans another range.
     #[must_use]
-    pub fn lerp(self, to: Self, t: f64) -> Self {
-        Self::clamped(self.get() + (to.get() - self.get()) * t as f32)
+    pub fn lerp<T: Bounds<Repr = f64>>(self, to: Self, t: Bounded<T>) -> Self {
+        const {
+            assert!(
+                T::MIN.to_bits() == 0.0_f64.to_bits() && T::MAX.to_bits() == 1.0_f64.to_bits(),
+                "an opacity interpolates at a fraction of 0..=1"
+            );
+        }
+        Self::clamped(self.get() + (to.get() - self.get()) * t.get() as f32)
     }
 
     /// The alpha a channel of alpha `alpha` draws with at this opacity.
@@ -203,6 +211,25 @@ mod tests {
     // alpha 0x40.
     const ORANGE_RGBA: u32 = 0xff80_2040;
     const ORANGE_RGB: u32 = 0x00ff_8020;
+
+    /// A test fraction of `0.0 ..= 1.0`, as a transition phase is.
+    enum Share {}
+    impl crate::bounded::Bounds for Share {
+        type Repr = f64;
+        const MIN: f64 = 0.0;
+        const MAX: f64 = 1.0;
+        const NAME: &'static str = "Share";
+        const REFUSAL: crate::bounded::Refusal = crate::bounded::Refusal::new("a share, not ", "");
+    }
+
+    #[test]
+    fn an_opacity_interpolates_at_a_typed_fraction_from_one_end_to_the_other() {
+        let (from, to) = (Bounded::<Opacity>::TRANSPARENT, Bounded::<Opacity>::OPAQUE);
+        let at = |t: f64| from.lerp(to, Bounded::<Share>::new(t).expect("in range"));
+        assert_eq!(at(0.0), from);
+        assert_eq!(at(1.0), to);
+        assert_eq!(at(0.5), Bounded::<Opacity>::clamped(0.5));
+    }
 
     #[test]
     fn each_packing_reads_the_known_channels() {

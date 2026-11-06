@@ -263,8 +263,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                     .get_data(ClipboardFormat::Ambre.mime())
                     .ok()
                     .filter(|s| !s.is_empty() && !plain)
-                    .and_then(|b64| base64_decode(&b64))
-                    .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::new);
+                    .and_then(|b64| base64_decode(&b64));
                 let text = data
                     .get_data(ClipboardFormat::PlainText.mime())
                     .unwrap_or_default();

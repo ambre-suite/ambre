@@ -44,7 +44,7 @@ use ambre_canvas::{
 };
 use ambre_chrome::commands::ClipboardWrite;
 use ambre_core::id::{Document, Element, Id};
-use ambre_core::{CanvasCss, Canvases, Device, Px, StaticKey, View};
+use ambre_core::{CanvasCss, Canvases, ClipboardBytes, Device, Payload, Px, StaticKey, View};
 use ambre_draw::{Consumed, DrawSurface, Point, Rect, Size};
 use ambre_logic::app::LogicCommand;
 use ambre_toile::ui::ToileView;
@@ -168,13 +168,13 @@ pub(crate) fn offset_of(event: &web_sys::MouseEvent) -> ambre_core::Point<Px<Vie
     )
 }
 
-pub(crate) fn base64_encode(bytes: &[u8]) -> String {
-    BASE64.encode(bytes)
+pub(crate) fn base64_encode(bytes: &Payload<ClipboardBytes>) -> String {
+    BASE64.encode(bytes.as_bytes())
 }
 
 /// Decode a base64 clipboard string back to bytes; `None` on malformed input.
-pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
-    BASE64.decode(s).ok()
+pub(crate) fn base64_decode(s: &str) -> Option<Payload<ClipboardBytes>> {
+    BASE64.decode(s).ok().map(Payload::<ClipboardBytes>::new)
 }
 
 /// The window is as wide as a desktop. The stylesheet decides, so a chord
@@ -260,10 +260,7 @@ fn publish_item<T>(
     build: impl Fn(&[(ClipboardFormat, Option<&str>)]) -> Option<T>,
 ) -> Option<Published<T>> {
     let html = blob.html.as_deref();
-    let payload = blob
-        .ambre
-        .as_ref()
-        .map(|bytes| base64_encode(bytes.as_bytes()));
+    let payload = blob.ambre.as_ref().map(base64_encode);
     let text = (ClipboardFormat::PlainText, Some(blob.text.as_str()));
     let full = [
         text,
@@ -671,7 +668,7 @@ mod tests {
         ClipboardFormat, FrameHost, Published, WebTypes, base64_decode, base64_encode,
         clipboard_item, publish_item,
     };
-    use ambre_core::{Instant, PageLoad};
+    use ambre_core::{ClipboardBytes, Instant, PageLoad, Payload};
     use std::collections::VecDeque;
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -742,6 +739,7 @@ mod tests {
             vec![1, 2, 3, 4, 5],
             vec![0, 255, 128, 64, 32, 16, 8],
         ] {
+            let bytes = Payload::<ClipboardBytes>::new(bytes);
             assert_eq!(base64_decode(&base64_encode(&bytes)), Some(bytes));
         }
     }

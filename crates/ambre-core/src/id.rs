@@ -221,6 +221,12 @@ impl<E: Entity<Repr = Uuid>> Id<E> {
         self.raw.to_hyphenated()
     }
 
+    /// The 32 lowercase hex digits, without hyphens, as an IndexedDB row key
+    /// names it.
+    pub fn to_simple(&self) -> String {
+        self.raw.to_simple()
+    }
+
     /// Parses an identifier from its text, hyphenated or not.
     ///
     /// # Errors
