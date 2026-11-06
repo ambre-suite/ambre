@@ -333,7 +333,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` One style register per cell | -- | a cell's whole style converges as one value, so no concurrent edit can tear it |
 | `[ ]` Paste as plain text in Trame | V1 | the plain-paste chord and a context-menu entry land the plain-text mirror as literal cells, the typed payload and the tab's own copy ignored |
 | `[x]` Column and row reorder | MVP | drag a whole column or row to a new position, references following the data |
-| `[ ]` Incremental remote apply | -- | a remote change costs the cells it touched, and the UI re-fetches the range that changed instead of the whole viewport |
+| `[x]` Incremental remote apply | -- | a remote change costs the cells it touched, and the UI re-fetches the range that changed instead of the whole viewport |
 | `[ ]` Cached sheet indexes | -- | a scroll on one sheet no longer rebuilds every other sheet's index |
 | `[ ]` Stable engine sheet indexes | -- | switching a tab no longer resets the engine |
 | `[x]` References stored by identity | MVP | a formula stores the rows and columns it names, so an insert widens a range, a delete breaks a reference into `#REF!`, and a reseed or a concurrent edit keeps each one on its cells. Done when `TRAME-008`, `TRAME-171` and `TRAME-226` to `TRAME-229` read `verified` |

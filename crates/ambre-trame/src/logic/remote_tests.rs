@@ -38,7 +38,7 @@ use super::structural_tests::{
 };
 use crate::formula::{AxisId, CellId};
 use crate::message::{HeaderRow, SortOrder};
-use crate::{CellRect, Col, Row, TrameCommand};
+use crate::{CellPos, CellRect, Col, Row, TrameCommand};
 
 /// The peer each author writes under.
 const AUTHORS: [u64; 2] = [11, 12];
@@ -355,6 +355,51 @@ proptest! {
     }
 }
 
+/// What the active sheet of `st` shows over every cell the generator
+/// reaches, and a margin past it.
+fn screen(st: &TrameState) -> Vec<(CellPos, String)> {
+    let window = CellRect::spanning(at(0, 0), at(ROWS + 8, COLS + 4));
+    st.pack_cells(window)
+        .into_iter()
+        .map(|cell| (CellPos::new(cell.row, cell.col), format!("{cell:?}")))
+        .collect()
+}
+
+/// The repaint `events` asks for covers each cell whose display changed
+/// between `before` and `after` (`TRAME-167`, `TRAME-284`). A whole-window
+/// repaint covers them all.
+fn repainted(
+    before: &[(CellPos, String)],
+    after: &[(CellPos, String)],
+    events: &[crate::TrameEvent],
+    step: &Step,
+) -> Result<(), TestCaseError> {
+    if events
+        .iter()
+        .any(|e| matches!(e, crate::TrameEvent::DataReset))
+    {
+        return Ok(());
+    }
+    let ranges: Vec<CellRect> = events
+        .iter()
+        .filter_map(|e| match e {
+            crate::TrameEvent::CellsChanged { range, .. } => Some(*range),
+            _ => None,
+        })
+        .collect();
+    prop_assert!(ranges.len() <= 1, "one repaint per batch after {:?}", step);
+    for ((at, was), (_, now)) in before.iter().zip(after) {
+        prop_assert!(
+            was == now || ranges.iter().any(|r| r.contains(*at)),
+            "{:?} changed and no repaint names it after {:?}: {:?}",
+            at,
+            step,
+            ranges
+        );
+    }
+    Ok(())
+}
+
 /// Run `program` on two authors and two receivers, and hold the receivers
 /// equal after each step.
 fn run(program: &[Step]) -> Result<(), TestCaseError> {
@@ -376,7 +421,9 @@ fn run(program: &[Step]) -> Result<(), TestCaseError> {
             Step::Deliver { who, n } => {
                 let take = (*n).min(queues[*who].len());
                 let batch: Vec<_> = queues[*who].drain(..take).collect();
-                carried.apply_remote_batch(&batch);
+                let before = screen(&carried);
+                let events = carried.apply_remote_batch(&batch);
+                repainted(&before, &screen(&carried), &events, step)?;
                 rebuilt.apply_remote_batch(&batch);
             }
             Step::SyncAuthors => {
@@ -389,7 +436,9 @@ fn run(program: &[Step]) -> Result<(), TestCaseError> {
             }
             Step::Local { edit } => {
                 for command in commands(&mut carried, edit) {
-                    carried.handle_command(command.clone());
+                    let before = screen(&carried);
+                    let events = carried.handle_command(command.clone()).display;
+                    repainted(&before, &screen(&carried), &events, step)?;
                     rebuilt.handle_command(command);
                 }
             }
@@ -716,6 +765,28 @@ fn a_purge_drops_a_formula_left_under_a_removed_column() {
                 col: 0,
                 text: "=C2+1".to_owned(),
             },
+        },
+        Step::Deliver { who: 1, n: 1 },
+    ];
+    let held = run(&program);
+    assert!(held.is_ok(), "{held:?}");
+}
+
+/// A peer deletes the column a merge ends on. The merge map is untouched,
+/// and the merge's span shrinks all the same. The batch names the block
+/// (`TRAME-284`).
+#[test]
+fn a_merge_that_loses_its_corner_line_repaints_its_block() {
+    use Edit::{DeleteColumn, Merge};
+    let program = [
+        Step::Author {
+            who: 1,
+            edit: Merge { row: 0, col: 2 },
+        },
+        Step::Deliver { who: 1, n: 1 },
+        Step::Author {
+            who: 1,
+            edit: DeleteColumn { at: 3 },
         },
         Step::Deliver { who: 1, n: 1 },
     ];

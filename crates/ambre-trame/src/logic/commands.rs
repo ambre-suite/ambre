@@ -16,6 +16,8 @@ impl TrameState {
     ///
     /// Must complete in < 50 ms (P2); scroll requests in < 10 ms (P1).
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
+        // A command names the cells it changed, and no command before it.
+        self.engine.changed.clear();
         let mut outcome = self.dispatch_command(cmd);
         // Any command that produced a CRDT delta also moved the `UndoManager`
         // stacks, so the chrome's Undo/Redo affordances must be refreshed. Undo
@@ -141,6 +143,7 @@ impl TrameState {
                     CellPos::new(row_end, col_end),
                 );
                 let cells = self.pack_cells(window);
+                self.served_version = version;
 
                 // Per-axis metric slices for the requested window: the UI feeds
                 // them straight into its variable-metric GridLayout

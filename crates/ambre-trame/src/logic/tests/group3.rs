@@ -390,7 +390,11 @@ fn two_peers_converge_via_mock_sync() {
 
     // Relay A's pending updates to B; B converges.
     let events = sync.deliver_updates_to(&mut b);
-    assert!(events.iter().any(|e| matches!(e, TrameEvent::DataReset)));
+    // The batch repaints the cell it wrote (`TRAME-167`).
+    assert!(events.iter().any(|e| matches!(
+        e,
+        TrameEvent::CellsChanged { range, .. } if range.contains(crate::CellPos::ORIGIN)
+    )));
     assert!(sync.is_empty(), "buffer drained after delivery");
     assert_eq!(
         read_cell(&mut b, 0, 0),

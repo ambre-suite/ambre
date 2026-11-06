@@ -51,27 +51,91 @@ fn view_point(point: ambre_draw::Point) -> ambre_core::Point<ambre_core::Px<ambr
 const BLINK_PERIOD: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(530.0);
 
 /// The one-slot viewport queue (`TRAME-UI-025`). Every request source writes
-/// through [`coalesce`](Self::coalesce), so the slot holds at most one request
-/// and the newest wins. The frame flush drains it once.
+/// through [`coalesce`](Self::coalesce) or
+/// [`coalesce_cells`](Self::coalesce_cells), so the slot holds at most one
+/// request. The frame flush drains it once.
 #[derive(Default)]
 struct ViewportQueue {
-    pending: Option<TrameCommand>,
+    pending: Option<PendingViewport>,
+}
+
+/// The request the slot holds, and what it covers.
+#[derive(Debug, Clone)]
+enum PendingViewport {
+    /// The whole window.
+    Window(TrameCommand),
+    /// The cells of a ranged change alone (`TRAME-UI-184`).
+    Cells(TrameCommand),
+}
+
+impl PendingViewport {
+    /// The command to send.
+    fn command(&self) -> &TrameCommand {
+        match self {
+            Self::Window(cmd) | Self::Cells(cmd) => cmd,
+        }
+    }
 }
 
 impl ViewportQueue {
-    /// Replace the pending request with `cmd`; the newest request wins.
+    /// Replace the pending request with `cmd`, a request for the whole
+    /// window; the newest request wins.
     fn coalesce(&mut self, cmd: TrameCommand) {
-        self.pending = Some(cmd);
+        self.pending = Some(PendingViewport::Window(cmd));
+    }
+
+    /// Hold `cmd`, a request for the cells of a ranged change. A pending
+    /// request for the whole window covers it, and two ranged requests become
+    /// one over both, under the newer version.
+    fn coalesce_cells(&mut self, cmd: TrameCommand) {
+        self.pending = match self.pending.take() {
+            None => Some(PendingViewport::Cells(cmd)),
+            Some(window @ PendingViewport::Window(_)) => Some(window),
+            Some(PendingViewport::Cells(held)) => {
+                Some(PendingViewport::Cells(spanning(&held, cmd)))
+            }
+        };
     }
 
     /// Take the one pending request, if any, leaving the slot empty.
-    fn take(&mut self) -> Option<TrameCommand> {
+    fn take(&mut self) -> Option<PendingViewport> {
         self.pending.take()
     }
 
     /// Restore a request the queue just dropped (`BUS-024`).
-    fn re_offer(&mut self, cmd: TrameCommand) {
-        self.pending = Some(cmd);
+    fn re_offer(&mut self, pending: PendingViewport) {
+        self.pending = Some(pending);
+    }
+}
+
+/// One request over the cells `held` and `newer` ask for, under the version
+/// of `newer`. Either one that is no viewport request is kept as it is.
+fn spanning(held: &TrameCommand, newer: TrameCommand) -> TrameCommand {
+    let (
+        TrameCommand::ScrollViewport {
+            row_start: r0,
+            row_end: r1,
+            col_start: c0,
+            col_end: c1,
+            ..
+        },
+        TrameCommand::ScrollViewport {
+            version,
+            row_start,
+            row_end,
+            col_start,
+            col_end,
+        },
+    ) = (held, &newer)
+    else {
+        return newer;
+    };
+    TrameCommand::ScrollViewport {
+        version: *version,
+        row_start: (*row_start).min(*r0),
+        row_end: (*row_end).max(*r1),
+        col_start: (*col_start).min(*c0),
+        col_end: (*col_end).max(*c1),
     }
 }
 
@@ -710,7 +774,7 @@ mod tests {
         queue.coalesce(scroll(ambre_core::Seq::nth(2)));
         assert!(
             matches!(
-                queue.take(),
+                queue.take().map(|p| p.command().clone()),
                 Some(TrameCommand::ScrollViewport { version, .. })
                     if version == ambre_core::Seq::nth(2)
             ),
@@ -783,9 +847,9 @@ mod tests {
         let sent = q.take().expect("one pending request");
         assert!(
             matches!(
-                sent,
+                sent.command(),
                 TrameCommand::ScrollViewport { version, .. }
-                    if version == ambre_core::Seq::nth(2)
+                    if *version == ambre_core::Seq::nth(2)
             ),
             "the newest request wins"
         );
@@ -801,10 +865,52 @@ mod tests {
         q.re_offer(sent);
         let again = q.take().expect("re-offered");
         assert!(matches!(
-            again,
+            again.command(),
             TrameCommand::ScrollViewport { version, .. }
-                if version == ambre_core::Seq::nth(3)
+                if *version == ambre_core::Seq::nth(3)
         ));
         assert!(q.take().is_none());
+    }
+
+    /// A request over `rows` and `cols` under `version`.
+    fn cells_cmd(version: u64, rows: (u32, u32), cols: (u32, u32)) -> TrameCommand {
+        TrameCommand::ScrollViewport {
+            version: ambre_core::Seq::nth(version),
+            row_start: Pos::<Row>::new(rows.0),
+            row_end: Pos::<Row>::new(rows.1),
+            col_start: Pos::<Col>::new(cols.0),
+            col_end: Pos::<Col>::new(cols.1),
+        }
+    }
+
+    /// A pending request for the whole window covers a ranged one, which the
+    /// slot then drops (`TRAME-UI-184`).
+    #[test]
+    fn a_pending_window_request_covers_a_ranged_one() {
+        let mut q = ViewportQueue::default();
+        q.coalesce(scroll_cmd(4));
+        q.coalesce_cells(cells_cmd(5, (2, 3), (1, 1)));
+        let sent = q.take().expect("pending");
+        assert!(matches!(sent, PendingViewport::Window(_)), "{sent:?}");
+        assert!(matches!(
+            sent.command(),
+            TrameCommand::ScrollViewport { version, .. } if *version == ambre_core::Seq::nth(4)
+        ));
+    }
+
+    /// Two ranged requests leave one, over both and under the newer version,
+    /// and a request for the whole window replaces them (`TRAME-UI-184`).
+    #[test]
+    fn two_ranged_requests_flush_as_one_over_both() {
+        let mut q = ViewportQueue::default();
+        q.coalesce_cells(cells_cmd(5, (2, 3), (1, 1)));
+        q.coalesce_cells(cells_cmd(6, (7, 8), (0, 0)));
+        assert_eq!(
+            q.take().map(|p| format!("{:?}", p.command())),
+            Some(format!("{:?}", cells_cmd(6, (2, 8), (0, 1))))
+        );
+        q.coalesce_cells(cells_cmd(7, (2, 3), (1, 1)));
+        q.coalesce(scroll_cmd(8));
+        assert!(matches!(q.take(), Some(PendingViewport::Window(_))));
     }
 }

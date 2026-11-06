@@ -297,6 +297,10 @@ pub struct TrameState {
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
     entry_end: Option<ambre_core::OpCounter>,
+    /// The last viewport request this state answered (`TRAME-UI-005`). A
+    /// ranged repaint names it, so the view knows which answers already show
+    /// the change (`TRAME-284`).
+    served_version: ambre_core::Seq<ambre_bus::ViewportVersion>,
     /// What the imports since the last remote batch wrote, noted by a
     /// subscription to [`Self::doc`] (`TRAME-282`).
     imported: remote::ImportSink,
@@ -459,6 +463,7 @@ impl TrameState {
             sheet_list_sent: false,
             undecodable: std::cell::Cell::new(false),
             entry_end: None,
+            served_version: ambre_core::Seq::ZERO,
             imported,
             _imports: imports,
         };
@@ -593,6 +598,7 @@ mod metrics;
 mod number_format;
 mod packing;
 mod remote;
+mod repaint;
 /// Container naming, the packed style layout, and the workbook's persisted
 /// schema version (`ambre-spec-schema-version.md`). Public for the version half
 /// alone -- the container names stay `pub(crate)`.

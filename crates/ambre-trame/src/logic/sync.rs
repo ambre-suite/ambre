@@ -270,6 +270,8 @@ impl TrameState {
     ) -> Vec<TrameEvent> {
         let order = self.sheet_order_ids();
         drop(self.take_imported());
+        // The batch names the cells it changed, and nothing before it.
+        self.engine.changed.clear();
         let mut merged_any = false;
         for payload in payloads {
             merged_any |= self.merge_payload(*payload, origin);
@@ -343,7 +345,8 @@ impl TrameState {
         // arrives as `filter_hidden_{sheet}` ops and is applied without recompute
         // (`trame-shared-filter` -- only the filter author recomputes).
         self.rebuild_filter();
-        self.merge_events(conflicts)
+        self.engine.changed.clear();
+        self.merge_events(conflicts, super::repaint::Repaint::Whole)
     }
 
     /// Advance the export cursor past the imported ops, keeping this peer's
@@ -377,14 +380,18 @@ impl TrameState {
     /// The events every merge answers with, whatever path it took. They are
     /// the re-fetch, the tab strip, the toggles of the active cell, the merge
     /// conflicts, the open session's cell and the undecodable notice.
-    pub(super) fn merge_events(&mut self, conflicts: Vec<TrameEvent>) -> Vec<TrameEvent> {
-        // Refresh the toolbar / context-menu toggles for the active cell: after a
-        // reload its formatting is only known once the `format` map is restored.
-        let mut events = vec![
-            TrameEvent::DataReset,
-            self.sheet_list_event(),
-            self.style_state_event(),
-        ];
+    pub(super) fn merge_events(
+        &mut self,
+        conflicts: Vec<TrameEvent>,
+        repaint: super::repaint::Repaint,
+    ) -> Vec<TrameEvent> {
+        // One repaint per batch: the whole window after a reseed, the cells
+        // the batch changed otherwise (`TRAME-167`). Refresh the toolbar /
+        // context-menu toggles for the active cell: after a reload its
+        // formatting is only known once the `format` map is restored.
+        let mut events: Vec<TrameEvent> = self.repaint_event(repaint).into_iter().collect();
+        events.push(self.sheet_list_event());
+        events.push(self.style_state_event());
         events.extend(conflicts);
         // The open session's cell, moved or deleted by the merge (`TRAME-UI-176`).
         events.extend(self.follow_edit_anchor());

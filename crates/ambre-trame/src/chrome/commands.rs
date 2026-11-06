@@ -62,6 +62,7 @@ pub fn mirror_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
             TrameEvent::ViewportData { .. }
             | TrameEvent::StyleApplied { .. }
             | TrameEvent::DataReset
+            | TrameEvent::CellsChanged { .. }
             | TrameEvent::SelectRange { .. }
             | TrameEvent::MergeRejected { .. }
             | TrameEvent::MergeConflictDetected { .. }
@@ -210,6 +211,7 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
         TrameEvent::ViewportData { .. }
         | TrameEvent::StyleApplied { .. }
         | TrameEvent::DataReset
+        | TrameEvent::CellsChanged { .. }
         | TrameEvent::SelectRange { .. }
         | TrameEvent::UndoState { .. }
         | TrameEvent::SheetList { .. }

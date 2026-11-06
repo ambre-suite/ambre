@@ -393,6 +393,7 @@ impl<L: Axis> AxisView<L> {
             gone: Vec::new(),
             added: Vec::new(),
             removed: removed.clone(),
+            first: None,
             kept: Kept::Same,
         };
         for (uid, n) in &uids {
@@ -417,6 +418,7 @@ impl<L: Axis> AxisView<L> {
             }
         }
         let first = Pos::<Slot>::from_index(first)?;
+        change.first = Some(first);
         Some(AxisPlan {
             elements,
             removed,
@@ -724,6 +726,9 @@ pub struct AxisChange {
     /// The elements the diffs removed for good. A key under one of them
     /// places on no cell any more.
     pub removed: Vec<Element>,
+    /// The first slot an edit reached, or `None` for an axis no diff
+    /// reached. With no hidden element, a slot is a line position.
+    pub first: Option<Pos<Slot>>,
     pub kept: Kept,
 }
 
@@ -889,6 +894,7 @@ impl SheetIndex {
             gone: Vec::new(),
             added: Vec::new(),
             removed: Vec::new(),
+            first: None,
             kept: Kept::Same,
         };
         let rows = match row_plan {
