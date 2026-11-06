@@ -253,7 +253,7 @@ impl TrameState {
         let layout = if moved {
             self.adopt_batch_layout(imported)
         } else {
-            Layout::Kept
+            BatchLayout::Kept
         };
         self.adopt_imported_cursor();
         if imported.keys == LineRead::Skipped {
@@ -263,9 +263,9 @@ impl TrameState {
         // and a masked cell leaves the engine, which only a reseed does.
         let conflicts = self.rebuild_merges();
         let change = match &layout {
-            Layout::Kept => Some(None),
-            Layout::Moved(change) => Some(Some(change)),
-            Layout::Read => None,
+            BatchLayout::Kept => Some(None),
+            BatchLayout::Moved(change) => Some(Some(change)),
+            BatchLayout::Read => None,
         };
         let step = change
             .filter(|_| self.masked_cells.is_empty())
@@ -291,7 +291,7 @@ impl TrameState {
     /// lists ([`SheetIndex::apply`]). It is read from the lists when only a
     /// read can tell. A line the batch removed and added again may sit on
     /// another element: only a reseed then says which keys read where.
-    fn adopt_batch_layout(&mut self, imported: &Imported) -> Layout {
+    fn adopt_batch_layout(&mut self, imported: &Imported) -> BatchLayout {
         let none: Vec<Vec<SlotEdit>> = Vec::new();
         let rows = imported.rows.get(&self.active_sheet).unwrap_or(&none);
         let cols = imported.cols.get(&self.active_sheet).unwrap_or(&none);
@@ -307,12 +307,12 @@ impl TrameState {
                 "the derived layout is the lists'"
             );
             if change.kept() == Kept::Same {
-                return Layout::Moved(change);
+                return BatchLayout::Moved(change);
             }
-            return Layout::Read;
+            return BatchLayout::Read;
         }
         self.rebuild_index();
-        Layout::Read
+        BatchLayout::Read
     }
 
     /// What the engine does after the batch, or `None` when only a reseed can
@@ -507,7 +507,7 @@ impl TrameState {
 }
 
 /// What a batch did to the active sheet's lines.
-enum Layout {
+enum BatchLayout {
     /// The batch left them as they were.
     Kept,
     /// The batch moved them, and each line it removed and added again kept
