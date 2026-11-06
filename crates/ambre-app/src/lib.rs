@@ -1022,7 +1022,7 @@ pub fn main() {
     let session_seen_frame = Rc::clone(&session_seen);
     let mut persist_waiting: Vec<(Id<Document>, ambre_logic::PersistWrite)> = Vec::new();
     let mut last_anchor: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>> = None;
-    let mut last_busy = false;
+    let mut busy_notice = relay::BusyNotice::default();
     let mut last_perf_push_ms: f64 = 0.0;
     // The relay's decisions, and the state they keep across frames.
     let mut decisions = relay::Relay::new(if boot_is_murmure {
@@ -1413,14 +1413,13 @@ pub fn main() {
         // user meets a document answering nothing and reads it as a freeze.
         // The launcher's outbox counts as well: a held route change or menu
         // command is a document catching up, as a held edit is.
-        let busy = busy_pump.is_busy() || relay_tx.is_busy();
-        if busy != last_busy {
-            last_busy = busy;
-            if busy {
-                toasts.warning("The document is catching up. Your edit is queued.");
-            } else {
-                toasts.info("The document is up to date.");
-            }
+        let load = if busy_pump.is_busy() || relay_tx.is_busy() {
+            relay::Load::Behind
+        } else {
+            relay::Load::Current
+        };
+        if let Some(notice) = busy_notice.step(load) {
+            toasts.push(notice.kind, notice.text);
         }
 
         // A launcher command past the outbox's bound did not leave. Say so,

@@ -592,6 +592,42 @@ pub(crate) fn destination(ev: UiEvent) -> Destination {
     }
 }
 
+/// Whether the document holds the user's input back: the view's queue, or
+/// the launcher's outbox.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub(crate) enum Load {
+    /// Every command left.
+    #[default]
+    Current,
+    /// A command waits for room on the queue.
+    Behind,
+}
+
+/// The busy notice: one when the document falls behind, one when it catches
+/// up. The view restates its level every frame, so this reads the edge, and
+/// the user meets one notice per episode rather than one per frame.
+#[derive(Default)]
+pub(crate) struct BusyNotice {
+    last: Load,
+}
+
+impl BusyNotice {
+    /// The notice the load of this frame calls for, if it changed.
+    pub(crate) fn step(&mut self, load: Load) -> Option<Notice> {
+        if load == self.last {
+            return None;
+        }
+        self.last = load;
+        Some(match load {
+            Load::Behind => Notice::new(
+                ToastKind::Warning,
+                "The document is catching up. Your edit is queued.",
+            ),
+            Load::Current => Notice::new(ToastKind::Info, "The document is up to date."),
+        })
+    }
+}
+
 /// The relay's roster on a Murmure page is the Murmure chrome's own.
 #[cfg(target_arch = "wasm32")]
 impl Roster for ambre_murmure::chrome::MurmureRelay {
@@ -607,8 +643,8 @@ impl Roster for ambre_murmure::chrome::MurmureRelay {
 #[cfg(test)]
 mod tests {
     use super::{
-        CHILD_BACKLOG_LIMIT, ChildFanOut, Destination, Effect, Page, Relay, Roster, Shown,
-        destination,
+        BusyNotice, CHILD_BACKLOG_LIMIT, ChildFanOut, Destination, Effect, Load, Notice, Page,
+        Relay, Roster, Shown, destination,
     };
     use crate::ChromeStatus;
     use crate::tofu::{self, KeyContact, Next, Purpose, TofuPrompt};
@@ -1317,5 +1353,36 @@ mod tests {
             }
             _ => panic!("an event of the view did not reach it"),
         }
+    }
+
+    /// A document that falls behind says so once, and says once that it
+    /// caught up. A frame that restates the same level raises nothing.
+    #[test]
+    fn the_busy_notice_reads_the_edge_alone() {
+        let mut busy = BusyNotice::default();
+        let said = |notice: Option<Notice>| notice.map(|n| (tone(n.kind), n.text));
+
+        assert_eq!(
+            said(busy.step(Load::Current)),
+            None,
+            "a calm start raised a notice"
+        );
+        assert_eq!(
+            said(busy.step(Load::Behind)),
+            Some((
+                Tone::Warning,
+                "The document is catching up. Your edit is queued.".to_owned()
+            ))
+        );
+        assert_eq!(
+            said(busy.step(Load::Behind)),
+            None,
+            "one episode raised two notices"
+        );
+        assert_eq!(
+            said(busy.step(Load::Current)),
+            Some((Tone::Info, "The document is up to date.".to_owned()))
+        );
+        assert_eq!(said(busy.step(Load::Current)), None);
     }
 }
