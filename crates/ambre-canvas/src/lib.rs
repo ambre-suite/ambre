@@ -14,7 +14,6 @@
 //   view          -- per-frame value types (FrameStats/RepaintPlan/InputEvent).
 //   host          -- GPU bootstrap + rAF primitives (wasm); the frame DRIVER
 //                    (FrameHost) + the AppView registry live in ambre-app.
-//   request_registry -- P3 request/response correlator (ARCH P1).
 // ============================================================================
 
 // -- Rendering pipeline (wgpu + parley + swash) ------------------------------
@@ -71,9 +70,6 @@ pub mod tokens;
 // -- Lazy font loading (CJK/Arabic/Devanagari fetched on missing codepoint) --
 pub mod fonts;
 
-// -- P3 request/response correlator for the UI thread -----------------------
-pub mod request_registry;
-
 // -- Convenience re-exports --------------------------------------------------
 pub use ambre_draw::wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode};
 pub use anchor::AnchorPublisher;
@@ -94,7 +90,6 @@ pub use host::{GpuSettled, GpuState, bootstrap_gpu, start_raf_loop};
 pub use intent::{FilterOpenPublisher, NoticePublisher};
 pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, WgpuSurface};
-pub use request_registry::{RequestRegistry, RequestTag};
 pub use space::{Parley, WholeParley};
 pub use text_cache::{
     Look, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_face,
