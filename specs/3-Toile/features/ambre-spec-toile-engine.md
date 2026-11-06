@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-208` | `INV` | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level -- `DisplayViewport` has four fields (the camera, the paint order, the reaction counts and the comment pins), no display event acknowledges a command, and the absence is the proof | none | verified |
 | `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
 | `TOILE-089` | `INV` | A command handler MUST NOT send on a queue: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level -- `ToileState` holds no sink and no sender, every handler returns `ToileOutcome` by value, and the absence is the proof | none | verified |
-| `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_open`) each hand a command to the Logic queue, there is no other sender, and `TOILE-UI-001` bans the CRDT on this side | none | verified |
+| `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_session`) each hand a command to the view's outbox, the one sender a view holds (`BUS-033`), and `TOILE-UI-001` bans the CRDT on this side | none | verified |
 | `TOILE-UI-101` | `INV` | The canvas dispatch over the display events MUST be exhaustive -- no wildcard arm -- so a new event is a compile error and never a silent drop. | this spec section 4 | exhaustive-match -- the dispatch of `ui/view.rs` carries **no `_` arm**, so adding an event fails the build | none | verified |
 | `TOILE-286` | `INV` | The board MUST hold no user id until the session seeds one, and that id afterwards. | this spec section 3 | `ambre_toile::logic::convergence_tests::identity_is_seeded_and_read_back` -- no id on a new board, then the seeded id read back | none | verified |
 | `TOILE-289` | `INV` | The debug form of a Toile value that holds user text MUST print its length and none of the text. | `ambre-spec-zero-knowledge.md section 1`, `ZK-006` | `ambre_toile::logic::interop::svg_export::tests::an_export_debug_form_prints_no_content`; `ambre_toile::logic::text_merge::tests::an_edit_debug_form_prints_no_text`; `ambre_toile::ui::comments::tests::an_intent_debug_form_prints_no_body`; `ambre_toile::ui::deck::tests::a_rename_debug_form_prints_no_name`; `ambre_toile::ui::presenter::tests::a_notes_edit_debug_form_prints_no_note`; `ambre_toile::ui::render::tests::a_frame_title_debug_form_prints_no_title` -- each formats the value with `{:?}`, finds no word of its text and reads its length | none | verified |
@@ -90,7 +90,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-312` | `POST` | A command sent from the drawing thread MUST reach the Logic thread addressed to the document it was drawn on. | this spec section 4; `ambre-spec-message-bus.md` | type-level -- the two board paths wrap the command in `LogicCommand::App` with the view's own document id, the id is not a parameter of the send, and the construction is the proof | none | verified |
-| `TOILE-UI-100` | `FAIL` | A full queue MUST drop an edit rather than block the frame, and MUST say so. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the edit path and the embed-session path are `try_send` and each handles `TrySendError::Full` with a warning | none | verified |
+| `TOILE-UI-100` | `FAIL` | A full queue MUST hold an edit rather than block the frame, and MUST say so. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1`; `BUS-011` | type-level -- the edit path and the embed-session path both go through the outbox, whose sends only try, and each logs a held and a refused command | none | verified |
 | `TOILE-UI-313` | `FAIL` | A full queue MUST drop a camera request rather than block the frame, and MUST say so. | `ambre-spec-ui.md section 1` | type-level -- the camera path is a try-send whose `Full` arm warns and returns `false`, and the arm is the only way the call answers a full queue | none | verified |
 | `TOILE-UI-314` | `FRAME` | Sending a command MUST NOT change what the canvas draws: the gesture is already on screen and no answer is awaited. | this spec section 4 | type-level -- the three senders take `&self`, so no send can touch the view's render state | none | verified |
 
@@ -398,9 +398,11 @@ and it is why the two are one property test.
 The user touches no part of this document directly. What it exposes is the answer every other Toile feature
 draws from, and the rules that keep the drawing thread honest. It holds view state and the current visible set
 and nothing else (`TOILE-UI-001`). Every mutation leaves as a command (`TOILE-UI-099`), carrying the document
-it was drawn on (`TOILE-UI-312`) and touching nothing the canvas draws (`TOILE-UI-314`). A full queue drops
-that command rather than blocking the frame, and both paths say so: the edit path (`TOILE-UI-100`) and the
-camera path (`TOILE-UI-313`). The dropped camera is offered again on the next frame (`BUS-024`).
+it was drawn on (`TOILE-UI-312`) and touching nothing the canvas draws (`TOILE-UI-314`).
+
+A full queue holds that command in the outbox rather than blocking the frame, and drops a camera request.
+Both paths say so: the edit path (`TOILE-UI-100`) and the camera path (`TOILE-UI-313`). The dropped camera is
+offered again on the next frame (`BUS-024`).
 
 **Where each event lands.** One arm per event and **no wildcard arm**, so a new event is a compile
 error rather than a silent drop (`TOILE-UI-101`).

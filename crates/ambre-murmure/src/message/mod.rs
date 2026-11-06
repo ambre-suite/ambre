@@ -358,6 +358,40 @@ impl MurmureCommand {
     }
 }
 
+impl ambre_bus::Mutation for MurmureCommand {
+    fn is_mutating(&self) -> bool {
+        MurmureCommand::is_mutating(self)
+    }
+
+    /// Two commands are lossy, and the view offers each again: the tick
+    /// each tick period, and the typing indicator on the next key. Every
+    /// other command carries intent the user gave once, or the view records
+    /// it as asked before it leaves. A picture, a load of older messages, a
+    /// read mark, a retry and a fetch are such requests. The match is
+    /// exhaustive, so a new command does not build until it is classed.
+    fn traffic(&self) -> ambre_bus::Traffic {
+        match self {
+            Self::Tick { .. } | Self::Typing { .. } => ambre_bus::Traffic::Lossy,
+            Self::SendMessage { .. }
+            | Self::LoadOlder { .. }
+            | Self::MarkRead
+            | Self::MarkUnread { .. }
+            | Self::MarkThreadRead { .. }
+            | Self::Name { .. }
+            | Self::React { .. }
+            | Self::Unreact { .. }
+            | Self::EditMessage { .. }
+            | Self::DeleteMessage { .. }
+            | Self::Reply { .. }
+            | Self::Retry { .. }
+            | Self::SeekRoot { .. }
+            | Self::UploadFile { .. }
+            | Self::FetchFile { .. }
+            | Self::ShowPicture { .. } => ambre_bus::Traffic::Lossless,
+        }
+    }
+}
+
 ambre_core::define_flag! {
     /// Whether the author edited the body of a message (`MURMURE-084`).
     pub enum Revision {

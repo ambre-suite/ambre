@@ -70,6 +70,7 @@ pub fn channel_of(
     let view = MurmureView::new(
         Some(ambre_bus::Inbox::direct(from_logic)),
         None,
+        ambre_canvas::BusyPublisher::new(),
         reads,
         size,
         ThemeControl::default(),

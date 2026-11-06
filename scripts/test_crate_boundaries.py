@@ -187,6 +187,7 @@ def scratch(tmp: str) -> Path:
     )
     write(root, cb.LOGIC_MANIFEST, '[dependencies]\nambre-bus = { path = "../ambre-bus" }\n\n[dev-dependencies]\nwgpu = "1"\n')
     write(root, "crates/ambre-bus/Cargo.toml", '[dependencies]\nambre-core = { path = "../ambre-core" }\n')
+    write(root, cb.CANVAS_MANIFEST, '[dependencies]\nambre-draw = { path = "../ambre-draw" }\n')
     write(root, f"{cb.PROTOCOL}/lib.rs", "pub struct Update {\n    pub seq: u64,\n}\n")
     write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
     write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
@@ -241,6 +242,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
             cb.check_thread_reach(errors)
+            cb.check_renderer_reach(errors)
             cb.check_worker_messages(errors)
             cb.check_engine_and_relay(errors)
             cb.check_handlers(errors)
@@ -1189,6 +1191,26 @@ class CrateBoundaries(unittest.TestCase):
         text = '[dependencies]\nambre-core = { path = "../ambre-core" }\nambre-canvas = { path = "../ambre-canvas" }\n'
         errors = self.breach("crates/ambre-bus/Cargo.toml", text)
         self.assertTrue(any("reaches `ambre-canvas`" in e for e in errors), errors)
+
+    def test_the_renderer_declaring_the_bus_is_refused(self):
+        for table in ("dependencies", "dev-dependencies", "target.'cfg(target_arch = \"wasm32\")'.dependencies"):
+            text = f'[dependencies]\nambre-draw = {{ path = "../ambre-draw" }}\n\n[{table}]\nambre-bus = {{ path = "../ambre-bus" }}\n'
+            errors = self.breach(cb.CANVAS_MANIFEST, text)
+            self.assertTrue(any("the renderer declares `ambre-bus`" in e for e in errors), (table, errors))
+
+    def test_the_renderer_reaching_the_bus_through_a_crate_is_refused(self):
+        text = '[dependencies]\nambre-core = { path = "../ambre-core" }\nambre-bus = { path = "../ambre-bus" }\n'
+        errors = self.breach("crates/ambre-draw/Cargo.toml", text)
+        self.assertTrue(any("the renderer reaches `ambre-bus` through `ambre-draw`" in e for e in errors), errors)
+
+    def test_a_missing_renderer_manifest_is_an_error_not_a_pass(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            (root / cb.CANVAS_MANIFEST).unlink()
+            errors = self.run_checks(root)
+        self.assertTrue(any("the renderer reach is unread" in e for e in errors), errors)
 
     def test_a_redeclared_wire_type_is_refused(self):
         errors = self.breach("crates/ambre-server/src/ws.rs", "pub struct Update {\n    seq: u64,\n}\n")

@@ -623,6 +623,7 @@ mod tests {
         AppView::Murmure(MurmureView::new(
             None,
             None,
+            ambre_canvas::BusyPublisher::new(),
             crate::host::page_reads(
                 ambre_murmure::chrome::MurmureRelay::new(),
                 TextInput::detached(),

@@ -25,9 +25,8 @@
 // every geometry is read from it (`CANVAS-078`).
 // ============================================================================
 
-use ambre_bus::Byte;
 use ambre_core::index::{Pos, Span};
-use ambre_core::{Doc, Px, Scale, View};
+use ambre_core::{Byte, Doc, Px, Scale, View};
 use ambre_draw::{
     Affine, Alignment, BezPath, BoundingBox, Brush, Color, DrawSurface, FontContext, FontFamily,
     FontFamilyName, FontStyle, FontWeight, LayoutContext, PlainEditor, Point, PositionedLayoutItem,

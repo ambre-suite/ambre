@@ -1253,6 +1253,16 @@ impl ambre_bus::Mutation for TrameCommand {
     fn is_mutating(&self) -> bool {
         TrameCommand::is_mutating(self)
     }
+
+    /// The viewport fetch and the selection aggregates are lossy: the grid
+    /// re-offers the first (`BUS-024`) and clears the band of the second
+    /// (`TRAME-UI-136`). Every other command carries intent.
+    fn traffic(&self) -> ambre_bus::Traffic {
+        match self {
+            Self::ScrollViewport { .. } | Self::RequestSelectionStats => ambre_bus::Traffic::Lossy,
+            _ => ambre_bus::Traffic::Lossless,
+        }
+    }
 }
 
 impl TrameCommand {

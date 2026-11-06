@@ -23,10 +23,10 @@
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
-use ambre_bus::{Inbox, Outbox, PasteSource, Port, SendOutcome, UiEvent};
+use ambre_bus::{Inbox, Load, Outbox, PasteSource, Port, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
-    BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
+    BusyLevel, BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
     NoticePublisher, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, ModifierKeys};
@@ -39,7 +39,7 @@ use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
 use ambre_prose::message::{ProseCommand, ProseEvent, WordCount};
 use ambre_prose::probe::{Answer, Dispatch, KeyProbe, Measure, ProbeName};
-use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
+use ambre_prose::ui::{ProseUiState, send_edit, send_request, status_figures};
 use ambre_prose::view::paint::PagePalette;
 
 /// The page palette, read from the theme tokens (`PROSE-UI-014`).
@@ -80,8 +80,8 @@ fn canvas_origin() -> Point<Px<Css>> {
 /// One open Prose document on the canvas.
 pub struct ProseView {
     document_id: Id<Document>,
-    to_logic: Port<ProseCommand>,
-    /// The edits' path out: a full channel holds them here (`BUS-011`).
+    /// The one path out: a full channel holds an edit here (`BUS-011`), and
+    /// drops a request the page asks again (`BUS-023`).
     outbox: Outbox<ProseCommand>,
     busy_pub: BusyPublisher,
     /// What the shell shows the user when the page cannot, such as a reply
@@ -110,6 +110,15 @@ pub struct ProseView {
     /// The keystrokes in flight, from their input to their frame.
     probe: KeyProbe,
     timeline: super::probe::Timeline,
+}
+
+/// The busy level the renderer shows for an outbox load (`BUS-016`). The
+/// renderer knows no thread protocol, so the view converts the load here.
+fn busy_level(load: Load) -> BusyLevel {
+    match load {
+        Load::Free => BusyLevel::Free,
+        Load::Busy => BusyLevel::Busy,
+    }
 }
 
 /// The width and the height of a canvas box, as the view pixels the page
@@ -164,10 +173,9 @@ impl ProseView {
         state.resize(size.0, size.1);
         Self {
             document_id,
-            outbox: Outbox::new(to_logic.clone()),
+            outbox: Outbox::new(to_logic),
             busy_pub,
             notices,
-            to_logic,
             from_logic,
             state,
             theme_ctl,
@@ -242,7 +250,7 @@ impl ProseView {
             let (outbox, document_id) = (&mut self.outbox, self.document_id);
             let mut send = |command| send_edit(outbox, document_id, command);
             self.dirty |= self.state.replay(&mut send).is_yes();
-            self.busy_pub.publish(self.outbox.load());
+            self.busy_pub.publish(busy_level(self.outbox.load()));
         }
         if self.shown != Some(self.state.word_count) {
             self.shown = Some(self.state.word_count);
@@ -264,7 +272,7 @@ impl ProseView {
         let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
         if let Some(command) = self.state.take_intent(intent, now) {
             send_edit(&mut self.outbox, self.document_id, command);
-            self.busy_pub.publish(self.outbox.load());
+            self.busy_pub.publish(busy_level(self.outbox.load()));
         }
         self.publish_hover();
         self.dirty = true;
@@ -291,7 +299,7 @@ impl ProseView {
         if let Some(command) = self.state.format(id) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
     }
 
     /// Act on a released ruler handle: one command for the whole drag
@@ -308,7 +316,7 @@ impl ProseView {
         if let Some(command) = self.state.ruler_release(release) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
     }
 
     /// Publish the ruler in pixels of the view. The release comes back in
@@ -353,7 +361,7 @@ impl ProseView {
             .state
             .handle_input(&ProseInput::SlashPick(index), &mut send)
             .is_yes();
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
     }
 
     /// Publish the slash menu where the view placed it.
@@ -374,7 +382,7 @@ impl ProseView {
         self.publish_origin();
         if !self.fatal
             && let Some(query) = self.state.marks_query()
-            && send_command(&self.to_logic, self.document_id, query).accepted()
+            && send_request(&self.outbox, self.document_id, query).accepted()
         {
             self.state.marks_sent();
         }
@@ -421,7 +429,7 @@ impl ProseView {
             self.signal_fatal("Logic thread disconnected");
             return;
         }
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
     }
 
     /// Announce the block the caret entered (`CHROME-023`). A move inside the
@@ -454,13 +462,13 @@ impl ProseView {
         // (`PROSE-FEAT-124`). A full channel drops it, and the next change
         // asks again.
         if let Some(command) = self.state.tick(now) {
-            send_command(&self.to_logic, self.document_id, command);
+            send_request(&self.outbox, self.document_id, command);
         }
         // The pages the canvas is about to show, asked for before a frame
-        // needs them (`PROSE-UI-211`). A full channel drops the request, and
-        // the next layout taken asks again.
+        // needs them (`PROSE-UI-211`). The view records the request as asked
+        // before it leaves, so a full channel holds it rather than drop it.
         if let Some(command) = self.state.window_request() {
-            send_command(&self.to_logic, self.document_id, command);
+            send_edit(&mut self.outbox, self.document_id, command);
         }
         // A drag held near an edge scrolls the page (`PROSE-UI-038`), and a
         // flick keeps it moving (`PROSE-UI-217`).
@@ -617,7 +625,7 @@ impl ProseView {
                 if let Some(url) = self.state.followed.take() {
                     self.annotations.followed.set(Some(url));
                 }
-                self.busy_pub.publish(self.outbox.load());
+                self.busy_pub.publish(busy_level(self.outbox.load()));
                 self.publish_toolbar();
                 self.dirty |= consumed.is_yes();
                 consumed
@@ -663,7 +671,7 @@ impl ProseView {
         let (outbox, document_id) = (&mut self.outbox, self.document_id);
         let mut send = |command| send_edit(outbox, document_id, command);
         let consumed = self.state.handle_input(input, &mut send);
-        self.busy_pub.publish(self.outbox.load());
+        self.busy_pub.publish(busy_level(self.outbox.load()));
         self.publish_toolbar();
         self.dirty |= consumed.is_yes();
         consumed
