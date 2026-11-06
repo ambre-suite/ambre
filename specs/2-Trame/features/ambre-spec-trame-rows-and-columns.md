@@ -22,6 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-085` | `INV` | A merge MUST cover the same cells after a line is inserted, deleted or moved. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` -- it drives the insert alone, the delete and the drag reaching the same rebuild with no test reading a merge after either | none | verified |
+| `TRAME-280` | `INV` | After an insert, a delete, a move or a sort, each formula MUST read the value it reads once the workbook is reopened. | this spec section 3; `TRAME-042` | `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- a proptest, 256 cases over two sheets: inserts, deletes of one line and of several, moves, sorts, merges, undos, formula writes and remote merges. After each step the carried state matches a state that walks every formula and reseeds, on the stored text, each value, each dependency and each cycle refusal | none | verified |
 | `TRAME-170` | `INV` | The height, the width and the hidden mark of a line MUST follow that line when the lines move. | this spec section 3 | `ambre_trame::logic::tests::group11::a_line_keeps_its_size_and_its_hidden_mark_when_it_moves` | none | verified |
 | `TRAME-091` | `CONC` | Two users inserting at the same position MUST both get a line. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op set carries an insert and a delete on both axes | none | verified |
 | `TRAME-261` | `CONC` | Two peers writing at once in one line past the used range MUST both land on that line. | this spec section 3 | `ambre_trame::logic::tests::group14::two_first_writes_in_one_new_row_land_on_one_row`; `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- its op set writes past the used range on both peers at once, and it compares the row counts | none | verified |
@@ -93,7 +94,7 @@ status values are normative in `ambre-spec-template.md`.
   and freezes formula references answers to the structural edit row of that section.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client. A derived uid hashes sealed content only.
-* **Verification.** 35 `verified`. What holds is the single-line gesture, the frame conditions
+* **Verification.** 36 `verified`. What holds is the single-line gesture, the frame conditions
   around it, and the summed block an insert widens. What is loose is two peers adding one line at
   once, and the guard past the used range.
 
@@ -129,9 +130,33 @@ and a sort (`TRAME-004`).
 
 | Operation | Document | Afterwards |
 |---|---|---|
-| insert | one insertion, carrying a freshly minted identity | rebuild the position cache, rebuild the merges, reseed the engine, the styles and the filter |
+| insert | one insertion, carrying a freshly minted identity | rebuild the position cache and the merges, carry the engine, reseed the styles and the filter |
 | delete | one removal, then a purge of every cell and style keyed by the removed identity | the same tail |
-| move | one move, and nothing else | rebuild the position cache only. The engine is **not** reseeded: each reference resolves to its line's new position by itself (`TRAME-084`) |
+| move | one move, and nothing else | the same tail. Each cell reference resolves to its line's new position by itself (`TRAME-084`) |
+
+**What a structural edit costs the engine** (`TRAME-280`). A formula that names each cell it reads by
+two live lines follows those cells. Its text changes only when one of its lines goes, and its value
+only when a cell it reads changes. Every other formula reads positions. It reads a range, a
+whole-line span, a position past the used range, a defined name, `ROW()` or `COLUMN()`, or a line
+already gone. The edit therefore reads two sets of formulas, and no other:
+
+1. each formula that reads a cell of a removed line, found through the dependency graph;
+2. each formula that reads positions, which the engine keeps as a set.
+
+The re-anchor walk rewrites the text of those formulas alone, before the commit. After the commit
+the engine clears the removed cells and compiles those formulas again from their text. It then
+recomputes what they dirty, in the order the dirty cells induce.
+
+**Where the engine still reseeds.** A formula refused for a cycle keeps no edge, so the graph cannot
+say whether an edit frees it. A masked cell, or a cell under a second key (`TRAME-279`), is out of the
+engine, so no dependency names it. A structural edit that meets any of the three walks every formula
+and reseeds the whole engine. So does a carried step that meets a new cycle. The feed order then
+decides which cell of a cycle is refused, as on every reseed.
+
+**A remote change still reseeds the whole engine.** A delta from a peer goes through the full
+reseed, a peer's structural edit among them. It does until the story that carries it lands:
+the `Incremental remote apply` Story (`ambre-roadmap.md` E6). So do an undo, a redo and a snapshot
+import. Only a structural edit made on this peer takes the carried path above.
 
 **Virtual space**, past the used range:
 
@@ -177,7 +202,7 @@ derived again revives nothing (`TRAME-274`, `TRAME-277`).
 | undo | the rewrite rides the delete's commit, so undoing the delete restores each uid reference |
 | a formula written against the line by a peer that has not received the delete | it cites the element, which is gone, so it reads `#REF!`. The next structural edit freezes it (`TRAME-278`) |
 | the frozen literal, now that the element binding closes the revival | kept. The formula bar shows `#REF!`, as in a spreadsheet, and an export writes it. The literal drops the element suffix from the text, and a read needs no lookup. The binding then guards the window before the freeze alone |
-| cost | the walk parses every formula of every sheet. Measured on 2026-11-05 at 10k formula cells, it takes about 345 ms on the target phone, against the < 10 ms of the structural edit row of `ambre-spec-budgets.md section 1`. The `A structural edit within its budget on a large sheet` Story (`ambre-roadmap.md` E6) narrows it. The freeze adds one case to that walk. The dependency graph indexes each cell and range a formula reads, so it could narrow the walk to the formulas that read the edited lines. That is an optimization of the whole walk, which the budget row tracks, and the freeze does not need it |
+| cost | the walk reads only the formulas that read a cell of a removed line, and those that read positions (section 3, `TRAME-280`). A formula that still cites a gone element reads positions, so the next structural edit reaches it. Measured on 2026-11-06 at 10k formula cells, the walk and the engine step take about 5.5 ms on the target phone, within the < 10 ms of the structural edit row of `ambre-spec-budgets.md section 1` |
 | `TRAME-007`, `TRAME-008` | both still hold: the freeze writes the `#REF!` the lookup already reads |
 
 
@@ -276,7 +301,7 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 |---|---|
 | an insert carries no coordinates | the menu and the header affordance both move the tracked active cell onto the target line, then send an intent -- above, below, left, right (`TRAME-087`) |
 | the new line is selected | so the insertion reads as a change, not as a silent shift |
-| merges are recomputed first | a masked cell is out of the dependency graph before the engine reseeds (`TRAME-085`) |
+| merges are recomputed first | a masked cell is out of the dependency graph before the engine step runs, and a masked cell makes that step a reseed (`TRAME-085`) |
 | the hidden rows need no work | the set is keyed by identity, so a filter survives a shift untouched |
 
 ---
@@ -290,7 +315,8 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 | The lists are dense over the used range only | a run-length encoding of the empty stretches | it buys back the storage but loses the direct index: reaching a position means walking the runs, on the path every viewport fill takes |
 | A write far past the used range is dropped | materializing whatever is asked | one accidental keystroke in the row-number box would otherwise materialize tens of thousands of lines on every peer, for one value |
 | A write far past the used range is dropped | clamping the write to the high-water mark | it silently lands the value on a line the user did not name, which is worse than not landing it: the sheet looks written and the number is in the wrong row |
-| A move reseeds the engine only when it re-anchored a range | reseeding after every structural operation, as a delete does | a cell reference resolves through the position cache, and a move only permutes it. Re-parsing every formula to reach the same answer is the cost a stable identity exists to avoid |
+| A structural edit carries the engine, and reads only the formulas that read a removed line or positions | reseeding after every structural operation | a cell reference resolves through the position cache, and an edit only permutes it or removes lines. Re-parsing every formula to reach the same answer is the cost a stable identity exists to avoid: on 10k formulas, about 11 billion instructions, seconds on a phone (`ambre-spec-budgets.md section 1`) |
+| The engine keeps the set of formulas that read positions | finding them at each edit through the stored text | that walk reads and parses every formula of the sheet, which is the cost being removed. The set is filled where the formula compiles, and costs one entry per such formula |
 | A delete purges the removed line's cells | leaving the entries and filtering them at read time | a cell keyed by a deleted identity is unreachable and would ride in the document and every sync payload for ever |
 | An insert from any surface goes through one intent | each surface computing a grid position and sending it | the menu, the header affordance and a future keyboard chord then resolve the position in one place, and cannot disagree about what "above" means |
 | A line a write adds takes a derived uid | a minted uid, then a merge of the two lines after the fact | every peer that imports the split writes the fold, and the fold rewrites every cell key of one line. A viewer cannot write, so a viewer keeps the split |
