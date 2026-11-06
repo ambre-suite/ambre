@@ -30,7 +30,6 @@ owner crates/ambre-app/src/lib.rs TOILE-IO-022
 owner crates/ambre-app/src/lib.rs TOILE-IO-023
 owner crates/ambre-app/src/lib.rs TOILE-UI-023
 owner crates/ambre-app/src/lib.rs TOILE-UI-097
-owner crates/ambre-app/src/lib.rs TOILE-UI-098
 owner crates/ambre-app/src/lib.rs TOILE-UI-340
 owner crates/ambre-app/src/platform.rs PROSE-UI-227
 owner crates/ambre-app/src/shell/app_root.rs PROSE-FEAT-040

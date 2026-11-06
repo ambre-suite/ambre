@@ -6,10 +6,12 @@
 // passes a decision.
 
 use ambre_bus::{Authored, DirectMember, FixedBytes, Instant, RestCommand, Role};
+#[cfg(target_arch = "wasm32")]
 use ambre_chrome::Dialog;
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_logic::app::LogicCommand;
 use ambre_murmure::message::DirectMessageDraft;
+#[cfg(target_arch = "wasm32")]
 use leptos::prelude::*;
 
 /// What a confirmed key is for.
@@ -68,6 +70,7 @@ pub(crate) enum KeyContact {
 
 impl TofuPrompt {
     /// The email the prompt shows under the name, for an invitation alone.
+    #[cfg(target_arch = "wasm32")]
     fn email(&self) -> Option<&ambre_bus::Email> {
         match &self.purpose {
             Purpose::Invite { email, .. } => Some(email),
@@ -107,6 +110,7 @@ pub(crate) fn classify(
 
 /// Pin the confirmed key, then dispatch the request that carries it
 /// (`CHROME-052`). The pin is filed under the recipient's identity alone.
+#[cfg(target_arch = "wasm32")]
 pub(crate) fn confirm(
     prompt: &TofuPrompt,
     role: Role,
@@ -163,6 +167,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
 /// substitution must not dismiss itself. Escape, the backdrop and the refusing
 /// action clear `prompt` and leave `confirmed` alone. The confirming action
 /// hands the prompt to `confirmed`, for the relay to pin and dispatch.
+#[cfg(target_arch = "wasm32")]
 #[component]
 pub(crate) fn TofuDialog(
     /// The decision waiting for the user, or `None`.
@@ -269,6 +274,8 @@ pub(crate) fn TofuDialog(
 }
 
 #[cfg(test)]
+// The prompt is mounted in a page, so these tests need the browser.
+#[cfg(target_arch = "wasm32")]
 mod tests {
     use super::*;
     use leptos::mount::mount_to;
