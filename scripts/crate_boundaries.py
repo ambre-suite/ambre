@@ -109,6 +109,11 @@ starts the Logic runtime from one line. The frame loop hands the route-free
 relay to `drive_frame` as its first step, and that relay drains the Logic to
 Sync queue.
 
+**The relay decides on the host** (`ARCH-072`). The per-frame relay asks
+`relay.rs` what each event calls for, and applies the answer. So no line of
+that file above its tests names a browser API, the interface toolkit or a
+signal, and its decisions stay testable on the host.
+
 **One kinetic model** (`KINETIC-012`). Pan, flick, wheel momentum and edge
 scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
 a friction or a velocity of its own. So no Rust line outside that file names
@@ -463,6 +468,13 @@ FRAME_RELAY = re.compile(
     r"drive_frame\(\s*&\w+,\s*(?:&mut pre_frame\b|\|\|\s*\(pre_frame\.borrow_mut\(\)\)\(\))"
 )
 SYNC_DRAIN = re.compile(r"\.drain\(&logic_to_sync_rx\b")
+# The relay's decisions, and what would tie them to the browser: a browser
+# API, the interface toolkit, or a signal of it (`ARCH-072`).
+RELAY_DECISIONS = "crates/ambre-app/src/relay.rs"
+BROWSER_BOUND = re.compile(
+    r"\b(?:web_sys|js_sys|wasm_bindgen\w*|leptos\w*|gloo\w*)\b"
+    r"|\b(?:Rw|Read|Write|Arc)?Signal\b|\bStoredValue\b"
+)
 APP_MESSAGE = re.compile(
     r"\bambre_bus::app\b|\b(?:Trame|Toile|Prose|Murmure|App)(?:Command|Event)\b|\bLogicCommand\b|\bUiEvent\b"
 )
@@ -1552,6 +1564,20 @@ def check_engine_and_relay(errors: list[str]) -> int:
     return len(files)
 
 
+def check_relay_decisions(errors: list[str]) -> int:
+    """`ARCH-072`: the relay's decisions name no browser API, no toolkit and
+    no signal, so the host builds them for their tests."""
+    path = ROOT / RELAY_DECISIONS
+    if not path.exists():
+        errors.append(f"{RELAY_DECISIONS}: gone from the tree, so the relay's decisions are unread")
+        return 0
+    for number, line in above_tests(path):
+        found = BROWSER_BOUND.search(line)
+        if found:
+            errors.append(f"{RELAY_DECISIONS}:{number}: the relay's decisions name the browser: `{found.group(0)}`")
+    return 1
+
+
 def check_failure_latches(errors: list[str]) -> int:
     """`ARCH-014`: each thread failure latches the page without a queue. A panic
     latches from the hook, and a failed Sync worker from its error event."""
@@ -2274,6 +2300,7 @@ def main() -> int:
     renderer_reach = check_renderer_reach(errors)
     worker_messages = check_worker_messages(errors)
     engine = check_engine_and_relay(errors)
+    decisions = check_relay_decisions(errors)
     handlers = check_handlers(errors)
     outboxes = check_launcher_outbox(errors)
     latches = check_failure_latches(errors)
@@ -2320,6 +2347,7 @@ def main() -> int:
         f"{renderer_reach} manifests read for the renderer reaching the thread protocol, "
         f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
         f"{engine} launcher files read for a second engine or a relay out of the frame, "
+        f"{decisions} relay decision file read for a browser API, "
         f"{handlers} engine files read for a handler that sends on a queue, "
         f"{outboxes} launcher files read for a write past its outbox, "
         f"{latches} launcher files read for a failure that waits on a queue, "
@@ -2362,7 +2390,8 @@ def main() -> int:
             "nor the worker reaches the rendering, the renderer reaches no thread "
             "protocol, and the worker redeclares no "
             "wire type, allocates no request id and names no app message. The launcher "
-            "starts one engine, and every frame relays before it draws. A command "
+            "starts one engine, and every frame relays before it draws. The relay "
+            "decides in a module that names no browser API. A command "
             "handler returns an outcome and names no queue. The launcher writes "
             "to the Logic thread through its one outbox. A panic and a failed "
             "worker each latch the fatal screen without a queue, and a failing thread "

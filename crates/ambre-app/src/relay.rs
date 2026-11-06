@@ -1,7 +1,6 @@
 // ambre-app/src/relay.rs
 // ============================================================================
-// The decisions of the per-frame relay (`ambre-spec-architecture.md`
-// section 5). The relay closure in `lib.rs` reads the queues, hands each
+// The decisions of the per-frame relay (`ARCH-072`). The relay closure in `lib.rs` reads the queues, hands each
 // event to this module, and applies what this module answers. This module
 // names no DOM, no `web_sys` and no signal. So it compiles on the host, and
 // the native tier runs its tests.
