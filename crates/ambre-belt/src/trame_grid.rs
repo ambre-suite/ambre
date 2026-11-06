@@ -361,5 +361,24 @@ mod tests {
             // A2 is 5 and B2 is 26.
             wait_totals(page, 0, 1, "Sum: 31").await;
         }
+
+        // Two first writes in one new row: row 4 exists on neither screen yet.
+        // Each peer adds it under the uid the line before derives, so both
+        // values land on row 4 and none moves down a row (`TRAME-261`).
+        let paused = bob.pause_worker(&sync).await;
+        go_to(&bob, 0, 3).await;
+        type_text(&bob, "7").await;
+        press(&bob, &[ENTER]).await;
+        go_to(&alice, 1, 3).await;
+        type_text(&alice, "8").await;
+        press(&alice, &[ENTER]).await;
+        wait_cell(&bob, 0, 3, "A4, 7").await;
+        wait_cell(&alice, 1, 3, "B4, 8").await;
+        bob.resume_worker(paused).await;
+
+        for page in [&alice, &bob] {
+            wait_cell(page, 0, 3, "A4, 7").await;
+            wait_cell(page, 1, 3, "B4, 8").await;
+        }
     }
 }

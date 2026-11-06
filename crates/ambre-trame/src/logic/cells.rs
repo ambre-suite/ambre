@@ -14,6 +14,7 @@ use std::cell::OnceCell;
 use super::*;
 use crate::formula::SheetQualifier;
 use crate::formula::identity;
+use crate::model::{Axes, CellRank, ElementId, LineRead};
 
 impl TrameState {
     /// Display text for a cell. The formula evaluation result if it's a formula
@@ -32,16 +33,11 @@ impl TrameState {
         // Plain-text cells: resolve the grid position to its stable id pair and
         // read the CRDT value. A virtual (never-written) cell, or one cleared
         // back to empty, has no stored value and renders blank.
-        if let Some((rl, cl)) = self.index.resolve(at) {
-            let map = self
-                .doc
-                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
-            if let Some(LoroValue::String(s)) = map
-                .get(CellKey::of(rl, cl).as_str())
-                .map(|v| v.get_deep_value())
-            {
-                return s.to_string();
-            }
+        let map = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
+        if let Some(LoroValue::String(s)) = cell_value(&map, &self.index, at) {
+            return s.to_string();
         }
         String::new()
     }
@@ -49,16 +45,11 @@ impl TrameState {
     /// Raw cell text as stored in the CRDT (the formula source for a formula
     /// cell, the literal otherwise). Empty for virtual/cleared cells.
     pub(super) fn cell_raw(&self, at: CellPos) -> CellText<StoredForm> {
-        if let Some((rl, cl)) = self.index.resolve(at) {
-            let map = self
-                .doc
-                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
-            if let Some(LoroValue::String(s)) = map
-                .get(CellKey::of(rl, cl).as_str())
-                .map(|v| v.get_deep_value())
-            {
-                return CellText::<StoredForm>::new(s.to_string());
-            }
+        let map = self
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
+        if let Some(LoroValue::String(s)) = cell_value(&map, &self.index, at) {
+            return CellText::<StoredForm>::new(s.to_string());
         }
         CellText::<StoredForm>::default()
     }
@@ -201,8 +192,8 @@ impl TrameState {
 
     /// Ensure the cell `at` is materialized (its row and column exist in the
     /// `rows_/cols_` lists) and return the `(row_lid, col_lid)` pair to key the
-    /// cell with. Extends the dense used range by pushing placeholder elements,
-    /// capturing each new element's stable id. The write is refused when the
+    /// cell with. Extends the dense used range by pushing one element per new
+    /// line, each line under a uid derived from the line before it. The write is refused when the
     /// jump past the high-water mark exceeds [`MATERIALIZE_ROWS`]. It is refused
     /// too when the session cannot mint every uid the cell needs. Every uid is minted
     /// before the first push, so a refusal for want of one pushes no line.
@@ -245,24 +236,24 @@ impl TrameState {
             return Err(Unmaterialized::IdsExhausted);
         }
         let grew = !row_uids.is_empty() || !col_uids.is_empty();
-        let rows = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
-        for uid in row_uids {
-            if rows.push(uid.to_key_part().as_str()).is_err() {
-                break;
-            }
-            self.index.push_row(uid);
-        }
-        let cols = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
-        for uid in col_uids {
-            if cols.push(uid.to_key_part().as_str()).is_err() {
-                break;
-            }
-            self.index.push_col(uid);
-        }
+        // Each minted id names the element that carries a line, never the line
+        // itself. The line takes a uid derived from the line before it. So two
+        // peers writing at once in one new line add one line (`TRAME-261`).
+        let row_ids: Vec<ElementId> = row_uids.into_iter().map(ElementId::minted).collect();
+        let col_ids: Vec<ElementId> = col_uids.into_iter().map(ElementId::minted).collect();
+        let axes = Axes::of(&self.doc, &self.active_sheet);
+        let (Some(rows), Some(cols)) = (
+            axes.plan::<Row>(&self.index, &row_ids),
+            axes.plan::<Col>(&self.index, &col_ids),
+        ) else {
+            self.uid_counter = before;
+            return Err(Unmaterialized::IdsExhausted);
+        };
+        // A refused push leaves the index as the lines that landed; the resolve
+        // below then answers the refusal.
+        let _ = axes
+            .grow(&mut self.index, rows)
+            .and_then(|()| axes.grow(&mut self.index, cols));
         // Commit the implicit scaffolding under the excluded origin so it stays
         // OUT of the undo stack (see `CommitOrigin::Materialize`). A cell edit's intent
         // is the value, not the row/column placeholders it forced into existence.
@@ -282,13 +273,7 @@ impl TrameState {
     /// Called after any import, where peers' (or our own persisted) structural
     /// ops may have added rows/columns the cache does not yet know about.
     pub(super) fn rebuild_index(&mut self) {
-        let rows = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
-        let cols = self
-            .doc
-            .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
-        self.index = SheetIndex::build(&rows, &cols);
+        self.index = self.axes().index();
         self.note_index_read(&self.index);
     }
 
@@ -343,12 +328,16 @@ impl TrameState {
     /// final commit, hence one undo item.
     pub(super) fn write_cell(&mut self, at: CellPos, text: &CellText<SourceForm>) {
         if text.is_empty() {
-            // Clearing: only touch the CRDT if the cell was materialized.
-            if let Some((rl, cl)) = self.index.resolve(at) {
-                let _ = self
-                    .doc
-                    .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())
-                    .delete(CellKey::of(rl, cl).as_str());
+            // Clearing: only touch the CRDT if the cell was materialized. The
+            // cell goes under every live element of its lines, so no value a
+            // hidden element holds shows through (`TRAME-279`).
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
+            for key in self.index.keys_at(at) {
+                if map.get(key.as_str()).is_some() {
+                    let _ = map.delete(key.as_str());
+                }
             }
             let cell = self.active_cell_id(at);
             let indices = self.engine_indices();
@@ -386,10 +375,15 @@ impl TrameState {
             let stored = self
                 .canonicalize_input(text, &sheet, &self.sheet_lines())
                 .unwrap_or_else(|_| CellText::<StoredForm>::new(text.as_str().to_owned()));
+            // The cell is keyed by the element of each line this peer sees. A
+            // concurrent delete of another element then spares it (`TRAME-265`).
+            let Some(key) = self.index.key_at(at) else {
+                return;
+            };
             let _ = self
                 .doc
                 .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str())
-                .insert(CellKey::of(rl, cl).as_str(), stored.as_str());
+                .insert(key.as_str(), stored.as_str());
             let cell = CellId::bound(ACTIVE_SHEET, rl, cl);
             let indices = self.engine_indices();
             let ctx = TrameCtx {
@@ -565,4 +559,54 @@ impl SheetLines<'_> {
         let cell = self.built.get(idx.to_usize())?;
         Some(cell.get_or_init(|| state.build_sheet_index(id)))
     }
+}
+
+/// The value a reader shows for the cell at `at` of `map`: the first key of
+/// [`SheetIndex::keys_at`] the map holds (`TRAME-279`).
+pub(super) fn cell_value(
+    map: &loro::LoroMap,
+    index: &SheetIndex,
+    at: CellPos,
+) -> Option<LoroValue> {
+    index
+        .keys_at(at)
+        .iter()
+        .find_map(|key| map.get(key.as_str()))
+        .map(|v| v.get_deep_value())
+}
+
+/// The entries of a cell, style or merge map a reader shows (`TRAME-279`).
+/// Each key reads on the cell of its two elements, and a key whose element is
+/// gone reads nowhere. Of two keys on one cell, the smaller [`CellRank`] wins:
+/// the one written under the visible element of each line. The other stays in
+/// the document, unseen. The entries come back in key order, so a caller that
+/// feeds them to the engine feeds them alike on every peer. The flag says
+/// whether a key no build writes was skipped (`SCHEMA-003`).
+pub(super) fn shown_cells<'a>(
+    index: &SheetIndex,
+    entries: impl IntoIterator<Item = (&'a String, &'a LoroValue)>,
+) -> (Vec<(CellPos, &'a String, &'a LoroValue)>, LineRead) {
+    let mut read = LineRead::Clean;
+    let mut best: HashMap<CellPos, (CellRank, &'a String, &'a LoroValue)> = HashMap::new();
+    for (key, value) in entries {
+        if parse_cell_key(key).is_none() {
+            read = LineRead::Skipped;
+            continue;
+        }
+        let Some((at, rank)) = index.place(key) else {
+            continue;
+        };
+        match best.get(&at) {
+            Some((held, ..)) if *held <= rank => {}
+            _ => {
+                best.insert(at, (rank, key, value));
+            }
+        }
+    }
+    let mut cells: Vec<_> = best
+        .into_iter()
+        .map(|(at, (_, key, value))| (at, key, value))
+        .collect();
+    cells.sort_unstable_by(|a, b| a.1.cmp(b.1));
+    (cells, read)
 }

@@ -441,10 +441,33 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 
 /// The canonical workbook of the version a step leaves: that version's layout,
 /// holding what the step rewrites. Each step reads its own, so a step added
-/// later never moves what an earlier one writes. The registry holds no step
-/// yet, so no version has one.
+/// later never moves what an earlier one writes.
 fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
-    panic!("the step from version {from} has no canonical workbook: write one here")
+    match from.get() {
+        // Version 1: one minted row, one minted column and a formula that
+        // names both by their bare uids. The step to 2 rewrites none of it.
+        1 => {
+            let doc = LoroDoc::new();
+            doc.set_peer_id(1).expect("a fixed peer");
+            let sheet = default_sheet();
+            let row = "0000000000000001_00000000";
+            let col = "0000000000000001_00000001";
+            let _ = doc
+                .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 1_i64);
+            for (root, uid) in [(SheetRoot::Rows, row), (SheetRoot::Cols, col)] {
+                doc.get_movable_list(SheetContainer::of(root, &sheet).as_str())
+                    .push(uid)
+                    .expect("a line");
+            }
+            doc.get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
+                .insert(&format!("{row}:{col}"), "={1_0|1_1}+1")
+                .expect("a cell");
+            doc.commit();
+            doc
+        }
+        _ => panic!("the step from version {from} has no canonical workbook: write one here"),
+    }
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical
@@ -575,8 +598,28 @@ fn a_value_type_changing_moves_the_shape() {
         .expect("the scenario writes a cell");
     let map = state.doc.get_map(cells.as_str());
     let key = match map.get_value() {
-        LoroValue::Map(entries) => entries.keys().next().cloned().expect("a cell is written"),
+        LoroValue::Map(entries) => entries.keys().next().cloned(),
         _ => panic!("a cell register is a map"),
+    };
+    let (map, key) = match key {
+        Some(key) => (map, key),
+        // The first cell map read may belong to an empty sheet: take one that
+        // holds a cell.
+        None => roots
+            .keys()
+            .filter(|name| {
+                SheetContainer::parse(name).is_some_and(|(root, _)| root == SheetRoot::Cells)
+            })
+            .find_map(|name| {
+                let map = state.doc.get_map(name.as_str());
+                match map.get_value() {
+                    LoroValue::Map(entries) => {
+                        entries.keys().next().cloned().map(|key| (map.clone(), key))
+                    }
+                    _ => None,
+                }
+            })
+            .expect("a cell is written"),
     };
     map.insert(&key, 1_i64).expect("the register takes a key");
     assert_ne!(

@@ -7,13 +7,17 @@
 // keys them by our own move-invariant `Uid` pairs. A row insert is then a single
 // Loro op, and a reorder never orphans a cell (`trame-rows-and-columns`).
 //
-// `SheetIndex` is the bidirectional position <-> `Uid` cache; it is the only
-// place that translates between the two address spaces.
+// `axis` owns the line order of every sheet. It alone reads or writes the raw
+// lists, and it alone builds a `SheetIndex` (`TRAME-275`).
 // ============================================================================
 
+mod axis;
 mod line;
 mod sheet_index;
 
+#[cfg(test)]
+pub(crate) use axis::generation_owner;
+pub(crate) use axis::{Axes, AxisOrder, Removed};
+pub use axis::{AxisView, CellRank, Element, ElementId, LineGeneration, SheetIndex, Slot};
 pub use line::Line;
-pub(crate) use line::{delete_line, insert_line, move_line};
-pub use sheet_index::{CellKey, LineRead, SheetIndex, Uid, parse_cell_key};
+pub use sheet_index::{CellKey, LineRead, Uid, parse_cell_key};

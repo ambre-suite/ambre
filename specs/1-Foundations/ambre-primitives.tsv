@@ -1057,7 +1057,6 @@ ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::NAME | const | &'stati
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::Repr | assoc | u16	newtype-inner	the number a value of this quantity holds
 ambre-logic | src/bin/ambre-fixtures.rs | crate | baseline(machine) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/bin/ambre-fixtures.rs | crate | display() | ret | String	generic	generic byte/text API or codec
-ambre-logic | src/bin/ambre-fixtures.rs | crate | freeze(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | ClosedChannel::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | ClosedChannel::watch() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1096,35 +1095,16 @@ ambre-logic | src/fixtures.rs | crate::fixtures | CURRENT_DIR | const | &str	gen
 ambre-logic | src/fixtures.rs | crate::fixtures | CorpusReport.frozen_held | field | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/fixtures.rs | crate::fixtures | CorpusReport::is_clean() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/fixtures.rs | crate::fixtures | Degraded.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Degraded.stem | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Bytes.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Frozen.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Frozen.stem | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | Drift::FrozenOverflow.kept | field | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Manifest.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Manifest.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Missing.name | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Orphan.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | FROZEN_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | FROZEN_KEEP_PER_TYPE | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Manifest.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Manifest.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::NotFound.name | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry.generator | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry.stem | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry::parse(stem) | param | &str	free-text	free text: message, label, name or report
+ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Stem.reason | field | String	free-text	the words that say why a file of the corpus tree carries no artifact stem
 ambre-logic | src/fixtures.rs | crate::fixtures | MANIFEST_EXT | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | REGISTRY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/fixtures.rs | crate::fixtures | artifact_path(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | artifact_stems() | ret | Result<Vec<String>,FixtureError>	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | canonical_dump() | ret | String	generic	generic byte/text API or codec
-ambre-logic | src/fixtures.rs | crate::fixtures | collect_stems(out) | param | &mut Vec<String>	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | freeze(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | load_bench_fixture(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | load_fixture(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | load_fixture_from(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | manifest_path(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | read_manifest(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | DocState::export_failed_event(reason) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -2739,8 +2719,11 @@ ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	the formula number a criterion compares against
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/formula/identity.rs | crate::formula::identity | gone() | ret | bool	generic	predicate
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	generic	predicate over typed qualifiers, the caller's filter
+ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor_node(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	local	private predicate: whether a reference names the edited sheet; the only closure in the call
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor_on(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	local	private predicate: whether a reference names the edited sheet; the only closure in the call
+ambre-trame | src/formula/identity.rs | crate::formula::identity | same_reference() | ret | bool	generic	predicate
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <FormulaNesting as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <Operators as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | add_sub() | ret | nom::IResult<&str,Expr>	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -2844,6 +2827,8 @@ ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | p
 ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	an operator's result inside the formula engine
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
+ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells() | ret | (Vec<(CellPos,&'a String,&'a LoroValue)>,LineRead)	foreign-api	the stored keys and values of a Loro map, each placed on its grid cell
+ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells(entries) | param | impl IntoIterator<Item=(&'a String,&'a LoroValue)>	foreign-api	the entries of a Loro map value, as the map hands them out
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	the step of a fill series: 1 for a lone number, else the difference of two finite sources, infinite past the largest number
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
@@ -2905,16 +2890,38 @@ ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::a
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_formulas() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::remove_line() | ret | Option<bool>	generic	state flag
+ambre-trame | src/logic/structural.rs | crate::logic::structural | may_qualify() | ret | bool	generic	predicate
+ambre-trame | src/logic/structural.rs | crate::logic::structural | may_qualify(body) | param | &str	generic	the stored formula text the walk reads
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::cell_is_numeric() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::displayed_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | line_element() | ret | nom::IResult<&str,Element>	generic	the nom parser of a line reference: the rest of the input it hands back, and the element it read
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | line_element(input) | param | &str	generic	the stored formula text a nom parser reads
+ambre-trame | src/formula/render.rs | crate::formula::render | render_element() | ret | String	generic	the stored text of a line reference: the codec of a struct of two fields
+ambre-trame | src/logic/schema.rs | crate::logic::schema | line_elements_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-trame | src/model/axis.rs | crate::model::axis | <Col as AxisOrder>::ROOT_KEY | const | &'static str	generic	the key half that names the column root in the generation record: the codec of a closed set
+ambre-trame | src/model/axis.rs | crate::model::axis | <Col as AxisOrder>::TAG | const | u8	generic	the byte the derivation hashes to name the column axis: hash input, a codec of a closed set
+ambre-trame | src/model/axis.rs | crate::model::axis | <LineGeneration as VersionKind>::NAME | const | &'static str	free-text	the name a version prints through Debug, for a log line
+ambre-trame | src/model/axis.rs | crate::model::axis | <LineGeneration as VersionKind>::Repr | assoc | u32	newtype-inner	the number a generation of a line holds
+ambre-trame | src/model/axis.rs | crate::model::axis | <Row as AxisOrder>::ROOT_KEY | const | &'static str	generic	the key half that names the row root in the generation record: the codec of a closed set
+ambre-trame | src/model/axis.rs | crate::model::axis | <Row as AxisOrder>::TAG | const | u8	generic	the byte the derivation hashes to name the row axis: hash input, a codec of a closed set
+ambre-trame | src/model/axis.rs | crate::model::axis | Before::key() | ret | String	generic	the key half of a generation key: the codec of an enum that carries data
+ambre-trame | src/model/axis.rs | crate::model::axis | DERIVATION_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::place(key) | param | &str	generic	the key a cell map stores, read back into its element pair: the codec of a struct of two fields
+ambre-trame | src/model/axis.rs | crate::model::axis | generation_key() | ret | String	generic	the key a generation record stores: the codec of a line before and a generation
+ambre-trame | src/model/axis.rs | crate::model::axis | parse_generation_key(key) | param | &str	generic	the key a generation record stores, read back into a line before and a generation
+ambre-trame | src/model/axis.rs | crate::model::axis | <Slot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-trame | src/model/axis.rs | crate::model::axis | AxisView<L>::is_empty() | ret | bool	generic	predicate
+ambre-trame | src/model/axis.rs | crate::model::axis | Element::is_minted() | ret | bool	generic	predicate
+ambre-trame | src/model/axis.rs | crate::model::axis | Element::parse(value) | param | &str	generic	the value a line element stores, read back into a uid and an element id from its canonical spelling alone: the codec of a struct of two fields
+ambre-trame | src/model/axis.rs | crate::model::axis | Element::spell() | ret | String	generic	the value a line element stores for a uid and an element id: the codec of a struct of two fields
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 | field | String	newtype-inner	the stored cell key CellKey types
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	newtype-inner	the stored cell key CellKey holds, which the Loro call into the map reads
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element or a cell key stores, read back into a uid from its canonical spelling alone: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse_hex(s) | param | &str	generic	the compact uid a stored formula writes, read back into a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	generic	the key part a list element stores for a uid: the codec of a struct of two fields
@@ -3555,9 +3562,11 @@ ambre-core | src/fixtures.rs | crate::fixtures | <Generator as crate::version::V
 ambre-core | src/fixtures.rs | crate::fixtures | <Generator as crate::version::VersionKind>::Repr | assoc | u32	newtype-inner	the number a version of this space holds
 ambre-core | src/fixtures.rs | crate::fixtures | <Peers as crate::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-core | src/fixtures.rs | crate::fixtures | <Sheets as crate::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureName.0 | field | std::borrow::Cow<'static,str>	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::declared(name) | param | &'static str	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Refuses>::Raw | assoc | String	generic	the refused value the error echoes
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Rule>::admit() | ret | Result<String,crate::Refused<FixtureName>>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-core | src/fixtures.rs | crate::fixtures | <FixtureName as crate::Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed.0 | field | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed::new(seed) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor
