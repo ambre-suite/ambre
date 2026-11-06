@@ -115,7 +115,7 @@ impl Numbered for Page {
     type Number = Ordinal<Page>;
 
     fn number_of(pos: Pos<Page>) -> Ordinal<Page> {
-        Ordinal::<Page>::from_position(pos.to_usize())
+        Ordinal::<Page>::of_index(pos)
     }
 }
 
@@ -1181,6 +1181,14 @@ impl MarkKey {
     #[must_use]
     pub fn root(&self) -> &str {
         self.0.split(':').next().unwrap_or(&self.0)
+    }
+
+    /// The registry root this key is read under, or `None` for a root this
+    /// build does not declare.
+    #[must_use]
+    pub fn mark_root(&self) -> Option<mark::MarkRoot> {
+        use ambre_core::crdt::CrdtName;
+        mark::MarkRoot::parse(self.root())
     }
 }
 

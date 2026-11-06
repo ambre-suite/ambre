@@ -147,6 +147,11 @@ impl SheetName {
         Self(Redacted::new(text))
     }
 
+    /// The name a sheet whose document holds none shows: its id, verbatim.
+    pub fn of_id(id: &Id<Sheet>) -> Self {
+        Self::stored(id.as_str().to_owned())
+    }
+
     /// Whether this name obeys the rule of a create or a rename as it is
     /// spelled, spaces included (`TRAME-234`).
     pub fn obeyed(&self) -> bool {
@@ -1315,6 +1320,16 @@ mod tests {
         let refused = Validated::<DefinedName>::parse("Q3 layoffs").unwrap_err();
         assert_eq!(format!("{refused:?}"), "InvalidDefinedName(10 chars)");
         assert!(refused.to_string().contains("Q3 layoffs"));
+    }
+
+    /// A sheet whose document holds no name shows its id, verbatim.
+    #[test]
+    fn a_sheet_with_no_name_shows_its_id() {
+        let id = ambre_core::id::Id::<ambre_core::id::Sheet>::from_text("s0_a1b2".to_owned());
+        assert_eq!(
+            SheetName::of_id(&id),
+            SheetName::stored("s0_a1b2".to_owned())
+        );
     }
 
     /// A defined name travels as its bare text, and a decode refuses a text

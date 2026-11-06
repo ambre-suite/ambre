@@ -23,10 +23,8 @@ ambre-app | src/host/mod.rs | crate::host | AppView::drags_text() | ret | bool	g
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text(text) | param | String	free-text	dropped text
 ambre-app | src/host/mod.rs | crate::host | AppView::takes_text() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(published) | param | Rc<std::cell::Cell<bool>>	generic	flag cell
-ambre-app | src/host/mod.rs | crate::host | base64_decode() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_decode(s) | param | &str	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_encode() | ret | String	generic	generic codec/parser/bytes API
-ambre-app | src/host/mod.rs | crate::host | base64_encode(bytes) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | desktop() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | desktop_in() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | is_other_editable() | ret | bool	generic	predicate result
@@ -167,8 +165,6 @@ ambre-prose | src/message/mark.rs | crate::message::mark | canonical_value(raw) 
 ambre-prose | src/message/mark.rs | crate::message::mark | parse_color(raw) | param | &str	generic	the raw text of a colour mark value, the input of its parse
 ambre-prose | src/message/mark.rs | crate::message::mark | parse_font_size(raw) | param | &str	generic	the raw text of a size mark value, the input of its parse
 ambre-prose | src/message/mark.rs | crate::message::mark | read_font_size(raw) | param | &str	generic	the raw text of a size mark value, the input of its parse
-ambre-prose | src/message/mark.rs | crate::message::mark | spell() | ret | String	generic	the canonical spelling of a number, wrapped into a MarkValue by its callers
-ambre-prose | src/message/mark.rs | crate::message::mark | spell(value) | param | f32	math	a typed size's points, or the number a stored or command string reads as
 ambre-prose | src/message/mark.rs | crate::message::mark | validate_value(raw) | param | Option<&str>	generic	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-toile | src/message/mod.rs | crate::message | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-toile | src/message/mod.rs | crate::message | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
@@ -858,6 +854,7 @@ ambre-core | src/id.rs | crate::id | Id<E>::from_text(text) | param | String	new
 ambre-core | src/id.rs | crate::id | Id<E>::from_uuid(uuid) | param | Uuid	newtype-inner	the Uuid an identifier wraps
 ambre-core | src/id.rs | crate::id | Id<E>::parse_str(s) | param | &str	newtype-inner	the identifier's own UUID text, read back
 ambre-core | src/id.rs | crate::id | Id<E>::to_hyphenated() | ret | String	newtype-inner	the identifier's own hyphenated UUID text
+ambre-core | src/id.rs | crate::id | Id<E>::to_simple() | ret | String	newtype-inner	the identifier's own UUID text in 32 hex digits, without hyphens
 ambre-core | src/id.rs | crate::id | Id<E>::uuid() | ret | Uuid	newtype-inner	the Uuid an identifier holds, its one way out
 ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	generic	length of the [u8;N] KeyId array, read only as an array length in KeyId's own signatures; a crate that frames a key id uses KeyId::SIZE and KeyId::split_from
 ambre-core | src/link.rs | crate::link | <LinkUrl as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of LinkUrl copies into its text
@@ -1119,7 +1116,6 @@ ambre-logic | src/lib.rs | crate::logged | <LoggedDeltas as ambre_core::CountKin
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_at() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
-ambre-logic | src/persistence.rs | crate::persistence | bytes_to_js(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | session_of(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | DbName.0 | field | &'a str	newtype-inner	DbName newtype
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey.0 | field | String	newtype-inner	IdbKey newtype
@@ -3573,7 +3569,6 @@ ambre-core | src/color.rs | crate::color | Alpha.0 | field | u8	newtype-inner	th
 ambre-core | src/color.rs | crate::color | Alpha::get() | ret | u8	newtype-inner	the one way out of an alpha, to a renderer that takes the channel byte
 ambre-core | src/color.rs | crate::color | Alpha::new(byte) | param | u8	newtype-inner	the constructor of an alpha; every byte is one
 ambre-core | src/color.rs | crate::color | Bounded<Opacity>::clamped(value) | param | f32	newtype-inner	the opacity unwrapped: the raw fraction it clamps into range
-ambre-core | src/color.rs | crate::color | Bounded<Opacity>::lerp(t) | param | f64	math	interpolation parameter
 ambre-core | src/color.rs | crate::color | Bounded<Opacity>::scaled(factor) | param | f32	math	scalar multiplier
 ambre-core | src/ordinal.rs | crate::ordinal | <Ordinal<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/ordinal.rs | crate::ordinal | Ordinal<K>::from_position(position) | param | usize	generic	the 0-based position of an item on any axis, which the ordinal numbers from one

@@ -101,7 +101,7 @@ impl AnimatedElement {
             id: b.id.clone(),
             bounds: lerp_rect(a.bounds, b.bounds, t),
             rotation: a.rotation + (b.rotation - a.rotation) * t.get(),
-            opacity: a.opacity.lerp(b.opacity, t.get()),
+            opacity: a.opacity.lerp(b.opacity, t),
             fill: lerp_fill(a.fill, b.fill, t),
         }
     }

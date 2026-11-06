@@ -147,7 +147,7 @@ pub use fixed_bytes::{ByteArray, DebugForm, FixedBytes, FixedBytesError, FixedRo
 pub use fixtures::{
     BoardFrames, Connectors, DocBlocks, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest,
     FixtureName, FixtureSeed, FixtureShape, Formulas, Generator, Peers, ShapeBody, Sheets,
-    fixture_peer_count, seeded_document_id,
+    fixture_peer_count, seeded_document_id, seeded_id,
 };
 pub use flags::{Flags, FlagsKind, FlagsRepr};
 pub use font::{
