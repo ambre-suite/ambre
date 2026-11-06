@@ -25,6 +25,14 @@ impl SignedTranscript {
     }
 }
 
+/// The door the signer and the verifier of `ambre-crypto` take: the bytes the
+/// two builders wrote, unchanged.
+impl ambre_core::Transcript for SignedTranscript {
+    fn covered_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl std::fmt::Debug for SignedTranscript {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SignedTranscript({} bytes)", self.0.len())
