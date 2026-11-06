@@ -172,3 +172,58 @@ fn an_answer_does_not_move_the_scroll_origin() {
     ));
     assert_eq!((state.top_row, state.left_col), origin);
 }
+
+/// The rectangle from `(r0, c0)` to `(r1, c1)`.
+fn rect(r0: u32, c0: u32, r1: u32, c1: u32) -> crate::CellRect {
+    crate::CellRect::spanning(
+        crate::CellPos::new(Pos::<Row>::new(r0), Pos::<Col>::new(c0)),
+        crate::CellPos::new(Pos::<Row>::new(r1), Pos::<Col>::new(c1)),
+    )
+}
+
+/// `TRAME-UI-184`: a ranged change re-fetches the cells of its range the
+/// window shows, and evicts nothing. A change outside the window re-fetches
+/// nothing.
+#[test]
+fn a_ranged_change_refetches_only_its_part_of_the_window() {
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
+    let full = state.scroll_viewport_cmd();
+    let TrameCommand::ScrollViewport { version: asked, .. } = full else {
+        panic!("a viewport request");
+    };
+    let (_, row_end, _, col_end) = window(full);
+    state.on_viewport_data(answer(
+        asked.get(),
+        vec![cell(0, 0, crate::message::RowFilter::Shown)],
+    ));
+    let cmd = state
+        .range_viewport_cmd(rect(2, 1, row_end + 50, 1), asked)
+        .expect("the window shows part of the range");
+    assert_eq!(window(cmd), (2, row_end, 1, 1), "the part the window shows");
+    assert!(
+        state.cell_cache.contains_key(&crate::CellPos::ORIGIN),
+        "a ranged request evicts nothing"
+    );
+    assert!(
+        state
+            .range_viewport_cmd(rect(row_end + 1, 0, row_end + 9, col_end), asked)
+            .is_none(),
+        "a change below the window re-fetches nothing"
+    );
+}
+
+/// `TRAME-UI-184`: a request for the whole window sent after the change
+/// reaches the Logic thread after it. Its answer shows the change, and no
+/// ranged request goes out.
+#[test]
+fn a_later_window_request_carries_a_ranged_change() {
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
+    let TrameCommand::ScrollViewport {
+        version: served, ..
+    } = state.scroll_viewport_cmd()
+    else {
+        panic!("a viewport request");
+    };
+    let _later = state.scroll_viewport_cmd();
+    assert!(state.range_viewport_cmd(rect(0, 0, 3, 3), served).is_none());
+}

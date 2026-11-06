@@ -3,8 +3,14 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use crate::CellRect;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
+
+/// The cell at `row`, `col`.
+fn at(row: u32, col: u32) -> CellPos {
+    CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col))
+}
 
 const COL_1: Pos<Col> = Pos::<Col>::new(1);
 
@@ -241,7 +247,7 @@ fn edit_after_reopen_broadcasts_causally_complete_delta() {
 /// where a cell present only in the last delta flashed in across N intermediate
 /// renders.
 #[test]
-fn apply_remote_batch_emits_single_datareset_with_full_state() {
+fn apply_remote_batch_repaints_once_over_the_cells_it_changed() {
     let mut author = TrameState::new();
     let u1 = author
         .handle_command(TrameCommand::SetCellText {
@@ -263,14 +269,173 @@ fn apply_remote_batch_emits_single_datareset_with_full_state() {
     let mut reopened = TrameState::new();
     let events = reopened.apply_remote_batch(&[u1, u2]);
 
-    let resets = events
+    let repaints: Vec<&TrameEvent> = events
         .iter()
-        .filter(|e| matches!(e, TrameEvent::DataReset))
-        .count();
-    assert_eq!(resets, 1, "the whole replay repaints exactly once");
+        .filter(|e| matches!(e, TrameEvent::DataReset | TrameEvent::CellsChanged { .. }))
+        .collect();
+    assert_eq!(repaints.len(), 1, "the whole replay repaints exactly once");
+    let TrameEvent::CellsChanged { range, .. } = repaints[0] else {
+        panic!("a carried batch repaints what it changed, not the whole window: {repaints:?}");
+    };
+    for row in [0, 1] {
+        assert!(
+            range.contains(at(row, 0)),
+            "the range names A{}: {range:?}",
+            row + 1
+        );
+    }
+    assert!(
+        !range.contains(at(0, 1)),
+        "and no cell beside them: {range:?}"
+    );
 
     assert_eq!(read_cell(&mut reopened, 0, 0), "1");
     assert_eq!(read_cell(&mut reopened, 1, 0), "2");
+}
+
+/// A batch the engine reseeds for repaints once, over the whole window
+/// (`TRAME-167`): a rename reaches every qualifier.
+#[test]
+fn a_remote_batch_that_reseeds_repaints_the_whole_window_once() {
+    let mut author = TrameState::new();
+    author.handle_command(TrameCommand::SetCellText {
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        text: "1".to_owned(),
+    });
+    let mut reader = TrameState::new();
+    reader
+        .import_snapshot(&author.export_snapshot())
+        .expect("a snapshot this build wrote reads back");
+    let rename = author
+        .handle_command(TrameCommand::RenameSheet {
+            sheet_id: default_sheet(),
+            name: crate::test_support::sheet("Data"),
+        })
+        .update
+        .expect("a rename sends a delta");
+    let events = reader.apply_remote_batch(&[rename]);
+    let repaints: Vec<&TrameEvent> = events
+        .iter()
+        .filter(|e| matches!(e, TrameEvent::DataReset | TrameEvent::CellsChanged { .. }))
+        .collect();
+    assert!(
+        matches!(repaints.as_slice(), [TrameEvent::DataReset]),
+        "{repaints:?}"
+    );
+}
+
+/// A cell write names the cell it wrote and each formula it fed, and asks
+/// for no whole-window repaint (`TRAME-284`).
+#[test]
+fn a_cell_write_names_the_cells_it_changed() {
+    let mut st = TrameState::new();
+    st.handle_command(TrameCommand::SetCellText {
+        row: Pos::<Row>::new(4),
+        col: Pos::<Col>::new(3),
+        text: "=B2*2".to_owned(),
+    });
+    st.handle_command(TrameCommand::SetCellText {
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        text: "9".to_owned(),
+    });
+    let out = st.handle_command(TrameCommand::SetCellText {
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(1),
+        text: "5".to_owned(),
+    });
+    assert!(
+        !out.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::DataReset))
+    );
+    let ranges: Vec<CellRect> = out
+        .display
+        .iter()
+        .filter_map(|e| match e {
+            TrameEvent::CellsChanged { range, .. } => Some(*range),
+            _ => None,
+        })
+        .collect();
+    let [range] = ranges.as_slice() else {
+        panic!("one ranged repaint: {:?}", out.display);
+    };
+    assert!(range.contains(at(1, 1)), "the written cell: {range:?}");
+    assert!(range.contains(at(4, 3)), "the formula it fed: {range:?}");
+    assert!(
+        !range.contains(at(0, 0)),
+        "not a cell the write left alone: {range:?}"
+    );
+}
+
+/// A write of the text a cell already holds still names that cell
+/// (`TRAME-284`). The view drew it already, and only an answer clears its
+/// mark.
+#[test]
+fn a_write_of_the_same_text_still_names_its_cell() {
+    let mut st = TrameState::new();
+    let write = || TrameCommand::SetCellText {
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(2),
+        text: "7".to_owned(),
+    };
+    st.handle_command(write());
+    let out = st.handle_command(write());
+    assert!(
+        out.display.iter().any(|e| matches!(
+            e,
+            TrameEvent::CellsChanged { range, .. } if range.contains(at(2, 2))
+        )),
+        "{:?}",
+        out.display
+    );
+}
+
+/// A remote batch names each cell it wrote and each formula that read one
+/// (`TRAME-284`).
+#[test]
+fn a_remote_batch_names_the_cells_it_changed() {
+    let mut author = TrameState::new();
+    for (row, col, text) in [(0, 0, "3"), (5, 2, "=A1*2"), (3, 4, "8")] {
+        author.handle_command(TrameCommand::SetCellText {
+            row: Pos::<Row>::new(row),
+            col: Pos::<Col>::new(col),
+            text: text.to_owned(),
+        });
+    }
+    let mut reader = TrameState::new();
+    reader
+        .import_snapshot(&author.export_snapshot())
+        .expect("a snapshot this build wrote reads back");
+    let delta = author
+        .handle_command(TrameCommand::SetCellText {
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
+            text: "4".to_owned(),
+        })
+        .update
+        .expect("a write sends a delta");
+    let events = reader.apply_remote_batch(&[delta]);
+    let ranges: Vec<CellRect> = events
+        .iter()
+        .filter_map(|e| match e {
+            TrameEvent::CellsChanged { range, .. } => Some(*range),
+            _ => None,
+        })
+        .collect();
+    let [range] = ranges.as_slice() else {
+        panic!("one ranged repaint: {events:?}");
+    };
+    assert!(
+        range.contains(at(0, 0)) && range.contains(at(5, 2)),
+        "{range:?}"
+    );
+    assert!(
+        !range.contains(at(3, 4)),
+        "not the cell the batch left alone: {range:?}"
+    );
+    assert_eq!(read_cell(&mut reader, 5, 2), "8");
 }
 
 #[test]

@@ -169,6 +169,17 @@ pub enum TrameEvent {
     /// viewport response predated the restore, so the cache must be refreshed.
     DataReset,
 
+    /// The cells whose shown value a cell write or a remote batch changed, as
+    /// one rectangle (`TRAME-284`). The UI Thread re-fetches the part of its
+    /// window the rectangle covers, and nothing else (`TRAME-UI-184`).
+    /// `version` is the last viewport request the Logic thread answered before
+    /// the change (`TRAME-UI-005`). The answer to any later request already
+    /// shows the change.
+    CellsChanged {
+        version: ambre_core::Seq<ambre_bus::ViewportVersion>,
+        range: CellRect,
+    },
+
     /// Ask the UI Thread to replace the rendered grid selection with the
     /// rectangle `rect`. Emitted when a
     /// command changes the area the user should see selected and the canvas
@@ -479,6 +490,7 @@ impl std::fmt::Debug for TrameEvent {
                 numeric,
             } => fields!("StyleApplied", style, bold, italic, merged, numeric),
             Self::DataReset => f.write_str("DataReset"),
+            Self::CellsChanged { version, range } => fields!("CellsChanged", version, range),
             Self::SelectRange { rect } => fields!("SelectRange", rect),
             Self::MergeRejected { reason } => fields!("MergeRejected", reason),
             Self::MergeConflictDetected {

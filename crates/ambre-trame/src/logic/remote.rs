@@ -18,6 +18,7 @@ use ambre_core::id::{Id, Sheet};
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, EventTriggerKind, LoroDoc, Subscription};
 
+use super::repaint::{Repaint, whole_sheet};
 use super::sheets::is_formula;
 use super::*;
 use crate::formula::ACTIVE_SHEET;
@@ -26,6 +27,7 @@ use crate::model::{
     AxisChange, CellKey, Element, Kept, LayoutChange, LineRead, ListAxis, SlotEdit, axis_list,
     slot_edits,
 };
+use ambre_core::index::{Axis, Len};
 
 ambre_core::define_flag! {
     /// Whether the imports since the last take wrote only where the carried
@@ -58,6 +60,8 @@ pub(super) struct Imported {
     merges: HashSet<Id<Sheet>>,
     /// The sheets whose style map changed.
     styles: HashSet<Id<Sheet>>,
+    /// The cell keys each sheet's style map gained, changed or lost.
+    styled: HashMap<Id<Sheet>, HashSet<CellKey>>,
     /// The sheets whose width or height map changed.
     sizes: HashSet<Id<Sheet>>,
     /// The sheets whose filter or hidden-row map changed.
@@ -77,6 +81,7 @@ impl Default for Imported {
             lines: LineRead::Clean,
             merges: HashSet::new(),
             styles: HashSet::new(),
+            styled: HashMap::new(),
             sizes: HashSet::new(),
             filters: HashSet::new(),
             keys: LineRead::Clean,
@@ -142,6 +147,15 @@ fn note(change: &ContainerDiff<'_>, imported: &mut Imported) {
             imported.merges.insert(sheet);
         }
         SheetRoot::CellStyle => {
+            if let Diff::Map(map) = &change.diff {
+                let keys = imported.styled.entry(sheet.clone()).or_default();
+                keys.extend(
+                    map.updated
+                        .keys()
+                        .filter_map(|key| parse_cell_key(key))
+                        .map(|(row, col)| CellKey::of(row, col)),
+                );
+            }
             imported.styles.insert(sheet);
         }
         SheetRoot::ColWidths | SheetRoot::RowHeights => {
@@ -245,7 +259,8 @@ impl TrameState {
 
     /// The tail of a remote batch the engine carries. It rebuilds the caches
     /// the batch reached, runs the engine step, and answers with the events
-    /// of a full reseed. `imported` is what the batch wrote, and
+    /// of a full reseed. The repaint names the cells the batch changed, or the
+    /// whole window when the engine reseeded after all (`TRAME-167`). `imported` is what the batch wrote, and
     /// [`carries`](Self::carries) accepted it.
     pub(super) fn carry_after_merge(&mut self, imported: &Imported) -> Vec<TrameEvent> {
         let active = self.active_sheet.clone();
@@ -261,6 +276,7 @@ impl TrameState {
         }
         // A covered cell a peer wrote is masked: the merges always rebuild,
         // and a masked cell leaves the engine, which only a reseed does.
+        let merges_before = self.merges.clone();
         let conflicts = self.rebuild_merges();
         let change = match &layout {
             BatchLayout::Kept => Some(None),
@@ -270,9 +286,45 @@ impl TrameState {
         let step = change
             .filter(|_| self.masked_cells.is_empty())
             .and_then(|change| self.remote_step(imported, change));
-        match step {
+        let mut repaint = match step {
             Some(step) => self.carry_remote(step),
-            None => self.reseed_engine(),
+            None => {
+                self.reseed_engine();
+                Repaint::Whole
+            }
+        };
+        repaint = self.take_engine_changes(repaint);
+        // A moved line moves every cell after it, and a size, a filter or a
+        // merge moves the layout of the whole sheet.
+        if let BatchLayout::Moved(change) = &layout {
+            repaint = moved_cells(change, &self.index)
+                .into_iter()
+                .fold(repaint, Repaint::with_rect);
+        }
+        if [&imported.sizes, &imported.filters, &imported.merges]
+            .iter()
+            .any(|sheets| sheets.contains(&active))
+        {
+            repaint = repaint.with_rect(whole_sheet());
+        }
+        // A merge whose corner line moved or went changes its span, though
+        // the merge map is untouched: each block that differs repaints.
+        repaint = merges_before
+            .iter()
+            .filter(|(master, end)| self.merges.get(master) != Some(end))
+            .chain(
+                self.merges
+                    .iter()
+                    .filter(|(master, end)| merges_before.get(master) != Some(end)),
+            )
+            .map(|(master, end)| CellRect::spanning(*master, *end))
+            .fold(repaint, Repaint::with_rect);
+        if let Some(keys) = imported.styled.get(&active) {
+            repaint = keys
+                .iter()
+                .filter_map(|key| self.index.place(key.as_str()))
+                .map(|(at, _)| at)
+                .fold(repaint, Repaint::with);
         }
         if moved || imported.styles.contains(&active) {
             self.reseed_styles();
@@ -283,7 +335,7 @@ impl TrameState {
         if moved || imported.filters.contains(&active) {
             self.rebuild_filter();
         }
-        self.merge_events(conflicts)
+        self.merge_events(conflicts, repaint)
     }
 
     /// Take the active sheet's layout after the batch as the position cache.
@@ -477,7 +529,7 @@ impl TrameState {
     /// layout is lent to the engine for the call, not copied. A step that
     /// meets a cycle reseeds after all, so the feed order decides which cell
     /// of it is refused.
-    fn carry_remote(&mut self, step: RemoteStep) {
+    fn carry_remote(&mut self, step: RemoteStep) -> Repaint {
         for (sheet, key) in &step.placed {
             if let Some(keys) = self.unplaced.get_mut(sheet) {
                 keys.remove(key);
@@ -502,8 +554,39 @@ impl TrameState {
         }
         if carried == crate::formula::engine::Carry::CycleMet {
             self.reseed_engine();
+            return Repaint::Whole;
         }
+        Repaint::Cells(None)
     }
+}
+
+/// The cells a layout change moved. A row edit moves the rows from the first
+/// one it reached to the last row of the longer layout. It moves them across
+/// the columns either layout used. A column edit moves the columns the same
+/// way. A cell past both layouts is empty before and after.
+fn moved_cells(change: &LayoutChange, index: &SheetIndex) -> Vec<CellRect> {
+    // The longer of the two layouts of one axis.
+    fn longest<L: Axis>(now: Len<L>, axis: &AxisChange<L>) -> Len<L> {
+        now.max(now.saturating_sub(Len::<L>::of(axis.added.len())) + Len::<L>::of(axis.gone.len()))
+    }
+    let (Some(last_row), Some(last_col)) = (
+        longest(index.row_len(), &change.rows).last(),
+        longest(index.col_len(), &change.cols).last(),
+    ) else {
+        return Vec::new();
+    };
+    let corner = CellPos::new(last_row, last_col);
+    let from_row = change
+        .rows
+        .first
+        .filter(|row| *row <= last_row)
+        .map(|row| CellRect::spanning(CellPos::new(row, Pos::<Col>::ZERO), corner));
+    let from_col = change
+        .cols
+        .first
+        .filter(|col| *col <= last_col)
+        .map(|col| CellRect::spanning(CellPos::new(Pos::<Row>::ZERO, col), corner));
+    from_row.into_iter().chain(from_col).collect()
 }
 
 /// What a batch did to the active sheet's lines.
@@ -523,14 +606,14 @@ enum BatchLayout {
 /// That axis held what `index` shows, less what the batch added, plus what it
 /// removed.
 fn gone_cells(change: &LayoutChange, index: &SheetIndex) -> HashSet<CellId> {
-    let before = |now: &[Uid], axis: &AxisChange| -> Vec<Uid> {
+    fn before<L: Axis>(now: &[Uid], axis: &AxisChange<L>) -> Vec<Uid> {
         let added: HashSet<&Uid> = axis.added.iter().collect();
         now.iter()
             .filter(|uid| !added.contains(uid))
             .chain(&axis.gone)
             .copied()
             .collect()
-    };
+    }
     let mut cells = HashSet::new();
     if !change.rows.gone.is_empty() {
         let cols = before(index.cols().lines().as_slice(), &change.cols);

@@ -522,6 +522,11 @@ pub struct TrameUiState {
     /// Monotonically increasing version counter for outgoing `ScrollViewport` commands.
     next_version: ambre_core::Seq<ambre_bus::ViewportVersion>,
 
+    /// The version and the window of the last request for the whole window.
+    /// A ranged change re-fetches its part of that window, unless a later
+    /// request for the whole window already carries it (`TRAME-UI-184`).
+    full_request: Option<(ambre_core::Seq<ambre_bus::ViewportVersion>, CellRect)>,
+
     /// Grid column carrying the active shared filter, drawn with a funnel badge on
     /// its header (`trame-shared-filter`). `None` when no filter is active. Tracked from
     /// `TrameEvent::FilterApplied` / `FilterCleared`; UI-only derived state.

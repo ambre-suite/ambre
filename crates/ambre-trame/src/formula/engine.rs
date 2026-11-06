@@ -43,6 +43,10 @@ pub struct FormulaEngine {
     pub formula_cache: RefCell<HashMap<CellId, CellValue>>,
     /// Cells that need re-evaluation (directly edited or downstream of an edit).
     pub dirty: HashSet<CellId>,
+    /// Every cell whose text or value the engine took or computed since the
+    /// caller last cleared the set. The caller names them to the view
+    /// (`TRAME-284`).
+    pub changed: HashSet<CellId>,
 }
 
 impl FormulaEngine {
@@ -52,6 +56,7 @@ impl FormulaEngine {
             bytecode: BytecodeCache::new(),
             formula_cache: RefCell::new(HashMap::new()),
             dirty: HashSet::new(),
+            changed: HashSet::new(),
         }
     }
 
@@ -73,6 +78,7 @@ impl FormulaEngine {
         if self.bytecode.compiled_from(cell, &raw) {
             return;
         }
+        self.changed.insert(cell);
         self.bytecode.invalidate(cell);
         let downstream = self.deps.collect_dirty(cell, indices);
         self.dirty.insert(cell);
@@ -277,6 +283,7 @@ impl FormulaEngine {
 
         let mut cache = self.formula_cache.borrow_mut();
         for (cell, value) in results {
+            self.changed.insert(cell);
             cache.insert(cell, value);
         }
         self.dirty.clear();
@@ -308,6 +315,7 @@ impl FormulaEngine {
         let mut cache = self.formula_cache.borrow_mut();
         for (cell, value) in results {
             if self.bytecode.get(&cell).is_some() {
+                self.changed.insert(cell);
                 cache.insert(cell, value);
             }
         }

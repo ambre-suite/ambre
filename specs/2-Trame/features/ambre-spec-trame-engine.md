@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | ci-gate -- `scripts/crate_boundaries.py` refuses a CRDT type, an export mode or an engine state in `ambre-trame/src/ui`, `render` and `chrome`, and its fixture covers the Trame view | none | verified |
 | `TRAME-UI-002` | `INV` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the outbound path is `TrameView::send_command_lossless` and its lossy twin (`ui/view/lifecycle.rs`), both of which take a `TrameCommand`, and the document itself is out of reach on this side (`TRAME-UI-001`) | none | verified |
 | `TRAME-UI-142` | `INV` | A command the UI thread failed to send MUST NOT be dropped in silence. | this spec section 4; `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | `ambre_trame::ui::view::view_tests::a_refused_send_is_never_silent` -- each lossless path logs an error over a closed queue; `ambre_trame::ui::view::view_tests::a_refused_source_clear_keeps_the_cut_range` | none | verified |
-| `TRAME-UI-006` | `INV` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | this spec section 4 | exhaustive-match -- `ui/view/frame.rs::dispatch_trame` names all 26 variants of the enum and carries no `_` arm, so adding one fails the build | none | verified |
+| `TRAME-UI-006` | `INV` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | this spec section 4 | exhaustive-match -- `ui/view/frame.rs::dispatch_trame` names every variant of the enum and carries no `_` arm, so adding one fails the build | none | verified |
 | `TRAME-UI-014` | `INV` | There MUST NOT be an `is_error` field on `DisplayCell`. | this spec section 3 | type-level -- the struct declares no such field, and the renderer has no other input | none | verified |
 | `TRAME-UI-141` | `OBS` | A cell in error MUST be marked visually from its displayed text. | this spec section 3 | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`; `::dirty_cell_gets_a_translucent_veil` | none | verified |
 
@@ -46,15 +46,15 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-167` | `POST` | A batch of remote operations MUST repaint once, carrying the whole new state. | this spec section 3 | `ambre_trame::logic::tests::group7::apply_remote_batch_emits_single_datareset_with_full_state` -- it counts the resets and reads both cells back | none | verified |
+| `TRAME-167` | `POST` | A batch of remote operations MUST repaint once, over the cells it changed, or over the whole state when the engine reseeds for it. | this spec section 3.F | `ambre_trame::logic::tests::group7::apply_remote_batch_repaints_once_over_the_cells_it_changed` -- it counts the repaints, reads the range and reads both cells back; `::a_remote_batch_that_reseeds_repaints_the_whole_window_once` -- a rename; `ambre_trame::logic::remote_tests::a_carried_remote_apply_equals_a_full_rebuild` -- after each batch, one repaint covers each cell whose display changed | none | verified |
 | `TRAME-168` | `FRAME` | Applying a remote delta MUST NOT re-broadcast it. | this spec section 3 | type-level -- `apply_remote` returns `Vec<TrameEvent>` and no outcome, so it has no shape to broadcast through | none | verified |
 | `TRAME-169` | `FRAME` | An import MUST NOT swallow the local peer's own operations before they have been broadcast. | this spec section 2, row 4 | `ambre_trame::logic::tests::group7::edit_after_reopen_broadcasts_causally_complete_delta` -- it drives two reopens and asserts the second replay carries both cells, the merge preserving this peer's entry in the export cursor and adopting every other | none | verified |
 | `TRAME-248` | `FAIL` | A key or a line element that spells a uid other than as `{peer:016x}_{counter:08x}` MUST be refused, and the refusal MUST reach the user. | `ambre-spec-trame-schema.md section 2`; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-003`) | `ambre_trame::model::sheet_index::tests::a_uid_reads_back_from_its_canonical_spelling_alone` -- a short, a signed, an upper-case and a wide spelling; `ambre_trame::logic::tests::group12::a_cell_key_in_a_non_canonical_spelling_is_refused_and_said`; `::a_non_canonical_key_in_every_keyed_map_is_said` -- the style, merge, width, height and filter maps; `::a_line_element_in_a_non_canonical_spelling_is_refused_and_said` | none | verified |
 | `TRAME-231` | `POST` | Opening a workbook MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 2; `ambre-spec-budgets.md section 1` | `ambre_trame::logic::tests::group7::a_reader_that_sent_nothing_holds_no_history_of_its_own` -- the reader's version vector equals the author's after the snapshot and after a delta | none | verified |
 | `TRAME-282` | `POST` | After a remote batch, each formula MUST hold the value, the dependencies, the error and the cycle refusal that a full reseed of the merged workbook gives it. | this spec section 3.F; `TRAME-042` | `ambre_trame::logic::remote_tests::a_carried_remote_apply_equals_a_full_rebuild` -- a proptest, 256 cases: two authors write cells and formulas on two sheets, write past the used range at once, insert, delete and move lines, sort, merge, redefine a name, undo and sync with each other. A receiver makes the same edits and switches sheets. One receiver carries its engine across each batch, the other reseeds after it, and they match on the stored text, each value, each dependency, each cycle refusal, the mark that sends the next structural edit to a reseed, and the stored formulas that place on no cell. Each derived layout is checked against a read of the lists; `ambre_trame::logic::remote_tests::a_remote_cell_write_recomputes_its_readers_without_a_reseed`; `::a_remote_row_delete_carries_the_engine_without_a_reseed`; `::a_remote_sheet_rename_reseeds_the_engine`; `::a_line_left_on_another_element_reseeds_the_engine`; `::a_second_key_on_a_cell_reseeds_the_engine`; `::an_undone_remote_delete_brings_back_a_value_written_on_the_gone_row`; `::a_formula_written_with_its_own_text_over_a_removed_row_compiles_again`; `::a_local_write_under_a_second_key_marks_the_engine_as_a_reseed_does`; `::a_purge_drops_a_formula_left_under_a_removed_column` -- each counts the reseeds, or replays a shrunk seed | none | verified |
 | `TRAME-283` | `POST` | A remote batch that writes one cell and deletes one row of a sheet of 10k formula cells MUST hold the remote batch budget. | this spec section 3.F; `ambre-spec-budgets.md section 1` | `callgrind` -- the `remote_batch` operation of `crates/ambre-trame/benches/instructions.rs`, the whole apply of the batch, under its ceiling in the CI `instructions` job | none | verified |
-| `TRAME-284` | `POST` | A remote batch MUST name the cells whose shown value it changed. | this spec section 6 | not built | unbuilt -- lands with the `Incremental remote apply` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-UI-184` | `POST` | On a remote batch, the UI MUST re-fetch only the cells of its window that the batch names. | this spec section 6; `TRAME-284` | not built | unbuilt -- lands with the `Incremental remote apply` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-284` | `POST` | A remote batch and a cell write MUST name the cells whose display they changed, unless they repaint the whole state. | this spec section 3.F | `ambre_trame::logic::tests::group7::a_cell_write_names_the_cells_it_changed`; `::a_write_of_the_same_text_still_names_its_cell`; `::a_remote_batch_names_the_cells_it_changed`; `ambre_trame::logic::remote_tests::a_merge_that_loses_its_corner_line_repaints_its_block`; `::a_carried_remote_apply_equals_a_full_rebuild` -- after each batch and each local edit, the range names each cell whose display changed | none | verified |
+| `TRAME-UI-184` | `POST` | On a change that names its cells, the UI MUST re-fetch only the cells of its window that the change names. | this spec section 4; `TRAME-284` | `ambre_trame::ui::grid::tests::viewport::a_ranged_change_refetches_only_its_part_of_the_window`; `::a_later_window_request_carries_a_ranged_change`; `ambre_trame::ui::view::view_tests::a_ranged_change_refetches_its_cells_and_a_reset_the_window`; `ambre_trame::ui::view::tests::a_pending_window_request_covers_a_ranged_one`; `::two_ranged_requests_flush_as_one_over_both` | none | verified |
 
 * **Budget.** six rows of `ambre-spec-budgets.md section 1`: the 10k-cell recompute, the
   sheet-index rebuild, the 50-cell batch, the remote batch, the viewport send and its
@@ -63,10 +63,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 21 `verified`, 2 `unimplemented`. What holds is what a compiler holds: a handler
-  with no queue in reach, an apply that returns display events and cannot broadcast. The sheet index
-  equals a rebuild after every step of a random stream, and so does an engine carried across each
-  remote batch. A native view reads each refused send in the log.
+* **Verification.** 23 `verified`. What holds is what a compiler holds: a handler with no queue in
+  reach, an apply that returns display events and cannot broadcast. The sheet index equals a rebuild
+  after every step of a random stream, and so does an engine carried across each remote batch. A
+  native view reads each refused send in the log.
 
 ---
 
@@ -80,7 +80,7 @@ Two peers, one workbook. The last column joins the example to the test that hold
 | edits, deletes a row and merges a block, in any order | does the same on the same sheet | every operation of both peers | the same grid on both screens, whatever order the deltas arrived in | same proptest |
 | writes one cell | -- | one delta, sent once | Bob's grid one repaint later, with no request of his own | `logic::tests::group3::edit_emits_send_update_through_sink`, `::two_peers_converge_via_mock_sync` |
 | closes the document and reopens it, then edits | -- | the whole causal history, not the tail | Bob applies the edit rather than rejecting it as an orphan | `logic::tests::group3::edit_after_reopen_broadcasts_causally_complete_delta` |
-| sends a batch of remote operations | -- | every operation of the batch | one repaint carrying the whole new state, not one per operation | `logic::tests::group7::apply_remote_batch_emits_single_datareset_with_full_state` |
+| sends a batch of remote operations | -- | every operation of the batch | one repaint over the cells the batch changed, not one per operation | `logic::tests::group7::apply_remote_batch_repaints_once_over_the_cells_it_changed` |
 | renames a sheet a formula of Bob's refers to | writes that cross-sheet formula | the rename and the formula, joined by the sheet id | the formula still reads Alice's cell, under the new tab name | `logic::tests::group3::cross_sheet_reference_converges_across_peers_on_rename` |
 
 Convergence rests on a rule the schema owns: a computed value never enters the document
@@ -286,7 +286,21 @@ are not noted: their own paths keep the caches. Once the batch merges, the tail 
 | the generation record of a sheet, or the peer registry | nothing: no cache holds either |
 
 The merges rebuild after every batch, since a covered cell a peer writes is masked. The dirty
-closure then recomputes in the order it induces. The events are those of a reseed.
+closure then recomputes in the order it induces. The events are those of a reseed, but for the
+repaint.
+
+**What the batch repaints** (`TRAME-167`, `TRAME-284`). One event per batch:
+
+| The batch | Repaint |
+|---|---|
+| reseeds the engine, by any of the five cases below or a cycle met | `DataReset`: the whole window |
+| is carried | `CellsChanged`, one rectangle over the cells below, with the last viewport version the state answered |
+
+The rectangle covers each cell the engine took or computed, and each cell whose style key the
+batch wrote. A row edit adds the rows from its first edit to the last row of the longer layout,
+across the used columns. A column edit adds the columns the same way. A size, a filter or a merge
+of the sheet on screen covers the whole sheet. A cell write names its cells the same way, the
+written cell always among them, since the view drew it already.
 
 **Where a remote batch still reseeds.** The full reseed answers a batch in five cases:
 
@@ -326,6 +340,7 @@ error rather than a silent drop (`TRAME-UI-006`).
 |---|---|
 | `ViewportData` | cache the payload, mark the frame dirty |
 | `DataReset`, `CondFormatsUpdated` | re-request the viewport |
+| `CellsChanged` | re-request the cells of the window the range covers, unless a later request for the whole window already carries them (`TRAME-UI-184`). The one-slot queue keeps a pending window request over a ranged one, and joins two ranged ones |
 | `SheetList` | refresh the tab strip |
 | `SelectRange` | set the selection, park the input, announce it |
 | `FilterApplied`, `FilterCleared` | set or clear the funnel badge on the column |
@@ -363,18 +378,6 @@ Each viewport answer carries a version, and the UI drops one older than the last
   another sheet are among them. The same reseed runs on a local undo, a sheet rename, a name
   definition and a tab switch. The `Cached sheet indexes` Story (`ambre-roadmap.md` E6) removes
   one cause, and the `Stable engine sheet indexes` Story (`ambre-roadmap.md` E6) another.
-* **The UI re-fetches the whole viewport on every batch.** A per-batch `DataReset` tells it to,
-  where an event naming what changed would let it re-fetch less (`TRAME-284`, `TRAME-UI-184`). Not
-  yet ruled:
-
-  * what the event names. It may name the cells whose shown value changed, or a rectangle
-    around them. After a structural edit every cell below the edit moves, so it may name the
-    whole window;
-  * how it meets `TRAME-167`, whose test counts the `DataReset` of a batch, and the viewport
-    version of `TRAME-UI-005`;
-  * whether a local edit answers with the same event, as the bullet on `TRAME-002` below asks.
-
-  Answered by the `Incremental remote apply` Story (`ambre-roadmap.md` E6).
 * **The sheet indexes are state here and a rebuild in the code.** The active sheet's index is cloned
   and every other sheet's is reconstructed from its full lists, once per write and once per scroll.
   A scroll on one sheet therefore rebuilds every other sheet's index, against the P1 budget on any
@@ -397,12 +400,10 @@ Each viewport answer carries a version, and the UI drops one older than the last
   they belong to the graph:
   `features/ambre-spec-trame-formula-engine.md section 6`. Answered by the "A recompute bounded by
   what changed" story.
-* **A local edit costs the whole viewport too** (`TRAME-002`). Section 3.C says P2 answers with a
-  fresh viewport only when the recompute touched the visible window. `finish_cell_writes` answers
-  with a bare `DataReset` every time. Each keystroke that commits therefore makes the UI re-fetch
-  the whole window, whether or not anything visible changed. It is the same defect as the remote one
-  above, on the path taken far more often. The invalidated-range event that answers one answers
-  both.
+* **Most local edits still repaint the whole window.** A cell write names the cells it changed
+  (`TRAME-284`). A refused write repaints the whole window, since the view drew a value that
+  did not land. So does a write that moves the filter, since rows moved. A structural edit, a sort, a merge, a
+  restyle and a resize answer with a `DataReset` too. Each one would name its cells the same way.
 * **A dropped command is silent twice** (`TRAME-UI-142`). Fifteen call sites match `SendError::Full`
   and log it; the `SetCellsBatch` of a paste fallback and the `CommitEdit` on cell exit drop the
   result. A `CommitEdit` lost this way leaves the undo group open, so the next command's fallback
