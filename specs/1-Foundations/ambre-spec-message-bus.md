@@ -218,6 +218,16 @@ lossless too, since nothing would offer it again.
 | Prose | the marks query, the word count |
 | Murmure | the tick, the typing beat |
 
+Two requests that change nothing stay lossless, because no sender offers them again:
+
+| Application | Request | Why it stays lossless |
+|---|---|---|
+| Toile | the selection aggregates | the view records the request as asked before it leaves: the selection the band last asked for, a pending fit, a pending focus |
+| Prose | the caret sample | no sender exists yet (`ambre-spec-presence.md`), so nothing offers a lost sample again |
+
+The other read-only requests of Trame and Toile answer one user action each, so they stay lossless
+for the same reason.
+
 **The Sync events are lossless too.** A delta or a service answer arrives through the worker's
 `postMessage` handler on the Main thread, which may not wait for room (`ambre-spec-architecture.md`,
 `ARCH-021`). What the queue to the Logic thread refuses waits in a backlog, in arrival order
