@@ -40,6 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | type-level -- the range buffer is sized by a `RangeGrant`, which only `grant_range` makes, after both caps; `ambre_trame::formula::vm::tests::a_range_over_the_cap_is_granted_nothing` | none | verified |
 | `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | `ambre_trame::formula::vm::tests::ranges_of_one_pass_share_one_budget` | none | verified |
 | `TRAME-042` | `INV` | A loop closed through a range, a name or another sheet MUST be caught while evaluating. | this spec section 3 | `ambre_trame::logic::tests::group8::a_whole_column_range_over_itself_is_a_cycle` -- the loop runs through a range, so the graph holds no edge for it and the evaluation stack catches it. A name and a qualifier become a range or a cell before the graph sees them | none | verified |
+| `TRAME-281` | `INV` | Each cell on a loop closed through a range, a name or another sheet, and each cell downstream of one, MUST show `#CIRCULAR!`, whatever order the evaluation takes. | this spec section 3; `TRAME-042` | `ambre_trame::formula::engine::tests::a_loop_through_a_range_shows_circular_in_every_order` -- two pass orders over a loop whose range also holds `#DIV/0!`, and a cell outside the loop that keeps its own error; `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- the carried and the reseeded engine evaluate in different orders and match on every value | none | verified |
 | `TRAME-048` | `INV` | A whole-column or whole-row range MUST cover the used part of its axis. | this spec section 6 | `ambre_trame::logic::tests::group8::a_whole_column_range_reads_the_used_rows` -- a row written past the old end and a row inserted above are summed; `ambre_trame::logic::tests::group8::a_whole_row_range_reads_the_used_columns`; `ambre_trame::logic::tests::group8::a_column_edit_carries_a_whole_column_range`; `ambre_trame::formula::identity::tests::whole_lines_store_their_lines_and_read_back_as_typed`; `ambre_trame::formula::shift::tests::whole_lines_shift_along_their_own_axis` | none | verified |
 | `TRAME-033` | `OBS` | A formula shown back to its author MUST carry only the parentheses its meaning needs. | this spec section 4 | `ambre_trame::formula::render::tests::precedence_minimal_parens`; `::pow_right_associative` | none | verified |
 | `TRAME-045` | `OBS` | Every evaluation failure MUST show a named error, never a blank and never a number. | this spec section 4 | `ambre_trame::formula::vm::tests::division_by_zero`; `ambre_trame::formula::engine::tests::division_by_zero_displayed`; `ambre_trame::formula::types::tests::cell_value_display` | none | verified |
@@ -56,7 +57,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-233` | `POST` | Writing a cell MUST update every formula that read it while it lay past the used range. | this spec section 3; `TRAME-006` | `ambre_trame::logic::tests::group8::a_formula_typed_before_its_cell_reads_the_cell_once_written` | none | verified |
 | `TRAME-041` | `FRAME` | An edit MUST NOT recompute a cell that reads nothing it changed. | this spec section 3 | `ambre_trame::formula::dag::tests::range_outside_no_dirty`; `ambre_trame::formula::cache::tests::not_stale_no_recompile` | none | verified |
 | `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | `ambre_trame::formula::engine::tests::retyping_the_same_text_does_not_recompile` | none | verified |
-| `TRAME-012` | `FAIL` | A formula that reads itself through other cells MUST be refused with its culprits named. | this spec section 3 | `ambre_trame::formula::dag::tests::static_cycle_detected`; `::cycle_detection_kosaraju_returns_culprits`; `::rejected_cycle_leaves_no_stale_range_deps` | none | verified |
+| `TRAME-012` | `FAIL` | A formula that reads itself through other cells MUST be refused with its culprits named. | this spec section 3 | `ambre_trame::formula::dag::tests::static_cycle_detected`; `::cycle_detection_kosaraju_returns_culprits`; `::rejected_cycle_leaves_no_stale_range_deps`; `ambre_trame::formula::prop_tests::the_local_cycle_check_agrees_with_the_whole_graph` -- a proptest, 512 cases: the search bounded to the descendants of the formula refuses what a check of the whole graph refuses, with the same culprits | none | verified |
 | `TRAME-213` | `FAIL` | A formula that reads its own cell directly MUST be refused. | this spec section 3 | `ambre_trame::formula::dag::tests::self_reference_rejected`; `ambre_trame::formula::engine::tests::self_reference_rejected` | none | verified |
 | `TRAME-035` | `FAIL` | A reference to a sheet that never existed MUST be refused, not evaluated. | this spec section 4 | `ambre_trame::formula::parser::tests::unknown_sheet_name_is_parse_error`; `::unknown_sheet_is_error` | none | verified |
 | `TRAME-039` | `FAIL` | A refused formula MUST replace the cell's previous result, never leave it on screen. | this spec section 3 | `ambre_trame::formula::engine::tests::parse_error_replaces_the_stale_value`; `::cycle_replaces_the_stale_value_with_an_error` | none | verified |
@@ -94,7 +95,7 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 47 `verified`. What holds is the graph and its recompute, the best-covered
+* **Verification.** 48 `verified`. What holds is the graph and its recompute, the best-covered
   engine of the workspace, and the stored form a structural edit carries. A range buffer is sized by
   a grant that only the caps make, so a range over them allocates nothing.
 
@@ -193,6 +194,11 @@ A paste or a fill shifts the positional source, never the stored text.
 range is not expanded into edges: it is stored whole against the formula that reads it, and a write
 is tested for containment. One entire column would otherwise cost a hundred thousand edges.
 
+**The static cycle search reads the descendants of the formula alone.** The graph holds no cycle
+before an update, so a new one runs through the updated formula. It exists only when that formula
+already reaches one of its new dependencies. The culprits are the descendants that reach the formula
+back (`TRAME-012`). A formula that nothing reads costs one step, never a walk of the graph.
+
 ```rust
 pub struct DependencyGraph {
     pub cell_dag: StableGraph<CellId, ()>,          // level 1: cycles are static
@@ -210,6 +216,12 @@ compiler already knows about.
 **Evaluating one cell**, in order. A cell already on the evaluation stack returns a
 circular-reference error (`TRAME-042`). A cell already resolved returns its memo. Otherwise it is
 pushed, executed, popped and memoised. This is the only guard against a loop the cell graph cannot see.
+
+**A loop shows one error.** A cell whose evaluation meets the stack, itself or through any cell it
+reads, evaluates to `#CIRCULAR!`, and the pass records it. A later read of a recorded cell meets
+the loop too. Another error the pass met first never replaces `#CIRCULAR!`. Each cell on a loop,
+and each cell downstream of one, therefore shows it in every pass order (`TRAME-281`). A formula refused for a
+static cycle records nothing: a cell that reads it keeps the error its own formula computes.
 
 **The value domain.** What the machine pushes, what a builtin receives, and what the cache holds.
 A plain cell's text is a `Number` when it spells a finite number, and `Text` otherwise. Rust's
@@ -332,8 +344,6 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   re-anchors ranges, and only those it holds. A range another peer types meanwhile keeps the lines
   it was typed against, so after the merge it covers wherever those lines went. It reads a sound
   rectangle, but not always the block its author saw. No rule covers it yet.
-* **Every structural edit parses every formula that reads its sheet.** The re-anchoring pass costs
-  what a reseed already costs, which the edit pays too. No budget row covers either.
 * **A defined name stays positional.** A name stores `A1` text, re-read on each reseed, so an insert
   above its target moves it (`features/ambre-spec-trame-named-ranges.md`).
 * **A defined name cannot take whole lines.** A name's body is a cell or a range, so `=A:A` is

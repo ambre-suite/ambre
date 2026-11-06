@@ -84,6 +84,19 @@ pub struct EvalContext<'a> {
     /// Range cells this pass may still read ([`MAX_PASS_RANGE_CELLS`]). A range
     /// that would overdraw it reads as `#REF!`, like one over `MAX_RANGE_CELLS`.
     pub range_cells_left: Count<Cells>,
+    /// Whether the evaluation in progress met the evaluation stack, through
+    /// any cell it read (`TRAME-281`).
+    met_loop: MetLoop,
+    /// The cells this pass evaluated to `#CIRCULAR!` because they met a loop.
+    /// A later read of one of them meets the loop too.
+    looped: HashSet<CellId>,
+}
+
+/// Whether an evaluation met a loop the evaluation stack caught.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MetLoop {
+    No,
+    Yes,
 }
 
 impl<'a> EvalContext<'a> {
@@ -105,6 +118,8 @@ impl<'a> EvalContext<'a> {
             current_row: None,
             current_col: None,
             range_cells_left: MAX_PASS_RANGE_CELLS,
+            met_loop: MetLoop::No,
+            looped: HashSet::new(),
         }
     }
 
@@ -119,17 +134,28 @@ impl<'a> EvalContext<'a> {
 
     /// Evaluate a single cell (already in canonical bound form), detecting
     /// dynamic cycles and caching results.
+    ///
+    /// A cell whose evaluation meets the evaluation stack, itself or through
+    /// any cell it reads, shows `#CIRCULAR!`. Another error the same pass
+    /// meets first never replaces it. Each cell on a loop and each cell
+    /// downstream of one then shows the same error in every pass order, on
+    /// every peer (`TRAME-281`).
     pub fn eval_cell(&mut self, cell: CellId) -> CellValue {
         if self.eval_stack.contains(&cell) {
+            self.met_loop = MetLoop::Yes;
             return CellValue::Error(FormulaError::CircularReference);
         }
         if let Some(v) = self.resolved.get(&cell) {
+            if self.looped.contains(&cell) {
+                self.met_loop = MetLoop::Yes;
+            }
             return v.clone();
         }
         self.eval_stack.insert(cell);
+        let outer = std::mem::replace(&mut self.met_loop, MetLoop::No);
         let prev = (self.current_row, self.current_col);
         (self.current_row, self.current_col) = self.grid_pos_of(cell);
-        let result = match self.bc.get(&cell) {
+        let mut result = match self.bc.get(&cell) {
             Some(bc) => self.execute(bc),
             None => self
                 .formula_cache
@@ -139,6 +165,12 @@ impl<'a> EvalContext<'a> {
         };
         self.eval_stack.remove(&cell);
         (self.current_row, self.current_col) = prev;
+        if self.met_loop == MetLoop::Yes {
+            result = CellValue::Error(FormulaError::CircularReference);
+            self.looped.insert(cell);
+        } else {
+            self.met_loop = outer;
+        }
         self.resolved.insert(cell, result.clone());
         result
     }

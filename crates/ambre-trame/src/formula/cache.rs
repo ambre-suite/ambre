@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::compile::compile;
 use super::dag::DependencyGraph;
-use super::identity::unbind;
+use super::identity::{follows_its_lines, unbind};
 use super::parser::{parse_formula, resolve_refs};
 use super::text::StoredForm;
 use super::types::EngineSheet;
@@ -31,6 +31,12 @@ pub struct BytecodeCache {
     /// Formulas compiled since construction, for the tests that hold
     /// `TRAME-212`.
     compiles: u64,
+    /// The formulas a structural edit re-reads whatever lines it edits: each
+    /// one that reads positions ([`follows_its_lines`] is false).
+    positional: HashSet<CellId>,
+    /// The formulas refused for a static cycle. A refused formula keeps no
+    /// edge, so the graph cannot say what it reads.
+    cyclic: HashSet<CellId>,
 }
 
 impl BytecodeCache {
@@ -40,7 +46,26 @@ impl BytecodeCache {
             stale: HashSet::new(),
             sources: HashMap::new(),
             compiles: 0,
+            positional: HashSet::new(),
+            cyclic: HashSet::new(),
         }
+    }
+
+    /// Forget the text `cell` was compiled from, so the next write of that
+    /// same text compiles it again. A structural edit uses it on a formula
+    /// whose text it kept but whose positions it moved.
+    pub fn forget_source(&mut self, cell: CellId) {
+        self.sources.remove(&cell);
+    }
+
+    /// The formulas that read positions, which a structural edit re-reads.
+    pub fn positional(&self) -> impl Iterator<Item = &CellId> {
+        self.positional.iter()
+    }
+
+    /// Whether a formula is refused for a static cycle.
+    pub fn has_cyclic(&self) -> bool {
+        !self.cyclic.is_empty()
     }
 
     /// Mark a cell as needing recompilation (its raw text changed).
@@ -94,6 +119,8 @@ impl BytecodeCache {
         if !self.stale.remove(&cell) {
             return None;
         }
+        self.positional.remove(&cell);
+        self.cyclic.remove(&cell);
 
         let Some(formula_text) = raw.formula_body() else {
             // No longer a formula: drop its bytecode and the dependencies it
@@ -116,8 +143,11 @@ impl BytecodeCache {
             };
             indices.get(&sheet?)
         };
-        let parsed = parse_formula(formula_text)
-            .and_then(|ast| resolve_refs(unbind(ast, &index_of), cell.sheet, ctx));
+        let mut follows = true;
+        let parsed = parse_formula(formula_text).and_then(|ast| {
+            follows = follows_its_lines(&ast, &index_of);
+            resolve_refs(unbind(ast, &index_of), cell.sheet, ctx)
+        });
         self.compiles += 1;
         self.sources.remove(&cell);
         match parsed {
@@ -127,10 +157,14 @@ impl BytecodeCache {
                     Ok(()) => {
                         self.entries.insert(cell, bc);
                         self.sources.insert(cell, raw);
+                        if !follows {
+                            self.positional.insert(cell);
+                        }
                         None // No error -- caller evaluates normally.
                     }
                     Err(_cycle_err) => {
                         self.entries.remove(&cell);
+                        self.cyclic.insert(cell);
                         Some(CellValue::Error(FormulaError::CircularReference))
                     }
                 }
