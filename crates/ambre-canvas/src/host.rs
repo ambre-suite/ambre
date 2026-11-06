@@ -28,7 +28,7 @@ use web_sys::HtmlCanvasElement;
 
 use crate::{QuadRenderer, SurfaceSize, TextCache};
 use ambre_bus::{Instant, Ms, PageLoad, TimeSpan};
-use ambre_core::{Px, Size, Texel};
+use ambre_core::{AssetPaths, Px, Size, StaticKey, Texel};
 
 // -----------------------------------------------------------------------------
 // GpuState
@@ -308,9 +308,9 @@ async fn create_gpu_state(
 // Font fetch helper
 // -----------------------------------------------------------------------------
 
-pub async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
+pub async fn fetch_bytes(url: StaticKey<AssetPaths>) -> Option<Vec<u8>> {
     let window = web_sys::window()?;
-    let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
+    let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url.as_str()))
         .await
         .ok()?;
     let resp: web_sys::Response = resp_val.dyn_into().ok()?;

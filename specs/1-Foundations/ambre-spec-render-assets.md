@@ -122,7 +122,7 @@ or equally permissive (`crates/ambre-app/fonts/LICENSES.md`). Under Trunk the fi
 `crates/ambre-app/fonts/` and are copied to `dist/fonts/`.
 
 **Family resolution is shared** (`CANVAS-017`). Every renderer and every inline editor maps a
-toolbar label through `registered_family_name` to a loaded face. A label is `Sans`, `Serif`,
+toolbar label through `registered_face` to a loaded face. A label is `Sans`, `Serif`,
 `Monospace`, `Default`, a CSS generic, or an unknown string. The mapping is idempotent: a face name maps to
 itself. An unmatched `Named` family handed to Parley shapes zero glyphs, which is the failure this
 rule exists to make impossible.
@@ -186,7 +186,7 @@ of three nobody set together (`CANVAS-007`). Toile is the heaviest consumer, so 
 revisiting; the **mechanism** stays common.
 
 **Code:** `crates/ambre-canvas/src/fonts.rs` holds the script classifier and the lazy loader, and
-`crates/ambre-canvas/src/text_cache.rs` the layout cache and `registered_family_name`. The two
+`crates/ambre-canvas/src/text_cache.rs` the layout cache and `registered_face`. The two
 atlases, the shelf packer and the compaction are in `crates/ambre-canvas/src/render/atlas.rs`.
 The icon pipeline and the shared image cache have no code.
 

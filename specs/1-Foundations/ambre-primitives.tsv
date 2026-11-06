@@ -346,7 +346,7 @@ ambre-bus | src/ui.rs | crate::ui | UiEvent::FatalError.message | field | String
 ambre-bus | src/ui.rs | crate::ui | UiEvent::SyncWarning.message | field | String	free-text	user-facing or log message
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::is_busy() | ret | bool	generic	predicate result
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::publish() | ret | bool	generic	predicate result
-ambre-canvas | src/density.rs | crate::density | density_query() | ret | String	free-text	text, label or message
+ambre-canvas | src/density.rs | crate::density | density_query() | ret | String	free-text	a CSS media query that the browser alone parses and no code matches back, free text as a SQL query is
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Compose.0 | field | String	free-text	user text or error message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::ComposeEnd.0 | field | String	free-text	user text or error message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Insert.0 | field | String	free-text	user text or error message
@@ -387,7 +387,6 @@ ambre-canvas | src/frame.rs | crate::frame | text_height(text) | param | &str	fr
 ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
 ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
-ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | url_flag() | ret | bool	generic	predicate result
 ambre-canvas | src/host.rs | crate::host | url_flag(flag) | param | &str	local	the name of the one flag this private function looks for in the query of the page address
 ambre-canvas | src/intent.rs | crate::intent | FilterOpenPublisher.slot | field | Rc<Cell<bool>>	generic	named state or style flag, local
@@ -529,7 +528,6 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(text) | pa
 ambre-canvas | src/text_cache.rs | crate::text_cache | paragraphs(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape() | ret | bool	generic	predicate result
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/text_cache.rs | crate::text_cache | registered_family_name() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | ContentKind::label() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | ContentKind::role_description() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput.focus_requests | field | Rc<Cell<u32>>	math	geometry, layout, GPU or count arithmetic
@@ -934,7 +932,7 @@ ambre-core | src/schema.rs | crate::schema | Fnv.0 | field | u64	generic	FNV has
 ambre-core | src/schema.rs | crate::schema | Fnv::feed(bytes) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | Fnv::new(tag) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | SchemaError::MigrationFailed.reason | field | String	free-text	diagnostic text for a report, never a decision
-ambre-core | src/schema.rs | crate::schema | SchemaError::VersionUnreadable.found | field | String	free-text	diagnostic text for a report, never a decision
+ambre-core | src/schema.rs | crate::schema | SchemaError::VersionUnreadable.found | field | String	generic	the refused register value as the error echoes it for a report, never for a decision
 ambre-core | src/schema.rs | crate::schema | SchemaMigration.apply | field | fn(&D)->Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-core | src/schema.rs | crate::schema | scaffold_peer(scaffold) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes: the Loro update a step exports, opaque to the hash as scaffold_peer's input is
@@ -1039,7 +1037,6 @@ ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKe
 ambre-draw | src/lib.rs | crate | ImageKey::get() | ret | u64	newtype-inner	the ImageKey newtype unwrapped, for a caller outside its module
 ambre-draw | src/lib.rs | crate | ImageKey::new(value) | param | u64	newtype-inner	the constructor of the ImageKey newtype
 ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
-ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	free-text	the same-origin font path the face fetch reads, a property of the script and no spelling of it, as BASE_FONTS holds the base ones
 ambre-draw | src/text.rs | crate::text | LazyFont::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
 ambre-draw | src/text.rs | crate::text | LazyFont::for_char(c) | param | char	generic	generic parser/reader/formatter over text
 ambre-draw | src/text.rs | crate::text | <LazyScripts as FlagsKind>::NAME | const | &'static str	free-text	the name a set of lazy scripts prints through Debug, for a log line
@@ -1089,7 +1086,7 @@ ambre-logic | src/fixtures.rs | crate::fixtures | BENCH_DIR | const | &str	gener
 ambre-logic | src/fixtures.rs | crate::fixtures | BENCH_REGISTRY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/fixtures.rs | crate::fixtures | BenchBaseline.machine | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | BenchBaseline::names_its_machine() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/fixtures.rs | crate::fixtures | BenchMeasurement.id | field | String	free-text	free text: message, label, name or report
+ambre-logic | src/fixtures.rs | crate::fixtures | BenchMeasurement.id | field | String	free-text	the criterion id of a benchmark, which a reviewer reads in the baseline diff; no code matches it back, and the sort only orders the diff
 ambre-logic | src/fixtures.rs | crate::fixtures | CORPUS_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | CURRENT_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | CorpusReport.frozen_held | field | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -1314,10 +1311,10 @@ ambre-murmure | src/markers.rs | crate::markers | Closed::apply(text) | param | 
 ambre-murmure | src/markers.rs | crate::markers | Closed::range(text) | param | &str	free-text	the draft text the closed markers sit in; the spans are ByteSpan in, CharSpan out
 ambre-murmure | src/markers.rs | crate::markers | DraftEdit.after | field | &'a str	free-text	the text of a draft a member typed, after an edit; Debug prints its length alone
 ambre-murmure | src/markers.rs | crate::markers | DraftEdit.before | field | &'a str	free-text	the text of a draft a member typed, before an edit; Debug prints its length alone
-ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	free-text	UI text/label const
-ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	free-text	UI text/label const
+ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	generic	the fence of a code block, a token the marker parser matches back in a draft: part of the codec of the marks
+ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	generic	the marker of a list item, a token the marker parser matches back in a draft: part of the codec of the marks
 ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	free-text	the title a person reads on each control of the format bar, the words Prose gives the same mark
-ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	free-text	UI text/label const
+ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	generic	the marker of a quote, a token the marker parser matches back in a draft: part of the codec of the marks
 ambre-murmure | src/markers.rs | crate::markers | Unmarked.after | field | String	free-text	the text of a draft a member typed, with both markers gone; Debug prints its length alone
 ambre-murmure | src/markers.rs | crate::markers | Unmarked.between | field | String	free-text	the text of a draft a member typed, with the close marker gone alone; Debug prints its length alone
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
@@ -1489,7 +1486,7 @@ ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::path(krate) |
 ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::path(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::through(home) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/aliases.rs | crate::aliases | Resolver<'_>::ty(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/aliases.rs | crate::aliases | SPEC | const | &str	free-text	a fixed path of the spec the alias check reads
+ambre-primitives | src/aliases.rs | crate::aliases | SPEC | const | &str	generic	the path of the spec the alias check reads, below the root; the gate links no ambre-core, so no family holds it
 ambre-primitives | src/aliases.rs | crate::aliases | Source.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/aliases.rs | crate::aliases | Source.shown | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/aliases.rs | crate::aliases | Source.text | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -1510,14 +1507,14 @@ ambre-primitives | src/allowlist.rs | crate::allowlist | Allowlist::pruned() | r
 ambre-primitives | src/allowlist.rs | crate::allowlist | Category::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as the allowlist file writes it
 ambre-primitives | src/allowlist.rs | crate::allowlist | Category::list() | ret | String	free-text	error messages printed to the terminal: the whole set of category words
 ambre-primitives | src/allowlist.rs | crate::allowlist | Category::parse(word) | param | &str	newtype-inner	the word of a closed enum, as the allowlist file writes it
-ambre-primitives | src/allowlist.rs | crate::allowlist | HEADER | const | &str	free-text	a fixed line or path of the allowlist file
+ambre-primitives | src/allowlist.rs | crate::allowlist | HEADER | const | &str	generic	the header line the parser matches back against the file: part of the codec of the allowlist
 ambre-primitives | src/allowlist.rs | crate::allowlist | Line::Text.0 | field | String	free-text	a comment or header line, kept byte for byte
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo.0 | field | usize	newtype-inner	the inside of SiteKey or LineNo, or its constructor
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo::new(number) | param | usize	newtype-inner	the inside of SiteKey or LineNo, or its constructor
 ambre-primitives | src/allowlist.rs | crate::allowlist | Verdict.counts | field | BTreeMap<Category,usize>	math	a count per category, printed and never stored
 ambre-primitives | src/allowlist.rs | crate::allowlist | Verdict::is_clean() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/allowlist.rs | crate::allowlist | Refuted.reason | field | String	free-text	error messages printed to the terminal
-ambre-primitives | src/main.rs | crate | ALLOWLIST | const | &str	free-text	a fixed line or path of the allowlist file
+ambre-primitives | src/main.rs | crate | ALLOWLIST | const | &str	generic	the path of the allowlist file, below the root; the gate links no ambre-core, so no family holds it
 ambre-primitives | src/scan.rs | crate::scan | <Disk as Tree>::read() | ret | Option<String>	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | Declaration.module | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | FileVisit.file | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -1675,7 +1672,7 @@ ambre-primitives | src/scan.rs | crate::scan | Declared::child() | ret | Result<
 ambre-primitives | src/scan.rs | crate::scan | Declared::child(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::child(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::child(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Declared::chosen() | ret | Result<BTreeSet<String>,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Declared::chosen() | ret | Result<BTreeSet<String>,String>	generic	the names of the primitives an impl chose, which the gate matches back, or the error message printed to the terminal
 ambre-primitives | src/scan.rs | crate::scan | Declared::foreign_crate() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | Declared::foreign_crate(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::foreign_crate(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -1703,7 +1700,7 @@ ambre-primitives | src/scan.rs | crate::scan | Declared::member() | ret | Result
 ambre-primitives | src/scan.rs | crate::scan | Declared::member(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::member(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::member(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Declared::place() | ret | Result<Option<(String,String)>,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Declared::place() | ret | Result<Option<(String,String)>,String>	generic	the crate and the module a path leads to, which the gate matches back, or the error message printed to the terminal
 ambre-primitives | src/scan.rs | crate::scan | Declared::place(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::place(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::place(prefix) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -1952,10 +1949,10 @@ ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_one(r
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_range(replacement) | param | &str	free-text	the replacement text the user typed, written over one range
 ambre-prose | src/logic/find.rs | crate::logic::find | match_offsets(hay) | param | &str	free-text	one block's text, searched for a query's matches
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | Annotation.body | field | String	free-text	an annotation's stored map rendered as the canonical text of a fixture dump
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | Annotation.id | field | String	free-text	an annotation id as the store keys it, which the dump replaces by its first mention
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | Annotation.id | field | String	generic	an annotation id as the store keys it, a substring the dump renderer matches back and replaces by its first mention: part of the codec of the dump
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | PlaceNames.0 | field | HashMap<String,String>	newtype-inner	each block id of a dump as its string, mapped to its place label
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | PlaceNames::rename() | ret | String	free-text	a value of a fixture dump, a block id renamed to its place
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | PlaceNames::rename(value) | param | &str	free-text	a value of a fixture dump, which may name a block id
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | PlaceNames::rename(value) | param | &str	generic	a stored value of a fixture dump, matched back against the block ids it may name: part of the codec of the dump
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | ProseState::canonical_dump() | ret | String	free-text	the canonical text dump of a fixture document, a whole document a reader diffs
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename_annotations() | ret | String	free-text	the canonical text dump of a fixture document, its annotation ids renamed to stable labels
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename_annotations(dump) | param | String	free-text	the canonical text dump of a fixture document, before its annotation ids are renamed
@@ -3081,7 +3078,6 @@ ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the bool the one constructor of Visibility reads into its variant
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to Count<Members> at once
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	foreign-api	the column bytes sqlx hands a decoder, read into a MasterKeySalt at once
-ambre-canvas | src/fonts.rs | crate::fonts | BASE_FONTS | const | [&str;6]	free-text	same-origin font paths the boot fetches
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_max | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_min | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-murmure | src/list.rs | crate::list | HeaderWords.author | field | String	free-text	header text a message row draws
@@ -3330,8 +3326,8 @@ ambre-primitives | src/newtypes.rs | crate::newtypes | Census.module | field | V
 ambre-primitives | src/newtypes.rs | crate::newtypes | Census.relative | field | &'a str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/newtypes.rs | crate::newtypes | Census.scope | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/newtypes.rs | crate::newtypes | FIELDS | const | usize	generic	the number of fields a key of the exceptions file splits into
-ambre-primitives | src/newtypes.rs | crate::newtypes | HEADER | const | &str	free-text	a fixed line or path of the allowlist file
-ambre-primitives | src/newtypes.rs | crate::newtypes | NEWTYPES | const | &str	free-text	a fixed line or path of the allowlist file
+ambre-primitives | src/newtypes.rs | crate::newtypes | HEADER | const | &str	generic	the header line the parser matches back against the file: part of the codec of the exceptions file
+ambre-primitives | src/newtypes.rs | crate::newtypes | NEWTYPES | const | &str	generic	the path of the newtype exceptions file, below the root; the gate links no ambre-core, so no family holds it
 ambre-primitives | src/newtypes.rs | crate::newtypes | NUMBERS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/newtypes.rs | crate::newtypes | SCALARS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/newtypes.rs | crate::newtypes | SEPARATOR | const | &str	generic	the text a key splits on, which no normalised field can hold
@@ -3449,8 +3445,8 @@ ambre-primitives | src/depinfo.rs | crate::depinfo | outer_levers() | ret | Vec<
 ambre-primitives | src/depinfo.rs | crate::depinfo | substituted() | ret | String	free-text	error messages printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | substituted(dotted) | param | &str	generic	the dotted TOML key a refusal names, printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | substituted(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/features.rs | crate::features | EXCLUSIONS | const | &str	free-text	a fixed line or path of the allowlist file
-ambre-primitives | src/features.rs | crate::features | HEADER | const | &str	free-text	a fixed line or path of the allowlist file
+ambre-primitives | src/features.rs | crate::features | EXCLUSIONS | const | &str	generic	the path of the feature exclusions file, below the root; the gate links no ambre-core, so no family holds it
+ambre-primitives | src/features.rs | crate::features | HEADER | const | &str	generic	the header line the parser matches back against the file: part of the codec of the exclusions file
 ambre-primitives | src/features.rs | crate::features | check() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/features.rs | crate::features | check(turned_on) | param | &BTreeMap<PathBuf,BTreeSet<String>>	generic	the feature names cargo reports per manifest, matched against the manifests
 ambre-primitives | src/features.rs | crate::features | declared() | ret | BTreeMap<PathBuf,(String,BTreeSet<String>)>	generic	the package and feature names the manifests declare, matched against what cargo reports
@@ -3615,7 +3611,7 @@ ambre-prose | src/view/walk.rs | crate::view::walk | <Highlights as ambre_core::
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark.0 | field | String	newtype-inner	CrossRefMark's own hex text
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark::as_str() | ret | &str	newtype-inner	CrossRefMark's own hex text, as the carrier mark stores it
 ambre-trame | src/ui/commands.rs | crate::ui::commands | SheetFilter::is_filtered() | ret | bool	generic	predicate or did-it-change return
-ambre-primitives | src/main.rs | crate | UNWRAP_ALLOWLIST | const | &str	free-text	a fixed line or path of the allowlist file
+ambre-primitives | src/main.rs | crate | UNWRAP_ALLOWLIST | const | &str	generic	the path of the unwrap allowlist file, below the root; the gate links no ambre-core, so no family holds it
 ambre-primitives | src/main.rs | crate | USAGE | const | &str	free-text	the usage line printed to the terminal
 ambre-primitives | src/scan.rs | crate::scan | Source.file | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Source.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3690,7 +3686,7 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | Finding.krate | field | Strin
 ambre-primitives | src/unwrap.rs | crate::unwrap | Finding.newtype | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Finding.scope | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Finding::key() | ret | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | HEADER | const | &str	free-text	a fixed line or path of the allowlist file
+ambre-primitives | src/unwrap.rs | crate::unwrap | HEADER | const | &str	generic	the header line the parser matches back against the file: part of the codec of the unwrap allowlist
 ambre-primitives | src/unwrap.rs | crate::unwrap | Home.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Home.module | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Impl.inner | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3957,6 +3953,7 @@ ambre-core | src/static_key.rs | crate::static_key | <Icons as KeyKind>::NAME | 
 ambre-core | src/static_key.rs | crate::static_key | <StorageKeys as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <CssClasses as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <Attributes as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/static_key.rs | crate::static_key | <AssetPaths as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | StaticKey.text | field | &'static str	newtype-inner	StaticKey newtype, the key text a const table names
 ambre-core | src/static_key.rs | crate::static_key | StaticKey<K>::as_str() | ret | &'static str	newtype-inner	StaticKey newtype, the key text a const table names
 ambre-core | src/static_key.rs | crate::static_key | StaticKey<K>::new(value) | param | &'static str	newtype-inner	StaticKey newtype, the key text a const table names

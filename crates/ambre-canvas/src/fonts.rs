@@ -26,6 +26,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+#[cfg(any(test, target_arch = "wasm32"))]
+use ambre_core::{AssetPaths, StaticKey};
 use ambre_core::{FontBytes, Payload};
 use rustc_hash::FxHashSet;
 
@@ -42,13 +44,13 @@ use rustc_hash::FxHashSet;
 /// missing file logs a warning and leaves that face absent rather than failing
 /// boot.
 #[cfg(any(test, target_arch = "wasm32"))]
-const BASE_FONTS: [&str; 6] = [
-    "/fonts/NotoSans-Regular.ttf",
-    "/fonts/NotoSans-Bold.ttf",
-    "/fonts/NotoSans-Italic.ttf",
-    "/fonts/NotoSans-BoldItalic.ttf",
-    "/fonts/DejaVuSerif.ttf",
-    "/fonts/DejaVuSansMono.ttf",
+const BASE_FONTS: [StaticKey<AssetPaths>; 6] = [
+    StaticKey::new("/fonts/NotoSans-Regular.ttf"),
+    StaticKey::new("/fonts/NotoSans-Bold.ttf"),
+    StaticKey::new("/fonts/NotoSans-Italic.ttf"),
+    StaticKey::new("/fonts/NotoSans-BoldItalic.ttf"),
+    StaticKey::new("/fonts/DejaVuSerif.ttf"),
+    StaticKey::new("/fonts/DejaVuSansMono.ttf"),
 ];
 
 /// Fetch the [`BASE_FONTS`] same-origin and return each face's bytes that
@@ -60,7 +62,8 @@ pub async fn fetch_base_font_faces() -> Vec<Payload<FontBytes>> {
     let mut faces = Vec::new();
     for url in BASE_FONTS {
         // The log names the face by its file, the last segment of its URL.
-        let label = url.rsplit('/').next().unwrap_or(url);
+        let path = url.as_str();
+        let label = path.rsplit('/').next().unwrap_or(path);
         match crate::host::fetch_bytes(url).await {
             Some(bytes) => {
                 tracing::info!("{label} loaded");
@@ -307,8 +310,9 @@ mod tests {
         let base = BASE_FONTS.iter().copied();
         let lazy = LazyFont::ALL.iter().map(|font| font.asset_url());
         for url in base.chain(lazy) {
-            assert!(url.starts_with("/fonts/"), "`{url}` leaves the origin");
-            assert!(!url.contains("//"), "`{url}` names a host");
+            let path = url.as_str();
+            assert!(path.starts_with("/fonts/"), "`{url}` leaves the origin");
+            assert!(!path.contains("//"), "`{url}` names a host");
         }
     }
 

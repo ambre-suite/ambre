@@ -33,13 +33,10 @@ use crate::space::{Parley, WholeParley};
 ///
 /// A thin wrapper over [`ambre_draw::resolve_family`], which is where the
 /// mapping lives. The canvas renderers, the inline editors and the Prose
-/// paginator all reach the same face for one family (`CANVAS-017`).
-pub fn registered_family_name(family: Option<&ambre_core::FontFamily>) -> &'static str {
-    bundled_face(family).face_name()
-}
-
-/// The bundled face `family` resolves to, the default one for `None`.
-fn bundled_face(family: Option<&ambre_core::FontFamily>) -> BundledFamily {
+/// paginator all reach the same face for one family (`CANVAS-017`). The
+/// caller spells the face through [`BundledFamily::face_name`] at the shaper
+/// call alone, since the shaper matches that name back.
+pub fn registered_face(family: Option<&ambre_core::FontFamily>) -> BundledFamily {
     match family {
         Some(family) => ambre_draw::resolve_family(family),
         None => ambre_draw::resolve_family(&ambre_core::FontFamily::Sans),
@@ -207,7 +204,7 @@ pub(crate) fn push_shape(
         builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
     }
     if let Some(family) = &shape.family {
-        let face = registered_family_name(Some(family));
+        let face = registered_face(Some(family)).face_name();
         let stack = FontFamily::Single(FontFamilyName::Named(face.into()));
         builder.push(StyleProperty::FontFamily(stack), range.clone());
     }
@@ -408,7 +405,7 @@ impl TextCache {
     ///
     /// The weight and the slant of `look` select the matching real face of
     /// the family, not faux bold or oblique. The family resolves to a
-    /// bundled face through [`registered_family_name`], and a family no face
+    /// bundled face through [`registered_face`], and a family no face
     /// is named for falls back to the default one. Every axis of `look` is
     /// part of the cache key, so each look of the same string is stored apart.
     pub fn get_or_build<L: TextLength>(
@@ -458,7 +455,7 @@ impl TextCache {
             weight,
             slant,
             word_break,
-            face: bundled_face(family),
+            face: registered_face(family),
             spans: spans.into(),
         };
 
@@ -520,7 +517,7 @@ impl TextCache {
         // (the old behaviour) matched no loaded face and shaped zero glyphs. A
         // sticky whose family was the generic default then rendered invisible text.
         // Edit mode -- which already routed through here -- showed it fine.
-        let font_family = FontFamilyName::Named(registered_family_name(family).into());
+        let font_family = FontFamilyName::Named(registered_face(family).face_name().into());
         builder.push_default(StyleProperty::FontFamily(FontFamily::Single(font_family)));
         builder.push_default(StyleProperty::FontSize(font_size.layout_units().get()));
         if weight == Weight::Bold {
@@ -550,7 +547,7 @@ impl TextCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{SpanShape, TextCache, registered_family_name};
+    use super::{SpanShape, TextCache, registered_face};
     use ambre_bus::Byte;
     use ambre_core::index::Span;
     use ambre_core::{Px, View};
@@ -558,7 +555,7 @@ mod tests {
 
     /// The face the family `label` names resolves to.
     fn face_of(label: Option<&str>) -> &'static str {
-        registered_family_name(label.map(ambre_core::FontFamily::from_label).as_ref())
+        registered_face(label.map(ambre_core::FontFamily::from_label).as_ref()).face_name()
     }
 
     /// A context holding the shipped Noto Sans face, read from the tree.
