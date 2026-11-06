@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 661ddd67be8c36d4b88d27a31afda41ed25bf1fd679f8c6156cca468d67efa9f # shrinks to program = [Local { edit: WriteBelow { col: 0, text: "=C2+1" } }, Author { who: 1, edit: InsertRow { at: 3 } }, Local { edit: DeleteRow { at: 1 } }, SyncAuthors, Author { who: 0, edit: Write { row: 0, col: 2, text: "=A9+1" } }, Local { edit: WriteBelow { col: 3, text: "=SUM(TOTAL)" } }, Author { who: 1, edit: Write { row: 5, col: 2, text: "=A9+1" } }, Deliver { who: 1, n: 1 }, Author { who: 0, edit: MoveColumn { from: 2, to: 0 } }, Deliver { who: 0, n: 1 }, Local { edit: WriteBelow { col: 0, text: "=A1+B2" } }, Deliver { who: 0, n: 1 }, Local { edit: Rename { reference: "Sheet2!A1:A4" } }]
+cc 8d852e5698f197980e066d02ecdcce904c2593dcc7ec8234e2ab6f3fb6709a56 # shrinks to program = [Author { who: 1, edit: DeleteRow { at: 3 } }, Local { edit: Write { row: 3, col: 2, text: "0" } }, Deliver { who: 1, n: 1 }, Author { who: 1, edit: Undo }, Deliver { who: 1, n: 1 }]

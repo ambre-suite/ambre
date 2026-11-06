@@ -51,16 +51,22 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-169` | `FRAME` | An import MUST NOT swallow the local peer's own operations before they have been broadcast. | this spec section 2, row 4 | `ambre_trame::logic::tests::group7::edit_after_reopen_broadcasts_causally_complete_delta` -- it drives two reopens and asserts the second replay carries both cells, the merge preserving this peer's entry in the export cursor and adopting every other | none | verified |
 | `TRAME-248` | `FAIL` | A key or a line element that spells a uid other than as `{peer:016x}_{counter:08x}` MUST be refused, and the refusal MUST reach the user. | `ambre-spec-trame-schema.md section 2`; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-003`) | `ambre_trame::model::sheet_index::tests::a_uid_reads_back_from_its_canonical_spelling_alone` -- a short, a signed, an upper-case and a wide spelling; `ambre_trame::logic::tests::group12::a_cell_key_in_a_non_canonical_spelling_is_refused_and_said`; `::a_non_canonical_key_in_every_keyed_map_is_said` -- the style, merge, width, height and filter maps; `::a_line_element_in_a_non_canonical_spelling_is_refused_and_said` | none | verified |
 | `TRAME-231` | `POST` | Opening a workbook MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 2; `ambre-spec-budgets.md section 1` | `ambre_trame::logic::tests::group7::a_reader_that_sent_nothing_holds_no_history_of_its_own` -- the reader's version vector equals the author's after the snapshot and after a delta | none | verified |
+| `TRAME-282` | `POST` | After a remote batch, each formula MUST hold the value, the dependencies, the error and the cycle refusal that a full reseed of the merged workbook gives it. | this spec section 3.F; `TRAME-042` | `ambre_trame::logic::remote_tests::a_carried_remote_apply_equals_a_full_rebuild` -- a proptest, 256 cases: two authors write cells and formulas on two sheets, write past the used range at once, insert, delete and move lines, sort, merge, redefine a name, undo and sync with each other. A receiver makes the same edits and switches sheets. One receiver carries its engine across each batch, the other reseeds after it, and they match on the stored text, each value, each dependency, each cycle refusal and the mark that sends the next structural edit to a reseed. Each derived layout is checked against a read of the lists; `ambre_trame::logic::remote_tests::a_remote_cell_write_recomputes_its_readers_without_a_reseed`; `::a_remote_row_delete_carries_the_engine_without_a_reseed`; `::a_remote_sheet_rename_reseeds_the_engine`; `::a_line_left_on_another_element_reseeds_the_engine`; `::a_second_key_on_a_cell_reseeds_the_engine`; `::an_undone_remote_delete_brings_back_a_value_written_on_the_gone_row` -- each counts the reseeds | none | verified |
+| `TRAME-283` | `POST` | A remote batch that writes one cell and deletes one row of a sheet of 10k formula cells MUST hold the remote batch budget. | this spec section 3.F; `ambre-spec-budgets.md section 1` | `callgrind` -- the `remote_batch` operation of `crates/ambre-trame/benches/instructions.rs`, the whole apply of the batch, under its ceiling in the CI `instructions` job | none | verified |
+| `TRAME-284` | `POST` | A remote batch MUST name the cells whose shown value it changed. | this spec section 6 | not built | unbuilt -- lands with the `Incremental remote apply` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-UI-184` | `POST` | On a remote batch, the UI MUST re-fetch only the cells of its window that the batch names. | this spec section 6; `TRAME-284` | not built | unbuilt -- lands with the `Incremental remote apply` Story (`ambre-roadmap.md` E6) | unimplemented |
 
-* **Budget.** five rows of `ambre-spec-budgets.md section 1`: the 10k-cell recompute, the
-  sheet-index rebuild, the 50-cell batch, the viewport send and its render. The workbook and graph
+* **Budget.** six rows of `ambre-spec-budgets.md section 1`: the 10k-cell recompute, the
+  sheet-index rebuild, the 50-cell batch, the remote batch, the viewport send and its
+  render. The workbook and graph
   holders of section 6 come on top. Only the recompute has a benchmark.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 19 `verified`. What holds is what a compiler holds: a handler with no queue in
-  reach, an apply that returns display events and cannot broadcast. The sheet index equals a rebuild
-  after every step of a random stream. A native view reads each refused send in the log.
+* **Verification.** 21 `verified`, 2 `unimplemented`. What holds is what a compiler holds: a handler
+  with no queue in reach, an apply that returns display events and cannot broadcast. The sheet index
+  equals a rebuild after every step of a random stream, and so does an engine carried across each
+  remote batch. A native view reads each refused send in the log.
 
 ---
 
@@ -180,7 +186,7 @@ Step 3 walks the graph in topological order and evaluates each dirty cell on the
 |:---|:---|:---|
 | **P1** | `ScrollViewport` | no mutation and no delta: evaluate the dirty cells inside the new window, answer with one viewport |
 | **P2** | `SetCellText`, `SetCellsBatch`, a structural write | the four steps above, and a fresh viewport only when the recompute touched the visible window. The UI has already drawn the edit, so there is no acknowledgement |
-| **P3** | a remote delta | import, diff, dirty, evaluate, answer. **As built** the code reseeds the whole engine instead (section 6) |
+| **P3** | a remote delta | import, read what the import wrote, carry the engine, evaluate the dirty closure, answer (section 3.F). The full reseed stays the fallback |
 
 ### D. The seam
 
@@ -266,6 +272,43 @@ Three shapes are deliberately absent, and each one is a rule:
 | an `EditAck` event | an edit is optimistic: the UI has drawn it before the command left |
 | an import-progress event | an import answers once, when it is done |
 
+### F. A remote batch
+
+A remote batch costs what it wrote, not the workbook (`TRAME-282`). A subscription to the document
+notes, container by container, what each import changes. A local commit, an undo and a checkout
+are not noted: their own paths keep the caches. Once the batch merges, the tail reads the note.
+
+| The batch changed | What runs |
+|---|---|
+| a key of a `cells_{sheet}` map | that cell compiles again from the text it now shows, and its dependents recompute |
+| the rows or the columns of the sheet on screen | the position cache takes the list diffs the import reported, and reads no list: the positions after the first edit are recorded again. The engine takes the carried step of `features/ambre-spec-trame-rows-and-columns.md section 3`: it clears the cells of each gone line, and compiles again each formula that read one or reads positions. It also reads each cell that a line the batch added crosses. An undo of a delete brings a line back on its own element, so a key written under it while it was gone reads again, and no operation of the batch names that key |
+| a style, size or filter map of the sheet on screen | that cache rebuilds from its container |
+| the generation record of a sheet, or the peer registry | nothing: no cache holds either |
+
+The merges rebuild after every batch, since a covered cell a peer writes is masked. The dirty
+closure then recomputes in the order it induces. The events are those of a reseed.
+
+**Where a remote batch still reseeds.** The full reseed answers a batch in five cases:
+
+1. the batch changed the sheet list, the tab order, a defined name, the schema register, a nested
+   container or a container no family names. Only a reseed rebuilds the sheet maps and the names;
+2. the batch changed the line order or the merge map of a sheet off the screen. Only the active
+   sheet keeps its layout from before the batch, and the carried step reads it. The layout of
+   every sheet is the `Cached sheet indexes` Story (`ambre-roadmap.md` E6);
+3. the engine cannot carry a local structural edit either (`TRAME-280`). It holds a formula
+   refused for a cycle, a masked cell, or a cell under a second key;
+4. the position cache cannot take the list diffs, and is read from the lists. That happens in
+   three cases:
+   * a line sits on two elements before or after the batch;
+   * a value is no element this build reads;
+   * a line the batch removed and added again sits on another element.
+
+   A batch that leaves a cell under a second key, or masks a cell, reseeds too. A reseed leaves
+   such a cell out of the engine;
+5. the carried step meets a cycle. The feed order then decides which cell of it is refused.
+
+A snapshot, an `.ambre` file and the restore from storage reseed too: each reads the whole state.
+
 ---
 
 ## 4. SURFACE
@@ -314,19 +357,24 @@ Each viewport answer carries a version, and the UI drops one older than the last
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A remote change costs the whole document.** Every remote batch reseeds the engine rather than
-  taking the diff-driven path P3 prescribes. The same reseed runs on an undo, a sheet rename, a
-  name definition and a tab switch. One peer keystroke therefore costs O(total cells) on the
-  receiver, against the client-processing budget of `ambre-spec-budgets.md section 1`.
-
-  **The target drives the apply from the document's own diff.** A changed `cells_{sheet}` key
-  recomputes that cell, and a `rows_{sheet}` or `cols_{sheet}` list diff calls the incremental
-  methods of section 3.B. A derived cache is rebuilt for the container that changed. The full
-  reseed stays the fallback for a snapshot import and for a diff the incremental path cannot
-  classify. Answered by the `Incremental remote apply` Story (`ambre-roadmap.md` E6).
+* **A remote change of a sheet off the screen, or of the workbook, costs the whole document.** A
+  remote batch carries the engine by what it wrote (section 3.F). It reseeds on the five cases
+  that section 3.F lists. A new sheet, a rename, a name definition and a structural edit of
+  another sheet are among them. The same reseed runs on a local undo, a sheet rename, a name
+  definition and a tab switch. The `Cached sheet indexes` Story (`ambre-roadmap.md` E6) removes
+  one cause, and the `Stable engine sheet indexes` Story (`ambre-roadmap.md` E6) another.
 * **The UI re-fetches the whole viewport on every batch.** A per-batch `DataReset` tells it to,
-  where an invalidated-range event would name what changed. Answered by the
-  `Incremental remote apply` Story (`ambre-roadmap.md` E6).
+  where an event naming what changed would let it re-fetch less (`TRAME-284`, `TRAME-UI-184`). Not
+  yet ruled:
+
+  * what the event names. It may name the cells whose shown value changed, or a rectangle
+    around them. After a structural edit every cell below the edit moves, so it may name the
+    whole window;
+  * how it meets `TRAME-167`, whose test counts the `DataReset` of a batch, and the viewport
+    version of `TRAME-UI-005`;
+  * whether a local edit answers with the same event, as the bullet on `TRAME-002` below asks.
+
+  Answered by the `Incremental remote apply` Story (`ambre-roadmap.md` E6).
 * **The sheet indexes are state here and a rebuild in the code.** The active sheet's index is cloned
   and every other sheet's is reconstructed from its full lists, once per write and once per scroll.
   A scroll on one sheet therefore rebuilds every other sheet's index, against the P1 budget on any

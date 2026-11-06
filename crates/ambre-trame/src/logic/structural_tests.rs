@@ -37,11 +37,11 @@ use crate::{CellPos, CellRect, Col, Row, TrameCommand};
 
 /// The window the generator addresses: small, so a structural edit meets the
 /// formulas that read the lines it edits.
-const ROWS: u32 = 6;
-const COLS: u32 = 4;
+pub(super) const ROWS: u32 = 6;
+pub(super) const COLS: u32 = 4;
 
 /// The peer both states write under, so both mint the same uids.
-const PEER: u64 = 7;
+pub(super) const PEER: u64 = 7;
 
 /// One step of a program.
 #[derive(Debug, Clone)]
@@ -88,7 +88,9 @@ enum Step {
         col: u32,
     },
     Undo,
-    /// A peer writes a cell, and the delta merges into both states.
+    /// A peer writes a cell, and the delta merges into both states. Both
+    /// carry it, as both carry a local write: the remote path has its own
+    /// reference model (`TRAME-282`).
     Remote {
         row: u32,
         col: u32,
@@ -99,7 +101,7 @@ enum Step {
 /// What a cell holds: numbers and formulas. The formulas read cells, ranges,
 /// whole lines, positions past the used range, their own position, a name and
 /// the other sheet. Cycles, static or through a range, come out of the mix.
-fn text() -> impl Strategy<Value = String> {
+pub(super) fn text() -> impl Strategy<Value = String> {
     prop_oneof![
         (0i64..9).prop_map(|n| n.to_string()),
         Just("=A1+B2".to_owned()),
@@ -138,11 +140,11 @@ fn step() -> impl Strategy<Value = Step> {
     ]
 }
 
-fn at(row: u32, col: u32) -> CellPos {
+pub(super) fn at(row: u32, col: u32) -> CellPos {
     CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col))
 }
 
-fn write(row: u32, col: u32, text: &str) -> TrameCommand {
+pub(super) fn write(row: u32, col: u32, text: &str) -> TrameCommand {
     TrameCommand::SetCellText {
         row: Pos::<Row>::new(row),
         col: Pos::<Col>::new(col),
@@ -206,7 +208,7 @@ fn commands(step: &Step) -> Vec<TrameCommand> {
 
 /// A workbook of two sheets: numbers and formulas on the first, and on the
 /// second, formulas that read the first through a qualifier.
-fn seeded(path: StructuralPath) -> TrameState {
+pub(super) fn seeded(path: StructuralPath) -> TrameState {
     let mut st = TrameState::with_peer(ambre_core::PeerId::new(PEER));
     st.structural_path = path;
     let first = st.active_sheet.clone();
@@ -254,7 +256,7 @@ fn seeded(path: StructuralPath) -> TrameState {
 }
 
 /// The stored text of every cell of every sheet.
-fn stored(st: &TrameState) -> Vec<LoroValue> {
+pub(super) fn stored(st: &TrameState) -> Vec<LoroValue> {
     st.sheets_by_idx
         .iter()
         .map(|sheet| {
@@ -267,14 +269,14 @@ fn stored(st: &TrameState) -> Vec<LoroValue> {
 
 /// Everything the engine holds that a later edit depends on, values aside.
 #[derive(Debug, PartialEq)]
-struct Engine {
-    edges: HashMap<(CellId, CellId), usize>,
-    ranges: HashMap<CellId, Vec<String>>,
-    formulas: Vec<String>,
-    cyclic: bool,
+pub(super) struct Engine {
+    pub(super) edges: HashMap<(CellId, CellId), usize>,
+    pub(super) ranges: HashMap<CellId, Vec<String>>,
+    pub(super) formulas: Vec<String>,
+    pub(super) cyclic: bool,
 }
 
-fn engine(st: &TrameState) -> Engine {
+pub(super) fn engine(st: &TrameState) -> Engine {
     let e = &st.engine;
     let mut edges = HashMap::new();
     for edge in e.deps.cell_dag.edge_indices() {
@@ -313,7 +315,7 @@ fn values(st: &TrameState) -> HashMap<CellId, (String, String)> {
 /// The two engines hold the same value for each cell, errors included. A
 /// cell on a loop closed through a range shows `#CIRCULAR!` on both, whatever
 /// order each pass took (`TRAME-281`).
-fn same_values(carried: &TrameState, rebuilt: &TrameState) -> Result<(), String> {
+pub(super) fn same_values(carried: &TrameState, rebuilt: &TrameState) -> Result<(), String> {
     let (a, b) = (values(carried), values(rebuilt));
     let keys: HashSet<&CellId> = a.keys().chain(b.keys()).collect();
     for cell in keys {

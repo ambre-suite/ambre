@@ -132,16 +132,14 @@ impl TrameState {
     /// Apply a remote CRDT delta and return display events.
     ///
     /// `payload` is the raw (decrypted) Loro binary update forwarded by the Sync
-    /// thread (a peer's edit, or our own history replayed on open). Loro's
-    /// `import` ingests both incremental updates and full snapshots, so the same
-    /// reseed path as [`import_snapshot`](Self::import_snapshot) applies. That
-    /// path merges the ops, reseeds the formula engine, and tells the UI to
-    /// re-fetch.
+    /// thread (a peer's edit, or our own history replayed on open). It takes
+    /// the path of [`apply_remote_batch`](Self::apply_remote_batch), as a batch
+    /// of one.
     pub fn apply_remote(
         &mut self,
         payload: &ambre_core::Payload<ambre_core::DeltaBytes>,
     ) -> Vec<TrameEvent> {
-        self.import_and_reseed(LoroPayloadRef::Delta(payload), MergeOrigin::Delta)
+        self.merge_and_carry(&[LoroPayloadRef::Delta(payload)], MergeOrigin::Delta)
     }
 
     /// Apply a snapshot whose contents are trusted the way a remote delta is
@@ -242,26 +240,49 @@ impl TrameState {
         self.reseed_after_merge(origin, &order)
     }
 
-    /// Apply a batch of decrypted remote deltas as a SINGLE merge+reseed, so the
-    /// UI sees one `DataReset` instead of one per delta. A server history replay
+    /// Apply a batch of decrypted remote deltas as a SINGLE merge, so the UI
+    /// sees one `DataReset` instead of one per delta. A server history replay
     /// on (re)open arrives as N sequenced updates. Delivering them one by one
     /// re-fetches and repaints the grid N times. A cell that only appears in the
     /// last delta visibly flickers in from blank. Merging the whole batch first,
-    /// then reseeding once, renders the final state in a single repaint. A no-op
-    /// (no display events) if nothing imported.
+    /// then refreshing once, renders the final state in a single repaint. A
+    /// no-op (no display events) if nothing imported.
+    ///
+    /// The engine is carried by what the batch wrote (`TRAME-282`), or
+    /// reseeded when the carried path cannot follow it
+    /// ([`carries`](Self::carries)).
     pub fn apply_remote_batch(
         &mut self,
         payloads: &[ambre_core::Payload<ambre_core::DeltaBytes>],
     ) -> Vec<TrameEvent> {
+        let payloads: Vec<LoroPayloadRef<'_>> =
+            payloads.iter().map(LoroPayloadRef::Delta).collect();
+        self.merge_and_carry(&payloads, MergeOrigin::Batch)
+    }
+
+    /// Merge `payloads`, then carry the engine by what they wrote, or reseed
+    /// it. The note of an earlier import is dropped first, so only this batch
+    /// is read.
+    fn merge_and_carry(
+        &mut self,
+        payloads: &[LoroPayloadRef<'_>],
+        origin: MergeOrigin,
+    ) -> Vec<TrameEvent> {
         let order = self.sheet_order_ids();
+        drop(self.take_imported());
         let mut merged_any = false;
         for payload in payloads {
-            merged_any |= self.merge_payload(LoroPayloadRef::Delta(payload), MergeOrigin::Batch);
+            merged_any |= self.merge_payload(*payload, origin);
         }
         if !merged_any {
             return Vec::new();
         }
-        self.reseed_after_merge(MergeOrigin::Batch, &order)
+        let imported = self.take_imported();
+        if self.carries(&imported) {
+            tracing::info!("[Logic] {origin} merged, carried");
+            return self.carry_after_merge(&imported);
+        }
+        self.reseed_after_merge(origin, &order)
     }
 
     /// Merge one decrypted Loro payload into the live document, returning whether
@@ -289,6 +310,8 @@ impl TrameState {
         origin: MergeOrigin,
         order: &[Id<Sheet>],
     ) -> Vec<TrameEvent> {
+        // The whole state is read again, so what the import wrote is not.
+        drop(self.take_imported());
         // A peer may have deleted the sheet this reader is on (`TRAME-075`).
         // Leave it before any cache is rebuilt from it.
         self.leave_a_deleted_sheet(order);
@@ -304,6 +327,28 @@ impl TrameState {
             _ => 0,
         };
         tracing::info!("[Logic] {origin} merged, {cell_count} cell(s) now present");
+        self.adopt_imported_cursor();
+        // Rebuild the merge cache (and re-evaluate masking) before the engine
+        // reseed so masked cells are excluded; conflict events ride along below.
+        let conflicts = self.rebuild_merges();
+        // Reseed the formula engine from the resulting cell values, mapping each
+        // stable key pair back to its grid position via the rebuilt index. A
+        // merge may have moved cells under their stable keys, so reset first.
+        self.reseed_engine();
+        // Rebuild bold/italic + rich styles from the merged `cellstyle_{sheet}` map.
+        self.reseed_styles();
+        // Rebuild the column-width / row-height caches from the merged metric maps.
+        self.reseed_metrics();
+        // Adopt the (possibly remote) hidden-row set directly. A peer's filter
+        // arrives as `filter_hidden_{sheet}` ops and is applied without recompute
+        // (`trame-shared-filter` -- only the filter author recomputes).
+        self.rebuild_filter();
+        self.merge_events(conflicts)
+    }
+
+    /// Advance the export cursor past the imported ops, keeping this peer's
+    /// own entry.
+    pub(super) fn adopt_imported_cursor(&mut self) {
         // Advance the cursor to include the imported ops: we did not author
         // them, or already persisted them. The next `flush_delta` must not
         // export them back. BUT preserve our own peer's cursor.
@@ -327,21 +372,12 @@ impl TrameState {
                 self.last_exported_vv.remove(&our_peer);
             }
         }
-        // Rebuild the merge cache (and re-evaluate masking) before the engine
-        // reseed so masked cells are excluded; conflict events ride along below.
-        let conflicts = self.rebuild_merges();
-        // Reseed the formula engine from the resulting cell values, mapping each
-        // stable key pair back to its grid position via the rebuilt index. A
-        // merge may have moved cells under their stable keys, so reset first.
-        self.reseed_engine();
-        // Rebuild bold/italic + rich styles from the merged `cellstyle_{sheet}` map.
-        self.reseed_styles();
-        // Rebuild the column-width / row-height caches from the merged metric maps.
-        self.reseed_metrics();
-        // Adopt the (possibly remote) hidden-row set directly. A peer's filter
-        // arrives as `filter_hidden_{sheet}` ops and is applied without recompute
-        // (`trame-shared-filter` -- only the filter author recomputes).
-        self.rebuild_filter();
+    }
+
+    /// The events every merge answers with, whatever path it took. They are
+    /// the re-fetch, the tab strip, the toggles of the active cell, the merge
+    /// conflicts, the open session's cell and the undecodable notice.
+    pub(super) fn merge_events(&mut self, conflicts: Vec<TrameEvent>) -> Vec<TrameEvent> {
         // Refresh the toolbar / context-menu toggles for the active cell: after a
         // reload its formatting is only known once the `format` map is restored.
         let mut events = vec![

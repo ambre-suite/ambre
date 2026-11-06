@@ -102,6 +102,16 @@ CEILINGS = [
         ceiling=10 * PER_MS,
         also=("carry_engine",),
     ),
+    # One remote batch from its import to its events: every cache, the
+    # engine step and the layout derived from the list diffs.
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="remote_batch",
+        symbol="ambre_budget_trame_remote_batch",
+        row="Trame remote batch, 10k formula cells, a cell write and a row delete (< 10 ms)",
+        ceiling=10 * PER_MS,
+    ),
     Ceiling(
         crate="ambre-prose",
         bench="instructions",

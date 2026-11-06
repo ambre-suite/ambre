@@ -145,10 +145,9 @@ impl SheetContainer {
 
     /// The family and the sheet a stored root name joins, or `None` for a
     /// root outside every family. The schema belts read stored roots back
-    /// through it.
-    #[cfg(test)]
+    /// through it, and so does the remote apply (`TRAME-282`).
     #[must_use]
-    pub(crate) fn parse(name: &str) -> Option<(SheetRoot, &str)> {
+    pub(crate) fn parse(name: &str) -> Option<(SheetRoot, Id<Sheet>)> {
         use ambre_core::crdt::CrdtName;
 
         SheetRoot::ALL
@@ -158,6 +157,7 @@ impl SheetContainer {
                 (!sheet.is_empty()).then_some((*root, sheet))
             })
             .max_by_key(|(root, _)| root.as_str().len())
+            .map(|(root, sheet)| (root, Id::<Sheet>::from_text(sheet.to_owned())))
     }
 }
 

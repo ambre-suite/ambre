@@ -153,10 +153,13 @@ engine, so no dependency names it. A structural edit that meets any of the three
 and reseeds the whole engine. So does a carried step that meets a new cycle. The feed order then
 decides which cell of a cycle is refused, as on every reseed.
 
-**A remote change still reseeds the whole engine.** A delta from a peer goes through the full
-reseed, a peer's structural edit among them. It does until the story that carries it lands:
-the `Incremental remote apply` Story (`ambre-roadmap.md` E6). So do an undo, a redo and a snapshot
-import. Only a structural edit made on this peer takes the carried path above.
+**A peer's structural edit takes the carried step too** (`ambre-spec-trame-engine.md section 3.F`,
+`TRAME-282`). A remote batch may insert, delete or move a line of the sheet on screen. The engine
+then clears the cells of each gone line, and compiles again each formula that read one or reads
+positions.
+The peer's walk already rewrote the text it saw, and that text arrives in the batch. A peer's
+structural edit of a sheet off the screen still reseeds the whole engine. So do an undo, a redo and
+a snapshot import.
 
 **Virtual space**, past the used range:
 

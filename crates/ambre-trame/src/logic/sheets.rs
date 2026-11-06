@@ -25,6 +25,10 @@ impl TrameState {
     /// freshly rebuilt [`Self::index`]). Required after any structural op or
     /// import, where a cell's grid position may have changed under stable keys.
     pub(super) fn reseed_engine(&mut self) {
+        #[cfg(test)]
+        {
+            self.reseeds += 1;
+        }
         self.engine.reset();
         // Sheet maps and named ranges must be current before feeding cells, so
         // that `Sheet2!A1` and named references resolve while compiling.

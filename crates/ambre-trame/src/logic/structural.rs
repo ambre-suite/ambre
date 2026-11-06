@@ -76,13 +76,26 @@ impl TrameState {
             }) else {
                 continue;
             };
-            self.reanchor_one(&map, sheet, key.as_str(), &text, &new, edit);
-            reread.push(Reread {
-                cell,
-                sheet: sheet.clone(),
-                key,
-            });
+            reread.push((
+                Reread {
+                    cell,
+                    sheet: sheet.clone(),
+                    key,
+                },
+                text,
+            ));
         }
+        // The reach comes out of a hash set. Writing in key order makes the
+        // operations of one edit the same on every run, whatever the order the
+        // set hands the formulas out in.
+        reread.sort_unstable_by(|(a, _), (b, _)| (&a.sheet, &a.key).cmp(&(&b.sheet, &b.key)));
+        for (r, text) in &reread {
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, &r.sheet).as_str());
+            self.reanchor_one(&map, &r.sheet, r.key.as_str(), text, &new, edit);
+        }
+        let reread = reread.into_iter().map(|(r, _)| r).collect();
         Walk {
             index: new,
             step: EngineStep::Carry { removed, reread },
@@ -210,6 +223,13 @@ impl TrameState {
         if self.structural_path == StructuralPath::Reseed {
             return true;
         }
+        self.engine_holds_a_skip()
+    }
+
+    /// Whether the engine holds what no dependency names: a formula refused
+    /// for a cycle, a masked cell, or a cell the last reseed left out. Neither
+    /// a structural edit nor a remote batch can carry such an engine.
+    pub(super) fn engine_holds_a_skip(&self) -> bool {
         self.engine.has_cyclic() || self.engine_skipped || !self.masked_cells.is_empty()
     }
 

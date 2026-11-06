@@ -238,7 +238,7 @@ fn target_reading(target: &NameTarget) -> String {
 fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
     let key = stored.keys.first().map(String::as_str)?;
     if let Some((root, sheet)) = SheetContainer::parse(&stored.root) {
-        return sheet_reading(reader, stored, key, root, sheet);
+        return sheet_reading(reader, stored, key, root, &sheet);
     }
     match Root::parse(&stored.root)? {
         Root::Meta if key == ambre_core::schema::MetaKey::SchemaVersion.as_str() => {
@@ -290,12 +290,12 @@ fn sheet_reading(
     stored: &Stored,
     key: &str,
     root: SheetRoot,
-    sheet: &str,
+    sheet: &Id<Sheet>,
 ) -> Option<String> {
     // The derived caches follow the active sheet only, and the scenario writes
     // nothing per sheet elsewhere. A value on another sheet has no reading,
     // and the coverage test names it.
-    if sheet != reader.active_sheet.as_str() {
+    if *sheet != reader.active_sheet {
         return None;
     }
     let index = &reader.index;

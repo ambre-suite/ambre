@@ -310,6 +310,158 @@ impl<L: Axis> AxisView<L> {
         self.read
     }
 
+    /// What the list diffs `edits` make of this view, one diff per import
+    /// and in import order, derived with no read of the list (`TRAME-282`).
+    /// Nothing changes until [`commit_diffs`](Self::commit_diffs) takes the plan.
+    ///
+    /// `None` when only a read can tell, in three cases:
+    /// * the view skipped an element it could not read;
+    /// * a uid sits on two elements before or after;
+    /// * an edit runs past the end of the list.
+    ///
+    /// The plan costs a copy of the list and the elements the diffs touch,
+    /// never a parse of the list.
+    fn plan_diffs(&self, edits: &[Vec<SlotEdit>]) -> Option<AxisPlan<L>> {
+        if self.read == LineRead::Skipped || !self.hidden_of.is_empty() {
+            return None;
+        }
+        let mut elements: Vec<Element> = self.elements.as_slice().to_vec();
+        let mut touched: Vec<(Element, Touch)> = Vec::new();
+        let mut first = elements.len();
+        for delta in edits {
+            let mut next = Vec::with_capacity(elements.len());
+            let mut cursor = 0usize;
+            for edit in delta {
+                match edit {
+                    SlotEdit::Retain(n) => {
+                        let end = cursor.checked_add(n.to_usize())?;
+                        next.extend_from_slice(elements.get(cursor..end)?);
+                        cursor = end;
+                    }
+                    SlotEdit::Delete(n) => {
+                        let end = cursor.checked_add(n.to_usize())?;
+                        let removed = elements.get(cursor..end)?;
+                        touched.extend(removed.iter().map(|e| (*e, Touch::Removed)));
+                        first = first.min(next.len());
+                        cursor = end;
+                    }
+                    SlotEdit::Insert(new) => {
+                        first = first.min(next.len());
+                        touched.extend(new.iter().map(|e| (*e, Touch::Added)));
+                        next.extend_from_slice(new);
+                    }
+                }
+            }
+            next.extend_from_slice(elements.get(cursor..)?);
+            elements = next;
+        }
+        // How many elements each touched id and each touched uid ends on. A
+        // view with no hidden element holds one element per uid.
+        let mut ids: HashMap<ElementId, Count> = HashMap::new();
+        let mut uids: HashMap<Uid, Count> = HashMap::new();
+        for (element, touch) in &touched {
+            let id = ids.entry(element.id).or_insert_with(|| {
+                if self.owner.contains_key(&element.id) {
+                    Count::held()
+                } else {
+                    Count::absent()
+                }
+            });
+            let uid = uids.entry(element.uid).or_insert_with(|| {
+                if self.at.contains_key(&element.uid) {
+                    Count::held()
+                } else {
+                    Count::absent()
+                }
+            });
+            id.step(*touch);
+            uid.step(*touch);
+        }
+        if ids
+            .values()
+            .chain(uids.values())
+            .any(|n| n.end > Len::<Slot>::ONE)
+        {
+            return None;
+        }
+        let mut change = AxisChange {
+            gone: Vec::new(),
+            added: Vec::new(),
+            kept: Kept::Same,
+        };
+        for (uid, n) in &uids {
+            let (start, end) = (n.start, n.end);
+            if start == Len::<Slot>::ONE && end == Len::<Slot>::ZERO {
+                change.gone.push(*uid);
+            } else if start == Len::<Slot>::ZERO && end == Len::<Slot>::ONE {
+                change.added.push(*uid);
+            }
+        }
+        // A line deleted, then added again by a later import, keeps its
+        // element or sits on another.
+        for (element, touch) in &touched {
+            let was = self.pos(&element.uid).and_then(|pos| self.element(pos));
+            if *touch == Touch::Added
+                && was.is_some_and(|was| was.id != element.id)
+                && ids
+                    .get(&element.id)
+                    .is_some_and(|n| n.end == Len::<Slot>::ONE)
+            {
+                change.kept = Kept::Changed;
+            }
+        }
+        let first = Pos::<Slot>::from_index(first)?;
+        Some(AxisPlan {
+            elements,
+            removed: touched
+                .iter()
+                .filter(|(e, _)| ids.get(&e.id).is_some_and(|n| n.end == Len::<Slot>::ZERO))
+                .map(|(e, _)| *e)
+                .collect(),
+            added: touched
+                .iter()
+                .filter(|(e, t)| {
+                    *t == Touch::Added && ids.get(&e.id).is_some_and(|n| n.end == Len::<Slot>::ONE)
+                })
+                .map(|(e, _)| *e)
+                .collect(),
+            first,
+            change,
+            _axis: std::marker::PhantomData,
+        })
+    }
+
+    /// Take a plan [`plan_diffs`](Self::plan_diffs) made of this view. The positions
+    /// before its first edit keep their entry, and each one after is
+    /// recorded again.
+    fn commit_diffs(&mut self, plan: AxisPlan<L>) -> Option<AxisChange> {
+        let elements = plan.elements;
+        let first = Pos::<L>::from_index(plan.first.to_usize().min(elements.len()))?;
+        for element in &plan.removed {
+            self.owner.remove(&element.id);
+            if self.at.get(&element.uid).is_some_and(|pos| *pos < first) {
+                return None;
+            }
+        }
+        // The plan holds each uid once, so each line after `first` is
+        // recorded again over its old entry, and only a gone line is dropped.
+        for uid in &plan.change.gone {
+            self.at.remove(uid);
+        }
+        for element in &plan.added {
+            self.owner.insert(element.id, element.uid);
+        }
+        self.lines = elements.iter().map(|e| e.uid).collect();
+        for (pos, uid) in self.lines.iter_enumerated().skip(first.to_usize()) {
+            self.at.insert(*uid, pos);
+        }
+        self.shown = (0..elements.len())
+            .map(Pos::<Slot>::from_index)
+            .collect::<Option<IdxVec<L, Pos<Slot>>>>()?;
+        self.elements = IdxVec::from(elements);
+        Some(plan.change)
+    }
+
     /// The view after `element` lands at the end of the list.
     fn pushed(&mut self, element: Element) {
         let fresh = !self.at.contains_key(&element.uid);
@@ -524,6 +676,160 @@ struct GrowthStep {
     element: Element,
 }
 
+/// One run of a list diff, over the slots of an axis list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SlotEdit {
+    /// Keep this many slots.
+    Retain(Len<Slot>),
+    /// Remove this many slots.
+    Delete(Len<Slot>),
+    /// Insert these elements.
+    Insert(Vec<Element>),
+}
+
+/// The runs of one list diff an import reports, its inserted values read as
+/// elements. `None` when a value is no element this build reads: only a read
+/// of the list then says what the view holds (`SCHEMA-003`).
+#[must_use]
+pub fn slot_edits(diff: &[loro::event::ListDiffItem]) -> Option<Vec<SlotEdit>> {
+    diff.iter()
+        .map(|item| match item {
+            loro::event::ListDiffItem::Retain { retain } => {
+                Some(SlotEdit::Retain(Len::<Slot>::of(*retain)))
+            }
+            loro::event::ListDiffItem::Delete { delete } => {
+                Some(SlotEdit::Delete(Len::<Slot>::of(*delete)))
+            }
+            loro::event::ListDiffItem::Insert { insert, .. } => insert
+                .iter()
+                .map(|value| match value {
+                    loro::ValueOrContainer::Value(LoroValue::String(text)) => Element::parse(text),
+                    _ => None,
+                })
+                .collect::<Option<Vec<Element>>>()
+                .map(SlotEdit::Insert),
+        })
+        .collect()
+}
+
+/// What a list diff did to one axis. It names the lines it removed and the
+/// lines it added. It says whether a line it removed and added again kept
+/// its element.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AxisChange {
+    pub gone: Vec<Uid>,
+    pub added: Vec<Uid>,
+    pub kept: Kept,
+}
+
+/// What the list diffs of one batch did to a sheet's two axes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LayoutChange {
+    pub rows: AxisChange,
+    pub cols: AxisChange,
+}
+
+impl LayoutChange {
+    /// Whether each line the diffs removed and added again kept its element.
+    #[must_use]
+    pub fn kept(&self) -> Kept {
+        if self.rows.kept == Kept::Same && self.cols.kept == Kept::Same {
+            Kept::Same
+        } else {
+            Kept::Changed
+        }
+    }
+}
+
+/// The view a list diff leaves, before it is taken.
+struct AxisPlan<L: Axis> {
+    elements: Vec<Element>,
+    /// The elements the diffs removed for good.
+    removed: Vec<Element>,
+    /// The elements the diffs added that stay.
+    added: Vec<Element>,
+    /// The first slot an edit reached: the slots before it are untouched.
+    first: Pos<Slot>,
+    change: AxisChange,
+    _axis: std::marker::PhantomData<L>,
+}
+
+/// Whether a diff removed an element from its slot or added it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Touch {
+    Removed,
+    Added,
+}
+
+/// How many elements of one id, or of one uid, a view holds before a diff
+/// and after it.
+#[derive(Debug, Clone, Copy)]
+struct Count {
+    start: Len<Slot>,
+    end: Len<Slot>,
+}
+
+impl Count {
+    /// One element before the diff.
+    fn held() -> Self {
+        Self {
+            start: Len::<Slot>::ONE,
+            end: Len::<Slot>::ONE,
+        }
+    }
+
+    /// No element before the diff.
+    fn absent() -> Self {
+        Self {
+            start: Len::<Slot>::ZERO,
+            end: Len::<Slot>::ZERO,
+        }
+    }
+
+    /// The count after one more touch. A removal never takes it below zero.
+    fn step(&mut self, touch: Touch) {
+        self.end = match touch {
+            Touch::Removed => self.end.saturating_sub(Len::<Slot>::ONE),
+            Touch::Added => self.end + Len::<Slot>::ONE,
+        };
+    }
+}
+
+/// Which line list a per-sheet container is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ListAxis {
+    /// The row order.
+    Rows,
+    /// The column order.
+    Cols,
+    /// The generation record of both axes. No cache holds it: a write that
+    /// derives a line reads it.
+    Generations,
+}
+
+/// The line list the family `root` names, or `None` for a family that holds
+/// no line. The one place outside the axis reads that a remote batch
+/// asks (`TRAME-282`).
+#[must_use]
+pub(crate) fn axis_list(root: SheetRoot) -> Option<ListAxis> {
+    match root {
+        SheetRoot::Rows => Some(ListAxis::Rows),
+        SheetRoot::Cols => Some(ListAxis::Cols),
+        SheetRoot::LineGen => Some(ListAxis::Generations),
+        _ => None,
+    }
+}
+
+ambre_core::define_flag! {
+    /// Whether each line a list diff kept sits on the element it sat on.
+    pub enum Kept {
+        /// Every kept line sits on its element.
+        Same,
+        /// A kept line now sits on another element.
+        Changed,
+    }
+}
+
 /// The rows and the columns of one sheet, each deduplicated, and the
 /// position <-> uid cache the engine reads.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -552,6 +858,42 @@ impl SheetIndex {
     #[must_use]
     pub fn cols(&self) -> &AxisView<Col> {
         &self.cols
+    }
+
+    /// Take the list diffs of each axis, derived with no read of the lists,
+    /// and answer what they changed ([`AxisView::plan_diffs`]). An axis with no
+    /// diff is kept. `None` when only a read can tell. The index is then
+    /// left as it was. A plan both axes accepted may still fail to commit,
+    /// and leave the index half edited: the caller reads the lists again.
+    pub fn apply(
+        &mut self,
+        rows: &[Vec<SlotEdit>],
+        cols: &[Vec<SlotEdit>],
+    ) -> Option<LayoutChange> {
+        let row_plan = if rows.is_empty() {
+            None
+        } else {
+            Some(self.rows.plan_diffs(rows)?)
+        };
+        let col_plan = if cols.is_empty() {
+            None
+        } else {
+            Some(self.cols.plan_diffs(cols)?)
+        };
+        let none = || AxisChange {
+            gone: Vec::new(),
+            added: Vec::new(),
+            kept: Kept::Same,
+        };
+        let rows = match row_plan {
+            Some(plan) => self.rows.commit_diffs(plan)?,
+            None => none(),
+        };
+        let cols = match col_plan {
+            Some(plan) => self.cols.commit_diffs(plan)?,
+            None => none(),
+        };
+        Some(LayoutChange { rows, cols })
     }
 
     /// Whether the build skipped a line element it could not read
