@@ -246,29 +246,6 @@ pub(crate) fn forget_dev_user() {
     }
 }
 
-/// Map a `SyncWarningCode` (the closed `ambre-bus` contract) to a user-facing
-/// notice. All are non-fatal, and all but an unreadable document correct
-/// themselves, so the wording reassures rather than alarms. Exhaustive by
-/// design: a new variant is a compile error here until it gets a message.
-pub(crate) fn sync_warning_message(code: SyncWarningCode) -> &'static str {
-    match code {
-        SyncWarningCode::QuarantineOverflow => {
-            "Syncing is catching up - some changes are taking longer to arrive."
-        }
-        SyncWarningCode::DecryptFailed => "A remote change could not be read and was skipped.",
-        SyncWarningCode::DocumentUnreadable => {
-            "Some changes were made by a different version of Ambre and cannot be shown here."
-        }
-        SyncWarningCode::LocalStoreFull => {
-            "This device is out of storage. Editing is paused until your changes are saved."
-        }
-        SyncWarningCode::UpdateRefused => "A change could not be sent: its document is not open.",
-        SyncWarningCode::EditRefused => {
-            "The server refused a change. Reopen the document before editing it again."
-        }
-    }
-}
-
 /// URL of the Sync worker's loader. Trunk builds `ambre-sync` as a separate
 /// `data-type="worker"` wasm artifact, and emits this `importScripts`-based
 /// loader. The loader is a CLASSIC worker: it calls `wasm_bindgen(...)`, which

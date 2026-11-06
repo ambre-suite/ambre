@@ -45,8 +45,6 @@ use std::rc::Rc;
 #[cfg(target_arch = "wasm32")]
 use ambre_bus::conduit::{self, Marks};
 #[cfg(target_arch = "wasm32")]
-use ambre_bus::sync_warning::SyncWarningCode;
-#[cfg(target_arch = "wasm32")]
 use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
 #[cfg(target_arch = "wasm32")]
 use ambre_chrome::{
@@ -110,7 +108,7 @@ mod route;
 #[cfg(target_arch = "wasm32")]
 mod signin;
 /// The recipient's key, compared and confirmed before a share.
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 mod tofu;
 /// The seal of the local store's rows, asked of the Sync worker.
 #[cfg(target_arch = "wasm32")]
@@ -1026,7 +1024,12 @@ pub fn main() {
     let mut last_anchor: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>> = None;
     let mut last_busy = false;
     let mut last_perf_push_ms: f64 = 0.0;
-    let mut list_requested = false;
+    // The relay's decisions, and the state they keep across frames.
+    let mut decisions = relay::Relay::new(if boot_is_murmure {
+        relay::Page::Murmure
+    } else {
+        relay::Page::Document
+    });
     let relay_tx = shell_outbox.clone();
     // A click on a notification opens its channel at its message (the
     // Murmure notifications spec). The permission is asked once per page.
@@ -1310,94 +1313,54 @@ pub fn main() {
             ) {
                 notify::deliver(notice, &notice_asked, Rc::clone(&open_noticed));
             }
-            match &ev {
-                // Non-fatal sync warnings surface as a transient warning toast.
-                // They never reach the fatal path. The session keeps running and
-                // the CRDT reconverges: a dropped/quarantined update is re-fetched
-                // via RequestMissing once its parent snapshot lands.
-                UiEvent::SyncWarning { code, .. } => toasts.warning(sync_warning_message(*code)),
-                // The relay moved to a newer wire version: syncing stays off
-                // until the page reloads onto the new client (`SYNC-137`).
-                UiEvent::UpdateRequired => toasts.warning(
-                    "A new version of Ambre is available. Reload the page to keep syncing.",
-                ),
-                // Session bootstrap (dev `?user=` or OIDC): show the user, and
-                // request the document list once for the landing overlay.
-                UiEvent::Rest {
-                    evt:
-                        ambre_bus::RestEvent::SessionReady {
-                            user_id,
-                            display_name,
-                            ..
-                        },
-                    ..
-                } => {
-                    username.set(Some(display_name.clone()));
-                    me.set(Some(*user_id));
-                    draft_keeper.signed_in(*user_id);
-                    session_seen_frame.set(true);
-                    if let Some(local) = persist_store_frame.borrow().as_ref() {
-                        local.signed_in();
+            // The relay decides what a service event calls for, and this
+            // closure applies each decision in order.
+            let shown = relay::Shown {
+                current: current_doc.get_untracked(),
+                status: chrome_status.get_untracked(),
+            };
+            for effect in decisions.service(&ev, shown, &murmure_relay) {
+                match effect {
+                    relay::Effect::Notice(notice) => toasts.push(notice.kind, notice.text),
+                    relay::Effect::Send(command) => {
+                        relay_tx.send(command);
                     }
-                    if !list_requested {
-                        list_requested = true;
-                        relay_tx.send(LogicCommand::Rest {
-                            id: ambre_bus::next_request(),
-                            cmd: RestCommand::ListDocuments,
-                        });
-                        // A Murmure page lists its channels and their activity.
-                        if boot_is_murmure {
-                            for command in ambre_murmure::chrome::MurmureRelay::boot() {
-                                relay_tx.send(command.map(AppCommand::embed));
-                            }
+                    relay::Effect::BootMurmure => {
+                        for command in ambre_murmure::chrome::MurmureRelay::boot() {
+                            relay_tx.send(command.map(AppCommand::embed));
                         }
                     }
-                }
-                // The worker ended the session and asked the relay to revoke
-                // it (`CHROME-107`). The relays above deleted the drafts
-                // (`ambre-spec-murmure-composer.md`). Once that write has landed, the page boots
-                // home afresh and holds nothing of the session (`CHROME-108`).
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::LoggedOut,
-                    ..
-                } => {
-                    let keeper = draft_keeper.clone();
-                    wasm_bindgen_futures::spawn_local(async move {
-                        keeper.written().await;
-                        signin::leave_session(|| {
+                    relay::Effect::SignedIn {
+                        user_id,
+                        display_name,
+                    } => {
+                        username.set(Some(display_name.clone()));
+                        me.set(Some(user_id));
+                        draft_keeper.signed_in(user_id);
+                        session_seen_frame.set(true);
+                        if let Some(local) = persist_store_frame.borrow().as_ref() {
+                            local.signed_in();
+                        }
+                    }
+                    relay::Effect::LeaveSession => {
+                        let keeper = draft_keeper.clone();
+                        wasm_bindgen_futures::spawn_local(async move {
+                            keeper.written().await;
+                            signin::leave_session(|| {
+                                if let Some(window) = web_sys::window() {
+                                    let _ = window.location().replace("/");
+                                }
+                            });
+                        });
+                    }
+                    relay::Effect::FollowProvider { url, state } => {
+                        signin::follow_address(url, state, |url| {
                             if let Some(window) = web_sys::window() {
-                                let _ = window.location().replace("/");
+                                let _ = window.location().set_href(url.as_str());
                             }
                         });
-                    });
-                }
-                // The provider's address: send the browser there (`CHROME-095`).
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::ProviderAddress { url, state },
-                    ..
-                } => {
-                    signin::follow_address(url, state, |url| {
-                        if let Some(window) = web_sys::window() {
-                            let _ = window.location().set_href(url.as_str());
-                        }
-                    });
-                }
-                // Signed in with the provider: the Sync worker holds the tokens,
-                // and the keys are still to open or to set up (`CHROME-096`).
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::ProviderSignedIn { keys_stored, .. },
-                    ..
-                } => {
-                    tracing::info!(
-                        "Provider sign-in done (keys stored: {})",
-                        keys_stored.as_bool()
-                    );
-                }
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::DocumentList { documents },
-                    ..
-                } => {
-                    docs.set(
+                    }
+                    relay::Effect::ShowDocuments(documents) => docs.set(
                         documents
                             .iter()
                             .map(|d| DocItem {
@@ -1408,213 +1371,29 @@ pub fn main() {
                                 member_count: d.member_count,
                             })
                             .collect(),
-                    );
-                }
-                // A document was renamed or deleted (possibly from the launcher):
-                // re-list so the card reflects the new name / disappears. Delete is
-                // also removed optimistically by the card; re-listing reconciles.
-                UiEvent::Rest {
-                    evt:
-                        ambre_bus::RestEvent::DocumentRenamed { .. }
-                        | ambre_bus::RestEvent::DocumentDeleted { .. },
-                    ..
-                } => {
-                    relay_tx.send(LogicCommand::Rest {
-                        id: ambre_bus::next_request(),
-                        cmd: RestCommand::ListDocuments,
-                    });
-                }
-                // The user left a document (`SYNC-141`), and the worker has
-                // closed it. A view still on it goes back to the launcher, and
-                // the list drops its card.
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::DocumentLeft { document_id },
-                    ..
-                } => {
-                    docs.update(|list| list.retain(|d| d.document_id != *document_id));
-                    if current_doc.get_untracked() == Some(*document_id)
-                        && let Some(window) = web_sys::window()
-                    {
-                        let _ = window.location().set_href("/");
-                    }
-                }
-                // One message for two causes, and that is the contract rather
-                // than laziness. The tag cannot tell a wrong passphrase from a
-                // modified file, and a message that named one would be a guess
-                // the user trusts (`DOCFILE-016`).
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::DocFileOpenFailed,
-                    ..
-                } => toasts.error(
-                    "That file did not open. The passphrase may be wrong, \
-                     or the file may be damaged.",
-                ),
-                // Share dialog: the current member list landed -> render it.
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::DocumentMembers { members: list, .. },
-                    ..
-                } => members.set(list.clone()),
-                // An invite succeeded: confirm and refresh the member list.
-                UiEvent::Rest {
-                    evt:
-                        ambre_bus::RestEvent::InviteSent {
-                            document_id,
-                            display_name,
-                            ..
-                        },
-                    ..
-                } => {
-                    toasts.success(format!("Invited {}", display_name.as_str()));
-                    relay_tx.send(LogicCommand::Rest {
-                        id: ambre_bus::next_request(),
-                        cmd: RestCommand::ListDocumentMembers {
-                            document_id: *document_id,
-                        },
-                    });
-                }
-                // TOFU phase 1 answer: classify the fetched key against the
-                // pinned one. Trusted (same key) -> dispatch phase 2 straight away;
-                // New (no pin) or Changed (divergence) -> raise the modal prompt.
-                UiEvent::Rest {
-                    evt:
-                        ambre_bus::RestEvent::InviteeKey {
-                            document_id,
-                            user_id,
-                            display_name,
-                            email,
-                            exchange_pub_key,
-                            fingerprint,
-                        },
-                    ..
-                } => {
-                    let prompt = TofuPrompt {
-                        purpose: tofu::Purpose::Invite {
-                            document_id: *document_id,
-                            email: email.clone(),
-                        },
-                        user_id: *user_id,
-                        display_name: Some(display_name.clone()),
-                        exchange_pub_key: *exchange_pub_key,
-                        fingerprint: fingerprint.clone(),
-                        contact: tofu::KeyContact::New,
-                    };
-                    classify_against_pin(prompt);
-                }
-                // A member chosen in the Murmure palette, or for an invite into
-                // the shown channel. Their key passes the same check before a
-                // direct message or the invite wraps a key for them.
-                UiEvent::Rest {
-                    evt:
-                        ambre_bus::RestEvent::MemberKey {
-                            user_id,
-                            exchange_pub_key,
-                            fingerprint,
-                        },
-                    ..
-                } => {
-                    let display_name = murmure_relay.member_name(*user_id);
-                    let purpose = match murmure_relay.take_invite(*user_id) {
-                        Some(channel_id) => tofu::Purpose::Channel { channel_id },
-                        None => tofu::Purpose::Direct {
-                            channel_id: Id::<ambre_core::id::Channel>::mint(),
-                        },
-                    };
-                    classify_against_pin(TofuPrompt {
-                        purpose,
-                        user_id: *user_id,
-                        display_name,
-                        exchange_pub_key: *exchange_pub_key,
-                        fingerprint: fingerprint.clone(),
-                        contact: tofu::KeyContact::New,
-                    });
-                }
-                // Revocation done (key rotation complete): confirm and refresh.
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::RevocationComplete { document_id },
-                    ..
-                } => {
-                    toasts.success("Member revoked");
-                    relay_tx.send(LogicCommand::Rest {
-                        id: ambre_bus::next_request(),
-                        cmd: RestCommand::ListDocumentMembers {
-                            document_id: *document_id,
-                        },
-                    });
-                }
-                // A role change took effect: refresh the member list.
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::MemberRoleUpdated { document_id, .. },
-                    ..
-                } => {
-                    relay_tx.send(LogicCommand::Rest {
-                        id: ambre_bus::next_request(),
-                        cmd: RestCommand::ListDocumentMembers {
-                            document_id: *document_id,
-                        },
-                    });
-                }
-                // Chrome status indicator (`-chrome.md` 2.G): mirror the active
-                // document's WebSocket link into the header label. Ignored for a
-                // non-active document (a stale push during a fast doc switch).
-                UiEvent::ConnectionStatus {
-                    document_id,
-                    connected,
-                } if current_doc.get_untracked() == Some(*document_id) => {
-                    chrome_status.update(|s| s.connected = *connected);
-                }
-                // Initial hydration finished: dismiss the loading overlay. Guarded
-                // on the active document so a late ready for a doc we already left
-                // does not clear the new doc's overlay.
-                UiEvent::DocumentReady { document_id, .. }
-                    if current_doc.get_untracked() == Some(*document_id) =>
-                {
-                    chrome_status.update(|s| s.hydrating = false);
-                }
-                // The open failed: lower the loading overlay and say why the
-                // canvas stays empty (`CHROME-104`).
-                UiEvent::DocumentOpenFailed { document_id, .. } => {
-                    let mut status = chrome_status.get_untracked();
-                    if let Some(notice) =
-                        status.open_failed(current_doc.get_untracked(), *document_id)
-                    {
-                        chrome_status.set(status);
-                        toasts.warning(notice);
-                    }
-                }
-                // A document was shared with us: refresh the landing list so it
-                // appears without a manual reload, and notify the user.
-                UiEvent::DocumentShared { .. } => {
-                    toasts.info("A document was shared with you");
-                    relay_tx.send(LogicCommand::Rest {
-                        id: ambre_bus::next_request(),
-                        cmd: RestCommand::ListDocuments,
-                    });
-                }
-                // Relayed service failures (for example unknown invitee) surface as a
-                // warning toast so the share action gives feedback.
-                UiEvent::ApiError { message, .. } => toasts.warning(message.clone()),
-                _ => {}
-            }
-            match ev {
-                // A sealed file came back open (`DOCFILE-014`): what it holds
-                // is a whole plaintext container, so the ordinary open path
-                // takes it from here. Version recovery, the type check and the
-                // local store are the same steps a plaintext file walks. The
-                // event is taken by value, so the bytes move into the
-                // container with no copy. The view reads nothing of it.
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::DocFileOpened { plaintext },
-                    ..
-                } => platform::open_plaintext_container(
-                    ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
-                        plaintext.into_plaintext(),
                     ),
-                    toasts,
-                    vault_frame.clone(),
-                ),
+                    relay::Effect::DropDocument(document_id) => {
+                        docs.update(|list| list.retain(|d| d.document_id != document_id));
+                    }
+                    relay::Effect::GoHome => {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.location().set_href("/");
+                        }
+                    }
+                    relay::Effect::ShowMembers(list) => members.set(list.to_vec()),
+                    relay::Effect::Classify(prompt) => classify_against_pin(prompt),
+                    relay::Effect::Status(status) => chrome_status.set(status),
+                }
+            }
+            match relay::destination(ev) {
+                // Version recovery, the type check and the local store are the
+                // same steps a plaintext file walks.
+                relay::Destination::OpenFile(container) => {
+                    platform::open_plaintext_container(container, toasts, vault_frame.clone());
+                }
                 // Content (and everything else) still flows to the view
                 // unchanged.
-                ev => {
+                relay::Destination::View(ev) => {
                     let _ = view_tx.try_send(ev);
                 }
             }
