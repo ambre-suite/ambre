@@ -27,6 +27,7 @@ use crate::model::{
     AxisChange, CellKey, Element, Kept, LayoutChange, LineRead, ListAxis, SlotEdit, axis_list,
     slot_edits,
 };
+use ambre_core::index::{Axis, Len};
 
 ambre_core::define_flag! {
     /// Whether the imports since the last take wrote only where the carried
@@ -564,43 +565,27 @@ impl TrameState {
 /// the columns either layout used. A column edit moves the columns the same
 /// way. A cell past both layouts is empty before and after.
 fn moved_cells(change: &LayoutChange, index: &SheetIndex) -> Vec<CellRect> {
-    // The longer of the two layouts of one axis, as a count of lines.
-    let longest = |now: usize, axis: &AxisChange| {
-        now.max(
-            now.saturating_sub(axis.added.len())
-                .saturating_add(axis.gone.len()),
-        )
-    };
-    let rows = longest(index.row_len().to_usize(), &change.rows);
-    let cols = longest(index.col_len().to_usize(), &change.cols);
+    // The longer of the two layouts of one axis.
+    fn longest<L: Axis>(now: Len<L>, axis: &AxisChange<L>) -> Len<L> {
+        now.max(now.saturating_sub(Len::<L>::of(axis.added.len())) + Len::<L>::of(axis.gone.len()))
+    }
     let (Some(last_row), Some(last_col)) = (
-        rows.checked_sub(1).and_then(Pos::<Row>::from_index),
-        cols.checked_sub(1).and_then(Pos::<Col>::from_index),
+        longest(index.row_len(), &change.rows).last(),
+        longest(index.col_len(), &change.cols).last(),
     ) else {
         return Vec::new();
     };
+    let corner = CellPos::new(last_row, last_col);
     let from_row = change
         .rows
         .first
-        .and_then(|slot| Pos::<Row>::from_index(slot.to_usize()))
         .filter(|row| *row <= last_row)
-        .map(|row| {
-            CellRect::spanning(
-                CellPos::new(row, Pos::<Col>::ZERO),
-                CellPos::new(last_row, last_col),
-            )
-        });
+        .map(|row| CellRect::spanning(CellPos::new(row, Pos::<Col>::ZERO), corner));
     let from_col = change
         .cols
         .first
-        .and_then(|slot| Pos::<Col>::from_index(slot.to_usize()))
         .filter(|col| *col <= last_col)
-        .map(|col| {
-            CellRect::spanning(
-                CellPos::new(Pos::<Row>::ZERO, col),
-                CellPos::new(last_row, last_col),
-            )
-        });
+        .map(|col| CellRect::spanning(CellPos::new(Pos::<Row>::ZERO, col), corner));
     from_row.into_iter().chain(from_col).collect()
 }
 
@@ -621,14 +606,14 @@ enum Layout {
 /// That axis held what `index` shows, less what the batch added, plus what it
 /// removed.
 fn gone_cells(change: &LayoutChange, index: &SheetIndex) -> HashSet<CellId> {
-    let before = |now: &[Uid], axis: &AxisChange| -> Vec<Uid> {
+    fn before<L: Axis>(now: &[Uid], axis: &AxisChange<L>) -> Vec<Uid> {
         let added: HashSet<&Uid> = axis.added.iter().collect();
         now.iter()
             .filter(|uid| !added.contains(uid))
             .chain(&axis.gone)
             .copied()
             .collect()
-    };
+    }
     let mut cells = HashSet::new();
     if !change.rows.gone.is_empty() {
         let cols = before(index.cols().lines().as_slice(), &change.cols);
