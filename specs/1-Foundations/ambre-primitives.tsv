@@ -17,7 +17,6 @@ ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::render_fatal(mes
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::sync_children() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children() | ret | bool	generic	a fact, selects no mode: whether the board must recomposite
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children(pump) | param | impl FnMut(&mut C)->bool	generic	a fact, selects no mode: whether the pumped child changed on its own
-ambre-app | src/host/frame.rs | crate::host::frame | send_faces() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::drags_text() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text(text) | param | String	free-text	dropped text
@@ -64,6 +63,8 @@ ambre-app | src/local_store.rs | crate::local_store | Inner.frames | field | Cel
 ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32	math	frame count
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
+ambre-app | src/outbox.rs | crate::outbox | ShellOutbox::is_busy() | ret | bool	generic	predicate result
+ambre-app | src/outbox.rs | crate::outbox | ShellOutbox::take_refusal() | ret | bool	generic	predicate result, whether a refusal is still untold
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
