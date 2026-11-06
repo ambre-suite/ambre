@@ -43,7 +43,9 @@ ambre-prose     = { path = "../ambre-prose" }
 # (`features/ambre-spec-murmure-engine.md`).
 ambre-murmure   = { path = "../ambre-murmure" }
 # The image a Murmure message carries, decoded off the render thread for its
-# preview, animated GIF included (the Murmure attachments spec).
+# preview, animated GIF included (the Murmure attachments spec). Host tests also
+# craft a tiny PNG with it to drive a real Toile media import through the
+# dispatcher (service-plane routing, `toile-media`).
 image           = { workspace = true, features = ["gif"] }
 
 # Fixture-only, host-only. `ambre-crypto` supplies `hash::chain_hash` for
@@ -108,9 +110,6 @@ serde = { workspace = true }
 # `Seq::nth` for a test that names a count. Test builds alone, held by
 # `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
 ambre-core = { path = "../ambre-core", features = ["testing"] }
-# Host tests craft a tiny PNG to drive a real Toile media import through the
-# dispatcher (service-plane routing, `toile-media`).
-image = { workspace = true }
 # The geometry the Toile commands of the dispatch belt carry
 # (`ambre-spec-toile-schema.md`).
 kurbo = { workspace = true }

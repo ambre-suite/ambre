@@ -42,11 +42,11 @@ const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was remov
 /// (`TOILE-UI-160`).
 #[cfg(any(test, target_arch = "wasm32"))]
 const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
-use ambre_bus::{Inbox, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
+use ambre_bus::{Inbox, Load, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
 use ambre_canvas::{
-    BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint, NoticePublisher,
-    PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
-    ThemeControl, WHEEL_LINE, WheelDelta,
+    BusyLevel, BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
+    NoticePublisher, PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput,
+    Theme, ThemeControl, WHEEL_LINE, WheelDelta,
 };
 use ambre_core::{Board, Css, Px, Vector, View};
 use ambre_draw::kinetic::{Release, ScrollStep};
@@ -145,6 +145,15 @@ const WHEEL_ZOOM_RATE: WheelZoomRate = WheelZoomRate(0.0018);
 /// a discrete mouse notch rather than a fine trackpad glide. This is the auto
 /// heuristic's mouse threshold (`toile-tools`).
 const WHEEL_MOUSE_NOTCH: Px<Css> = Px::<Css>::new(40.0);
+
+/// The busy level the renderer shows for an outbox load (`BUS-016`). The
+/// renderer knows no thread protocol, so the view converts the load here.
+fn busy_level(load: Load) -> BusyLevel {
+    match load {
+        Load::Free => BusyLevel::Free,
+        Load::Busy => BusyLevel::Busy,
+    }
+}
 
 /// A point of the canvas, as the shared kinetic model reads it.
 fn view_point(screen: Point) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
@@ -1057,7 +1066,7 @@ impl ToileView {
             self.signal_fatal("Logic thread disconnected");
             return;
         }
-        if self.busy_pub.publish(self.outbox.load()) && !self.outbox.is_busy() {
+        if self.busy_pub.publish(busy_level(self.outbox.load())) && !self.outbox.is_busy() {
             tracing::info!("Toile: the UI->Logic channel cleared, input resumes");
         }
     }

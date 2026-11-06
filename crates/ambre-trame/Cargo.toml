@@ -81,17 +81,14 @@ proptest = { workspace = true }
 
 # Leptos UI tests (Epic `ET`, `ambre-spec-testing.md`): the chrome is
 # `cfg(target_arch = "wasm32")` (leptos CSR + DOM), so its tests run under the
-# wasm target in headless Chrome (`just test-wasm`). These
-# dev-deps let the integration test name the chrome's public types directly
-# (ambre-bus events, the leptos signals, ambre-chrome stores, the perf snapshot).
+# wasm target in headless Chrome (`just test-wasm`). The integration test names
+# the chrome's public types directly (ambre-bus events, the leptos signals,
+# ambre-chrome stores, the perf snapshot): the runtime tables above already
+# declare those four crates for the wasm target, so no line here repeats them.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 # Awaits a browser task, such as the `close` event a dialog queues.
 wasm-bindgen-futures = { workspace = true }
-leptos       = { workspace = true }
-ambre-bus    = { path = "../ambre-bus" }
-ambre-chrome = { path = "../ambre-chrome" }
-ambre-canvas = { path = "../ambre-canvas" }
 
 # Guards the walk of the "Trame structural edit" row by a count of instructions under
 # callgrind, which `scripts/instructions.py` reads (`just instructions`).

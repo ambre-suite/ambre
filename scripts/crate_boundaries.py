@@ -421,6 +421,10 @@ SYNC_UNREACHABLE = RENDER_OR_TOOLKIT + (
     "ambre-draw", "ambre-crdt", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure",
     "ambre-logic",
 )
+# What the renderer may not reach: the protocol between the threads. A test
+# build counts, so the dev tables are read too (`ARCH-071`).
+CANVAS_MANIFEST = "crates/ambre-canvas/Cargo.toml"
+CANVAS_UNREACHABLE = ("ambre-bus",)
 PATH_DEP = re.compile(r'^([\w-]+)\s*=\s*\{[^}]*\bpath\s*=\s*"\.\./([\w-]+)"', re.MULTILINE)
 
 # The wire types, and what the worker may not name.
@@ -1436,6 +1440,39 @@ def check_thread_reach(errors: list[str]) -> int:
     return len(closure) + 1
 
 
+def all_dependencies(manifest: str) -> set[str]:
+    """The names every dependency table of the manifest declares, dev and target tables included."""
+    names: set[str] = set()
+    table = ""
+    for line in manifest.splitlines():
+        header = re.match(r"^\s*\[([^\]]+)\]", line)
+        if header:
+            table = header.group(1)
+            continue
+        if table.endswith("dependencies"):
+            entry = re.match(r"^\s*([\w-]+)\s*=", line)
+            if entry:
+                names.add(entry.group(1))
+    return names
+
+
+def check_renderer_reach(errors: list[str]) -> int:
+    """`ARCH-071`: the renderer reaches no protocol between the threads."""
+    canvas = read(CANVAS_MANIFEST)
+    if not canvas:
+        errors.append(f"{CANVAS_MANIFEST}: gone from the tree, so the renderer reach is unread")
+        return 0
+    for name in sorted(all_dependencies(canvas) & set(CANVAS_UNREACHABLE)):
+        errors.append(f"{CANVAS_MANIFEST}: the renderer declares `{name}`")
+    closure = path_closure("ambre-canvas") - {"ambre-canvas"}
+    for crate in sorted(closure):
+        manifest = f"{CRATES}/{crate}/Cargo.toml"
+        # The crate that declares the edge is named, never the crate it reaches.
+        for name in sorted(manifest_dependencies(read(manifest)) & set(CANVAS_UNREACHABLE)):
+            errors.append(f"{manifest}: the renderer reaches `{name}` through `{crate}`")
+    return len(closure) + 1
+
+
 def check_worker_messages(errors: list[str]) -> int:
     """`ARCH-006`, `BUS-004`, `BUS-021`: one wire type, no worker id, no app message."""
     wire = {name for path in sources((PROTOCOL,)) for name in TYPE_DECL.findall(path.read_text())}
@@ -2129,6 +2166,7 @@ def main() -> int:
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
     reach = check_thread_reach(errors)
+    renderer_reach = check_renderer_reach(errors)
     worker_messages = check_worker_messages(errors)
     engine = check_engine_and_relay(errors)
     handlers = check_handlers(errors)
@@ -2172,6 +2210,7 @@ def main() -> int:
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "
+        f"{renderer_reach} manifests read for the renderer reaching the thread protocol, "
         f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
         f"{engine} launcher files read for a second engine or a relay out of the frame, "
         f"{handlers} engine files read for a handler that sends on a queue, "
@@ -2211,7 +2250,8 @@ def main() -> int:
             "and its text adapter and a closed set its enum, a fixture "
             "benchmark reports no frame rate, the page "
             "loads two instances and shares no worker, neither the Logic runtime "
-            "nor the worker reaches the rendering, and the worker redeclares no "
+            "nor the worker reaches the rendering, the renderer reaches no thread "
+            "protocol, and the worker redeclares no "
             "wire type, allocates no request id and names no app message. The launcher "
             "starts one engine, and every frame relays before it draws. A command "
             "handler returns an outcome and names no queue. A panic and a failed "

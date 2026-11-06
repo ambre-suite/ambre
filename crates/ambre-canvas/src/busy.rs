@@ -9,14 +9,27 @@
 // the view restates it every frame and the chrome reads it without consuming it,
 // like `AnchorPublisher` and unlike the one-shot `FilterOpenPublisher`.
 //
-// Pure value plumbing (an `Rc<Cell<Load>>`) that compiles on every target,
-// reaches no UI framework, and stays `!Send` on the UI thread.
+// Pure value plumbing (an `Rc<Cell<BusyLevel>>`) that compiles on every
+// target, reaches no UI framework, and stays `!Send` on the UI thread.
+//
+// The level is a type of this crate, not the outbox's `ambre_bus::Load`. The
+// renderer knows no thread protocol (`ARCH-071`). So the view that owns the
+// outbox converts its load into a `BusyLevel` before it publishes.
 // ============================================================================
 
 use std::cell::Cell;
 use std::rc::Rc;
 
-use ambre_bus::Load;
+/// Whether a view can take more input (`BUS-016`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BusyLevel {
+    /// The view takes input.
+    #[default]
+    Free,
+    /// The view refuses input: its outbox holds a command the Logic thread
+    /// has not taken.
+    Busy,
+}
 
 /// The level signal a view uses to say it cannot take more input.
 ///
@@ -25,7 +38,7 @@ use ambre_bus::Load;
 /// `Rc<Cell>`).
 #[derive(Clone, Default)]
 pub struct BusyPublisher {
-    slot: Rc<Cell<Load>>,
+    slot: Rc<Cell<BusyLevel>>,
 }
 
 impl BusyPublisher {
@@ -35,13 +48,13 @@ impl BusyPublisher {
 
     /// State the current level. Returns `true` when the level changed, so the
     /// chrome raises one notice per episode instead of one per frame.
-    pub fn publish(&self, load: Load) -> bool {
-        self.slot.replace(load) != load
+    pub fn publish(&self, level: BusyLevel) -> bool {
+        self.slot.replace(level) != level
     }
 
     /// Whether the view is refusing input right now.
     pub fn is_busy(&self) -> bool {
-        self.slot.get() == Load::Busy
+        self.slot.get() == BusyLevel::Busy
     }
 }
 
@@ -53,10 +66,10 @@ mod tests {
     fn only_the_first_frame_of_an_episode_reports_a_change() {
         let busy = BusyPublisher::new();
         assert!(!busy.is_busy());
-        assert!(busy.publish(Load::Busy));
-        assert!(!busy.publish(Load::Busy));
+        assert!(busy.publish(BusyLevel::Busy));
+        assert!(!busy.publish(BusyLevel::Busy));
         assert!(busy.is_busy());
-        assert!(busy.publish(Load::Free));
-        assert!(!busy.publish(Load::Free));
+        assert!(busy.publish(BusyLevel::Free));
+        assert!(!busy.publish(BusyLevel::Free));
     }
 }
