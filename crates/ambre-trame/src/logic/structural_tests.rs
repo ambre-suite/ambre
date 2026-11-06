@@ -362,3 +362,128 @@ proptest! {
         }
     }
 }
+
+/// Run `before`, a remote write of `text` at `row`, `col`, an undo, then
+/// `edit`, on a carried state and on the reference model. The undo removes
+/// the line `before` added. The remote formula then stays stored under an
+/// element no line carries any more. It places on no cell, and the engine
+/// holds nothing of it. The two must still store the same text after `edit`.
+fn orphan_then(before: TrameCommand, row: u32, col: u32, text: &str, edit: &[TrameCommand]) {
+    let mut carried = seeded(StructuralPath::Carry);
+    let mut rebuilt = seeded(StructuralPath::Reseed);
+    for st in [&mut carried, &mut rebuilt] {
+        st.handle_command(before.clone());
+    }
+    let mut peer = TrameState::with_peer(ambre_core::PeerId::new(PEER + 1));
+    peer.import_snapshot(&carried.export_snapshot())
+        .expect("a snapshot this build wrote reads back");
+    let delta = peer
+        .handle_command(write(row, col, text))
+        .update
+        .expect("a write sends a delta");
+    for st in [&mut carried, &mut rebuilt] {
+        st.apply_remote(&delta);
+        st.handle_command(TrameCommand::Undo);
+    }
+    assert_eq!(
+        stored(&carried),
+        stored(&rebuilt),
+        "the undo leaves both alike"
+    );
+    for command in edit {
+        carried.handle_command(command.clone());
+        rebuilt.handle_command(command.clone());
+    }
+    assert_eq!(
+        stored(&carried),
+        stored(&rebuilt),
+        "the walk reads the stored formula"
+    );
+}
+
+/// The shrunk seed of `a_carried_engine_equals_a_full_rebuild`: a formula
+/// left under a column an undo removed, then a row insert (`TRAME-280`).
+#[test]
+fn a_row_insert_rewrites_a_formula_left_under_a_removed_column() {
+    orphan_then(
+        TrameCommand::InsertColumn {
+            at: Pos::<Col>::new(2),
+        },
+        0,
+        2,
+        "=A3-C1",
+        &[TrameCommand::InsertRow {
+            at: Pos::<Row>::new(0),
+        }],
+    );
+}
+
+/// A formula left under a row an undo removed, then a column insert.
+#[test]
+fn a_column_insert_rewrites_a_formula_left_under_a_removed_row() {
+    orphan_then(
+        TrameCommand::InsertRow {
+            at: Pos::<Row>::new(1),
+        },
+        1,
+        0,
+        "=B2+A1",
+        &[TrameCommand::InsertColumn {
+            at: Pos::<Col>::new(0),
+        }],
+    );
+}
+
+/// A formula left under a row an undo removed, then a move.
+#[test]
+fn a_move_rewrites_a_formula_left_under_a_removed_row() {
+    orphan_then(
+        TrameCommand::InsertRow {
+            at: Pos::<Row>::new(1),
+        },
+        1,
+        0,
+        "=B2+A1",
+        &[TrameCommand::MoveRow {
+            from: Pos::<Row>::new(0),
+            to: Pos::<Row>::new(2),
+        }],
+    );
+}
+
+/// A formula left under a row an undo removed, then a sort.
+#[test]
+fn a_sort_rewrites_a_formula_left_under_a_removed_row() {
+    orphan_then(
+        TrameCommand::InsertRow {
+            at: Pos::<Row>::new(1),
+        },
+        1,
+        0,
+        "=B2+A1",
+        &[TrameCommand::SortRange {
+            sheet_id: super::default_sheet(),
+            rect: CellRect::spanning(at(0, 0), at(ROWS - 1, COLS - 1)),
+            sort_col: Len::<Col>::new(0),
+            order: SortOrder::Descending,
+            header: HeaderRow::Absent,
+        }],
+    );
+}
+
+/// A formula left under a column an undo removed, then a delete of another
+/// column.
+#[test]
+fn a_column_delete_rewrites_a_formula_left_under_a_removed_column() {
+    orphan_then(
+        TrameCommand::InsertColumn {
+            at: Pos::<Col>::new(2),
+        },
+        0,
+        2,
+        "=A3-C1",
+        &[TrameCommand::DeleteColumn {
+            at: Pos::<Col>::new(0),
+        }],
+    );
+}

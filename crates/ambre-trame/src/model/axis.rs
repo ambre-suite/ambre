@@ -384,9 +384,15 @@ impl<L: Axis> AxisView<L> {
         {
             return None;
         }
+        let removed: Vec<Element> = touched
+            .iter()
+            .filter(|(e, _)| ids.get(&e.id).is_some_and(|n| n.end == Len::<Slot>::ZERO))
+            .map(|(e, _)| *e)
+            .collect();
         let mut change = AxisChange {
             gone: Vec::new(),
             added: Vec::new(),
+            removed: removed.clone(),
             kept: Kept::Same,
         };
         for (uid, n) in &uids {
@@ -413,11 +419,7 @@ impl<L: Axis> AxisView<L> {
         let first = Pos::<Slot>::from_index(first)?;
         Some(AxisPlan {
             elements,
-            removed: touched
-                .iter()
-                .filter(|(e, _)| ids.get(&e.id).is_some_and(|n| n.end == Len::<Slot>::ZERO))
-                .map(|(e, _)| *e)
-                .collect(),
+            removed,
             added: touched
                 .iter()
                 .filter(|(e, t)| {
@@ -719,6 +721,9 @@ pub fn slot_edits(diff: &[loro::event::ListDiffItem]) -> Option<Vec<SlotEdit>> {
 pub struct AxisChange {
     pub gone: Vec<Uid>,
     pub added: Vec<Uid>,
+    /// The elements the diffs removed for good. A key under one of them
+    /// places on no cell any more.
+    pub removed: Vec<Element>,
     pub kept: Kept,
 }
 
@@ -883,6 +888,7 @@ impl SheetIndex {
         let none = || AxisChange {
             gone: Vec::new(),
             added: Vec::new(),
+            removed: Vec::new(),
             kept: Kept::Same,
         };
         let rows = match row_plan {

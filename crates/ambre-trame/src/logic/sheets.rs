@@ -44,6 +44,7 @@ impl TrameState {
         // skipped.
         let indices = self.engine_indices();
         self.engine_skipped = false;
+        self.unplaced.clear();
         let sheets: Vec<(Id<Sheet>, Pos<EngineSheet>)> = self
             .sheets_by_idx
             .iter()
@@ -66,6 +67,15 @@ impl TrameState {
             // *every* sheet. A cross-sheet reference to it converges regardless of
             // the active tab (`trame-cell-merges`). For the active sheet this
             // equals `self.masked_cells`.
+            let unplaced: HashSet<crate::model::CellKey> = cells
+                .iter()
+                .filter(|(key, value)| index.place(key).is_none() && is_formula(value))
+                .filter_map(|(key, _)| parse_cell_key(key))
+                .map(|(row, col)| crate::model::CellKey::of(row, col))
+                .collect();
+            if !unplaced.is_empty() {
+                self.unplaced.insert(sheet_id.clone(), unplaced);
+            }
             let masked = self.masked_cells_for(&sheet_id, index);
             // Feed the cells in stable key order. The map iterates in hash order,
             // and the feed order decides which cell of a cycle gets rejected. A
@@ -803,4 +813,9 @@ pub(super) fn sheet_ids_exhausted() -> TrameEvent {
         message: "this session has no fresh sheet id; reopen the document to add a sheet"
             .to_owned(),
     }
+}
+
+/// Whether a stored cell value is a formula: text that opens on `=`.
+pub(super) fn is_formula(value: &LoroValue) -> bool {
+    matches!(value, LoroValue::String(text) if text.starts_with('='))
 }

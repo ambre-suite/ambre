@@ -4163,3 +4163,4 @@ ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::r
 ambre-trame | src/logic/remote.rs | crate::logic::remote | TrameState::carries() | ret | bool	generic	predicate: whether the engine may carry a remote batch
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::engine_holds_a_skip() | ret | bool	generic	predicate: whether the engine holds what no dependency names
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::parse(name) | param | &str	foreign-api	a root container name as Loro reports it
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | is_formula() | ret | bool	generic	predicate: whether a stored cell value is a formula

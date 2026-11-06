@@ -18,11 +18,13 @@ use ambre_core::id::{Id, Sheet};
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, EventTriggerKind, LoroDoc, Subscription};
 
+use super::sheets::is_formula;
 use super::*;
 use crate::formula::ACTIVE_SHEET;
 use crate::formula::text::{CellText, StoredForm};
 use crate::model::{
-    AxisChange, CellKey, Kept, LayoutChange, LineRead, ListAxis, SlotEdit, axis_list, slot_edits,
+    AxisChange, CellKey, Element, Kept, LayoutChange, LineRead, ListAxis, SlotEdit, axis_list,
+    slot_edits,
 };
 
 ambre_core::define_flag! {
@@ -205,6 +207,10 @@ struct RemoteStep {
     written: Vec<(CellId, CellText<StoredForm>)>,
     /// The layout after the batch of every sheet but the active one.
     others: HashMap<Pos<EngineSheet>, SheetIndex>,
+    /// The stored keys whose formula now places on no cell, by sheet.
+    orphaned: Vec<(Id<Sheet>, CellKey)>,
+    /// The stored keys that no longer hold a formula placing on no cell.
+    placed: Vec<(Id<Sheet>, CellKey)>,
 }
 
 impl TrameState {
@@ -331,6 +337,8 @@ impl TrameState {
         };
         let removed = change.map_or_else(HashSet::new, |change| gone_cells(change, &self.index));
         let mut written: HashMap<CellId, CellText<StoredForm>> = HashMap::new();
+        let mut orphaned = Vec::new();
+        let mut placed = Vec::new();
         for (sheet, keys) in &imported.cells {
             // A sheet the strip does not carry is fed by no reseed either.
             let Some(&at_sheet) = self.engine_sheet_by_id.get(sheet) else {
@@ -344,16 +352,50 @@ impl TrameState {
                 .doc
                 .get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str());
             for key in keys {
-                // A key whose line is gone reads nowhere.
+                // A key whose line is gone reads nowhere, and a structural
+                // edit still walks its formula (`TRAME-280`).
                 let Some((at, _)) = index.place(key.as_str()) else {
+                    let entry = (sheet.clone(), key.clone());
+                    if map
+                        .get(key.as_str())
+                        .is_some_and(|value| is_formula(&value.get_deep_value()))
+                    {
+                        orphaned.push(entry);
+                    } else {
+                        placed.push(entry);
+                    }
                     continue;
                 };
+                placed.push((sheet.clone(), key.clone()));
                 let (row, col) = index.resolve(at)?;
                 let text = shown_text(&map, index, at)?;
                 written.insert(CellId::bound(at_sheet, row, col), text);
             }
         }
         if let Some(change) = change {
+            let active = &self.active_sheet;
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, active).as_str());
+            // A line back on its element places its keys again.
+            if let Some(keys) = self.unplaced.get(active) {
+                placed.extend(
+                    keys.iter()
+                        .filter(|key| self.index.place(key.as_str()).is_some())
+                        .map(|key| (active.clone(), key.clone())),
+                );
+            }
+            // A key under a removed element that the batch names nowhere,
+            // as one a peer wrote while the line went, places on no cell.
+            orphaned.extend(
+                left_under(change, &self.index)
+                    .into_iter()
+                    .filter(|key| {
+                        map.get(key.as_str())
+                            .is_some_and(|value| is_formula(&value.get_deep_value()))
+                    })
+                    .map(|key| (active.clone(), key)),
+            );
             // An undo of a delete brings a line back on its own element. A key
             // written under it while it was gone reads again, and the batch
             // names no such key. So each cell an added line crosses is read.
@@ -379,7 +421,11 @@ impl TrameState {
         let mut reread = Vec::new();
         if change.is_some() {
             for cell in self.engine.structural_reach(&removed) {
-                if written.contains_key(&cell) {
+                // A cell the batch also wrote may hold the text it compiled
+                // from, over lines the batch moved or removed. It compiles
+                // again all the same, from the text it now shows.
+                if let Some(text) = written.remove(&cell) {
+                    reread.push((cell, text));
                     continue;
                 }
                 let Some(index) = index_of(cell.sheet) else {
@@ -405,6 +451,8 @@ impl TrameState {
             reread,
             written: written.into_iter().collect(),
             others,
+            orphaned,
+            placed,
         })
     }
 
@@ -430,6 +478,15 @@ impl TrameState {
     /// meets a cycle reseeds after all, so the feed order decides which cell
     /// of it is refused.
     fn carry_remote(&mut self, step: RemoteStep) {
+        for (sheet, key) in &step.placed {
+            if let Some(keys) = self.unplaced.get_mut(sheet) {
+                keys.remove(key);
+            }
+        }
+        for (sheet, key) in step.orphaned {
+            self.unplaced.entry(sheet).or_default().insert(key);
+        }
+        self.unplaced.retain(|_, keys| !keys.is_empty());
         let mut indices = step.others;
         indices.insert(ACTIVE_SHEET, std::mem::take(&mut self.index));
         let ctx = TrameCtx {
@@ -518,6 +575,38 @@ fn added_cells(change: &LayoutChange, index: &SheetIndex) -> Vec<CellId> {
         );
     }
     cells
+}
+
+/// The keys a cell under an element `change` removed may sit under. Each
+/// removed element of one axis meets each element of the other, live or
+/// removed by the same batch.
+fn left_under(change: &LayoutChange, index: &SheetIndex) -> Vec<CellKey> {
+    let mut keys = Vec::new();
+    // Each side is listed only when the other axis lost an element. A list
+    // of every row costs one read per row of the sheet.
+    if !change.rows.removed.is_empty() {
+        let cols: Vec<Element> = index
+            .cols()
+            .lines()
+            .iter_enumerated()
+            .flat_map(|(pos, _)| index.cols().elements_at(pos))
+            .chain(change.cols.removed.iter().copied())
+            .collect();
+        for &row in &change.rows.removed {
+            keys.extend(cols.iter().map(|&col| CellKey::of(row, col)));
+        }
+    }
+    if !change.cols.removed.is_empty() {
+        let rows = index
+            .rows()
+            .lines()
+            .iter_enumerated()
+            .flat_map(|(pos, _)| index.rows().elements_at(pos));
+        for row in rows {
+            keys.extend(change.cols.removed.iter().map(|&col| CellKey::of(row, col)));
+        }
+    }
+    keys
 }
 
 /// The text the cell at `at` shows: what its one stored key holds, or the

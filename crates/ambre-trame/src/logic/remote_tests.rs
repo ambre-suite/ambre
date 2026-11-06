@@ -244,6 +244,20 @@ fn opened(
     st
 }
 
+/// The stored formulas that place on no cell, in a stable order.
+fn unplaced(st: &TrameState) -> Vec<String> {
+    let mut keys: Vec<String> = st
+        .unplaced
+        .iter()
+        .flat_map(|(sheet, keys)| {
+            keys.iter()
+                .map(move |key| format!("{sheet}:{}", key.as_str()))
+        })
+        .collect();
+    keys.sort();
+    keys
+}
+
 /// The formulas that read positions, in a stable order.
 fn positional(st: &TrameState) -> Vec<String> {
     let mut cells: Vec<String> = st
@@ -317,6 +331,12 @@ fn agree(carried: &TrameState, rebuilt: &TrameState, step: &Step) -> Result<(), 
         positional(carried),
         positional(rebuilt),
         "the positional set differs after {:?}",
+        step
+    );
+    prop_assert_eq!(
+        unplaced(carried),
+        unplaced(rebuilt),
+        "the unplaced formulas differ after {:?}",
         step
     );
     Ok(())
@@ -576,4 +596,129 @@ fn an_undone_remote_delete_brings_back_a_value_written_on_the_gone_row() {
         .expect("an undo sends a delta");
     receiver.apply_remote_batch(&[undo]);
     assert_eq!(shown(&receiver, last, 2).as_deref(), Some("5"));
+}
+
+/// A peer undoes a row insert and deletes a row in one batch. The batch writes
+/// a formula of the other sheet with the text it already held, over a row the
+/// batch removed. The formula compiles again all the same, and reads `#REF!`
+/// as a reseed has it (`TRAME-282`).
+#[test]
+fn a_formula_written_with_its_own_text_over_a_removed_row_compiles_again() {
+    use Edit::{DeleteRow, InsertRow, Undo};
+    let program = [
+        Step::Author {
+            who: 1,
+            edit: InsertRow { at: 0 },
+        },
+        Step::Switch,
+        Step::Deliver { who: 1, n: 1 },
+        Step::Switch,
+        Step::Author { who: 1, edit: Undo },
+        Step::Author {
+            who: 1,
+            edit: DeleteRow { at: 1 },
+        },
+        Step::Deliver { who: 1, n: 2 },
+    ];
+    let held = run(&program);
+    assert!(held.is_ok(), "{held:?}");
+}
+
+/// The receiver writes a cell twice, and a peer adds the column of that cell
+/// on an element of its own in between. The second write lands under the
+/// column's visible element, so the cell sits under two keys. The engine is
+/// marked as a reseed marks it, and a later batch carries that mark
+/// (`TRAME-282`).
+#[test]
+fn a_local_write_under_a_second_key_marks_the_engine_as_a_reseed_does() {
+    use Edit::Write;
+    let program = [
+        Step::Local {
+            edit: Write {
+                row: 2,
+                col: 2,
+                text: "0".to_owned(),
+            },
+        },
+        Step::Author {
+            who: 1,
+            edit: Write {
+                row: 0,
+                col: 2,
+                text: "=A1".to_owned(),
+            },
+        },
+        Step::Deliver { who: 1, n: 1 },
+        Step::Local {
+            edit: Write {
+                row: 2,
+                col: 2,
+                text: "0".to_owned(),
+            },
+        },
+        Step::Author {
+            who: 0,
+            edit: Write {
+                row: 0,
+                col: 0,
+                text: "2".to_owned(),
+            },
+        },
+        Step::Deliver { who: 0, n: 1 },
+    ];
+    let held = run(&program);
+    assert!(held.is_ok(), "{held:?}");
+}
+
+/// A peer deletes a column while another writes a formula into a new row of
+/// it. The formula then places on no cell. The receiver deletes that row, and
+/// its purge takes the formula with it, so no later walk reads it
+/// (`TRAME-280`, `TRAME-282`).
+#[test]
+fn a_purge_drops_a_formula_left_under_a_removed_column() {
+    use Edit::{DeleteColumn, DeleteRow, Sort, Write, WriteBelow};
+    let program = [
+        Step::Author {
+            who: 0,
+            edit: Sort {
+                order: SortOrder::Descending,
+            },
+        },
+        Step::Author {
+            who: 1,
+            edit: WriteBelow {
+                col: 1,
+                text: "=A1+B2".to_owned(),
+            },
+        },
+        Step::Author {
+            who: 0,
+            edit: DeleteColumn { at: 1 },
+        },
+        Step::Deliver { who: 1, n: 1 },
+        Step::Author {
+            who: 0,
+            edit: Write {
+                row: 4,
+                col: 0,
+                text: "0".to_owned(),
+            },
+        },
+        Step::Deliver { who: 0, n: 1 },
+        Step::Deliver { who: 0, n: 2 },
+        Step::Local {
+            edit: DeleteRow { at: 5 },
+        },
+        Step::Author {
+            who: 1,
+            edit: Write {
+                row: 0,
+                col: 0,
+                text: "=C2+1".to_owned(),
+            },
+        },
+        Step::Deliver { who: 1, n: 1 },
+    ];
+    let held = run(&program);
+    assert!(held.is_ok(), "{held:?}");
 }

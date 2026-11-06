@@ -206,6 +206,11 @@ pub struct TrameState {
     /// any sheet, or one shown under a second key (`TRAME-279`). A structural
     /// edit then reseeds, since no dependency names such a cell (`TRAME-280`).
     engine_skipped: bool,
+    /// The stored formulas that place on no cell, per sheet. Each one sits
+    /// under an element no line carries any more, as an undo of an insert
+    /// leaves one. No reseed feeds them, so the engine names none of them, and the
+    /// narrowed walk of a structural edit reads them here (`TRAME-280`).
+    unplaced: HashMap<Id<Sheet>, HashSet<crate::model::CellKey>>,
     /// The path a structural edit takes. Only the test of `TRAME-280` sets the
     /// reference model, which walks every formula and reseeds.
     #[cfg(test)]
@@ -434,6 +439,7 @@ impl TrameState {
             hidden_rows: HashSet::new(),
             masked_cells: HashSet::new(),
             engine_skipped: false,
+            unplaced: HashMap::new(),
             #[cfg(test)]
             structural_path: structural::StructuralPath::Carry,
             #[cfg(test)]

@@ -8,3 +8,4 @@ cc 5c2e5cbe3782513b5d25b0f8c0104dd2b4c992601ff6654551dd422491cfd6cd # shrinks to
 cc dbe4eca73c67732ea2229218ed3413711a4626a4f70cedf1f5259c7778ca5c67 # shrinks to program = [DeleteColumn { at: 0 }]
 cc a64310d654346b4186fca1d1fabdf2e34b2a3688a5d371aa76c129aa51725c07 # shrinks to program = [Write { row: 0, col: 1, text: "=A1+B2" }, DeleteRow { at: 1 }, Remote { row: 0, col: 2, text: "=SUM(B2:C4)" }, Write { row: 1, col: 0, text: "=SUM(TOTAL)" }, InsertColumn { at: 2 }]
 cc 3b6f857a31e834254b6fca3f4a81b6eac29b83ffee8f23e57f343c464f5c3f6e # shrinks to program = [Remote { row: 0, col: 0, text: "=C2+1" }]
+cc bbff86519a621d788aec63cccc447f2a39f8e881c95a3569facb4028cd03714f # shrinks to program = [InsertColumn { at: 2 }, Remote { row: 0, col: 2, text: "=A3-C1" }, Undo, InsertRow { at: 0 }]
