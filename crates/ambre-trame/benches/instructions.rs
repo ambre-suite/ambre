@@ -9,8 +9,9 @@
 //! its own name. They are the re-anchor walk and the engine step after the
 //! commit. The
 //! rest of the delete falls outside the count: the purge, the commit, and the
-//! caches of positions, merges, styles and sizes. Run with no operation named,
-//! as `cargo bench` does, every operation runs once: a smoke test.
+//! caches of positions, merges, styles and sizes. A remote batch is counted
+//! whole, from the import to the events. Run with no operation named, as
+//! `cargo bench` does, every operation runs once: a smoke test.
 
 use ambre_core::index::{Len, Pos};
 use ambre_trame::logic::TrameState;
@@ -84,12 +85,71 @@ fn checked(st: &mut TrameState) {
     assert!(computed, "the last formula computes");
 }
 
+/// The batch a peer receives from the author of `sheet()`: one cell edit,
+/// then one row delete. The edit writes a number into the column the
+/// formulas read, so one formula recomputes.
+fn remote_batch(author: &mut TrameState) -> Vec<ambre_core::Payload<ambre_core::DeltaBytes>> {
+    let edit = author.handle_command(TrameCommand::SetCellText {
+        row: Pos::<Row>::new(FORMULAS / 4),
+        col: Pos::<Col>::new(0),
+        text: "7".to_owned(),
+    });
+    let delete = author.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(FORMULAS / 2),
+    });
+    [edit.update, delete.update].into_iter().flatten().collect()
+}
+
+/// Apply the batch on the peer: the import, every cache and the events.
+#[inline(never)]
+fn ambre_budget_trame_remote_batch(
+    st: &mut TrameState,
+    batch: &[ambre_core::Payload<ambre_core::DeltaBytes>],
+) {
+    black_box(st.apply_remote_batch(batch));
+}
+
+/// Whether the cell of column B on `row` shows `want`.
+fn shows(st: &mut TrameState, row: u32, want: &str) -> bool {
+    let out = st.handle_command(TrameCommand::ScrollViewport {
+        version: ambre_core::Seq::nth(u64::MAX),
+        row_start: Pos::<Row>::new(row),
+        row_end: Pos::<Row>::new(row),
+        col_start: Pos::<Col>::new(1),
+        col_end: Pos::<Col>::new(1),
+    });
+    out.display.iter().any(|e| match e {
+        TrameEvent::ViewportData { cells, .. } => cells.iter().any(|c| c.text == want),
+        _ => false,
+    })
+}
+
+/// The peer shows the edit, and the rows below the delete moved up one.
+fn checked_after_batch(st: &mut TrameState) {
+    assert!(shows(st, FORMULAS / 4, "14"), "the edited cell recomputes");
+    let last = (2 * (FORMULAS - 1)).to_string();
+    assert!(shows(st, FORMULAS - 2, &last), "the last row moved up one");
+}
+
 /// Each operation the script may name, with the function that runs it.
-const OPERATIONS: &[(&str, fn())] = &[("structural_edit", || {
-    let mut st = sheet();
-    checked(&mut st);
-    ambre_budget_trame_structural_edit(&mut st);
-})];
+const OPERATIONS: &[(&str, fn())] = &[
+    ("structural_edit", || {
+        let mut st = sheet();
+        checked(&mut st);
+        ambre_budget_trame_structural_edit(&mut st);
+    }),
+    ("remote_batch", || {
+        let mut author = sheet();
+        let mut peer = TrameState::new();
+        let opened = peer.import_snapshot(&author.export_snapshot());
+        assert!(opened.is_ok(), "a snapshot this build wrote reads back");
+        checked(&mut peer);
+        let batch = remote_batch(&mut author);
+        assert_eq!(batch.len(), 2, "the edit and the delete each send a delta");
+        ambre_budget_trame_remote_batch(&mut peer, &batch);
+        checked_after_batch(&mut peer);
+    }),
+];
 
 fn main() {
     // `cargo bench` passes flags such as `--bench`; only a bare word names an
