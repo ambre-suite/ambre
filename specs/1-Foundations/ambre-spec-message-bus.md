@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE CLIENT MESSAGE BUS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the planes, the envelopes, the role gate, the two outboxes and
-the lossy gate ship. The lossy class coalesces by habit and no test drives the
+**Implementation:** partial -- the planes, the envelopes, the role gate, the outboxes on one
+lane and the lossy gate ship. The lossy class coalesces by habit and no test drives the
 coalescing.
 
 > The contract the three threads talk over. It fixes what a message may carry, who allocates its
@@ -29,8 +29,9 @@ prefix is `BUS`.
 | `BUS-032` | `INV` | An application's content commands and events MUST be declared in that application's crate, never in the crate that carries the envelopes. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-018` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a command or event enum of `ambre-bus` other than the four envelopes and the service family, above its tests; type-level -- `LogicCommand` and `UiEvent` take the document command and event as a parameter and the channel types through a `ChannelPlane`, so the bus names none of an application's | none | verified |
 | `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | exhaustive-match -- `LogicCommand::Channel` carries the `Murmure` plane's `MurmureCommand`, a closed enum matched in `ambre_logic::channels::handle_channel_command`, so a new command does not build until its arm is written; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` | none | verified |
 | `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | type-level -- `LogicCommand::Channel` and `UiEvent::Channel` hold the typed `MurmureCommand` and `MurmureEvent` of the `Murmure` plane, and no `SyncCommand` or `LogicEvent` variant names a channel message: a channel delta is the `SendUpdate` of its document | none | verified |
-| `BUS-033` | `INV` | A view MUST write to the Logic thread through its outbox alone. | this spec section 2; `BUS-011` | type-level -- `Port` keeps `try_send` private to `ambre-bus` and implements no `Clone`, so a view moves its one port into one `Outbox`. The outbox's `send` and `send_lossy` are the two sends a view can name. The launcher builds each view's port from its own outbox and keeps no queue sender to hand a view (`BUS-035`) | none | verified |
+| `BUS-033` | `INV` | A view MUST write to the Logic thread through its outbox alone. | this spec section 2; `BUS-011` | type-level -- `Port` keeps its sends private to `ambre-bus` and implements no `Clone`, so a view moves its one port into one `Outbox`. The outbox's `send` and `send_lossy` are the two sends a view can name. The launcher builds each view's port from its own outbox and keeps no queue sender to hand a view (`BUS-035`) | none | verified |
 | `BUS-035` | `INV` | A launcher sender that owns no frame MUST write to the Logic thread through the launcher's one outbox. | this spec section 2; `BUS-011` | type-level -- the raw end of the UI to Logic queue moves into `ShellOutbox::new` where it is made, so the compiler refuses a later use of it; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses above its tests a launcher file other than `outbox.rs` that names a raw sender of that queue or builds a port over one; `ambre_app::outbox::tests::two_senders_on_a_full_queue_hold_their_commands_in_call_order` -- wasm tier: two clones share one hold queue and its order | none | verified |
+| `BUS-037` | `INV` | A command MUST NOT reach the Logic thread before an older command that any outbox on its queue holds. | this spec section 2; `BUS-005`, `BUS-011` | `ambre_bus::outbox::tests::a_close_never_overtakes_an_edit_another_outbox_holds` -- a view holds an edit and the launcher's close joins the lane behind it; `::an_edit_never_overtakes_a_command_the_launcher_holds`; `::two_outboxes_on_one_lane_share_its_hold_bound`; `ambre_bus::lossy::tests::a_lossy_request_never_overtakes_a_held_command`; type-level -- a `Port` holds through a `Lane`, and `Lane::port` and `Port::direct` are its only constructors; ci-gate -- `scripts/crate_boundaries.py` refuses above its tests a launcher file other than `outbox.rs` that builds a lane, and the raw sender moves into the one `ShellOutbox::new` that builds the queue's lane (`BUS-035`) | none | verified |
 
 ### 1.2 The interface sends a command
 
@@ -87,7 +88,7 @@ is what a full queue means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 36 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
+* **Verification.** 37 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
   viewer's edit, a child's role. They also drive a service round trip, a late response, the lossy
   gate and a full queue. Native views drive the input gate, the re-offer and the refused commit. A
   gate refuses a handler that sends on a queue, and the browser tier reads the busy notice.
@@ -196,12 +197,25 @@ re-offers a dropped request (`BUS-024`).
 relay, the local store and the vault send commands no view owns. None of them has a frame, so they
 share one `ShellOutbox` over one `Outbox`, and their commands leave in call order (`BUS-035`).
 
+**Every outbox on one queue holds through one lane.** A `Lane` is the hold queue of the UI to Logic
+queue, and each port holds through it. So a view's outbox and the launcher's keep one order, the
+order of the calls (`BUS-037`). A close sent after an edit joins the lane behind that edit. The
+Logic thread then applies the edit before the document leaves its registry (`BUS-005`).
+
+* **The busy signal is shared.** A command any sender holds makes every outbox on the lane busy,
+  since the queue is full for each of them alike (`BUS-016`).
+* **The bound is shared.** The lane refuses past its bound, whichever sender fills it (`BUS-018`).
+* **Any flush drains the lane.** The relay's flush sends a view's held edit too, oldest first.
+* **A lossy request never passes a held command.** It drops while the lane holds anything, and the
+  next frame offers it again (`BUS-024`).
+
 The relay flushes it before anything newer leaves, on every frame and on a hidden page's timer
 (`ambre-spec-frame.md`, `CANVAS-075`). A held command raises the busy notice (`BUS-016`). A refusal
 raises a notice once (`BUS-036`), and a shell control reads the outcome before it changes its state.
 
-The raw end of the queue moves into that outbox where it is made, and the views take their ports
-from it. A Leptos `StoredValue` with local storage carries it across the router's `Send` boundary.
+The raw end of the queue moves into that outbox where it is made, which builds the queue's one
+lane. The views take their ports from that lane. A Leptos `StoredValue` with local storage carries
+it across the router's `Send` boundary.
 Every call runs on the main thread, so no lock guards it (`ARCH-020`).
 
 The worker hop is not this queue, so the Logic to Sync drain and the Sync backlog need no outbox.
@@ -217,6 +231,16 @@ lossless too, since nothing would offer it again.
 | Toile | the viewport fetch, the media fetch, the presence beat |
 | Prose | the marks query, the word count |
 | Murmure | the tick, the typing beat |
+
+Two requests that change nothing stay lossless, because no sender offers them again:
+
+| Application | Request | Why it stays lossless |
+|---|---|---|
+| Toile | the selection aggregates | the view records the request as asked before it leaves: the selection the band last asked for, a pending fit, a pending focus |
+| Prose | the caret sample | no sender exists yet (`ambre-spec-presence.md`), so nothing offers a lost sample again |
+
+The other read-only requests of Trame and Toile answer one user action each, so they stay lossless
+for the same reason.
 
 **The Sync events are lossless too.** A delta or a service answer arrives through the worker's
 `postMessage` handler on the Main thread, which may not wait for room (`ambre-spec-architecture.md`,
@@ -272,6 +296,8 @@ The bus has no control of its own. What a user meets is what it does under load.
 | A view's own command is embedded into the sum on the one UI to Logic queue | one queue per application into the Logic thread, each typed by that application's command | the launcher's own commands and a view's commands would travel on two queues, and nothing would order them. A close sent after an edit could overtake it, which is the loss `ARCH-019` forbids |
 | The launcher's senders share one outbox, flushed by the relay | one outbox per launcher sender | two hold queues on one queue reorder it: a route change held in one would leave after an edit held in the other, and the close could overtake its edit |
 | The launcher's senders share one outbox, flushed by the relay | an outbox shared through a mutex, so that it crosses the router's boundary | the Main thread takes no lock on a queue it shares with the Logic thread (`ARCH-020`). Every call runs on that one thread, so thread-local storage costs nothing and waits on nothing |
+| Every outbox on one queue holds through one lane | a close that waits until the view's outbox is empty, the launcher flushing the view first or holding the close back while the view is busy | the launcher reaches no view's outbox, and the level the view publishes lags an input that arrives between frames. It also orders the close alone: an edit could still overtake a held open |
+| Every outbox on one queue holds through one lane | the Logic thread keeping an edit for a document that is closing, instead of dropping it | Logic cannot tell a late edit from one sent to a document never opened, so `BUS-005` would turn into a tombstone per closed document. An edit applied after the close would also reach no view |
 | The launcher's senders share one outbox, flushed by the relay | each sender flushing on a timer of its own | a timer per sender is one more clock to drive, and the relay already runs on every frame and on a hidden page's timer |
 | Nothing is encoded between the UI and the Logic threads | one encoding for every hop, so that all four queues look alike | that path carries scroll and typing, where latency is the whole budget, and the two threads share one heap. Encoding it would buy isolation the crate graph already gives |
 | The envelopes group by direction, the content plane by application | grouping every type by direction, including the per-application value types | a document type's command and its event share the whole value vocabulary, so splitting them by direction scatters each application over two modules. An envelope belongs to one hop, which is why direction is the right axis for it and the wrong one below it |
@@ -280,12 +306,10 @@ The bus has no control of its own. What a user meets is what it does under load.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **A view's outbox and the launcher's outbox hold apart.** Each keeps its own order, and nothing
-  orders the two. A close can thus overtake an edit the view still holds, and `BUS-005` drops that
-  edit. A busy view takes no input, which narrows the window. No rule yet orders the two outboxes.
-* **The hold queue has a bound, and past it the command is refused.** Sixty-four commands, after
-  which the outbox reports a refusal rather than growing without limit. The input gate closes on the
-  first held command, so reaching the bound takes a saturation no test has produced.
+* **The lane has a bound, and past it the command is refused.** Sixty-four commands across every
+  outbox on the queue, after which the outbox reports a refusal rather than growing without limit.
+  The input gate closes on the first held command, so reaching the bound takes a saturation no test
+  has produced.
 * **A channel is not a document, so it has its own content variant.** `AppCommand` is addressed to
   one document, and a channel is several (`MURMURE-021`). `LogicCommand::Channel` carries its
   commands through the `Murmure` plane, and a channel delta leaves as the `SendUpdate` of the

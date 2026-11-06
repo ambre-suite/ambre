@@ -18,13 +18,13 @@
 // (`ARCH-020`).
 //
 // The raw sender of the queue lives here and nowhere else in the launcher.
-// The views take their ports from it, and nothing else of the launcher can
-// name the queue (`BUS-035`).
+// It moves into the queue's one lane, and the views take their ports from that
+// lane. So a view and the launcher hold in one order (`BUS-035`, `BUS-037`).
 // ============================================================================
 
 use ambre_bus::conduit::Sender;
 use ambre_bus::{
-    ChannelPlane, Embed, LossyOutcome, Outbox, PlaneOf, Port, SendOutcome, is_lossy_class,
+    ChannelPlane, Embed, Lane, LossyOutcome, Outbox, PlaneOf, Port, SendOutcome, is_lossy_class,
 };
 use ambre_logic::app::{AppCommand, LogicCommand};
 use ambre_murmure::message::Murmure;
@@ -39,8 +39,10 @@ enum Refusal {
     Untold,
 }
 
-/// The outbox and the refusal the relay still owes the user.
+/// The queue's one lane, the launcher's outbox on it, and the refusal the
+/// relay still owes the user.
 struct Hold {
+    lane: Lane<AppCommand, Murmure>,
     outbox: Outbox<AppCommand, Murmure>,
     refusal: Refusal,
 }
@@ -52,44 +54,46 @@ struct Hold {
 #[derive(Clone)]
 pub(crate) struct ShellOutbox {
     hold: StoredValue<Hold, LocalStorage>,
-    /// The queue's raw end, kept for the views' ports alone.
-    to_logic: Sender<LogicCommand>,
 }
 
 impl ShellOutbox {
     /// The outbox over `to_logic`, the one sender of the UI to Logic queue
-    /// the launcher keeps.
+    /// the launcher keeps. The queue's one lane is made here (`BUS-037`).
     pub(crate) fn new(to_logic: Sender<LogicCommand>) -> Self {
-        Self::with_outbox(Outbox::new(Port::direct(to_logic.clone())), to_logic)
+        Self::with_lane(Lane::new(to_logic))
     }
 
     /// The outbox with an explicit hold bound, so a test reaches the refusal
     /// without sixty-four commands.
     #[cfg(test)]
     pub(crate) fn with_capacity(to_logic: Sender<LogicCommand>, capacity: usize) -> Self {
-        Self::with_outbox(
-            Outbox::with_capacity(Port::direct(to_logic.clone()), capacity),
-            to_logic,
-        )
+        Self::with_lane(Lane::with_capacity(to_logic, capacity))
     }
 
-    fn with_outbox(outbox: Outbox<AppCommand, Murmure>, to_logic: Sender<LogicCommand>) -> Self {
+    fn with_lane(lane: Lane<AppCommand, Murmure>) -> Self {
+        let outbox = Outbox::new(lane.port());
         Self {
             hold: StoredValue::new_local(Hold {
+                lane,
                 outbox,
                 refusal: Refusal::Told,
             }),
-            to_logic,
         }
     }
 
-    /// A port over the same queue, for one view's own outbox (`BUS-033`).
-    pub(crate) fn port<A: 'static, P: ChannelPlane + 'static>(&self) -> Port<A, P>
+    /// A port over the same lane, for one view's own outbox (`BUS-033`).
+    ///
+    /// The view holds through the launcher's lane, so a close the launcher
+    /// sends never overtakes an edit the view holds (`BUS-037`). Once the
+    /// page drops the lane, the port carries nothing.
+    pub(crate) fn port<A: 'static, P: ChannelPlane + PlaneOf<P> + 'static>(&self) -> Port<A, P>
     where
         AppCommand: Embed<A>,
         Murmure: PlaneOf<P>,
     {
-        Port::embedded(self.to_logic.clone())
+        self.hold
+            .try_with_value(|hold| hold.lane.port())
+            .unwrap_or_else(Port::closed)
     }
 
     /// Send one lossless command, or hold it for the relay to flush.

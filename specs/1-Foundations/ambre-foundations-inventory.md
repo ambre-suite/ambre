@@ -26,7 +26,7 @@
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 18 |  |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 35 |  |
-| `message-bus` | The contract the three threads talk over. | implemented | 36 |  |
+| `message-bus` | The contract the three threads talk over. | implemented | 37 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 28 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 21 partial, 5 design-only. 1176 contract rows, 11 loose.**
+**46 features: 20 implemented, 21 partial, 5 design-only. 1177 contract rows, 11 loose.**

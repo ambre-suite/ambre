@@ -125,8 +125,8 @@ def scratch(tmp: str) -> Path:
     write(
         root,
         cb.SHELL_OUTBOX,
-        "pub(crate) struct ShellOutbox { to_logic: Sender<LogicCommand> }\n"
-        "fn port() { Port::embedded(self.to_logic.clone()) }\n",
+        "pub(crate) struct ShellOutbox { hold: StoredValue<Hold, LocalStorage> }\n"
+        "fn new(to_logic: Sender<LogicCommand>) -> Self { Self::with_lane(Lane::new(to_logic)) }\n",
     )
     write(root, cb.FRAME_HOST, "fn go() { drive_frame(&raf_c, &mut pre_frame, render); }\n")
     write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
@@ -879,6 +879,8 @@ class CrateBoundaries(unittest.TestCase):
             "struct W { to_logic: ambre_bus::conduit::Sender<LogicCommand> }\n",
             "fn view() { let p = Port::embedded(tx); }\n",
             "fn rig() { let p = ambre_bus::Port::direct(tx); }\n",
+            "fn second() { let lane = ambre_bus::Lane::new(tx); }\n",
+            "fn bound() { let lane = Lane::with_capacity(tx, 4); }\n",
         ):
             errors = self.breach(f"{cb.LAUNCHER}/landing.rs", line)
             self.assertTrue(any("writes past its outbox" in e for e in errors), (line, errors))

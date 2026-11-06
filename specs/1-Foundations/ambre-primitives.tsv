@@ -324,7 +324,7 @@ ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::SeqKind>::NAME 
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | is_lossy_class() | ret | bool	generic	predicate
 ambre-bus | src/outbox.rs | crate::outbox | HOLD_CAPACITY | const | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/outbox.rs | crate::outbox | Outbox.capacity | field | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Held.capacity | field | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
@@ -4139,8 +4139,11 @@ ambre-trame | src/message/command.rs | crate::message::command | <TrameCommand a
 ambre-bus | src/content.rs | crate::content | Mutation::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/content.rs | crate::content | <Infallible as Mutation>::is_mutating() | ret | bool	generic	predicate, never called: no value of the type exists
 ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | <Held<S,Q> as Queue<A,P>>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Queue::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/port.rs | crate::port | Port<A,P>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::is_busy() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/outbox.rs | crate::outbox | Lane<S,Q>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-logic | src/app.rs | crate::app | <AppCommand as Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | lossy() | ret | bool	generic	predicate
 ambre-murmure | src/message/mod.rs | crate::message | <MurmureCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
