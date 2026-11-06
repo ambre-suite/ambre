@@ -93,13 +93,31 @@ class Verdict(unittest.TestCase):
 
 class Ceilings(unittest.TestCase):
     def test_each_operation_is_counted_in_a_function_of_its_own(self) -> None:
-        symbols = [c.symbol for c in instructions.CEILINGS]
+        symbols = [s for c in instructions.CEILINGS for s in (c.symbol, *c.also)]
         self.assertEqual(len(symbols), len(set(symbols)))
-        for c in instructions.CEILINGS:
+        for s in symbols:
             self.assertFalse(
-                any(c.symbol != o and c.symbol in o for o in symbols),
-                f"`*{c.symbol}*` also matches another operation's function",
+                any(s != o and s in o for o in symbols),
+                f"`*{s}*` also matches another counted function",
             )
+
+
+class Toggles(unittest.TestCase):
+    def test_each_counted_function_is_a_toggle(self) -> None:
+        two = instructions.Ceiling(
+            crate="c",
+            bench="b",
+            operation="op",
+            symbol="walk",
+            row="a row",
+            ceiling=1000,
+            also=("step",),
+        )
+        self.assertEqual(
+            instructions.toggles(two),
+            ["--toggle-collect=*walk*", "--toggle-collect=*step*"],
+        )
+        self.assertEqual(instructions.toggles(CEILING), ["--toggle-collect=*sym*"])
 
 
 if __name__ == "__main__":
