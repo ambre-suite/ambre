@@ -210,8 +210,8 @@ pub use span::{
     Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
 };
 pub use static_key::{
-    Attributes, Canvases, Categories, CommandNames, Commands, CssClasses, Icons, KeyKind,
-    StaticKey, StorageKeys,
+    AssetPaths, Attributes, Canvases, Categories, CommandNames, Commands, CssClasses, Icons,
+    KeyKind, StaticKey, StorageKeys,
 };
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusWord,

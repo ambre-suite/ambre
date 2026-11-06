@@ -448,6 +448,7 @@ dependencies = [
  "ambre-core",
  "ambre-crdt",
  "ambre-draw",
+ "blake2",
  "csv",
  "icondata",
  "js-sys",

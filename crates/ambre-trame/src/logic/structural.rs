@@ -8,7 +8,7 @@
 use super::*;
 use crate::formula::SheetQualifier;
 use crate::formula::identity::{self, AxisEdit, LineEdit};
-use crate::model::{delete_line, insert_line, move_line};
+use crate::model::{Axes, Removed};
 use ambre_core::index::{Len, Pos};
 
 impl TrameState {
@@ -47,17 +47,21 @@ impl TrameState {
                 let Some(body) = text.strip_prefix('=') else {
                     continue;
                 };
-                // Another sheet's formula reads this one only through a qualifier.
-                if sheet != active && !body.contains('#') {
+                // Another sheet's formula reads this one only through a
+                // qualifier.
+                if sheet != active && !may_qualify(body) {
                     continue;
                 }
                 let Ok(ast) = parse_formula(body) else {
                     continue;
                 };
-                let before = render::render(&ast);
-                let after = identity::reanchor(ast, &edited, &self.index, &new, edit);
+                // Most formulas name no line the edit moves: those render and
+                // write nothing.
+                let Some(after) = identity::reanchor(ast, &edited, &self.index, &new, edit) else {
+                    continue;
+                };
                 let after = render::render(&after);
-                if after != before {
+                if after != body {
                     let _ = map.insert(key, format!("={after}").as_str());
                     rewritten = true;
                 }
@@ -79,7 +83,7 @@ impl TrameState {
         let Some(uid) = self.mint_uid() else {
             return TrameOutcome::display_only(vec![super::cells::ids_exhausted()]);
         };
-        if insert_line(&self.line_list::<L>(), at, &uid).is_none() {
+        if self.axes().insert(at, uid).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
         self.reanchor_formulas(L::edit(LineEdit::Insert { at, n: Len::ONE }));
@@ -112,14 +116,9 @@ impl TrameState {
         outcome
     }
 
-    /// The list that orders the lines of axis `P` on the active sheet.
-    fn line_list<L: SheetLine>(&self) -> loro::LoroMovableList {
-        let root = match L::AXIS {
-            Axis::Row => SheetRoot::Rows,
-            Axis::Col => SheetRoot::Cols,
-        };
-        self.doc
-            .get_movable_list(SheetContainer::of(root, &self.active_sheet).as_str())
+    /// The axes of the active sheet, the one door to its line order.
+    pub(super) fn axes(&self) -> Axes<'_> {
+        Axes::of(&self.doc, &self.active_sheet)
     }
 
     /// Remove the row/column at grid position `at` and purge what it carried,
@@ -127,10 +126,10 @@ impl TrameState {
     /// virtual and nothing was removed, else whether the active filter went
     /// with it.
     fn remove_line<L: SheetLine>(&mut self, at: Pos<L>) -> Option<bool> {
-        // A virtual line has nothing materialized to remove.
-        let removed = L::uid(&self.index, at)?;
-        delete_line(&self.line_list::<L>(), at)?;
-        Some(self.purge_axis(removed, L::AXIS))
+        // A virtual line has nothing materialized to remove. Every element of
+        // the line goes, the hidden ones too (`TRAME-269`).
+        let removed = self.axes().delete(at)?;
+        Some(self.purge_axis(&removed, L::AXIS))
     }
 
     /// Move the row/column at grid position `from` to grid position `to`
@@ -145,7 +144,7 @@ impl TrameState {
         if from == to || from >= end || to >= end {
             return TrameOutcome::display_only(vec![]);
         }
-        if move_line(&self.line_list::<L>(), from, to).is_none() {
+        if self.axes().move_line(from, to).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
         let rewritten = self.reanchor_formulas(L::edit(LineEdit::Reorder));
@@ -253,7 +252,7 @@ impl TrameState {
     /// row/column id, so a deleted line leaves no orphan entries behind.
     /// `true` when the removed column carried the active filter, which went
     /// with it.
-    pub(super) fn purge_axis(&mut self, removed: Uid, axis: Axis) -> bool {
+    pub(super) fn purge_axis(&mut self, removed: &Removed, axis: Axis) -> bool {
         for root in [SheetRoot::Cells, SheetRoot::CellStyle] {
             let map = self
                 .doc
@@ -264,9 +263,12 @@ impl TrameState {
             let stale: Vec<String> = entries
                 .keys()
                 .filter(|k| {
-                    parse_cell_key(k).is_some_and(|(rl, cl)| match axis {
-                        Axis::Row => rl == removed,
-                        Axis::Col => cl == removed,
+                    parse_cell_key(k).is_some_and(|(rl, cl)| {
+                        let element = match axis {
+                            Axis::Row => rl,
+                            Axis::Col => cl,
+                        };
+                        removed.elements.contains(&element)
                     })
                 })
                 .cloned()
@@ -279,17 +281,19 @@ impl TrameState {
         let filter_dropped = matches!(axis, Axis::Col)
             && self
                 .load_active_filter()
-                .is_some_and(|(col, _)| col == removed);
+                .is_some_and(|(col, _)| col == removed.uid);
         if filter_dropped {
             self.drop_filter();
         }
+        // The generations recorded after the line go with it.
+        self.axes().purge_record(&removed.uid);
         // The line's own formatting is keyed by its uid alone: its size, and
         // for a row its filter mark (`TRAME-082`).
         let line_maps = match axis {
             Axis::Row => vec![SheetRoot::RowHeights, SheetRoot::FilterHidden],
             Axis::Col => vec![SheetRoot::ColWidths],
         };
-        let key = removed.to_key_part();
+        let key = removed.uid.to_key_part();
         for root in line_maps {
             let map = self
                 .doc
@@ -326,5 +330,31 @@ impl TrameState {
             update,
             ephemeral: None,
         }
+    }
+}
+
+/// Whether a stored formula body may name another sheet. Every qualifier ends
+/// on `!`, and the element separator `#` of a derived reference is no
+/// qualifier. A formula of another sheet that cites its own lines alone is
+/// then never parsed by a structural edit of this one.
+fn may_qualify(body: &str) -> bool {
+    body.contains('!')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::may_qualify;
+
+    /// A derived reference carries `#`, and a qualifier `!`: only the second
+    /// sends a formula of another sheet through the walk.
+    #[test]
+    fn only_a_qualifier_sends_another_sheets_formula_through_the_walk() {
+        assert!(
+            !may_qualify("{a1_2#b3_4|c5_6#d7_8}*2"),
+            "an element separator"
+        );
+        assert!(!may_qualify("SUM({a1_2|c5_6}:{a1_3|c5_6})"));
+        assert!(may_qualify("#s1_2!{a1_2#b3_4|c5_6}+1"), "an id qualifier");
+        assert!(may_qualify("'My Sheet'!A1"), "a name qualifier");
     }
 }

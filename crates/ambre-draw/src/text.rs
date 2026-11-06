@@ -14,7 +14,7 @@
 // from one still waiting for a face.
 // ============================================================================
 
-use ambre_core::{Flags, FlagsKind, FontFamily};
+use ambre_core::{AssetPaths, Flags, FlagsKind, FontFamily, StaticKey};
 
 /// One of the families the application ships (`PROSE-108`, `CANVAS-017`).
 ///
@@ -149,13 +149,13 @@ impl LazyFont {
     /// The files live under `crates/ambre-app/fonts/` and Trunk copies them to
     /// `dist/fonts/`. A missing file leaves tofu rather than failing a boot.
     #[must_use]
-    pub fn asset_url(self) -> &'static str {
-        match self {
+    pub fn asset_url(self) -> StaticKey<AssetPaths> {
+        StaticKey::new(match self {
             LazyFont::Cjk => "/fonts/NotoSansSC-Regular.otf",
             LazyFont::Arabic => "/fonts/NotoSansArabic-Regular.ttf",
             LazyFont::Devanagari => "/fonts/NotoSansDevanagari-Regular.ttf",
             LazyFont::Emoji => "/fonts/NotoColorEmoji.ttf",
-        }
+        })
     }
 
     /// The set that holds this script alone: its bit in a set of
