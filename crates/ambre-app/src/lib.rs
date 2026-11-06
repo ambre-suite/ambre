@@ -26,58 +26,94 @@
 // keyboard shortcut, context menu -- produces the SAME `StaticKey<Commands>` ->
 // `LogicCommand`, targeting the currently routed document (`current_doc`).
 //
-// Compiles ONLY on wasm32 targets (depends on web_sys, wgpu, leptos).
+// Compiles ONLY on wasm32 targets (depends on web_sys, wgpu, leptos), save
+// the decisions of the per-frame relay (`relay`). The host builds those for
+// their tests, with the few items they read.
 // ============================================================================
 
-#![cfg(target_arch = "wasm32")]
-
+#[cfg(target_arch = "wasm32")]
 use ambre_chrome::commands::Keymap;
+#[cfg(target_arch = "wasm32")]
 use ambre_core::id::Sheet;
+#[cfg(target_arch = "wasm32")]
 use ambre_core::{Commands, StaticKey};
+#[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+#[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
 
-use ambre_bus::conduit::{self, ChannelSlots, Marks};
+#[cfg(target_arch = "wasm32")]
+use ambre_bus::conduit::{self, Marks};
+#[cfg(target_arch = "wasm32")]
 use ambre_bus::sync_warning::SyncWarningCode;
+#[cfg(target_arch = "wasm32")]
 use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
+#[cfg(target_arch = "wasm32")]
 use ambre_chrome::{
     AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
     Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar,
 };
+#[cfg(target_arch = "wasm32")]
 use ambre_core::id::{Document, Frame, Id, User};
+#[cfg(target_arch = "wasm32")]
 use ambre_core::{Board, Doc, Scale, View};
+#[cfg(target_arch = "wasm32")]
 use ambre_logic::app::{AppCommand, LogicCommand, UiEvent};
+#[cfg(target_arch = "wasm32")]
 use ambre_toile::message::{Broadcast, PresentMode, SlidePosition};
+#[cfg(target_arch = "wasm32")]
 use ambre_trame::message::SheetTab;
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
+#[cfg(target_arch = "wasm32")]
 use ambre_toile::chrome as toile_chrome;
+#[cfg(target_arch = "wasm32")]
 use ambre_toile::ui::ToileView;
+#[cfg(target_arch = "wasm32")]
 use ambre_trame::chrome as trame_chrome;
+#[cfg(target_arch = "wasm32")]
 use ambre_trame::render::FormulaAction;
+#[cfg(target_arch = "wasm32")]
 use ambre_trame::ui::TrameView;
+#[cfg(target_arch = "wasm32")]
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use leptos_icons::Icon;
+#[cfg(target_arch = "wasm32")]
 use leptos_router::components::Router;
+#[cfg(target_arch = "wasm32")]
 use leptos_router::hooks::use_location;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
 mod host;
+#[cfg(target_arch = "wasm32")]
 mod landing;
 /// The local store the Main thread drives, within its budget (`RESID-002`).
+#[cfg(target_arch = "wasm32")]
 mod local_store;
 /// The system notifications of an open tab.
+#[cfg(target_arch = "wasm32")]
 mod notify;
 /// The launcher's one writer on the UI to Logic queue (`BUS-035`).
+#[cfg(target_arch = "wasm32")]
 mod outbox;
+/// What the per-frame relay decides, testable on the host.
+#[cfg(any(target_arch = "wasm32", test))]
+mod relay;
+#[cfg(target_arch = "wasm32")]
 mod route;
+#[cfg(target_arch = "wasm32")]
 mod signin;
 /// The recipient's key, compared and confirmed before a share.
+#[cfg(target_arch = "wasm32")]
 mod tofu;
 /// The seal of the local store's rows, asked of the Sync worker.
+#[cfg(target_arch = "wasm32")]
 mod vault;
 
 // The crate's unit tests (pure helpers in `route`/`host`) run under headless
@@ -85,11 +121,15 @@ mod vault;
 // the runner skips any test binary not configured for the browser -- declare
 // it once here for the whole lib-test.
 #[cfg(test)]
+#[cfg(target_arch = "wasm32")]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
+#[cfg(target_arch = "wasm32")]
 use host::{AppView, ClipboardPaste, DocSwitcher};
 
+#[cfg(target_arch = "wasm32")]
 use landing::{DocItem, LandingSignals};
+#[cfg(target_arch = "wasm32")]
 use tofu::TofuPrompt;
 
 /// Capacity of every inter-thread queue.
@@ -98,14 +138,16 @@ use tofu::TofuPrompt;
 /// it. The hot viewport path is coalesced to <=1 send/frame on the UI side
 /// (see `TrameView`). It exists purely as a safety bound so a momentarily-slow
 /// consumer cannot grow an unbounded queue in the shared heap.
-const CHANNEL_CAPACITY: ambre_core::Bounded<ChannelSlots> =
-    ambre_core::Bounded::<ChannelSlots>::of::<1024>();
+#[cfg(any(target_arch = "wasm32", test))]
+const CHANNEL_CAPACITY: ambre_core::Bounded<ambre_bus::conduit::ChannelSlots> =
+    ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1024>();
 
 /// Sync events held past a full channel. At the high mark, four channels'
 /// worth, the worker stops reading the relay. At the low mark, one channel's
 /// worth, it starts again (`ambre-spec-budgets.md section 6`, `SYNC-059`).
 /// The match runs at compile time. A low mark that is not below the high one
 /// is thus a build error.
+#[cfg(target_arch = "wasm32")]
 const SYNC_INBOX_MARKS: Marks = match Marks::new(
     conduit::backlog(CHANNEL_CAPACITY, 4),
     conduit::backlog(CHANNEL_CAPACITY, 1),
@@ -114,126 +156,11 @@ const SYNC_INBOX_MARKS: Marks = match Marks::new(
     None => panic!("the inbox marks are a pair"),
 };
 
-/// The child fan-out registry: every live view of a nested document, by
-/// document. A list rather than a slot -- two embeds of one document are two
-/// views (`TOILE-UI-097`).
-///
-/// Written out at its uses, the type fails `clippy::type_complexity`.
-type ChildRoutes = Rc<RefCell<HashMap<Id<Document>, Vec<ambre_bus::conduit::Sender<UiEvent>>>>>;
-
-/// What a child's queue could not take yet, oldest first, by document
-/// (`TOILE-UI-340`).
-///
-/// Written out at its uses, the type fails `clippy::type_complexity`.
-type ChildBacklog = Rc<RefCell<HashMap<Id<Document>, VecDeque<UiEvent>>>>;
-
 /// A handle the shell mount fills and the imperative wiring reads back.
+#[cfg(target_arch = "wasm32")]
 type Slot<T> = Rc<RefCell<Option<T>>>;
 
-/// How many events may wait for one child before the oldest are dropped.
-///
-/// A child is pumped once per frame, so a backlog only forms on a burst larger
-/// than the queue itself. Past this the client is saturated for good and no
-/// amount of memory fixes it. The real answer is the busy signal `BUS-016`
-/// prescribes, which lands with its own Story. Until then the bound is what
-/// keeps a stalled child from growing without limit, and it says so out loud.
-// A `u32` widens into a `usize` on every target the workspace builds.
-const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY.get() as usize;
-
-/// Hand `ev` to every live view of `id`, deferring what a full queue refuses
-/// (`TOILE-UI-340`).
-///
-/// The old path dropped it: a `Full` fell through the disconnected test and then
-/// past the `continue`. The event reached neither the child nor the board. It is
-/// a CRDT delta, so the child's view then sat behind its own document until
-/// something else redrew it from scratch.
-///
-/// A document with anything already waiting takes the new event straight to the
-/// back of its queue. A child must not see a later delta before an earlier one.
-fn send_to_child(routes: &ChildRoutes, backlog: &ChildBacklog, id: Id<Document>, ev: UiEvent) {
-    if backlog.borrow().get(&id).is_some_and(|q| !q.is_empty()) {
-        defer_for_child(backlog, id, ev);
-        return;
-    }
-    if !offer_to_child(routes, id, &ev) {
-        defer_for_child(backlog, id, ev);
-    }
-}
-
-/// Offer `ev` to each live view of `id`, dropping the senders whose view is
-/// gone. Reports whether every remaining one took it; `false` means at least one
-/// queue was full and the event must be re-offered.
-fn offer_to_child(routes: &ChildRoutes, id: Id<Document>, ev: &UiEvent) -> bool {
-    let mut routes = routes.borrow_mut();
-    let Some(senders) = routes.get_mut(&id) else {
-        // No view left at all: the document is no longer shown, so the event has
-        // nowhere to go and nothing to be behind.
-        return true;
-    };
-    let mut all_took_it = true;
-    senders.retain(|tx| match tx.try_send(ev.clone()) {
-        Ok(()) => true,
-        // The child view was dropped; reclaim its slot.
-        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => false,
-        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
-            all_took_it = false;
-            true
-        }
-    });
-    // The entry stays even with no sender left in it, and that emptiness is what
-    // holds `TOILE-UI-098`. A child view is dropped the frame its embed leaves
-    // the culled set, while its session stays open for the whole close debounce.
-    // An event arriving in that window used to find no route and fall through to
-    // the board's own stream and chrome mirrors. A Toile nested in a Toile emits
-    // exactly the event the parent board would then apply to itself. An empty
-    // entry absorbs it instead, and the next view of that document pushes its
-    // sender back into the same slot.
-    //
-    // What is left is a few dozen bytes per document embedded at least once in
-    // this session, which nothing reclaims. Bounded by the boards a user opens,
-    // and the trade the other way is a delta applied to the wrong document.
-    all_took_it
-}
-
-/// The nested document `ev` belongs to, when it is one the fan-out holds a route
-/// for. Such an event goes to the child's queues and never to the board's own
-/// stream or chrome (`TOILE-UI-098`). A route left with no view still counts.
-fn child_of(routes: &ChildRoutes, ev: &UiEvent) -> Option<Id<Document>> {
-    ev.routed_document_id()
-        .filter(|id| routes.borrow().contains_key(id))
-}
-
-/// Queue `ev` for `id`, oldest first, and say so when the bound forces a drop.
-fn defer_for_child(backlog: &ChildBacklog, id: Id<Document>, ev: UiEvent) {
-    let mut backlog = backlog.borrow_mut();
-    let queue = backlog.entry(id).or_default();
-    queue.push_back(ev);
-    if queue.len() > CHILD_BACKLOG_LIMIT {
-        queue.pop_front();
-        tracing::error!("embedded document {id}: backlog full, an event was dropped");
-    }
-}
-
-/// Re-offer every deferred event, oldest first, stopping at the first one a
-/// queue still refuses so the order is kept (`TOILE-UI-340`).
-fn flush_child_backlog(routes: &ChildRoutes, backlog: &ChildBacklog) {
-    let ids: Vec<Id<Document>> = backlog.borrow().keys().copied().collect();
-    for id in ids {
-        loop {
-            let Some(ev) = backlog.borrow().get(&id).and_then(|q| q.front().cloned()) else {
-                break;
-            };
-            if !offer_to_child(routes, id, &ev) {
-                break;
-            }
-            backlog.borrow_mut().get_mut(&id).map(VecDeque::pop_front);
-        }
-        if backlog.borrow().get(&id).is_some_and(VecDeque::is_empty) {
-            backlog.borrow_mut().remove(&id);
-        }
-    }
-}
-
+#[cfg(target_arch = "wasm32")]
 #[derive(Clone)]
 struct Wiring {
     to_logic: outbox::ShellOutbox,
@@ -440,13 +367,16 @@ struct Wiring {
 ///   snapshot, so this is cleared by the explicit ready event, not by content.
 /// - `connected`: mirrors the document's WebSocket link
 ///   (`UiEvent::ConnectionStatus`). Drives the "Synced" vs "Offline" label.
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 struct ChromeStatus {
     hydrating: bool,
     connected: ambre_core::LinkState,
 }
 
+#[cfg(any(target_arch = "wasm32", test))]
 impl ChromeStatus {
+    #[cfg(target_arch = "wasm32")]
     /// Localized header label for the current state (`-chrome.md` 2.G). While the
     /// document is hydrating the link state is irrelevant -- the user reads it as
     /// "still loading".
@@ -458,6 +388,7 @@ impl ChromeStatus {
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
     /// CSS modifier for the status dot colour (paired with `.dot` in styles.css).
     fn dot_class(self) -> &'static str {
         match (self.hydrating, self.connected) {
@@ -472,8 +403,8 @@ impl ChromeStatus {
     /// already left changes nothing.
     fn open_failed(
         &mut self,
-        current: Option<Id<Document>>,
-        failed: Id<Document>,
+        current: Option<ambre_core::id::Id<ambre_core::id::Document>>,
+        failed: ambre_core::id::Id<ambre_core::id::Document>,
     ) -> Option<&'static str> {
         if current != Some(failed) {
             return None;
@@ -497,6 +428,7 @@ impl ChromeStatus {
     clippy::expect_used,
     reason = "the boot spawns the threads the page runs on, which has no fallback page"
 )]
+#[cfg(target_arch = "wasm32")]
 #[cfg_attr(not(test), wasm_bindgen(start))]
 pub fn main() {
     // Our crates log at the build's level, and every dependency at WARN
@@ -597,10 +529,9 @@ pub fn main() {
     // are two views (`TOILE-UI-097`), each with its own queue, and both must
     // see the document's events. One slot per document had the second
     // registration evict the first, leaving that embed painting a view nothing
-    // fed.
-    let child_routes: ChildRoutes = Rc::new(RefCell::new(HashMap::new()));
-    // What a child's queue could not take yet (`TOILE-UI-340`).
-    let child_backlog: ChildBacklog = Rc::new(RefCell::new(HashMap::new()));
+    // fed. The fan-out also holds what a child's queue could not take yet
+    // (`TOILE-UI-340`).
+    let child_fan_out = Rc::new(relay::ChildFanOut::default());
 
     // Command keymap (the keyboard view of the registry). The active app binds
     // its own chords -- the launcher names none. Populated once the boot document
@@ -1133,8 +1064,7 @@ pub fn main() {
     }
     // The relay's view of the child fan-out registry: read to route a
     // nested document's events, pruned when a child receiver has been dropped.
-    let child_routes_relay = Rc::clone(&child_routes);
-    let child_backlog_relay = Rc::clone(&child_backlog);
+    let child_fan_out_relay = Rc::clone(&child_fan_out);
 
     // SPA route binding, polled each frame on the main thread (where the `!Send`
     // canvas handle lives, so it stays OUT of the Leptos tree). The client URL is
@@ -1288,7 +1218,7 @@ pub fn main() {
         // Re-offer what a child's queue could not take on an earlier turn
         // (`TOILE-UI-340`). Ordered, and ahead of the fresh stream, so a child
         // never sees a later delta before an earlier one.
-        flush_child_backlog(&child_routes_relay, &child_backlog_relay);
+        child_fan_out_relay.flush();
 
         // Mark the turn that takes Logic's answers off the channel: the mark
         // splits a keystroke's confirmation between the relay and the view.
@@ -1328,10 +1258,9 @@ pub fn main() {
             // drive the parent's formula bar, zoom chip or status band. Only a
             // document that is a LIVE child is diverted; the top-level document's
             // events (and untagged service events) fall through unchanged.
-            if let Some(id) = child_of(&child_routes_relay, &ev) {
-                send_to_child(&child_routes_relay, &child_backlog_relay, id, ev);
+            let Some(ev) = child_fan_out_relay.divert(ev) else {
                 continue;
-            }
+            };
             // The seal of a local row this thread asked for, which no view
             // awaits (`RESID-025`). The vault takes the event by value, so
             // each opened row moves out of its wrapper with no copy.
@@ -1763,7 +1692,7 @@ pub fn main() {
     // reads them, so every child shares one dead set. It is created here, in the
     // launcher's leptos owner, where `RwSignal::new` is valid.
     let child_to_logic = shell_outbox.clone();
-    let child_routes_factory = Rc::clone(&child_routes);
+    let child_fan_out_factory = Rc::clone(&child_fan_out);
     let child_theme_ctl = theme_ctl.clone();
     // An embedded child sends on its host board's UI->Logic queue, so the two
     // share one busy level rather than each holding a level nobody reads.
@@ -1814,11 +1743,7 @@ pub fn main() {
         // Demultiplexed Logic->UI queue for this child (registered for the relay
         // fan-out; dropped with the child when its embed leaves the cull set).
         let (child_tx, child_rx) = conduit::local::<UiEvent>(CHANNEL_CAPACITY);
-        child_routes_factory
-            .borrow_mut()
-            .entry(document_id)
-            .or_default()
-            .push(child_tx);
+        child_fan_out_factory.register(document_id, child_tx);
         match doc_type {
             ambre_bus::DocType::Toile => AppView::Toile(ToileView::new(
                 document_id,
@@ -1980,199 +1905,14 @@ pub fn main() {
 
 // The launcher is split across sibling modules; `shell`/`platform` inherit the
 // launcher's imports (and `Wiring`/`ChromeStatus`) via `use super::*`.
+#[cfg(target_arch = "wasm32")]
 mod platform;
+#[cfg(target_arch = "wasm32")]
 mod shell;
 
+#[cfg(target_arch = "wasm32")]
 use ambre_bus::{Authored, Instant};
+#[cfg(target_arch = "wasm32")]
 use platform::*;
+#[cfg(target_arch = "wasm32")]
 use shell::mount_shell;
-
-#[cfg(test)]
-mod chrome_status_tests {
-    use super::ChromeStatus;
-    use ambre_core::id::{Document, Id};
-    use wasm_bindgen_test::wasm_bindgen_test;
-
-    /// `CHROME-104`: a failed open of the active document lowers its loading
-    /// screen and raises a notice. A document already left keeps both down.
-    #[wasm_bindgen_test]
-    fn a_failed_open_ends_the_loading_screen() {
-        let active = Id::<Document>::mint();
-        let loading = ChromeStatus {
-            hydrating: true,
-            connected: ambre_core::LinkState::Connected,
-        };
-
-        let mut left = loading;
-        assert_eq!(left.open_failed(Some(active), Id::<Document>::mint()), None);
-        assert!(
-            left.hydrating,
-            "another document's failure lowered the screen"
-        );
-
-        let mut failed = loading;
-        assert!(failed.open_failed(Some(active), active).is_some());
-        assert!(!failed.hydrating, "the loading screen stayed up");
-    }
-}
-
-#[cfg(test)]
-mod fan_out_tests {
-    use super::{
-        CHILD_BACKLOG_LIMIT, ChildBacklog, ChildRoutes, child_of, flush_child_backlog,
-        send_to_child,
-    };
-    use ambre_bus::conduit;
-    use ambre_core::LinkState;
-    use ambre_core::id::{Document, Id};
-    use ambre_logic::app::UiEvent;
-    use std::cell::RefCell;
-    use std::collections::HashMap;
-    use std::rc::Rc;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use wasm_bindgen_test::wasm_bindgen_test;
-
-    /// An event a child's stream carries. Its `connected` flag tells two
-    /// events apart, so the order they arrive in can be read back.
-    fn status(document_id: Id<Document>, connected: LinkState) -> UiEvent {
-        UiEvent::ConnectionStatus {
-            document_id,
-            connected,
-        }
-    }
-
-    fn fan_out() -> (ChildRoutes, ChildBacklog) {
-        (
-            Rc::new(RefCell::new(HashMap::new())),
-            Rc::new(RefCell::new(HashMap::new())),
-        )
-    }
-
-    fn connected(ev: UiEvent) -> LinkState {
-        match ev {
-            UiEvent::ConnectionStatus { connected, .. } => connected,
-            _ => panic!("a foreign event reached the child"),
-        }
-    }
-
-    /// Counts the error events emitted while it is the default subscriber.
-    struct Errors(Arc<AtomicUsize>);
-
-    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Errors {
-        fn on_event(
-            &self,
-            event: &tracing::Event<'_>,
-            _: tracing_subscriber::layer::Context<'_, S>,
-        ) {
-            if *event.metadata().level() == tracing::Level::ERROR {
-                self.0.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-    }
-
-    /// `TOILE-UI-340`: what a full queue refuses waits, and is re-offered in
-    /// order and ahead of the fresh stream. A later event never overtakes it.
-    #[wasm_bindgen_test]
-    fn a_refused_event_waits_and_arrives_in_order() {
-        let (routes, backlog) = fan_out();
-        let doc = Id::<Document>::mint();
-        let (tx, rx) = conduit::local::<UiEvent>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<1>());
-        routes.borrow_mut().entry(doc).or_default().push(tx);
-
-        send_to_child(&routes, &backlog, doc, status(doc, LinkState::Connected));
-        send_to_child(&routes, &backlog, doc, status(doc, LinkState::Disconnected));
-        send_to_child(&routes, &backlog, doc, status(doc, LinkState::Connected));
-        assert_eq!(
-            backlog.borrow()[&doc].len(),
-            2,
-            "a refused event was dropped"
-        );
-
-        let mut seen = Vec::new();
-        while let Ok(ev) = rx.try_recv() {
-            seen.push(connected(ev));
-            flush_child_backlog(&routes, &backlog);
-        }
-        assert_eq!(
-            seen,
-            [
-                LinkState::Connected,
-                LinkState::Disconnected,
-                LinkState::Connected
-            ]
-        );
-        assert!(backlog.borrow().is_empty(), "a drained backlog lingers");
-    }
-
-    /// `TOILE-UI-340`: a backlog past its bound drops its oldest event, and
-    /// says so. Nothing is dropped in silence.
-    #[wasm_bindgen_test]
-    fn an_overflowing_backlog_says_what_it_dropped() {
-        let (routes, backlog) = fan_out();
-        let doc = Id::<Document>::mint();
-        let (tx, _rx) = conduit::local::<UiEvent>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<1>());
-        routes.borrow_mut().entry(doc).or_default().push(tx);
-        let errors = Arc::new(AtomicUsize::new(0));
-        let subscriber = tracing_subscriber::layer::SubscriberExt::with(
-            tracing_subscriber::registry(),
-            Errors(Arc::clone(&errors)),
-        );
-        tracing::subscriber::with_default(subscriber, || {
-            // One taken by the queue, the bound waiting, and two past it.
-            for _ in 0..CHILD_BACKLOG_LIMIT + 3 {
-                send_to_child(&routes, &backlog, doc, status(doc, LinkState::Connected));
-            }
-        });
-        assert_eq!(backlog.borrow()[&doc].len(), CHILD_BACKLOG_LIMIT);
-        assert_eq!(
-            errors.load(Ordering::Relaxed),
-            2,
-            "an event was dropped in silence"
-        );
-    }
-
-    /// `TOILE-UI-098`: a nested document's event stays with its children, even
-    /// once its last view is gone. The route outlives the view, so the event is
-    /// absorbed instead of falling through to the board's own stream.
-    #[wasm_bindgen_test]
-    fn a_childs_event_never_reaches_the_board() {
-        let (routes, backlog) = fan_out();
-        let child = Id::<Document>::mint();
-        let board = Id::<Document>::mint();
-        let (tx, rx) = conduit::local::<UiEvent>(ambre_core::Bounded::<
-            ambre_bus::conduit::ChannelSlots,
-        >::of::<4>());
-        routes.borrow_mut().entry(child).or_default().push(tx);
-        assert_eq!(
-            child_of(&routes, &status(child, LinkState::Connected)),
-            Some(child)
-        );
-        assert_eq!(
-            child_of(&routes, &status(board, LinkState::Connected)),
-            None
-        );
-
-        // The embed leaves the frame: its view, and with it the receiver, drop.
-        drop(rx);
-        send_to_child(
-            &routes,
-            &backlog,
-            child,
-            status(child, LinkState::Connected),
-        );
-        assert!(
-            routes.borrow()[&child].is_empty(),
-            "the dead view kept its slot"
-        );
-        assert_eq!(
-            child_of(&routes, &status(child, LinkState::Disconnected)),
-            Some(child),
-            "an event of a document with no view fell through to the board"
-        );
-    }
-}

@@ -47,7 +47,6 @@ ambre-app | src/landing.rs | crate::landing | SignInMode::from_dev_flag(dev) | p
 ambre-app | src/landing.rs | crate::landing | SignInMode::is_dev() | ret | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/landing.rs | crate::landing | open_document(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/landing.rs | crate::landing | rel_time() | ret | String	free-text	relative time label
-ambre-app | src/lib.rs | crate | CHILD_BACKLOG_LIMIT | const | usize	math	backlog count
 ambre-app | src/lib.rs | crate | ChromeStatus.hydrating | field | bool	generic	a fact that selects no mode: whether the first sync is still landing; the link itself is LinkState, and no caller writes it as a literal
 ambre-app | src/lib.rs | crate | ChromeStatus::dot_class() | ret | &'static str	generic	the codec of a struct that is no newtype: the CSS class of the status dot, derived from both fields, which the stylesheet matches
 ambre-app | src/lib.rs | crate | ChromeStatus::label() | ret | &'static str	free-text	label
@@ -56,7 +55,6 @@ ambre-app | src/lib.rs | crate | Wiring.filter_values | field | RwSignal<Vec<Str
 ambre-app | src/lib.rs | crate | Wiring.formula_ref | field | RwSignal<String>	free-text	formula bar label
 ambre-app | src/lib.rs | crate | Wiring.formula_text | field | RwSignal<String>	free-text	formula bar text
 ambre-app | src/lib.rs | crate | Wiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
-ambre-app | src/lib.rs | crate | offer_to_child() | ret | bool	generic	predicate result
 ambre-app | src/local_store.rs | crate::local_store | Inner.frames | field | Cell<u32>	math	frame count
 ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32	math	frame count
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
@@ -71,6 +69,8 @@ ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Op
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	local	the address of the Sync worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
+ambre-app | src/relay.rs | crate::relay | CHILD_BACKLOG_LIMIT | const | usize	math	backlog count
+ambre-app | src/relay.rs | crate::relay | ChildFanOut::offer() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | doc_path() | ret | String	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | needs_reload() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | parse(path) | param | &str	generic	generic codec/parser/bytes API
