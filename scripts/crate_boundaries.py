@@ -130,8 +130,9 @@ launcher that owns no frame shares one outbox, flushed by the per-frame
 relay. So the queue's raw end moves into that outbox on the line after its
 creation, and no other launcher line names it. Above its tests, no file of
 `ambre-app` but `outbox.rs` names a raw sender of that queue or builds a port
-over one. The relay in `lib.rs` flushes that outbox and tells the user of a
-refusal (`BUS-036`).
+over one. Nor does it build a lane, since a second lane on that queue holds
+apart from the first (`BUS-037`). The relay in `lib.rs` flushes that outbox
+and tells the user of a refusal (`BUS-036`).
 
 **An identifier typed on the bus** (`BUS-029`). Two identifiers carried as
 two strings swap without a compile error. So no field of `ambre-bus` named
@@ -709,7 +710,9 @@ DESTRUCTOR = re.compile(r"\bimpl\b[^{]*\bDrop\s+for\b")
 # writer would need: a raw sender of the queue, or a port built over one
 # (`BUS-035`).
 SHELL_OUTBOX = "crates/ambre-app/src/outbox.rs"
-LAUNCHER_QUEUE = re.compile(r"\bSender<\s*LogicCommand\b|\bPort::(?:embedded|direct)\b")
+LAUNCHER_QUEUE = re.compile(
+    r"\bSender<\s*LogicCommand\b|\bPort::(?:embedded|direct)\b|\bLane::(?:new|with_capacity)\b"
+)
 # The relay's two calls on that outbox: the flush of what it holds, and the
 # refusal it tells the user of. A queue's own flush through a borrow is not
 # the outbox's, so the receiver must be a bare name.
@@ -1609,8 +1612,9 @@ def check_launcher_outbox(errors: list[str]) -> int:
 
     The raw end of the UI to Logic queue moves into the outbox where it is
     made, so the compiler refuses a later use of it. No other launcher file
-    names a raw sender of that queue or builds a port over one. The relay
-    flushes the outbox, and tells the user of a refusal (`BUS-036`)."""
+    names a raw sender of that queue, builds a port over one, or builds a
+    lane (`BUS-037`). The relay flushes the outbox, and tells the user of a
+    refusal (`BUS-036`)."""
     if not (ROOT / SHELL_OUTBOX).exists():
         errors.append(f"{SHELL_OUTBOX}: gone from the tree, so the launcher outbox reads nothing")
         return 0
