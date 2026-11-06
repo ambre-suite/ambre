@@ -34,6 +34,19 @@ impl FixedRole for Signature {
     type Array = [u8; 64];
 }
 
+/// The bytes one whole-message signature covers: a domain, then the fields
+/// the signature binds.
+///
+/// The signer and the verifier of `ambre-crypto` take a transcript, never
+/// bare bytes. The type that builds the transcript lives in a crate that
+/// `ambre-crypto` may not depend on, so the two meet through this trait. A
+/// type implements it only for the bytes its own builders write.
+pub trait Transcript {
+    /// The bytes a signer signs and a verifier checks, as the builder wrote
+    /// them.
+    fn covered_bytes(&self) -> &[u8];
+}
+
 /// The role of AEAD ciphertext: `Payload<Ciphertext>`. `Debug` prints the
 /// length and none of the bytes, so a logged message logs no ciphertext
 /// (`ZK-006`). Serde sees the bare byte string, as the `serde_bytes` form it

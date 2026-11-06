@@ -322,7 +322,7 @@ impl Log {
 /// Whether `key` signed `entry`.
 fn signed_by(entry: &MembershipEntry, key: &FixedBytes<PublicKey>) -> bool {
     entry.signed_bytes().is_ok_and(|bytes| {
-        ambre_crypto::signature::verify_message(key, bytes.as_bytes(), &entry.signature).is_ok()
+        ambre_crypto::signature::verify_message(key, &bytes, &entry.signature).is_ok()
     })
 }
 
@@ -360,7 +360,7 @@ pub(crate) fn sign(
         signature: FixedBytes::<Signature>::from_array([0; ENTRY_SIGNATURE_LEN]),
     };
     let bytes = entry.signed_bytes()?;
-    entry.signature = ambre_crypto::signature::sign_message(signing_key, bytes.as_bytes());
+    entry.signature = ambre_crypto::signature::sign_message(signing_key, &bytes);
     Ok(entry)
 }
 
@@ -440,6 +440,30 @@ pub(crate) mod tests {
         append(&mut log, alice, alice, MembershipAct::Create, Role::Owner);
         append(&mut log, alice, bob, MembershipAct::Invite, Role::Editor);
         log
+    }
+
+    /// The bytes one entry signs, and its signature, as the sign of the
+    /// membership log wrote them before the signer took a typed transcript.
+    /// A change of either breaks every log a relay stores.
+    #[test]
+    fn the_signed_bytes_and_the_signature_of_an_entry_stay_pinned() {
+        let alice = Person::new(1);
+        let log = created(&alice, &Person::new(2));
+        let first = log.first().unwrap();
+        let transcript = first.signed_bytes().unwrap();
+        assert_eq!(
+            hex::encode(transcript.as_bytes()),
+            "616d6272652d6d656d626572736869702d656e7472792d763107070707070707\
+             07070707070707070700010101010101010101010101010101018a88e3dd7409\
+             f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c000001000000\
+             000000000000000000000000000001010101010101010101010101010101"
+        );
+        assert_eq!(
+            hex::encode(first.signature.as_slice()),
+            "b81489ac694b28cd245eb98000ef465fa06837e61728b33ceb3a7c896d91e969\
+             2fef1b9cde2d2c1b198b24ab41039721d6fbe52c40a3b758c2be89a61211f507"
+        );
+        assert!(signed_by(first, &alice.public()));
     }
 
     fn anchor(log: &[MembershipEntry]) -> Option<FixedBytes<EntryDigest>> {
