@@ -21,8 +21,7 @@ use crate::message::{
 };
 use crate::message::{LogicCommand, Murmure, UiEvent};
 use ambre_bus::{
-    Authored, Emoji, Inbox, Instant, Load, LossyOutcome, Outbox, Port, Request, RestEvent,
-    SendOutcome,
+    Authored, Emoji, Inbox, Instant, LossyOutcome, Outbox, Port, Request, RestEvent, SendOutcome,
 };
 use ambre_canvas::{
     BusyLevel, ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan,
@@ -1575,7 +1574,8 @@ impl MurmureView {
         if outbox.flush() == SendOutcome::Disconnected {
             tracing::error!("Murmure: the Logic channel is gone");
         }
-        self.busy_pub.publish(busy_level(outbox.load()));
+        self.busy_pub
+            .publish(BusyLevel::from_busy(outbox.is_busy()));
     }
 
     /// The wall clock, as the engine dates a sample or a message.
@@ -1965,15 +1965,6 @@ impl MurmureView {
 
     /// A Murmure page binds no document, so a route swap changes nothing.
     pub fn set_document(&mut self, _document_id: Id<Document>) {}
-}
-
-/// The busy level the renderer shows for an outbox load (`BUS-016`). The
-/// renderer knows no thread protocol, so the view converts the load here.
-fn busy_level(load: Load) -> BusyLevel {
-    match load {
-        Load::Free => BusyLevel::Free,
-        Load::Busy => BusyLevel::Busy,
-    }
 }
 
 #[cfg(test)]

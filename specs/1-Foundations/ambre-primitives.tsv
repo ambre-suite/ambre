@@ -346,6 +346,7 @@ ambre-bus | src/ui.rs | crate::ui | UiEvent::FatalError.message | field | String
 ambre-bus | src/ui.rs | crate::ui | UiEvent::SyncWarning.message | field | String	free-text	user-facing or log message
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::is_busy() | ret | bool	generic	predicate result
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::publish() | ret | bool	generic	predicate result
+ambre-canvas | src/busy.rs | crate::busy | BusyLevel::from_busy(busy) | param | bool	newtype-inner	fieldless enum, its constructor from the outbox's busy predicate
 ambre-canvas | src/density.rs | crate::density | density_query() | ret | String	free-text	a CSS media query that the browser alone parses and no code matches back, free text as a SQL query is
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Compose.0 | field | String	free-text	user text or error message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::ComposeEnd.0 | field | String	free-text	user text or error message
