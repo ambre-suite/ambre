@@ -470,3 +470,75 @@ proptest! {
         prop_assert_eq!(forward, backward);
     }
 }
+
+// -----------------------------------------------------------------------------
+// Static cycle check
+//
+// `DependencyGraph::update` searches the descendants of the formula alone. The
+// oracle is the check it replaced. It rebuilds the whole graph from every
+// accepted formula, tests it for a cycle, and reads the culprits from a
+// Kosaraju pass.
+// -----------------------------------------------------------------------------
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 512, ..ProptestConfig::default() })]
+
+    /// The local check refuses exactly the formulas a check of the whole graph
+    /// refuses, with the same culprits (`TRAME-012`).
+    #[test]
+    fn the_local_cycle_check_agrees_with_the_whole_graph(
+        updates in proptest::collection::vec(
+            (0u32..6, proptest::collection::vec(0u32..6, 0..3)),
+            1..24,
+        )
+    ) {
+        use super::dag::DependencyGraph;
+        use petgraph::graph::DiGraph;
+        use std::collections::BTreeSet;
+
+        let mut dag = DependencyGraph::new();
+        // The deps of each accepted formula, keyed by its cell number.
+        let mut model: HashMap<u32, Vec<u32>> = HashMap::new();
+        for (formula, deps) in updates {
+            let mut next = model.clone();
+            next.insert(formula, deps.clone());
+            // The oracle's verdict: the culprits, or none.
+            let expected: Option<BTreeSet<u32>> = if deps.contains(&formula) {
+                Some(BTreeSet::from([formula]))
+            } else {
+                let mut g = DiGraph::<u32, ()>::new();
+                let nodes: Vec<_> = (0..6).map(|n| g.add_node(n)).collect();
+                for (f, ds) in &next {
+                    for d in ds {
+                        g.add_edge(nodes[*d as usize], nodes[*f as usize], ());
+                    }
+                }
+                petgraph::algo::is_cyclic_directed(&g).then(|| {
+                    petgraph::algo::kosaraju_scc(&g)
+                        .into_iter()
+                        .find(|scc| scc.len() > 1)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|n| g[n])
+                        .collect()
+                })
+            };
+            let cells: Vec<CellId> = deps.iter().map(|d| cell(*d, 0)).collect();
+            let got = dag
+                .update(cell(formula, 0), cells, Vec::new())
+                .err()
+                .map(|e| {
+                    e.into_inner()
+                        .into_iter()
+                        .map(|c| (0..6).find(|n| cell(*n, 0) == c).unwrap_or(u32::MAX))
+                        .collect::<BTreeSet<u32>>()
+                });
+            prop_assert_eq!(&got, &expected);
+            if expected.is_some() {
+                // A refused formula depends on nothing.
+                next.insert(formula, Vec::new());
+            }
+            model = next;
+        }
+    }
+}

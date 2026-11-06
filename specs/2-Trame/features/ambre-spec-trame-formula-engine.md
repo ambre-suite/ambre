@@ -56,7 +56,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-233` | `POST` | Writing a cell MUST update every formula that read it while it lay past the used range. | this spec section 3; `TRAME-006` | `ambre_trame::logic::tests::group8::a_formula_typed_before_its_cell_reads_the_cell_once_written` | none | verified |
 | `TRAME-041` | `FRAME` | An edit MUST NOT recompute a cell that reads nothing it changed. | this spec section 3 | `ambre_trame::formula::dag::tests::range_outside_no_dirty`; `ambre_trame::formula::cache::tests::not_stale_no_recompile` | none | verified |
 | `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | `ambre_trame::formula::engine::tests::retyping_the_same_text_does_not_recompile` | none | verified |
-| `TRAME-012` | `FAIL` | A formula that reads itself through other cells MUST be refused with its culprits named. | this spec section 3 | `ambre_trame::formula::dag::tests::static_cycle_detected`; `::cycle_detection_kosaraju_returns_culprits`; `::rejected_cycle_leaves_no_stale_range_deps` | none | verified |
+| `TRAME-012` | `FAIL` | A formula that reads itself through other cells MUST be refused with its culprits named. | this spec section 3 | `ambre_trame::formula::dag::tests::static_cycle_detected`; `::cycle_detection_kosaraju_returns_culprits`; `::rejected_cycle_leaves_no_stale_range_deps`; `ambre_trame::formula::prop_tests::the_local_cycle_check_agrees_with_the_whole_graph` -- a proptest, 512 cases: the search bounded to the descendants of the formula refuses what a check of the whole graph refuses, with the same culprits | none | verified |
 | `TRAME-213` | `FAIL` | A formula that reads its own cell directly MUST be refused. | this spec section 3 | `ambre_trame::formula::dag::tests::self_reference_rejected`; `ambre_trame::formula::engine::tests::self_reference_rejected` | none | verified |
 | `TRAME-035` | `FAIL` | A reference to a sheet that never existed MUST be refused, not evaluated. | this spec section 4 | `ambre_trame::formula::parser::tests::unknown_sheet_name_is_parse_error`; `::unknown_sheet_is_error` | none | verified |
 | `TRAME-039` | `FAIL` | A refused formula MUST replace the cell's previous result, never leave it on screen. | this spec section 3 | `ambre_trame::formula::engine::tests::parse_error_replaces_the_stale_value`; `::cycle_replaces_the_stale_value_with_an_error` | none | verified |
@@ -192,6 +192,11 @@ A paste or a fill shifts the positional source, never the stored text.
 **The two levels.** Cell-to-cell edges live in a `petgraph` DAG, where a cycle is a static error. A
 range is not expanded into edges: it is stored whole against the formula that reads it, and a write
 is tested for containment. One entire column would otherwise cost a hundred thousand edges.
+
+**The static cycle search reads the descendants of the formula alone.** The graph holds no cycle
+before an update, so a new one runs through the updated formula. It exists only when that formula
+already reaches one of its new dependencies. The culprits are the descendants that reach the formula
+back (`TRAME-012`). A formula that nothing reads costs one step, never a walk of the graph.
 
 ```rust
 pub struct DependencyGraph {

@@ -123,11 +123,12 @@ impl DependencyGraph {
             self.cell_dag.add_edge(dep_node, node, ());
         }
 
-        // Static cycle detection (before rollback, so we can identify the
-        // offending cells).
-        if petgraph::algo::is_cyclic_directed(&self.cell_dag) {
-            let culprits = self.find_cycle_cells();
-            // Rollback the edges we just added.
+        // Static cycle detection, before the rollback, so the culprits can be
+        // named. The graph held no cycle before this update. A new cycle
+        // therefore runs through `node`, and exists only when `node` already
+        // reaches one of its new dependencies. The search reads the
+        // descendants of `node` alone, never the whole graph.
+        if let Some(culprits) = self.cycle_through(node) {
             self.clear_incoming(node);
             return Err(CycleError(culprits));
         }
@@ -249,15 +250,42 @@ impl DependencyGraph {
         dirty
     }
 
-    /// Find cells participating in a cycle via Kosaraju SCC.
-    fn find_cycle_cells(&self) -> Vec<CellId> {
-        petgraph::algo::kosaraju_scc(&self.cell_dag)
-            .into_iter()
-            .find(|scc| scc.len() > 1)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|n| self.cell_dag[n])
-            .collect()
+    /// The cells of the cycle through `node`, or `None` when `node` is on no
+    /// cycle.
+    ///
+    /// The graph was acyclic before the edges into `node` were added. The
+    /// only strongly connected component of more than one cell is therefore
+    /// the one that holds `node`. Its cells are the descendants of `node` that reach `node`
+    /// back. Both searches stay inside the descendants of `node`: a formula
+    /// that nothing reads costs one step.
+    fn cycle_through(&self, node: petgraph::graph::NodeIndex) -> Option<Vec<CellId>> {
+        let mut below = HashSet::new();
+        let mut dfs = Dfs::new(&self.cell_dag, node);
+        while let Some(n) = dfs.next(&self.cell_dag) {
+            below.insert(n);
+        }
+        // A dependency of `node` that is also below it closes the loop.
+        let closes = self
+            .cell_dag
+            .neighbors_directed(node, Direction::Incoming)
+            .any(|dep| below.contains(&dep));
+        if !closes {
+            return None;
+        }
+        // Walk back from `node` along the incoming edges, inside the
+        // descendants: each cell met is on a path from `node` back to `node`.
+        let mut on_cycle = vec![node];
+        let mut seen: HashSet<_> = on_cycle.iter().copied().collect();
+        let mut queue = vec![node];
+        while let Some(cur) = queue.pop() {
+            for dep in self.cell_dag.neighbors_directed(cur, Direction::Incoming) {
+                if below.contains(&dep) && seen.insert(dep) {
+                    on_cycle.push(dep);
+                    queue.push(dep);
+                }
+            }
+        }
+        Some(on_cycle.into_iter().map(|n| self.cell_dag[n]).collect())
     }
 
     /// Number of nodes in the cell-level DAG. Only the tests read it.
