@@ -23,8 +23,18 @@ pub fn FormulaBar(
     cell_ref: RwSignal<String>,
     content: RwSignal<String>,
     on_action: Callback<FormulaAction>,
+    /// The workbook's locale and the reader's half, which the date preview
+    /// reads.
+    locale: RwSignal<Option<crate::ui::locale::LocaleView>>,
 ) -> impl IntoView {
     let input_ref = NodeRef::<html::Input>::new();
+    // A date whose day and month could swap shows its long form before the
+    // commit (`LOCALE-022`).
+    let preview = move || {
+        let view = locale.get()?;
+        let text = crate::ui::locale::date_preview(&content.get(), &view)?;
+        Some(view! { <span class="formula-date-preview" role="status">{text}</span> })
+    };
 
     // When the signal changes from outside, push the new value into the DOM
     // input without resetting the caret. A new cell was selected, or an edit
@@ -73,5 +83,6 @@ pub fn FormulaBar(
             on:input=on_input
             on:keydown=on_keydown
         />
+        {preview}
     }
 }

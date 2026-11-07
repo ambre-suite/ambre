@@ -67,6 +67,9 @@ pub struct TrameRelay {
     pub sheets: RwSignal<Vec<SheetTab>>,
     /// The aggregates of a multi-cell selection (`trame-status-bar`).
     pub sel_stats: RwSignal<Option<SelStats>>,
+    /// The workbook's locale and the reader's half, which the status bar and
+    /// the formula bar read (`LOCALE-021`, `LOCALE-022`).
+    pub locale: RwSignal<Option<crate::ui::locale::LocaleView>>,
 }
 
 impl TrameRelay {
@@ -142,6 +145,12 @@ impl TrameRelay {
             }
             // The view publishes the active sheet it adopts.
             TrameEvent::SheetList { sheets, .. } => self.sheets.set(sheets.clone()),
+            TrameEvent::LocaleState { document, reader } => {
+                self.locale.set(Some(crate::ui::locale::LocaleView {
+                    document: document.clone(),
+                    reader: reader.clone(),
+                }));
+            }
             // The view clears the band on a single cell. The Logic thread's
             // totals fill it here.
             TrameEvent::SelectionStats { count, numbers } => self.sel_stats.set(Some(SelStats {

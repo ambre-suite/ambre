@@ -1865,6 +1865,13 @@ pub enum ToileCommand {
         name: String,
     },
 
+    /// Set the board's locale, one register of `meta` (`LOCALE-001`). No
+    /// element moves with it (`LOCALE-009`). An edit, so a viewer's is
+    /// dropped (`LOCALE-007`).
+    SetDocumentLocale {
+        locale: ambre_core::DocumentLocale,
+    },
+
     // -- Presentation (`toile-presentation`) --
     /// Set the shared slide sequence: the frames, in playback order
     /// (`toile-presentation`). CRDT (a `LoroMovableList<Id<Frame>>`),
@@ -2248,6 +2255,7 @@ impl fmt::Debug for ToileCommand {
                 .field("name", &ambre_core::RedactedChars::of(name))
                 .finish(),
             Self::SetSlideOrder { order } => fields!("SetSlideOrder", order),
+            Self::SetDocumentLocale { locale } => fields!("SetDocumentLocale", locale),
             Self::NextSlide => f.write_str("NextSlide"),
             Self::PrevSlide => f.write_str("PrevSlide"),
             Self::GotoSlide(slide) => tuple!("GotoSlide", slide),
@@ -2376,6 +2384,7 @@ impl ambre_bus::Mutation for ToileCommand {
             | Self::SetFrameChildren { .. }
             | Self::RemoveFromFrames { .. }
             | Self::RenameFrame { .. }
+            | Self::SetDocumentLocale { .. }
             | Self::SetSlideOrder { .. }
             | Self::NextSlide
             | Self::PrevSlide

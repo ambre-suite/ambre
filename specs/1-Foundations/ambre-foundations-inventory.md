@@ -24,6 +24,7 @@
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 |  |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
+| `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 18 |  |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 35 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
@@ -57,10 +58,9 @@
 | `ui` | The page's own thread. | partial | 20 |  |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 22 |  |
 | `call-media` | The audio and video of a call, encrypted end to end. | design-only | 30 |  |
-| `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 23 |  |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**47 features: 19 implemented, 22 partial, 6 design-only. 1219 contract rows, 11 loose.**
+**47 features: 20 implemented, 22 partial, 5 design-only. 1219 contract rows, 11 loose.**

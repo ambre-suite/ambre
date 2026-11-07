@@ -70,6 +70,7 @@ pub mod lang;
 pub mod layout;
 /// The target of a link: [`LinkUrl`].
 pub mod link;
+pub mod locale;
 pub mod media;
 pub mod member_count;
 /// Two-way choices shared across crates: [`StepDirection`], [`HistoryStep`].
@@ -160,6 +161,10 @@ pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::{LangTag, NotALangTag, primary_subtag};
 pub use link::LinkUrl;
+pub use locale::{
+    CalendarNames, DateAmbiguity, DateOrder, DocumentLocale, Grouping, LocaleError, MonthDay,
+    NumberConvention, NumberForms, ReaderLocale, TypedDate, resolve,
+};
 pub use media::{
     ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress, MediaType,
     Octets,

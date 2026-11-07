@@ -172,6 +172,7 @@
 | interface language | the language the reader's own menus are in | | `1-Foundations/ambre-spec-locale.md` |
 | reader convention | which locale a reader sees and types numbers in (`NumberConvention`) | | `1-Foundations/ambre-spec-locale.md` |
 | reader locale | the locale a reader holds on their own device | | `1-Foundations/ambre-spec-locale.md` |
+| neutral forms | how a number and a date are written when no locale resolves | | `1-Foundations/ambre-spec-locale.md` |
 | heading number | the counters drawn in front of a heading | | `4-Prose/features/ambre-spec-prose-headings.md` |
 
 ## 5. THE METHOD

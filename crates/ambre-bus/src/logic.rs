@@ -238,6 +238,12 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
     LoadFonts {
         faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
     },
+    /// The reader's own locale and convention, read from the device at boot
+    /// and sent again when the reader changes them (`LOCALE-015`). Every open
+    /// document takes it, and a document this reader creates is seeded with
+    /// the locale (`LOCALE-019`). Local-only: no document stores it
+    /// (`LOCALE-017`).
+    SetReaderLocale { reader: ambre_core::ReaderLocale },
 }
 
 // -----------------------------------------------------------------------------
@@ -333,6 +339,7 @@ impl<A, P: ChannelPlane> LogicCommand<A, P> {
             Self::MarkAllRead => LogicCommand::MarkAllRead,
             Self::SearchMessages { query } => LogicCommand::SearchMessages { query },
             Self::LoadFonts { faces } => LogicCommand::LoadFonts { faces },
+            Self::SetReaderLocale { reader } => LogicCommand::SetReaderLocale { reader },
         })
     }
 

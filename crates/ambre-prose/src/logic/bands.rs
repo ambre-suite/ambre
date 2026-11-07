@@ -169,6 +169,27 @@ impl ProseState {
         outcome
     }
 
+    /// Write `locale` into the `meta` register, and redraw the bands whose
+    /// date fields read it (`LOCALE-008`). No block moves (`LOCALE-009`).
+    /// The same locale writes nothing.
+    pub(super) fn set_document_locale(
+        &mut self,
+        locale: &ambre_core::DocumentLocale,
+    ) -> ProseOutcome {
+        if doc::read_locale(&self.doc).as_ref() == locale.tag() {
+            return ProseOutcome::nothing();
+        }
+        let meta = doc::meta(&self.doc);
+        let written = match locale.as_str() {
+            Some(tag) => meta.insert(doc::MetaKey::Locale, tag),
+            None => meta.delete(doc::MetaKey::Locale),
+        };
+        if let Err(e) = written {
+            return Self::err_write(e);
+        }
+        self.commit_bands()
+    }
+
     /// This session's own operation counter: how far its PeerID has written.
     fn own_counter(&self) -> ambre_core::OpCounter {
         ambre_core::OpCounter::new(
@@ -707,6 +728,45 @@ pub(crate) mod tests {
             Len::<Page>::ONE,
         );
         assert_eq!(unnamed, "2026-03-05");
+    }
+
+    /// `LOCALE-008`, `LOCALE-009`: a set redraws the date in the new
+    /// language, and the field keeps the format it stores.
+    #[test]
+    fn a_set_locale_redraws_the_date_and_moves_no_block() {
+        let (mut state, header) = with_header();
+        state.handle_command(ProseCommand::InsertHeaderField {
+            field: HeaderField::Date(DateFieldFormat::Long),
+            target: HfTarget::Regular,
+            pos: Pos::<DocChar>::ZERO,
+        });
+        state.handle_command(ProseCommand::StampModified {
+            now: Instant::<Authored>::new(1_772_712_000_000),
+        });
+        let header = crate::events::tree_id(header);
+        let before = crate::doc::read_bands(state.document());
+        let out = state.handle_command(ProseCommand::SetDocumentLocale {
+            locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
+        });
+        assert!(out.update.is_some(), "a set is one delta");
+        assert!(
+            out.display
+                .iter()
+                .any(|e| matches!(e, ProseEvent::BandsUpdated { .. })),
+            "the bands redraw"
+        );
+        let drawn = crate::band::resolve(
+            state.document(),
+            &header,
+            Pos::<Page>::ZERO,
+            Len::<Page>::ONE,
+        );
+        assert_eq!(drawn, "5 mars 2026");
+        assert_eq!(crate::doc::read_bands(state.document()), before);
+        let again = state.handle_command(ProseCommand::SetDocumentLocale {
+            locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
+        });
+        assert!(again.update.is_none(), "the same locale writes nothing");
     }
 
     #[test]

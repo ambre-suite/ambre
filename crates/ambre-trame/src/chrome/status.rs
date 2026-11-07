@@ -59,7 +59,18 @@ pub fn StatusBar(
     stats: RwSignal<Option<SelStats>>,
     perf: RwSignal<PerfSnapshot>,
     zoom: RwSignal<Scale<Doc, View>>,
+    /// The workbook's locale and the reader's half, mirrored from
+    /// `TrameEvent::LocaleState` by the relay.
+    locale: RwSignal<Option<crate::ui::locale::LocaleView>>,
 ) -> impl IntoView {
+    // A view in another locale than the workbook's says so (`LOCALE-021`).
+    let notice = move || {
+        locale
+            .get()
+            .as_ref()
+            .and_then(crate::ui::locale::locale_notice)
+            .map(|text| view! { <span class="stat statusbar-locale" role="status">{text}</span> })
+    };
     // The aggregates line, recomputed whenever the selection stats change.
     let aggregates = move || {
         stats.get().map(|s| {
@@ -82,6 +93,7 @@ pub fn StatusBar(
     view! {
         <StatusLabel label=status_label() />
         <span class="statusbar-stats">{aggregates}</span>
+        {notice}
         <span class="spacer"></span>
         // Shared interactive zoom + fps chips (identical to Toile,
         // `toile-status-bar`). The

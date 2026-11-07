@@ -252,6 +252,13 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
                 verdict(version, SCHEMA_VERSION)
             ))
         }
+        Root::Meta if key == ambre_core::schema::MetaKey::Locale.as_str() => {
+            let LoroValue::String(tag) = &stored.value else {
+                return None;
+            };
+            let locale = ambre_core::DocumentLocale::from_register(Some(tag.as_str()));
+            Some(format!("in {:?}", locale.as_str()?))
+        }
         Root::Sheets => {
             let tab = reader
                 .sheet_order_ids()
@@ -309,7 +316,7 @@ fn sheet_reading(
     match root {
         SheetRoot::Cells => {
             let place = at()?;
-            let shown = reader.displayed_text(place);
+            let shown = reader.displayed_text(place, &reader.shown_forms());
             Some(format!("{} shows {shown:?}", cell(place)))
         }
         SheetRoot::CellStyle => {

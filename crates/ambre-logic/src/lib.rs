@@ -393,6 +393,30 @@ impl DocState {
         }
     }
 
+    /// Hand the document the reader's own locale and convention. Only Trame
+    /// formats and parses numbers on the reader's behalf (`LOCALE-015`).
+    fn set_reader_locale(&mut self, reader: &ambre_core::ReaderLocale) {
+        match self {
+            DocState::Trame(state) => state.adopt_reader_locale(reader.clone()),
+            DocState::Toile(_) | DocState::Prose(_) => {}
+        }
+    }
+
+    /// The command that writes `locale` into this document's register.
+    fn locale_command(&self, locale: ambre_core::DocumentLocale) -> AppCommand {
+        match self {
+            DocState::Trame(_) => {
+                AppCommand::Trame(ambre_trame::TrameCommand::SetDocumentLocale { locale })
+            }
+            DocState::Toile(_) => {
+                AppCommand::Toile(ambre_toile::ToileCommand::SetDocumentLocale { locale })
+            }
+            DocState::Prose(_) => {
+                AppCommand::Prose(ambre_prose::ProseCommand::SetDocumentLocale { locale })
+            }
+        }
+    }
+
     /// Hand the document the font faces the application has loaded
     /// (`CANVAS-067`, `PROSE-115`).
     ///
@@ -929,6 +953,12 @@ struct LogicState {
     /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot
     /// fetch, so this is the whole of what it can measure on.
     base_faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
+    /// The reader's own locale and convention (`LogicCommand::SetReaderLocale`),
+    /// so a document opened later reads under the same convention.
+    reader_locale: ambre_core::ReaderLocale,
+    /// The locale each document this reader created waits to be seeded with,
+    /// until it opens (`LOCALE-019`).
+    locale_seeds: HashMap<Id<Document>, ambre_core::DocumentLocale>,
     /// Base fonts for PDF export (`toile-pdf-export`), seeded once by
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
@@ -1015,6 +1045,8 @@ impl LogicState {
             rest_routes: HashMap::new(),
             pending_seals: HashMap::new(),
             base_faces: Vec::new(),
+            reader_locale: ambre_core::ReaderLocale::default(),
+            locale_seeds: HashMap::new(),
             export_cx: None,
             owed: HashMap::new(),
             evicted: HashMap::new(),

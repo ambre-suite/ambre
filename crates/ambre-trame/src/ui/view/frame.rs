@@ -213,6 +213,7 @@ impl TrameView {
             | TrameEvent::MergeRejected { .. }
             | TrameEvent::MergeConflictDetected { .. }
             | TrameEvent::UndoState { .. }
+            | TrameEvent::LocaleState { .. }
             | TrameEvent::SortComplete
             | TrameEvent::SortRange { .. }
             | TrameEvent::ColumnValues { .. }

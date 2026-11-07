@@ -1693,6 +1693,12 @@ pub enum ProseCommand {
     StampModified {
         now: Instant<Authored>,
     },
+    /// Set the document's locale, the `meta` register the date field reads
+    /// (`LOCALE-001`). No block moves with it (`LOCALE-009`). An edit, so a
+    /// viewer's is dropped (`LOCALE-007`).
+    SetDocumentLocale {
+        locale: ambre_core::DocumentLocale,
+    },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
     /// Open a search, or replace the one open. It writes nothing
@@ -1994,6 +2000,7 @@ impl fmt::Debug for ProseCommand {
             }
             Self::SetBandAlign { block_id, align } => fields!("SetBandAlign", block_id, align),
             Self::StampModified { now } => fields!("StampModified", now),
+            Self::SetDocumentLocale { locale } => fields!("SetDocumentLocale", locale),
             Self::FindStart { query } => fields!("FindStart", query),
             Self::FindNext => f.write_str("FindNext"),
             Self::FindPrev => f.write_str("FindPrev"),
@@ -2409,6 +2416,7 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::InsertFooterField { .. }
             | Self::SetBandAlign { .. }
             | Self::StampModified { .. }
+            | Self::SetDocumentLocale { .. }
             | Self::FindStart { .. }
             | Self::FindNext
             | Self::FindPrev
@@ -2525,6 +2533,7 @@ impl ProseCommand {
             Self::InsertFooterField { .. } => "inserting a footer field",
             Self::SetBandAlign { .. } => "aligning the band",
             Self::StampModified { .. } => "stamping the document",
+            Self::SetDocumentLocale { .. } => "setting the document language",
             Self::FindStart { .. } => "searching",
             Self::FindNext => "going to the next match",
             Self::FindPrev => "going to the previous match",
