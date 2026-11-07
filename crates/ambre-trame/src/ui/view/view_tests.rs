@@ -369,6 +369,44 @@ fn a_paste_into_an_open_editor_inserts_the_text() {
     );
 }
 
+/// Covers `TRAME-UI-186`: the copy reply hands the host an HTML table beside
+/// the mirror. The ownership token then has HTML to ride in on every browser.
+#[test]
+fn a_copy_hands_the_host_an_html_table() {
+    let mut rig = Rig::new();
+    let payload = crate::message::ClipboardPayload {
+        rows: Len::<Row>::new(1),
+        cols: Len::<Col>::new(2),
+        cells: vec![
+            crate::message::ClipboardCell {
+                raw: "=A1+1".to_owned(),
+                ..Default::default()
+            },
+            crate::message::ClipboardCell {
+                dc: Len::<Col>::new(1),
+                raw: "a<b".to_owned(),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    rig.answer(TrameEvent::Clipboard(payload));
+    let blob = rig
+        .view
+        .poll_clipboard()
+        .expect("the copy reply yields a blob");
+    assert_eq!(blob.text, "=A1+1\ta<b");
+    assert_eq!(
+        blob.html.as_deref(),
+        Some("<table><tr><td>=A1+1</td><td>a&lt;b</td></tr></table>")
+    );
+    assert_eq!(
+        rig.view.last_clip.as_ref(),
+        Some(&blob),
+        "the kept copy matches"
+    );
+}
+
 /// Covers `UI-THREAD-047`: a paste leaves no blob for the host to write.
 #[test]
 fn a_paste_writes_nothing_back() {

@@ -24,6 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-059` | `POST` | A copy MUST cover the whole selection, never only the cells the viewport holds. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it spans five hundred rows and asserts the far cell is in the payload | none | verified |
+| `TRAME-UI-186` | `POST` | A copy MUST carry the range as a table that another spreadsheet or a word processor reads as cells. | this spec section 3; `UI-THREAD-061` | `ambre_trame::ui::view::view_tests::a_copy_hands_the_host_an_html_table` -- the copy reply hands the host the mirror and the table; `ambre_trame::tests::message::to_html_lays_out_the_tsv_grid_escaped` -- the table lays out the mirror's grid, each cell escaped | none | verified |
 
 **Frame:** `UI-THREAD-044`
 
@@ -49,10 +50,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the OS clipboard carries the selection out of the application, in plaintext, by the
   user's own gesture. `ambre-spec-clipboard.md` fixes what it may hold and the window it may be
   written in. Nothing here reaches the relay or holds a key.
-* **Verification.** 8 `verified`, 1 `unimplemented`. What holds is the rules that live
-  in the Logic thread, and two peers that paste and cut over each other's edits converge. Above the
-  seam, a native test drives the view. The kept copy answers on the token, and a cut clears its
-  source only behind its paste. The token itself is browser state, held in the browser tier.
+* **Verification.** 9 `verified`, 1 `unimplemented`. What holds is the rules that live in the Logic
+  thread, and two peers that paste and cut over each other's edits converge. Above the seam, a
+  native test drives the view. The kept copy answers on the token, and a cut clears its source only
+  behind its paste. The token itself is browser state, held in the browser tier.
 
 ---
 
@@ -80,9 +81,11 @@ declared in `ambre-spec-trame-schema.md section 3`.
 | `TrameCommand::PasteRange { target_row, target_col, payload }` | UI to Logic | the landing cell and the typed payload |
 | `TrameCommand::SetCellsBatch { cells }` | UI to Logic | the source clear of a cut, as one undo item |
 
-**The transport** is the app-agnostic `ClipboardBlob { text, ambre }` of `ambre-bus`, specified in
-`ambre-spec-clipboard.md`: `text` is the plain-text mirror, `ambre` the postcard of the payload
-above. This document states what Trame puts in it, never how the seam works.
+**The transport** is the app-agnostic `ClipboardBlob { text, html, ambre }` of `ambre-bus`. It is
+specified in `ambre-spec-clipboard.md`. `text` is the plain-text mirror, `html` the same grid as one
+escaped table, and `ambre` the postcard of the payload above. The table also carries the ownership
+token where the browser refuses the `web ` types (`UI-THREAD-061`). This document states what Trame
+puts in the transport, never how the seam works.
 
 **The paste fidelity ladder**, first match wins:
 

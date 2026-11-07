@@ -186,13 +186,15 @@ impl TrameView {
             // Authoritative copy reply (`trame-clipboard`): the Logic thread
             // serialized the whole tracked selection from the document (no viewport
             // limit). Build the transport blob: TSV for cross-app `text/plain`,
-            // postcard of the typed payload for the private Ambre type. Stash it in
+            // and the postcard of the typed payload for the private Ambre type.
+            // The HTML table gives the ownership token a carrier where the
+            // browser refuses the `web ` types (`TRAME-UI-186`). Stash it in
             // memory for a full-fidelity same-tab paste. Mark it pending so the
             // host mirrors it to the OS clipboard next frame.
             TrameEvent::Clipboard(payload) => {
                 let blob = ambre_bus::ClipboardBlob {
                     text: payload.to_tsv(),
-                    html: None,
+                    html: Some(payload.to_html()),
                     ambre: postcard::to_allocvec(&payload)
                         .ok()
                         .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::new),

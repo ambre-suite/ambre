@@ -132,29 +132,36 @@ mod tests {
 
     /// Waits until the clipboard holds the ownership token a grid copy
     /// publishes once the Logic thread answered it. A paste sent before that
-    /// races the copy, which no user waiting for the copy meets.
+    /// races the copy, which no user waiting for the copy meets. Chrome holds
+    /// the token under its `web ` type. Firefox refuses that type, so the token
+    /// rides in the HTML table of the copy (`UI-THREAD-061`).
     async fn wait_copied(page: &Page) {
         let deadline = std::time::Instant::now() + STEP;
         loop {
-            let types = page
+            let held = page
                 .browser
                 .script_async(
                     "const done = arguments[0]; \
                      navigator.clipboard.read() \
-                       .then(items => done(items.flatMap(i => i.types))) \
+                       .then(async items => { \
+                         const types = items.flatMap(i => i.types); \
+                         if (types.includes('web application/x-ambre-token')) return 'token'; \
+                         const item = items.find(i => i.types.includes('text/html')); \
+                         if (!item) return types; \
+                         const html = await (await item.getType('text/html')).text(); \
+                         return html.includes('<!--ambre-token:') ? 'token' : types; \
+                       }) \
+                       .then(done) \
                        .catch(e => done(e.name));",
                     json!([]),
                 )
                 .await;
-            if types
-                .as_array()
-                .is_some_and(|t| t.contains(&json!("web application/x-ambre-token")))
-            {
+            if held == json!("token") {
                 return;
             }
             assert!(
                 std::time::Instant::now() < deadline,
-                "the clipboard holds {types}"
+                "the clipboard holds {held}"
             );
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
