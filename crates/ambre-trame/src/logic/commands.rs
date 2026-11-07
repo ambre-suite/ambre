@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::find::Replacement;
+use super::locale::TypedKind;
 use super::*;
 use crate::formula::text::CellText;
 use ambre_core::HistoryStep;
@@ -81,7 +82,12 @@ impl TrameState {
                 // commit (filter recompute) merge into a single undo item. The
                 // next `CommitEdit` seals it, or the fallback seal above.
                 let _ = self.undo_manager.group_start();
-                self.write_cell(CellPos::new(row, col), &CellText::<SourceForm>::new(text));
+                let at = CellPos::new(row, col);
+                let typed = self.typed_source(CellText::<SourceForm>::new(text));
+                if typed.kind == TypedKind::Date {
+                    self.format_typed_date(at);
+                }
+                self.write_cell(at, &typed.text);
                 self.finish_cell_writes()
             }
             TrameCommand::BeginCellEdit { session, row, col } => {
@@ -92,7 +98,8 @@ impl TrameState {
                     "[Logic] CommitCellEdit session={session} text of {} chars",
                     text.chars().count()
                 );
-                self.commit_cell_edit(session, &CellText::<SourceForm>::new(text))
+                let typed = self.typed_source(CellText::<SourceForm>::new(text));
+                self.commit_cell_edit(session, &typed)
             }
             TrameCommand::EndCellEdit { session } => self.end_cell_edit(session),
             TrameCommand::SetCellsBatch { cells } => {
@@ -113,7 +120,11 @@ impl TrameState {
                     }
                 }
                 for (at, text) in cells {
-                    self.write_cell(at, &CellText::<SourceForm>::new(text));
+                    let typed = self.typed_source(CellText::<SourceForm>::new(text));
+                    if typed.kind == TypedKind::Date {
+                        self.format_typed_date(at);
+                    }
+                    self.write_cell(at, &typed.text);
                 }
                 self.finish_cell_writes()
             }
@@ -233,6 +244,8 @@ impl TrameState {
             TrameCommand::ActivateSheet { sheet_id } => self.activate_sheet(&sheet_id),
             TrameCommand::CreateSheet { name } => self.create_sheet(&name),
             TrameCommand::RenameSheet { sheet_id, name } => self.rename_sheet(&sheet_id, &name),
+            TrameCommand::SetDocumentLocale { locale } => self.set_document_locale(&locale),
+            TrameCommand::SetReaderLocale { reader } => self.set_reader_locale(reader),
             TrameCommand::MoveSheet { sheet_id, to_index } => self.move_sheet(&sheet_id, to_index),
             TrameCommand::DeleteSheet { sheet_id } => self.delete_sheet(&sheet_id),
             TrameCommand::SortRange {
@@ -416,6 +429,8 @@ impl TrameState {
         // One set of sheet layouts for the whole window: a cross-sheet formula
         // builds its sheet's index once, not once per cell.
         let lines = self.sheet_lines();
+        // The forms this reader sees, read once for the window.
+        let forms = self.shown_forms();
 
         for at in window.cells() {
             let CellPos { row, col } = at;
@@ -432,7 +447,7 @@ impl TrameState {
             } else {
                 // Apply the cell's number format to its computed value
                 // (`trame-number-formats`): a `General` cell is verbatim.
-                self.format_display(at, self.cell_text(at), &style)
+                self.format_display(at, self.cell_text(at), &style, &forms)
             };
             cells.push(DisplayCell {
                 row,
@@ -444,8 +459,12 @@ impl TrameState {
                     // Reconstruct positions from the stored lines, and
                     // cross-sheet qualifiers from the stable id to the
                     // display name (`TRAME-228`, `trame-sheets`).
-                    self.formula_display(&self.cell_raw(at), &self.active_sheet, &lines)
-                        .into_string()
+                    self.edit_bar_text(self.formula_display(
+                        &self.cell_raw(at),
+                        &self.active_sheet,
+                        &lines,
+                    ))
+                    .into_string()
                 },
                 bold: Weight::from_bool(self.bold.contains(&at)),
                 italic: Slant::from_bool(self.italic.contains(&at)),

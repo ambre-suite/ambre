@@ -4220,3 +4220,15 @@ ambre-core | src/locale.rs | crate::locale | region_subtag() | ret | Option<Stri
 ambre-core | src/locale.rs | crate::locale | split_canonical(text) | param | &str	local	a number text, cut and checked here
 ambre-core | src/locale.rs | crate::locale | ungroup() | ret | Option<String>	local	the whole digits with the group marks dropped, read by in_forms() alone
 ambre-core | src/locale.rs | crate::locale | ungroup(whole) | param | &str	local	the whole part of a typed number
+ambre-trame | src/logic/locale.rs | crate::logic::locale | canonical_formula() | ret | String	local	the formula text in the canonical separators, which typed_source() stores
+ambre-trame | src/logic/locale.rs | crate::logic::locale | canonical_formula(typed) | param | &str	local	a formula text a reader typed in their own separators
+ambre-trame | src/logic/locale.rs | crate::logic::locale | localized_formula() | ret | String	local	the formula text in the reader's separators, which edit_bar_text() shows
+ambre-trame | src/logic/locale.rs | crate::logic::locale | localized_formula(canonical) | param | &str	local	a formula text in the canonical separators
+ambre-trame | src/logic/locale.rs | crate::logic::locale | semicolon_arguments() | ret | bool	generic	predicate
+ambre-trame | src/logic/locale.rs | crate::logic::locale | translate() | ret | String	local	the formula text rewritten, read by the two translators alone
+ambre-trame | src/logic/locale.rs | crate::logic::locale | translate(formula) | param | &str	local	the formula text one translator rewrites
+ambre-trame | src/logic/locale.rs | crate::logic::locale | translate(swap) | param | impl Fn(char,Literal,bool)->(char,Literal)	local	the rewrite of one character the translator supplies
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Marks.decimal | field | char	local	what a pattern's point prints as, read by place_fraction() alone
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Marks.group | field | char	local	what a pattern's thousands comma prints as, read by group_thousands() alone
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands(mark) | param | char	local	the group mark a pattern's comma prints as
+ambre-trame | src/logic/schema.rs | crate::logic::schema | document_locale_v3() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed

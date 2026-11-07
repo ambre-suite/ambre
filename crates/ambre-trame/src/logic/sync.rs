@@ -237,7 +237,10 @@ impl TrameState {
         if !self.merge_payload(payload, origin) {
             return Vec::new();
         }
-        self.reseed_after_merge(origin, &order)
+        let mut events = self.reseed_after_merge(origin, &order);
+        // A load names the locale to the view (`LOCALE-021`).
+        events.push(self.locale_state_event());
+        events
     }
 
     /// Apply a batch of decrypted remote deltas as a SINGLE merge, so the UI
@@ -269,6 +272,7 @@ impl TrameState {
         origin: MergeOrigin,
     ) -> Vec<TrameEvent> {
         let order = self.sheet_order_ids();
+        let locale = self.document_locale();
         drop(self.take_imported());
         // The batch names the cells it changed, and nothing before it.
         self.engine.changed.clear();
@@ -280,11 +284,19 @@ impl TrameState {
             return Vec::new();
         }
         let imported = self.take_imported();
-        if self.carries(&imported) {
+        let mut events = if self.carries(&imported) {
             tracing::info!("[Logic] {origin} merged, carried");
-            return self.carry_after_merge(&imported);
+            self.carry_after_merge(&imported)
+        } else {
+            self.reseed_after_merge(origin, &order)
+        };
+        // A peer's locale reformats every cell this reader sees, written or
+        // not (`LOCALE-008`).
+        if self.document_locale() != locale {
+            events.push(self.locale_state_event());
+            events.push(TrameEvent::DataReset);
         }
-        self.reseed_after_merge(origin, &order)
+        events
     }
 
     /// Merge one decrypted Loro payload into the live document, returning whether

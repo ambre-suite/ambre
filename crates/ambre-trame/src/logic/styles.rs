@@ -7,6 +7,7 @@
 
 use super::*;
 use ambre_core::id::{Id, Sheet};
+use ambre_core::{Grouping, NumberForms};
 use serde::{Deserialize, Serialize};
 
 /// A cell's whole visual style as one CRDT record. Bold/italic are not part of
@@ -320,11 +321,11 @@ impl TrameState {
     /// The text a cell of the active sheet shows: its computed text through its
     /// number format. Find, replace and export read this, so a cell reads the
     /// same wherever it is shown as text (`TRAME-108`).
-    pub(super) fn displayed_text(&self, at: CellPos) -> String {
+    pub(super) fn displayed_text(&self, at: CellPos, forms: &NumberForms) -> String {
         let text = self.cell_text(at);
         match self.styles.get(&at) {
-            Some(style) => self.format_display(at, text, style),
-            None => text,
+            Some(style) => self.format_display(at, text, style, forms),
+            None => self.format_display(at, text, &CellStyle::default(), forms),
         }
     }
 
@@ -348,14 +349,22 @@ impl TrameState {
         }
     }
 
-    /// Apply a cell's number format to its computed display `text`. A `General` /
-    /// `Text` cell or a non-numeric value renders verbatim
-    /// (`trame-number-formats`).
-    pub(super) fn format_display(&self, _at: CellPos, text: String, style: &CellStyle) -> String {
+    /// Apply a cell's number format to its computed display `text`, in
+    /// `forms` (`trame-number-formats`, `TRAME-110`). A `Text` cell and a
+    /// non-numeric value render verbatim. A `General` number keeps its digits
+    /// and takes the decimal mark of `forms`.
+    pub(super) fn format_display(
+        &self,
+        _at: CellPos,
+        text: String,
+        style: &CellStyle,
+        forms: &NumberForms,
+    ) -> String {
         match style.format {
-            CellFormat::General | CellFormat::Text => text,
+            CellFormat::Text => text,
+            CellFormat::General => forms.localize(&text, Grouping::Ungrouped),
             ref fmt => match crate::formula::types::finite_number(&text) {
-                Some(v) => format_number(v, fmt, style.decimals),
+                Some(v) => format_number(v, fmt, style.decimals, forms),
                 None => text,
             },
         }
