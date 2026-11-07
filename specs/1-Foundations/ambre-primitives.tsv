@@ -2859,6 +2859,12 @@ ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass() | 
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(operand) | param | &str	free-text	the filter operand the user typed, compared as a number when it spells a finite one, else as text
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text() | ret | String	free-text	free text: user content, label, message or display string
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | History::managed() | ret | usize	foreign-api	how many items of the undo manager a stack names, compared to the count its API returns as usize
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | History::trim_bottom(count) | param | usize	foreign-api	the depth of a stack of the undo manager, as its API returns it
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | History::trim_top(count) | param | usize	foreign-api	the depth of a stack of the undo manager, as its API returns it
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Journal::note(key) | param | &str	foreign-api	a key of any map a line delete writes, as the Loro map call takes it
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | TrameState::follow_manager(depth) | param | usize	foreign-api	the depth of the undo stack before a command, as the undo manager returns it
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | TrameState::note_write(key) | param | &str	foreign-api	a key of any map a line delete writes, as the Loro map call takes it
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
@@ -2924,6 +2930,9 @@ ambre-trame | src/model/axis.rs | crate::model::axis | Element::parse(value) | p
 ambre-trame | src/model/axis.rs | crate::model::axis | Element::spell() | ret | String	generic	the value a line element stores for a uid and an element id: the codec of a struct of two fields
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/model/axis.rs | crate::model::axis | Axes<'a>::purge_record(noted) | param | impl FnMut(&LoroMap,&str)	foreign-api	the hook a line delete notes each key in, as the Loro map call takes it
+ambre-trame | src/model/axis.rs | crate::model::axis | slot_of() | ret | Option<usize>	foreign-api	the index of a value in a Loro list read, which the list insert and delete take as usize
+ambre-trame | src/model/axis.rs | crate::model::axis | slot_of(spelled) | param | &str	generic	the value a line element stores, compared to each value a list read holds: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 | field | String	newtype-inner	the stored cell key CellKey types
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	newtype-inner	the stored cell key CellKey holds, which the Loro call into the map reads
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element or a cell key stores, read back into a uid from its canonical spelling alone: the codec of a struct of two fields

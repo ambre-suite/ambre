@@ -36,7 +36,9 @@ use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Axis, IdxVec, Len, Pos};
 use ambre_core::{OpenRange, Version, VersionKind};
 use blake2::{Blake2b512, Digest};
-use loro::{LoroDoc, LoroMap, LoroMovableList, LoroValue};
+use loro::{
+    ContainerID, ContainerTrait, ContainerType, LoroDoc, LoroMap, LoroMovableList, LoroValue,
+};
 
 use super::line::Line;
 use super::sheet_index::{CellKey, LineRead, Uid, parse_cell_key};
@@ -1232,6 +1234,82 @@ impl AxisOrder for Col {
 pub(crate) struct Removed {
     pub(crate) uid: Uid,
     pub(crate) elements: Vec<Element>,
+    /// Each element the list lost, in the order of the deletes.
+    pub(crate) spots: Vec<Spot>,
+}
+
+/// One element a delete took out of a list, and where it stood.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Spot {
+    /// The slot the element held when the delete took it.
+    pub(crate) slot: Pos<Slot>,
+    /// The element.
+    pub(crate) element: Element,
+    /// The element just before it at that moment, `None` at the head.
+    pub(crate) after: Option<Element>,
+}
+
+/// The list `id` and its values, in order. The values stay shared with the
+/// document: a copy of a long list costs more than the read.
+fn list_of(doc: &LoroDoc, id: &ContainerID) -> Option<(LoroMovableList, LoroValue)> {
+    let ContainerID::Root {
+        name,
+        container_type: ContainerType::MovableList,
+    } = id
+    else {
+        return None;
+    };
+    let list = doc.get_movable_list(name.as_str());
+    let values = list.get_value();
+    Some((list, values))
+}
+
+/// The values a list read holds, none for any other value.
+fn items(values: &LoroValue) -> &[LoroValue] {
+    match values {
+        LoroValue::List(items) => items,
+        _ => &[],
+    }
+}
+
+/// The slot of the element spelled `spelled` in `values`.
+fn slot_of(values: &[LoroValue], spelled: &str) -> Option<usize> {
+    values
+        .iter()
+        .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == spelled))
+}
+
+/// Put the element of `spot` back into the list `id`, after the element that
+/// stood before it. When that one is gone too, the element goes back to its
+/// old slot, or to the end of a shorter list. An element already in the list
+/// stays where it is.
+pub(crate) fn restore_spot(doc: &LoroDoc, id: &ContainerID, spot: &Spot) {
+    let Some((list, values)) = list_of(doc, id) else {
+        return;
+    };
+    let values = items(&values);
+    let spelled = spot.element.spell();
+    if slot_of(values, &spelled).is_some() {
+        return;
+    }
+    let at = match spot.after {
+        None => 0,
+        Some(after) => match slot_of(values, &after.spell()) {
+            Some(slot) => slot + 1,
+            None => spot.slot.to_usize().min(values.len()),
+        },
+    };
+    let _ = list.insert(at, spelled.as_str());
+}
+
+/// Take the element of `spot` out of the list `id` again, wherever it stands.
+pub(crate) fn remove_spot(doc: &LoroDoc, id: &ContainerID, spot: &Spot) {
+    let Some((list, values)) = list_of(doc, id) else {
+        return;
+    };
+    if let Some(slot) = slot_of(items(&values), &spot.element.spell()) {
+        let _ = list.delete(slot, 1);
+    }
 }
 
 /// The axes of one sheet of one document: every read and write of a line
@@ -1251,6 +1329,12 @@ impl<'a> Axes<'a> {
     fn list<L: AxisOrder>(&self) -> LoroMovableList {
         self.doc
             .get_movable_list(SheetContainer::of(L::order_root(), self.sheet).as_str())
+    }
+
+    /// The container of the list of the axis `L`, for a journal that names
+    /// it.
+    pub(crate) fn list_id<L: AxisOrder>(&self) -> ContainerID {
+        self.list::<L>().id()
     }
 
     /// The index of the sheet, both axes read from the document.
@@ -1312,6 +1396,18 @@ impl<'a> Axes<'a> {
             .iter()
             .filter_map(|slot| view.elements.get(*slot).copied())
             .collect();
+        // The slots come last first, so the element before each one still
+        // stands where the view read it when its delete runs.
+        let spots: Vec<Spot> = slots
+            .iter()
+            .filter_map(|&slot| {
+                Some(Spot {
+                    slot,
+                    element: view.elements.get(slot).copied()?,
+                    after: slot.prev().and_then(|b| view.elements.get(b).copied()),
+                })
+            })
+            .collect();
         let next = layout
             .take()
             .and_then(|index| index.without_line::<L>(&uid));
@@ -1319,7 +1415,11 @@ impl<'a> Axes<'a> {
             list.delete(slot.to_index()?, 1).ok()?;
         }
         *layout = next;
-        Some(Removed { uid, elements })
+        Some(Removed {
+            uid,
+            elements,
+            spots,
+        })
     }
 
     /// Move the line at `from` so it shows at `to`. Only the visible element
@@ -1487,8 +1587,8 @@ impl<'a> Axes<'a> {
     }
 
     /// Drop every generation the record holds under the line `uid`, for a
-    /// delete that removes it.
-    pub(crate) fn purge_record(&self, uid: &Uid) {
+    /// delete that removes it. `noted` sees each key just before its delete.
+    pub(crate) fn purge_record(&self, uid: &Uid, mut noted: impl FnMut(&LoroMap, &str)) {
         let record = self.record();
         let prefix = format!("{}:", uid.to_key_part());
         let keys: Vec<String> = record
@@ -1497,6 +1597,7 @@ impl<'a> Axes<'a> {
             .map(|key| key.to_string())
             .collect();
         for key in keys {
+            noted(&record, &key);
             let _ = record.delete(&key);
         }
     }

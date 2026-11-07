@@ -137,17 +137,21 @@ pub enum CommitOrigin {
     /// The scaffolding an edit forces into existence around the value the user
     /// wrote.
     Materialize,
+    /// A step the application records in a history of its own, beside the
+    /// undo manager's: an edit whose undo the manager would cost too much.
+    Recorded,
 }
 
 impl CommitOrigin {
     /// Every origin, in declaration order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Peers,
         Self::Load,
         Self::Stamp,
         Self::Comment,
         Self::Sweep,
         Self::Materialize,
+        Self::Recorded,
     ];
 
     /// The spelling the commit carries, for the call that sets or excludes it.
@@ -160,6 +164,7 @@ impl CommitOrigin {
             Self::Comment => "comment",
             Self::Sweep => "sweep",
             Self::Materialize => "mat",
+            Self::Recorded => "recorded",
         }
     }
 }

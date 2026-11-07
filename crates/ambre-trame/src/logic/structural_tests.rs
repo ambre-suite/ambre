@@ -45,7 +45,7 @@ pub(super) const PEER: u64 = 7;
 
 /// One step of a program.
 #[derive(Debug, Clone)]
-enum Step {
+pub(super) enum Step {
     Write {
         row: u32,
         col: u32,
@@ -122,7 +122,7 @@ pub(super) fn text() -> impl Strategy<Value = String> {
     ]
 }
 
-fn step() -> impl Strategy<Value = Step> {
+pub(super) fn step() -> impl Strategy<Value = Step> {
     prop_oneof![
         4 => (0..ROWS, 0..COLS, text()).prop_map(|(row, col, text)| Step::Write { row, col, text }),
         1 => (0..ROWS).prop_map(|at| Step::InsertRow { at }),
@@ -155,7 +155,7 @@ pub(super) fn write(row: u32, col: u32, text: &str) -> TrameCommand {
 }
 
 /// The commands of one local step. A remote step has none.
-fn commands(step: &Step) -> Vec<TrameCommand> {
+pub(super) fn commands(step: &Step) -> Vec<TrameCommand> {
     match step.clone() {
         Step::Write { row, col, text } => vec![write(row, col, &text)],
         Step::InsertRow { at } => vec![TrameCommand::InsertRow {

@@ -212,16 +212,17 @@ impl TrameState {
 
     /// Empty the filter definition and its hidden set, uncommitted.
     pub(super) fn drop_filter(&self) {
-        clear_loro_map(
-            &self
+        for root in [SheetRoot::FilterHidden, SheetRoot::Filters] {
+            let map = self
                 .doc
-                .get_map(SheetContainer::of(SheetRoot::FilterHidden, &self.active_sheet).as_str()),
-        );
-        clear_loro_map(
-            &self
-                .doc
-                .get_map(SheetContainer::of(SheetRoot::Filters, &self.active_sheet).as_str()),
-        );
+                .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
+            if let LoroValue::Map(entries) = map.get_value() {
+                for key in entries.keys() {
+                    self.note_write(&map, key);
+                }
+            }
+            clear_loro_map(&map);
+        }
     }
 
     /// Bring `filter_hidden_{sheet}` to the rows the filter hides on the given

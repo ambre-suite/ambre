@@ -112,25 +112,24 @@ CEILINGS = [
         row="Trame whole line delete, 10k formula cells, one DeleteRow (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
-    # The undo of that delete, and its redo, each held to the same budget: a
-    # history step of a structural edit is one more structural edit. Only the
-    # tail after the step of Loro's undo manager is counted: that step alone
-    # costs about 300 million (`ambre-spec-budgets.md`, the whole line delete
-    # row), and no code of this workspace runs inside it.
+    # The undo of that delete, and its redo, each held whole to the same
+    # budget: a history step of a structural edit is one more structural
+    # edit. The delete records its own inverse, so neither step goes through
+    # the checkout of Loro's undo manager (`TRAME-286`).
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="line_delete_undo",
-        symbol="after_undo",
-        row="Trame whole line delete, 10k formula cells, the tail of its undo (< 10 ms)",
+        symbol="ambre_budget_trame_line_delete_undo",
+        row="Trame whole line delete, 10k formula cells, its whole undo (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="line_delete_redo",
-        symbol="after_redo",
-        row="Trame whole line delete, 10k formula cells, the tail of its redo (< 10 ms)",
+        symbol="ambre_budget_trame_line_delete_redo",
+        row="Trame whole line delete, 10k formula cells, its whole redo (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
     # One remote batch from its import to its events: every cache, the
