@@ -21,16 +21,13 @@ owner crates/ambre-app/src/host/web_embed.rs TOILE-UI-091
 owner crates/ambre-app/src/host/web_embed.rs TOILE-UI-097
 owner crates/ambre-app/src/host/web_embed.rs TOILE-UI-324
 owner crates/ambre-app/src/lib.rs PROSE-FEAT-040
-owner crates/ambre-app/src/lib.rs PROSE-IO-053
 owner crates/ambre-app/src/lib.rs PROSE-UI-050
 owner crates/ambre-app/src/lib.rs PROSE-UI-052
 owner crates/ambre-app/src/lib.rs TOILE-065
 owner crates/ambre-app/src/lib.rs TOILE-114
-owner crates/ambre-app/src/lib.rs TOILE-IO-022
 owner crates/ambre-app/src/lib.rs TOILE-IO-023
 owner crates/ambre-app/src/lib.rs TOILE-UI-023
 owner crates/ambre-app/src/lib.rs TOILE-UI-097
-owner crates/ambre-app/src/lib.rs TOILE-UI-340
 owner crates/ambre-app/src/platform.rs PROSE-UI-227
 owner crates/ambre-app/src/shell/app_root.rs PROSE-FEAT-040
 owner crates/ambre-app/src/shell/app_root.rs PROSE-UI-050

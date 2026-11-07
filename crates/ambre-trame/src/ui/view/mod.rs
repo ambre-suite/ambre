@@ -13,7 +13,7 @@
 
 use crate::message::{FillMode, TrameCommand, TrameEvent};
 use ambre_bus::{
-    Inbox, LogicCommand, LossyOutcome, Outbox, PasteSource, Port, SendOutcome, UiEvent,
+    Feed, LogicCommand, LossyOutcome, Outbox, PasteSource, Port, SendOutcome, UiEvent,
 };
 use ambre_canvas::{
     AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats, InputEvent,
@@ -405,7 +405,7 @@ pub struct TrameWiring {
     /// its one way to write (`BUS-011`).
     pub to_logic: Port<TrameCommand>,
     /// The queue from the Logic thread.
-    pub from_logic: Inbox<TrameEvent>,
+    pub from_logic: Feed<TrameEvent>,
     /// The shared text pipe.
     pub text_input: TextInput,
     /// When embedded as a `doc_embed` child (`toile-embeds`), the child view
@@ -442,7 +442,7 @@ pub struct TrameView {
     /// (`BUS-016`).
     busy_pub: BusyPublisher,
     /// Inbound queue from the Logic thread, drained each frame in `update`.
-    from_logic: Inbox<TrameEvent>,
+    from_logic: Feed<TrameEvent>,
 
     /// Grid navigation + cell cache.
     state: TrameUiState,
@@ -593,6 +593,9 @@ pub struct TrameView {
     /// Per-frame sub-phase breakdown produced by the renderer, shown on the HUD.
     draw_stats: DrawStats,
     initial_viewport_sent: bool,
+    /// A selection-statistics request the queue refused, still owed to the
+    /// band. Each frame offers it again until it leaves (`TRAME-UI-185`).
+    stats_owed: bool,
 
     /// Latest viewport request awaiting send, coalesced to <=1 per frame so a
     /// fast key-repeat can't outrun the Logic thread. Set in `handle_input`,

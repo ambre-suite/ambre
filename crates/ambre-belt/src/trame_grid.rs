@@ -318,6 +318,10 @@ mod tests {
         not(feature = "browser"),
         ignore = "needs a build, chromedriver and the services; run just test-browser"
     )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "pauses a worker through the DevTools Protocol, which Firefox does not speak"
+    )]
     async fn two_peers_typing_at_once_converge_on_both_screens() {
         let alice = Page::new_document("trame").await;
         // The first commit creates the document on the relay, so a second user

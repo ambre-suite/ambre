@@ -24,6 +24,28 @@ pub struct ChannelDocumentRow {
     pub kind: ambre_core::ChannelDocumentKind,
 }
 
+/// The documents whose members are those of `document_id`. A channel's
+/// `meta` decides access to every document of its channel (`SRV-103`), so a
+/// change of its rows changes the members of each. Any other document
+/// answers itself alone.
+pub async fn documents_sharing_members(
+    pool: &PgPool,
+    document_id: &Id<Document>,
+) -> Result<Vec<Id<Document>>, AppError> {
+    let rows: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT d.document_id FROM channel_documents m \
+         JOIN channel_documents d ON d.channel_id = m.channel_id \
+         WHERE m.document_id = $1 AND m.kind = 'meta'",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_all(pool)
+    .await?;
+    if rows.is_empty() {
+        return Ok(vec![*document_id]);
+    }
+    Ok(rows.into_iter().map(uuid_row_to_id).collect())
+}
+
 /// The documents a channel groups, `meta` first, then by identifier.
 ///
 /// An unknown channel groups nothing, so it answers an empty list.

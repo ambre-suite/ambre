@@ -74,7 +74,7 @@ pub fn build_chain(pixels: &Payload<RgbaPixels>, size: Size<Px<Image>>) -> Vec<M
 /// The number of mip levels wgpu expects for an image of this size, level 0
 /// included -- `floor(log2(max(w, h))) + 1`, and 1 for a degenerate size.
 pub fn level_count(size: Size<Px<Image>>) -> u32 {
-    let longest = size.width.get().max(size.height.get());
+    let longest = size.width.max(size.height).get();
     if longest <= 1 {
         return 1;
     }

@@ -1,14 +1,15 @@
-// ambre-app/src/relay.rs
+// ambre-app/src/switchboard.rs
 // ============================================================================
-// The decisions of the per-frame relay (`ARCH-072`). The relay closure in `lib.rs` reads the queues, hands each
-// event to this module, and applies what this module answers. This module
-// names no DOM, no `web_sys` and no signal. So it compiles on the host, and
-// the native tier runs its tests.
+// The decisions of the switchboard (`ARCH-072`). The switchboard closure in
+// `lib.rs` reads the queues, hands each event to this module, and applies
+// what this module answers. This module names no DOM, no `web_sys` and no
+// signal. So it compiles on the host, and the native tier runs its tests. It
+// reads no clock either: the wiring passes each instant, so a test sets it.
 //
-// The child fan-out holds the senders of the embedded views. Those are
-// `ambre_bus::conduit` queues, which run on the host as well. The decision
-// to defer an event depends on what the queue takes, so the fan-out keeps
-// the senders rather than answering a list of sends.
+// The view fan-out holds the senders of the main view and of the embedded
+// views. Those are `ambre_bus::conduit` queues, which run on the host as
+// well. The decision to defer an event depends on what the queue takes, so
+// the fan-out keeps the senders rather than answering a list of sends.
 // ============================================================================
 
 use std::cell::RefCell;
@@ -16,47 +17,193 @@ use std::collections::{HashMap, VecDeque};
 
 use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::sync_warning::SyncWarningCode;
-use ambre_bus::{DocumentSummary, MemberInfo, RestCommand, RestEvent};
+use ambre_bus::{DocumentSummary, MemberInfo, RestCommand, RestEvent, Role};
+use ambre_canvas::{PerfPublisher, PerfSnapshot};
 use ambre_chrome::ToastKind;
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{
-    Credential, DisplayName, OidcState, Opaque, Payload, PlaintextContainer, ProviderUrls,
-    Validated,
+    Authored, Credential, DisplayName, ExchangePublicKey, FixedBytes, FracMs, Instant, OidcState,
+    Opaque, PageLoad, Payload, PlaintextContainer, ProviderUrls, TimeSpan, Validated,
 };
 use ambre_logic::app::{LogicCommand, UiEvent};
 
 use crate::ChromeStatus;
 use crate::tofu::{self, TofuPrompt};
 
-/// How many events may wait for one child before the oldest are dropped.
+/// How many events may wait for one view target before the oldest are dropped.
 ///
-/// A child is pumped once per frame, so a backlog only forms on a burst larger
-/// than the queue itself. Past this the client is saturated for good and no
-/// amount of memory fixes it. The real answer is the busy signal `BUS-016`
+/// Each view is pumped once per frame, so a backlog only forms on a burst
+/// larger than the queue itself. Past this the client is saturated for good and
+/// no amount of memory fixes it. The real answer is the busy signal `BUS-016`
 /// prescribes, which lands with its own Story. Until then the bound is what
-/// keeps a stalled child from growing without limit, and it says so out loud.
+/// keeps a stalled view from growing without limit, and it says so out loud.
 // A `u32` widens into a `usize` on every target the workspace builds.
-pub(crate) const CHILD_BACKLOG_LIMIT: usize = crate::CHANNEL_CAPACITY.get() as usize;
+pub(crate) const VIEW_BACKLOG_LIMIT: usize = crate::CHANNEL_CAPACITY.get() as usize;
 
-/// The child fan-out: every live view of a nested document, by document, and
-/// what each child's queue could not take yet.
-///
-/// The child factory registers a view, and the relay routes the events. The
-/// two share one fan-out behind an `Rc`, on the page's main thread alone.
-#[derive(Default)]
-pub(crate) struct ChildFanOut {
-    /// The senders of every live view, by document. A list rather than a
-    /// slot -- two embeds of one document are two views (the Toile embeds spec).
-    routes: RefCell<HashMap<Id<Document>, Vec<Sender<UiEvent>>>>,
-    /// What a child's queue could not take yet, oldest first, by document
-    /// (the Toile embeds spec).
-    backlog: RefCell<HashMap<Id<Document>, VecDeque<UiEvent>>>,
+/// The views a deferred event waits for.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum Target {
+    /// The view of the routed document, on the top-level queue.
+    Main,
+    /// Every live view of one nested document.
+    Child(Id<Document>),
 }
 
-impl ChildFanOut {
+/// What one view queue did with an event it was offered.
+enum Offer {
+    /// The queue took it.
+    Taken,
+    /// The queue was full, and hands it back.
+    Full(UiEvent),
+    /// The view is gone, and so is its queue.
+    Gone,
+}
+
+/// Whether a view still reads its queue.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Reader {
+    /// The view is there, whether or not it read lately.
+    Live,
+    /// The view dropped its receiver.
+    Gone,
+}
+
+/// One view's queue, what it could not take yet, and the documents whose
+/// events it lost.
+///
+/// Each view keeps a backlog of its own (`BUS-044`). A backlog shared by two
+/// views of one document offers a waiting event to both again. The view that
+/// took it the first time would then apply it twice.
+struct ViewQueue {
+    tx: Sender<UiEvent>,
+    /// What the queue refused, oldest first (`BUS-038`).
+    backlog: VecDeque<UiEvent>,
+    /// The documents an event dropped past the bound belonged to, since the
+    /// backlog last drained (`BUS-041`).
+    lost: Vec<Id<Document>>,
+}
+
+impl ViewQueue {
+    fn new(tx: Sender<UiEvent>) -> Self {
+        Self {
+            tx,
+            backlog: VecDeque::new(),
+            lost: Vec::new(),
+        }
+    }
+
+    fn offer(&self, ev: UiEvent) -> Offer {
+        match self.tx.try_send(ev) {
+            Ok(()) => Offer::Taken,
+            Err(TrySendError::Full(ev)) => Offer::Full(ev),
+            Err(TrySendError::Disconnected(_)) => Offer::Gone,
+        }
+    }
+
+    /// Hand `ev` to the view, behind what waits already (`BUS-038`). Reports
+    /// whether the view is still there.
+    fn send(&mut self, target: Target, ev: UiEvent) -> Reader {
+        if !self.backlog.is_empty() {
+            self.defer(target, ev);
+            return Reader::Live;
+        }
+        match self.offer(ev) {
+            Offer::Taken => Reader::Live,
+            Offer::Full(ev) => {
+                self.defer(target, ev);
+                Reader::Live
+            }
+            Offer::Gone => Reader::Gone,
+        }
+    }
+
+    /// Re-offer what waits, oldest first, stopping at the first event the queue
+    /// still refuses so the order is kept (`BUS-038`). Reports whether the view
+    /// is still there.
+    fn flush(&mut self) -> Reader {
+        while let Some(ev) = self.backlog.pop_front() {
+            match self.offer(ev) {
+                Offer::Taken => {}
+                Offer::Full(ev) => {
+                    self.backlog.push_front(ev);
+                    return Reader::Live;
+                }
+                Offer::Gone => return Reader::Gone,
+            }
+        }
+        Reader::Live
+    }
+
+    /// The documents this view lost an event of, once its backlog is empty
+    /// again (`BUS-041`). The view reads its queue by then, so the state Logic
+    /// answers with reaches it.
+    fn caught_up(&mut self) -> Vec<Id<Document>> {
+        if self.backlog.is_empty() {
+            std::mem::take(&mut self.lost)
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Queue `ev`, oldest first, and say so when the bound forces a drop
+    /// (`BUS-039`). The document of the dropped event is kept, so the view can
+    /// ask for its whole state once it reads again (`BUS-041`).
+    fn defer(&mut self, target: Target, ev: UiEvent) {
+        self.backlog.push_back(ev);
+        if self.backlog.len() <= VIEW_BACKLOG_LIMIT {
+            return;
+        }
+        let dropped = self.backlog.pop_front();
+        let document = match target {
+            Target::Main => dropped.and_then(|ev| ev.routed_document_id()),
+            Target::Child(id) => Some(id),
+        };
+        if let Some(id) = document
+            && !self.lost.contains(&id)
+        {
+            self.lost.push(id);
+        }
+        match target {
+            Target::Main => {
+                tracing::error!("main view: backlog full, an event was dropped");
+            }
+            Target::Child(id) => {
+                tracing::error!("embedded document {id}: backlog full, an event was dropped");
+            }
+        }
+    }
+}
+
+/// The view fan-out: the one writer on every view queue. It holds the main
+/// view's queue, every live view of a nested document, and what each view
+/// could not take yet (`BUS-038`, `BUS-039`).
+///
+/// The child factory registers a view, and the switchboard routes the events.
+/// The two share one fan-out behind an `Rc`, on the page's main thread alone.
+pub(crate) struct ViewFanOut {
+    /// The queue of the routed document's view.
+    main: RefCell<ViewQueue>,
+    /// The queues of every live child view, by document. A list rather than a
+    /// slot -- two embeds of one document are two views (the Toile embeds spec).
+    routes: RefCell<HashMap<Id<Document>, Vec<ViewQueue>>>,
+}
+
+impl ViewFanOut {
+    /// The fan-out over the main view's queue, with no child yet.
+    pub(crate) fn new(main: Sender<UiEvent>) -> Self {
+        Self {
+            main: RefCell::new(ViewQueue::new(main)),
+            routes: RefCell::default(),
+        }
+    }
+
     /// Add the queue of one more view of `id`.
     pub(crate) fn register(&self, id: Id<Document>, tx: Sender<UiEvent>) {
-        self.routes.borrow_mut().entry(id).or_default().push(tx);
+        self.routes
+            .borrow_mut()
+            .entry(id)
+            .or_default()
+            .push(ViewQueue::new(tx));
     }
 
     /// Fan a nested child's event out to its own view queues, or give the
@@ -67,133 +214,106 @@ impl ChildFanOut {
     /// top-level document's events, and untagged service events, come back
     /// unchanged.
     pub(crate) fn divert(&self, ev: UiEvent) -> Option<UiEvent> {
-        match self.child_of(&ev) {
-            Some(id) => {
-                self.send(id, ev);
-                None
-            }
-            None => Some(ev),
-        }
-    }
-
-    /// Re-offer every deferred event, oldest first, stopping at the first one a
-    /// queue still refuses so the order is kept (the Toile embeds spec).
-    pub(crate) fn flush(&self) {
-        let ids: Vec<Id<Document>> = self.backlog.borrow().keys().copied().collect();
-        for id in ids {
-            loop {
-                let Some(ev) = self
-                    .backlog
-                    .borrow()
-                    .get(&id)
-                    .and_then(|q| q.front().cloned())
-                else {
-                    break;
-                };
-                if !self.offer(id, &ev) {
-                    break;
-                }
-                self.backlog
-                    .borrow_mut()
-                    .get_mut(&id)
-                    .map(VecDeque::pop_front);
-            }
-            if self
-                .backlog
-                .borrow()
-                .get(&id)
-                .is_some_and(VecDeque::is_empty)
-            {
-                self.backlog.borrow_mut().remove(&id);
-            }
-        }
-    }
-
-    /// The nested document `ev` belongs to, when it is one the fan-out holds a
-    /// route for. Such an event goes to the child's queues and never to the
-    /// board's own stream or chrome (the Toile embeds spec). A route left with no view
-    /// still counts.
-    fn child_of(&self, ev: &UiEvent) -> Option<Id<Document>> {
-        ev.routed_document_id()
-            .filter(|id| self.routes.borrow().contains_key(id))
-    }
-
-    /// Hand `ev` to every live view of `id`, deferring what a full queue
-    /// refuses (the Toile embeds spec).
-    ///
-    /// The old path dropped it: a `Full` fell through the disconnected test and
-    /// then past the `continue`. The event reached neither the child nor the
-    /// board. It is a CRDT delta, so the child's view then sat behind its own
-    /// document until something else redrew it from scratch.
-    ///
-    /// A document with anything already waiting takes the new event straight to
-    /// the back of its queue. A child must not see a later delta before an
-    /// earlier one.
-    fn send(&self, id: Id<Document>, ev: UiEvent) {
-        if self
-            .backlog
-            .borrow()
-            .get(&id)
-            .is_some_and(|q| !q.is_empty())
-        {
-            self.defer(id, ev);
-            return;
-        }
-        if !self.offer(id, &ev) {
-            self.defer(id, ev);
-        }
-    }
-
-    /// Offer `ev` to each live view of `id`, dropping the senders whose view is
-    /// gone. Reports whether every remaining one took it; `false` means at least
-    /// one queue was full and the event must be re-offered.
-    fn offer(&self, id: Id<Document>, ev: &UiEvent) -> bool {
-        let mut routes = self.routes.borrow_mut();
-        let Some(senders) = routes.get_mut(&id) else {
-            // No view left at all: the document is no longer shown, so the
-            // event has nowhere to go and nothing to be behind.
-            return true;
+        let Some(id) = ev.routed_document_id() else {
+            return Some(ev);
         };
-        let mut all_took_it = true;
-        senders.retain(|tx| match tx.try_send(ev.clone()) {
-            Ok(()) => true,
-            // The child view was dropped; reclaim its slot.
-            Err(TrySendError::Disconnected(_)) => false,
-            Err(TrySendError::Full(_)) => {
-                all_took_it = false;
-                true
-            }
-        });
-        // The entry stays even with no sender left in it, and that emptiness is
-        // what holds the Toile embeds spec, section 3. A child view is dropped the frame its embed
-        // leaves the culled set, while its session stays open for the whole
-        // close debounce. An event arriving in that window used to find no route
-        // and fall through to the board's own stream and chrome mirrors. A Toile
+        let mut routes = self.routes.borrow_mut();
+        let Some(views) = routes.get_mut(&id) else {
+            return Some(ev);
+        };
+        // A gone view gives its slot back. The entry stays even with no view
+        // left in it, and that emptiness is what holds the Toile embeds spec,
+        // section 3. A child view is dropped the frame its embed leaves the
+        // culled set, while its session stays open for the whole close
+        // debounce. An event arriving in that window used to find no route and
+        // fall through to the board's own stream and chrome mirrors. A Toile
         // nested in a Toile emits exactly the event the parent board would then
         // apply to itself. An empty entry absorbs it instead, and the next view
-        // of that document pushes its sender back into the same slot.
+        // of that document pushes its queue back into the same slot.
         //
         // What is left is a few dozen bytes per document embedded at least once
         // in this session, which nothing reclaims. Bounded by the boards a user
         // opens, and the trade the other way is a delta applied to the wrong
         // document.
-        all_took_it
+        views.retain_mut(|view| view.send(Target::Child(id), ev.clone()) == Reader::Live);
+        None
     }
 
-    /// Queue `ev` for `id`, oldest first, and say so when the bound forces a
-    /// drop.
-    fn defer(&self, id: Id<Document>, ev: UiEvent) {
-        let mut backlog = self.backlog.borrow_mut();
-        let queue = backlog.entry(id).or_default();
-        queue.push_back(ev);
-        if queue.len() > CHILD_BACKLOG_LIMIT {
-            queue.pop_front();
-            tracing::error!("embedded document {id}: backlog full, an event was dropped");
+    /// Hand a top-level event to the main view, deferring it behind what its
+    /// queue refused before (`BUS-038`, `BUS-039`).
+    ///
+    /// The old path dropped it: `let _ = view_tx.try_send(ev)` threw away
+    /// whatever a full queue refused, with no trace. A burst larger than the
+    /// queue left the view behind its own document.
+    pub(crate) fn deliver(&self, ev: UiEvent) {
+        let mut main = self.main.borrow_mut();
+        if main.send(Target::Main, ev) == Reader::Gone {
+            // No main view reads any more: nothing waits for it.
+            main.backlog.clear();
         }
+    }
+
+    /// Re-offer every deferred event, oldest first, and answer the documents
+    /// whose views lost an event and read again (`BUS-041`). The switchboard
+    /// asks the Logic thread for the whole state of each.
+    ///
+    /// Each view stops at the first event its queue still refuses, so the
+    /// order is kept (`BUS-038`).
+    #[must_use = "a view that lost an event stays behind until its document is resent"]
+    pub(crate) fn flush(&self) -> Vec<Id<Document>> {
+        let mut lost = Vec::new();
+        {
+            let mut main = self.main.borrow_mut();
+            if main.flush() == Reader::Live {
+                lost.extend(main.caught_up());
+            } else {
+                main.backlog.clear();
+                main.lost.clear();
+            }
+        }
+        for views in self.routes.borrow_mut().values_mut() {
+            views.retain_mut(|view| view.flush() == Reader::Live);
+            for view in views.iter_mut() {
+                lost.extend(view.caught_up());
+            }
+        }
+        // Two views of one document lost it: one resend serves both.
+        let mut resend: Vec<Id<Document>> = Vec::with_capacity(lost.len());
+        for id in lost {
+            if !resend.contains(&id) {
+                resend.push(id);
+            }
+        }
+        resend
+    }
+
+    /// How many events wait for `target`, summed over its views.
+    #[cfg(test)]
+    fn waiting(&self, target: Target) -> usize {
+        match target {
+            Target::Main => self.main.borrow().backlog.len(),
+            Target::Child(id) => self
+                .routes
+                .borrow()
+                .get(&id)
+                .map_or(0, |views| views.iter().map(|v| v.backlog.len()).sum()),
+        }
+    }
+
+    /// Whether no view waits on anything.
+    #[cfg(test)]
+    fn idle(&self) -> bool {
+        self.main.borrow().backlog.is_empty()
+            && self
+                .routes
+                .borrow()
+                .values()
+                .flatten()
+                .all(|view| view.backlog.is_empty())
     }
 }
 
-/// What a page boots, as far as the relay reads it: a Murmure page asks its
+/// What a page boots, as far as the switchboard reads it: a Murmure page asks its
 /// channels and their activity once signed in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Page {
@@ -203,7 +323,7 @@ pub(crate) enum Page {
     Murmure,
 }
 
-/// Whether the relay asked the document list of this page yet.
+/// Whether the switchboard asked the document list of this page yet.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 enum Listing {
     #[default]
@@ -211,7 +331,7 @@ enum Listing {
     Asked,
 }
 
-/// What the relay reads of the shell beside the event: the routed document,
+/// What the switchboard reads of the shell beside the event: the routed document,
 /// and the header status as the shell holds it now.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Shown {
@@ -221,7 +341,7 @@ pub(crate) struct Shown {
     pub(crate) status: ChromeStatus,
 }
 
-/// What the relay needs of the Murmure members, to file a fetched key under
+/// What the switchboard needs of the Murmure members, to file a fetched key under
 /// what it is for.
 pub(crate) trait Roster {
     /// The display name of a member this page knows, for the prompt.
@@ -231,7 +351,7 @@ pub(crate) trait Roster {
     fn take_invite(&self, user: Id<User>) -> Option<Id<Channel>>;
 }
 
-/// A notice the relay raises, with its severity.
+/// A notice the switchboard raises, with its severity.
 pub(crate) struct Notice {
     /// The severity, which picks the toast's accent.
     pub(crate) kind: ToastKind,
@@ -248,8 +368,8 @@ impl Notice {
     }
 }
 
-/// One decision of the relay on a service event. The wiring applies each one
-/// in the order the relay answers them.
+/// One decision of the switchboard on a service event. The wiring applies each one
+/// in the order the switchboard answers them.
 pub(crate) enum Effect<'e> {
     /// Raise a toast.
     Notice(Notice),
@@ -285,15 +405,15 @@ pub(crate) enum Effect<'e> {
     Status(ChromeStatus),
 }
 
-/// The relay's own state across frames: the page it runs on, and whether it
+/// The switchboard's own state across frames: the page it runs on, and whether it
 /// asked the document list yet.
-pub(crate) struct Relay {
+pub(crate) struct Switchboard {
     page: Page,
     listing: Listing,
 }
 
-impl Relay {
-    /// The relay of a page that boots `page`.
+impl Switchboard {
+    /// The switchboard of a page that boots `page`.
     pub(crate) fn new(page: Page) -> Self {
         Self {
             page,
@@ -567,7 +687,7 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
     }
 }
 
-/// Where an event goes once the relay has read it.
+/// Where an event goes once the switchboard has read it.
 pub(crate) enum Destination {
     /// The canvas view's stream: content, and everything else.
     View(UiEvent),
@@ -627,7 +747,54 @@ impl BusyNotice {
     }
 }
 
-/// The relay's roster on a Murmure page is the Murmure chrome's own.
+/// What a fetched key leads to once the wiring has read its pin
+/// (`CHROME-050`, `CHROME-051`). A trusted key sends its request at once,
+/// dated `now`. A new or a changed key asks the user first.
+///
+/// The wiring reads the pin off the thread and the clock after that read, so
+/// the request carries the instant it leaves. `role` is the one an
+/// invitation grants.
+pub(crate) fn pin_read(
+    prompt: TofuPrompt,
+    pinned: Option<FixedBytes<ExchangePublicKey>>,
+    role: Role,
+    now: Instant<Authored>,
+) -> tofu::Next {
+    tofu::classify(prompt, pinned, role, now)
+}
+
+/// The shortest span between two perf read-outs of the status bar. The view
+/// publishes a snapshot every frame, and a text read-out for a developer
+/// needs no more than two a second. The HUD of the frame keeps the same
+/// period (`ambre-spec-frame.md`).
+pub(crate) const PERF_PERIOD: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(500.0);
+
+/// The cadence of the perf read-out: one snapshot per [`PERF_PERIOD`] at
+/// most, on the page clock.
+#[derive(Default)]
+pub(crate) struct PerfCadence {
+    last: Instant<PageLoad>,
+}
+
+impl PerfCadence {
+    /// The snapshot to show at `now`, or `None` while the last one is fresh.
+    ///
+    /// The cadence starts at the page load, so the first snapshot shows one
+    /// period after it.
+    pub(crate) fn step(
+        &mut self,
+        now: Instant<PageLoad>,
+        perf: &PerfPublisher,
+    ) -> Option<PerfSnapshot> {
+        if now - self.last < PERF_PERIOD {
+            return None;
+        }
+        self.last = now;
+        Some(perf.read())
+    }
+}
+
+/// The switchboard's roster on a Murmure page is the Murmure chrome's own.
 #[cfg(target_arch = "wasm32")]
 impl Roster for ambre_murmure::chrome::MurmureRelay {
     fn member_name(&self, user: Id<User>) -> Option<Validated<DisplayName>> {
@@ -642,19 +809,21 @@ impl Roster for ambre_murmure::chrome::MurmureRelay {
 #[cfg(test)]
 mod tests {
     use super::{
-        BusyNotice, CHILD_BACKLOG_LIMIT, ChildFanOut, Destination, Effect, Load, Notice, Page,
-        Relay, Roster, Shown, destination,
+        BusyNotice, Destination, Effect, Load, Notice, Page, PerfCadence, Roster, Shown,
+        Switchboard, Target, VIEW_BACKLOG_LIMIT, ViewFanOut, destination, pin_read,
     };
     use crate::ChromeStatus;
-    use crate::tofu::{self, KeyContact, Next, Purpose, TofuPrompt};
+    use crate::tofu::{KeyContact, Next, Purpose, TofuPrompt};
     use ambre_bus::conduit;
     use ambre_bus::sync_warning::SyncWarningCode;
+    use ambre_bus::{Authored, DirectMember, Instant};
     use ambre_bus::{Confidential, DocType, Plaintext, RestCommand, RestEvent, Role};
+    use ambre_canvas::{PerfPublisher, PerfSnapshot};
     use ambre_chrome::ToastKind;
     use ambre_core::id::{Channel, Document, Id, User};
     use ambre_core::{
-        Credential, DisplayName, Email, ExchangePublicKey, FixedBytes, KeyFingerprints, LinkState,
-        OidcState, Opaque, ProviderUrls, Validated,
+        Count, Credential, DisplayName, Email, ExchangePublicKey, FixedBytes, KeyFingerprints,
+        LinkState, Ms, OidcState, Opaque, PageLoad, ProviderUrls, TimeSpan, Validated,
     };
     use ambre_logic::app::{LogicCommand, UiEvent};
     use std::cell::Cell;
@@ -682,6 +851,35 @@ mod tests {
         conduit::local::<UiEvent>(ambre_core::Bounded::<conduit::ChannelSlots>::of::<N>())
     }
 
+    /// A fan-out whose main view is gone, for the tests that read the children.
+    fn children() -> ViewFanOut {
+        ViewFanOut::new(queue::<1>().0)
+    }
+
+    /// The document each event a view queue holds names, oldest first. A test
+    /// mints one document per event, so the list reads the order back.
+    fn drain(rx: &conduit::Receiver<UiEvent>) -> Vec<Id<Document>> {
+        let mut seen = Vec::new();
+        while let Ok(ev) = rx.try_recv() {
+            match ev {
+                UiEvent::ConnectionStatus { document_id, .. } => seen.push(document_id),
+                _ => panic!("a foreign event reached the main view"),
+            }
+        }
+        seen
+    }
+
+    /// Counts the error events while `f` runs.
+    fn errors_during(f: impl FnOnce()) -> usize {
+        let errors = Arc::new(AtomicUsize::new(0));
+        let subscriber = tracing_subscriber::layer::SubscriberExt::with(
+            tracing_subscriber::registry(),
+            Errors(Arc::clone(&errors)),
+        );
+        tracing::subscriber::with_default(subscriber, f);
+        errors.load(Ordering::Relaxed)
+    }
+
     /// Counts the error events emitted while it is the default subscriber.
     struct Errors(Arc<AtomicUsize>);
 
@@ -701,7 +899,7 @@ mod tests {
     /// order and ahead of the fresh stream. A later event never overtakes it.
     #[test]
     fn a_refused_event_waits_and_arrives_in_order() {
-        let fan_out = ChildFanOut::default();
+        let fan_out = children();
         let doc = Id::<Document>::mint();
         let (tx, rx) = queue::<1>();
         fan_out.register(doc, tx);
@@ -714,7 +912,7 @@ mod tests {
             assert!(fan_out.divert(status(doc, link)).is_none());
         }
         assert_eq!(
-            fan_out.backlog.borrow()[&doc].len(),
+            fan_out.waiting(Target::Child(doc)),
             2,
             "a refused event was dropped"
         );
@@ -722,7 +920,7 @@ mod tests {
         let mut seen = Vec::new();
         while let Ok(ev) = rx.try_recv() {
             seen.push(connected(ev));
-            fan_out.flush();
+            assert!(fan_out.flush().is_empty(), "nothing was lost");
         }
         assert_eq!(
             seen,
@@ -732,36 +930,144 @@ mod tests {
                 LinkState::Connected
             ]
         );
-        assert!(
-            fan_out.backlog.borrow().is_empty(),
-            "a drained backlog lingers"
-        );
+        assert!(fan_out.idle(), "a drained backlog lingers");
     }
 
     /// The Toile embeds spec, section 5: a backlog past its bound drops its oldest event, and
     /// says so. Nothing is dropped in silence.
     #[test]
     fn an_overflowing_backlog_says_what_it_dropped() {
-        let fan_out = ChildFanOut::default();
+        let fan_out = children();
         let doc = Id::<Document>::mint();
         let (tx, _rx) = queue::<1>();
         fan_out.register(doc, tx);
-        let errors = Arc::new(AtomicUsize::new(0));
-        let subscriber = tracing_subscriber::layer::SubscriberExt::with(
-            tracing_subscriber::registry(),
-            Errors(Arc::clone(&errors)),
-        );
-        tracing::subscriber::with_default(subscriber, || {
+        let errors = errors_during(|| {
             // One taken by the queue, the bound waiting, and two past it.
-            for _ in 0..CHILD_BACKLOG_LIMIT + 3 {
+            for _ in 0..VIEW_BACKLOG_LIMIT + 3 {
                 assert!(fan_out.divert(status(doc, LinkState::Connected)).is_none());
             }
         });
-        assert_eq!(fan_out.backlog.borrow()[&doc].len(), CHILD_BACKLOG_LIMIT);
+        assert_eq!(fan_out.waiting(Target::Child(doc)), VIEW_BACKLOG_LIMIT);
+        assert_eq!(errors, 2, "an event was dropped in silence");
+    }
+
+    /// `BUS-038`: what the main view's full queue refuses waits, and a later
+    /// event never overtakes it.
+    #[test]
+    fn a_refused_main_view_event_waits_and_arrives_in_order() {
+        let (tx, rx) = queue::<1>();
+        let fan_out = ViewFanOut::new(tx);
+        let sent: Vec<Id<Document>> = (0..3).map(|_| Id::<Document>::mint()).collect();
+
+        for &doc in &sent {
+            fan_out.deliver(status(doc, LinkState::Connected));
+        }
         assert_eq!(
-            errors.load(Ordering::Relaxed),
+            fan_out.waiting(Target::Main),
             2,
-            "an event was dropped in silence"
+            "a refused event was dropped"
+        );
+
+        let mut seen = drain(&rx);
+        while !fan_out.idle() {
+            assert!(fan_out.flush().is_empty(), "nothing was lost");
+            seen.extend(drain(&rx));
+        }
+        assert_eq!(seen, sent);
+    }
+
+    /// `BUS-039`: past its bound the main view's backlog drops its oldest
+    /// event, and says so once per event. Nothing is dropped in silence.
+    #[test]
+    fn an_overflowing_main_view_backlog_says_what_it_dropped() {
+        let (tx, rx) = queue::<1>();
+        let fan_out = ViewFanOut::new(tx);
+        let sent: Vec<Id<Document>> = (0..VIEW_BACKLOG_LIMIT + 3)
+            .map(|_| Id::<Document>::mint())
+            .collect();
+
+        // One taken by the queue, the bound waiting, and two past it.
+        let errors = errors_during(|| {
+            for &doc in &sent {
+                fan_out.deliver(status(doc, LinkState::Connected));
+            }
+        });
+        assert_eq!(errors, 2, "an event was dropped in silence");
+
+        let mut seen = drain(&rx);
+        while !fan_out.idle() {
+            let _resent = fan_out.flush();
+            seen.extend(drain(&rx));
+        }
+        // The queue kept the first; the backlog lost the two oldest it held.
+        let mut kept = vec![sent[0]];
+        kept.extend_from_slice(&sent[3..]);
+        assert_eq!(seen, kept);
+    }
+
+    /// `BUS-038`: the next frame's flush hands the main view what waited,
+    /// before an event that frame delivers.
+    #[test]
+    fn the_main_view_backlog_drains_on_the_next_frame() {
+        let (tx, rx) = queue::<3>();
+        let fan_out = ViewFanOut::new(tx);
+        let first: Vec<Id<Document>> = (0..5).map(|_| Id::<Document>::mint()).collect();
+
+        // Frame 1: a burst of five on a queue of three, then the view reads.
+        for &doc in &first {
+            fan_out.deliver(status(doc, LinkState::Connected));
+        }
+        assert_eq!(drain(&rx), first[..3]);
+
+        // Frame 2: the flush runs before the fresh stream, as `lib.rs` orders it.
+        assert!(fan_out.flush().is_empty(), "nothing was lost");
+        assert!(fan_out.idle(), "a drained backlog lingers");
+        let fresh = Id::<Document>::mint();
+        fan_out.deliver(status(fresh, LinkState::Connected));
+        assert_eq!(drain(&rx), [first[3], first[4], fresh]);
+    }
+
+    /// `BUS-040`: each view waits on its own backlog. A full main view leaves a
+    /// child its events, and a full child leaves the main view its own.
+    #[test]
+    fn a_full_view_holds_back_no_other_view() {
+        let (main_tx, main_rx) = queue::<1>();
+        let fan_out = ViewFanOut::new(main_tx);
+        let child = Id::<Document>::mint();
+        let (child_tx, child_rx) = queue::<1>();
+        fan_out.register(child, child_tx);
+
+        // Fill the main view, and leave one event waiting for it.
+        let top: Vec<Id<Document>> = (0..2).map(|_| Id::<Document>::mint()).collect();
+        for &doc in &top {
+            fan_out.deliver(status(doc, LinkState::Connected));
+        }
+        assert!(
+            fan_out
+                .divert(status(child, LinkState::Connected))
+                .is_none()
+        );
+        assert_eq!(
+            child_rx.try_recv().map(connected),
+            Ok(LinkState::Connected),
+            "the main view's backlog held the child back"
+        );
+
+        // Fill the child, and leave one event waiting for it.
+        for link in [LinkState::Connected, LinkState::Disconnected] {
+            assert!(fan_out.divert(status(child, link)).is_none());
+        }
+        assert_eq!(drain(&main_rx), top[..1]);
+        assert!(fan_out.flush().is_empty(), "nothing was lost");
+        assert_eq!(
+            drain(&main_rx),
+            top[1..],
+            "the child's backlog held the main view back"
+        );
+        assert_eq!(
+            fan_out.waiting(Target::Child(child)),
+            1,
+            "the child's refused event was dropped"
         );
     }
 
@@ -770,7 +1076,7 @@ mod tests {
     /// absorbed instead of falling through to the board's own stream.
     #[test]
     fn a_childs_event_never_reaches_the_board() {
-        let fan_out = ChildFanOut::default();
+        let fan_out = children();
         let child = Id::<Document>::mint();
         let board = Id::<Document>::mint();
         let (tx, rx) = queue::<4>();
@@ -811,7 +1117,7 @@ mod tests {
     /// each event of that document.
     #[test]
     fn two_views_of_one_document_each_take_its_event() {
-        let fan_out = ChildFanOut::default();
+        let fan_out = children();
         let doc = Id::<Document>::mint();
         let (first, first_rx) = queue::<4>();
         let (second, second_rx) = queue::<4>();
@@ -826,6 +1132,102 @@ mod tests {
             Ok(LinkState::Connected),
             "the second registration evicted the first"
         );
+    }
+
+    /// `BUS-044`: the two embeds of one document are two views with a backlog
+    /// each. The view that took an event the first time is not offered it
+    /// again when the other one reads.
+    #[test]
+    fn two_views_of_one_document_never_take_an_event_twice() {
+        let fan_out = children();
+        let doc = Id::<Document>::mint();
+        let (wide, wide_rx) = queue::<4>();
+        let (narrow, narrow_rx) = queue::<1>();
+        fan_out.register(doc, wide);
+        fan_out.register(doc, narrow);
+
+        for link in [LinkState::Connected, LinkState::Disconnected] {
+            assert!(fan_out.divert(status(doc, link)).is_none());
+        }
+        assert_eq!(fan_out.waiting(Target::Child(doc)), 1);
+
+        let mut narrow_seen = Vec::new();
+        while let Ok(ev) = narrow_rx.try_recv() {
+            narrow_seen.push(connected(ev));
+            assert!(fan_out.flush().is_empty(), "nothing was lost");
+        }
+        let wide_seen: Vec<LinkState> = std::iter::from_fn(|| wide_rx.try_recv().ok())
+            .map(connected)
+            .collect();
+        let both = [LinkState::Connected, LinkState::Disconnected];
+        assert_eq!(wide_seen, both, "the wide view took an event twice");
+        assert_eq!(narrow_seen, both);
+    }
+
+    /// `BUS-041`: a main view that lost an event has its document resent once
+    /// it reads again, and once only. A view that still lags asks nothing yet.
+    #[test]
+    fn a_main_view_that_lost_an_event_has_its_document_resent_once_it_reads() {
+        let (tx, rx) = queue::<1>();
+        let fan_out = ViewFanOut::new(tx);
+        let doc = Id::<Document>::mint();
+        let errors = errors_during(|| {
+            for _ in 0..VIEW_BACKLOG_LIMIT + 2 {
+                fan_out.deliver(status(doc, LinkState::Connected));
+            }
+        });
+        assert_eq!(errors, 1, "one event past the bound");
+        assert!(
+            fan_out.flush().is_empty(),
+            "a view that reads nothing was resent its document"
+        );
+
+        let mut resent = Vec::new();
+        while rx.try_recv().is_ok() {
+            resent.extend(fan_out.flush());
+        }
+        assert!(fan_out.idle());
+        assert_eq!(resent, [doc]);
+        assert!(fan_out.flush().is_empty(), "the document was resent twice");
+    }
+
+    /// `BUS-041`: an embedded view that lost an event has its document resent
+    /// once it reads again.
+    #[test]
+    fn an_embedded_view_that_lost_an_event_has_its_document_resent_once_it_reads() {
+        let fan_out = children();
+        let doc = Id::<Document>::mint();
+        let (tx, rx) = queue::<1>();
+        fan_out.register(doc, tx);
+        let errors = errors_during(|| {
+            for _ in 0..VIEW_BACKLOG_LIMIT + 2 {
+                assert!(fan_out.divert(status(doc, LinkState::Connected)).is_none());
+            }
+        });
+        assert_eq!(errors, 1, "one event past the bound");
+
+        let mut resent = Vec::new();
+        while rx.try_recv().is_ok() {
+            resent.extend(fan_out.flush());
+        }
+        assert_eq!(resent, [doc]);
+    }
+
+    /// `BUS-041`: a view gone before it read again asks for nothing.
+    #[test]
+    fn a_view_gone_after_a_loss_asks_for_nothing() {
+        let fan_out = children();
+        let doc = Id::<Document>::mint();
+        let (tx, rx) = queue::<1>();
+        fan_out.register(doc, tx);
+        errors_during(|| {
+            for _ in 0..VIEW_BACKLOG_LIMIT + 2 {
+                assert!(fan_out.divert(status(doc, LinkState::Connected)).is_none());
+            }
+        });
+        drop(rx);
+        assert!(fan_out.flush().is_empty());
+        assert!(fan_out.idle(), "a gone view kept its backlog");
     }
 
     /// `CHROME-104`: a failed open of the active document lowers its loading
@@ -911,7 +1313,7 @@ mod tests {
         })
     }
 
-    /// The one prompt the relay asks to classify, or a failure naming what
+    /// The one prompt the switchboard asks to classify, or a failure naming what
     /// it answered instead.
     fn classified(effects: Vec<Effect<'_>>) -> TofuPrompt {
         match <[Effect<'_>; 1]>::try_from(effects) {
@@ -979,10 +1381,10 @@ mod tests {
             name: Some(name("Bob")),
             invite: Cell::new(Some((user, channel))),
         };
-        let mut relay = Relay::new(Page::Murmure);
+        let mut switchboard = Switchboard::new(Page::Murmure);
 
         let ev = member_key(user, 3);
-        let prompt = classified(relay.service(&ev, on(None), &roster));
+        let prompt = classified(switchboard.service(&ev, on(None), &roster));
         assert_eq!(
             prompt.purpose,
             Purpose::Channel {
@@ -996,7 +1398,7 @@ mod tests {
         assert_eq!(prompt.contact, KeyContact::New);
 
         let ev = member_key(user, 3);
-        let again = classified(relay.service(&ev, on(None), &roster));
+        let again = classified(switchboard.service(&ev, on(None), &roster));
         assert!(
             matches!(again.purpose, Purpose::Direct { .. }),
             "one invitation answered two keys"
@@ -1008,12 +1410,12 @@ mod tests {
     #[test]
     fn a_murmure_member_key_with_no_invitation_opens_a_direct_message() {
         let user = Id::<User>::mint();
-        let mut relay = Relay::new(Page::Murmure);
+        let mut switchboard = Switchboard::new(Page::Murmure);
 
         let first = member_key(user, 1);
         let second = member_key(user, 1);
-        let first = classified(relay.service(&first, on(None), &nobody()));
-        let second = classified(relay.service(&second, on(None), &nobody()));
+        let first = classified(switchboard.service(&first, on(None), &nobody()));
+        let second = classified(switchboard.service(&second, on(None), &nobody()));
 
         match (first.purpose, second.purpose) {
             (Purpose::Direct { channel_id: a }, Purpose::Direct { channel_id: b }) => {
@@ -1026,8 +1428,6 @@ mod tests {
 
     /// An invitee's key is classified for its document. With no pin it is a
     /// first contact, and with another pin it is a change. Both ask the user.
-    /// The pinned key reads the browser clock, so the wasm tier holds that
-    /// path (`ambre_app::tofu::tests`).
     #[test]
     fn an_invitee_key_asks_for_a_first_contact_and_for_a_change() {
         let document_id = Id::<Document>::mint();
@@ -1040,7 +1440,7 @@ mod tests {
             exchange_pub_key: key(7),
             fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
         });
-        let prompt = classified(Relay::new(Page::Document).service(&ev, on(None), &nobody()));
+        let prompt = classified(Switchboard::new(Page::Document).service(&ev, on(None), &nobody()));
         assert_eq!(
             prompt.purpose,
             Purpose::Invite {
@@ -1050,13 +1450,121 @@ mod tests {
         );
         assert_eq!(prompt.display_name, Some(name("Ada")));
 
-        match tofu::classify(prompt.clone(), None, Role::Editor) {
+        match pin_read(prompt.clone(), None, Role::Editor, AT) {
             Next::Ask(asked) => assert_eq!(asked.contact, KeyContact::New),
             Next::Proceed(sent) => panic!("a key with no pin left with no prompt: {sent:?}"),
         }
-        match tofu::classify(prompt, Some(key(8)), Role::Editor) {
+        match pin_read(prompt, Some(key(8)), Role::Editor, AT) {
             Next::Ask(asked) => assert_eq!(asked.contact, KeyContact::Changed),
             Next::Proceed(sent) => panic!("a changed key left with no prompt: {sent:?}"),
+        }
+    }
+
+    /// The instant the clock of these tests reads when a request leaves.
+    const AT: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
+
+    /// The pinned key of an invitee sends the invitation with no prompt. It
+    /// grants the role asked, carries the key the user saw, and leaves at the
+    /// instant the wiring read (`CHROME-047`, `CHROME-051`).
+    #[test]
+    fn a_pinned_invitee_key_invites_at_the_instant_read() {
+        let document_id = Id::<Document>::mint();
+        let user_id = Id::<User>::mint();
+        let ev = rest(RestEvent::InviteeKey {
+            document_id,
+            user_id,
+            display_name: name("Ada"),
+            email: Email::from("ada@test.local"),
+            exchange_pub_key: key(7),
+            fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
+        });
+        let prompt = classified(Switchboard::new(Page::Document).service(&ev, on(None), &nobody()));
+        let Next::Proceed(LogicCommand::Rest {
+            cmd:
+                RestCommand::InviteToDocument {
+                    document_id: sent_to,
+                    invitee,
+                    role,
+                    expect_exchange_pub_key,
+                    now,
+                    ..
+                },
+            ..
+        }) = pin_read(prompt, Some(key(7)), Role::Viewer, AT)
+        else {
+            panic!("a pinned key did not invite");
+        };
+        assert_eq!(sent_to, document_id);
+        assert_eq!(invitee, user_id);
+        assert_eq!(role, Role::Viewer);
+        assert_eq!(expect_exchange_pub_key, key(7));
+        assert_eq!(now, AT, "the invitation is dated by another clock");
+    }
+
+    /// The pinned key of a Murmure member opens the direct message of the two
+    /// at the instant read. A later clock dates the same request later, so the
+    /// instant comes from the wiring and from no clock of its own.
+    #[test]
+    fn a_pinned_member_key_opens_the_direct_message_at_the_instant_read() {
+        let user_id = Id::<User>::mint();
+        let prompt = classified(Switchboard::new(Page::Murmure).service(
+            &member_key(user_id, 5),
+            on(None),
+            &nobody(),
+        ));
+        let later = AT.plus(TimeSpan::<Ms>::new(60_000));
+        for at in [AT, later] {
+            let Next::Proceed(LogicCommand::OpenDirectMessage { draft, now }) =
+                pin_read(prompt.clone(), Some(key(5)), Role::Editor, at)
+            else {
+                panic!("a pinned member key did not open the direct message");
+            };
+            assert_eq!(now, at);
+            assert_eq!(
+                draft.members,
+                vec![DirectMember {
+                    user_id,
+                    exchange_pub_key: key(5),
+                }]
+            );
+        }
+    }
+
+    /// The perf read-out shows one snapshot per period at most, on the page
+    /// clock the wiring reads. The first one waits a period from the page
+    /// load, and a frame inside the period shows nothing.
+    #[test]
+    fn the_perf_read_out_shows_one_snapshot_per_period() {
+        let perf = PerfPublisher::new();
+        let mut cadence = PerfCadence::default();
+        let at = |ms: f64| Instant::<PageLoad>::new(ms);
+        let shown = |snapshot: Option<PerfSnapshot>| snapshot.map(|s| s.cells_drawn);
+
+        perf.publish(drawn(1));
+        assert_eq!(
+            shown(cadence.step(at(16.0), &perf)),
+            None,
+            "shown before a period"
+        );
+        assert_eq!(shown(cadence.step(at(500.0), &perf)), Some(Count::new(1)));
+        perf.publish(drawn(2));
+        assert_eq!(
+            shown(cadence.step(at(999.0), &perf)),
+            None,
+            "shown twice in a period"
+        );
+        assert_eq!(shown(cadence.step(at(1_000.0), &perf)), Some(Count::new(2)));
+        // A frame late by a whole period shows once, and the period restarts there.
+        assert_eq!(shown(cadence.step(at(2_700.0), &perf)), Some(Count::new(2)));
+        assert_eq!(shown(cadence.step(at(3_100.0), &perf)), None);
+        assert_eq!(shown(cadence.step(at(3_200.0), &perf)), Some(Count::new(2)));
+    }
+
+    /// A snapshot that counts `cells` drawn cells, so two read apart.
+    fn drawn(cells: u32) -> PerfSnapshot {
+        PerfSnapshot {
+            cells_drawn: Count::new(cells),
+            ..PerfSnapshot::default()
         }
     }
 
@@ -1070,9 +1578,9 @@ mod tests {
             display_name: name("Eve"),
             email: Email::from("eve@test.local"),
         });
-        let mut relay = Relay::new(Page::Murmure);
+        let mut switchboard = Switchboard::new(Page::Murmure);
 
-        let first = relay.service(&ev, on(None), &nobody());
+        let first = switchboard.service(&ev, on(None), &nobody());
         assert_eq!(first.len(), 3);
         match first.first() {
             Some(Effect::SignedIn {
@@ -1087,13 +1595,13 @@ mod tests {
         assert!(first.get(1).is_some_and(asks_documents));
         assert!(matches!(first.get(2), Some(Effect::BootMurmure)));
 
-        let again = relay.service(&ev, on(None), &nobody());
+        let again = switchboard.service(&ev, on(None), &nobody());
         assert!(
             matches!(again.as_slice(), [Effect::SignedIn { .. }]),
             "a second session event asked again"
         );
 
-        let document_page = Relay::new(Page::Document).service(&ev, on(None), &nobody());
+        let document_page = Switchboard::new(Page::Document).service(&ev, on(None), &nobody());
         assert!(
             !document_page
                 .iter()
@@ -1109,7 +1617,7 @@ mod tests {
     fn the_header_follows_the_routed_document_alone() {
         let routed = Id::<Document>::mint();
         let other = Id::<Document>::mint();
-        let mut relay = Relay::new(Page::Document);
+        let mut switchboard = Switchboard::new(Page::Document);
         let status = |effects: Vec<Effect<'_>>| match effects.first() {
             Some(Effect::Status(status)) => Some(*status),
             _ => None,
@@ -1130,7 +1638,7 @@ mod tests {
 
         let ev = offline(routed);
         assert_eq!(
-            status(relay.service(&ev, on(Some(routed)), &nobody())),
+            status(switchboard.service(&ev, on(Some(routed)), &nobody())),
             Some(ChromeStatus {
                 hydrating: true,
                 connected: LinkState::Disconnected,
@@ -1138,7 +1646,7 @@ mod tests {
         );
         let ev = ready(routed);
         assert_eq!(
-            status(relay.service(&ev, on(Some(routed)), &nobody())),
+            status(switchboard.service(&ev, on(Some(routed)), &nobody())),
             Some(ChromeStatus {
                 hydrating: false,
                 connected: LinkState::Connected,
@@ -1146,13 +1654,15 @@ mod tests {
         );
         for ev in [offline(other), ready(other), failed(other)] {
             assert!(
-                relay.service(&ev, on(Some(routed)), &nobody()).is_empty(),
+                switchboard
+                    .service(&ev, on(Some(routed)), &nobody())
+                    .is_empty(),
                 "another document moved the header"
             );
         }
 
         let ev = failed(routed);
-        let effects = relay.service(&ev, on(Some(routed)), &nobody());
+        let effects = switchboard.service(&ev, on(Some(routed)), &nobody());
         assert_eq!(effects.len(), 2);
         assert!(effects.first().is_some_and(|e| matches!(
             e,
@@ -1173,14 +1683,14 @@ mod tests {
     fn a_left_document_drops_its_card_and_sends_its_view_home() {
         let left = Id::<Document>::mint();
         let ev = rest(RestEvent::DocumentLeft { document_id: left });
-        let mut relay = Relay::new(Page::Document);
+        let mut switchboard = Switchboard::new(Page::Document);
 
-        let on_it = relay.service(&ev, on(Some(left)), &nobody());
+        let on_it = switchboard.service(&ev, on(Some(left)), &nobody());
         assert!(matches!(
             on_it.as_slice(),
             [Effect::DropDocument(id), Effect::GoHome] if *id == left
         ));
-        let elsewhere = relay.service(&ev, on(Some(Id::<Document>::mint())), &nobody());
+        let elsewhere = switchboard.service(&ev, on(Some(Id::<Document>::mint())), &nobody());
         assert!(matches!(elsewhere.as_slice(), [Effect::DropDocument(_)]));
     }
 
@@ -1189,7 +1699,7 @@ mod tests {
     #[test]
     fn a_membership_change_asks_its_member_list_again() {
         let doc = Id::<Document>::mint();
-        let mut relay = Relay::new(Page::Document);
+        let mut switchboard = Switchboard::new(Page::Document);
         let cases = [
             (
                 rest(RestEvent::InviteSent {
@@ -1213,7 +1723,7 @@ mod tests {
             ),
         ];
         for (ev, said) in cases {
-            let effects = relay.service(&ev, on(None), &nobody());
+            let effects = switchboard.service(&ev, on(None), &nobody());
             assert_eq!(effects.iter().find_map(notice), said);
             assert_eq!(
                 effects.last().and_then(asks_members),
@@ -1223,17 +1733,17 @@ mod tests {
         }
     }
 
-    /// The landing reads the lists the relay hands it, and a sharing, a rename
+    /// The landing reads the lists the switchboard hands it, and a sharing, a rename
     /// or a deletion asks the document list again.
     #[test]
     fn the_landing_takes_each_list_and_a_change_asks_it_again() {
-        let mut relay = Relay::new(Page::Document);
+        let mut switchboard = Switchboard::new(Page::Document);
 
         let ev = rest(RestEvent::DocumentList {
             documents: Vec::new(),
         });
         assert!(matches!(
-            relay.service(&ev, on(None), &nobody()).as_slice(),
+            switchboard.service(&ev, on(None), &nobody()).as_slice(),
             [Effect::ShowDocuments(documents)] if documents.is_empty()
         ));
         let ev = rest(RestEvent::DocumentMembers {
@@ -1241,7 +1751,7 @@ mod tests {
             members: Vec::new(),
         });
         assert!(matches!(
-            relay.service(&ev, on(None), &nobody()).as_slice(),
+            switchboard.service(&ev, on(None), &nobody()).as_slice(),
             [Effect::ShowMembers(members)] if members.is_empty()
         ));
 
@@ -1249,7 +1759,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
             doc_type: DocType::Trame,
         };
-        let effects = relay.service(&shared, on(None), &nobody());
+        let effects = switchboard.service(&shared, on(None), &nobody());
         assert_eq!(
             effects.first().and_then(notice),
             Some((Tone::Info, "A document was shared with you"))
@@ -1260,7 +1770,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
         });
         assert!(
-            relay
+            switchboard
                 .service(&renamed, on(None), &nobody())
                 .first()
                 .is_some_and(asks_documents)
@@ -1271,11 +1781,11 @@ mod tests {
     /// own decision, and a provider's address keeps its state.
     #[test]
     fn the_session_exits_and_the_warnings_each_reach_the_wiring() {
-        let mut relay = Relay::new(Page::Document);
+        let mut switchboard = Switchboard::new(Page::Document);
 
         let ev = rest(RestEvent::LoggedOut);
         assert!(matches!(
-            relay.service(&ev, on(None), &nobody()).as_slice(),
+            switchboard.service(&ev, on(None), &nobody()).as_slice(),
             [Effect::LeaveSession]
         ));
 
@@ -1289,7 +1799,7 @@ mod tests {
         }) else {
             panic!("the event is a provider address");
         };
-        match relay.service(&ev, on(None), &nobody()).as_slice() {
+        match switchboard.service(&ev, on(None), &nobody()).as_slice() {
             [Effect::FollowProvider { url, state }] => {
                 assert_eq!(url.as_str(), "https://id.test.local/auth");
                 assert!(std::ptr::eq(*state, sent), "the state was copied");
@@ -1303,7 +1813,7 @@ mod tests {
             message: String::new(),
         };
         assert_eq!(
-            relay
+            switchboard
                 .service(&warned, on(None), &nobody())
                 .first()
                 .and_then(notice),
@@ -1314,7 +1824,7 @@ mod tests {
         );
         let refused = rest(RestEvent::DocFileOpenFailed);
         assert_eq!(
-            relay
+            switchboard
                 .service(&refused, on(None), &nobody())
                 .first()
                 .and_then(notice)
@@ -1322,7 +1832,7 @@ mod tests {
             Some(Tone::Error)
         );
         assert!(
-            relay
+            switchboard
                 .service(&UiEvent::UpdateRequired, on(None), &nobody())
                 .first()
                 .is_some_and(|effect| notice(effect).is_some())

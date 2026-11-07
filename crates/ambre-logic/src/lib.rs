@@ -62,6 +62,9 @@ pub mod store_ledger;
 /// The threads of a channel: a reply, and the link of its thread.
 mod threads;
 mod unopened;
+/// The load bench of a view's queue (`ambre-spec-budgets.md section 6`).
+#[cfg(test)]
+mod view_load;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
 
@@ -390,6 +393,30 @@ impl DocState {
         }
     }
 
+    /// Hand the document the reader's own locale and convention. Only Trame
+    /// formats and parses numbers on the reader's behalf (`LOCALE-015`).
+    fn set_reader_locale(&mut self, reader: &ambre_core::ReaderLocale) {
+        match self {
+            DocState::Trame(state) => state.adopt_reader_locale(reader.clone()),
+            DocState::Toile(_) | DocState::Prose(_) => {}
+        }
+    }
+
+    /// The command that writes `locale` into this document's register.
+    fn locale_command(&self, locale: ambre_core::DocumentLocale) -> AppCommand {
+        match self {
+            DocState::Trame(_) => {
+                AppCommand::Trame(ambre_trame::TrameCommand::SetDocumentLocale { locale })
+            }
+            DocState::Toile(_) => {
+                AppCommand::Toile(ambre_toile::ToileCommand::SetDocumentLocale { locale })
+            }
+            DocState::Prose(_) => {
+                AppCommand::Prose(ambre_prose::ProseCommand::SetDocumentLocale { locale })
+            }
+        }
+    }
+
     /// Hand the document the font faces the application has loaded
     /// (`CANVAS-067`, `PROSE-115`).
     ///
@@ -409,6 +436,25 @@ impl DocState {
         match self {
             DocState::Prose(state) => state.layout_event().map(AppEvent::Prose),
             DocState::Trame(_) | DocState::Toile(_) => None,
+        }
+    }
+
+    /// The events that draw this document whole, for a view that lost one
+    /// (`BUS-042`). Prose answers none: its view keeps a text it reconciles
+    /// change by change, which a resent state does not repair (`BUS-043`).
+    fn whole_state(&self) -> Vec<AppEvent> {
+        match self {
+            DocState::Trame(state) => state
+                .whole_state()
+                .into_iter()
+                .map(AppEvent::Trame)
+                .collect(),
+            DocState::Toile(state) => state
+                .whole_state()
+                .into_iter()
+                .map(AppEvent::Toile)
+                .collect(),
+            DocState::Prose(_) => Vec::new(),
         }
     }
 
@@ -907,6 +953,12 @@ struct LogicState {
     /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot
     /// fetch, so this is the whole of what it can measure on.
     base_faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
+    /// The reader's own locale and convention (`LogicCommand::SetReaderLocale`),
+    /// so a document opened later reads under the same convention.
+    reader_locale: ambre_core::ReaderLocale,
+    /// The locale each document this reader created waits to be seeded with,
+    /// until it opens (`LOCALE-019`).
+    locale_seeds: HashMap<Id<Document>, ambre_core::DocumentLocale>,
     /// Base fonts for PDF export (`toile-pdf-export`), seeded once by
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
@@ -993,6 +1045,8 @@ impl LogicState {
             rest_routes: HashMap::new(),
             pending_seals: HashMap::new(),
             base_faces: Vec::new(),
+            reader_locale: ambre_core::ReaderLocale::default(),
+            locale_seeds: HashMap::new(),
             export_cx: None,
             owed: HashMap::new(),
             evicted: HashMap::new(),

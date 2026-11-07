@@ -45,7 +45,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers; cargo-fuzz -- `fuzz/fuzz_targets/trame_file.rs`, run by the CI `fuzz` job | none | verified |
 | `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6 | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
 | `TRAME-IO-050` | `FAIL` | An import MUST write no field past the last row or the last column of the grid. It MUST report the records and fields it left out. An import that keeps no field MUST leave the document untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::an_import_past_the_grid_edge_is_cut_and_said` -- one record past the last row, one field past the last column; `::an_import_starting_past_the_grid_edge_writes_nothing` -- a start past the last row, then past the last column | none | verified |
-| `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6 | `ambre_belt::trame::tests::an_import_the_full_queue_refuses_says_so` -- browser tier: a CSV picked while the paused Logic worker leaves the queue full raises the warning | none | verified |
+| `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6; `BUS-036` | `ambre_app::outbox::tests::a_refusal_past_the_bound_is_kept_for_the_relay_to_tell` -- wasm tier: a command the launcher's outbox refuses past its bound waits for the switchboard, which tells the user once; type-level -- the picker sends through `ShellOutbox`, which holds the one raw sender of the queue (`BUS-035`); ci-gate -- `scripts/crate_boundaries.py` refuses a launcher file other than `outbox.rs` that names that sender | none | verified |
+| `TRAME-IO-051` | `FAIL` | An import picked while the command queue is full MUST wait for it and land once it drains; it MUST NOT be lost. | this spec section 4; `BUS-011` | `ambre_belt::trame::tests::an_import_on_a_full_queue_lands_once_it_drains` -- browser tier: a CSV picked while the paused Logic worker leaves the queue full imports once the worker resumes | none | verified |
 
 ### 1.3 Hand a sheet back as CSV
 
@@ -99,11 +100,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 29 `verified`, 13 `unimplemented`. What holds is the round trip of the two
+* **Verification.** 30 `verified`, 13 `unimplemented`. What holds is the round trip of the two
   gestures and their frame conditions. An import is one undo item, an empty file writes nothing, and
-  an export or a save changes nothing. Every refusal answers, and the browser tier reads the one a
-  full queue raises. A gate and `deny.toml` keep every conversion in the Logic thread of
-  `ambre-trame`.
+  an export or a save changes nothing. Every refusal answers, and the browser tier reads a file
+  picked on a full queue land once it drains. A gate and `deny.toml` keep every conversion in the
+  Logic thread of `ambre-trame`.
 
 ---
 

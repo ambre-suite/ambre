@@ -723,6 +723,16 @@ pub enum TrameCommand {
         name: SheetName,
     },
 
+    /// Set the workbook's locale, one register of `meta` (`LOCALE-001`). No
+    /// stored value moves with it (`LOCALE-009`), and every peer's view
+    /// reformats (`LOCALE-008`). An edit, so a viewer's is dropped
+    /// (`LOCALE-007`).
+    SetDocumentLocale { locale: ambre_core::DocumentLocale },
+
+    /// The reader's own locale and convention, which the device holds
+    /// (`LOCALE-015`). Local view state: nothing is written (`LOCALE-017`).
+    SetReaderLocale { reader: ambre_core::ReaderLocale },
+
     /// Move `sheet_id` to position `to_index` in the tab strip (one
     /// `LoroMovableList` move op). Pure presentation: never touches a reference
     /// (`trame-sheets`). A no-op if the id is unknown or already at that position.
@@ -1134,6 +1144,8 @@ impl std::fmt::Debug for TrameCommand {
             Self::ActivateSheet { sheet_id } => fields!("ActivateSheet", sheet_id),
             Self::CreateSheet { name } => fields!("CreateSheet", name),
             Self::RenameSheet { sheet_id, name } => fields!("RenameSheet", sheet_id, name),
+            Self::SetDocumentLocale { locale } => fields!("SetDocumentLocale", locale),
+            Self::SetReaderLocale { reader } => fields!("SetReaderLocale", reader),
             Self::MoveSheet { sheet_id, to_index } => fields!("MoveSheet", sheet_id, to_index),
             Self::SortRange {
                 sheet_id,
@@ -1317,6 +1329,8 @@ impl ambre_bus::Mutation for TrameCommand {
             | Self::ActivateSheet { .. }
             | Self::CreateSheet { .. }
             | Self::RenameSheet { .. }
+            | Self::SetDocumentLocale { .. }
+            | Self::SetReaderLocale { .. }
             | Self::MoveSheet { .. }
             | Self::SortRange { .. }
             | Self::DeleteSheet { .. }
@@ -1359,6 +1373,8 @@ impl TrameCommand {
                 | Self::ActivateSheet { .. }
                 | Self::SaveFilterView { .. }
                 | Self::ActivateFilterView { .. }
+                // The reader's half lives on the device (`LOCALE-017`).
+                | Self::SetReaderLocale { .. }
                 // Read-only queries: they reply with data, emit no CRDT delta.
                 | Self::RequestActiveColumnValues
                 | Self::RequestSelectionStats

@@ -24,6 +24,8 @@ mod frame;
 #[cfg(test)]
 mod ime;
 #[cfg(test)]
+mod murmure;
+#[cfg(test)]
 mod page;
 #[cfg(test)]
 mod prose;

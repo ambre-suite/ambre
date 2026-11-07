@@ -136,6 +136,10 @@ mod tests {
         not(feature = "browser"),
         ignore = "needs a build and chromedriver; run just test-browser"
     )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "composes through the DevTools input methods, which Firefox does not speak"
+    )]
     async fn a_composition_in_a_prose_page_commits_its_text_once() {
         let page = Page::new_document("prose").await;
         let (ox, oy) = page.canvas_origin().await;
@@ -171,6 +175,10 @@ mod tests {
     #[cfg_attr(
         not(feature = "browser"),
         ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "composes through the DevTools input methods, which Firefox does not speak"
     )]
     async fn a_composition_in_a_trame_cell_commits_its_text_once() {
         let page = Page::new_document("trame").await;

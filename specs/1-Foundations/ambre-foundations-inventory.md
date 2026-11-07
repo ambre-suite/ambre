@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 72 | 9 |
+| `architecture` | How the client is split, and why. | implemented | 73 | 9 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
@@ -24,9 +24,9 @@
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 |  |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
+| `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 18 |  |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 35 |  |
-| `message-bus` | The contract the three threads talk over. | implemented | 37 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 28 |  |
@@ -45,7 +45,8 @@
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 21 | 1 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 29 |  |
-| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 27 |  |
+| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 28 |  |
+| `message-bus` | The contract the three threads talk over. | partial | 45 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 18 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 14 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 17 |  |
@@ -57,10 +58,9 @@
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 22 |  |
-| `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 23 |  |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**47 features: 20 implemented, 22 partial, 5 design-only. 1217 contract rows, 11 loose.**
+**47 features: 20 implemented, 23 partial, 4 design-only. 1227 contract rows, 11 loose.**

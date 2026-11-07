@@ -15,11 +15,10 @@
 //     wasm instance's memory and talk over `ambre_bus::conduit` queues.
 //   - Sync is a SEPARATE wasm instance in its own Web Worker (own memory),
 //     spawned here via `web_sys::Worker` and reached over `postMessage`. The
-//     main thread relays Logic<->Sync traffic in the single per-frame relay.
+//     main thread relays Logic<->Sync traffic in the single switchboard.
 //   - The Leptos shell mounts once: the AppShell chrome (which owns the
 //     `<canvas>`) plus a landing overlay shown on the `/` route.
-//   - One route-independent rAF loop (the canvas host's) runs the per-frame
-//     relay AND the dispatcher, whatever the route. It is paused, on a frozen
+//   - One route-independent rAF loop (the canvas host's) runs the switchboard AND the dispatcher, whatever the route. It is paused, on a frozen
 //     frame, while the landing overlay covers the canvas.
 //
 // Command model (ambre-spec-commands.md): every trigger -- toolbar button,
@@ -27,7 +26,7 @@
 // `LogicCommand`, targeting the currently routed document (`current_doc`).
 //
 // Compiles ONLY on wasm32 targets (depends on web_sys, wgpu, leptos), save
-// the decisions of the per-frame relay (`relay`). The host builds those for
+// the decisions of the switchboard (`relay`). The host builds those for
 // their tests, with the few items they read.
 // ============================================================================
 
@@ -48,13 +47,13 @@ use ambre_bus::conduit::{self, Marks};
 use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
 #[cfg(target_arch = "wasm32")]
 use ambre_chrome::{
-    AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
-    Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar,
+    AppShell, CanvasCell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, Panel, Sidebar,
+    StatusBar, Tabs, ToastHost, Toasts, Toolbar,
 };
 #[cfg(target_arch = "wasm32")]
 use ambre_core::id::{Document, Frame, Id, User};
 #[cfg(target_arch = "wasm32")]
-use ambre_core::{Board, Doc, Scale, View};
+use ambre_core::{Board, Doc, PageLoad, Scale, View};
 #[cfg(target_arch = "wasm32")]
 use ambre_logic::app::{AppCommand, LogicCommand, UiEvent};
 #[cfg(target_arch = "wasm32")]
@@ -87,6 +86,13 @@ use wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+/// The selection anchor, mirrored from the canvas into the chrome.
+#[cfg(target_arch = "wasm32")]
+mod anchor;
+/// The chrome of each document application, fed from the Logic thread's
+/// events.
+#[cfg(target_arch = "wasm32")]
+mod chrome_mirror;
 #[cfg(target_arch = "wasm32")]
 mod host;
 #[cfg(target_arch = "wasm32")]
@@ -94,19 +100,31 @@ mod landing;
 /// The local store the Main thread drives, within its budget (`RESID-002`).
 #[cfg(target_arch = "wasm32")]
 mod local_store;
+/// The Murmure chrome, fed from the Logic thread's events.
+#[cfg(target_arch = "wasm32")]
+mod murmure_mirror;
 /// The system notifications of an open tab.
 #[cfg(target_arch = "wasm32")]
 mod notify;
 /// The launcher's one writer on the UI to Logic queue (`BUS-035`).
 #[cfg(target_arch = "wasm32")]
 mod outbox;
-/// What the per-frame relay decides, testable on the host.
-#[cfg(any(target_arch = "wasm32", test))]
-mod relay;
+/// The link from the Logic thread to the local store.
+#[cfg(target_arch = "wasm32")]
+mod persist;
 #[cfg(target_arch = "wasm32")]
 mod route;
+/// The route binding, polled each frame.
+#[cfg(target_arch = "wasm32")]
+mod route_binding;
 #[cfg(target_arch = "wasm32")]
 mod signin;
+/// What the switchboard decides, testable on the host.
+#[cfg(any(target_arch = "wasm32", test))]
+mod switchboard;
+/// The browser tab title, written when it changes.
+#[cfg(target_arch = "wasm32")]
+mod tab_title;
 /// The recipient's key, compared and confirmed before a share.
 #[cfg(any(target_arch = "wasm32", test))]
 mod tofu;
@@ -180,8 +198,7 @@ struct Wiring {
     username: RwSignal<Option<ambre_core::Validated<ambre_core::DisplayName>>>,
     /// The user's documents (landing list).
     docs: RwSignal<Vec<DocItem>>,
-    /// Members of the active document (share dialog). Populated by the per-frame
-    /// relay on `DocumentMembers`; empty until the dialog requests the list.
+    /// Members of the active document (share dialog). Populated by the switchboard on `DocumentMembers`; empty until the dialog requests the list.
     members: RwSignal<Vec<MemberInfo>>,
     /// Pending TOFU trust prompt (`ambre-spec-key-verification.md`), or `None` when no
     /// invitation is awaiting the user's fingerprint decision. Set by the relay on
@@ -214,7 +231,7 @@ struct Wiring {
     /// Shared filter popover open state (`trame-shared-filter`); `None` = closed.
     filter_popover: RwSignal<Option<trame_chrome::FilterPopoverState>>,
     /// The active column's distinct visible values, feeding the popover's "by
-    /// values" list. Set by the per-frame relay on `TrameEvent::ColumnValues`.
+    /// values" list. Set by the switchboard on `TrameEvent::ColumnValues`.
     filter_values: RwSignal<Vec<String>>,
     /// Find/replace panel open state (`trame-find-replace`); `None` = closed.
     find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
@@ -307,15 +324,17 @@ struct Wiring {
     /// it: a sandboxed tab, or another document (`TOILE-065`, `TOILE-114`).
     toile_followed_link: RwSignal<Option<toile_chrome::ShellNav>>,
     /// Status-bar selection aggregates (`trame-status-bar`); `None` on a single
-    /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
+    /// cell. Set by the switchboard on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
+    /// The workbook's locale and the reader's half, set by the switchboard
+    /// on `TrameEvent::LocaleState` (`LOCALE-021`, `LOCALE-022`).
+    trame_locale: RwSignal<Option<ambre_trame::ui::locale::LocaleView>>,
     /// Toile status-bar selection aggregates (toile-status-bar): element count +
-    /// combined world bounds; `None` on an empty selection. Set by the per-frame
-    /// relay on `ToileEvent::SelectionStats`.
+    /// combined world bounds; `None` on an empty selection. Set by the switchboard on `ToileEvent::SelectionStats`.
     sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
     /// Status-bar perf snapshot (fps + frame timings), pumped from the canvas
-    /// view's `PerfPublisher` by the per-frame relay (~2 Hz).
+    /// view's `PerfPublisher` by the switchboard (~2 Hz).
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
     /// Grid zoom factor (`1.0` = 100%, `trame-status-bar`): the status-bar menu
     /// writes it, the canvas view polls it each frame. Local view state, not synced.
@@ -333,13 +352,13 @@ struct Wiring {
     /// Multi-column sort dialog open state (`trame-sort`); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
     /// Sheet-tab strip model (`trame-sheets`), in display order.
-    /// Mirrored from `TrameEvent::SheetList` by the per-frame relay; drives the
+    /// Mirrored from `TrameEvent::SheetList` by the switchboard; drives the
     /// DOM `SheetTabs` slot (the tabs no longer live on the canvas).
     sheets: RwSignal<Vec<SheetTab>>,
     /// Active sheet id, published by the Trame view on `TrameEvent::SheetList`.
     active_sheet: RwSignal<Id<Sheet>>,
     /// Chrome status indicator (`-chrome.md` 2.G): drives the header sync label
-    /// and the document-loading overlay. Set by the per-frame relay on
+    /// and the document-loading overlay. Set by the switchboard on
     /// `UiEvent::DocumentReady` / `ConnectionStatus`, and by the route poll on a
     /// document switch (which arms `hydrating`).
     chrome_status: RwSignal<ChromeStatus>,
@@ -482,7 +501,7 @@ pub fn main() {
     // Logic parks on `logic_bell`, which every channel into it rings (`ARCH-022`),
     // and parks on a full outbound channel until the relay drains it (`ARCH-023`).
     // The Logic<->Sync halves on the main side (`logic_to_sync_rx`,
-    // `sync_to_logic_tx`) are owned by the per-frame relay below, NOT by a worker.
+    // `sync_to_logic_tx`) are owned by the switchboard below, NOT by a worker.
     let logic_bell = conduit::Doorbell::new();
     let (ui_to_logic_tx, ui_to_logic_rx) =
         conduit::to_worker::<LogicCommand>(CHANNEL_CAPACITY, &logic_bell);
@@ -512,24 +531,25 @@ pub fn main() {
     )>(CHANNEL_CAPACITY, &logic_bell);
 
     // Dispatcher -> canvas view: the content event stream, forwarded after the
-    // dispatcher has mirrored command-state events into the chrome.
+    // dispatcher has mirrored command-state events into the chrome. The view
+    // fan-out below owns its one sender, so every write to a view queue takes
+    // one path. What a full queue refuses waits there (`BUS-038`, `BUS-039`).
     let (view_tx, view_rx) = conduit::local::<UiEvent>(CHANNEL_CAPACITY);
 
     // Per-document Logic->UI fan-out for nested `doc_embed` children. A child
     // view built by `make_child` (below) registers a demultiplexed sender here.
-    // The relay routes every doc-tagged event whose `document_id` is a live child
-    // to those queues, instead of the shared top-level `view_tx`. So a child's
-    // stream never reaches the parent view (which ignores `document_id`).
-    // Dropping a child drops its receiver, so the relay reclaims that slot on its
-    // next send to it.
+    // The switchboard routes every doc-tagged event whose `document_id` is a
+    // live child to those queues, instead of the main view's queue. So a
+    // child's stream never reaches the parent view (which ignores
+    // `document_id`). Dropping a child drops its receiver, so the switchboard
+    // reclaims that slot on its next send to it.
     //
     // A LIST of senders per document, not one. Two embeds of a single document
     // are two views (`TOILE-UI-097`), each with its own queue, and both must
     // see the document's events. One slot per document had the second
     // registration evict the first, leaving that embed painting a view nothing
-    // fed. The fan-out also holds what a child's queue could not take yet
-    // (`TOILE-UI-340`).
-    let child_fan_out = Rc::new(relay::ChildFanOut::default());
+    // fed. The fan-out also holds what a view's queue could not take yet.
+    let view_fan_out = Rc::new(switchboard::ViewFanOut::new(view_tx));
 
     // Command keymap (the keyboard view of the registry). The active app binds
     // its own chords -- the launcher names none. Populated once the boot document
@@ -552,8 +572,7 @@ pub fn main() {
     let perf_pub = ambre_canvas::PerfPublisher::new();
 
     // Canvas->DOM filter-open signal (`trame-shared-filter`): the view raises this
-    // one-shot intent when an in-canvas autofilter button is clicked. The per-frame
-    // relay consumes it (after mirroring the anchor) and opens the DOM
+    // one-shot intent when an in-canvas autofilter button is clicked. The switchboard consumes it (after mirroring the anchor) and opens the DOM
     // FilterPopover through the same path as the context-menu "Filter by column"
     // entry. So there is one filter code path with two entry points.
     let filter_open_pub = ambre_canvas::FilterOpenPublisher::new();
@@ -576,8 +595,7 @@ pub fn main() {
     let formula_action = RwSignal::new(None::<FormulaAction>);
 
     // TOFU share-dialog signals (`ambre-spec-key-verification.md`), created here in the
-    // launcher owner and shared with both `AppRoot` (dialog) and the per-frame
-    // relay (trust decision + phase-2 dispatch).
+    // launcher owner and shared with both `AppRoot` (dialog) and the switchboard (trust decision + phase-2 dispatch).
     let tofu_prompt = RwSignal::new(None::<TofuPrompt>);
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
     let opened_file = RwSignal::new(None::<platform::OpenedFile>);
@@ -597,7 +615,7 @@ pub fn main() {
     let find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
     let find_result_toile = RwSignal::new(None::<ambre_toile::message::FindResults>);
     // Presenter overlay panel signals (toile-presentation). The board view
-    // publishes the mode; the per-frame relay fills the slide signals from the
+    // publishes the mode; the switchboard fills the slide signals from the
     // enriched `SlideChanged`. Created here and passed to the shell.
     let present_toile = RwSignal::new(PresentMode::Editing);
     let presenter_slide = RwSignal::new(SlidePosition::default());
@@ -776,6 +794,11 @@ pub fn main() {
     // which has both, fetches on its behalf and ships the raw bytes across as
     // `LogicCommand::LoadFonts`. Fire-and-forget on a `spawn_local`: export
     // happens far later, and a slow fetch must not stall boot.
+    // The reader's own locale, read from the device before the first open, so
+    // a document reads and seeds under it (`LOCALE-015`, `LOCALE-019`).
+    let _ = shell_outbox.send(LogicCommand::SetReaderLocale {
+        reader: platform::reader_locale(),
+    });
     {
         let fonts_tx = shell_outbox.clone();
         wasm_bindgen_futures::spawn_local(async move {
@@ -932,16 +955,16 @@ pub fn main() {
     let current_doc = current_doc_slot
         .borrow()
         .expect("current_doc signal created during mount");
-    // Each application's relay, read back for the per-frame relay, which hands
+    // Each application's relay, read back for the switchboard, which hands
     // it every event (`ARCH-018`).
     let (trame_relay, toile_relay, murmure_relay) =
         relays_slot.borrow().expect("relays created during mount");
     // Formatting-toolbar style state (`trame-cell-styles`), read back for the
-    // per-frame relay, which hands it every event.
+    // switchboard, which hands it every event.
     let style_state = style_slot
         .borrow()
         .expect("style state created during mount");
-    // Chrome status indicator, read back for the per-frame relay (sets it on
+    // Chrome status indicator, read back for the switchboard (sets it on
     // `UiEvent::DocumentReady` / `ConnectionStatus`) and the route poll (arms
     // `hydrating` on a document switch).
     let chrome_status = chrome_status_slot
@@ -959,222 +982,85 @@ pub fn main() {
     // Keyboard: resolve registered chords and dispatch to the routed document.
     install_command_keys(keymap, commands.clone());
 
-    // Local persistence: open the IndexedDB store on this (Main) thread, where
-    // the event loop is live. On open, restore the BOOT document's snapshot (if
-    // any) so an edit survives a refresh without a network round-trip. The store
-    // is shared with the per-frame relay below, which saves snapshots Logic emits.
-    let persist_store: Rc<RefCell<Option<local_store::LocalStore>>> = Rc::new(RefCell::new(None));
-    // Set when the store will never open, so the writes waiting for it go.
-    let persist_gone = Rc::new(std::cell::Cell::new(false));
     // The Sync worker seals each row the store keeps and opens it again
     // (`RESID-025`).
     let vault = vault::Vault::new(shell_outbox.clone());
-    // Set once a session holds the key: the page's document comes back from
-    // its copy only then.
-    let session_seen = Rc::new(std::cell::Cell::new(false));
     // The drafts the composer keeps go to the same store
     // (`ambre-spec-murmure-composer.md`).
     let draft_keeper = host::DraftKeeper::new(murmure_relay.drafts(), vault.clone());
-    {
-        let store_slot = Rc::clone(&persist_store);
-        let keeper = draft_keeper.clone();
-        let gone = Rc::clone(&persist_gone);
-        let full_tx = shell_outbox.clone();
-        let vault = vault.clone();
-        let session_seen = Rc::clone(&session_seen);
-        wasm_bindgen_futures::spawn_local(async move {
-            let store = match ambre_logic::persistence::PersistenceStore::open().await {
-                Ok(Ok(store)) => store,
-                Ok(Err(e)) => {
-                    tracing::warn!("Persistence: store unavailable ({e})");
-                    gone.set(true);
-                    return;
-                }
-                Err(_) => {
-                    tracing::warn!("Persistence: open channel dropped");
-                    gone.set(true);
-                    return;
-                }
-            };
-            keeper.store_opened(store.clone());
-            let local = local_store::LocalStore::open(store, full_tx, vault, boot_doc_typed).await;
-            // The page's document comes back from its copy once a session
-            // holds the key, whichever of the two came first.
-            if session_seen.get() {
-                local.signed_in();
-            }
-            *store_slot.borrow_mut() = Some(local);
-        });
-    }
+    // Local persistence: open the IndexedDB store on this (Main) thread, where
+    // the event loop is live. The store is shared with the switchboard below,
+    // which saves snapshots Logic emits.
+    let mut persist = persist::PersistLink::open(
+        draft_keeper.clone(),
+        shell_outbox.clone(),
+        vault.clone(),
+        boot_doc_typed,
+        logic_to_persist_rx,
+    );
 
     // The single UI-thread dispatcher, pumped once per frame regardless of route.
     // It runs the persist drain, the Logic->Sync relay and the anchor mirror. It
     // also runs the Logic->UI fan-out: command state to the chrome, session/list
     // to the landing, content to the view.
-    let anchor_pub_pump = anchor_pub.clone();
+    let mut anchor_mirror = anchor::AnchorMirror::new(anchor_pub.clone(), anchor_pos);
     let perf_pub_pump = perf_pub.clone();
     let filter_open_pump = filter_open_pub.clone();
     let busy_pump = busy_pub.clone();
     let notice_pump = notice_pub.clone();
-    let persist_store_frame = Rc::clone(&persist_store);
-    let persist_gone_frame = Rc::clone(&persist_gone);
+    let persist_store_frame = persist.store();
     let vault_frame = vault.clone();
-    let session_seen_frame = Rc::clone(&session_seen);
-    let mut persist_waiting: Vec<(Id<Document>, ambre_logic::PersistWrite)> = Vec::new();
-    let mut last_anchor: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>> = None;
-    let mut busy_notice = relay::BusyNotice::default();
-    let mut last_perf_push_ms: f64 = 0.0;
+    let mut busy_notice = switchboard::BusyNotice::default();
+    let mut perf_cadence = switchboard::PerfCadence::default();
     // The relay's decisions, and the state they keep across frames.
-    let mut decisions = relay::Relay::new(if boot_is_murmure {
-        relay::Page::Murmure
+    let mut decisions = switchboard::Switchboard::new(if boot_is_murmure {
+        switchboard::Page::Murmure
     } else {
-        relay::Page::Document
+        switchboard::Page::Document
     });
     let relay_tx = shell_outbox.clone();
-    // A click on a notification opens its channel at its message (the
-    // Murmure notifications spec). The permission is asked once per page.
-    let notice_asked = Rc::new(std::cell::Cell::new(notify::Question::Unasked));
-    let open_noticed: Rc<dyn Fn(Id<ambre_core::id::Channel>, Option<ambre_murmure::MessageRef>)> = {
-        let tx = shell_outbox.clone();
-        Rc::new(move |channel, at| {
-            if let Some(command) = murmure_relay.open_at(channel, at) {
-                tx.send(command.map(AppCommand::embed));
-            }
-        })
+    // The chrome of each document application, fed from each event.
+    let chrome_mirror = chrome_mirror::ChromeMirror {
+        store,
+        toile_store,
+        prose_signals,
+        style_state,
+        toasts,
+        trame_panels: trame_relay,
+        toile_panels: toile_relay,
     };
-    // A Murmure page refreshes this user's presence on each of its spaces once
-    // per refresh period (the Murmure members spec). It ticks the shown channel
-    // too (the Murmure typing spec). An interval, not the frame loop: a hidden
-    // tab pauses its frames, yet holds its spaces open. The interval lives as
-    // long as the page.
+    // The Murmure chrome, fed from each event, and its presence refresh.
+    let murmure_mirror = murmure_mirror::MurmureMirror::new(murmure_relay, shell_outbox.clone());
     if boot_is_murmure {
-        let presence_tx = shell_outbox.clone();
-        let refresh = Closure::<dyn FnMut()>::new(move || {
-            let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
-            // The tick is lossy and the next period offers it again. The
-            // presence refresh of a space is not, so the outbox holds it.
-            for command in murmure_relay.refresh_presence(now) {
-                presence_tx.offer(command.map(AppCommand::embed));
-            }
-        });
-        if let Some(window) = web_sys::window() {
-            let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
-                refresh.as_ref().unchecked_ref(),
-                ambre_murmure::REFRESH_PERIOD.to_timer_i32(),
-            );
-        }
-        refresh.forget();
+        murmure_mirror.keep_presence();
     }
-    // The relay's view of the child fan-out registry: read to route a
-    // nested document's events, pruned when a child receiver has been dropped.
-    let child_fan_out_relay = Rc::clone(&child_fan_out);
+    // The switchboard's handle on the view fan-out: it routes every view's
+    // events, and prunes a child sender whose receiver has been dropped.
+    let view_fan_out_relay = Rc::clone(&view_fan_out);
 
-    // SPA route binding, polled each frame on the main thread (where the `!Send`
-    // canvas handle lives, so it stays OUT of the Leptos tree). The client URL is
-    // the single source of truth: `leptos_router` pushState navigations and
-    // browser back/forward both land here. On a change we close the previous
-    // document, open the next, and point the persistent canvas at it. We then
-    // gate the rAF render: paint the doc, or freeze it behind the landing
-    // overlay. We publish the active document, so every command trigger targets
-    // it.
-    let route_switcher = Rc::clone(&switcher_slot);
-    let route_tx = shell_outbox.clone();
-    let route_raf = raf.clone();
-    let mut prev_route: Option<route::Route> = None;
-    let mut last_title: Option<ComposedName> = None;
+    // The SPA route binding, polled each frame: the client URL is the single
+    // source of truth for the routed document.
+    let mut route_binding = route_binding::RouteBinding::new(
+        Rc::clone(&switcher_slot),
+        shell_outbox.clone(),
+        raf.clone(),
+        current_doc,
+        chrome_status,
+    );
+    let mut tab_title = tab_title::TabTitle::new(docs);
 
     let pre_frame = move || {
         // What the launcher's outbox held on an earlier turn leaves first, so
         // nothing this turn sends overtakes it (`BUS-011`). The relay runs on
         // the hidden page's timer too, so the flush does as well (`CANVAS-075`).
         relay_tx.flush();
-        let cur_route = route::current();
-        let cur_doc = cur_route.doc();
-        if let Some(step) = route::step(prev_route.as_ref(), &cur_route) {
-            if let Some(document_id) = step.close {
-                route_tx.send(LogicCommand::CloseDocument { document_id });
-            }
-            if let Some((doc_type, document_id)) = step.open {
-                route_tx.send(LogicCommand::OpenDocument {
-                    document_id,
-                    doc_type,
-                });
-            }
-            if step.close.is_some() || step.open.is_some() {
-                current_doc.set(step.show);
-                // Arm the loading overlay when entering a document; clear it on
-                // the landing route. The relay clears `hydrating` on the matching
-                // `DocumentReady` (see the per-frame pump below).
-                chrome_status.update(|s| {
-                    s.hydrating = cur_doc.is_some();
-                    if cur_doc.is_none() {
-                        s.connected = ambre_core::LinkState::Disconnected;
-                    }
-                });
-            }
-            match step.show {
-                Some(document_id) => {
-                    if let Some(sw) = route_switcher.borrow().as_ref() {
-                        sw.set_document(document_id);
-                    }
-                    route_raf.set_cover(ambre_canvas::Cover::Document);
-                }
-                // Freeze the canvas behind the landing overlay (the relay below
-                // keeps running -- only the render is gated).
-                None => route_raf.set_cover(ambre_canvas::Cover::Launcher),
-            }
-            prev_route = Some(cur_route);
-        }
+        let cur_doc = route_binding.poll();
 
-        // Browser tab title (`ComposedName::tab_title`). Recomputed each frame
-        // so a rename or a late-arriving document list updates the tab; the
-        // DOM write happens only when the title changes.
-        let title = match cur_doc {
-            Some((doc_type, document_id)) => {
-                let name = docs.with_untracked(|list| {
-                    list.iter()
-                        .find(|d| d.document_id == document_id)
-                        .and_then(|d| d.name.clone())
-                });
-                ComposedName::tab_title(Some((doc_type, name.as_ref())))
-            }
-            None => ComposedName::tab_title(None),
-        };
-        if last_title.as_ref() != Some(&title) {
-            if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                title.set_as_title(&doc);
-            }
-            last_title = Some(title);
-        }
+        // Browser tab title, recomputed each frame and written on a change.
+        tab_title.show(cur_doc);
 
-        // Persist Logic -> local store. Writes wait here until the store is
-        // open: a delta dropped would be missing from every restore until the
-        // next snapshot. Best-effort; the put() commits as the event loop idles.
-        persist_waiting.extend(logic_to_persist_rx.try_iter());
-        if persist_gone_frame.get() {
-            // A store that never opens holds no copy: each reopen waiting on
-            // one is answered empty, and fetches from the relay (`RESID-012`).
-            for (document_id, write) in persist_waiting.drain(..) {
-                if let ambre_logic::PersistWrite::ReadBack { doc_type } = write {
-                    relay_tx.send(LogicCommand::RestoreLocalSnapshot {
-                        document_id,
-                        doc_type,
-                        snapshot: None,
-                        deltas: Vec::new(),
-                        sessions: Vec::new(),
-                    });
-                }
-            }
-        }
-        if let Some(local) = persist_store_frame.borrow().as_ref() {
-            local.tick();
-            // Each write is sealed, then passes the store's ledger, which
-            // keeps it within its budget and meets the quota (`RESID-002`,
-            // `RESID-025`).
-            for (document_id, write) in persist_waiting.drain(..) {
-                local.apply(document_id, write);
-            }
-        }
+        // Persist Logic -> local store, once the store is open.
+        persist.drain();
 
         // A plaintext file the picker read: its payload lands sealed, as every
         // copy does (`RESID-025`).
@@ -1191,6 +1077,7 @@ pub fn main() {
             tofu::confirm(
                 &p,
                 invite_role.get_untracked(),
+                Instant::<Authored>::new(js_sys::Date::now() as u64),
                 |user, key| {
                     if let Some(local) = persist_store_frame.borrow().as_ref() {
                         local.store().save_trusted_key(user, key);
@@ -1218,10 +1105,13 @@ pub fn main() {
                 Err(e) => tracing::error!("[UI->Sync] failed to encode SyncCommand: {e}"),
             });
 
-        // Re-offer what a child's queue could not take on an earlier turn
-        // (`TOILE-UI-340`). Ordered, and ahead of the fresh stream, so a child
-        // never sees a later delta before an earlier one.
-        child_fan_out_relay.flush();
+        // Re-offer what a view's queue could not take on an earlier turn
+        // (`BUS-038`). Ordered, and ahead of the fresh stream, so a view never
+        // sees a later delta before an earlier one. A view that lost an event
+        // and reads again has its document resent (`BUS-041`).
+        for document_id in view_fan_out_relay.flush() {
+            relay_tx.send(LogicCommand::ResendState { document_id });
+        }
 
         // Mark the turn that takes Logic's answers off the channel: the mark
         // splits a keystroke's confirmation between the relay and the view.
@@ -1243,7 +1133,8 @@ pub fn main() {
                     Some(rx) => rx.await.ok().flatten(),
                     None => None,
                 };
-                match tofu::classify(prompt, pinned, role_sig.get_untracked()) {
+                let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
+                match switchboard::pin_read(prompt, pinned, role_sig.get_untracked(), now) {
                     tofu::Next::Proceed(cmd) => {
                         relay.send(cmd);
                     }
@@ -1261,7 +1152,7 @@ pub fn main() {
             // drive the parent's formula bar, zoom chip or status band. Only a
             // document that is a LIVE child is diverted; the top-level document's
             // events (and untagged service events) fall through unchanged.
-            let Some(ev) = child_fan_out_relay.divert(ev) else {
+            let Some(ev) = view_fan_out_relay.divert(ev) else {
                 continue;
             };
             // The seal of a local row this thread asked for, which no view
@@ -1274,75 +1165,36 @@ pub fn main() {
                 },
                 ev => ev,
             };
-            // Mirror authoritative command-toggle state into the chrome store.
-            // The active app owns the event->toggle mapping; the launcher names
-            // no content event variant.
-            trame_chrome::mirror_event(&store, &ev);
-            // Mirror Toile's Undo/Redo availability into its own command store,
-            // so the menu bar disables the two rows from the Logic thread's
-            // `UndoState` alone (`UNDO-006`).
-            toile_chrome::mirror_event(&toile_store, &ev);
-            // Prose's history availability, into the signals its context
-            // menu reads (`UNDO-006`).
-            prose_signals.mirror_event(&ev);
-            // Mirror the active cell's rich style into the formatting toolbar
-            // (`trame-cell-styles`). A no-op for non-style events.
-            trame_chrome::apply_style_event(&style_state, &ev);
-            // Surface Trame's user-facing notifications (rejections, validation
-            // errors, sheet-lifecycle errors, sort/filter completion) as toasts.
-            // The app owns the event->toast mapping; the launcher names no variant.
-            trame_chrome::notify_event(&toasts, &ev);
-            // Surface Toile's interop outcomes -- the lossy-import report, a
-            // refused file, a finished export -- as toasts (`TOILE-IO-022`). The
-            // app owns the event->toast mapping; the launcher names no variant.
-            toile_chrome::notify_event(&toasts, &ev);
-            // Prose's conversion reports, the same way (`PROSE-IO-053`).
-            ambre_prose::chrome::notify_event(&toasts, &ev);
-            // Murmure's root of a copy not reached, the same way.
-            ambre_murmure::chrome::notify_event(&toasts, &ev);
-            // Each application fills its own panels from its own events
-            // (`ARCH-018`). The launcher names no variant.
-            trame_relay.absorb(&ev);
-            toile_relay.absorb(&ev);
-            for command in murmure_relay.absorb(&ev) {
-                relay_tx.send(command.map(AppCommand::embed));
-            }
-            if let Some(notice) = murmure_relay.notice(
-                &ev,
-                ambre_murmure::chrome::PageVisibility::visible_if(notify::page_visible()),
-            ) {
-                notify::deliver(notice, &notice_asked, Rc::clone(&open_noticed));
-            }
+            // Each application's chrome, then Murmure's, from this event.
+            chrome_mirror.mirror(&ev);
+            murmure_mirror.mirror(&ev);
             // The relay decides what a service event calls for, and this
             // closure applies each decision in order.
-            let shown = relay::Shown {
+            let shown = switchboard::Shown {
                 current: current_doc.get_untracked(),
                 status: chrome_status.get_untracked(),
             };
             for effect in decisions.service(&ev, shown, &murmure_relay) {
                 match effect {
-                    relay::Effect::Notice(notice) => toasts.push(notice.kind, notice.text),
-                    relay::Effect::Send(command) => {
+                    switchboard::Effect::Notice(notice) => toasts.push(notice.kind, notice.text),
+                    switchboard::Effect::Send(command) => {
                         relay_tx.send(command);
                     }
-                    relay::Effect::BootMurmure => {
+                    switchboard::Effect::BootMurmure => {
                         for command in ambre_murmure::chrome::MurmureRelay::boot() {
                             relay_tx.send(command.map(AppCommand::embed));
                         }
                     }
-                    relay::Effect::SignedIn {
+                    switchboard::Effect::SignedIn {
                         user_id,
                         display_name,
                     } => {
                         username.set(Some(display_name.clone()));
                         me.set(Some(user_id));
                         draft_keeper.signed_in(user_id);
-                        session_seen_frame.set(true);
-                        if let Some(local) = persist_store_frame.borrow().as_ref() {
-                            local.signed_in();
-                        }
+                        persist.signed_in();
                     }
-                    relay::Effect::LeaveSession => {
+                    switchboard::Effect::LeaveSession => {
                         let keeper = draft_keeper.clone();
                         wasm_bindgen_futures::spawn_local(async move {
                             keeper.written().await;
@@ -1353,14 +1205,14 @@ pub fn main() {
                             });
                         });
                     }
-                    relay::Effect::FollowProvider { url, state } => {
+                    switchboard::Effect::FollowProvider { url, state } => {
                         signin::follow_address(url, state, |url| {
                             if let Some(window) = web_sys::window() {
                                 let _ = window.location().set_href(url.as_str());
                             }
                         });
                     }
-                    relay::Effect::ShowDocuments(documents) => docs.set(
+                    switchboard::Effect::ShowDocuments(documents) => docs.set(
                         documents
                             .iter()
                             .map(|d| DocItem {
@@ -1372,40 +1224,32 @@ pub fn main() {
                             })
                             .collect(),
                     ),
-                    relay::Effect::DropDocument(document_id) => {
+                    switchboard::Effect::DropDocument(document_id) => {
                         docs.update(|list| list.retain(|d| d.document_id != document_id));
                     }
-                    relay::Effect::GoHome => {
+                    switchboard::Effect::GoHome => {
                         if let Some(window) = web_sys::window() {
                             let _ = window.location().set_href("/");
                         }
                     }
-                    relay::Effect::ShowMembers(list) => members.set(list.to_vec()),
-                    relay::Effect::Classify(prompt) => classify_against_pin(prompt),
-                    relay::Effect::Status(status) => chrome_status.set(status),
+                    switchboard::Effect::ShowMembers(list) => members.set(list.to_vec()),
+                    switchboard::Effect::Classify(prompt) => classify_against_pin(prompt),
+                    switchboard::Effect::Status(status) => chrome_status.set(status),
                 }
             }
-            match relay::destination(ev) {
+            match switchboard::destination(ev) {
                 // Version recovery, the type check and the local store are the
                 // same steps a plaintext file walks.
-                relay::Destination::OpenFile(container) => {
+                switchboard::Destination::OpenFile(container) => {
                     platform::open_plaintext_container(container, toasts, vault_frame.clone());
                 }
                 // Content (and everything else) still flows to the view
                 // unchanged.
-                relay::Destination::View(ev) => {
-                    let _ = view_tx.try_send(ev);
-                }
+                switchboard::Destination::View(ev) => view_fan_out_relay.deliver(ev),
             }
         }
 
-        // Mirror the view's published selection anchor into the chrome signal,
-        // only on change so the floating toolbar repositions just when it moves.
-        let next = anchor_pub_pump.read();
-        if next != last_anchor {
-            last_anchor = next;
-            anchor_pos.set(next);
-        }
+        anchor_mirror.step();
 
         // Say that the view stopped taking input, and say when it resumes
         // (`BUS-016`). The view restates the level every frame, so this reads the
@@ -1414,9 +1258,9 @@ pub fn main() {
         // The launcher's outbox counts as well: a held route change or menu
         // command is a document catching up, as a held edit is.
         let load = if busy_pump.is_busy() || relay_tx.is_busy() {
-            relay::Load::Behind
+            switchboard::Load::Behind
         } else {
-            relay::Load::Current
+            switchboard::Load::Current
         };
         if let Some(notice) = busy_notice.step(load) {
             toasts.push(notice.kind, notice.text);
@@ -1445,15 +1289,15 @@ pub fn main() {
             commands.send(trame.open_filter());
         }
 
-        // Mirror the view's perf snapshot into the status-bar signal, throttled
-        // to ~2 Hz. The old wgpu HUD refreshed every 500 ms too, and a per-frame
-        // DOM update would be wasteful for a debug read-out.
-        let now_ms = web_sys::window()
+        // Mirror the view's perf snapshot into the status-bar signal, at the
+        // cadence the switchboard decides on the page clock.
+        let now = web_sys::window()
             .and_then(|w| w.performance())
-            .map_or(0.0, |p| p.now());
-        if now_ms - last_perf_push_ms >= 500.0 {
-            last_perf_push_ms = now_ms;
-            perf_snap.set(perf_pub_pump.read());
+            .map_or(Instant::<PageLoad>::EPOCH, |p| {
+                Instant::<PageLoad>::new(p.now())
+            });
+        if let Some(snapshot) = perf_cadence.step(now, &perf_pub_pump) {
+            perf_snap.set(snapshot);
         }
     };
 
@@ -1470,7 +1314,7 @@ pub fn main() {
     // reads them, so every child shares one dead set. It is created here, in the
     // launcher's leptos owner, where `RwSignal::new` is valid.
     let child_to_logic = shell_outbox.clone();
-    let child_fan_out_factory = Rc::clone(&child_fan_out);
+    let view_fan_out_factory = Rc::clone(&view_fan_out);
     let child_theme_ctl = theme_ctl.clone();
     // An embedded child sends on its host board's UI->Logic queue, so the two
     // share one busy level rather than each holding a level nobody reads.
@@ -1521,7 +1365,7 @@ pub fn main() {
         // Demultiplexed Logic->UI queue for this child (registered for the relay
         // fan-out; dropped with the child when its embed leaves the cull set).
         let (child_tx, child_rx) = conduit::local::<UiEvent>(CHANNEL_CAPACITY);
-        child_fan_out_factory.register(document_id, child_tx);
+        view_fan_out_factory.register(document_id, child_tx);
         match doc_type {
             ambre_bus::DocType::Toile => AppView::Toile(ToileView::new(
                 document_id,
@@ -1531,7 +1375,7 @@ pub fn main() {
                 ),
                 ambre_toile::ui::ToileWiring {
                     to_logic: child_to_logic.port(),
-                    from_logic: ambre_bus::Inbox::embedded(child_rx),
+                    from_logic: ambre_bus::Feed::embedded(child_rx),
                     text_input,
                     embedding: ambre_canvas::Embedding::Embedded,
                     perf_pub: ambre_canvas::PerfPublisher::new(),
@@ -1570,7 +1414,7 @@ pub fn main() {
                 ),
                 ambre_trame::ui::TrameWiring {
                     to_logic: child_to_logic.port(),
-                    from_logic: ambre_bus::Inbox::embedded(child_rx),
+                    from_logic: ambre_bus::Feed::embedded(child_rx),
                     text_input,
                     embedding: ambre_canvas::Embedding::Embedded,
                     anchor: ambre_canvas::AnchorPublisher::new(),
@@ -1598,15 +1442,15 @@ pub fn main() {
     let switcher = host::run_with(
         ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         move |size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>, text_input| {
-            let w = ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.width.get()));
-            let h = ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.height.get()));
+            let w = size.width.surface_length();
+            let h = size.height.surface_length();
             // Pick the view by the booted document's type. Cross-type in-session
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.
             if boot_is_murmure {
                 text_input.name_content(ambre_canvas::ContentKind::Conversation);
                 AppView::Murmure(host::MurmureView::new(
-                    Some(ambre_bus::Inbox::embedded(view_rx)),
+                    Some(ambre_bus::Feed::embedded(view_rx)),
                     Some(view_tx_logic.port()),
                     busy_pub.clone(),
                     host::page_reads(
@@ -1623,7 +1467,7 @@ pub fn main() {
                     size,
                     host::ProseWiring {
                         to_logic: view_tx_logic.port(),
-                        from_logic: ambre_bus::Inbox::embedded(view_rx),
+                        from_logic: ambre_bus::Feed::embedded(view_rx),
                         text_input,
                         theme_ctl,
                         figures: prose_figures,
@@ -1638,7 +1482,7 @@ pub fn main() {
                     ambre_core::Size::new(w, h),
                     ambre_toile::ui::ToileWiring {
                         to_logic: view_tx_logic.port(),
-                        from_logic: ambre_bus::Inbox::embedded(view_rx),
+                        from_logic: ambre_bus::Feed::embedded(view_rx),
                         text_input,
                         embedding: ambre_canvas::Embedding::Standalone,
                         perf_pub,
@@ -1654,7 +1498,7 @@ pub fn main() {
                     ambre_core::Size::new(w, h),
                     ambre_trame::ui::TrameWiring {
                         to_logic: view_tx_logic.port(),
-                        from_logic: ambre_bus::Inbox::embedded(view_rx),
+                        from_logic: ambre_bus::Feed::embedded(view_rx),
                         text_input,
                         embedding: ambre_canvas::Embedding::Standalone,
                         anchor: anchor_pub,

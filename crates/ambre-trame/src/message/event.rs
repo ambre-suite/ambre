@@ -227,6 +227,15 @@ pub enum TrameEvent {
         active: Id<Sheet>,
     },
 
+    /// The workbook's locale and the reader's half it is read under. Sent on
+    /// load, on a set, on a peer's set and on a change of the reader's half.
+    /// A view says so when the locale it shows is not the workbook's
+    /// (`LOCALE-021`).
+    LocaleState {
+        document: ambre_core::DocumentLocale,
+        reader: ambre_core::ReaderLocale,
+    },
+
     /// A command was rejected for a reason the user should see (for example deleting the
     /// last remaining sheet). Purely informational; no CRDT mutation occurred.
     Error { message: String },
@@ -507,6 +516,7 @@ impl std::fmt::Debug for TrameEvent {
             ),
             Self::UndoState { undo, redo } => fields!("UndoState", undo, redo),
             Self::SheetList { sheets, active } => fields!("SheetList", sheets, active),
+            Self::LocaleState { document, reader } => fields!("LocaleState", document, reader),
             Self::Error { message } => f
                 .debug_struct("Error")
                 .field("message", &RedactedChars::of(message))

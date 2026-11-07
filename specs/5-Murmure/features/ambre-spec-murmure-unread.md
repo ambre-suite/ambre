@@ -28,6 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3; `MURMURE-470` | `ambre_murmure::list::tests::a_drawn_latest_message_marks_the_channel_read_once` -- each new latest message drawn marks the channel read once; `ambre_murmure::view::tests::the_selected_channel_shows_its_list_and_is_marked_read_once` -- the region sends mark read once its latest message paints, on a recording surface | none | verified |
 | `MURMURE-470` | `POST` | Marking a channel read MUST move each of its read cursors to its latest message. | this spec section 3 | `ambre_logic::channels::tests::marking_a_channel_read_moves_its_live_segments_and_clears_its_mark`; `ambre_sync::updates::tests::a_read_reaches_the_last_update_delivered_and_no_further`; `ambre_murmure::channel_tests::the_final_segments_are_listed_loaded_or_not` -- the command moves the live segments to the last update delivered and the finals to their last number | none | verified |
 | `MURMURE-116` | `FRAME` | Moving a read cursor MUST NOT move the cursor of another member. | this spec section 3 | `ambre_server::routes::read_cursors::tests::marking_everything_read_moves_the_callers_cursors_alone`; `ambre_server::routes::read_cursors::tests::a_listed_move_touches_the_listed_documents_alone` -- another member's cursors stay where they were | none | verified |
+| `MURMURE-587` | `POST` | A message another member sends in a channel the user does not show MUST count as unread on that channel's sidebar entry. | this spec section 3; `MURMURE-120` | `ambre_belt::murmure::tests::a_message_to_a_closed_channel_marks_it_unread` -- browser tier: the second user goes back from the channel, the first posts, and the entry counts one unread message that opening the channel shows | none | verified |
 
 ### 1.3 Mark a message unread
 
@@ -60,10 +61,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   (`ambre-spec-budgets.md section 6`).
 * **Boundary.** the relay holds the read cursors and answers yes or no, never a count
   (`SRV-110`, `ZK-015`). The kind of each update stays sealed.
-* **Verification.** 17 `verified`, 0 `unimplemented`. The read cursor route tests hold the relay
-  rows against a real database. The engine, Logic and Sync unit tests hold the client rows. A
-  closed channel counts from its summaries, and a segment it opens meanwhile is not counted yet.
-  The view's host tests hold the read cursor the message list moves.
+* **Verification.** 18 `verified`. The read cursor route tests hold the relay rows against a real
+  database. The engine, Logic and Sync unit tests hold the client rows. A closed channel counts from
+  its summaries, and a segment it opens meanwhile is not counted yet. The view's host tests hold the
+  read cursor the message list moves.
 
 ---
 

@@ -257,7 +257,7 @@ impl SheetLine for Col {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(2);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(3);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -311,11 +311,18 @@ pub fn read_version(doc: &LoroDoc) -> Result<Version<Schema>, SchemaError> {
 ///
 /// Version 1 is the first layout. A workbook with no version reads as 0
 /// (`SCHEMA-005`), and the walk finds no step from 0 and refuses it.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
-    from: Version::new(1),
-    to: Version::new(2),
-    apply: line_elements_v2,
-}];
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
+    SchemaMigration {
+        from: Version::new(1),
+        to: Version::new(2),
+        apply: line_elements_v2,
+    },
+    SchemaMigration {
+        from: Version::new(2),
+        to: Version::new(3),
+        apply: document_locale_v3,
+    },
+];
 
 /// Version 1 to 2: a line a write adds takes a derived uid
 /// (`ambre-spec-trame-schema.md section 7`).
@@ -326,6 +333,18 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
 /// `line_gen_{sheet}` starts empty: no line of a version-1 workbook was derived
 /// (`TRAME-272`).
 fn line_elements_v2(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// Version 2 to 3: `meta` carries the workbook's locale
+/// (`ambre-spec-locale.md`).
+///
+/// The step rewrites nothing but the register. A version-2 workbook names no
+/// locale, and an absent key reads as none (`LOCALE-013`), so no cell, date or
+/// formula moves (`LOCALE-009`).
+fn document_locale_v3(doc: &LoroDoc) -> Result<(), String> {
     stamp(doc);
     doc.commit();
     Ok(())

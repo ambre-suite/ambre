@@ -30,7 +30,7 @@ pub(crate) enum Purpose {
     Channel { channel_id: Id<Channel> },
 }
 
-/// A pending trust decision. Built by the per-frame relay from a fetched
+/// A pending trust decision. Built by the switchboard from a fetched
 /// key, once that key has been compared with the pinned one.
 ///
 /// Only the states that interrupt the user become a prompt. That is a **new**
@@ -90,13 +90,15 @@ pub(crate) enum Next {
 
 /// Classify a fetched key against the pin (`CHROME-050`, `CHROME-051`).
 /// `role` is the one an invitation grants; a direct message ignores it.
+/// `now` dates the request a trusted key sends, and nothing else.
 pub(crate) fn classify(
     prompt: TofuPrompt,
     pinned: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
     role: Role,
+    now: Instant<Authored>,
 ) -> Next {
     match pinned {
-        Some(key) if key == prompt.exchange_pub_key => Next::Proceed(request(&prompt, role)),
+        Some(key) if key == prompt.exchange_pub_key => Next::Proceed(request(&prompt, role, now)),
         Some(_) => Next::Ask(TofuPrompt {
             contact: KeyContact::Changed,
             ..prompt
@@ -110,25 +112,27 @@ pub(crate) fn classify(
 
 /// Pin the confirmed key, then dispatch the request that carries it
 /// (`CHROME-052`). The pin is filed under the recipient's identity alone.
+/// `now` dates the request.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn confirm(
     prompt: &TofuPrompt,
     role: Role,
+    now: Instant<Authored>,
     pin: impl FnOnce(Id<User>, &FixedBytes<ambre_core::ExchangePublicKey>),
     dispatch: impl FnOnce(LogicCommand),
 ) {
     pin(prompt.user_id, &prompt.exchange_pub_key);
-    dispatch(request(prompt, role));
+    dispatch(request(prompt, role, now));
 }
 
 /// The request the key is for, carrying the key the user saw so Sync can
 /// refuse a substitution (`CHROME-047`). Private: [`classify`] and
 /// [`confirm`] are the only routes to it.
 ///
-/// It names the user the key came with, and the instant it leaves, which the
-/// Logic thread cannot read for itself.
-fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
-    let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
+/// It names the user the key came with, and the instant `now` it leaves. The
+/// Logic thread cannot read that instant for itself, and the caller reads the
+/// clock, so the decision runs on the host.
+fn request(prompt: &TofuPrompt, role: Role, now: Instant<Authored>) -> LogicCommand {
     match &prompt.purpose {
         Purpose::Invite { document_id, email } => LogicCommand::Rest {
             id: ambre_bus::next_request(),
@@ -283,6 +287,9 @@ mod tests {
     use std::cell::RefCell;
     use wasm_bindgen_test::wasm_bindgen_test;
 
+    /// The instant every request of these tests leaves at.
+    const NOW: Instant<Authored> = Instant::<Authored>::new(1_000);
+
     /// A prompt for a key of `byte`, as the first phase answers it.
     fn fetched(byte: u8) -> TofuPrompt {
         TofuPrompt {
@@ -330,11 +337,16 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_new_or_changed_key_asks_and_only_the_pinned_key_invites() {
         for prompt in [fetched(1), fetched_for_direct(1)] {
-            match classify(prompt.clone(), None, Role::Editor) {
+            match classify(prompt.clone(), None, Role::Editor, NOW) {
                 Next::Ask(p) => assert_eq!(p.contact, KeyContact::New, "a first contact is new"),
                 other => panic!("a new key went out: {other:?}"),
             }
-            match classify(prompt, Some(FixedBytes::from_array([9; 32])), Role::Editor) {
+            match classify(
+                prompt,
+                Some(FixedBytes::from_array([9; 32])),
+                Role::Editor,
+                NOW,
+            ) {
                 Next::Ask(p) => assert_eq!(
                     p.contact,
                     KeyContact::Changed,
@@ -347,6 +359,7 @@ mod tests {
             fetched(1),
             Some(FixedBytes::from_array([1; 32])),
             Role::Editor,
+            NOW,
         );
         assert_eq!(invited_with(&trusted), Some([1; 32]));
     }
@@ -368,6 +381,7 @@ mod tests {
             prompt.clone(),
             Some(FixedBytes::from_array([6; 32])),
             Role::Viewer,
+            NOW,
         ) else {
             panic!("a pinned key asks again");
         };
@@ -378,6 +392,7 @@ mod tests {
         confirm(
             &prompt,
             Role::Viewer,
+            NOW,
             |_, key| log.borrow_mut().push(format!("pin {}", key.as_array()[0])),
             |cmd| {
                 let LogicCommand::OpenDirectMessage { draft, .. } = cmd else {
@@ -401,7 +416,7 @@ mod tests {
         };
         assert!(prompt.email().is_none(), "an invite by id shows no email");
         assert!(matches!(
-            classify(prompt.clone(), None, Role::Editor),
+            classify(prompt.clone(), None, Role::Editor, NOW),
             Next::Ask(_)
         ));
         let Next::Proceed(LogicCommand::InviteToChannel {
@@ -412,6 +427,7 @@ mod tests {
             prompt.clone(),
             Some(FixedBytes::from_array([7; 32])),
             Role::Editor,
+            NOW,
         )
         else {
             panic!("a pinned key did not invite into the channel");
@@ -435,6 +451,7 @@ mod tests {
         confirm(
             &prompt,
             Role::Viewer,
+            NOW,
             |user, key| {
                 log.borrow_mut()
                     .push(format!("pin {:?} {}", user.as_bytes(), key.as_array()[0]))

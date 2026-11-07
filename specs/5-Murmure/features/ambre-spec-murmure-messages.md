@@ -31,6 +31,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-081` | `POST` | A sent message MUST hand the Sync worker an activity summary of kind content, with its mentions. | this spec section 3; `SYNC-113` | `ambre_murmure::channel_tests::a_sent_message_carries_a_content_summary_with_its_mentions`; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` -- the summary leaves with the delta | none | verified |
 | `MURMURE-082` | `FAIL` | Given a delta that creates a message under another author, every client MUST refuse the delta. | this spec section 3 | `ambre_murmure::authorship_tests::a_message_carries_the_author_who_signed_it_and_no_other` -- a message forged under another user is refused and changes nothing | none | verified |
 | `MURMURE-083` | `FRAME` | Sending a message MUST NOT change another message. | this spec section 3 | `ambre_murmure::channel_tests::sending_a_message_changes_no_other_message` -- the deep value of every earlier message compares equal across the send | none | verified |
+| `MURMURE-586` | `POST` | A message one member sends in a channel MUST reach the list of every other member who holds that channel open. | this spec section 3; `MURMURE-080`; `SRV-177` | `ambre_belt::murmure::tests::a_message_one_member_sends_reaches_the_other` -- browser tier: two users in two browsers through the relay, each hears the other's message with its author, and the second joined after the first opened the channel | none | verified |
 
 ### 1.3 Edit a message
 
@@ -71,9 +72,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
-* **Verification.** 25 `verified`. The send, the authorship check, the edit and the delete are
-  built, live and as amendments. So is the `thread` field another member sets once. The list
-  draws the styles of a body, and a click on a link opens it.
+* **Verification.** 26 `verified`. The send, the authorship check, the edit and the delete are
+  built, live and as amendments. So is the `thread` field another member sets once. The list draws
+  the styles of a body, and a click on a link opens it.
 
 ---
 

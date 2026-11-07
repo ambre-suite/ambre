@@ -32,6 +32,7 @@ use crate::message::{
 use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
+    SpaceHead,
 };
 use ambre_bus::MentionState;
 use ambre_bus::{Authored, ChannelPlace, Instant, RestCommand, RestEvent};
@@ -1068,13 +1069,23 @@ impl MurmureRelay {
         match event {
             SpaceEvent::Catalogue {
                 name,
+                role,
                 categories,
                 channels,
             } => {
                 self.sidebar.update(|s| {
                     s.set_catalogue(space, name.clone(), categories.clone(), channels.clone());
+                    s.set_role(space, *role);
                 });
                 Vec::new()
+            }
+            // The channel this page created opens at once (`MURMURE-584`).
+            // The Logic thread holds it already, and the listing moves it
+            // among the joined ones.
+            SpaceEvent::ChannelCreated { channel_id } => {
+                let mut commands = vec![LogicCommand::ListMemberChannels];
+                commands.extend(self.show(*channel_id));
+                commands
             }
             SpaceEvent::Members { members } => {
                 self.members.update(|m| {
@@ -1388,6 +1399,77 @@ impl MurmureRelay {
             .flatten()
     }
 
+    /// The spaces of the sidebar, each with the role of the user once known
+    /// (`MURMURE-583`).
+    pub fn space_heads(&self) -> Memo<Vec<SpaceHead>> {
+        let sidebar = self.sidebar;
+        Memo::new(move |_| sidebar.with(Sidebar::space_heads))
+    }
+
+    /// Create a space named `name`, with the user as its owner. The Logic
+    /// thread shows it at once, so the sidebar lists it (`MURMURE-583`). A
+    /// blank name, or one past the cap, creates nothing.
+    pub fn create_space(&self, name: String, now: Instant<Authored>) -> Option<LogicCommand> {
+        let name = name_typed(&name)?;
+        Some(LogicCommand::CreateSpace {
+            space_id: Id::<Space>::mint(),
+            name,
+            now,
+        })
+    }
+
+    /// Create a public channel named `name` in `space`, last in its
+    /// catalogue. Only an owner or an editor of the space may, and the
+    /// channel opens once the relay holds it (`MURMURE-584`).
+    pub fn create_channel(
+        &self,
+        space: Id<Space>,
+        name: String,
+        now: Instant<Authored>,
+    ) -> Option<LogicCommand> {
+        let name = name_typed(&name)?;
+        let position = self.sidebar.with_untracked(|s| {
+            let admin = s
+                .space_heads()
+                .iter()
+                .any(|head| head.space == space && head.is_admin());
+            admin.then(|| s.next_position(space))
+        })?;
+        Some(LogicCommand::Space {
+            space_id: space,
+            command: SpaceCommand::CreatePublicChannel {
+                draft: crate::message::PublicChannelDraft {
+                    channel_id: Id::<Channel>::mint(),
+                    name,
+                    topic: None,
+                    category: None,
+                    position,
+                },
+                now,
+            },
+        })
+    }
+
+    /// Invite the user at `email` into `space`. Only its owner may. Their
+    /// key is fetched first, for the check of the pin, and the invite to the
+    /// space document leaves once it passes (`MURMURE-585`). A blank address
+    /// fetches nothing.
+    pub fn invite_to_space(&self, space: Id<Space>, email: String) -> Option<LogicCommand> {
+        let email = email.trim();
+        let owner = self.sidebar.with_untracked(|s| {
+            s.space_heads()
+                .iter()
+                .any(|head| head.space == space && head.is_owner())
+        });
+        (owner && !email.is_empty()).then(|| LogicCommand::Rest {
+            id: ambre_bus::next_request(),
+            cmd: RestCommand::FetchInviteeKey {
+                document_id: space.document_id(),
+                invitee_email: ambre_core::Email::from(email),
+            },
+        })
+    }
+
     /// Open the next channel with activity after the shown one, or the
     /// previous one (`MURMURE-176`). It sends no read cursor: the channel
     /// opens as a click opens it (`MURMURE-177`).
@@ -1525,6 +1607,159 @@ pub fn ChannelList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl In
                     .collect_view()
             }}
         </nav>
+    }
+}
+
+/// The spaces of the sidebar, above its channels (the Murmure spaces spec).
+/// A signed-in user creates a space here, and each space lists once created
+/// (`MURMURE-583`). An owner or an editor of a space creates a public channel
+/// in it (`MURMURE-584`), and its owner invites another user (`MURMURE-585`).
+/// A space whose role is not known yet offers neither. `now` stamps a
+/// creation, and `send` carries what the relay answers.
+#[component]
+pub fn SpaceList(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    now: Callback<(), Instant<Authored>>,
+) -> impl IntoView {
+    let heads = relay.space_heads();
+    let new_space = Callback::new(move |name: String| relay.create_space(name, now.run(())));
+    view! {
+        <section class="murmure-spaces" aria-label="Spaces">
+            <PromptControl words=NEW_SPACE send=send on_submit=new_space />
+            <ul>
+                {move || {
+                    heads
+                        .get()
+                        .into_iter()
+                        .map(|head| space_view(relay, send, now, head))
+                        .collect_view()
+                }}
+            </ul>
+        </section>
+    }
+}
+
+/// One space of the sidebar: its name, then the controls its role allows.
+fn space_view(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    now: Callback<(), Instant<Authored>>,
+    head: SpaceHead,
+) -> impl IntoView {
+    let space = head.space;
+    let new_channel = head.is_admin().then(|| {
+        let on_submit =
+            Callback::new(move |name: String| relay.create_channel(space, name, now.run(())));
+        view! { <PromptControl words=NEW_CHANNEL send=send on_submit=on_submit /> }
+    });
+    let invite = head.is_owner().then(|| {
+        let on_submit = Callback::new(move |email: String| relay.invite_to_space(space, email));
+        view! { <PromptControl words=INVITE_TO_SPACE send=send on_submit=on_submit /> }
+    });
+    let name = head
+        .name
+        .map_or_else(|| UNNAMED_SPACE.to_owned(), Validated::into_string);
+    view! {
+        <li class="murmure-space">
+            <h3 class="murmure-space-name">{name}</h3>
+            {new_channel}
+            {invite}
+        </li>
+    }
+}
+
+/// The name typed in a field, trimmed. A blank one names nothing, though an
+/// empty `Name` parses.
+fn name_typed(text: &str) -> Option<Validated<Name>> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    Validated::<Name>::parse(text).ok()
+}
+
+/// The heading of a space whose catalogue names none yet.
+const UNNAMED_SPACE: &str = "Unnamed space";
+
+/// The words and the class of one control that asks for a line of text.
+#[derive(Clone, Copy)]
+struct PromptWords {
+    /// The class of the form. The toggle and the field add `-toggle` and
+    /// `-field` to it.
+    class: StaticKey<ambre_core::CssClasses>,
+    /// The words of the toggle.
+    toggle: &'static str,
+    /// The accessible name of the field.
+    label: &'static str,
+    /// The words of the submit button.
+    submit: &'static str,
+}
+
+const NEW_SPACE: PromptWords = PromptWords {
+    class: StaticKey::new("murmure-new-space"),
+    toggle: "New space",
+    label: "Name of the new space",
+    submit: "Create",
+};
+
+const NEW_CHANNEL: PromptWords = PromptWords {
+    class: StaticKey::new("murmure-new-channel"),
+    toggle: "New channel",
+    label: "Name of the new channel",
+    submit: "Create",
+};
+
+const INVITE_TO_SPACE: PromptWords = PromptWords {
+    class: StaticKey::new("murmure-space-invite"),
+    toggle: "Invite",
+    label: "Email of the user to invite",
+    submit: "Invite",
+};
+
+/// A toggle that opens a form of one field. A submit hands the words typed
+/// to `on_submit`, and sends the command it answers. A command sent closes
+/// the form and clears the field; no command keeps both, so the user can
+/// fix the words.
+#[component]
+fn PromptControl(
+    words: PromptWords,
+    send: Callback<LogicCommand>,
+    on_submit: Callback<String, Option<LogicCommand>>,
+) -> impl IntoView {
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
+    let text = RwSignal::new(String::new());
+    let class = words.class.as_str();
+    let submit = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        if let Some(command) = on_submit.run(text.get_untracked()) {
+            send.run(command);
+            text.set(String::new());
+            open.set(ambre_chrome::Openness::Closed);
+        }
+    };
+    view! {
+        <button
+            r#type="button"
+            class=format!("{class}-toggle")
+            aria-expanded=move || open.get().aria()
+            on:click=move |_| open.update(|o| *o = o.toggled())
+        >
+            {words.toggle}
+        </button>
+        <Show when=move || open.get() == ambre_chrome::Openness::Open>
+            <form class=class on:submit=submit>
+                <input
+                    class=format!("{class}-field")
+                    r#type="text"
+                    aria-label=words.label
+                    placeholder=words.label
+                    prop:value=move || text.get()
+                    on:input=move |ev| text.set(event_target_value(&ev))
+                />
+                <button r#type="submit">{words.submit}</button>
+            </form>
+        </Show>
     }
 }
 

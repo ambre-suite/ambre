@@ -71,8 +71,8 @@ jobs:
       # the allowlist half.
       # Then, on the same scan, the strict unwrap report: no newtype unwrapped
       # early inside a body unless `ambre-unwrap.tsv` names its key with a
-      # count and a reason (`ai/ambre-rust-style.md`, the newtype rule). The
-      # step prints both verdicts on its last line, and fails on either.
+      # count and a reason (`ARCH-073`). The step prints both verdicts on its
+      # last line, and fails on either.
       - run: just primitives
       # What a spec quotes: no function body in a spec (template §0).
       - run: just spec-code

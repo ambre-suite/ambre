@@ -63,7 +63,7 @@ js-sys = { workspace = true }
 
 console_error_panic_hook = { workspace = true }
 
-# The crate is wasm-only (web_sys/wgpu/leptos) save the per-frame relay's
+# The crate is wasm-only (web_sys/wgpu/leptos) save the switchboard's
 # decisions (`relay`), which the host builds for its tests (`ARCH-072`). The
 # other pure helpers (route parsing, base64, FPS window) still run on the wasm
 # target, in headless Chrome (`just test-wasm`). See ambre-spec-testing.md.

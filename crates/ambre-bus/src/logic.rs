@@ -155,6 +155,13 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
     /// the in-memory state; the Sync thread unsubscribes and zeroizes the key.
     CloseDocument { document_id: Id<Document> },
 
+    /// Send every view of an open document its whole state again, as events
+    /// of its application (`ambre-spec-message-bus.md`, `BUS-041`). The
+    /// switchboard asks for it once a view that lost an event reads again.
+    /// The document and its sessions are left as they are, and a document not
+    /// open answers nothing.
+    ResendState { document_id: Id<Document> },
+
     /// Open a channel: its `meta` document, then its live segments, each an
     /// ordinary document session (the Murmure engine spec).
     OpenChannel { channel_id: Id<Channel> },
@@ -231,6 +238,12 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
     LoadFonts {
         faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
     },
+    /// The reader's own locale and convention, read from the device at boot
+    /// and sent again when the reader changes them (`LOCALE-015`). Every open
+    /// document takes it, and a document this reader creates is seeded with
+    /// the locale (`LOCALE-019`). Local-only: no document stores it
+    /// (`LOCALE-017`).
+    SetReaderLocale { reader: ambre_core::ReaderLocale },
 }
 
 // -----------------------------------------------------------------------------
@@ -292,6 +305,7 @@ impl<A, P: ChannelPlane> LogicCommand<A, P> {
                 doc_type,
             },
             Self::CloseDocument { document_id } => LogicCommand::CloseDocument { document_id },
+            Self::ResendState { document_id } => LogicCommand::ResendState { document_id },
             Self::OpenChannel { channel_id } => LogicCommand::OpenChannel { channel_id },
             Self::CloseChannel { channel_id } => LogicCommand::CloseChannel { channel_id },
             Self::OpenDirectMessage { draft, now } => LogicCommand::OpenDirectMessage {
@@ -325,6 +339,7 @@ impl<A, P: ChannelPlane> LogicCommand<A, P> {
             Self::MarkAllRead => LogicCommand::MarkAllRead,
             Self::SearchMessages { query } => LogicCommand::SearchMessages { query },
             Self::LoadFonts { faces } => LogicCommand::LoadFonts { faces },
+            Self::SetReaderLocale { reader } => LogicCommand::SetReaderLocale { reader },
         })
     }
 

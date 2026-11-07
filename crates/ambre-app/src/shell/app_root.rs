@@ -14,7 +14,7 @@ use ambre_core::{Commands, StaticKey};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
     ChannelHeader, ChannelList, ChannelMentionConfirm, DeleteConfirm, EmojiPicker, InviteControl,
-    KeyList, MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay,
+    KeyList, MarkBarPanel, MemberList, MentionPanel, MessageSearch, MurmureRelay, SpaceList,
 };
 
 /// The table the command palette searches: the booted application's whole
@@ -55,6 +55,12 @@ pub(crate) fn MurmureShell(
                 <MessageSearch relay=relay send=send />
             </Toolbar>
             <Sidebar slot label="Channels">
+                // The view stamps a creation: the Logic thread reads no clock.
+                <SpaceList
+                    relay=relay
+                    send=send
+                    now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
+                />
                 <ChannelList relay=relay send=send />
             </Sidebar>
             <Panel slot label=Signal::derive(move || ambre_murmure::chrome::panel_label(pane.get()).to_owned())>
@@ -237,6 +243,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         invite_role,
         me,
         sel_stats,
+        trame_locale,
         sel_stats_toile,
         present_toile,
         presenter_slide,
@@ -625,6 +632,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         cell_ref=formula_ref
                         content=formula_text
                         on_action=Callback::new(move |action| formula_action.set(Some(action)))
+                        locale=trame_locale
                     />
                 })}
             </FormulaBar>
@@ -659,7 +667,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     .into_any()
                 } else {
                     view! {
-                        <trame_chrome::StatusBar stats=sel_stats perf=perf_snap zoom=zoom />
+                        <trame_chrome::StatusBar
+                            stats=sel_stats
+                            perf=perf_snap
+                            zoom=zoom
+                            locale=trame_locale
+                        />
                     }
                     .into_any()
                 }}

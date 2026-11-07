@@ -10,7 +10,7 @@
 //   - the toolbar markup and the status label.
 //
 // The launcher (`ambre-app`) stays app-agnostic. It owns the generic AppShell,
-// the `CommandStates` store, and the per-frame relay. It reaches into this module
+// the `CommandStates` store, and the switchboard. It reaches into this module
 // for the Trame pieces (`COMMANDS`, `bind_keys`, `TrameHandler`,
 // `mirror_event`, the `<FormatBar>` / `<SelectionBar>` components, ...).
 //

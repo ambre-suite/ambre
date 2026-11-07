@@ -67,6 +67,7 @@ pub fn mirror_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
             | TrameEvent::MergeRejected { .. }
             | TrameEvent::MergeConflictDetected { .. }
             | TrameEvent::SheetList { .. }
+            | TrameEvent::LocaleState { .. }
             | TrameEvent::Error { .. }
             | TrameEvent::EditTargetMoved { .. }
             | TrameEvent::EditTargetGone { .. }
@@ -215,6 +216,7 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
         | TrameEvent::SelectRange { .. }
         | TrameEvent::UndoState { .. }
         | TrameEvent::SheetList { .. }
+        | TrameEvent::LocaleState { .. }
         | TrameEvent::EditTargetMoved { .. }
         | TrameEvent::ColumnValues { .. }
         | TrameEvent::SortRange { .. }

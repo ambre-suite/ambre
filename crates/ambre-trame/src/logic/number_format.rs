@@ -13,7 +13,7 @@
 
 use crate::formula::text::LiteralText;
 use crate::message::DateParts;
-use ambre_core::{Instant, SheetDateTime};
+use ambre_core::{Bounded, Grouping, Instant, MonthDay, NumberForms, SheetDateTime};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
 const MONTHS: [&str; 12] = [
@@ -43,17 +43,54 @@ const DAYS: [&str; 7] = [
     "Friday",
 ];
 
-/// A day serial as an ISO calendar date, `2026-09-29` (`TRAME-107`). The ISO
-/// order is the one no locale misreads; the document has no locale yet
-/// (`TRAME-110`).
-pub(crate) fn format_date(serial: Instant<SheetDateTime>) -> String {
+/// A day serial as a calendar date in `forms` (`TRAME-107`, `TRAME-110`):
+/// `29/09/2026` in French. The neutral forms write the ISO date, the order no
+/// locale misreads.
+pub(crate) fn format_date(serial: Instant<SheetDateTime>, forms: &NumberForms) -> String {
     let DateParts {
         year: y,
         month: m,
         day: d,
     } = DateParts::of_day(serial.day());
-    let (y, m, d) = (y.get(), m.get(), d.get());
-    format!("{y:04}-{m:02}-{d:02}")
+    match u8::try_from(d.get())
+        .ok()
+        .and_then(Bounded::<MonthDay>::new)
+    {
+        Some(day) => forms.numeric_date(y, m, day),
+        // A day a calendar count never yields: the ISO digits, unpadded past
+        // their width, rather than a wrong date.
+        None => format!("{:04}-{:02}-{:02}", y.get(), m.get(), d.get()),
+    }
+}
+
+/// The marks a pattern's point and thousands comma print as, in one locale.
+#[derive(Clone, Copy)]
+struct Marks {
+    /// What the pattern's `.` prints as.
+    decimal: char,
+    /// What the pattern's thousands `,` prints as.
+    group: char,
+}
+
+impl Marks {
+    /// The marks of `forms`. The neutral forms group nothing on their own,
+    /// and a pattern that asks for a group gets the comma it wrote.
+    fn of(forms: &NumberForms) -> Self {
+        // Five digits, which every locale groups whatever its minimum.
+        let probe = forms.localize("10000.5", Grouping::Grouped);
+        let mut marks = probe.chars().filter(|c| !c.is_ascii_digit());
+        match (marks.next(), marks.next()) {
+            (Some(group), Some(decimal)) => Self { decimal, group },
+            (Some(decimal), None) => Self {
+                decimal,
+                group: ',',
+            },
+            _ => Self {
+                decimal: '.',
+                group: ',',
+            },
+        }
+    }
 }
 
 /// The time of day a serial carries in its fraction, `14:05:09` (`TRAME-107`).
@@ -148,7 +185,7 @@ enum DateLetter {
 }
 
 /// Render `value` through `pattern` (`TRAME-109`).
-pub(crate) fn format_custom(value: f64, pattern: &str) -> String {
+pub(crate) fn format_custom(value: f64, pattern: &str, forms: &NumberForms) -> String {
     let sections = split_sections(pattern);
     // One section serves every value; two split off the negatives; a third
     // serves zero. A section chosen for its sign prints the magnitude.
@@ -160,9 +197,9 @@ pub(crate) fn format_custom(value: f64, pattern: &str) -> String {
     };
     let tokens = lex(section);
     if tokens.iter().any(|t| matches!(t, Token::Date(..))) {
-        render_date(&tokens, Instant::<SheetDateTime>::new(value))
+        render_date(&tokens, Instant::<SheetDateTime>::new(value), forms)
     } else {
-        render_number(&tokens, value)
+        render_number(&tokens, value, Marks::of(forms))
     }
 }
 
@@ -248,7 +285,7 @@ fn lex(section: &str) -> Vec<Token> {
 
 /// Render a numeric section: the placeholders take the digits, the literals
 /// stay where they are.
-fn render_number(tokens: &[Token], value: f64) -> String {
+fn render_number(tokens: &[Token], value: f64, marks: Marks) -> String {
     let percents = tokens.iter().filter(|t| **t == Token::Percent).count();
     let value = value * 100f64.powi(percents as i32);
     let point = tokens.iter().position(|t| *t == Token::Point);
@@ -275,9 +312,9 @@ fn render_number(tokens: &[Token], value: f64) -> String {
     if value < 0.0 && fixed.chars().any(|c| c.is_ascii_digit() && c != '0') {
         out.push('-');
     }
-    out.push_str(&place_integer(int_tokens, int_digits, thousands));
+    out.push_str(&place_integer(int_tokens, int_digits, thousands, marks));
     if point.is_some() {
-        out.push_str(&place_fraction(frac_tokens, frac_digits));
+        out.push_str(&place_fraction(frac_tokens, frac_digits, marks));
     }
     out
 }
@@ -297,7 +334,7 @@ enum Thousands {
 /// placeholders stay in place, which is how `(000) 000-0000` renders a phone
 /// number. The thousands comma groups the digits when no literal sits among
 /// the placeholders.
-fn place_integer(tokens: &[Token], digits: &str, thousands: Thousands) -> String {
+fn place_integer(tokens: &[Token], digits: &str, thousands: Thousands, marks: Marks) -> String {
     let placeholders = tokens
         .iter()
         .filter(|t| matches!(t, Token::Zero | Token::Hash))
@@ -348,14 +385,14 @@ fn place_integer(tokens: &[Token], digits: &str, thousands: Thousands) -> String
     out.reverse();
     let joined: String = out.concat();
     if thousands == Thousands::Grouped && !interleaved {
-        group_thousands(&joined)
+        group_thousands(&joined, marks.group)
     } else {
         joined
     }
 }
 
-/// Insert a comma every three digits in the leading run of digits of `text`.
-fn group_thousands(text: &str) -> String {
+/// Insert `mark` every three digits in the leading run of digits of `text`.
+fn group_thousands(text: &str, mark: char) -> String {
     let start = text
         .find(|c: char| c.is_ascii_digit())
         .unwrap_or(text.len());
@@ -366,7 +403,7 @@ fn group_thousands(text: &str) -> String {
     let mut grouped = String::with_capacity(digits.len() + digits.len() / 3);
     for (i, d) in digits.chars().enumerate() {
         if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            grouped.push(',');
+            grouped.push(mark);
         }
         grouped.push(d);
     }
@@ -375,7 +412,7 @@ fn group_thousands(text: &str) -> String {
 
 /// Fill the fraction placeholders from the left. A `#` drops a trailing zero
 /// that a `0` would print.
-fn place_fraction(tokens: &[Token], digits: &str) -> String {
+fn place_fraction(tokens: &[Token], digits: &str, marks: Marks) -> String {
     let digits: Vec<char> = digits.chars().collect();
     // The digits a `#` may drop: the trailing zeros after the last `0`.
     let last_zero = tokens
@@ -391,7 +428,7 @@ fn place_fraction(tokens: &[Token], digits: &str) -> String {
         .rposition(|&d| d != '0')
         .map_or(0, |p| p + 1)
         .max(last_zero);
-    let mut out = String::from(".");
+    let mut out = String::from(marks.decimal);
     let mut place = 0;
     for token in tokens {
         match token {
@@ -408,16 +445,21 @@ fn place_fraction(tokens: &[Token], digits: &str) -> String {
             Token::AmPm | Token::Date(..) | Token::Comma | Token::Point => {}
         }
     }
-    if out == "." { String::new() } else { out }
+    if out.chars().eq([marks.decimal]) {
+        String::new()
+    } else {
+        out
+    }
 }
 
 /// Render a date or time section.
-fn render_date(tokens: &[Token], serial: Instant<SheetDateTime>) -> String {
+fn render_date(tokens: &[Token], serial: Instant<SheetDateTime>, forms: &NumberForms) -> String {
     let DateParts {
         year: y,
         month: mo,
         day: d,
     } = DateParts::of_day(serial.day());
+    let month_of = mo;
     let (y, mo, d) = (y.get(), mo.get(), d.get());
     let TimeOfDay {
         hours: h,
@@ -426,10 +468,13 @@ fn render_date(tokens: &[Token], serial: Instant<SheetDateTime>) -> String {
     } = hms(serial);
     let twelve_hour = tokens.contains(&Token::AmPm);
     let month = |run: Run| -> String {
-        let name = MONTHS
-            .get((mo - 1).clamp(0, 11) as usize)
-            .copied()
-            .unwrap_or("");
+        let name = match forms.names() {
+            Some(names) => names.month(month_of),
+            None => MONTHS
+                .get((mo - 1).clamp(0, 11) as usize)
+                .copied()
+                .unwrap_or(""),
+        };
         match run {
             Run::One => mo.to_string(),
             Run::Two => format!("{mo:02}"),
@@ -466,10 +511,13 @@ fn render_date(tokens: &[Token], serial: Instant<SheetDateTime>) -> String {
             Token::Date(DateLetter::Day, run) => match run {
                 Run::One | Run::Two => out.push_str(&pad(d as u32, *run)),
                 Run::Three | Run::Four => {
-                    let name = DAYS
-                        .get(serial.day().get().rem_euclid(7) as usize)
-                        .copied()
-                        .unwrap_or("");
+                    let name = match forms.names() {
+                        Some(names) => names.weekday(serial.day()),
+                        None => DAYS
+                            .get(serial.day().get().rem_euclid(7) as usize)
+                            .copied()
+                            .unwrap_or(""),
+                    };
                     let shown: String = if *run == Run::Three {
                         name.chars().take(3).collect()
                     } else {
@@ -515,11 +563,17 @@ mod tests {
     fn date_and_time_render_the_calendar() {
         // 46294 is 2026-09-29; .5 is noon.
         assert_eq!(
-            format_date(Instant::<SheetDateTime>::new(46294.0)),
+            format_date(
+                Instant::<SheetDateTime>::new(46294.0),
+                &NumberForms::NEUTRAL
+            ),
             "2026-09-29"
         );
         assert_eq!(
-            format_date(Instant::<SheetDateTime>::new(46294.75)),
+            format_date(
+                Instant::<SheetDateTime>::new(46294.75),
+                &NumberForms::NEUTRAL
+            ),
             "2026-09-29"
         );
         assert_eq!(
@@ -534,7 +588,7 @@ mod tests {
 
     #[test]
     fn custom_numeric_patterns() {
-        let f = format_custom;
+        let f = |value, pattern| format_custom(value, pattern, &NumberForms::NEUTRAL);
         assert_eq!(f(1234.5, "#,##0.00"), "1,234.50");
         assert_eq!(f(1234567.0, "#,##0"), "1,234,567");
         assert_eq!(f(0.5, "0.0%"), "50.0%");
@@ -552,7 +606,7 @@ mod tests {
 
     #[test]
     fn custom_literals_and_interleaved_digits() {
-        let f = format_custom;
+        let f = |value, pattern| format_custom(value, pattern, &NumberForms::NEUTRAL);
         assert_eq!(f(5551234567.0, "(000) 000-0000"), "(555) 123-4567");
         assert_eq!(f(75001.0, "00000"), "75001");
         assert_eq!(f(42.0, "0 \"kg\""), "42 kg");
@@ -561,7 +615,7 @@ mod tests {
 
     #[test]
     fn custom_sections_choose_by_sign() {
-        let f = format_custom;
+        let f = |value, pattern| format_custom(value, pattern, &NumberForms::NEUTRAL);
         assert_eq!(f(-5.0, "0;(0)"), "(5)");
         assert_eq!(f(5.0, "0;(0)"), "5");
         assert_eq!(f(0.0, "0;(0);\"zero\""), "zero");
@@ -569,7 +623,7 @@ mod tests {
 
     #[test]
     fn custom_date_and_time_tokens() {
-        let f = format_custom;
+        let f = |value, pattern| format_custom(value, pattern, &NumberForms::NEUTRAL);
         let serial = 46294.0 + (14.0 * 3600.0 + 5.0 * 60.0 + 9.0) / 86_400.0;
         assert_eq!(f(serial, "dd/mm/yyyy"), "29/09/2026");
         assert_eq!(f(serial, "d mmm yy"), "29 Sep 26");
@@ -592,11 +646,31 @@ mod tests {
     /// four prints as four.
     #[test]
     fn a_date_run_past_four_letters_prints_as_four() {
-        let f = format_custom;
+        let f = |value, pattern| format_custom(value, pattern, &NumberForms::NEUTRAL);
         let serial = 46294.0;
         assert_eq!(f(serial, "d|dd|ddd"), "29|29|Tue");
         assert_eq!(f(serial, "ddddd"), f(serial, "dddd"));
         assert_eq!(f(serial, "mmmmmm"), "September");
         assert_eq!(f(serial, "yyyyyy"), "2026");
+    }
+
+    /// `TRAME-110`: a pattern's point and thousands comma print the marks of
+    /// the workbook's locale, and its month names its language.
+    #[test]
+    fn a_pattern_prints_the_marks_and_names_of_its_locale() {
+        let fr = ambre_core::DocumentLocale::parse("fr").unwrap().forms();
+        let de = ambre_core::DocumentLocale::parse("de").unwrap().forms();
+        assert_eq!(format_custom(1234.5, "#,##0.00", &fr), "1\u{202f}234,50");
+        assert_eq!(format_custom(1234.5, "#,##0.00", &de), "1.234,50");
+        assert_eq!(format_custom(0.25, "#.00", &de), ",25");
+        assert_eq!(
+            format_custom(46294.0, "d mmmm yyyy", &fr),
+            "29 septembre 2026"
+        );
+        assert_eq!(format_custom(46294.0, "dddd", &de), "Dienstag");
+        assert_eq!(
+            format_date(Instant::<SheetDateTime>::new(46294.0), &fr),
+            "29/09/2026"
+        );
     }
 }

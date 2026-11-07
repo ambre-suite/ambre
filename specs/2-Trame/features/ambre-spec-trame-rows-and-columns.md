@@ -50,7 +50,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-081` | `POST` | Deleting a line MUST leave none of its cells in the document. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the absence through a snapshot round trip | none | verified |
+| `TRAME-081` | `POST` | Deleting a line MUST leave none of its cells in the document. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the absence through a snapshot round trip; `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- the purge reads the keys of the line from an index by line, which every test checks against a walk of the map at each purge. After each step of the proptest the index equals a walk of every cell and style map | none | verified |
 | `TRAME-082` | `POST` | Deleting a line MUST leave none of its formatting in the document either. | this spec section 6 | `ambre_trame::logic::tests::group2::deleted_line_leaves_no_formatting` | none | verified |
 | `TRAME-277` | `POST` | Deleting a line MUST rewrite each formula reference to a line the sheet no longer holds into a literal `#REF!`, in the same undo step. | this spec section 3; `TRAME-008` | `ambre_trame::logic::tests::group14::a_delete_freezes_each_reference_to_its_line_in_one_undo_step` -- it reads the stored text, then undoes | none | verified |
 | `TRAME-269` | `POST` | Deleting a line that two peers added at once MUST leave no copy of that line on the grid. | this spec section 3 | `ambre_trame::logic::tests::group14::a_delete_of_a_line_two_peers_added_leaves_no_copy`; `ambre_trame::model::axis::tests::a_delete_drops_every_element_and_a_move_moves_the_visible_one` | none | verified |
@@ -131,7 +131,7 @@ and a sort (`TRAME-004`).
 | Operation | Document | Afterwards |
 |---|---|---|
 | insert | one insertion, carrying a freshly minted identity | rebuild the position cache and the merges, carry the engine, reseed the styles and the filter |
-| delete | one removal, then a purge of every cell and style keyed by the removed identity | the same tail |
+| delete | one removal, then a purge of every cell and style keyed by the removed identity. The purge reads those keys from an index by line, which a subscription to the document keeps from every commit, import and undo (`TRAME-081`). The removal reads its slots from the position cache, not from the list | the same tail |
 | move | one move, and nothing else | the same tail. Each cell reference resolves to its line's new position by itself (`TRAME-084`) |
 
 **What a structural edit costs the engine** (`TRAME-280`). A formula that names each cell it reads by
@@ -164,8 +164,10 @@ decides which cell of a cycle is refused, as on every reseed.
 then clears the cells of each gone line, and compiles again each formula that read one or reads
 positions.
 The peer's walk already rewrote the text it saw, and that text arrives in the batch. A peer's
-structural edit of a sheet off the screen still reseeds the whole engine. So do an undo, a redo and
-a snapshot import.
+structural edit of a sheet off the screen still reseeds the whole engine. So does a snapshot
+import.
+
+**An undo and a redo take the tail of a remote batch** (`TRAME-285`).
 
 **Virtual space**, past the used range:
 

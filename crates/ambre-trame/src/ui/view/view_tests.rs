@@ -80,7 +80,7 @@ impl Rig {
             ),
             TrameWiring {
                 to_logic: ambre_bus::Port::direct(tx),
-                from_logic: ambre_bus::Inbox::direct(rx),
+                from_logic: ambre_bus::Feed::direct(rx),
                 text_input: TextInput::detached(),
                 embedding: ambre_canvas::Embedding::Standalone,
                 anchor: AnchorPublisher::new(),
@@ -1611,6 +1611,63 @@ fn a_lone_cell_asks_for_no_aggregate() {
     let (x, y) = rig.cell_mid(0, 0);
     rig.click(x, y);
     assert_eq!(asks(&rig.sent()), 0);
+}
+
+/// A refresh the full queue refused fills the band on a later frame, with no
+/// new selection change (`TRAME-UI-185`, `BUS-024`). The request leaves once,
+/// and the Logic thread's answer to it is the aggregate the band shows.
+#[test]
+fn a_refused_stats_request_fills_the_band_on_a_later_frame() {
+    let asks = |sent: &[TrameCommand]| {
+        sent.iter()
+            .filter(|c| matches!(c, TrameCommand::RequestSelectionStats))
+            .count()
+    };
+    let mut rig =
+        Rig::with_queue(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>());
+    let mut logic = crate::TrameState::new();
+    for row in 0..3 {
+        logic.handle_command(TrameCommand::SetCellText {
+            row: Pos::<Row>::new(row),
+            col: Pos::<Col>::new(0),
+            text: format!("{}", 10 * (row + 1)),
+        });
+    }
+    rig.frame();
+    rig.sent();
+    let (x, y) = rig.cell_mid(0, 0);
+    rig.click(x, y);
+    for cmd in rig.sent() {
+        logic.handle_command(cmd);
+    }
+    // The selection command takes the one slot, and the request finds the
+    // queue full.
+    let (x, y) = rig.cell_mid(2, 0);
+    rig.shift_click(x, y);
+    let first = rig.sent();
+    assert_eq!(asks(&first), 0, "the full queue took the request");
+    for cmd in first {
+        logic.handle_command(cmd);
+    }
+    rig.frame();
+    let later = rig.sent();
+    assert_eq!(asks(&later), 1, "the refused request was not offered again");
+    let mut band = None;
+    for cmd in later {
+        for event in logic.handle_command(cmd).display {
+            if let TrameEvent::SelectionStats { count, numbers } = &event {
+                band = Some((count.get(), numbers.map(|n| n.count().get())));
+            }
+            rig.answer(event);
+        }
+    }
+    assert_eq!(
+        band,
+        Some((3, Some(3))),
+        "the band shows the held selection"
+    );
+    rig.frame();
+    assert_eq!(asks(&rig.sent()), 0, "the request was offered twice");
 }
 
 /// Counts the ERROR events while it is the default subscriber.

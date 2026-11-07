@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use syn::visit::Visit;
 
 use super::{
-    CatalogVisit, Finding, HEADER, Outcome, Raw, Report, Row, SiteCount, Strictness, judge,
-    parse_allowlist, report,
+    CatalogVisit, Finding, HEADER, Outcome, Phase, Raw, Report, Row, Scope, SiteCount, Strictness,
+    Uses, judge, parse_allowlist, report,
 };
 use crate::allowlist::LineNo;
 use crate::scan::{META, Tree, lexical, scan};
@@ -285,6 +285,43 @@ fn a_field_of_a_known_struct_types_its_receiver() {
         refusals(&run(&lib)),
         ["demo | src/lib.rs:10 | Name::as_str -> store"]
     );
+}
+
+#[test]
+fn a_field_or_a_binding_a_type_parameter_types_is_untyped() {
+    // `width` of `Size<P>` holds any newtype, so its call is judged. The
+    // accessor `spell` no std type shares, so the receiver is known.
+    let lib = "pub mod len {\n\
+            pub struct Len(u32);\n\
+            impl Len { pub fn spell(self) -> u32 { self.0 } }\n\
+        }\n\
+        pub fn keep(n: u32) {}\n\
+        pub struct Size<P> { pub width: P, pub height: P }\n\
+        impl<P> Size<P> { pub fn keep(&self) { keep(self.width.spell()); } }\n\
+        pub fn save(size: &Size<len::Len>) { keep(size.height.spell()); }\n\
+        pub fn spell<K>(key: K) { keep(key.spell()); }\n";
+    let report = run(lib);
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(
+        refusals(&report),
+        [
+            "demo | src/lib.rs:7 | Len::spell -> keep",
+            "demo | src/lib.rs:8 | Len::spell -> keep",
+            "demo | src/lib.rs:9 | Len::spell -> keep",
+        ]
+    );
+}
+
+#[test]
+fn a_field_of_an_untyped_base_with_a_generic_name_keeps_the_name_filter() {
+    // A kurbo point holds `x` too: an untyped base names no `Point<P>`.
+    let lib = format!(
+        "{NAME}pub struct Point<P> {{ pub x: P }}\n\
+         pub fn save() {{ let at = make(); store(at.x.as_str()); }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
 }
 
 #[test]
@@ -964,16 +1001,123 @@ fn a_macro_body_catalogues_no_item_a_metavariable_names() {
     }\n";
     let file = syn::parse_file(lib).unwrap();
     let mut raw = Raw::default();
-    let mut visit = CatalogVisit {
-        krate: "demo".to_owned(),
-        module: vec!["crate".to_owned()],
-        imports: BTreeMap::new(),
-        raw: &mut raw,
-    };
-    for item in &file.items {
-        visit.visit_item(item);
+    for phase in [Phase::Declare, Phase::Catalog] {
+        let mut visit = CatalogVisit {
+            phase,
+            module: vec!["crate".to_owned()],
+            scope: Scope {
+                krate: "demo".to_owned(),
+                uses: Uses::default(),
+            },
+            raw: &mut raw,
+        };
+        for item in &file.items {
+            visit.visit_item(item);
+        }
     }
     let types: Vec<&String> = raw.catalog.types.iter().collect();
     assert_eq!(types, ["Written"]);
     assert!(raw.catalog.fns.0.keys().all(|name| !name.starts_with(META)));
+}
+
+#[test]
+fn a_type_name_two_crates_and_a_foreign_import_share_is_judged_by_each_type() {
+    let units = "pub mod px {\n\
+            pub struct Px(u32);\n\
+            impl Px { pub fn get(self) -> u32 { self.0 } }\n\
+            pub struct Pos(usize);\n\
+            impl Pos { pub fn to_usize(self) -> usize { self.0 } }\n\
+        }\n\
+        pub use px::{Pos, Px};\n";
+    // `grid` holds a `Px` in `Layout::width`, so its `get` is an unwrap.
+    let grid = "use units::Px;\n\
+        pub struct Layout { pub width: Px }\n\
+        pub fn keep(n: u32) {}\n\
+        pub fn draw(layout: &Layout) { keep(layout.width.get()); }\n";
+    // `sheet` holds no newtype in its own `Layout::width`.
+    let sheet = "pub struct Wide;\n\
+        impl Wide { pub fn get(self) -> u32 { 0 } }\n\
+        pub struct Layout { pub width: Wide }\n\
+        pub fn keep(n: u32) {}\n\
+        pub fn draw(layout: &Layout) { keep(layout.width.get()); }\n";
+    // `prose` names the `Layout` of a dependency: its `get` is foreign.
+    let prose = "use parley::Layout;\n\
+        use units::Pos;\n\
+        pub struct Run { layout: Layout }\n\
+        impl Run { pub fn line(&self, at: Pos) { self.layout.get(at.to_usize()); } }\n";
+    let deps = "[dependencies]\nunits = \"1\"\n";
+    let report = run_crates(&[
+        ("grid", deps, grid),
+        (
+            "prose",
+            "[dependencies]\nparley = \"1\"\nunits = \"1\"\n",
+            prose,
+        ),
+        ("sheet", deps, sheet),
+        ("units", "", units),
+    ]);
+    assert_eq!(refusals(&report), ["grid | src/lib.rs:4 | Px::get -> keep"]);
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.foreign, SiteCount::new(1));
+}
+
+#[test]
+fn a_re_export_resolves_through_the_pub_use_of_its_crate() {
+    // `draw` re-exports the kurbo `Point`, and one of its files imports
+    // the `Point` of `units` for its own use.
+    let units = "pub struct Point(u32);\n\
+        impl Point { pub fn new(text: &str) -> Self { Self(0) } }\n";
+    let draw = "pub use kurbo::Point;\n\
+        mod kinetic { use units::Point; }\n";
+    let lib = format!(
+        "{NAME}use draw::Point;\n\
+         pub fn save(name: &Name) {{ Point::new(name.as_str()); units::Point::new(name.as_str()); }}\n"
+    );
+    let report = run_crates(&[
+        (
+            "demo",
+            "[dependencies]\ndraw = \"1\"\nunits = \"1\"\n",
+            &lib,
+        ),
+        ("draw", "[dependencies]\nunits = \"1\"\n", draw),
+        ("units", "", units),
+    ]);
+    assert_eq!(
+        shapes(&report.refusals),
+        ["Name::as_str -> units::Point::new"]
+    );
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.foreign, SiteCount::new(1));
+}
+
+#[test]
+fn a_workspace_glob_places_a_name_only_when_one_crate_answers() {
+    // `one` reaches `Px` through one glob. `two` reaches it through two
+    // globs whose crates both declare a `Px`, so `two` cannot place it.
+    let units = "pub mod px {\n\
+            pub struct Px(u32);\n\
+            impl Px { pub fn get(self) -> u32 { self.0 } }\n\
+        }\n\
+        pub use px::Px;\n";
+    let shapes = "pub struct Px;\n\
+        impl Px { pub fn get(self) -> u32 { 0 } }\n";
+    let draw = "pub fn keep(n: u32) {}\n\
+        pub fn draw(width: Px) { keep(width.get()); }\n";
+    let one = format!("use units::*;\n{draw}");
+    let two = format!("use shapes::*;\nuse units::*;\n{draw}");
+    let report = run_crates(&[
+        ("one", "[dependencies]\nunits = \"1\"\n", &one),
+        ("shapes", "", shapes),
+        (
+            "two",
+            "[dependencies]\nshapes = \"1\"\nunits = \"1\"\n",
+            &two,
+        ),
+        ("units", "", units),
+    ]);
+    assert_eq!(refusals(&report), ["one | src/lib.rs:3 | Px::get -> keep"]);
+    // A name the report cannot place reads as foreign, so `two` holds
+    // no site at all.
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.sites, SiteCount::new(1));
 }

@@ -94,6 +94,7 @@ test-native:
     cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-canvas/tokens
     just fixtures-check
     just tokens-check
+    just locale-table-check
 
 # Regenerate `fixtures/current/` in place and drop any artifact whose generator
 # is gone (`ambre-spec-fixtures.md` section 3). The fix for a red
@@ -126,6 +127,21 @@ tokens-write:
 # token drift: fail when a generated theme file is not what `tokens.ron` gives.
 tokens-check:
     cargo run -q -p ambre-canvas --features tokens --bin ambre-tokens
+
+# The number and date forms of each locale (`ambre-spec-locale.md`), from a
+# pinned CLDR. `locale-table-fetch` is the one step that reads the network: it
+# refreshes `scripts/data/cldr-locale-subset.json` from the npm registry, each
+# package checked against its pinned integrity. `locale-table` writes the Rust
+# table from that subset, and `locale-table-check` fails, offline, on a table
+# the subset does not give. No value of the table is typed by hand.
+locale-table-fetch:
+    python3 scripts/locale_table.py --fetch
+
+locale-table:
+    python3 scripts/locale_table.py
+
+locale-table-check:
+    python3 scripts/locale_table.py --check
 
 # Copy one artifact out of `current/` into `frozen/`, deriving the version
 # suffix from its manifest. Takes a generator name (`trame/grid_literals`),
@@ -356,7 +372,7 @@ primitives:
 primitives-files:
     cargo run -q -p ambre-primitives -- files
 
-# The unwrap report (`ai/ambre-rust-style.md`, the newtype rule). It refuses a
+# The unwrap report (`ARCH-073`). It refuses a
 # newtype unwrapped early inside a body, unless a line of
 # `specs/1-Foundations/ambre-unwrap.tsv` names its key with a count and a
 # reason.
@@ -522,18 +538,26 @@ inventory-write:
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part
 # of the graph being checked rather than invisible to it. No network build: this
-# reads `Cargo.lock` and the advisory database only.
+# reads `Cargo.lock` and the advisory database only. A wrapper no edge of the
+# graph matches is an error, not a warning: it grants a capability to a crate
+# that no longer takes it, so the day one does no one reviews the edge.
 
 # cargo-deny: advisories, licences, sources, and the ZK capability bans.
 deny:
-    cargo deny check
+    cargo deny check --deny unused-wrapper
 
 # cargo-fuzz: each untrusted reader, for `seconds` apiece (`ambre-spec-testing.md
 # section 2`). The targets live in `fuzz/`, a workspace of its own, so the
 # sanitizer flags never reach the main build. A crash stops the run and leaves
 # its input under `fuzz/artifacts/`.
+#
+# The target is the host triple of the pinned `rustc`, never the default of
+# `cargo-fuzz`: that default is the triple `cargo-fuzz` itself was built for.
+# The prebuilt binary CI installs is a musl one, and a musl target links libc
+# statically, which the address sanitizer refuses when `build-std` rebuilds
+# `core`.
 fuzz seconds="60":
-    cd fuzz && for target in wire_decode docfile formula markdown sealed trame_file toile_file; do cargo fuzz run "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
+    cd fuzz && host="$(rustc -vV | sed -n 's/^host: //p')" && for target in wire_decode docfile formula markdown sealed trame_file toile_file; do cargo fuzz run --target "$host" "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
 
 # Local convenience: bring the db-tier backing services up, the object store
 # prepared.

@@ -121,6 +121,7 @@ impl LogicState {
                         self.spaces.clear();
                         self.space_opening.clear();
                         self.creating.clear();
+                        self.locale_seeds.clear();
                         self.joining.clear();
                         self.handing_off.clear();
                         self.direct.clear();
@@ -173,6 +174,9 @@ impl LogicState {
                 {
                     self.docs.insert(document_id, LiveDoc::new(state));
                 }
+                // A document this reader just created takes their locale, once
+                // (`LOCALE-019`). It is an edit, held until the identity.
+                self.seed_locale(document_id);
                 self.send_to_sync(SyncCommand::OpenDocument {
                     document_id,
                     doc_type,
@@ -186,6 +190,19 @@ impl LogicState {
                 // so closing a document never loses them (`ARCH-017`). It then
                 // leaves memory, and Sync keeps it light (`RESID-001`).
                 self.evict(document_id);
+            }
+            // A view that lost an event reads again (`BUS-041`, `BUS-042`).
+            // Its document is resent from what this thread holds, so nothing
+            // reaches the relay or the store.
+            LogicCommand::ResendState { document_id } => {
+                let events = self
+                    .docs
+                    .get(&document_id)
+                    .map(|doc| doc.state.whole_state())
+                    .unwrap_or_default();
+                for event in events {
+                    self.send_to_ui(UiEvent::Viewport { document_id, event });
+                }
             }
             LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
             LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
@@ -217,6 +234,7 @@ impl LogicState {
                 channel_id,
                 command,
             } => self.handle_channel_command(channel_id, command),
+            LogicCommand::SetReaderLocale { reader } => self.set_reader_locale(reader),
             LogicCommand::LoadFonts { faces } => {
                 // The Logic thread cannot fetch, so this is the only way a face
                 // reaches it (`CANVAS-067`). Local-only: nothing is sent to
@@ -292,6 +310,13 @@ impl LogicState {
                         self.route_service_event(document_id, id, evt);
                         return;
                     }
+                }
+                // A document this reader created waits for its locale seed.
+                if let RestEvent::DocumentCreated { document_id, .. } = &evt
+                    && !self.reader_locale.own.is_none()
+                {
+                    self.locale_seeds
+                        .insert(*document_id, self.reader_locale.own.clone());
                 }
                 // `SessionReady` also seeds the canonical `Id<User>`. Capture it
                 // for later opens and push it into every already-open document,
@@ -774,6 +799,78 @@ mod tests {
         let (to_persist, persist_rx) = test_link();
         std::mem::forget(persist_rx);
         (LogicState::new(to_ui, to_sync, to_persist), ui_rx, sync_rx)
+    }
+
+    /// The events a resend hands the view of `document_id`, and whether it
+    /// sent anything to the Sync worker.
+    fn resent(doc_type: DocType) -> (Vec<AppEvent>, bool) {
+        let (mut state, ui, sync) = harness();
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, doc_type);
+        ui.try_iter().for_each(drop);
+        sync.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::ResendState { document_id });
+        let events = ui
+            .try_iter()
+            .map(|ev| match ev {
+                UiEvent::Viewport {
+                    document_id: id,
+                    event,
+                } if id == document_id => event,
+                other => panic!("a resend sent {other:?}"),
+            })
+            .collect();
+        (events, sync.try_recv().is_ok())
+    }
+
+    /// `BUS-042`, `BUS-045`: a resend hands a Trame view what draws it whole.
+    /// That is the re-fetch of its window, its tabs, its cell toggles and its
+    /// undo state. Nothing reaches the relay.
+    #[test]
+    fn a_resend_hands_a_trame_view_its_whole_state() {
+        use ambre_trame::message::TrameEvent;
+        let (events, synced) = resent(DocType::Trame);
+        assert!(!synced, "a resend reached the Sync worker");
+        let has = |want: fn(&TrameEvent) -> bool| {
+            events
+                .iter()
+                .any(|ev| matches!(ev, AppEvent::Trame(e) if want(e)))
+        };
+        assert!(has(|e| matches!(e, TrameEvent::DataReset)));
+        assert!(has(|e| matches!(e, TrameEvent::SheetList { .. })));
+        assert!(has(|e| matches!(e, TrameEvent::StyleApplied { .. })));
+        assert!(has(|e| matches!(e, TrameEvent::UndoState { .. })));
+    }
+
+    /// `BUS-042`, `BUS-045`: a resend hands a Toile view what draws it whole.
+    /// That is its viewport, the changes its panels re-read on, and its undo
+    /// state. Nothing reaches the relay.
+    #[test]
+    fn a_resend_hands_a_toile_view_its_whole_state() {
+        use ambre_toile::message::ToileEvent;
+        let (events, synced) = resent(DocType::Toile);
+        assert!(!synced, "a resend reached the Sync worker");
+        let has = |want: fn(&ToileEvent) -> bool| {
+            events
+                .iter()
+                .any(|ev| matches!(ev, AppEvent::Toile(e) if want(e)))
+        };
+        assert!(has(|e| matches!(e, ToileEvent::ViewportData(_))));
+        assert!(has(|e| matches!(e, ToileEvent::BoardChanged)));
+        assert!(has(|e| matches!(e, ToileEvent::DeckChanged)));
+        assert!(has(|e| matches!(e, ToileEvent::UndoState { .. })));
+    }
+
+    /// `BUS-042`, `BUS-045`: a resend of a document this thread does not hold
+    /// answers nothing.
+    #[test]
+    fn a_resend_of_a_document_not_open_answers_nothing() {
+        let (mut state, ui, sync) = harness();
+        state.handle_logic_command(LogicCommand::ResendState {
+            document_id: Id::<Document>::mint(),
+        });
+        assert!(ui.try_recv().is_err());
+        assert!(sync.try_recv().is_err());
     }
 
     /// Drive `ExportAmbreFile` on a live document of `doc_type` and hand back
@@ -1514,6 +1611,115 @@ mod tests {
         state.docs.insert(doc_id, doc);
         state.grant_identity(doc_id);
         doc_id
+    }
+
+    /// The Trame state of an open document.
+    fn trame_of(state: &LogicState, id: Id<Document>) -> &TrameState {
+        match state.docs.get(&id).map(|doc| &doc.state) {
+            Some(DocState::Trame(trame)) => trame,
+            other => panic!("expected an open Trame doc, got {other:?}"),
+        }
+    }
+
+    fn reader(own: &str) -> ambre_core::ReaderLocale {
+        ambre_core::ReaderLocale {
+            own: ambre_core::DocumentLocale::parse(own).unwrap(),
+            convention: ambre_core::NumberConvention::default(),
+        }
+    }
+
+    /// `LOCALE-007`: a viewer's locale set is an edit, and it is dropped
+    /// before the engine.
+    #[test]
+    fn a_viewers_locale_set_is_dropped() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc_id = live_trame(&mut state, Role::Viewer);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Trame(TrameCommand::SetDocumentLocale {
+                locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
+            }),
+        });
+        assert!(sync_rx.try_recv().is_err(), "no delta leaves");
+        assert_eq!(
+            trame_of(&state, doc_id).document_locale(),
+            ambre_core::DocumentLocale::NONE
+        );
+    }
+
+    /// `LOCALE-006`: a locale set reaches Sync as one CRDT delta, which the
+    /// worker seals like every other, and as no field of its own.
+    #[test]
+    fn a_locale_set_leaves_as_one_delta_and_nothing_else() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc_id = live_trame(&mut state, Role::Editor);
+        while sync_rx.try_recv().is_ok() {}
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Trame(TrameCommand::SetDocumentLocale {
+                locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
+            }),
+        });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        assert_eq!(sent.len(), 1, "one command reaches Sync");
+        assert!(matches!(sent[0], SyncCommand::SendUpdate { .. }));
+    }
+
+    /// `LOCALE-019`: a document this reader creates takes their locale once,
+    /// as its first edit, and a document they open is not written.
+    #[test]
+    fn a_created_document_is_seeded_with_its_creators_locale() {
+        let (mut state, _ui, _sync) = harness();
+        state.handle_logic_command(LogicCommand::SetReaderLocale {
+            reader: reader("fr-CA"),
+        });
+        let created = Id::<Document>::mint();
+        state.handle_logic_event(LogicEvent::Rest {
+            id: Some(ambre_bus::next_request()),
+            evt: RestEvent::DocumentCreated {
+                document_id: created,
+                doc_type: DocType::Trame,
+            },
+        });
+        let opened = Id::<Document>::mint();
+        for document_id in [created, opened] {
+            state.handle_logic_command(LogicCommand::OpenDocument {
+                document_id,
+                doc_type: DocType::Trame,
+            });
+            state.grant_identity(document_id);
+        }
+        assert_eq!(
+            trame_of(&state, created).document_locale(),
+            ambre_core::DocumentLocale::parse("fr-CA").unwrap()
+        );
+        assert_eq!(
+            trame_of(&state, opened).document_locale(),
+            ambre_core::DocumentLocale::NONE
+        );
+        // A second open of the created document seeds nothing again.
+        assert!(state.locale_seeds.is_empty());
+    }
+
+    /// `LOCALE-017`: the reader's half reaches every open document and one
+    /// opened later, and no delta leaves for it.
+    #[test]
+    fn the_readers_locale_reaches_each_document_and_writes_nothing() {
+        let (mut state, _ui, sync_rx) = harness();
+        let before = live_trame(&mut state, Role::Editor);
+        while sync_rx.try_recv().is_ok() {}
+        state.handle_logic_command(LogicCommand::SetReaderLocale {
+            reader: reader("de"),
+        });
+        assert!(sync_rx.try_recv().is_err(), "nothing is sent to Sync");
+        let after = Id::<Document>::mint();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id: after,
+            doc_type: DocType::Trame,
+        });
+        for id in [before, after] {
+            assert_eq!(*trame_of(&state, id).reader_locale(), reader("de"));
+        }
     }
 
     #[test]

@@ -20,6 +20,7 @@ impl TrameView {
         self.editor = None;
         self.edit_dirty = false;
         self.initial_viewport_sent = false;
+        self.stats_owed = false;
         self.pending_viewport = ViewportQueue::default();
         self.needs_full = true;
         self.viewport_changed = false;
@@ -36,7 +37,7 @@ impl TrameView {
     /// update from the Logic thread). Exhaustive on purpose: a new variant must
     /// fail the build here rather than be dropped silently. Variants that only
     /// affect the DOM chrome (toasts, formatting toolbar, undo/redo enablement)
-    /// are explicit no-ops. They are handled in the per-frame relay
+    /// are explicit no-ops. They are handled in the switchboard
     /// (`ambre-app`), not here.
     pub(crate) fn dispatch_trame(&mut self, te: TrameEvent) {
         match te {
@@ -205,13 +206,14 @@ impl TrameView {
             // informational here (the chrome relay may toast it).
             TrameEvent::ImportComplete { .. } => {}
             // Chrome-only variants: surfaced as toasts / toolbar state / undo-redo
-            // enablement by the per-frame relay (`ambre-app`). No canvas state
+            // enablement by the switchboard (`ambre-app`). No canvas state
             // changes -- the cache is refreshed by the DataReset that accompanies
             // any of these that mutate content.
             TrameEvent::StyleApplied { .. }
             | TrameEvent::MergeRejected { .. }
             | TrameEvent::MergeConflictDetected { .. }
             | TrameEvent::UndoState { .. }
+            | TrameEvent::LocaleState { .. }
             | TrameEvent::SortComplete
             | TrameEvent::SortRange { .. }
             | TrameEvent::ColumnValues { .. }
@@ -239,7 +241,7 @@ impl TrameView {
                 // Single entry point for every Trame logic message: an exhaustive
                 // dispatcher (`dispatch_trame`) decides the canvas-side reaction.
                 // The chrome side (toasts / toolbar / command store) consumes the
-                // same event in the per-frame relay; the two never overlap.
+                // same event in the switchboard; the two never overlap.
                 Ok(UiEvent::Viewport { event, .. }) => self.dispatch_trame(event),
                 Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
                 // Other UiEvent variants (session, CRUD, channels...) are not yet
@@ -292,6 +294,13 @@ impl TrameView {
             && !self.send_command_lossy(pending.command().clone())
         {
             self.pending_viewport.re_offer(pending);
+        }
+
+        // A selection-statistics request the queue refused is offered again
+        // until it leaves, so the band fills with no new selection change
+        // (`TRAME-UI-185`, `BUS-024`).
+        if self.stats_owed && self.send_command_lossy(TrameCommand::RequestSelectionStats) {
+            self.stats_owed = false;
         }
 
         // Pick up a theme switch (chrome toggled it): repaint everything with
@@ -591,10 +600,8 @@ impl TrameView {
 
     /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
     pub fn resize(&mut self, size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>) {
-        self.state.resize(
-            ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.width.get())),
-            ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.height.get())),
-        );
+        self.state
+            .resize(size.width.surface_length(), size.height.surface_length());
         self.needs_full = true;
     }
 

@@ -296,10 +296,10 @@ impl TrameState {
                 _ => String::new(),
             },
         };
-        match self.stored_style(sheet_id, index, at) {
-            Some(style) => self.format_display(at, text, &style),
-            None => text,
-        }
+        // An export writes the workbook's forms, whoever runs it
+        // (`LOCALE-020`).
+        let style = self.stored_style(sheet_id, index, at).unwrap_or_default();
+        self.format_display(at, text, &style, &self.export_forms())
     }
 }
 

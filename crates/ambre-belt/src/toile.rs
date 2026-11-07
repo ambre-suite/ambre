@@ -9,8 +9,15 @@ pub(crate) mod tests {
     /// Draws a rectangle with the shape tool from `a` to `b`, in canvas pixels.
     /// Then selects it with the select tool and waits until the board
     /// announces it. A drawn shape is not selected by its creation.
+    ///
+    /// The release clears the drag's preview, and the shape shows once the
+    /// Logic thread answers with it. A click before that hits an empty board,
+    /// as no user could click it. So the click waits for the screen to change
+    /// at the centre: geckodriver sends it within the frame of the release.
     async fn draw_rect(page: &Page, a: (f64, f64), b: (f64, f64)) {
         let (ox, oy) = page.canvas_origin().await;
+        let centre = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+        let blank = page.color_at(centre).await;
         page.focus_canvas().await;
         page.browser.perform(json!([key("r")])).await;
         // An armed creation tool shows the crosshair (`toile-tools`).
@@ -24,8 +31,20 @@ pub(crate) mod tests {
         page.browser
             .perform(json!([drag((ox + a.0, oy + a.1), (ox + b.0, oy + b.1), 8)]))
             .await;
+        let deadline = std::time::Instant::now() + STEP;
+        loop {
+            let seen = page.color_at(centre).await;
+            if seen.iter().zip(blank).any(|(s, b)| s.abs_diff(b) > 8) {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the board still shows {seen:?} where the rectangle was drawn"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
         page.browser.perform(json!([key("v")])).await;
-        click(page, ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)).await;
+        click(page, centre).await;
         page.wait_announced("Rectangle").await;
     }
 

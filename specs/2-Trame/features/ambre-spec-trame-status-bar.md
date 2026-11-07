@@ -39,16 +39,18 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-109` | `POST` | A change to the selection MUST refresh the aggregates. | this spec section 2 | `ambre_trame::ui::grid::tests::group1::extending_a_header_band_makes_the_selection_multi` -- the extend path yields a multi-cell band; `ambre_trame::ui::view::lifecycle::tests::a_sent_request_keeps_the_last_answer` -- a multi-cell band sends the request | none | verified |
 | `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | `ambre_trame::ui::view::lifecycle::tests::a_dropped_request_clears_the_band` -- the clear decision in `stats_band_clears`; `::a_single_cell_clears_and_sends_nothing`; `::a_sent_request_keeps_the_last_answer` -- the other two sides | none | verified |
+| `TRAME-UI-185` | `FRAME` | A refresh whose request the queue refused MUST fill the band on a later frame, with no new selection change. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-024`) | `ambre_trame::ui::view::view_tests::a_refused_stats_request_fills_the_band_on_a_later_frame` -- the request the full queue refused reaches the Logic thread on a later frame, once, and its answer is the band's | none | verified |
 
 * **Budget.** none: the counts are one walk over the selection, and
   `ambre-spec-budgets.md` budgets no aggregate. The band paints inside the frame
   phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path,
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 13 `verified`. The walk, the counts, the read-only guarantee, the
-  whole-selection coverage, the refresh on a selection change and the clear decision each have a
-  host test. The band, its number format and its overflow are read back on the wasm tier. The
-  count and the numeric aggregates are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
+* **Verification.** 14 `verified`. The walk, the counts, the read-only guarantee and the
+  whole-selection coverage each have a host test. So do the refresh on a selection change, the clear
+  decision and the request offered again after a refusal. The band, its number format and its
+  overflow are read back on the wasm tier. The count and the numeric aggregates are two rows
+  (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
 
 ---
 
@@ -109,7 +111,8 @@ read two totals. Excel's own band leaves them out the same way. Every other tota
 
 1. a selection change asks for the aggregates when the selection is multi-cell, and clears the
    band otherwise (`TRAME-UI-108`). The request is lossy, so a full queue drops it and the band
-   stays cleared (`TRAME-UI-136`);
+   is cleared (`TRAME-UI-136`). The request stays owed, and each later frame offers it again
+   until it leaves (`TRAME-UI-185`);
 2. the reply is mirrored into one signal, which the band reads.
 
 **Code:**
@@ -152,6 +155,7 @@ value (`TRAME-UI-108`).
 | The band is DOM, not a drawn surface | a drawn band inside the canvas | it is what the earlier design carried, and it had the renderer shaping its glyphs on the GPU every frame for a read-out that changes on selection. The band is text and two menus. |
 | The numeric aggregates hide with no number | showing zeros | a sum of a text selection is zero, which reads as a fact rather than as an absence. |
 | A sum that overflows reads `#NUM!` | showing the infinity, or the largest finite number | an infinity is no cell number, and the largest finite number states a total the cells do not hold. |
+| A refused request is offered again on a later frame | leaving the band cleared until the selection moves | the user holds a selection and waits for its total, so no further change comes to ask again: the band stays empty over a selection that has an answer (`BUS-024`). |
 
 ---
 

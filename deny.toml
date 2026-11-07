@@ -128,10 +128,14 @@ name = "ambre-crypto"
 wrappers = ["ambre-sync", "ambre-logic"]
 
 # CRDT engine. The Sync worker must compile no CRDT (`SYNC-011`), and the relay
-# must not be able to interpret a document at all.
+# must not be able to interpret a document at all. `ambre-logic` is the Logic
+# thread, which holds every document already: it reads the PeerIDs a delta
+# carries before any engine imports it (`AUTHOR-012`).
 [[bans.deny]]
 name = "loro"
-wrappers = ["ambre-crdt", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
+wrappers = [
+    "ambre-crdt", "ambre-logic", "ambre-murmure", "ambre-prose", "ambre-toile", "ambre-trame",
+]
 
 # The typed handles over the CRDT engine. They link Loro, so the four crates
 # that may hold a document alone depend on them.
@@ -163,10 +167,11 @@ name = "wgpu"
 wrappers = ["ambre-canvas", "ambre-app"]
 
 # The glyph rasterizer, the other `unsafe` render crate (`CANVAS-057`). An
-# application draws text through the canvas, never through swash.
+# application draws text through the canvas, never through swash. The text
+# stack no longer links it, so the canvas is its one parent.
 [[bans.deny]]
 name = "swash"
-wrappers = ["ambre-canvas", "parley"]
+wrappers = ["ambre-canvas"]
 
 # The protocol between the threads. The renderer knows no thread protocol
 # (`ARCH-071`): a view converts what it reads off the bus into a type of the

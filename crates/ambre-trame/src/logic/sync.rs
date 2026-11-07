@@ -152,6 +152,22 @@ impl TrameState {
         self.import_and_reseed(LoroPayloadRef::Snapshot(payload), MergeOrigin::Snapshot)
     }
 
+    /// The events that draw this workbook whole, and write nothing. They are
+    /// the re-fetch of the whole window, the tab strip, the toggles of the
+    /// active cell and the undo state. A view that lost an event takes them in
+    /// place of what it missed (`ambre-spec-message-bus.md`, `BUS-042`).
+    #[must_use]
+    pub fn whole_state(&self) -> Vec<TrameEvent> {
+        let mut events: Vec<TrameEvent> = self
+            .repaint_event(super::repaint::Repaint::Whole)
+            .into_iter()
+            .collect();
+        events.push(self.sheet_list_event());
+        events.push(self.style_state_event());
+        events.push(self.undo_state_event());
+        events
+    }
+
     /// Apply a remote ephemeral (presence) payload and return presence events.
     ///
     /// Stubbed until collaborator presence is wired.
@@ -237,7 +253,10 @@ impl TrameState {
         if !self.merge_payload(payload, origin) {
             return Vec::new();
         }
-        self.reseed_after_merge(origin, &order)
+        let mut events = self.reseed_after_merge(origin, &order);
+        // A load names the locale to the view (`LOCALE-021`).
+        events.push(self.locale_state_event());
+        events
     }
 
     /// Apply a batch of decrypted remote deltas as a SINGLE merge, so the UI
@@ -269,6 +288,7 @@ impl TrameState {
         origin: MergeOrigin,
     ) -> Vec<TrameEvent> {
         let order = self.sheet_order_ids();
+        let locale = self.document_locale();
         drop(self.take_imported());
         // The batch names the cells it changed, and nothing before it.
         self.engine.changed.clear();
@@ -280,11 +300,19 @@ impl TrameState {
             return Vec::new();
         }
         let imported = self.take_imported();
-        if self.carries(&imported) {
+        let mut events = if self.carries(&imported) {
             tracing::info!("[Logic] {origin} merged, carried");
-            return self.carry_after_merge(&imported);
+            self.carry_after_merge(&imported)
+        } else {
+            self.reseed_after_merge(origin, &order)
+        };
+        // A peer's locale reformats every cell this reader sees, written or
+        // not (`LOCALE-008`).
+        if self.document_locale() != locale {
+            events.push(self.locale_state_event());
+            events.push(TrameEvent::DataReset);
         }
-        self.reseed_after_merge(origin, &order)
+        events
     }
 
     /// Merge one decrypted Loro payload into the live document, returning whether

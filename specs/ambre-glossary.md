@@ -30,8 +30,10 @@
 | worker | a browser worker hosting a thread | | `1-Foundations/ambre-spec-architecture.md` |
 | queue | a bounded, typed link between two threads | | `1-Foundations/ambre-spec-architecture.md` |
 | conduit | the lock-free queue of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
+| feed | the receiving end of a view on the Logic to UI queue | | `1-Foundations/ambre-spec-message-bus.md` |
 | doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
 | call worker | the instance that seals the audio and video of one call | media worker | `1-Foundations/ambre-spec-call-media.md` |
+| switchboard | the Main module routing each Logic event to a view or effect | frame relay, per-frame relay | `1-Foundations/ambre-spec-architecture.md` |
 | plane | a class of traffic on the bus | | `1-Foundations/ambre-spec-message-bus.md` |
 | content plane | the plane carrying document edits | | `1-Foundations/ambre-spec-message-bus.md` |
 | service plane | the plane carrying correlated requests and responses | | `1-Foundations/ambre-spec-message-bus.md` |
@@ -170,6 +172,7 @@
 | interface language | the language the reader's own menus are in | | `1-Foundations/ambre-spec-locale.md` |
 | reader convention | which locale a reader sees and types numbers in (`NumberConvention`) | | `1-Foundations/ambre-spec-locale.md` |
 | reader locale | the locale a reader holds on their own device | | `1-Foundations/ambre-spec-locale.md` |
+| neutral forms | how a number and a date are written when no locale resolves | | `1-Foundations/ambre-spec-locale.md` |
 | heading number | the counters drawn in front of a heading | | `4-Prose/features/ambre-spec-prose-headings.md` |
 
 ## 5. THE METHOD

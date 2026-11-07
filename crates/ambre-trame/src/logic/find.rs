@@ -64,6 +64,8 @@ impl TrameState {
     /// empty query clears the highlight: see [`Self::find_nothing`].
     pub(super) fn find_next(&self, query: &FindText, options: FindOptions) -> TrameOutcome {
         let needle = fold_needle(query, options.case);
+        // A find matches what this reader sees (`TRAME-108`).
+        let forms = self.shown_forms();
         let mut matches: Vec<CellPos> = Vec::new();
         for at in self
             .index
@@ -72,7 +74,7 @@ impl TrameState {
             .flat_map(CellRect::cells)
         {
             // The displayed value, format included (`TRAME-UI-078`).
-            let text = self.displayed_text(at);
+            let text = self.displayed_text(at, &forms);
             if !text.is_empty() && cell_matches(&text, &needle, options.extent) {
                 matches.push(at);
             }
@@ -245,7 +247,7 @@ impl TrameState {
         let haystack = if is_formula {
             raw.as_str().to_owned()
         } else {
-            self.displayed_text(at)
+            self.displayed_text(at, &self.shown_forms())
         };
         if !cell_matches(&haystack, needle, options.extent) {
             return false;
@@ -307,10 +309,8 @@ impl TrameState {
                     raw.as_str().to_owned()
                 };
                 // The displayed value, format included (`TRAME-UI-078`).
-                match self.stored_style(sheet_id, &index, at) {
-                    Some(style) => self.format_display(at, text, &style),
-                    None => text,
-                }
+                let style = self.stored_style(sheet_id, &index, at).unwrap_or_default();
+                self.format_display(at, text, &style, &self.shown_forms())
             };
             if !cell_matches(&haystack, needle, options.extent) {
                 continue;

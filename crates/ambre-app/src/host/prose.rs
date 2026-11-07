@@ -23,7 +23,7 @@
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
-use ambre_bus::{Inbox, Outbox, PasteSource, Port, SendOutcome, UiEvent};
+use ambre_bus::{Feed, Outbox, PasteSource, Port, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
     BusyLevel, BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
@@ -87,7 +87,7 @@ pub struct ProseView {
     /// What the shell shows the user when the page cannot, such as a reply
     /// lost with its thread (`PROSE-UI-232`).
     notices: NoticePublisher,
-    from_logic: Inbox<ProseEvent>,
+    from_logic: Feed<ProseEvent>,
     state: ProseUiState,
     theme_ctl: ThemeControl,
     theme: Theme,
@@ -128,7 +128,7 @@ pub struct ProseWiring {
     /// The queue to the Logic thread.
     pub to_logic: Port<ProseCommand>,
     /// The queue from the Logic thread.
-    pub from_logic: Inbox<ProseEvent>,
+    pub from_logic: Feed<ProseEvent>,
     /// The shared text pipe.
     pub text_input: TextInput,
     /// The active theme.
@@ -846,7 +846,7 @@ mod tests {
             Size::new(Px::new(800), Px::new(600)),
             ProseWiring {
                 to_logic: Port::direct(to_logic),
-                from_logic: Inbox::direct(from_logic),
+                from_logic: Feed::direct(from_logic),
                 text_input: pipe.clone(),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures: RwSignal::new(None),
@@ -896,7 +896,7 @@ mod tests {
             Size::new(Px::new(800), Px::new(600)),
             ProseWiring {
                 to_logic: Port::direct(to_logic),
-                from_logic: Inbox::direct(from_logic),
+                from_logic: Feed::direct(from_logic),
                 text_input: TextInput::create(&document, &cell),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures: RwSignal::new(None),
@@ -963,7 +963,7 @@ mod tests {
             Size::new(Px::new(800), Px::new(600)),
             ProseWiring {
                 to_logic: Port::direct(to_logic),
-                from_logic: Inbox::direct(from_logic),
+                from_logic: Feed::direct(from_logic),
                 text_input: TextInput::create(&document, &cell),
                 theme_ctl: ThemeControl::new(Theme::Dark),
                 figures,

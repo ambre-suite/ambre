@@ -583,6 +583,7 @@ impl ToileState {
             }
             ToileCommand::RemoveFromFrames { ids } => self.remove_from_frames(&ids),
             ToileCommand::RenameFrame { frame, name } => self.rename_frame(&frame, &name),
+            ToileCommand::SetDocumentLocale { locale } => self.set_document_locale(&locale),
             ToileCommand::SetSlideOrder { order } => self.set_slide_order(&order),
             ToileCommand::NextSlide => self.next_slide(),
             ToileCommand::PrevSlide => self.prev_slide(),
@@ -724,6 +725,20 @@ impl ToileState {
         snapshot: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) -> Vec<ToileEvent> {
         self.import_remote(snapshot.into())
+    }
+
+    /// The events that draw this board whole, and write nothing: the
+    /// viewport, the board and deck changes every panel re-reads on, and the
+    /// undo state. A view that lost an event takes them in place of what it
+    /// missed (`ambre-spec-message-bus.md`, `BUS-042`).
+    #[must_use]
+    pub fn whole_state(&self) -> Vec<ToileEvent> {
+        vec![
+            self.viewport_event(),
+            ToileEvent::BoardChanged,
+            ToileEvent::DeckChanged,
+            self.undo_state_event(),
+        ]
     }
 
     /// The tail of [`apply_remote`](Self::apply_remote): `doc.import` reads a

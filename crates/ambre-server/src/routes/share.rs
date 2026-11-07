@@ -233,7 +233,7 @@ pub async fn invite_to_document(
         let _ = crate::redis_ops::user_broadcast(&state.redis, &invitee_id, &msg).await;
     }
     // The members who hold the document open read the rows again (`SRV-177`).
-    crate::redis_ops::members_changed(&state.redis, &doc_id).await;
+    members_changed(&state, &doc_id).await;
     Ok(axum::Json(InviteResponse {
         user_id: invitee_id,
         display_name: invitee.display_name,
@@ -293,7 +293,7 @@ pub async fn revoke_from_document(
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, removed = ?removed, "member removed");
     // The members who stay read the rows again (`SRV-177`), unless no one stays.
     if !matches!(removed, db::Removed::ChannelDeleted(_)) {
-        crate::redis_ops::members_changed(&state.redis, &doc_id).await;
+        members_changed(&state, &doc_id).await;
     }
     match removed {
         db::Removed::Owed => {}
@@ -474,6 +474,23 @@ async fn restore_debt_mirrors(state: &AppState, documents: &[Id<Document>]) {
     }
 }
 
+/// Tells every connection subscribed to a document whose members are those
+/// of `document_id` that they changed (`SRV-177`). A change on a channel's
+/// `meta` reaches each document of the channel, whose access `meta` decides
+/// (`SRV-103`). A client holding a segment open then resolves a newcomer's
+/// deltas. A failed lookup tells `document_id` alone.
+pub(crate) async fn members_changed(state: &AppState, document_id: &Id<Document>) {
+    let documents = db::documents_sharing_members(&state.db, document_id)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(document_id = %document_id, "the documents sharing members: {e}");
+            vec![*document_id]
+        });
+    for document in &documents {
+        crate::redis_ops::members_changed(&state.redis, document).await;
+    }
+}
+
 /// Tells each channel a leave of its space touched (`SRV-136`). The members
 /// who stay re-read the rows, and those of a private channel learn its debt.
 /// The member who left drops each channel, a deleted one included
@@ -485,7 +502,7 @@ async fn announce_space_leave(
     sweep_due: Instant<UnixSec>,
 ) {
     for meta in &leave.left {
-        crate::redis_ops::members_changed(&state.redis, meta).await;
+        members_changed(state, meta).await;
         notify_removed(state, meta, target).await;
     }
     for meta in &leave.owed {
