@@ -1525,6 +1525,8 @@ mod platform;
 mod shell;
 
 #[cfg(target_arch = "wasm32")]
+use ambre_bus::{Authored, Instant};
+#[cfg(target_arch = "wasm32")]
 use platform::*;
 #[cfg(target_arch = "wasm32")]
 use shell::mount_shell;
