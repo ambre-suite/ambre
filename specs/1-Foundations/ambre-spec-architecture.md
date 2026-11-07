@@ -380,11 +380,11 @@ The stack has no control of its own. What a user meets is what it guarantees the
   a browser. It exists because the interface framework requires a subtree that the engine handles
   cannot enter.
 * **The switchboard applies its decisions in a browser alone.** `switchboard.rs` takes them on the
-  host (`ARCH-072`). They cover the view fan-out, the header status, the busy notice and the prompt
-  of a fetched key. They cover the requests and notices of a service answer too, the request of a
-  trusted key and the cadence of the perf read-out. The wiring reads the clock for those two. The
-  closure that applies them runs only in a browser, as do the chrome mirrors, the Murmure pane and
-  the local store link. The hop to the Sync worker and the frame read-out stay in the closure.
+  host (`ARCH-072`). They cover the view fan-out, the header status, the busy notice, the prompt of
+  a fetched key and the answers of the service plane. The request of a trusted key and the perf
+  cadence take an instant the wiring reads. The closure that applies them runs only in a browser, as
+  do the chrome mirrors, the Murmure pane and the local store link. The hop to the Sync worker and
+  the frame read-out stay in the closure.
 * **Three files at the workspace root cite a document the corpus does not have.** The build
   configuration, the workspace manifest and the toolchain file each name a migration note that was
   deleted. No resolver opens a file outside the corpus, the crates and the rules.

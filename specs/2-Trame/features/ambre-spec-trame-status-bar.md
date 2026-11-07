@@ -46,9 +46,9 @@ status values are normative in `ambre-spec-template.md`.
   phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path,
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 14 `verified`. The walk, the counts, the read-only guarantee, the
-  whole-selection coverage, the refresh on a selection change, the clear decision and the request
-  offered again after a refusal each have a host test. The band, its number format and its
+* **Verification.** 14 `verified`. The walk, the counts, the read-only guarantee and the
+  whole-selection coverage each have a host test. So do the refresh on a selection change, the clear
+  decision and the request offered again after a refusal. The band, its number format and its
   overflow are read back on the wasm tier. The count and the numeric aggregates are two rows
   (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
 
