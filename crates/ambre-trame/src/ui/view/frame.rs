@@ -145,6 +145,13 @@ impl TrameView {
             // `trame-cell-styles`). Both
             // invalidate the cache -- re-fetch the visible region, then full-repaint
             // with the result.
+            // A change the Logic thread names cell by cell: re-fetch the part
+            // of the window it covers, and nothing else (`TRAME-UI-184`).
+            TrameEvent::CellsChanged { version, range } => {
+                if let Some(cmd) = self.state.range_viewport_cmd(range, version) {
+                    self.pending_viewport.coalesce_cells(cmd);
+                }
+            }
             TrameEvent::DataReset | TrameEvent::CondFormatsUpdated { .. } => {
                 self.needs_full = true;
                 // Queued rather than sent here, so the one flush below carries
@@ -281,10 +288,10 @@ impl TrameView {
         // frame, regardless of how many arrow keys fired since the last frame
         // (`BUS-012`). A full queue drops it, and the request goes back in the
         // queue for the next frame (`BUS-024`).
-        if let Some(cmd) = self.pending_viewport.take()
-            && !self.send_command_lossy(cmd.clone())
+        if let Some(pending) = self.pending_viewport.take()
+            && !self.send_command_lossy(pending.command().clone())
         {
-            self.pending_viewport.re_offer(cmd);
+            self.pending_viewport.re_offer(pending);
         }
 
         // Pick up a theme switch (chrome toggled it): repaint everything with

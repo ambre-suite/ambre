@@ -34,6 +34,7 @@ impl TrameUiState {
             accepted_version: ambre_core::Seq::ZERO,
             active_sheet: Id::<Sheet>::from_text(String::new()),
             next_version: ambre_core::Seq::ZERO.next(),
+            full_request: None,
             filtered_col: None,
             hidden_rows: Vec::new(),
             col_widths: HashMap::new(),
@@ -429,6 +430,7 @@ impl TrameUiState {
 
         let version = self.next_version;
         self.next_version = self.next_version.next();
+        self.full_request = Some((version, window));
 
         TrameCommand::ScrollViewport {
             version,
@@ -437,6 +439,34 @@ impl TrameUiState {
             col_start,
             col_end,
         }
+    }
+
+    /// The request that re-fetches the cells of `range` the window shows, for
+    /// a change the Logic thread made after it answered `served`
+    /// (`TRAME-UI-184`). It evicts nothing.
+    ///
+    /// `None` when the window shows none of `range`, or when a request for
+    /// the whole window was sent after `served`. The Logic thread answers that
+    /// one after the change, so the answer already shows it.
+    pub fn range_viewport_cmd(
+        &mut self,
+        range: CellRect,
+        served: ambre_core::Seq<ambre_bus::ViewportVersion>,
+    ) -> Option<TrameCommand> {
+        let (asked, window) = self.full_request?;
+        if asked > served {
+            return None;
+        }
+        let shown = intersection(window, range)?;
+        let version = self.next_version;
+        self.next_version = self.next_version.next();
+        Some(TrameCommand::ScrollViewport {
+            version,
+            row_start: shown.top_left.row,
+            row_end: shown.bottom_right.row,
+            col_start: shown.top_left.col,
+            col_end: shown.bottom_right.col,
+        })
     }
 
     /// Merge a `ViewportData` batch into the local cache.
@@ -608,4 +638,14 @@ impl TrameUiState {
         }
         r
     }
+}
+
+/// The cells both rectangles cover, or `None` when they share none.
+fn intersection(a: CellRect, b: CellRect) -> Option<CellRect> {
+    let top = a.top_left.row.max(b.top_left.row);
+    let left = a.top_left.col.max(b.top_left.col);
+    let bottom = a.bottom_right.row.min(b.bottom_right.row);
+    let right = a.bottom_right.col.min(b.bottom_right.col);
+    (top <= bottom && left <= right)
+        .then(|| CellRect::spanning(CellPos::new(top, left), CellPos::new(bottom, right)))
 }

@@ -348,6 +348,8 @@ impl TrameState {
             };
             self.engine
                 .on_cell_changed(cell, CellText::<StoredForm>::default(), &indices, &ctx);
+            // The view drew the write already, and an answer clears its mark.
+            self.engine.changed.insert(cell);
         } else {
             // Persist the canonical form: sheet ids, so cross-sheet references
             // survive rename/reorder (`trame-sheets`), and lines, so references
@@ -407,13 +409,16 @@ impl TrameState {
                 named: &self.named,
             };
             self.engine.on_cell_changed(cell, stored, &indices, &ctx);
+            // The view drew the write already, and an answer clears its mark.
+            self.engine.changed.insert(cell);
         }
     }
 
     /// Commit the pending cell write(s), recompute the dirty formula closure and
-    /// the active filter, then return the standard write outcome. That outcome is
-    /// a `DataReset`, so the UI re-fetches its viewport, plus the CRDT delta.
-    /// Shared tail of the single-cell and batch write paths.
+    /// the active filter, then return the standard write outcome. That outcome
+    /// names the cells the writes and their readers changed, so the UI
+    /// re-fetches those alone (`TRAME-284`), plus the CRDT delta. Shared tail
+    /// of the single-cell and batch write paths.
     pub(super) fn finish_cell_writes(&mut self) -> TrameOutcome {
         self.doc.commit();
         let indices = self.engine_indices();
@@ -421,15 +426,22 @@ impl TrameState {
         // The edit may change the filtered column's value: recompute the active
         // filter so the row's hidden status tracks the data
         // (`trame-shared-filter`).
+        let hidden = self.hidden_rows.clone();
         self.recompute_active_filter();
         let update = self.flush_delta();
-        // Ask the UI to re-fetch its viewport. The edit, and any formula it
-        // feeds, then renders its computed result immediately, without waiting
-        // for the network echo. The optimistic UI-side update covers plain
-        // literals; formulas need this round-trip. The re-fetch also puts back
-        // what the UI drew optimistically for a refused write.
-        let mut display = vec![TrameEvent::DataReset];
-        display.extend(self.take_write_refusals());
+        // The written cells and every formula they feed render their computed
+        // result at once, without waiting for the network echo. A refused write
+        // puts back what the UI drew optimistically. A row the filter hid or
+        // showed moves every row below it. Both re-fetch the whole window.
+        let refusals = self.take_write_refusals();
+        let repaint = if refusals.is_empty() && hidden == self.hidden_rows {
+            self.take_engine_changes(repaint::Repaint::Cells(None))
+        } else {
+            self.engine.changed.clear();
+            repaint::Repaint::Whole
+        };
+        let mut display: Vec<TrameEvent> = self.repaint_event(repaint).into_iter().collect();
+        display.extend(refusals);
         TrameOutcome {
             display,
             update,

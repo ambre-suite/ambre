@@ -1862,3 +1862,52 @@ fn a_dropped_scroll_request_is_offered_again() {
     rig.frame();
     assert_eq!(scrolls(&mut rig), 0, "the request was offered twice");
 }
+
+/// The bounds of one viewport request, as `(row_start, row_end, col_start,
+/// col_end)`.
+fn bounds(cmd: &TrameCommand) -> Option<(u32, u32, u32, u32)> {
+    match cmd {
+        TrameCommand::ScrollViewport {
+            row_start,
+            row_end,
+            col_start,
+            col_end,
+            ..
+        } => Some((
+            row_start.get(),
+            row_end.get(),
+            col_start.get(),
+            col_end.get(),
+        )),
+        _ => None,
+    }
+}
+
+/// `TRAME-UI-184`: a change the Logic thread names cell by cell re-fetches
+/// those cells alone, where a whole-state change re-fetches the window.
+#[test]
+fn a_ranged_change_refetches_its_cells_and_a_reset_the_window() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let first = rig.sent();
+    let window = first.iter().find_map(bounds).expect("the opening fetch");
+    let served = first
+        .iter()
+        .find_map(|c| match c {
+            TrameCommand::ScrollViewport { version, .. } => Some(*version),
+            _ => None,
+        })
+        .expect("a version");
+    rig.answer(TrameEvent::CellsChanged {
+        version: served,
+        range: CellRect::spanning(
+            CellPos::new(ROW_1, Pos::<Col>::new(2)),
+            CellPos::new(ROW_4, Pos::<Col>::new(3)),
+        ),
+    });
+    let ranged: Vec<_> = rig.sent().iter().filter_map(bounds).collect();
+    assert_eq!(ranged, vec![(1, 4, 2, 3)], "the named cells alone");
+    rig.answer(TrameEvent::DataReset);
+    let whole: Vec<_> = rig.sent().iter().filter_map(bounds).collect();
+    assert_eq!(whole, vec![window], "the whole window");
+}

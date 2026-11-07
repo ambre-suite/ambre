@@ -393,6 +393,7 @@ impl<L: Axis> AxisView<L> {
             gone: Vec::new(),
             added: Vec::new(),
             removed: removed.clone(),
+            first: None,
             kept: Kept::Same,
         };
         for (uid, n) in &uids {
@@ -416,7 +417,8 @@ impl<L: Axis> AxisView<L> {
                 change.kept = Kept::Changed;
             }
         }
-        let first = Pos::<Slot>::from_index(first)?;
+        let first = Pos::<L>::from_index(first)?;
+        change.first = Some(first);
         Some(AxisPlan {
             elements,
             removed,
@@ -436,9 +438,9 @@ impl<L: Axis> AxisView<L> {
     /// Take a plan [`plan_diffs`](Self::plan_diffs) made of this view. The positions
     /// before its first edit keep their entry, and each one after is
     /// recorded again.
-    fn commit_diffs(&mut self, plan: AxisPlan<L>) -> Option<AxisChange> {
+    fn commit_diffs(&mut self, plan: AxisPlan<L>) -> Option<AxisChange<L>> {
         let elements = plan.elements;
-        let first = Pos::<L>::from_index(plan.first.to_usize().min(elements.len()))?;
+        let first = plan.first;
         for element in &plan.removed {
             self.owner.remove(&element.id);
             if self.at.get(&element.uid).is_some_and(|pos| *pos < first) {
@@ -718,20 +720,36 @@ pub fn slot_edits(diff: &[loro::event::ListDiffItem]) -> Option<Vec<SlotEdit>> {
 /// lines it added. It says whether a line it removed and added again kept
 /// its element.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AxisChange {
+pub struct AxisChange<L: Axis> {
     pub gone: Vec<Uid>,
     pub added: Vec<Uid>,
     /// The elements the diffs removed for good. A key under one of them
     /// places on no cell any more.
     pub removed: Vec<Element>,
+    /// The first line an edit reached, or `None` for an axis no diff
+    /// reached.
+    pub first: Option<Pos<L>>,
     pub kept: Kept,
+}
+
+impl<L: Axis> AxisChange<L> {
+    /// The change of an axis no diff reached.
+    fn untouched() -> Self {
+        Self {
+            gone: Vec::new(),
+            added: Vec::new(),
+            removed: Vec::new(),
+            first: None,
+            kept: Kept::Same,
+        }
+    }
 }
 
 /// What the list diffs of one batch did to a sheet's two axes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LayoutChange {
-    pub rows: AxisChange,
-    pub cols: AxisChange,
+    pub rows: AxisChange<Row>,
+    pub cols: AxisChange<Col>,
 }
 
 impl LayoutChange {
@@ -753,9 +771,10 @@ struct AxisPlan<L: Axis> {
     removed: Vec<Element>,
     /// The elements the diffs added that stay.
     added: Vec<Element>,
-    /// The first slot an edit reached: the slots before it are untouched.
-    first: Pos<Slot>,
-    change: AxisChange,
+    /// The first line an edit reached: the lines before it are untouched.
+    /// A view with no hidden element holds one slot per line, in order.
+    first: Pos<L>,
+    change: AxisChange<L>,
     _axis: std::marker::PhantomData<L>,
 }
 
@@ -885,19 +904,13 @@ impl SheetIndex {
         } else {
             Some(self.cols.plan_diffs(cols)?)
         };
-        let none = || AxisChange {
-            gone: Vec::new(),
-            added: Vec::new(),
-            removed: Vec::new(),
-            kept: Kept::Same,
-        };
         let rows = match row_plan {
             Some(plan) => self.rows.commit_diffs(plan)?,
-            None => none(),
+            None => AxisChange::untouched(),
         };
         let cols = match col_plan {
             Some(plan) => self.cols.commit_diffs(plan)?,
-            None => none(),
+            None => AxisChange::untouched(),
         };
         Some(LayoutChange { rows, cols })
     }
