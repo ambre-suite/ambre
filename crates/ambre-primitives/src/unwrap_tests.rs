@@ -288,6 +288,43 @@ fn a_field_of_a_known_struct_types_its_receiver() {
 }
 
 #[test]
+fn a_field_or_a_binding_a_type_parameter_types_is_untyped() {
+    // `width` of `Size<P>` holds any newtype, so its call is judged. The
+    // accessor `spell` no std type shares, so the receiver is known.
+    let lib = "pub mod len {\n\
+            pub struct Len(u32);\n\
+            impl Len { pub fn spell(self) -> u32 { self.0 } }\n\
+        }\n\
+        pub fn keep(n: u32) {}\n\
+        pub struct Size<P> { pub width: P, pub height: P }\n\
+        impl<P> Size<P> { pub fn keep(&self) { keep(self.width.spell()); } }\n\
+        pub fn save(size: &Size<len::Len>) { keep(size.height.spell()); }\n\
+        pub fn spell<K>(key: K) { keep(key.spell()); }\n";
+    let report = run(lib);
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(
+        refusals(&report),
+        [
+            "demo | src/lib.rs:7 | Len::spell -> keep",
+            "demo | src/lib.rs:8 | Len::spell -> keep",
+            "demo | src/lib.rs:9 | Len::spell -> keep",
+        ]
+    );
+}
+
+#[test]
+fn a_field_of_an_untyped_base_with_a_generic_name_keeps_the_name_filter() {
+    // A kurbo point holds `x` too: an untyped base names no `Point<P>`.
+    let lib = format!(
+        "{NAME}pub struct Point<P> {{ pub x: P }}\n\
+         pub fn save() {{ let at = make(); store(at.x.as_str()); }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+}
+
+#[test]
 fn a_public_tuple_field_is_an_unwrap_and_a_private_one_is_not() {
     let lib = "pub mod key {\n\
         pub struct Key(pub String);\n\
