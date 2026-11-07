@@ -921,6 +921,10 @@ struct LogicState {
     /// The channel and space commands that write a document whose session
     /// identity has not landed, in the order they came (`AUTHOR-026`).
     murmure_waiting: HashMap<Id<Document>, Vec<channels::HeldCommand>>,
+    /// The roots whose own thread the relay linked before the thread went
+    /// up, by that thread. Each root names its thread once the thread's
+    /// first update left (the Murmure threads spec).
+    unnamed_roots: HashMap<Id<Document>, threads::UnnamedRoot>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival, and into any document opened afterwards. An app
@@ -1040,6 +1044,7 @@ impl LogicState {
             unsent: HashMap::new(),
             murmure_identities: HashMap::new(),
             murmure_waiting: HashMap::new(),
+            unnamed_roots: HashMap::new(),
             my_user_id: None,
             my_display_name: None,
             rest_routes: HashMap::new(),

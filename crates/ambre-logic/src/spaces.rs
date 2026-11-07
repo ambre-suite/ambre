@@ -128,6 +128,7 @@ impl LogicState {
                 summary: None,
             });
             self.release_waiting(document_id);
+            self.name_root(document_id);
         }
     }
 

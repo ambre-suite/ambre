@@ -3535,6 +3535,7 @@ mod tests {
         let other = Id::<Snapshot>::mint();
         // The relay numbers every delta once, so the next gap takes new numbers.
         let first = QUARANTINE_ALERT as u64 + 50;
+        state.pass_replay_window();
         for clock in 1..=(QUARANTINE_ALERT as u64) {
             let update = make_update(doc, other, Seq::<DeltaAuthor>::new(clock), b"x", &key, &sk);
             state.receive_update(Seq::<Relay>::new(first + clock), update);
