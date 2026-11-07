@@ -152,6 +152,22 @@ impl TrameState {
         self.import_and_reseed(LoroPayloadRef::Snapshot(payload), MergeOrigin::Snapshot)
     }
 
+    /// The events that draw this workbook whole, and write nothing. They are
+    /// the re-fetch of the whole window, the tab strip, the toggles of the
+    /// active cell and the undo state. A view that lost an event takes them in
+    /// place of what it missed (`ambre-spec-message-bus.md`, `BUS-042`).
+    #[must_use]
+    pub fn whole_state(&self) -> Vec<TrameEvent> {
+        let mut events: Vec<TrameEvent> = self
+            .repaint_event(super::repaint::Repaint::Whole)
+            .into_iter()
+            .collect();
+        events.push(self.sheet_list_event());
+        events.push(self.style_state_event());
+        events.push(self.undo_state_event());
+        events
+    }
+
     /// Apply a remote ephemeral (presence) payload and return presence events.
     ///
     /// Stubbed until collaborator presence is wired.

@@ -62,6 +62,9 @@ pub mod store_ledger;
 /// The threads of a channel: a reply, and the link of its thread.
 mod threads;
 mod unopened;
+/// The load bench of a view's queue (`ambre-spec-budgets.md section 6`).
+#[cfg(test)]
+mod view_load;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
 
@@ -409,6 +412,25 @@ impl DocState {
         match self {
             DocState::Prose(state) => state.layout_event().map(AppEvent::Prose),
             DocState::Trame(_) | DocState::Toile(_) => None,
+        }
+    }
+
+    /// The events that draw this document whole, for a view that lost one
+    /// (`BUS-042`). Prose answers none: its view keeps a text it reconciles
+    /// change by change, which a resent state does not repair (`BUS-043`).
+    fn whole_state(&self) -> Vec<AppEvent> {
+        match self {
+            DocState::Trame(state) => state
+                .whole_state()
+                .into_iter()
+                .map(AppEvent::Trame)
+                .collect(),
+            DocState::Toile(state) => state
+                .whole_state()
+                .into_iter()
+                .map(AppEvent::Toile)
+                .collect(),
+            DocState::Prose(_) => Vec::new(),
         }
     }
 

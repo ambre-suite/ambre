@@ -187,6 +187,19 @@ impl LogicState {
                 // leaves memory, and Sync keeps it light (`RESID-001`).
                 self.evict(document_id);
             }
+            // A view that lost an event reads again (`BUS-041`, `BUS-042`).
+            // Its document is resent from what this thread holds, so nothing
+            // reaches the relay or the store.
+            LogicCommand::ResendState { document_id } => {
+                let events = self
+                    .docs
+                    .get(&document_id)
+                    .map(|doc| doc.state.whole_state())
+                    .unwrap_or_default();
+                for event in events {
+                    self.send_to_ui(UiEvent::Viewport { document_id, event });
+                }
+            }
             LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
             LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
             LogicCommand::OpenDirectMessage { draft, now } => self.open_direct_message(draft, now),
@@ -774,6 +787,78 @@ mod tests {
         let (to_persist, persist_rx) = test_link();
         std::mem::forget(persist_rx);
         (LogicState::new(to_ui, to_sync, to_persist), ui_rx, sync_rx)
+    }
+
+    /// The events a resend hands the view of `document_id`, and whether it
+    /// sent anything to the Sync worker.
+    fn resent(doc_type: DocType) -> (Vec<AppEvent>, bool) {
+        let (mut state, ui, sync) = harness();
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, doc_type);
+        ui.try_iter().for_each(drop);
+        sync.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::ResendState { document_id });
+        let events = ui
+            .try_iter()
+            .map(|ev| match ev {
+                UiEvent::Viewport {
+                    document_id: id,
+                    event,
+                } if id == document_id => event,
+                other => panic!("a resend sent {other:?}"),
+            })
+            .collect();
+        (events, sync.try_recv().is_ok())
+    }
+
+    /// `BUS-042`, `BUS-045`: a resend hands a Trame view what draws it whole.
+    /// That is the re-fetch of its window, its tabs, its cell toggles and its
+    /// undo state. Nothing reaches the relay.
+    #[test]
+    fn a_resend_hands_a_trame_view_its_whole_state() {
+        use ambre_trame::message::TrameEvent;
+        let (events, synced) = resent(DocType::Trame);
+        assert!(!synced, "a resend reached the Sync worker");
+        let has = |want: fn(&TrameEvent) -> bool| {
+            events
+                .iter()
+                .any(|ev| matches!(ev, AppEvent::Trame(e) if want(e)))
+        };
+        assert!(has(|e| matches!(e, TrameEvent::DataReset)));
+        assert!(has(|e| matches!(e, TrameEvent::SheetList { .. })));
+        assert!(has(|e| matches!(e, TrameEvent::StyleApplied { .. })));
+        assert!(has(|e| matches!(e, TrameEvent::UndoState { .. })));
+    }
+
+    /// `BUS-042`, `BUS-045`: a resend hands a Toile view what draws it whole.
+    /// That is its viewport, the changes its panels re-read on, and its undo
+    /// state. Nothing reaches the relay.
+    #[test]
+    fn a_resend_hands_a_toile_view_its_whole_state() {
+        use ambre_toile::message::ToileEvent;
+        let (events, synced) = resent(DocType::Toile);
+        assert!(!synced, "a resend reached the Sync worker");
+        let has = |want: fn(&ToileEvent) -> bool| {
+            events
+                .iter()
+                .any(|ev| matches!(ev, AppEvent::Toile(e) if want(e)))
+        };
+        assert!(has(|e| matches!(e, ToileEvent::ViewportData(_))));
+        assert!(has(|e| matches!(e, ToileEvent::BoardChanged)));
+        assert!(has(|e| matches!(e, ToileEvent::DeckChanged)));
+        assert!(has(|e| matches!(e, ToileEvent::UndoState { .. })));
+    }
+
+    /// `BUS-042`, `BUS-045`: a resend of a document this thread does not hold
+    /// answers nothing.
+    #[test]
+    fn a_resend_of_a_document_not_open_answers_nothing() {
+        let (mut state, ui, sync) = harness();
+        state.handle_logic_command(LogicCommand::ResendState {
+            document_id: Id::<Document>::mint(),
+        });
+        assert!(ui.try_recv().is_err());
+        assert!(sync.try_recv().is_err());
     }
 
     /// Drive `ExportAmbreFile` on a live document of `doc_type` and hand back
