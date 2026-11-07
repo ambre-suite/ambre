@@ -44,6 +44,36 @@ impl ClipboardPayload {
     /// gaps (blank source cells, omitted from `cells`) render as empty fields. A
     /// formula cell contributes its raw text (for example `=A1*2`).
     pub fn to_tsv(&self) -> String {
+        self.grid()
+            .iter()
+            .map(|r| r.as_slice().join("\t"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Lay the payload out as one HTML table, the same grid as [`Self::to_tsv`]
+    /// with each cell escaped. A spreadsheet or a word processor reads a table
+    /// as cells. Where the browser refuses the `web ` types, the host carries
+    /// the ownership token in this HTML. A same-tab paste then keeps rung 2 on
+    /// every browser (`TRAME-UI-186`).
+    pub fn to_html(&self) -> String {
+        let mut html = String::from("<table>");
+        for row in self.grid().iter() {
+            html.push_str("<tr>");
+            for raw in row.iter() {
+                html.push_str("<td>");
+                escape_html(raw, &mut html);
+                html.push_str("</td>");
+            }
+            html.push_str("</tr>");
+        }
+        html.push_str("</table>");
+        html
+    }
+
+    /// The payload as a dense grid of raw texts. A zero extent clamps to one
+    /// cell, and a cell whose offset falls outside the extent is dropped.
+    fn grid(&self) -> IdxVec<Row, IdxVec<Col, String>> {
         let width = Len::<Col>::new(self.cols.get().max(1));
         let height = Len::<Row>::new(self.rows.get().max(1));
         let mut grid: IdxVec<Row, IdxVec<Col, String>> =
@@ -61,13 +91,25 @@ impl ClipboardPayload {
                 .get_mut(cell.dr.as_end())
                 .and_then(|row| row.get_mut(cell.dc.as_end()))
             {
-                *slot = cell.raw.clone();
+                slot.clone_from(&cell.raw);
             }
         }
-        grid.iter()
-            .map(|r| r.as_slice().join("\t"))
-            .collect::<Vec<_>>()
-            .join("\n")
+        grid
+    }
+}
+
+/// Append `text` to `out`, each of the five HTML special characters escaped.
+/// A cell holding markup then lands as text in the editor that reads the table.
+fn escape_html(text: &str, out: &mut String) {
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
     }
 }
 

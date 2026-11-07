@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3977 rows: 3414 shipped, of which 13 loose. 563 unbuilt.**
+**3979 rows: 3416 shipped, of which 13 loose. 563 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1001 | 485 | 873 | 618 | 424 | 3401 |
+| `verified` | 1002 | 486 | 873 | 618 | 424 | 3403 |
 | `failing` |  |  |  |  | 2 | 2 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 9 |  |  |  |  | 9 |
@@ -43,7 +43,7 @@
 | `ambre-spec-architecture.md` | 73 | 73 | 64 | 9 |  |
 | `ambre-spec-broadcast.md` | 28 | 27 | 27 |  | 1 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
-| `ambre-spec-clipboard.md` | 19 | 18 | 18 |  | 1 |
+| `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-delta-order.md` | 22 | 22 | 22 |  |  |
 | `ambre-spec-design-tokens.md` | 6 | 6 | 6 |  |  |
@@ -86,7 +86,7 @@
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 37 |  | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 13 | 10 | 10 |  | 3 |
 | `ambre-spec-trame-cell-styles.md` | 26 | 22 | 22 |  | 4 |
-| `ambre-spec-trame-clipboard.md` | 9 | 8 | 8 |  | 1 |
+| `ambre-spec-trame-clipboard.md` | 10 | 9 | 9 |  | 1 |
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-engine.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 6 |  |  |
@@ -196,7 +196,7 @@
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237 |
 | `ambre-spec-call-media.md` | CALL-001..030 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |
-| `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057 |
+| `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057,061 |
 | `ambre-spec-commands.md` | UI-THREAD-011,019,026..028,035..042 |
 | `ambre-spec-delta-order.md` | SYNC-006..007,024..033,082..087,101,131,147..148 |
 | `ambre-spec-design-tokens.md` | UI-THREAD-029..034 |
@@ -325,7 +325,7 @@
 | `ambre-spec-trame-cell-merges.md` | TRAME-019..020,027..031,125..128,130..133,135..138,140..150; TRAME-IO-016; TRAME-UI-009,111..116 |
 | `ambre-spec-trame-cell-rendering.md` | TRAME-UI-020..021,093..100,139..140,177 |
 | `ambre-spec-trame-cell-styles.md` | TRAME-092..101,186..193,239..240,259..260; TRAME-FEAT-017..019,028 |
-| `ambre-spec-trame-clipboard.md` | TRAME-UI-059,061..065,124..125,174 |
+| `ambre-spec-trame-clipboard.md` | TRAME-UI-059,061..065,124..125,174,186 |
 | `ambre-spec-trame-context-menu.md` | TRAME-UI-085..090,117..120 |
 | `ambre-spec-trame-engine.md` | TRAME-001..002,015,023..024,166..169,231,243,248,282..285; TRAME-FEAT-001; TRAME-UI-001..002,006,014,141..142,184 |
 | `ambre-spec-trame-find-replace.md` | TRAME-UI-077..080,083,138 |

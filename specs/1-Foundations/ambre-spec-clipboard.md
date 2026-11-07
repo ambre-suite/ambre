@@ -54,7 +54,8 @@ Four rungs of fidelity, in one order. The first that can answer does.
 | `UI-THREAD-054` | `POST` | A paste raised after the copy's asynchronous write landed MUST read the clipboard back, so the token and the private bytes that write moved still decide it. | this spec section 2 | `ambre_app::host::pipe::tests::a_paste_after_a_landed_write_reads_the_clipboard_back` -- the browser's read answers with the item a landed write leaves, and the paste decides on its token | none | verified |
 | `UI-THREAD-055` | `POST` | Where the browser refuses the `web ` types, the asynchronous write MUST still publish the mirror and the HTML. | this spec section 2 | `ambre_app::host::tests::a_browser_refusing_the_web_types_still_gets_the_mirror_and_the_html` -- a constructor refusing the `web ` types gets a second item with the mirror and the marked HTML; `ambre_belt::trame::tests::a_deferred_copy_writes_inside_the_activation_window` -- browser tier, Firefox: the mirror lands; `ambre_belt::prose::tests::the_token_reads_back_from_the_html_firefox_hands_back` -- browser tier, Firefox: the marked HTML lands | none | verified |
 | `UI-THREAD-057` | `POST` | A copy that writes HTML MUST carry its ownership token in that HTML, and the token MUST read back from it. | this spec section 2 | `ambre_bus::clipboard_tests::the_token_reads_back_from_the_marked_html` -- the token's round trip, through the HTML as Firefox 156 hands it back; `ambre_belt::prose::tests::the_token_reads_back_from_the_html_firefox_hands_back` -- browser tier, Firefox: a trusted copy and paste, and the paste event's HTML holds the token the copy event wrote | none | verified |
-| `UI-THREAD-056` | `POST` | Where the browser refuses the `web ` types, a same-tab paste MUST still reach rung 2. | this spec section 2 | not built | unbuilt -- lands with the `A same-tab paste on a browser refusing the web types` Story (`ambre-roadmap.md` E9). The token rides in the HTML alone, so a copy without HTML, every Trame and Toile copy, loses rung 2 on such a browser | unimplemented |
+| `UI-THREAD-056` | `POST` | Where the browser refuses the `web ` types, a same-tab Toile paste MUST still reach rung 2. | this spec section 2 | not built | unbuilt -- lands with the `A same-tab paste on a browser refusing the web types` Story (`ambre-roadmap.md` E9). The token rides in the HTML alone, and a Toile copy writes no HTML | unimplemented |
+| `UI-THREAD-061` | `POST` | Where the browser refuses the `web ` types, a same-tab Trame paste MUST still reach rung 2. | this spec section 2 | `ambre_belt::trame_grid::tests::a_copied_range_pastes_with_its_formula_shifted` -- browser tier, Firefox: rung 3 is refused and rung 4 keeps the formula unshifted, so only rung 2 shifts it; `ambre_trame::ui::view::view_tests::a_copy_hands_the_host_an_html_table` -- the HTML the token rides in | none | verified |
 | `UI-THREAD-022` | `POST` | A paste MUST take the fidelity ladder in one order, first match wins. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_paste_takes_the_highest_rung_it_can_serve`; `ambre_trame::ui::view::view_tests::a_paste_takes_the_highest_rung_it_can_serve` -- each offers two rungs at once and reads which one answered | none | verified |
 | `UI-THREAD-046` | `POST` | A paste MUST NOT skip a rung it can serve. | this spec section 2, the ladder | `ambre_toile::ui::view::view_tests::a_paste_takes_the_highest_rung_it_can_serve`; `ambre_trame::ui::view::view_tests::a_paste_takes_the_highest_rung_it_can_serve` -- rungs 2 to 4. `ambre_toile::ui::view::view_tests::a_paste_into_an_open_editor_inserts_the_text`; `ambre_trame::ui::view::view_tests::a_paste_into_an_open_editor_inserts_the_text` -- rung 1 | none | verified |
 | `UI-THREAD-047` | `FRAME` | A paste MUST NOT change what the clipboard holds. | derived | `ambre_app::host::pipe::tests::a_paste_writes_nothing_to_the_clipboard` -- the host half. `ambre_toile::ui::view::view_tests::a_paste_writes_nothing_back`; `ambre_trame::ui::view::view_tests::a_paste_writes_nothing_back` -- a paste leaves no blob for the host to write | none | verified |
@@ -65,10 +66,10 @@ Four rungs of fidelity, in one order. The first that can answer does.
   outside the sealed path of `ambre-spec-zero-knowledge.md` and it is the only outbound
   surface the UI thread has besides the font fetch (`UI-THREAD-004`). Nothing here reaches the
   relay, holds a key or opens a socket.
-* **Verification.** 18 `verified`, 1 `unimplemented`. The wasm tier raises real clipboard events
-  and reads the written item back; the host tier drives each view's ladder. The browser tier
-  holds the activation window, and on Firefox the token in the HTML. The unbuilt row is rung 2
-  without the `web ` types.
+* **Verification.** 19 `verified`, 1 `unimplemented`. The wasm tier raises real clipboard events and
+  reads the written item back; the host tier drives each view's ladder. The browser tier holds the
+  activation window, and on Firefox the token in the HTML. The unbuilt row is rung 2 without the
+  `web ` types for Toile, whose copy writes no HTML.
 ---
 
 ## 2. MODEL
@@ -82,7 +83,7 @@ shape is serialized onto the operating system clipboard.
 ```rust
 /// `text` is the plain-text mirror every other application can read; `ambre` is
 /// the active application's own bytes, opaque to the host. `html` is the formatted half
-/// other editors read and write; only Prose fills it today. `form` is `Plain` when the
+/// other editors read and write; Prose and Trame fill it. `form` is `Plain` when the
 /// user asked for the plain text alone, and a view then ignores every richer half.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ClipboardBlob {
@@ -122,7 +123,8 @@ writes.
    (`UI-THREAD-009`). Where the write lands it replaces the whole clipboard. The token and the
    private bytes then exist only under the `web ` types, which a `paste` event cannot see. The
    next paste reads them back (`UI-THREAD-054`). A browser that refuses the `web ` types gets
-   the mirror and the HTML alone (`UI-THREAD-055`), the token in an HTML comment (`UI-THREAD-056`).
+   the mirror and the HTML alone (`UI-THREAD-055`), the token in an HTML comment (`UI-THREAD-057`).
+   A Trame copy writes HTML, so its same-tab paste keeps rung 2 there (`UI-THREAD-061`).
 
 **A paste, in steps.** The ladder is one order and the first rung that can answer does
 (`UI-THREAD-022`).

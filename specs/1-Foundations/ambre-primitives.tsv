@@ -221,6 +221,10 @@ ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth::g
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth::new(day) | param | i64	newtype-inner	the number a calendar part wraps
 ambre-trame | src/message/clipboard.rs | crate::message::clipboard | ClipboardCell.raw | field | String	free-text	cell text / query / user message
 ambre-trame | src/message/clipboard.rs | crate::message::clipboard | ClipboardPayload::to_tsv() | ret | String	generic	TSV rendering of the payload
+ambre-trame | src/message/clipboard.rs | crate::message::clipboard | ClipboardPayload::to_html() | ret | String	generic	HTML table rendering of the payload
+ambre-trame | src/message/clipboard.rs | crate::message::clipboard | ClipboardPayload::grid() | ret | IdxVec<Row,IdxVec<Col,String>>	free-text	cell text laid out as a grid
+ambre-trame | src/message/clipboard.rs | crate::message::clipboard | escape_html(text) | param | &str	free-text	cell text escaped into the HTML table
+ambre-trame | src/message/clipboard.rs | crate::message::clipboard | escape_html(out) | param | &mut String	generic	the HTML table being built
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::DefineName.reference | field | String	free-text	the A1 reference text the user typed; only the Trame engine parses it, against the live sheets, so no type holds its parse on the bus

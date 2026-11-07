@@ -1,8 +1,8 @@
 // ambre-trame message tests (tier `host`, `ambre-spec-message-bus.md`).
 // ============================================================================
 // Pure, native coverage of the helpers and bounded values Trame's message
-// vocabulary carries: `ClipboardPayload::to_tsv`, `CellFormat::has_decimals`
-// and the decimal count. They moved here with the vocabulary (`BUS-032`).
+// vocabulary carries: `ClipboardPayload::to_tsv` and `::to_html`,
+// `CellFormat::has_decimals` and the decimal count. They moved here with the vocabulary (`BUS-032`).
 // ============================================================================
 
 use ambre_bus::{Col, Row};
@@ -79,6 +79,29 @@ fn to_tsv_out_of_bounds_offsets_are_ignored() {
         ..Default::default()
     };
     assert_eq!(payload.to_tsv(), "a");
+}
+
+// -- Content plane: ClipboardPayload::to_html --------------------------------
+
+/// `TRAME-UI-186`: the HTML table lays out the grid `to_tsv` lays out, a gap
+/// as an empty cell, and each special character escaped.
+#[test]
+fn to_html_lays_out_the_tsv_grid_escaped() {
+    let payload = ClipboardPayload {
+        rows: Len::<Row>::new(2),
+        cols: Len::<Col>::new(2),
+        cells: vec![cell(0, 0, "<b>&\"'"), cell(1, 1, "=A1*2")],
+        ..Default::default()
+    };
+    assert_eq!(
+        payload.to_html(),
+        "<table><tr><td>&lt;b&gt;&amp;&quot;&#39;</td><td></td></tr>\
+         <tr><td></td><td>=A1*2</td></tr></table>"
+    );
+    assert_eq!(
+        ClipboardPayload::default().to_html(),
+        "<table><tr><td></td></tr></table>"
+    );
 }
 
 // -- Content plane: CellFormat::has_decimals (exhaustive) ---------------------
