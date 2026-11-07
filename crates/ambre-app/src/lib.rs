@@ -104,6 +104,9 @@ mod notify;
 mod outbox;
 #[cfg(target_arch = "wasm32")]
 mod route;
+/// The route binding, polled each frame.
+#[cfg(target_arch = "wasm32")]
+mod route_binding;
 #[cfg(target_arch = "wasm32")]
 mod signin;
 /// What the switchboard decides, testable on the host.
@@ -1070,18 +1073,15 @@ pub fn main() {
     // events, and prunes a child sender whose receiver has been dropped.
     let view_fan_out_relay = Rc::clone(&view_fan_out);
 
-    // SPA route binding, polled each frame on the main thread (where the `!Send`
-    // canvas handle lives, so it stays OUT of the Leptos tree). The client URL is
-    // the single source of truth: `leptos_router` pushState navigations and
-    // browser back/forward both land here. On a change we close the previous
-    // document, open the next, and point the persistent canvas at it. We then
-    // gate the rAF render: paint the doc, or freeze it behind the landing
-    // overlay. We publish the active document, so every command trigger targets
-    // it.
-    let route_switcher = Rc::clone(&switcher_slot);
-    let route_tx = shell_outbox.clone();
-    let route_raf = raf.clone();
-    let mut prev_route: Option<route::Route> = None;
+    // The SPA route binding, polled each frame: the client URL is the single
+    // source of truth for the routed document.
+    let mut route_binding = route_binding::RouteBinding::new(
+        Rc::clone(&switcher_slot),
+        shell_outbox.clone(),
+        raf.clone(),
+        current_doc,
+        chrome_status,
+    );
     let mut tab_title = tab_title::TabTitle::new(docs);
 
     let pre_frame = move || {
@@ -1089,43 +1089,7 @@ pub fn main() {
         // nothing this turn sends overtakes it (`BUS-011`). The relay runs on
         // the hidden page's timer too, so the flush does as well (`CANVAS-075`).
         relay_tx.flush();
-        let cur_route = route::current();
-        let cur_doc = cur_route.doc();
-        if let Some(step) = route::step(prev_route.as_ref(), &cur_route) {
-            if let Some(document_id) = step.close {
-                route_tx.send(LogicCommand::CloseDocument { document_id });
-            }
-            if let Some((doc_type, document_id)) = step.open {
-                route_tx.send(LogicCommand::OpenDocument {
-                    document_id,
-                    doc_type,
-                });
-            }
-            if step.close.is_some() || step.open.is_some() {
-                current_doc.set(step.show);
-                // Arm the loading overlay when entering a document; clear it on
-                // the landing route. The relay clears `hydrating` on the matching
-                // `DocumentReady` (see the per-frame pump below).
-                chrome_status.update(|s| {
-                    s.hydrating = cur_doc.is_some();
-                    if cur_doc.is_none() {
-                        s.connected = ambre_core::LinkState::Disconnected;
-                    }
-                });
-            }
-            match step.show {
-                Some(document_id) => {
-                    if let Some(sw) = route_switcher.borrow().as_ref() {
-                        sw.set_document(document_id);
-                    }
-                    route_raf.set_cover(ambre_canvas::Cover::Document);
-                }
-                // Freeze the canvas behind the landing overlay (the relay below
-                // keeps running -- only the render is gated).
-                None => route_raf.set_cover(ambre_canvas::Cover::Launcher),
-            }
-            prev_route = Some(cur_route);
-        }
+        let cur_doc = route_binding.poll();
 
         // Browser tab title, recomputed each frame and written on a change.
         tab_title.show(cur_doc);
