@@ -3,12 +3,12 @@
 // The launcher's one writer on the UI to Logic queue (`BUS-011`, `BUS-035`).
 //
 // Several launcher parts send commands of their own: the shell, the landing,
-// the route poll, the per-frame relay, the local store and the vault. None of
+// the route poll, the switchboard, the local store and the vault. None of
 // them owns a frame, so none can drive an outbox of its own. They share this
 // one, over one `ambre_bus::Outbox`. Their commands leave in call order, and a
 // full queue holds a lossless command rather than dropping it.
 //
-// The per-frame relay flushes it. That relay runs on every animation frame,
+// The switchboard flushes it. That relay runs on every animation frame,
 // and on the timer of a hidden page (`CANVAS-075`). A held command thus leaves
 // whether the page shows or not.
 //

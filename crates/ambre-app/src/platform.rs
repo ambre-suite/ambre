@@ -699,7 +699,7 @@ fn read_ambre_file(
         // plaintext path below resumes on what comes back (`DOCFILE-015`).
         match picked.into_lineage() {
             ambre_core::PickedFile::Sealed(file) => on_sealed.run(file),
-            // The per-frame relay holds the store's seal, and resumes from
+            // The switchboard holds the store's seal, and resumes from
             // here (`RESID-025`).
             ambre_core::PickedFile::Plaintext(file) => opened.set(Some(OpenedFile(file))),
         }

@@ -160,7 +160,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
     } = toile;
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
-        // and the per-frame relay drives it. The shell sees only its toggle
+        // and the switchboard drives it. The shell sees only its toggle
         // signals (Send), so the `<Router>` subtree stays Send.
         let store = CommandStates::new(trame_chrome::COMMANDS.iter().map(|c| c.id));
         // Seed app-specific initial command states (Undo/Redo start disabled).
@@ -195,7 +195,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         // opens on the Logic thread's reply.
         let sort_dialog = RwSignal::new(None::<trame_chrome::SortDialogState>);
         // Each application fills its panels from its own events, and turns
-        // their intents into its own commands (`ARCH-018`). The per-frame relay
+        // their intents into its own commands (`ARCH-018`). The switchboard
         // reads both back through the slot.
         let trame_relay = trame_chrome::TrameRelay {
             sort_dialog,

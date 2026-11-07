@@ -30,7 +30,7 @@ pub(crate) enum Purpose {
     Channel { channel_id: Id<Channel> },
 }
 
-/// A pending trust decision. Built by the per-frame relay from a fetched
+/// A pending trust decision. Built by the switchboard from a fetched
 /// key, once that key has been compared with the pinned one.
 ///
 /// Only the states that interrupt the user become a prompt. That is a **new**

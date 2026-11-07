@@ -70,7 +70,7 @@ impl SignInMode {
 }
 
 /// Reactive handles the launcher fills as auth state and the document list
-/// resolve. They are shared with the per-frame relay (session, document
+/// resolve. They are shared with the switchboard (session, document
 /// list) and the config fetch (`dev_mode`).
 #[derive(Clone, Copy)]
 pub struct LandingSignals {
@@ -88,8 +88,7 @@ pub struct LandingSignals {
     /// launcher raises no other notification, so this is the one handle it
     /// needs.
     pub toasts: Toasts,
-    /// Where a plaintext `.ambre` container goes once read: the per-frame
-    /// relay stores its payload sealed (`RESID-025`).
+    /// Where a plaintext `.ambre` container goes once read: the switchboard stores its payload sealed (`RESID-025`).
     pub opened_file: RwSignal<Option<crate::platform::OpenedFile>>,
 }
 

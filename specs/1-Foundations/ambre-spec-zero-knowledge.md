@@ -247,7 +247,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The passphrase is copied into a transient buffer.** It crosses the bus in a self-wiping type
-  (`ZK-010`), and the per-frame relay then postcard-encodes it into an ordinary buffer for
+  (`ZK-010`), and the switchboard then postcard-encodes it into an ordinary buffer for
   `postMessage`. That buffer is not wiped, and no type stops it.
 * **The membership graph has no whitelist.** `ZK-007` covers the sealed envelopes alone. The member
   row adds a role and an inviter. The relay reads the role and serves the inviter for the unwrap. A

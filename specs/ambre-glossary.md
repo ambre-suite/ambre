@@ -31,6 +31,7 @@
 | queue | a bounded, typed link between two threads | | `1-Foundations/ambre-spec-architecture.md` |
 | conduit | the lock-free queue of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
 | doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
+| switchboard | the Main thread module that sends each Logic event to a view or an effect | frame relay, per-frame relay | `1-Foundations/ambre-spec-architecture.md` |
 | plane | a class of traffic on the bus | | `1-Foundations/ambre-spec-message-bus.md` |
 | content plane | the plane carrying document edits | | `1-Foundations/ambre-spec-message-bus.md` |
 | service plane | the plane carrying correlated requests and responses | | `1-Foundations/ambre-spec-message-bus.md` |
