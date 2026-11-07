@@ -42,7 +42,7 @@ const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was remov
 /// (`TOILE-UI-160`).
 #[cfg(any(test, target_arch = "wasm32"))]
 const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
-use ambre_bus::{Inbox, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
+use ambre_bus::{Feed, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
 use ambre_canvas::{
     BusyLevel, BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
     NoticePublisher, PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput,
@@ -348,7 +348,7 @@ pub struct ToileWiring {
     /// its one way to write (`BUS-011`).
     pub to_logic: Port<ToileCommand>,
     /// The queue from the Logic thread.
-    pub from_logic: Inbox<ToileEvent>,
+    pub from_logic: Feed<ToileEvent>,
     /// The shared text pipe.
     pub text_input: TextInput,
     /// When embedded as a `doc_embed` child (`toile-embeds`), the child view
@@ -371,7 +371,7 @@ pub struct ToileWiring {
 
 pub struct ToileView {
     document_id: Id<Document>,
-    from_logic: Inbox<ToileEvent>,
+    from_logic: Feed<ToileEvent>,
     /// The one send path to the Logic thread. It keeps a lossless command a
     /// full queue could not take, and offers it again on a later frame
     /// (`BUS-011`). It drops a lossy one (`BUS-023`).

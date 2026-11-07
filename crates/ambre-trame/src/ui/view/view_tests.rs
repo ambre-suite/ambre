@@ -80,7 +80,7 @@ impl Rig {
             ),
             TrameWiring {
                 to_logic: ambre_bus::Port::direct(tx),
-                from_logic: ambre_bus::Inbox::direct(rx),
+                from_logic: ambre_bus::Feed::direct(rx),
                 text_input: TextInput::detached(),
                 embedding: ambre_canvas::Embedding::Standalone,
                 anchor: AnchorPublisher::new(),

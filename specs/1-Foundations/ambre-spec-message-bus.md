@@ -159,7 +159,7 @@ they carry. Each application declares its command enum, event enum and value typ
 (`BUS-032`). The Logic runtime declares the sums over them, since it sits downstream of every
 application.
 
-A view holds a `Port` and an `Inbox` typed by its own vocabulary. The launcher builds them over the
+A view holds a `Port` and a `Feed` typed by its own vocabulary. The launcher builds them over the
 shared queues: `Embed` wraps a view's command into the sum, and unwraps its events. So the Sync
 worker builds against no application's vocabulary (`ARCH-070`). A `Port` has no send outside the
 bus and no `Clone`: the view moves it into its one outbox (`BUS-033`).

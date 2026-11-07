@@ -30,6 +30,7 @@
 | worker | a browser worker hosting a thread | | `1-Foundations/ambre-spec-architecture.md` |
 | queue | a bounded, typed link between two threads | | `1-Foundations/ambre-spec-architecture.md` |
 | conduit | the lock-free queue of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
+| feed | the receiving end of a view on the Logic to UI queue | | `1-Foundations/ambre-spec-message-bus.md` |
 | doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
 | plane | a class of traffic on the bus | | `1-Foundations/ambre-spec-message-bus.md` |
 | content plane | the plane carrying document edits | | `1-Foundations/ambre-spec-message-bus.md` |

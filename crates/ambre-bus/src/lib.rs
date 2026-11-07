@@ -62,7 +62,7 @@ pub use logic::{LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, is_lossy_class};
 pub use outbox::{Lane, Outbox, SendOutcome};
 pub use plane::{ChannelPlane, NoChannels, PlaneOf};
-pub use port::{Inbox, Port};
+pub use port::{Feed, Port};
 pub use rest::{
     Confidential, DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, Plaintext,
     RecoveryWords, Request, RestCommand, RestEvent, RowPlace, SealedRow, UserInfo, next_request,

@@ -3,7 +3,7 @@
 //!
 //! The UI to Logic queue carries the Logic runtime's closed sum, which no
 //! application crate can name. A [`Port`] takes the view's own command and
-//! embeds it on the way in. An [`Inbox`] projects the view's own event out of
+//! embeds it on the way in. A [`Feed`] projects the view's own event out of
 //! what the launcher forwards. Both erase the sum, so a view type names its
 //! own vocabulary and nothing downstream of it.
 //!
@@ -80,23 +80,23 @@ type RecvFn<E, P> = dyn Fn() -> Result<UiEvent<E, P>, TryRecvError> + Send;
 
 /// A view's receiving end of the events the launcher forwards it, for
 /// document events of type `E` and the channel plane `P`.
-pub struct Inbox<E, P: ChannelPlane = NoChannels> {
+pub struct Feed<E, P: ChannelPlane = NoChannels> {
     recv: Box<RecvFn<E, P>>,
 }
 
-impl<E: 'static, P: ChannelPlane + PlaneOf<P> + 'static> Inbox<E, P>
+impl<E: 'static, P: ChannelPlane + PlaneOf<P> + 'static> Feed<E, P>
 where
     UiEvent<E, P>: Send,
 {
-    /// An inbox over a queue that carries `E` and `P` themselves, as a test
+    /// A feed over a queue that carries `E` and `P` themselves, as a test
     /// rig's does.
     pub fn direct(from_logic: Receiver<UiEvent<E, P>>) -> Self {
         Self::embedded(from_logic)
     }
 }
 
-impl<E: 'static, P: ChannelPlane + 'static> Inbox<E, P> {
-    /// An inbox over a queue that carries the sum `S`, which embeds `E`, and
+impl<E: 'static, P: ChannelPlane + 'static> Feed<E, P> {
+    /// A feed over a queue that carries the sum `S`, which embeds `E`, and
     /// the plane `Q`, which embeds `P`.
     ///
     /// A document event of another application is skipped, and so is a
@@ -120,7 +120,7 @@ impl<E: 'static, P: ChannelPlane + 'static> Inbox<E, P> {
     }
 }
 
-impl<E, P: ChannelPlane> Inbox<E, P> {
+impl<E, P: ChannelPlane> Feed<E, P> {
     /// The next event queued for the view, without waiting.
     ///
     /// # Errors

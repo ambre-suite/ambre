@@ -1531,7 +1531,7 @@ pub fn main() {
                 ),
                 ambre_toile::ui::ToileWiring {
                     to_logic: child_to_logic.port(),
-                    from_logic: ambre_bus::Inbox::embedded(child_rx),
+                    from_logic: ambre_bus::Feed::embedded(child_rx),
                     text_input,
                     embedding: ambre_canvas::Embedding::Embedded,
                     perf_pub: ambre_canvas::PerfPublisher::new(),
@@ -1570,7 +1570,7 @@ pub fn main() {
                 ),
                 ambre_trame::ui::TrameWiring {
                     to_logic: child_to_logic.port(),
-                    from_logic: ambre_bus::Inbox::embedded(child_rx),
+                    from_logic: ambre_bus::Feed::embedded(child_rx),
                     text_input,
                     embedding: ambre_canvas::Embedding::Embedded,
                     anchor: ambre_canvas::AnchorPublisher::new(),
@@ -1606,7 +1606,7 @@ pub fn main() {
             if boot_is_murmure {
                 text_input.name_content(ambre_canvas::ContentKind::Conversation);
                 AppView::Murmure(host::MurmureView::new(
-                    Some(ambre_bus::Inbox::embedded(view_rx)),
+                    Some(ambre_bus::Feed::embedded(view_rx)),
                     Some(view_tx_logic.port()),
                     busy_pub.clone(),
                     host::page_reads(
@@ -1623,7 +1623,7 @@ pub fn main() {
                     size,
                     host::ProseWiring {
                         to_logic: view_tx_logic.port(),
-                        from_logic: ambre_bus::Inbox::embedded(view_rx),
+                        from_logic: ambre_bus::Feed::embedded(view_rx),
                         text_input,
                         theme_ctl,
                         figures: prose_figures,
@@ -1638,7 +1638,7 @@ pub fn main() {
                     ambre_core::Size::new(w, h),
                     ambre_toile::ui::ToileWiring {
                         to_logic: view_tx_logic.port(),
-                        from_logic: ambre_bus::Inbox::embedded(view_rx),
+                        from_logic: ambre_bus::Feed::embedded(view_rx),
                         text_input,
                         embedding: ambre_canvas::Embedding::Standalone,
                         perf_pub,
@@ -1654,7 +1654,7 @@ pub fn main() {
                     ambre_core::Size::new(w, h),
                     ambre_trame::ui::TrameWiring {
                         to_logic: view_tx_logic.port(),
-                        from_logic: ambre_bus::Inbox::embedded(view_rx),
+                        from_logic: ambre_bus::Feed::embedded(view_rx),
                         text_input,
                         embedding: ambre_canvas::Embedding::Standalone,
                         anchor: anchor_pub,
