@@ -89,6 +89,10 @@ use wasm_bindgen::prelude::*;
 /// The selection anchor, mirrored from the canvas into the chrome.
 #[cfg(target_arch = "wasm32")]
 mod anchor;
+/// The chrome of each document application, fed from the Logic thread's
+/// events.
+#[cfg(target_arch = "wasm32")]
+mod chrome_mirror;
 #[cfg(target_arch = "wasm32")]
 mod host;
 #[cfg(target_arch = "wasm32")]
@@ -1007,6 +1011,16 @@ pub fn main() {
         switchboard::Page::Document
     });
     let relay_tx = shell_outbox.clone();
+    // The chrome of each document application, fed from each event.
+    let chrome_mirror = chrome_mirror::ChromeMirror {
+        store,
+        toile_store,
+        prose_signals,
+        style_state,
+        toasts,
+        trame_panels: trame_relay,
+        toile_panels: toile_relay,
+    };
     // The Murmure chrome, fed from each event, and its presence refresh.
     let murmure_mirror = murmure_mirror::MurmureMirror::new(murmure_relay, shell_outbox.clone());
     if boot_is_murmure {
@@ -1138,36 +1152,8 @@ pub fn main() {
                 },
                 ev => ev,
             };
-            // Mirror authoritative command-toggle state into the chrome store.
-            // The active app owns the event->toggle mapping; the launcher names
-            // no content event variant.
-            trame_chrome::mirror_event(&store, &ev);
-            // Mirror Toile's Undo/Redo availability into its own command store,
-            // so the menu bar disables the two rows from the Logic thread's
-            // `UndoState` alone (`UNDO-006`).
-            toile_chrome::mirror_event(&toile_store, &ev);
-            // Prose's history availability, into the signals its context
-            // menu reads (`UNDO-006`).
-            prose_signals.mirror_event(&ev);
-            // Mirror the active cell's rich style into the formatting toolbar
-            // (`trame-cell-styles`). A no-op for non-style events.
-            trame_chrome::apply_style_event(&style_state, &ev);
-            // Surface Trame's user-facing notifications (rejections, validation
-            // errors, sheet-lifecycle errors, sort/filter completion) as toasts.
-            // The app owns the event->toast mapping; the launcher names no variant.
-            trame_chrome::notify_event(&toasts, &ev);
-            // Surface Toile's interop outcomes -- the lossy-import report, a
-            // refused file, a finished export -- as toasts (`TOILE-IO-022`). The
-            // app owns the event->toast mapping; the launcher names no variant.
-            toile_chrome::notify_event(&toasts, &ev);
-            // Prose's conversion reports, the same way (`PROSE-IO-053`).
-            ambre_prose::chrome::notify_event(&toasts, &ev);
-            // Murmure's root of a copy not reached, the same way.
-            ambre_murmure::chrome::notify_event(&toasts, &ev);
-            // Each application fills its own panels from its own events
-            // (`ARCH-018`). The launcher names no variant.
-            trame_relay.absorb(&ev);
-            toile_relay.absorb(&ev);
+            // Each application's chrome, then Murmure's, from this event.
+            chrome_mirror.mirror(&ev);
             murmure_mirror.mirror(&ev);
             // The relay decides what a service event calls for, and this
             // closure applies each decision in order.
