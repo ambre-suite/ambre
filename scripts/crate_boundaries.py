@@ -171,6 +171,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -263,6 +264,11 @@ SECRET_KEY = re.compile(rf"\"({SECRET_NAME})\"\s*:|rename\s*=\s*\"({SECRET_NAME}
 # The root manifest, its member list, its lint table, and the two lines that
 # make a member inherit that table.
 WORKSPACE = "Cargo.toml"
+# The resolved graph of the workspace, read for what the SFU links (`CALL-013`).
+LOCKFILE = "Cargo.lock"
+SFU = "ambre-sfu"
+# The C cryptography libraries a Rust crate can link: the SFU takes none of them.
+C_CRYPTO = frozenset({"aws-lc-sys", "aws-lc-fips-sys", "ring", "openssl-sys", "boring-sys"})
 MEMBERS = re.compile(r"^members\s*=\s*\[([^\]]*)\]", re.MULTILINE)
 LINT_TABLE = re.compile(r"^\[workspace\.lints(?:\.\w+)?\]", re.MULTILINE)
 INHERITS_LINTS = re.compile(r"^\[lints\]\s*\n\s*workspace\s*=\s*true\b", re.MULTILINE)
@@ -2258,6 +2264,34 @@ def check_walks(errors: list[str]) -> int:
     return held
 
 
+def check_sfu_crypto(errors: list[str]) -> int:
+    """`CALL-013`: the SFU links no C cryptography library.
+
+    The lockfile holds the graph cargo resolved for the whole workspace, so the
+    walk from the SFU is a superset of what its own build links: a refusal can
+    be stricter than the build, never looser."""
+    path = ROOT / LOCKFILE
+    if not path.exists():
+        errors.append(f"{LOCKFILE}: gone from the tree, so what the SFU links is unread")
+        return 0
+    packages = tomllib.loads(path.read_text()).get("package", [])
+    edges = {pkg["name"]: [dep.split(" ")[0] for dep in pkg.get("dependencies", [])] for pkg in packages}
+    if SFU not in edges:
+        errors.append(f"{LOCKFILE}: no `{SFU}` package, so what the SFU links is unread")
+        return len(packages)
+    seen: set[str] = set()
+    todo = [SFU]
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        todo.extend(edges.get(name, []))
+    for name in sorted(seen & C_CRYPTO):
+        errors.append(f"{LOCKFILE}: `{SFU}` reaches `{name}`, a C cryptography library")
+    return len(packages)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -2310,6 +2344,7 @@ def main() -> int:
     latches = check_failure_latches(errors)
     exits = check_exit_writes(errors)
     walks = check_walks(errors)
+    sfu = check_sfu_crypto(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -2356,7 +2391,8 @@ def main() -> int:
         f"{outboxes} launcher files read for a write past its outbox, "
         f"{latches} launcher files read for a failure that waits on a queue, "
         f"{exits} build and thread files read for a write on the way out, "
-        f"{walks} walks read for a screen module or screen state"
+        f"{walks} walks read for a screen module or screen state, "
+        f"{sfu} locked packages read for a C cryptography library under the SFU"
     )
     for line in errors:
         print(f"  {line}")
@@ -2399,7 +2435,8 @@ def main() -> int:
             "handler returns an outcome and names no queue. The launcher writes "
             "to the Logic thread through its one outbox. A panic and a failed "
             "worker each latch the fatal screen without a queue, and a failing thread "
-            "writes nothing on its way out. A walk reaches no screen state.",
+            "writes nothing on its way out. A walk reaches no screen state. The SFU "
+            "links no C cryptography library.",
             file=sys.stderr,
         )
         return 1

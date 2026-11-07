@@ -108,6 +108,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-logic` | Logic thread entry point: command and event routing, pure Rust |
 | `ambre-sync` | CRDT synchronization layer |
 | `ambre-server` | Blind-relay server (Axum, PostgreSQL, Redis) |
+| `ambre-sfu` | Selective forwarding unit of a call: forwards sealed chunks it cannot open (str0m, RustCrypto) |
 | `ambre-trame` | Spreadsheet application |
 | `ambre-prose` | Word processor application |
 | `ambre-toile` | Whiteboard/presentation application |

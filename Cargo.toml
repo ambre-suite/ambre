@@ -1,5 +1,7 @@
 [workspace]
 resolver = "2"
+# A patched third-party crate, built as a dependency and never linted as ours.
+exclude = ["vendor"]
 members = [
     "crates/ambre-core",
     "crates/ambre-commands",
@@ -19,6 +21,7 @@ members = [
     "crates/ambre-murmure",
     "crates/ambre-app",
     "crates/ambre-server",
+    "crates/ambre-sfu",
     "crates/ambre-belt",
     "crates/ambre-primitives",
 ]
@@ -350,3 +353,10 @@ codegen-units = 1
 inherits = "release"
 opt-level = "z"
 strip = "symbols"
+
+# str0m's RustCrypto backend made its DTLS certificate through rcgen, which
+# links aws-lc-sys, a C library. The vendored copy builds it from RustCrypto
+# alone, so the SFU links no C cryptography (`CALL-013`). Drop it once
+# str0m ships the same change.
+[patch.crates-io]
+str0m-rust-crypto = { path = "vendor/str0m-rust-crypto" }

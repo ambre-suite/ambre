@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: CALL MEDIA
 
 **Type:** Horizontal (framework)
-**Implementation:** design-only
+**Implementation:** partial -- the SFU crate links no C cryptography and completes DTLS; no call exists
 
 > The audio and video of a call, encrypted end to end. The browser captures and encodes, a Rust
 > worker seals each chunk, and a blind selective forwarding unit (SFU) in Rust forwards what it
@@ -36,9 +36,10 @@ this document alone.
 | `CALL-010` | `INV` | The peer connection of a call MUST NOT open a data channel. | this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-011` | `INV` | A client MUST attach the chunk transform to a sender before it attaches a track to it. | this spec section 3; `CALL-001` | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-012` | `INV` | The SFU MUST NOT link the crate that opens a chunk. | this spec section 3; `ZK-004` | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-013` | `INV` | The SFU MUST NOT link a C cryptography library. | README pillar "Rust-first"; this spec section 3 | not built | unbuilt -- lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-013` | `INV` | The SFU MUST NOT link a C cryptography library. | README pillar "Rust-first"; this spec section 3 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a C cryptography library the lockfile reaches from `ambre-sfu` | none | verified |
 | `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3; `CANVAS-001` | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-031` | `INV` | A participant MUST complete the DTLS handshake with the SFU through the RustCrypto backend alone. | this spec section 3; `CALL-013` | `ambre_sfu::tests::a_participant_completes_dtls_with_the_sfu_over_rust_crypto` -- an in-memory link between a browser connection and the SFU reaches the connected state, and a wrong fingerprint fails it | none | verified |
 
 ### 1.2 Join a call
 
@@ -77,7 +78,8 @@ A participant leaves, or the channel removes a member who is in the call.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 30 `unimplemented`: no call code exists.
+* **Verification.** 2 `verified`, 29 `unimplemented`. The SFU crate exists: its link and its DTLS handshake
+  are held (`CALL-013`, `CALL-031`). No call code exists beyond them.
 
 ---
 
@@ -163,8 +165,8 @@ admits under a pseudonymous identifier per call. The SFU mints the TURN credenti
 
 **The SFU.** It forwards packets and never decodes them.
 
-* str0m drives it, with its DTLS on RustCrypto. The SFU makes its certificate at boot, so no C
-  library generates one (`CALL-013`).
+* str0m drives it, with its DTLS on RustCrypto. A patched copy of its RustCrypto backend builds
+  the DTLS certificate from RustCrypto too, so no C library generates one (`CALL-013`).
 * The congestion control, the layer choice and the parser of the dependency descriptor come from
   Signal-Calling-Service, under AGPL-3.0 like Ambre.
 * It sends a phone one video at 720p and eight at 180p, and the few loudest audio tracks.
@@ -179,7 +181,8 @@ assumes them away.
 | the SFU sees when each member speaks, through the packet rate of silence | the codec stops sending in silence, and padding does not hide an absent packet |
 | a member who leaves can open chunks until the switch completes | the switch waits for the delay of the budget row, so that late wraps arrive |
 
-**Code.** not built. `crates/ambre-protocol/src/signaling.rs` carries a shape for a mesh, with
+**Code.** `crates/ambre-sfu/src/lib.rs` holds the connection settings of a participant; nothing
+else is built. `crates/ambre-protocol/src/signaling.rs` carries a shape for a mesh, with
 plaintext session descriptions sent to a named user: it is replaced, not extended.
 
 ---
@@ -227,8 +230,8 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
   software VP8 decoder of an iPhone, are untested. H.264 for every sender is the fallback.
 * **iOS audio may crackle with the echo canceller on.** WebKit bug 326286 reports it on iOS 26.2 to
   27, and Ambre has no fix of its own.
-* **The SFU still links a C library.** str0m generates its certificate through rcgen, which pulls
-  aws-lc-sys (`CALL-013`).
+* **The SFU builds on a patched str0m backend.** The upstream backend builds its certificate
+  through rcgen, which links aws-lc-sys. The workspace patches it until str0m ships the change.
 * **No rule caps the calls of one channel.** Whether a channel holds one live call or several is
   not ruled.
 * **A network that allows only TCP on port 443** reaches the SFU through TURN alone. No rule bounds
