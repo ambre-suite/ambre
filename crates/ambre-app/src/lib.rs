@@ -308,7 +308,7 @@ struct Wiring {
     /// cell. Set by the switchboard on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
-    /// The workbook's locale and the reader's half, set by the per-frame relay
+    /// The workbook's locale and the reader's half, set by the switchboard
     /// on `TrameEvent::LocaleState` (`LOCALE-021`, `LOCALE-022`).
     trame_locale: RwSignal<Option<ambre_trame::ui::locale::LocaleView>>,
     /// Toile status-bar selection aggregates (toile-status-bar): element count +
