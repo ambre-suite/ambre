@@ -41,4 +41,4 @@
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 526 contract rows, 0 loose.**
+**25 features: 12 implemented, 13 partial, 0 design-only. 527 contract rows, 0 loose.**
