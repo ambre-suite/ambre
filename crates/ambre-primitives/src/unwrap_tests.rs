@@ -1116,8 +1116,58 @@ fn a_workspace_glob_places_a_name_only_when_one_crate_answers() {
         ("units", "", units),
     ]);
     assert_eq!(refusals(&report), ["one | src/lib.rs:3 | Px::get -> keep"]);
-    // A name the report cannot place reads as foreign, so `two` holds
-    // no site at all.
-    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
-    assert_eq!(report.sites, SiteCount::new(1));
+    // `two` types no receiver, so its site is ambiguous, never refused.
+    assert_eq!(ambiguous(&report), ["two | src/lib.rs:4 | Px::get -> keep"]);
+}
+
+#[test]
+fn a_name_two_workspace_globs_answer_is_ambiguous() {
+    // `Px` is a newtype in `units` and a plain struct in `shapes`. Through
+    // both globs, a parameter, a field and a return it types are untyped.
+    let units = "pub struct Px(u32);
+\
+        impl Px { pub fn get(self) -> u32 { self.0 } }
+";
+    let shapes = "pub struct Px;
+\
+        impl Px { pub fn get(self) -> u32 { 0 } }
+";
+    let draw = "use shapes::*;
+\
+        use units::*;
+\
+        pub struct Size { width: Px }
+\
+        pub fn keep(n: u32) {}
+\
+        pub fn origin() -> Px { todo!() }
+\
+        pub fn param(width: Px) { keep(width.get()); }
+\
+        pub fn field(size: Size) { keep(size.width.get()); }
+\
+        pub fn ret() { keep(origin().get()); }
+\
+        pub fn hinted() { let width: Px = origin(); keep(width.get()); }
+";
+    let report = run_crates(&[
+        (
+            "draw",
+            "[dependencies]\nshapes = \"1\"\nunits = \"1\"\n",
+            draw,
+        ),
+        ("shapes", "", shapes),
+        ("units", "", units),
+    ]);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(
+        ambiguous(&report),
+        [
+            "draw | src/lib.rs:6 | Px::get -> keep",
+            "draw | src/lib.rs:7 | Px::get -> keep",
+            "draw | src/lib.rs:8 | Px::get -> keep",
+            "draw | src/lib.rs:9 | Px::get -> keep",
+        ]
+    );
+    assert_eq!(report.ambiguous_receivers(), SiteCount::new(4));
 }

@@ -12,10 +12,11 @@
 //!
 //!   * a type is one name of one crate. A `use` of the file, the crate a
 //!     path starts at, or a declaration of the current crate places a
-//!     name. A glob of the workspace places it when one crate answers. A
-//!     re-export follows the `pub use` items of its crate, or else any
-//!     `use` of it. A type a signature names and nothing places is
+//!     name. A re-export follows the `pub use` items of its crate, or else
+//!     any `use` of it. A type a signature names and nothing places is
 //!     foreign. The owner of a call that nothing places goes by its name;
+//!   * a glob of the workspace places a name last, when one crate answers.
+//!     A name two such globs answer leaves its value untyped, never foreign;
 //!   * a newtype is a struct with one field over a primitive, a byte
 //!     vector, a byte slice or a byte array. `PhantomData` is no field;
 //!   * a generic struct is a newtype too when its one field is an
@@ -570,21 +571,31 @@ impl Catalog {
     }
 
     /// The type a path names in `scope`, `None` when the report cannot
-    /// place it. A path that starts at a crate, or a name a `use` brings
-    /// in, takes that crate. A name the current crate declares is its own.
-    /// A glob of the workspace comes last: two crates through two globs
-    /// leave the name unplaced.
+    /// place it.
     fn resolve(&self, scope: &Scope, segments: &[String], space: &Defs) -> Option<Ty> {
-        let (first, name) = (segments.first()?, segments.last()?);
+        match self.placing(scope, segments, space) {
+            Placing::One(ty) => Some(ty),
+            Placing::Split | Placing::Unplaced => None,
+        }
+    }
+
+    /// How a path names a type in `scope`. A path that starts at a crate,
+    /// or a name a `use` brings in, takes that crate. A name the current
+    /// crate declares is its own. A glob of the workspace comes last: two
+    /// crates through two globs split the name.
+    fn placing(&self, scope: &Scope, segments: &[String], space: &Defs) -> Placing {
+        let (Some(first), Some(name)) = (segments.first(), segments.last()) else {
+            return Placing::Unplaced;
+        };
         if let [_, .., _] = segments {
             let root = scope.uses.names.get(first).unwrap_or(first);
-            return self.rooted(&scope.krate, root, name, space, 0);
+            return self.rooted(&scope.krate, root, name, space, 0).into();
         }
         if let Some(root) = scope.uses.names.get(name) {
-            return self.rooted(&scope.krate, root, name, space, 0);
+            return self.rooted(&scope.krate, root, name, space, 0).into();
         }
         if space.declares(name, &scope.krate) {
-            return Some(Ty::of(&scope.krate, name));
+            return Placing::One(Ty::of(&scope.krate, name));
         }
         let found: BTreeSet<Ty> = scope
             .uses
@@ -595,8 +606,9 @@ impl Catalog {
             .collect();
         let mut found = found.into_iter();
         match (found.next(), found.next()) {
-            (Some(one), None) => Some(one),
-            _ => None,
+            (Some(one), None) => Placing::One(one),
+            (Some(_), Some(_)) => Placing::Split,
+            (None, _) => Placing::Unplaced,
         }
     }
 
@@ -661,6 +673,24 @@ impl Catalog {
 
 /// The longest chain of re-exports the report follows.
 const REEXPORTS: usize = 4;
+
+/// How a path names a type.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Placing {
+    /// One type answers the path.
+    One(Ty),
+    /// Two workspace globs answer the name with two types. A value it
+    /// types is one of them, so the report cannot type it.
+    Split,
+    /// Nothing places the path: no workspace type answers it.
+    Unplaced,
+}
+
+impl From<Option<Ty>> for Placing {
+    fn from(ty: Option<Ty>) -> Self {
+        ty.map_or(Self::Unplaced, Self::One)
+    }
+}
 
 /// One type of one crate. A `const` goes by its crate and name the same
 /// way.
@@ -747,8 +777,9 @@ impl Defs {
 /// The return type of a `fn`, as the catalog reads it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Ret {
-    /// The type, `Self` read as the owner.
-    ty: Ty,
+    /// The type, `Self` read as the owner. `None` when two workspace globs
+    /// split the name: the call is then untyped.
+    ty: Option<Ty>,
     /// The type `?` yields, for a `Result` or an `Option`.
     tried: Option<Ty>,
 }
@@ -758,13 +789,13 @@ impl Ret {
     fn of(
         output: &syn::ReturnType,
         owner: Option<&Ty>,
-        place: impl Fn(&[String]) -> Ty,
+        place: impl Fn(&[String]) -> Option<Ty>,
     ) -> Option<Self> {
         let syn::ReturnType::Type(_, ty) = output else {
             return None;
         };
         let own = |segments: Vec<String>| match owner {
-            Some(owner) if segments == ["Self"] => owner.clone(),
+            Some(owner) if segments == ["Self"] => Some(owner.clone()),
             _ => place(&segments),
         };
         let shape = shape_path(ty)?;
@@ -775,7 +806,7 @@ impl Ret {
                 .last()
                 .and_then(first_argument)
                 .and_then(shape_path)
-                .map(own),
+                .and_then(own),
             _ => None,
         };
         Some(Self {
@@ -1284,6 +1315,12 @@ impl CatalogVisit<'_> {
     fn place(&self, segments: &[String]) -> Ty {
         place(&self.raw.catalog, &self.scope, segments)
     }
+
+    /// The type a path gives a value in this file, `None` when two
+    /// workspace globs split the name.
+    fn typed(&self, segments: &[String]) -> Option<Ty> {
+        typed(&self.raw.catalog, &self.scope, segments)
+    }
 }
 
 /// The type a path names in `scope`, foreign when the catalog cannot place
@@ -1292,6 +1329,15 @@ fn place(catalog: &Catalog, scope: &Scope, segments: &[String]) -> Ty {
     catalog
         .resolve(scope, segments, &catalog.declared)
         .unwrap_or_else(|| Ty::foreign(segments.last().map_or("", String::as_str)))
+}
+
+/// The type a path gives a value in `scope`, `None` when two workspace
+/// globs split the name: the value is then untyped, never foreign.
+fn typed(catalog: &Catalog, scope: &Scope, segments: &[String]) -> Option<Ty> {
+    match catalog.placing(scope, segments, &catalog.declared) {
+        Placing::Split => None,
+        _ => Some(place(catalog, scope, segments)),
+    }
 }
 
 impl<'ast> Visit<'ast> for CatalogVisit<'_> {
@@ -1348,7 +1394,13 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                             generic.insert(name);
                             return None;
                         }
-                        Some((name, self.place(&path)))
+                        // A type two workspace globs split holds either
+                        // type, as a type parameter does.
+                        let Some(ty) = self.typed(&path) else {
+                            generic.insert(name);
+                            return None;
+                        };
+                        Some((name, ty))
                     })
                     .collect();
                 let catalog = &mut self.raw.catalog;
@@ -1433,7 +1485,7 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 }
             }
             syn::Item::Fn(f) if !declare => {
-                let ret = Ret::of(&f.sig.output, None, |path| self.place(path));
+                let ret = Ret::of(&f.sig.output, None, |path| self.typed(path));
                 let catalog = &mut self.raw.catalog;
                 catalog.fns.add(f.sig.ident.to_string(), &krate);
                 if let Some(ret) = ret {
@@ -1444,8 +1496,9 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
             | syn::Item::Static(syn::ItemStatic { ident, ty, .. }) => {
                 if declare {
                     self.raw.catalog.values.add(ident.to_string(), &krate);
-                } else if let Some(path) = shape_path(ty) {
-                    let ty = self.place(&path);
+                } else if let Some(path) = shape_path(ty)
+                    && let Some(ty) = self.typed(&path)
+                {
                     self.raw
                         .catalog
                         .consts
@@ -1543,7 +1596,7 @@ impl CatalogVisit<'_> {
                 && !test_only(&f.attrs)
             {
                 let key = (owner.clone(), f.sig.ident.to_string());
-                let ret = Ret::of(&f.sig.output, Some(&owner), |path| self.place(path));
+                let ret = Ret::of(&f.sig.output, Some(&owner), |path| self.typed(path));
                 let into = into_params(&f.sig, &self.scope.uses.names);
                 let catalog = &mut self.raw.catalog;
                 if i.trait_.is_none() && !into.is_empty() {
@@ -1835,7 +1888,8 @@ impl BodyVisit<'_, '_> {
         let path = type_path(ty)?;
         match path.as_slice() {
             [only] if self.generics.iter().any(|params| params.contains(only)) => None,
-            _ => Some(self.place(&path)),
+            [only] if only == "Self" => self.owners.last().cloned(),
+            _ => typed(self.catalog, &self.scope_of, &path),
         }
     }
 
@@ -1898,7 +1952,7 @@ impl BodyVisit<'_, '_> {
                     _ => {}
                 }
                 if let Some(ret) = self.ret_of(expr) {
-                    return Some(ret.ty.clone());
+                    return ret.ty.clone();
                 }
                 let fixed = STD_RETURNS.contains(&method.as_str())
                     || !self.catalog.methods.within(&method, self.reach());
@@ -1916,14 +1970,17 @@ impl BodyVisit<'_, '_> {
                 Some(ret) => ret.tried.clone(),
                 None => self.infer(&t.expr),
             },
-            syn::Expr::Struct(s) => Some(self.place(&segments_of(&s.path))),
+            syn::Expr::Struct(s) => match segments_of(&s.path).as_slice() {
+                [only] if only == "Self" => self.owners.last().cloned(),
+                path => typed(self.catalog, &self.scope_of, path),
+            },
             syn::Expr::Call(c) => {
                 let syn::Expr::Path(p) = &*c.func else {
                     return None;
                 };
                 let segments = segments_of(&p.path);
                 if let Some(ret) = self.ret_of(expr) {
-                    return Some(ret.ty.clone());
+                    return ret.ty.clone();
                 }
                 let [path @ .., owner, ctor] = segments.as_slice() else {
                     return None;
