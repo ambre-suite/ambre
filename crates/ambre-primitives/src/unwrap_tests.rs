@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use syn::visit::Visit;
 
 use super::{
-    CatalogVisit, Finding, HEADER, Outcome, Raw, Report, Row, SiteCount, Strictness, judge,
-    parse_allowlist, report,
+    CatalogVisit, Finding, HEADER, Outcome, Phase, Raw, Report, Row, Scope, SiteCount, Strictness,
+    Uses, judge, parse_allowlist, report,
 };
 use crate::allowlist::LineNo;
 use crate::scan::{META, Tree, lexical, scan};
@@ -964,16 +964,91 @@ fn a_macro_body_catalogues_no_item_a_metavariable_names() {
     }\n";
     let file = syn::parse_file(lib).unwrap();
     let mut raw = Raw::default();
-    let mut visit = CatalogVisit {
-        krate: "demo".to_owned(),
-        module: vec!["crate".to_owned()],
-        imports: BTreeMap::new(),
-        raw: &mut raw,
-    };
-    for item in &file.items {
-        visit.visit_item(item);
+    for phase in [Phase::Declare, Phase::Catalog] {
+        let mut visit = CatalogVisit {
+            phase,
+            module: vec!["crate".to_owned()],
+            scope: Scope {
+                krate: "demo".to_owned(),
+                uses: Uses::default(),
+            },
+            raw: &mut raw,
+        };
+        for item in &file.items {
+            visit.visit_item(item);
+        }
     }
     let types: Vec<&String> = raw.catalog.types.iter().collect();
     assert_eq!(types, ["Written"]);
     assert!(raw.catalog.fns.0.keys().all(|name| !name.starts_with(META)));
+}
+
+#[test]
+fn a_type_name_two_crates_and_a_foreign_import_share_is_judged_by_each_type() {
+    let units = "pub mod px {\n\
+            pub struct Px(u32);\n\
+            impl Px { pub fn get(self) -> u32 { self.0 } }\n\
+            pub struct Pos(usize);\n\
+            impl Pos { pub fn to_usize(self) -> usize { self.0 } }\n\
+        }\n\
+        pub use px::{Pos, Px};\n";
+    // `grid` holds a `Px` in `Layout::width`, so its `get` is an unwrap.
+    let grid = "use units::Px;\n\
+        pub struct Layout { pub width: Px }\n\
+        pub fn keep(n: u32) {}\n\
+        pub fn draw(layout: &Layout) { keep(layout.width.get()); }\n";
+    // `sheet` holds no newtype in its own `Layout::width`.
+    let sheet = "pub struct Wide;\n\
+        impl Wide { pub fn get(self) -> u32 { 0 } }\n\
+        pub struct Layout { pub width: Wide }\n\
+        pub fn keep(n: u32) {}\n\
+        pub fn draw(layout: &Layout) { keep(layout.width.get()); }\n";
+    // `prose` names the `Layout` of a dependency: its `get` is foreign.
+    let prose = "use parley::Layout;\n\
+        use units::Pos;\n\
+        pub struct Run { layout: Layout }\n\
+        impl Run { pub fn line(&self, at: Pos) { self.layout.get(at.to_usize()); } }\n";
+    let deps = "[dependencies]\nunits = \"1\"\n";
+    let report = run_crates(&[
+        ("grid", deps, grid),
+        (
+            "prose",
+            "[dependencies]\nparley = \"1\"\nunits = \"1\"\n",
+            prose,
+        ),
+        ("sheet", deps, sheet),
+        ("units", "", units),
+    ]);
+    assert_eq!(refusals(&report), ["grid | src/lib.rs:4 | Px::get -> keep"]);
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.foreign, SiteCount::new(1));
+}
+
+#[test]
+fn a_re_export_resolves_through_the_pub_use_of_its_crate() {
+    // `draw` re-exports the kurbo `Point`, and one of its files imports
+    // the `Point` of `units` for its own use.
+    let units = "pub struct Point(u32);\n\
+        impl Point { pub fn new(text: &str) -> Self { Self(0) } }\n";
+    let draw = "pub use kurbo::Point;\n\
+        mod kinetic { use units::Point; }\n";
+    let lib = format!(
+        "{NAME}use draw::Point;\n\
+         pub fn save(name: &Name) {{ Point::new(name.as_str()); units::Point::new(name.as_str()); }}\n"
+    );
+    let report = run_crates(&[
+        (
+            "demo",
+            "[dependencies]\ndraw = \"1\"\nunits = \"1\"\n",
+            &lib,
+        ),
+        ("draw", "[dependencies]\nunits = \"1\"\n", draw),
+        ("units", "", units),
+    ]);
+    assert_eq!(
+        shapes(&report.refusals),
+        ["Name::as_str -> units::Point::new"]
+    );
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.foreign, SiteCount::new(1));
 }
