@@ -46,8 +46,10 @@
 //!   * so do a method whose return std or a dependency fixes, as
 //!     `to_token_stream` does, and a variant of a foreign `enum` in a pattern;
 //!   * a field of an untyped base holds a newtype only when a workspace
-//!     struct holds one under that field name. A generic field escapes this
-//!     rule;
+//!     struct holds one under that field name;
+//!   * a field its struct's type parameter types, as `width` of `Size<P>`,
+//!     is untyped, and holds any newtype. So is a value that a type
+//!     parameter of the enclosing impl, trait or `fn` types;
 //!   * the return type of a workspace `fn` types its call, and `?` reads
 //!     the `Ok` or `Some` type. An `Err(e)` pattern and the closure of
 //!     `map_err` bind an error;
@@ -502,6 +504,10 @@ struct Catalog {
     fields: BTreeMap<Ty, BTreeMap<String, Ty>>,
     /// Every type a field of each name holds, in any struct.
     field_types: BTreeMap<String, BTreeSet<Ty>>,
+    /// The fields of each struct that its own type parameter types, as
+    /// `width` of `Size<P>`. Such a field holds any type, so it types no
+    /// receiver.
+    generic_fields: BTreeMap<Ty, BTreeSet<String>>,
     /// The type of each `const` and `static`, keyed by its crate and name.
     consts: BTreeMap<Ty, Ty>,
     /// Every struct, enum, union, trait and alias, by name.
@@ -1319,6 +1325,8 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                     return;
                 }
                 let ty = Ty::of(&krate, &name);
+                let params = type_params(&s.generics);
+                let mut generic = BTreeSet::new();
                 let fields: Vec<&syn::Field> = s
                     .fields
                     .iter()
@@ -1333,10 +1341,24 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                             .ident
                             .as_ref()
                             .map_or_else(|| index.to_string(), ToString::to_string);
-                        Some((name, self.place(&shape_path(&field.ty)?)))
+                        let path = shape_path(&field.ty)?;
+                        if let [only] = path.as_slice()
+                            && params.contains(only)
+                        {
+                            generic.insert(name);
+                            return None;
+                        }
+                        Some((name, self.place(&path)))
                     })
                     .collect();
                 let catalog = &mut self.raw.catalog;
+                if !generic.is_empty() {
+                    catalog
+                        .generic_fields
+                        .entry(ty.clone())
+                        .or_default()
+                        .extend(generic);
+                }
                 for (field, ty) in &named {
                     catalog
                         .field_types
@@ -1706,6 +1728,9 @@ struct BodyVisit<'c, 'r> {
     scope: Vec<String>,
     /// The owner of each enclosing impl, the innermost last.
     owners: Vec<Ty>,
+    /// The type parameters of each enclosing impl, trait and `fn`: a value
+    /// such a parameter types holds any type, so it stays untyped.
+    generics: Vec<BTreeSet<String>>,
     /// For each enclosing impl, the newtypes it may unwrap: its owner and
     /// the type a conversion trait names.
     exempt: Vec<BTreeSet<Ty>>,
@@ -1804,9 +1829,25 @@ impl BodyVisit<'_, '_> {
         }
     }
 
-    /// The name of a written type, `Self` read as the impl owner.
+    /// The name of a written type, `Self` read as the impl owner. A type
+    /// parameter in scope names no type.
     fn hint(&self, ty: &syn::Type) -> Option<Ty> {
-        type_path(ty).map(|path| self.place(&path))
+        let path = type_path(ty)?;
+        match path.as_slice() {
+            [only] if self.generics.iter().any(|params| params.contains(only)) => None,
+            _ => Some(self.place(&path)),
+        }
+    }
+
+    /// Whether the field `member` of `base` is typed by a type parameter of
+    /// its struct, so that it may hold any newtype.
+    fn generic_field(&self, base: &syn::Expr, member: &syn::Member) -> bool {
+        self.infer(base).is_some_and(|owner| {
+            self.catalog
+                .generic_fields
+                .get(&owner)
+                .is_some_and(|fields| fields.contains(&member_name(member)))
+        })
     }
 
     /// The type name of an expression, where the syntax states it.
@@ -2026,6 +2067,8 @@ impl BodyVisit<'_, '_> {
         // only when a workspace struct has a field of that name and type. A
         // field of a syn or proc-macro2 value holds none.
         let candidates: Vec<&Ty> = match peel(receiver) {
+            // A field its struct's type parameter types holds any of them.
+            syn::Expr::Field(f) if self.generic_field(&f.base, &f.member) => candidates,
             syn::Expr::Field(f) => {
                 let held = self.catalog.field_types.get(&member_name(&f.member));
                 candidates
@@ -2266,6 +2309,19 @@ impl BodyVisit<'_, '_> {
 
     /// Files the verdict on one handed unwrap.
     fn record(&mut self, unwrap: Unwrap, callee: Callee, shown: String, line: LineNo) {
+        if std::env::var_os("UNWRAP_DEBUG").is_some() {
+            eprintln!(
+                "SITE {:?} {} | {}:{} | {}::{} -> {} [{}]",
+                callee,
+                self.krate(),
+                self.file,
+                line,
+                unwrap.newtype,
+                unwrap.accessor,
+                shown,
+                self.scope.join("::")
+            );
+        }
         let why = match (callee, unwrap.receiver) {
             (Callee::Foreign, _) => {
                 self.report.foreign = self.report.foreign.incremented();
@@ -2300,6 +2356,7 @@ impl BodyVisit<'_, '_> {
     fn visit_fn(&mut self, name: &syn::Ident, sig: &syn::Signature, block: &syn::Block) {
         let outer = std::mem::replace(&mut self.env, vec![BTreeMap::new()]);
         self.scope.push(name.to_string());
+        self.generics.push(type_params(&sig.generics));
         for input in &sig.inputs {
             let syn::FnArg::Typed(t) = input else {
                 continue;
@@ -2312,6 +2369,7 @@ impl BodyVisit<'_, '_> {
             }
         }
         self.visit_block(block);
+        self.generics.pop();
         self.scope.pop();
         self.env = outer;
     }
@@ -2474,6 +2532,7 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
         self.exempt.push(exempt);
         self.scope.push(owner.name.clone());
         self.owners.push(owner);
+        self.generics.push(type_params(&i.generics));
         for item in &i.items {
             // A named conversion, `fn of_row(delta: RowDelta) -> Self`,
             // unwraps its one newtype freely, as `From<RowDelta>` does.
@@ -2485,9 +2544,16 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
             self.visit_impl_item(item);
             self.exempt.pop();
         }
+        self.generics.pop();
         self.scope.pop();
         self.owners.pop();
         self.exempt.pop();
+    }
+
+    fn visit_item_trait(&mut self, t: &'ast syn::ItemTrait) {
+        self.generics.push(type_params(&t.generics));
+        syn::visit::visit_item_trait(self, t);
+        self.generics.pop();
     }
 
     fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
@@ -2778,6 +2844,7 @@ pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
             module: source.module.split("::").map(str::to_owned).collect(),
             scope: Vec::new(),
             owners: Vec::new(),
+            generics: Vec::new(),
             exempt: Vec::new(),
             closure_hint: None,
             env: vec![BTreeMap::new()],
