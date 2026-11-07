@@ -1413,7 +1413,7 @@ fn a_match_opens_its_message_in_its_channel_and_closes_the_search() {
         }
     );
     assert_eq!(relay.search.get_untracked(), SearchBox::default());
-    relay.absorb(&found("", budget, zeta));
+    relay.absorb(&found("bud", budget, zeta));
     relay.absorb(&found("budget", budget, zeta));
     assert!(relay.search_groups().get_untracked().is_empty());
 }
