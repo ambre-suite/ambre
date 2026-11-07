@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3971 rows: 3408 shipped, of which 11 loose. 563 unbuilt.**
+**3972 rows: 3409 shipped, of which 11 loose. 563 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1000 | 484 | 873 | 618 | 422 | 3397 |
+| `verified` | 1000 | 485 | 873 | 618 | 422 | 3398 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 9 |  |  |  |  | 9 |
@@ -94,7 +94,7 @@
 | `ambre-spec-trame-function-library.md` | 37 | 30 | 30 |  | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-trame-headers.md` | 9 | 9 | 9 |  |  |
-| `ambre-spec-trame-import-export.md` | 42 | 29 | 29 |  | 13 |
+| `ambre-spec-trame-import-export.md` | 43 | 30 | 30 |  | 13 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-number-formats.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  | 3 |
@@ -333,7 +333,7 @@
 | `ambre-spec-trame-function-library.md` | TRAME-014,049..061,194..207,244,246..247,249..251,253..254,258 |
 | `ambre-spec-trame-grid-viewport.md` | TRAME-UI-004..005,007,012..013,024..029,049,143..149,175 |
 | `ambre-spec-trame-headers.md` | TRAME-UI-043..048,121..123 |
-| `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..050 |
+| `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..051 |
 | `ambre-spec-trame-named-ranges.md` | TRAME-062..069,155..156 |
 | `ambre-spec-trame-number-formats.md` | TRAME-102..110,157..158,223,237..238 |
 | `ambre-spec-trame-pdf-export.md` | TRAME-IO-021..023,031 |

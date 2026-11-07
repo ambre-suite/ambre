@@ -468,6 +468,10 @@ mod tests {
         not(feature = "browser"),
         ignore = "needs a build, chromedriver and the services; run just test-browser"
     )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "pauses a worker through the DevTools Protocol, which Firefox does not speak"
+    )]
     async fn two_peers_typing_in_two_paragraphs_converge() {
         let alice = Page::new_document("prose").await;
         write(&alice, "Alpha").await;
