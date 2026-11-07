@@ -189,10 +189,12 @@ test-db:
 # browser tier: the Trunk build of the whole application, served in front of a
 # relay and driven through WebDriver (`crates/ambre-belt`). It needs the db-tier
 # services, a Chrome and its chromedriver (`CHROMEDRIVER`, `BELT_CHROME`). One
-# test at a time: each starts a relay and a browser of its own.
+# test at a time: each starts a relay and a browser of its own. The call test
+# starts the SFU binary instead, and two browsers on fake capture devices.
 test-browser:
     trunk build
     cargo build -p ambre-server
+    cargo build -p ambre-sfu
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt --features browser -- --test-threads=1
 
 # The browser tier on Firefox: the same belt, driven by headless Firefox
@@ -203,6 +205,7 @@ test-browser:
 test-browser-firefox:
     trunk build
     cargo build -p ambre-server
+    cargo build -p ambre-sfu
     if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1
 
 # `cargo test` runs each wasm test module through `wasm-bindgen-test-runner`,

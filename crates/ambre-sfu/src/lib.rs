@@ -7,6 +7,9 @@ use std::sync::Arc;
 
 use str0m::RtcConfig;
 
+pub mod forward;
+pub mod serve;
+
 #[cfg(test)]
 mod tests;
 

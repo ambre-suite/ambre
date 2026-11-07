@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: CALL MEDIA
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the SFU crate links no C cryptography and completes DTLS; no call exists
+**Implementation:** partial -- the SFU forwards RTP between the participants of a room; no call exists
 
 > The audio and video of a call, encrypted end to end. The browser captures and encodes, a Rust
 > worker seals each chunk, and a blind selective forwarding unit (SFU) in Rust forwards what it
@@ -40,6 +40,9 @@ this document alone.
 | `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3; `CANVAS-001` | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-031` | `INV` | A participant MUST complete the DTLS handshake with the SFU through the RustCrypto backend alone. | this spec section 3; `CALL-013` | `ambre_sfu::tests::a_participant_completes_dtls_with_the_sfu_over_rust_crypto` -- an in-memory link between a browser connection and the SFU reaches the connected state, and a wrong fingerprint fails it | none | verified |
+| `CALL-032` | `INV` | The SFU MUST forward each RTP packet of a participant to every other participant of its room, its payload unchanged. | this spec section 3, the SFU | `ambre_sfu::forward::tests::each_packet_reaches_every_other_participant_of_the_room_unchanged` | none | verified |
+| `CALL-036` | `INV` | The SFU MUST serve its signalling on a port of its own, apart from the relay. | `ambre-spec-broadcast.md`, `SRV-049`; this spec section 3, signalling | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier | none | verified |
+| `CALL-037` | `OBS` | Two browsers in one room MUST each decode the audio and the video of the other through the SFU. | this spec section 3, the stack | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier, under Chrome and under Firefox | none | verified |
 
 ### 1.2 Join a call
 
@@ -73,13 +76,23 @@ A participant leaves, or the channel removes a member who is in the call.
 | `CALL-029` | `POST` | Leaving a call MUST erase every sender key of that call from the call worker. | this spec section 3, the leave steps | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.5 Forward a packet
+
+A participant sends a packet to the SFU, and the SFU forwards it within the room.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CALL-033` | `FRAME` | The SFU MUST NOT send a packet to its own sender, or to a participant of another room. | this spec section 3, the SFU; `CALL-009` | `ambre_sfu::forward::tests::no_packet_goes_back_to_its_sender_or_into_another_room` | none | verified |
+| `CALL-034` | `POST` | A participant who joins a room MUST receive each track the room already carries. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_late_joiner_receives_the_tracks_already_in_the_room` | none | verified |
+| `CALL-035` | `POST` | A keyframe request from a receiver MUST reach the sender of its track. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_keyframe_request_reaches_the_sender_of_the_track` | none | verified |
+
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 2 `verified`, 29 `unimplemented`. The SFU crate exists: its link and its DTLS handshake
-  are held (`CALL-013`, `CALL-031`). No call code exists beyond them.
+* **Verification.** 8 `verified`, 29 `unimplemented`. The SFU links no C cryptography, completes DTLS,
+  and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-037`). No call code exists beyond it.
 
 ---
 
@@ -170,6 +183,10 @@ admits under a pseudonymous identifier per call. The SFU mints the TURN credenti
 * The congestion control, the layer choice and the parser of the dependency descriptor come from
   Signal-Calling-Service, under AGPL-3.0 like Ambre.
 * It sends a phone one video at 720p and eight at 180p, and the few loudest audio tracks.
+* Its signalling is a WebSocket on a port of its own (`CALL-036`). axum and tokio serve it, the
+  stack of the relay, so the SFU adds no crate to the workspace.
+* It forwards in RTP mode: it copies the payload and the header fields of each packet
+  (`CALL-032`). The sequence numbers of each receiver start at a rollover count of zero.
 
 **What the design does not protect.** These limits are accepted, and stated here so that no reader
 assumes them away.
@@ -181,9 +198,11 @@ assumes them away.
 | the SFU sees when each member speaks, through the packet rate of silence | the codec stops sending in silence, and padding does not hide an absent packet |
 | a member who leaves can open chunks until the switch completes | the switch waits for the delay of the budget row, so that late wraps arrive |
 
-**Code.** `crates/ambre-sfu/src/lib.rs` holds the connection settings of a participant; nothing
-else is built. `crates/ambre-protocol/src/signaling.rs` carries a shape for a mesh, with
-plaintext session descriptions sent to a named user: it is replaced, not extended.
+**Code.** `crates/ambre-sfu/src/lib.rs` holds the connection settings of a participant,
+`forward.rs` the forwarding core without I/O, and `serve.rs` the UDP socket and the signalling
+WebSocket. Nothing seals a chunk yet. `crates/ambre-protocol/src/signaling.rs` carries a shape
+for a mesh, with plaintext session descriptions sent to a named user: it is replaced, not
+extended.
 
 ---
 
@@ -225,7 +244,8 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No call worker, no SFU and no route exist.
+* **Nothing seals a chunk.** No call worker and no relay route exist. The SFU forwards, with no
+  admission token, no layer choice and no congestion control.
 * **The receive sizes rest on no measurement.** One 720p and eight 180p videos on a phone, and the
   software VP8 decoder of an iPhone, are untested. H.264 for every sender is the fallback.
 * **iOS audio may crackle with the echo canceller on.** WebKit bug 326286 reports it on iOS 26.2 to

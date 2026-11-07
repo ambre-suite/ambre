@@ -16,6 +16,8 @@
 #[cfg(test)]
 mod busy;
 #[cfg(test)]
+mod call;
+#[cfg(test)]
 mod driver;
 #[cfg(test)]
 mod frame;

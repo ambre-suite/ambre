@@ -4165,3 +4165,10 @@ ambre-trame | src/logic/remote.rs | crate::logic::remote | TrameState::carries()
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::engine_holds_a_skip() | ret | bool	generic	predicate: whether the engine holds what no dependency names
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::parse(name) | param | &str	foreign-api	a root container name as Loro reports it
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | is_formula() | ret | bool	generic	predicate: whether a stored cell value is a formula
+ambre-sfu | src/forward.rs | crate::forward | <Participant as SeqKind>::NAME | const | &'static str	free-text	the family name a participant number prints through Debug, for a log line
+ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/main.rs | crate | Setting::read() | ret | Result<SocketAddr,String>	free-text	the words of the error the binary prints when a variable holds no socket address
+ambre-sfu | src/main.rs | crate | Setting::variable() | ret | &'static str	newtype-inner	the fieldless enum's own spelling, the name of the environment variable std::env::var takes

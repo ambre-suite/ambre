@@ -74,6 +74,9 @@ fn chrome_capabilities(downloads: &Path) -> Value {
             "--enable-unsafe-swiftshader",
             "--use-angle=swiftshader",
             "--disable-features=BackForwardCache",
+            // A call test captures the fake camera and microphone, with no prompt.
+            "--use-fake-device-for-media-stream",
+            "--use-fake-ui-for-media-stream",
         ],
         "prefs": {
             "download.default_directory": downloads.display().to_string(),
@@ -119,6 +122,11 @@ fn firefox_capabilities(downloads: &Path) -> Value {
             // page under test.
             "browser.startup.homepage_override.mstone": "ignore",
             "datareporting.policy.dataSubmissionEnabled": false,
+            // A call test captures the fake camera and microphone, with no prompt. It reaches
+            // the SFU on the loopback, which Firefox refuses as a candidate by default.
+            "media.navigator.streams.fake": true,
+            "media.navigator.permission.disabled": true,
+            "media.peerconnection.ice.loopback": true,
         },
     });
     if let Ok(binary) = std::env::var("BELT_FIREFOX") {

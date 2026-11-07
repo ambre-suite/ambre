@@ -406,7 +406,12 @@ dependencies = [
 name = "ambre-sfu"
 version = "0.1.0"
 dependencies = [
+ "ambre-core",
+ "axum",
+ "serde",
+ "serde_json",
  "str0m",
+ "tokio",
 ]
 
 [[package]]
