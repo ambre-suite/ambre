@@ -213,11 +213,25 @@
 * **Cached for good after the first visit.** Every built file is named by a hash of its content
   (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
   again, and a release downloads only the instance it changed.
-* **The first download breaks the budget today.** A release build weighs 3.07 MB brotli for Main
-  and 0.34 MB for Sync. The `wasm-release` profile builds every crate for size and strips the name
+* **The first download breaks the budget today.** On 2026-10-20 a release build weighed 3.07 MB
+  brotli for Main and 0.34 MB for Sync. On 2026-11-07, `just size` read 3 128 174 bytes for Main
+  and 352 134 for Sync. The `wasm-release` profile builds every crate for size and strips the name
   section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job holds each figure as a
   ceiling (`scripts/wasm_size.py`), and a ceiling is not the budget. The roadmap story `The Main
   instance within its download budget` closes the gap, and it needs the applications split out.
+* **Both ceilings went up on 2026-11-07**, to 3.13 MB for Main and 0.36 MB for Sync. No dead code
+  grew, so no cut was found. The table below is `twiggy top` on a build that keeps the name
+  section, from the 2026-10-20 ceiling commit `a70872374` to that day. A crate's raw growth is
+  net of the code that moved out of `ambre-bus`.
+
+| Instance | Crate that grew | Raw growth | Why |
+|---|---|---|---|
+| Main | `ambre-trame`, `ambre-toile`, `ambre-murmure`, `ambre-app`, `ambre-logic`, `ambre-chrome`, `ambre-prose` | +148 KB | The message vocabulary moved in from `ambre-bus`, and new features: the switchboard, the outbox, the line uids of Trame schema 2 |
+| Main | `reactive_graph`, `tachys`, `leptos` | +59 KB | The new chrome views of those features |
+| Main | `ambre-core` and `hashbrown` | +51 KB | The generic newtype families (`ambre-spec-newtypes.md`) build one copy of each function per marker, a hash table included |
+| Main | `blake2` | +7 KB | The line uid of Trame schema 2 is a BLAKE2b hash, so the hash now links into Main |
+| Sync | `ambre-core` | +19 KB | The generic newtype families, one copy per marker |
+| Sync | `ambre-sync`, `serde`, `percent-encoding` | +11 KB | The percent-encoded query (`SYNC-179`) and a flattened token pair |
 * **wasm-opt stays off.** Binaryen 124 takes 7% off the raw Main wasm, and the result compresses
   0.8% worse, in gzip and in brotli alike. The download is the budget, so the pass costs.
 
