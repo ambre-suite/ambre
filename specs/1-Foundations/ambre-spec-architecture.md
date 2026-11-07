@@ -322,8 +322,10 @@ a `Length`: a length is geometric, as `Px<S>` measures it.
 and `Seq<DeltaAuthor>` is the clock of a delta. A `LamportStamp` is no sequence number, since many
 peers issue stamps and two may share one.
 
-**Code.** `crates/ambre-app/src/lib.rs` for the boot and the relay, and `crates/ambre-app/src/host/`
-for the frame driver and the view registry. Then `crates/ambre-logic/src/lib.rs` for the Logic
+**Code.** `crates/ambre-app/src/lib.rs` for the boot and the frame loop, and `crates/ambre-app/src/host/`
+for the frame driver and the view registry. Each concern the frame loop drives has its own module
+beside `lib.rs`: `chrome_mirror.rs`, `murmure_mirror.rs`, `route_binding.rs`, `tab_title.rs`,
+`persist.rs` and `anchor.rs`. Then `crates/ambre-logic/src/lib.rs` for the Logic
 runtime, `crates/ambre-sync/src/worker.rs` for the worker entry, `.cargo/config.toml` and
 `Trunk.toml` for
 the build.
@@ -372,15 +374,15 @@ The stack has no control of its own. What a user meets is what it guarantees the
   browser.
 * **The relay cadence is unmeasured.** `ARCH-007` states one drain per frame ahead of the draw, and
   the budget rows for both hops read that no measurement exists.
-* **The route poll runs every frame inside the launcher.** Its decision is `route::step`, which a
-  test walks. The effects it applies, the document open and close and the render gate, run only in
+* **The route poll runs every frame, in `route_binding.rs`.** Its decision is `route::step`, which
+  a test walks. The effects it applies, the document open and close and the render gate, run only in
   a browser. It exists because the interface framework requires a subtree that the engine handles
   cannot enter.
 * **The switchboard applies its decisions in a browser alone.** `switchboard.rs` takes them on the
   host (`ARCH-072`). They cover the view fan-out, the header status, the busy notice and the prompt
   of a fetched key. They cover the requests and notices of a service answer too. The closure that
-  applies them runs only in a browser, with the chrome mirrors of each application and the Murmure
-  pane. The local store, the hop to the Sync worker and the frame read-out stay there too.
+  applies them runs only in a browser, as do the chrome mirrors, the Murmure pane and the local
+  store link. The hop to the Sync worker and the frame read-out stay in the closure.
 * **Three files at the workspace root cite a document the corpus does not have.** The build
   configuration, the workspace manifest and the toolchain file each name a migration note that was
   deleted. No resolver opens a file outside the corpus, the crates and the rules.

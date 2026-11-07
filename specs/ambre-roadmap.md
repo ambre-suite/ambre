@@ -541,7 +541,8 @@ owns the subsystem.
 | `[ ]` One floating-menu shell | V1 | one placement, flip and keyboard model under every popover and floating bar |
 | `[ ]` One performance read-out | V1 | the frame read-out available in every app, not in Trame alone |
 | `[ ]` Links in Trame | V1 | clickable per-cell links, on the link and open-URL model shared with Prose and Toile |
-| `[ ]` The launcher wiring split by concern | V1 | `lib.rs` still wires the chrome mirrors, the Murmure mirrors, the route, the tab title, the local store and the anchor in one function. Done when each concern is one module and `lib.rs` keeps the boot and the frame loop alone |
+| `[x]` The launcher's mirrors, route, title, store and anchor in modules | V1 | `lib.rs` wired the chrome mirrors of each application, the Murmure mirrors, the route, the tab title, the local store and the anchor in one function. Done when each is one module that the frame loop of `lib.rs` calls |
+| `[ ]` The launcher's perf read-out and TOFU pin read in modules | V1 | the frame loop of `lib.rs` still mirrors the perf snapshot into the status bar and reads the TOFU pin inline. Done when each concern is one module and `lib.rs` keeps the boot and the frame loop alone |
 
 ---
 

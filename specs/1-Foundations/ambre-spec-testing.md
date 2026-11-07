@@ -360,7 +360,7 @@ A Leptos component mixes three things, and only one of them is pure Rust.
 | Applied to | Extracted to host | Left in wasm |
 | :--- | :--- | :--- |
 | `ambre-chrome` | `command::key_from_dom`, the DOM-key classification; `context_menu::place_menu`, the viewport-flip geometry; `passphrase::vet`, the one decision of the seal prompt | the modifier bits off a `KeyboardEvent`, and the `getBoundingClientRect` read |
-| `ambre-app` | `switchboard`, the decisions of the switchboard: the view fan-out, the header status, the busy notice, the prompt of a fetched key, the requests and notices of a service answer (`ARCH-072`) | the closure that applies them; `route::parse`, `host::base64_*` and `FrameHost::tick_fps`, which the crate's other pure helpers still run as inline `#[wasm_bindgen_test]` |
+| `ambre-app` | `switchboard`, the decisions of the switchboard: the view fan-out, the header status, the busy notice, the prompt of a fetched key, the requests and notices of a service answer (`ARCH-072`) | the closure that applies them, and the glue modules the frame loop drives: `chrome_mirror`, `murmure_mirror`, `route_binding`, `tab_title`, `persist` and `anchor`; `route::parse`, `host::base64_*` and `FrameHost::tick_fps`, which the crate's other pure helpers still run as inline `#[wasm_bindgen_test]` |
 | `ambre-trame` | geometry, hit testing, selection, editor state, the draw-call sequence | the DOM chrome only |
 
 > `#[wasm_bindgen(start)] fn main` is gated `#[cfg(not(test))]`, so the test harness's generated entry
