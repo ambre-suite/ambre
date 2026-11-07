@@ -1,4 +1,4 @@
-# The unwrap report (ai/ambre-rust-style.md, the newtype rule): `ambre-primitives unwrap --strict`.
+# The unwrap report (ARCH-073): `ambre-primitives unwrap --strict`.
 # One line per key that hands a newtype's primitive to workspace code: the number of sites it allows, then the true reason they may. Add a line by hand only; a reviewer reads it.
 key	count	reason
 ambre-canvas | src/render/atlas.rs | crate::render::atlas::rasterize | Px::get -> .size	1	A foreign call: .size is the swash ScalerBuilder method on a receiver the report cannot type, and swash takes the raster size as a bare f32.

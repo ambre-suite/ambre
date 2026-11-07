@@ -353,7 +353,7 @@ primitives:
 primitives-files:
     cargo run -q -p ambre-primitives -- files
 
-# The unwrap report (`ai/ambre-rust-style.md`, the newtype rule). It refuses a
+# The unwrap report (`ARCH-073`). It refuses a
 # newtype unwrapped early inside a body, unless a line of
 # `specs/1-Foundations/ambre-unwrap.tsv` names its key with a count and a
 # reason.
