@@ -206,9 +206,11 @@ deliberately not the product name for that kind, which is what the tile carries.
 
 **Code:** `crates/ambre-app/src/landing.rs` holds the overlay, the cards, the picker and the sign-in
 panel. `crates/ambre-app/src/route.rs` holds the path mapping and the reload predicate.
-`crates/ambre-app/src/lib.rs` holds the relay that fills the list, pauses the loop behind the
-overlay and keeps the tab title in step. `crates/ambre-core/src/doc_type.rs` holds the kinds, their
-monograms, their generic labels and the creatable list. The style is `crates/ambre-app/styles.css`.
+`crates/ambre-app/src/lib.rs` holds the switchboard closure that fills the list.
+`crates/ambre-app/src/route_binding.rs` pauses the loop behind the overlay, and
+`crates/ambre-app/src/tab_title.rs` keeps the tab title in step. `crates/ambre-core/src/doc_type.rs`
+holds the kinds, their monograms, their generic labels and the creatable list. The style is
+`crates/ambre-app/styles.css`.
 
 ---
 
