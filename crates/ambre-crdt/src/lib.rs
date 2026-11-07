@@ -13,6 +13,10 @@
 
 use std::marker::PhantomData;
 
+mod locale;
+
+pub use locale::{read_locale, write_locale};
+
 use ambre_core::crdt::FieldKey;
 
 /// A live Loro map, read and written through the keys of the schema

@@ -1669,6 +1669,14 @@ pub enum ProseCommand {
     SetDifferentFirstPage {
         first_page: FirstPage,
     },
+    /// Set the document's locale, or clear it with
+    /// [`DocumentLocale::none`](ambre_core::DocumentLocale::none)
+    /// (`ambre-spec-locale.md`). One delta on the `meta` register, and no
+    /// block moves with it (`LOCALE-009`). The type holds a well-formed tag
+    /// only (`LOCALE-010`).
+    SetLocale {
+        locale: ambre_core::DocumentLocale,
+    },
     /// A field in the header block `target` names. A position past the end
     /// is clamped to it (`PROSE-FEAT-068`).
     InsertHeaderField {
@@ -1986,6 +1994,7 @@ impl fmt::Debug for ProseCommand {
             Self::SetDifferentFirstPage { first_page } => {
                 fields!("SetDifferentFirstPage", first_page)
             }
+            Self::SetLocale { locale } => fields!("SetLocale", locale),
             Self::InsertHeaderField { field, target, pos } => {
                 fields!("InsertHeaderField", field, target, pos)
             }
@@ -2405,6 +2414,7 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::SetHeaderEnabled { .. }
             | Self::SetFooterEnabled { .. }
             | Self::SetDifferentFirstPage { .. }
+            | Self::SetLocale { .. }
             | Self::InsertHeaderField { .. }
             | Self::InsertFooterField { .. }
             | Self::SetBandAlign { .. }
@@ -2521,6 +2531,7 @@ impl ProseCommand {
             Self::SetHeaderEnabled { .. } => "showing or hiding the header",
             Self::SetFooterEnabled { .. } => "showing or hiding the footer",
             Self::SetDifferentFirstPage { .. } => "changing the first page's bands",
+            Self::SetLocale { .. } => "setting the document language",
             Self::InsertHeaderField { .. } => "inserting a header field",
             Self::InsertFooterField { .. } => "inserting a footer field",
             Self::SetBandAlign { .. } => "aligning the band",

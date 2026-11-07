@@ -432,6 +432,31 @@ impl TrameState {
         schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)
     }
 
+    /// The workbook's locale, read from the `meta` register on every call, so
+    /// a peer's write is seen as soon as it is applied (`ambre-spec-locale.md`).
+    #[must_use]
+    pub fn locale(&self) -> ambre_core::DocumentLocale {
+        ambre_crdt::read_locale(&self.doc)
+    }
+
+    /// Writes `locale` into the `meta` register as one delta. A locale equal
+    /// to the one held writes nothing. No other container moves (`LOCALE-009`).
+    pub(super) fn set_locale(&mut self, locale: &ambre_core::DocumentLocale) -> TrameOutcome {
+        if self.locale() == *locale {
+            return TrameOutcome::display_only(vec![]);
+        }
+        if ambre_crdt::write_locale(&self.doc, locale).is_err() {
+            return TrameOutcome::display_only(vec![]);
+        }
+        self.doc.commit();
+        let update = self.flush_delta();
+        TrameOutcome {
+            display: vec![],
+            update,
+            ephemeral: None,
+        }
+    }
+
     /// Record that a register could not be decoded (`SCHEMA-003`).
     ///
     /// An **empty** register is not a failure: a cell with no formatting carries

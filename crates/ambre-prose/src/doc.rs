@@ -199,7 +199,7 @@ ambre_core::crdt_names! {
     pub(crate) enum MetaKey: FieldKey {
         Title = "title",
         /// The document locale, a BCP 47 tag: the key Trame and Toile share.
-        Locale = "locale",
+        Locale = ambre_core::schema::MetaKey::Locale.as_str(),
         Pageless = "pageless",
         /// The page sub-map, keyed by [`PageKey`].
         Page = "page",
@@ -1634,9 +1634,7 @@ pub fn read_title(doc: &LoroDoc) -> String {
 /// reads as no language rather than as a fixed one.
 #[must_use]
 pub fn read_locale(doc: &LoroDoc) -> Option<Validated<LangTag>> {
-    meta_read(doc)
-        .and_then(|meta| read_string(&meta, MetaKey::Locale))
-        .and_then(|text| Validated::parse(text).ok())
+    ambre_crdt::read_locale(doc).tag().cloned()
 }
 
 // -----------------------------------------------------------------------------

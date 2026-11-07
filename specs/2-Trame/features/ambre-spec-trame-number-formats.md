@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-107` | `OBS` | A date-formatted cell MUST show a calendar date, never the day serial behind it. | this spec section 5 | `ambre_trame::logic::tests::group1::date_and_time_cells_show_the_calendar`; `ambre_trame::logic::number_format::tests::date_and_time_render_the_calendar` | none | verified |
 | `TRAME-108` | `OBS` | A formatted value MUST read the same everywhere it is shown as text. | this spec section 5 | `ambre_trame::logic::tests::group7::find_matches_the_formatted_value`; `ambre_trame::logic::tests::group7::csv_export_writes_the_formatted_value` | none | verified |
 | `TRAME-109` | `OBS` | A cell carrying a custom pattern MUST show that pattern applied. | this spec section 5 | `ambre_trame::logic::tests::group1::custom_pattern_is_applied`; `ambre_trame::logic::number_format::tests::custom_numeric_patterns`; `::custom_literals_and_interleaved_digits`; `::custom_sections_choose_by_sign`; `::custom_date_and_time_tokens` | none | verified |
-| `TRAME-110` | `OBS` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `TRAME-110` | `OBS` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5 | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 ### 1.2 Change the decimal count
 
@@ -46,8 +46,8 @@ A reader types a number into a cell. The reader convention picks the separators 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-237` | `POST` | Typed input MUST be parsed under the reader's convention: a French reader typing `3,5`, under the default convention, stores 3.5. | this spec section 5; `1-Foundations/ambre-spec-locale.md`, `LOCALE-016` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `TRAME-238` | `FRAME` | A typed number MUST be stored without the locale it was typed in. | this spec section 5; `1-Foundations/ambre-spec-locale.md`, `LOCALE-014` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `TRAME-237` | `POST` | Typed input MUST be parsed under the reader's convention: a French reader typing `3,5`, under the default convention, stores 3.5. | this spec section 5; `1-Foundations/ambre-spec-locale.md`, `LOCALE-016` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `TRAME-238` | `FRAME` | A typed number MUST be stored without the locale it was typed in. | this spec section 5; `1-Foundations/ambre-spec-locale.md`, `LOCALE-014` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 * **Budget.** none of its own. A format is a pure function of a value and a pattern, applied per
   displayed cell inside the frame phases of `ambre-spec-budgets.md section 2`.

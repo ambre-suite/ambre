@@ -280,6 +280,12 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
                     .get(&ambre_core::Validated::<crate::DefinedName>::parse(key).ok()?)?
             )
         )),
+        Root::Meta if key == ambre_core::schema::MetaKey::Locale.as_str() => {
+            Some(match reader.locale().tag() {
+                Some(tag) => format!("locale {}", tag.as_str()),
+                None => "no locale".to_owned(),
+            })
+        }
         Root::Meta => None,
     }
 }
