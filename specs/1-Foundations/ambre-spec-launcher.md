@@ -52,6 +52,7 @@ The route changed. Either the booted engine can draw what was asked for, or the 
 | `CHROME-039` | `POST` | An open whose render kind equals the booted one MUST swap in place. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_app::route::tests::cross_kind_open_needs_reload` -- the two of its four combinations where the kinds agree | none | verified |
 | `CHROME-083` | `POST` | An open whose render kind differs from the booted one MUST reload the page. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_app::route::tests::cross_kind_open_needs_reload` -- the two combinations where they differ, one engine being booted per page, so this is the rule that keeps a board from being drawn by a grid | none | verified |
 | `CHROME-042` | `FRAME` | Going back home MUST NOT unmount the content surface: it MUST be covered and frozen. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_canvas::frame::tests::a_closed_modal_resumes_only_what_it_suspended` -- a route away stops the loop, and a modal closing over it does not restart it; `ambre_canvas::frame::tests::a_paused_loop_relays_and_does_no_frame_work` -- a stopped loop does no frame work | none | verified |
+| `CHROME-116` | `POST` | Opening a page MUST let its canvas render, a Murmure page included, though it binds no document. | this spec section 2; `CHROME-042` | `ambre_app::route::tests::a_murmure_page_renders_and_home_freezes` -- wasm tier, a Murmure page and a document page render, and home alone freezes; `ambre_belt::murmure::tests::a_message_one_member_sends_reaches_the_other` -- browser tier, the composer of a Murmure page is drawn and takes the keys | none | verified |
 | `CHROME-104` | `POST` | An open that failed MUST end its loading screen and tell the user the document could not open. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-030` | `ambre_app::switchboard::tests::a_failed_open_ends_the_loading_screen` -- the active document's failed open lowers the screen and raises a notice, and another document's leaves it | none | verified |
 
 ### 1.4 Create a document
@@ -100,7 +101,7 @@ The session ends where it was opened: on this screen.
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 23 `verified`, 4 `unimplemented`. What holds is what a pure function or one
+* **Verification.** 24 `verified`, 4 `unimplemented`. What holds is what a pure function or one
   mounted control carries, and what a scan of the source refuses. Creation is held by the gate that
   keeps the named command off the page. A composed name is held by its type, which converts to no
   `String` (`CHROME-080`).

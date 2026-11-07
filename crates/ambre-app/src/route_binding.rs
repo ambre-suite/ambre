@@ -76,17 +76,12 @@ impl RouteBinding {
                     }
                 });
             }
-            match step.show {
-                Some(document_id) => {
-                    if let Some(sw) = self.switcher.borrow().as_ref() {
-                        sw.set_document(document_id);
-                    }
-                    self.raf.set_cover(ambre_canvas::Cover::Document);
-                }
-                // Freeze the canvas behind the landing overlay (the switchboard
-                // keeps running -- only the render is gated).
-                None => self.raf.set_cover(ambre_canvas::Cover::Launcher),
+            if let Some(document_id) = step.show
+                && let Some(sw) = self.switcher.borrow().as_ref()
+            {
+                sw.set_document(document_id);
             }
+            self.raf.set_cover(route::cover(&cur_route));
             self.prev = Some(cur_route);
         }
         cur_doc

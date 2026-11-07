@@ -105,7 +105,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-175` | `POST` | A direct message MUST be created whole in one transaction, in no space, with an editor row for each member and no owner, and only from a log that says so. | this spec section 3; `SRV-104` | `ambre_server::routes::channels::tests::a_direct_message_has_no_space_and_no_owner` -- database tier, an editor row per member; `ambre_server::routes::channels::tests::each_member_holds_the_key_wrapped_for_them` -- each row holds its own wrap; `ambre_server::routes::channels::tests::a_direct_message_with_an_owner_is_refused` -- a log that keeps an owner writes nothing | none | verified |
 | `SRV-176` | `FRAME` | A direct message request MUST NOT create a second direct message for a set of members that already holds one. | this spec section 3; `SRV-175` | `ambre_server::routes::channels::tests::the_same_members_reach_the_same_direct_message` -- database tier, the existing one answers; `ambre_server::routes::channels::tests::racing_requests_create_one_direct_message` -- two racing requests create one | none | verified |
 | `SRV-240` | `FAIL` | Given a direct message request of more members than its budget, the relay MUST refuse it before any lookup of a member. | `ambre-spec-budgets.md section 6`; `SYNC-180` | `ambre_server::routes::channels::tests::a_direct_message_past_its_budget_is_refused_before_any_lookup` -- database tier, unknown members are refused as a bad request, not as unknown, and one member fewer is created | none | verified |
-| `SRV-177` | `POST` | A change of the members of a document MUST reach every connection subscribed to it, naming the document alone. | this spec section 3; `MURMURE-440` | `ambre_server::routes::tests::handler_tests::a_change_of_members_reaches_the_subscribers_of_the_document` -- database tier, an invitation, a change of role and a removal each publish it on the topic of the document; `ambre_server::routes::channels::tests::a_self_join_tells_the_subscribers_of_meta` -- a self-join that adds a row publishes it, and one that adds none is silent | none | verified |
+| `SRV-177` | `POST` | A change of the members of a document MUST reach every connection subscribed to it, naming the document alone. | this spec section 3; `MURMURE-440` | `ambre_server::routes::tests::handler_tests::a_change_of_members_reaches_the_subscribers_of_the_document` -- database tier, an invitation, a change of role and a removal each publish it on the topic of the document; `ambre_server::routes::channels::tests::a_self_join_tells_the_subscribers_of_every_channel_document` -- a self-join that adds a row publishes it on `meta` and on its segment, whose access `meta` decides, and one that adds none is silent | none | verified |
 
 ### 1.5 A member joins a public channel alone
 
@@ -268,8 +268,9 @@ lock is advisory and lasts the transaction, so no table holds the set.
 A change of the member rows of a document is said on the topic of that document (`SRV-177`). An
 invitation says it, as do a change of role, a removal and a self-join that adds a row. The message
 names the document alone, which the topic already names, so a subscriber learns no row from it. A
-client that shows the members reads them again. A removal that deletes the channel says nothing,
-since no member stays to hear it.
+client that shows the members reads them again. A change on a channel's `meta` is said on every
+document of the channel, since `meta` decides access to each (`SRV-103`). A removal that deletes the
+channel says nothing, since no member stays to hear it.
 
 A public channel outlives its last member. The space reads its key in the catalogue, so the next
 member joins it alone, and the last one leaves owner or not (`SRV-173`). A private channel goes
