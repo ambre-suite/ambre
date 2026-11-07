@@ -86,6 +86,9 @@ use wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+/// The selection anchor, mirrored from the canvas into the chrome.
+#[cfg(target_arch = "wasm32")]
+mod anchor;
 #[cfg(target_arch = "wasm32")]
 mod host;
 #[cfg(target_arch = "wasm32")]
@@ -1007,7 +1010,7 @@ pub fn main() {
     // It runs the persist drain, the Logic->Sync relay and the anchor mirror. It
     // also runs the Logic->UI fan-out: command state to the chrome, session/list
     // to the landing, content to the view.
-    let anchor_pub_pump = anchor_pub.clone();
+    let mut anchor_mirror = anchor::AnchorMirror::new(anchor_pub.clone(), anchor_pos);
     let perf_pub_pump = perf_pub.clone();
     let filter_open_pump = filter_open_pub.clone();
     let busy_pump = busy_pub.clone();
@@ -1017,7 +1020,6 @@ pub fn main() {
     let vault_frame = vault.clone();
     let session_seen_frame = Rc::clone(&session_seen);
     let mut persist_waiting: Vec<(Id<Document>, ambre_logic::PersistWrite)> = Vec::new();
-    let mut last_anchor: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>> = None;
     let mut busy_notice = switchboard::BusyNotice::default();
     let mut last_perf_push_ms: f64 = 0.0;
     // The relay's decisions, and the state they keep across frames.
@@ -1393,13 +1395,7 @@ pub fn main() {
             }
         }
 
-        // Mirror the view's published selection anchor into the chrome signal,
-        // only on change so the floating toolbar repositions just when it moves.
-        let next = anchor_pub_pump.read();
-        if next != last_anchor {
-            last_anchor = next;
-            anchor_pos.set(next);
-        }
+        anchor_mirror.step();
 
         // Say that the view stopped taking input, and say when it resumes
         // (`BUS-016`). The view restates the level every frame, so this reads the
