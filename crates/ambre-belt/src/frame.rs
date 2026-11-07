@@ -89,6 +89,10 @@ mod tests {
         not(feature = "browser"),
         ignore = "needs a build and chromedriver; run just test-browser"
     )]
+    #[cfg_attr(
+        feature = "firefox",
+        ignore = "installs its draw-call counter through the DevTools Protocol, which Firefox does not speak"
+    )]
     async fn a_modal_stops_the_frames_and_escape_gives_them_back() {
         let page = counted_document("trame").await;
         assert!(draws_over_a_watch(&page).await > 0, "a running loop draws");
