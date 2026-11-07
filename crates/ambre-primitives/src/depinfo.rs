@@ -49,7 +49,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::scan::{NESTED_WORKSPACES, SQLX, Scan, Tree, canonical};
+use crate::scan::{NESTED_WORKSPACES, SQLX, Scan, Tree, VENDORED, canonical};
 
 /// The cargo subcommand of one compile line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -474,7 +474,7 @@ fn error_text(message: &str) -> Option<String> {
 
 /// The unit one message of cargo describes, the `.rs` files it read and the
 /// features cargo turned on for it. `None` for another message, and for a
-/// unit of a package outside the workspace.
+/// unit of a package outside the workspace or vendored into it.
 fn artifact(root: &Path, message: &str) -> Result<Option<Artifact>, String> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(message) else {
         return Ok(None);
@@ -489,7 +489,11 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Artifact>, String> {
         return Err("an artifact message names no manifest".to_owned());
     };
     let manifest = canonical(Path::new(manifest));
-    if !manifest.starts_with(root) {
+    if !manifest.starts_with(root)
+        || VENDORED
+            .iter()
+            .any(|dir| manifest.starts_with(root.join(dir)))
+    {
         return Ok(None);
     }
     let Some(source) = value
