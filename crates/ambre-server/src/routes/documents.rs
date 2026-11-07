@@ -647,7 +647,7 @@ pub async fn update_document_member_role(
         super::share::checked_entry(&state, &s, doc_id, req.entry.as_ref(), expected).await?;
     db::update_document_member_role(&state.db, &doc_id, &target, role, entry.as_ref()).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
-    crate::redis_ops::members_changed(&state.redis, &doc_id).await;
+    super::share::members_changed(&state, &doc_id).await;
     Ok(super::Done::json(ambre_core::WriteStatus::RoleUpdated))
 }
 

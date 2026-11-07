@@ -3378,7 +3378,7 @@
   {"edge": "cites-section", "from": "SRV-177", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "cites-rule", "from": "SRV-177", "to": "MURMURE-440"},
   {"edge": "verified-by", "from": "SRV-177", "to": "ambre_server::routes::tests::handler_tests::a_change_of_members_reaches_the_subscribers_of_the_document"},
-  {"edge": "verified-by", "from": "SRV-177", "to": "ambre_server::routes::channels::tests::a_self_join_tells_the_subscribers_of_meta"},
+  {"edge": "verified-by", "from": "SRV-177", "to": "ambre_server::routes::channels::tests::a_self_join_tells_the_subscribers_of_every_channel_document"},
   {"edge": "cites-section", "from": "SRV-105", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "cites-document", "from": "SRV-105", "to": "5-Murmure/ambre-spec-murmure-schema.md"},
   {"edge": "verified-by", "from": "SRV-105", "to": "ambre_server::routes::channels::tests::a_self_join_from_outside_the_space_is_refused"},

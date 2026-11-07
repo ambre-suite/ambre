@@ -903,7 +903,7 @@ pub async fn join_channel(
     .await?;
     tracing::info!(channel_id = %channel_id, user_id = %auth.user_id, joined, "channel self-join");
     if joined {
-        crate::redis_ops::members_changed(&state.redis, &meta_id.document_id()).await;
+        super::share::members_changed(&state, &meta_id.document_id()).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1531,12 +1531,13 @@ mod tests {
         assert_eq!(row.invited_by, Some(bob));
     }
 
-    /// `SRV-177`: a self-join tells the connections subscribed to `meta` that
-    /// its members changed. A caller already a member changes no row, and
-    /// nothing is said.
+    /// `SRV-177`: a self-join tells the connections subscribed to `meta`, and
+    /// those subscribed to its segment, that the members changed: `meta`
+    /// decides the access to both. A caller already a member changes no row,
+    /// and nothing is said.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-    async fn a_self_join_tells_the_subscribers_of_meta(pool: sqlx::PgPool) {
+    async fn a_self_join_tells_the_subscribers_of_every_channel_document(pool: sqlx::PgPool) {
         use futures_util::StreamExt;
         use rustis::commands::PubSubCommands;
         let state = crate::test_helpers::test_app_state(pool).await;
@@ -1550,8 +1551,9 @@ mod tests {
         let subscriber = rustis::client::Client::connect("redis://localhost:6379")
             .await
             .expect("redis");
+        let segment = channel.segment.document_id();
         let mut stream = subscriber
-            .subscribe(format!("doc:{meta}"))
+            .subscribe([format!("doc:{meta}"), format!("doc:{segment}")])
             .await
             .expect("a subscription");
         let wait = std::time::Duration::from_millis(500);
@@ -1560,15 +1562,27 @@ mod tests {
             join(&state, bob, channel.id, 9).await,
             StatusCode::NO_CONTENT
         );
-        let msg = tokio::time::timeout(wait, stream.next())
-            .await
-            .expect("a broadcast")
-            .expect("an open stream")
-            .expect("a message");
-        assert!(matches!(
-            ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(msg.payload().to_vec())),
-            Ok(ambre_protocol::ws::WsServerMsg::MembersChanged { document_id }) if document_id == meta
-        ));
+        let mut told = Vec::new();
+        for _ in 0..2 {
+            let msg = tokio::time::timeout(wait, stream.next())
+                .await
+                .expect("a broadcast")
+                .expect("an open stream")
+                .expect("a message");
+            match ambre_protocol::ws::decode_server_msg(&ambre_core::Payload::new(
+                msg.payload().to_vec(),
+            )) {
+                Ok(ambre_protocol::ws::WsServerMsg::MembersChanged { document_id }) => {
+                    told.push(document_id);
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+        assert_eq!(told.len(), 2, "{told:?}");
+        assert!(
+            told.contains(&meta) && told.contains(&segment),
+            "meta and its segment, once each: {told:?}"
+        );
 
         assert_eq!(
             join(&state, bob, channel.id, 9).await,
