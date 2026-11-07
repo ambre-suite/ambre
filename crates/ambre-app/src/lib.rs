@@ -53,7 +53,7 @@ use ambre_chrome::{
 #[cfg(target_arch = "wasm32")]
 use ambre_core::id::{Document, Frame, Id, User};
 #[cfg(target_arch = "wasm32")]
-use ambre_core::{Board, Doc, Scale, View};
+use ambre_core::{Board, Doc, PageLoad, Scale, View};
 #[cfg(target_arch = "wasm32")]
 use ambre_logic::app::{AppCommand, LogicCommand, UiEvent};
 #[cfg(target_arch = "wasm32")]
@@ -1019,7 +1019,7 @@ pub fn main() {
     let mut persist_waiting: Vec<(Id<Document>, ambre_logic::PersistWrite)> = Vec::new();
     let mut last_anchor: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>> = None;
     let mut busy_notice = switchboard::BusyNotice::default();
-    let mut last_perf_push_ms: f64 = 0.0;
+    let mut perf_cadence = switchboard::PerfCadence::default();
     // The relay's decisions, and the state they keep across frames.
     let mut decisions = switchboard::Switchboard::new(if boot_is_murmure {
         switchboard::Page::Murmure
@@ -1187,6 +1187,7 @@ pub fn main() {
             tofu::confirm(
                 &p,
                 invite_role.get_untracked(),
+                Instant::<Authored>::new(js_sys::Date::now() as u64),
                 |user, key| {
                     if let Some(local) = persist_store_frame.borrow().as_ref() {
                         local.store().save_trusted_key(user, key);
@@ -1242,7 +1243,8 @@ pub fn main() {
                     Some(rx) => rx.await.ok().flatten(),
                     None => None,
                 };
-                match tofu::classify(prompt, pinned, role_sig.get_untracked()) {
+                let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
+                match switchboard::pin_read(prompt, pinned, role_sig.get_untracked(), now) {
                     tofu::Next::Proceed(cmd) => {
                         relay.send(cmd);
                     }
@@ -1442,15 +1444,15 @@ pub fn main() {
             commands.send(trame.open_filter());
         }
 
-        // Mirror the view's perf snapshot into the status-bar signal, throttled
-        // to ~2 Hz. The old wgpu HUD refreshed every 500 ms too, and a per-frame
-        // DOM update would be wasteful for a debug read-out.
-        let now_ms = web_sys::window()
+        // Mirror the view's perf snapshot into the status-bar signal, at the
+        // cadence the switchboard decides on the page clock.
+        let now = web_sys::window()
             .and_then(|w| w.performance())
-            .map_or(0.0, |p| p.now());
-        if now_ms - last_perf_push_ms >= 500.0 {
-            last_perf_push_ms = now_ms;
-            perf_snap.set(perf_pub_pump.read());
+            .map_or(Instant::<PageLoad>::EPOCH, |p| {
+                Instant::<PageLoad>::new(p.now())
+            });
+        if let Some(snapshot) = perf_cadence.step(now, &perf_pub_pump) {
+            perf_snap.set(snapshot);
         }
     };
 
