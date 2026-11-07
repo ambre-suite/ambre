@@ -547,8 +547,14 @@ deny:
 # section 2`). The targets live in `fuzz/`, a workspace of its own, so the
 # sanitizer flags never reach the main build. A crash stops the run and leaves
 # its input under `fuzz/artifacts/`.
+#
+# The target is the host triple of the pinned `rustc`, never the default of
+# `cargo-fuzz`: that default is the triple `cargo-fuzz` itself was built for.
+# The prebuilt binary CI installs is a musl one, and a musl target links libc
+# statically, which the address sanitizer refuses when `build-std` rebuilds
+# `core`.
 fuzz seconds="60":
-    cd fuzz && for target in wire_decode docfile formula markdown sealed trame_file toile_file; do cargo fuzz run "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
+    cd fuzz && host="$(rustc -vV | sed -n 's/^host: //p')" && for target in wire_decode docfile formula markdown sealed trame_file toile_file; do cargo fuzz run --target "$host" "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
 
 # Local convenience: bring the db-tier backing services up, the object store
 # prepared.
