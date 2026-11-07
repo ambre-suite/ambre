@@ -1216,8 +1216,11 @@ pub fn main() {
 
         // Re-offer what a view's queue could not take on an earlier turn
         // (`BUS-038`). Ordered, and ahead of the fresh stream, so a view never
-        // sees a later delta before an earlier one.
-        view_fan_out_relay.flush();
+        // sees a later delta before an earlier one. A view that lost an event
+        // and reads again has its document resent (`BUS-041`).
+        for document_id in view_fan_out_relay.flush() {
+            relay_tx.send(LogicCommand::ResendState { document_id });
+        }
 
         // Mark the turn that takes Logic's answers off the channel: the mark
         // splits a keystroke's confirmation between the relay and the view.
