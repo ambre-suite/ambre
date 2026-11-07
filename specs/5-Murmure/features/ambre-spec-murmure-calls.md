@@ -17,23 +17,23 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-407` | `INV` | A call started from a channel MUST admit the members of that channel alone. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-019`) | not built | unbuilt -- lands with the `Murmure calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-407` | `INV` | A call started from a channel MUST admit the members of that channel alone. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-019`) | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Start a call
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-408` | `POST` | Starting a call MUST post a call message in the channel that the members can join from. | this spec section 3 | not built | unbuilt -- lands with the `Murmure calls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-409` | `POST` | The call message MUST show who is in the call and whether it ended, read from the call, never written into the message. | this spec section 3 | not built | unbuilt -- lands with the `Murmure calls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-410` | `FRAME` | Starting a call MUST NOT change the membership of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Murmure calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-408` | `POST` | Starting a call MUST post a call message in the channel that the members can join from. | this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-409` | `POST` | The call message MUST show who is in the call and whether it ended, read from the call, never written into the message. | this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-410` | `FRAME` | Starting a call MUST NOT change the membership of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Join a call
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-411` | `POST` | Joining from a call message MUST bring the member into that call. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-016`) | not built | unbuilt -- lands with the `Murmure calls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-412` | `FAIL` | Given a call that has ended, the call message MUST offer no join. | this spec section 3 | not built | unbuilt -- lands with the `Murmure calls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-413` | `FRAME` | Joining a call MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `Murmure calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-411` | `POST` | Joining from a call message MUST bring the member into that call. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-016`) | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-412` | `FAIL` | Given a call that has ended, the call message MUST offer no join. | this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-413` | `FRAME` | Joining a call MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none here: the participant cap, the latency and the load of a call are the call rows
   of `ambre-spec-budgets.md section 1`.

@@ -293,8 +293,12 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Pinned messages | V1 | messages pinned to a channel for every member, in a `pinned` list of the channel `meta` document |
 | `[ ]` A link to a message | V1 | a link that opens a channel at one message, for a member of the channel |
 | `[ ]` Archived channels | V1 | a channel kept readable and closed to writes |
-| `[ ]` Call stack proofs | V1 | seven proofs before any call code: the call worker under load, iPhone decoding, iOS audio, video into the canvas, the SFU on str0m with no C library, the sender keys, networks open on TCP 443 alone. Each one passes or switches to its stated fallback |
-| `[ ]` Murmure calls | V1 | an audio and video call started from a channel, sealed end to end in a call worker, forwarded by an SFU in Rust, with its signalling on an endpoint of its own |
+| `[ ]` Call client proofs | MVP | four proofs on a Galaxy A55 under Chrome and an iPhone under Safari, before any call code. The call worker seals about 1 500 chunks per second at p99 5 ms and 25 % of one core, while the Sync worker seals a file; else a phone shows one 720p and four 180p videos. An iPhone decodes one 720p and eight 180p VP8 videos for 30 minutes at 25 fps and 15 % battery; else every sender uses H.264. iOS audio holds 30 minutes with echo cancellation on and no crackle; else the calls spec states it as degraded. Nine videos reach the canvas at 30 fps for 4 ms of UI thread per paint; else page elements carry them |
+| `[ ]` Call SFU proofs | MVP | the SFU on str0m links no C cryptography library, and the three engines connect to it. Then 50 headless clients on one EU machine of 4 vCPU, 150 ms of round trip and 2 % loss: a capped receiver drops a layer within 3 s, freezes 1 s per 10 minutes at most, sees 300 ms mouth to ear at p95, and the SFU stays under 2 vCPU. Else mediasoup behind the same signalling. A network open on TCP 443 alone gets media within 5 s through TURN, at 400 ms mouth to ear; else the calls spec names it unsupported |
+| `[ ]` Audio calls | MVP | an audio call started from a channel: the sender keys, the call worker, the SFU, the signalling route and TURN. Done when its rows are verified, the key model test included |
+| `[ ]` Video calls | MVP | camera video in a call: three sizes per sender, the clear codec prefix, and the remote videos drawn on the canvas |
+| `[ ]` Screen sharing in a call | MVP | a participant shares a screen or a window as a third track of its own |
+| `[ ]` Call crypto review | MVP | an external review of the chunk format, the sender keys and the DTLS stack of the SFU, started once the format is frozen. No call reaches users before it closes with no high finding |
 
 ---
 
