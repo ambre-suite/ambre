@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use crate::message::{CatalogPosition, CatalogueEntry, CategoryView};
 use ambre_bus::{
-    ChannelActivity, ChannelName, ChannelPlace, DirectPeers, MemberChannel, Mentions, Unread,
+    ChannelActivity, ChannelName, ChannelPlace, DirectPeers, MemberChannel, Mentions, Role, Unread,
 };
 use ambre_core::StepDirection;
 use ambre_core::id::{Category, Channel, Id, Space};
@@ -84,12 +84,38 @@ pub struct SidebarSection {
     pub entries: Vec<SidebarEntry>,
 }
 
+/// One space of the user, as the head of its controls in the sidebar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpaceHead {
+    pub space: Id<Space>,
+    /// Absent until its catalogue names it, or when the space has no name.
+    pub name: Option<ambre_core::Validated<ambre_core::Name>>,
+    /// The role of the user on the space document. Absent until the space
+    /// opens, so no control shows before the role is known.
+    pub role: Option<Role>,
+}
+
+impl SpaceHead {
+    /// Whether the user may change the catalogue: an owner or an editor of
+    /// the space document (the Murmure spaces spec, `MURMURE-032`).
+    pub fn is_admin(&self) -> bool {
+        matches!(self.role, Some(Role::Owner | Role::Editor))
+    }
+
+    /// Whether the user owns the space document, and so may invite.
+    pub fn is_owner(&self) -> bool {
+        self.role == Some(Role::Owner)
+    }
+}
+
 /// The catalogue of one open space.
 #[derive(Debug, Clone, Default)]
 struct Catalogue {
     name: Option<ambre_core::Validated<ambre_core::Name>>,
     categories: Vec<CategoryView>,
     channels: Vec<CatalogueEntry>,
+    /// The role of the user on the space document.
+    role: Option<Role>,
 }
 
 /// The state the sidebar is drawn from.
@@ -183,14 +209,50 @@ impl Sidebar {
         if !self.spaces.contains(&space) {
             self.spaces.push(space);
         }
+        // A catalogue changes without its role: the role stays.
+        let role = self.catalogues.get(&space).and_then(|c| c.role);
         self.catalogues.insert(
             space,
             Catalogue {
                 name,
                 categories,
                 channels,
+                role,
             },
         );
+    }
+
+    /// Take the role of the user on an open space. A space with no catalogue
+    /// yet takes it with its catalogue.
+    pub fn set_role(&mut self, space: Id<Space>, role: Role) {
+        if let Some(catalogue) = self.catalogues.get_mut(&space) {
+            catalogue.role = Some(role);
+        }
+    }
+
+    /// The spaces of the user, in sidebar order, each with its name and the
+    /// role of the user once its catalogue is known (`MURMURE-583`).
+    pub fn space_heads(&self) -> Vec<SpaceHead> {
+        self.spaces
+            .iter()
+            .map(|&space| {
+                let catalogue = self.catalogues.get(&space);
+                SpaceHead {
+                    space,
+                    name: catalogue.and_then(|c| c.name.clone()),
+                    role: catalogue.and_then(|c| c.role),
+                }
+            })
+            .collect()
+    }
+
+    /// The rank after every channel the catalogue of `space` lists, for a new
+    /// public channel to come last.
+    pub fn next_position(&self, space: Id<Space>) -> ambre_bus::Rank<CatalogPosition> {
+        self.catalogues
+            .get(&space)
+            .and_then(|c| c.channels.iter().map(|e| e.position).max())
+            .map_or(ambre_bus::Rank::FIRST, ambre_bus::Rank::next)
     }
 
     /// Take an activity answer. A channel absent from it keeps its mark.

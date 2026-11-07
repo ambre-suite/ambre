@@ -273,7 +273,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Attachments | MVP | files and images attached to a message through the shared media flow |
 | `[x]` Emoji | MVP | Unicode emoji drawn in messages and reactions, with a picker |
 | `[x]` Animated images | MVP | an animated GIF plays in the message list, and stays still under reduced motion |
-| `[ ]` Spaces and channels created from the sidebar | MVP | the Logic thread creates a space, a public channel and an invite, but no control of the interface sends any of them, so a user never reaches a channel and no browser test drives Murmure. Done when `MURMURE-583` to `MURMURE-585` read `verified` |
+| `[x]` Spaces and channels created from the sidebar | MVP | the Logic thread creates a space, a public channel and an invite, but no control of the interface sends any of them, so a user never reaches a channel and no browser test drives Murmure. Done when `MURMURE-583` to `MURMURE-585` read `verified` |
 | `[ ]` Murmure measured on a phone | MVP | the Murmure budgets measured in WASM on a mid-range phone, in place of the desktop figures and the ratio they assume: segment replay and snapshot import, the JSON authorship check, the envelope open, the rotation of a space leave, the color emoji font size, and the two residency memory budgets. The `segment` bench of `ambre-murmure` is the starting point. It also measures a cold open end to end, relay read included, against the cold start row |
 | `[ ]` Moderation | V1 | a moderator hides the message of another member |
 | `[ ]` Custom emoji | V1 | emoji a space admin adds for the members of that space |
