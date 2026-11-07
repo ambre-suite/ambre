@@ -386,10 +386,10 @@ group needs a token.
 | read cursors | a cursor, the activity answer, marking read | this document, and `ambre-spec-murmure-unread.md` |
 | the socket | one upgrade | `ambre-spec-broadcast.md` |
 
-**What the surface does not carry.** Meetings have no route at all. Of the channel routes, these
-are built: two listings, the activity answer, a registration, the direct message, the signed
-self-join and the delete. The retention of a space is designed and unbuilt (`SRV-111`
-and `SRV-112`).
+**What the surface does not carry.** Calls have no route at all (`ambre-spec-call-media.md`). Of
+the channel routes, these are built: two listings, the activity answer, a registration, the direct
+message, the signed self-join and the delete. The retention of a space is designed and unbuilt
+(`SRV-111` and `SRV-112`).
 
 **The last number of a document.** The activity answer compares the caller's cursor with the
 higher of two numbers. One is the sequence counter in the ephemeral store. The other is the
@@ -422,7 +422,8 @@ threads appear: `meta` and amendments carry no message a member reads.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **The register declares meeting tables nothing serves.** Meetings exist in the durable schema,
-  and no route and no handler writes them (`ambre-spec-broadcast.md`).
+  and no route and no handler writes them (`ambre-spec-broadcast.md`). Their plaintext name
+  breaks `ZK-022`, and they name no channel: the calls story replaces them.
 * **The declared schema and the migrated schema differ in three places.** The address is unique and
   case-insensitive, and the master material is optional until an account completes its setup. An
   address also carries whether a provider verified it. All three are rules of

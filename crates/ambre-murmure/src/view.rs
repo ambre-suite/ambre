@@ -21,7 +21,7 @@ use crate::message::{
 };
 use crate::message::{LogicCommand, Murmure, UiEvent};
 use ambre_bus::{
-    Authored, Emoji, Inbox, Instant, LossyOutcome, Outbox, Port, Request, RestEvent, SendOutcome,
+    Authored, Emoji, Feed, Instant, LossyOutcome, Outbox, Port, Request, RestEvent, SendOutcome,
 };
 use ambre_canvas::{
     BusyLevel, ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan,
@@ -263,7 +263,7 @@ enum Drag {
 pub struct MurmureView {
     /// The events of the Logic thread. The content canvas holds the page's
     /// queue; the thread's cell holds none and reads the lists it fills.
-    from_logic: Option<Inbox<Infallible, Murmure>>,
+    from_logic: Option<Feed<Infallible, Murmure>>,
     /// The page's one way to write to the Logic thread. The two regions share
     /// it, so a held command keeps its place before what either sends next
     /// (`BUS-011`).
@@ -401,7 +401,7 @@ impl Drop for MurmureView {
 
 impl MurmureView {
     pub fn new(
-        from_logic: Option<Inbox<Infallible, Murmure>>,
+        from_logic: Option<Feed<Infallible, Murmure>>,
         to_logic: Option<Port<Infallible, Murmure>>,
         busy_pub: ambre_canvas::BusyPublisher,
         reads: PageReads,
@@ -2224,7 +2224,7 @@ mod tests {
         };
         let size = ambre_core::Size::new(ambre_core::Px::new(300), ambre_core::Px::new(400));
         let view = MurmureView::new(
-            Some(Inbox::direct(from_logic)),
+            Some(Feed::direct(from_logic)),
             Some(Port::direct(to_logic)),
             ambre_canvas::BusyPublisher::new(),
             reads,

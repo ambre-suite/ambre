@@ -68,11 +68,11 @@ ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | p
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	local	the address of the Sync worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
-ambre-app | src/relay.rs | crate::relay | CHILD_BACKLOG_LIMIT | const | usize	math	backlog count
-ambre-app | src/relay.rs | crate::relay | ChildFanOut::offer() | ret | bool	generic	predicate result
-ambre-app | src/relay.rs | crate::relay | sync_warning_message() | ret | &'static str	free-text	message
-ambre-app | src/relay.rs | crate::relay | Notice.text | field | String	free-text	the words of a notice the user reads
-ambre-app | src/relay.rs | crate::relay | Notice::new(text) | param | impl Into<String>	free-text	the words of a notice the user reads
+ambre-app | src/switchboard.rs | crate::switchboard | VIEW_BACKLOG_LIMIT | const | usize	math	backlog count
+ambre-app | src/switchboard.rs | crate::switchboard | ViewFanOut::offer_child() | ret | bool	generic	predicate result
+ambre-app | src/switchboard.rs | crate::switchboard | sync_warning_message() | ret | &'static str	free-text	message
+ambre-app | src/switchboard.rs | crate::switchboard | Notice.text | field | String	free-text	the words of a notice the user reads
+ambre-app | src/switchboard.rs | crate::switchboard | Notice::new(text) | param | impl Into<String>	free-text	the words of a notice the user reads
 ambre-app | src/route.rs | crate::route | doc_path() | ret | String	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | needs_reload() | ret | bool	generic	predicate result
 ambre-app | src/route.rs | crate::route | parse(path) | param | &str	generic	generic codec/parser/bytes API
@@ -1200,6 +1200,15 @@ ambre-murmure | src/chrome.rs | crate::chrome | entry_view(unnamed) | param | &'
 ambre-murmure | src/chrome.rs | crate::chrome | member_view(choose) | param | Option<(Callback<()>,&'static str)>	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | panel_label() | ret | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | segments() | ret | String	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::create_channel(name) | param | String	free-text	the text of the new channel field as the DOM hands it, blank included; a Name parses from it inside
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::create_space(name) | param | String	free-text	the text of the new space field as the DOM hands it, blank included; a Name parses from it inside
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::invite_to_space(email) | param | String	free-text	the text of the invite field as the DOM hands it, blank included; the Email is built from it inside, trimmed
+ambre-murmure | src/chrome.rs | crate::chrome | PromptControl(on_submit) | param | Callback<String,Option<LogicCommand>>	free-text	the callable a submit hands the text of its field to, as the DOM hands it
+ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.label | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.submit | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.toggle | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | UNNAMED_SPACE | const | &str	free-text	the heading a person reads over a space whose catalogue names none yet
+ambre-murmure | src/chrome.rs | crate::chrome | name_typed(text) | param | &str	free-text	the text of a name field as the DOM hands it; a Name parses from it inside
 ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	free-text	the closed set's display label: the words the shortcut list shows for the place
 ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	free-text	the text of a message a member wrote, as the clipboard takes it
@@ -1407,6 +1416,8 @@ ambre-murmure | src/sequence.rs | crate::sequence | Range::holds() | ret | bool	
 ambre-murmure | src/sequence.rs | crate::sequence | RowTable.0 | field | &'a[u8]	newtype-inner	the raw sequence table of a framed snapshot, cut into fixed rows only by table
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/sidebar.rs | crate::sidebar | SpaceHead::is_admin() | ret | bool	generic	predicate result
+ambre-murmure | src/sidebar.rs | crate::sidebar | SpaceHead::is_owner() | ret | bool	generic	predicate result
 ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
@@ -3611,57 +3622,32 @@ ambre-primitives | src/scan.rs | crate::scan | Source.file | field | String	gene
 ambre-primitives | src/scan.rs | crate::scan | Source.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Source.module | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Argument::Inner.0 | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Argument::Named.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Binding.ty | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.closure_hint | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.env | field | Vec<BTreeMap<String,Binding>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.exempt | field | Vec<BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.file | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.imports | field | BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.module | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.owners | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit.scope | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::attribute(accessor) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::bind(name) | param | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::constructor(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::exempts() | ret | bool	generic	a predicate or a file read of the scanner
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::exempts(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::foreign_path() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::foreign_path(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::hint() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::infer() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::lookup(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::method_callee(method) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::module() | ret | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::named_conversion() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::owner_crate() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::owner_crate(owner) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::owner_crate(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::reach() | ret | Option<&BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::record(shown) | param | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::type_callee(owner) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::type_callee(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::workspace_root() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::workspace_root(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | CONVERSIONS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
-ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.boundaries | field | BTreeMap<String,Vec<(usize,String)>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name, with the index of a parameter
-ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.consts | field | BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.crates | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.field_types | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.fields | field | BTreeMap<String,BTreeMap<String,String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.foreign_names | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.modules | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.newtypes | field | BTreeMap<String,Newtype>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.reach | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.returns | field | BTreeMap<String,Option<Ret>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.types | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::declare(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::declare(name) | param | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::ret(key) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::returned(key) | param | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | CatalogVisit.imports | field | BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | CatalogVisit.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | CatalogVisit.module | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | DEPENDENCY_METHODS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | Defs.0 | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3686,7 +3672,6 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | Home.module | field | String	
 ambre-primitives | src/unwrap.rs | crate::unwrap | Impl.inner | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Impl.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Impl.of_trait | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Impl.owner | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Impl.shows_content | field | bool	generic	a fact of a signature or an impl the report reads, which selects no mode
 ambre-primitives | src/unwrap.rs | crate::unwrap | Invocation.family | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Invocation.types | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3702,15 +3687,10 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | Newtype.accessors | field | B
 ambre-primitives | src/unwrap.rs | crate::unwrap | Newtype.conversions | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Newtype.tuple | field | bool	generic	a fact of a signature or an impl the report reads, which selects no mode
 ambre-primitives | src/unwrap.rs | crate::unwrap | PEELS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
-ambre-primitives | src/unwrap.rs | crate::unwrap | PatNames.names | field | Vec<(String,Option<String>)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | PatNames.within | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | RETURNS | const | &[(&str,&str)]	generic	a word list the scanner matches Rust tokens against, with the type each word names
 ambre-primitives | src/unwrap.rs | crate::unwrap | Raw.macros | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Raw.traits | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Report.errors | field | Vec<String>	free-text	error messages printed to the terminal
-ambre-primitives | src/unwrap.rs | crate::unwrap | Ret.tried | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Ret.ty | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | Ret::of(owner) | param | Option<&str>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | SHARED_ACCESSORS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | STD_RETURNS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | STD_TYPES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
@@ -3723,12 +3703,7 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | body_methods(fragments) | par
 ambre-primitives | src/unwrap.rs | crate::unwrap | body_methods(methods) | param | &mut BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | foreign_method() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | foreign_method(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | imports(found) | param | &mut BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree(found) | param | &mut BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree(root) | param | Option<&str>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree_inner(found) | param | &mut BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree_inner(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | GenericCandidate.name | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | GenericCandidate.slots | field | BTreeSet<(String,String)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | GenericCandidate.tuple | field | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | GenericRepr.assocs | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3756,10 +3731,59 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | reach() | ret | BTreeMap<Stri
 ambre-primitives | src/unwrap.rs | crate::unwrap | reads_field() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | returns_inner() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | returns_inner(fragments) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/unwrap.rs | crate::unwrap | shape_name() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | type_name() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | writes_newtypes() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | writes_newtypes(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Argument::of(place) | param | impl Fn(&[String])->Ty	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::import() | ret | Option<&String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::import(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::krate() | ret | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::place(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::resolve(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::type_callee(owner_path) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.boundaries | field | BTreeMap<(Ty,String),Vec<(usize,String)>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.crate_uses | field | BTreeMap<String,BTreeMap<String,Roots>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.field_types | field | BTreeMap<String,BTreeSet<Ty>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.fields | field | BTreeMap<Ty,BTreeMap<String,Ty>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.method_returns | field | BTreeMap<(Ty,String),Option<Ret>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::exported(depth) | param | usize	generic	the depth of a chain of re-exports the unwrap report follows
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::exported(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::exported(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::local_root() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::local_root(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::method_ret(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::resolve(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::ret(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::rooted(depth) | param | usize	generic	the depth of a chain of re-exports the unwrap report follows
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::rooted(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::rooted(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::rooted(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::workspace_root() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog::workspace_root(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | CatalogVisit<'_>::place(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Defs::declares() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/unwrap.rs | crate::unwrap | Defs::declares(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Defs::declares(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | PatNames.names | field | Vec<(String,Option<Ty>)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | REEXPORTS | const | usize	generic	the depth of a chain of re-exports the unwrap report follows
+ambre-primitives | src/unwrap.rs | crate::unwrap | Ret::of(place) | param | impl Fn(&[String])->Ty	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Roots.any | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Roots.public | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Scope.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Ty.krate | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Ty.name | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Ty::foreign(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Ty::is_workspace() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/unwrap.rs | crate::unwrap | Ty::of(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Ty::of(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Uses.globs | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Uses.names | field | BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Uses.public | field | BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree(public) | param | bool	generic	a fact of a use item the report reads, which selects no mode
+ambre-primitives | src/unwrap.rs | crate::unwrap | place(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | segments_of() | ret | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | shape_path() | ret | Option<Vec<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | type_path() | ret | Option<Vec<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | raster_of_layout(scale) | param | f64	math	the scale of the drawing transform, a bare ratio
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | texel_scale() | ret | f32	math	device pixels per atlas texel, a bare ratio of the size to the raster cap
 ambre-core | src/scale.rs | crate::scale | <Scale<A,B> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait

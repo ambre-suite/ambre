@@ -91,6 +91,13 @@ impl<K: RankKind<Repr = u32>> Rank<K> {
     /// The first rank: zero.
     pub const FIRST: Self = Self::new(0);
 
+    /// The rank right after this one, saturating at the last rank. A new
+    /// item takes it to come after every item it follows.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self::new(self.raw.saturating_add(1))
+    }
+
     /// The rank a document stored as `stored`, saturating at the last rank.
     #[must_use]
     pub fn from_stored(stored: u64) -> Self {
@@ -177,6 +184,8 @@ mod tests {
     fn a_rank_orders_by_its_number_and_zero_is_one() {
         assert_eq!(Rank::<Shelf>::FIRST, Rank::new(0));
         assert!(Rank::<Shelf>::FIRST < Rank::new(1));
+        assert_eq!(Rank::<Shelf>::FIRST.next(), Rank::new(1));
+        assert_eq!(Rank::<Shelf>::new(u32::MAX).next(), Rank::new(u32::MAX));
         assert!(Rank::<Queue>::new(-1) < Rank::new(0));
         assert_eq!(Rank::<Queue>::new(-7).get(), -7);
         assert_eq!(format!("{:?}", Rank::<Queue>::new(-2)), "QueueRank(-2)");

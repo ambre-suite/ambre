@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3928 rows: 3395 shipped, of which 11 loose. 533 unbuilt.**
+**3963 rows: 3401 shipped, of which 11 loose. 562 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 992 | 482 | 873 | 618 | 419 | 3384 |
+| `verified` | 995 | 482 | 873 | 618 | 422 | 3390 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 175 | 54 | 29 | 109 | 166 | 533 |
+| `unimplemented` | 207 | 54 | 29 | 109 | 163 | 562 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -60,7 +60,7 @@
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-membership.md` | 35 | 35 | 35 |  |  |
-| `ambre-spec-message-bus.md` | 37 | 37 | 37 |  |  |
+| `ambre-spec-message-bus.md` | 40 | 40 | 40 |  |  |
 | `ambre-spec-object-store.md` | 18 | 17 | 17 |  | 1 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-organizations.md` | 14 | 12 | 12 |  | 2 |
@@ -79,7 +79,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
 | `ambre-spec-undo.md` | 11 | 11 | 11 |  |  |
-| `ambre-spec-zero-knowledge.md` | 20 | 19 | 19 |  | 1 |
+| `ambre-spec-zero-knowledge.md` | 22 | 19 | 19 |  | 3 |
 | `ambre-spec-trame-schema.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
@@ -177,7 +177,7 @@
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-murmure-search.md` | 18 | 7 | 7 |  | 11 |
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
-| `ambre-spec-murmure-spaces.md` | 37 | 29 | 29 |  | 8 |
+| `ambre-spec-murmure-spaces.md` | 37 | 32 | 32 |  | 5 |
 | `ambre-spec-murmure-threads.md` | 28 | 22 | 22 |  | 6 |
 | `ambre-spec-murmure-typing-presence.md` | 16 | 14 | 14 |  | 2 |
 | `ambre-spec-murmure-unread.md` | 17 | 17 | 17 |  |  |
@@ -194,6 +194,7 @@
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
 | `ambre-spec-architecture.md` | ARCH-001..072 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237 |
+| `ambre-spec-call-media.md` | CALL-001..030 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057 |
 | `ambre-spec-commands.md` | UI-THREAD-011,019,026..028,035..042 |
@@ -214,7 +215,7 @@
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176 |
 | `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173 |
-| `ambre-spec-message-bus.md` | BUS-001..037 |
+| `ambre-spec-message-bus.md` | BUS-001..040 |
 | `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
 | `ambre-spec-murmure-calls.md` | MURMURE-407..413 |
@@ -348,5 +349,5 @@
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060 |
 | `ambre-spec-undo.md` | UNDO-001..011 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..015 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..020 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..022 |
 | `ambre-spec-zoom.md` | ZOOM-001..010 |

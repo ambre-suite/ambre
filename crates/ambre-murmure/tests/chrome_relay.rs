@@ -22,7 +22,7 @@ use ambre_core::index::Pos;
 use ambre_core::{Point, Px, View};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
-    MurmureHandler, MurmureRelay, Notice, PageVisibility, SearchBox, coverage,
+    MurmureHandler, MurmureRelay, Notice, PageVisibility, SearchBox, SpaceList, coverage,
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
@@ -30,7 +30,8 @@ use ambre_murmure::commands::{
 };
 use ambre_murmure::message::{
     CatalogueEntry, ChannelMatches, DirectMessageEvent, HeldReply, HeldSend, MemberView, MessageAt,
-    MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, SearchMatch, SpaceEvent,
+    MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, SearchMatch, SpaceCommand,
+    SpaceEvent,
 };
 use ambre_murmure::message::{LogicCommand, UiEvent};
 use ambre_murmure::{MessageRef, MurmurePane, Region};
@@ -483,6 +484,7 @@ fn a_space_with(
         space_id: space,
         event: SpaceEvent::Catalogue {
             name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Acme").unwrap()),
+            role: Role::Viewer,
             categories: Vec::new(),
             channels: vec![CatalogueEntry {
                 channel_id: general,
@@ -1411,7 +1413,7 @@ fn a_match_opens_its_message_in_its_channel_and_closes_the_search() {
         }
     );
     assert_eq!(relay.search.get_untracked(), SearchBox::default());
-    relay.absorb(&found("", budget, zeta));
+    relay.absorb(&found("bud", budget, zeta));
     relay.absorb(&found("budget", budget, zeta));
     assert!(relay.search_groups().get_untracked().is_empty());
 }
@@ -1830,4 +1832,251 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         "a send gives nothing back"
     );
     root.remove();
+}
+
+use wasm_bindgen::JsCast as _;
+
+/// The space list of a sidebar, mounted in the page. `sent` holds what its
+/// controls sent the Logic thread, in order.
+struct Spaces {
+    root: web_sys::Element,
+    relay: MurmureRelay,
+    sent: RwSignal<Vec<LogicCommand>>,
+    _handle: Box<dyn std::any::Any>,
+}
+
+impl Spaces {
+    const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
+
+    fn mount(owner: &Owner) -> Self {
+        owner.set();
+        let relay = MurmureRelay::new();
+        let sent = RwSignal::new(Vec::<LogicCommand>::new());
+        let send = Callback::new(move |command| sent.update(|s| s.push(command)));
+        let root = document().create_element("div").unwrap();
+        document().body().unwrap().append_child(&root).unwrap();
+        let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+        let handle = leptos::mount::mount_to(mount, move || {
+            view! { <SpaceList relay=relay send=send now=Callback::new(|()| Spaces::NOW) /> }
+        });
+        Self {
+            root,
+            relay,
+            sent,
+            _handle: Box::new(handle),
+        }
+    }
+
+    /// The catalogue of `space`, named `name`, with the user as `role`.
+    async fn catalogue(&self, space: Id<Space>, name: &str, role: Role) {
+        self.relay.absorb(&Event::Space {
+            space_id: space,
+            event: SpaceEvent::Catalogue {
+                name: Some(ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap()),
+                role,
+                categories: Vec::new(),
+                channels: Vec::new(),
+            },
+        });
+        settle().await;
+    }
+
+    fn find(&self, selector: &str) -> Option<web_sys::HtmlElement> {
+        self.root
+            .query_selector(selector)
+            .unwrap()
+            .map(|el| el.dyn_into().unwrap())
+    }
+
+    fn names(&self) -> Vec<String> {
+        let list = self.root.query_selector_all(".murmure-space-name").unwrap();
+        (0..list.length())
+            .filter_map(|i| list.item(i)?.text_content())
+            .collect()
+    }
+
+    /// Opens the control of `class`, types `text` and submits it.
+    async fn submit(&self, class: &str, text: &str) {
+        self.find(&format!(".{class}-toggle")).unwrap().click();
+        settle().await;
+        let field: web_sys::HtmlInputElement = self
+            .find(&format!(".{class}-field"))
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        field.set_value(text);
+        field
+            .dispatch_event(&web_sys::Event::new("input").unwrap())
+            .unwrap();
+        self.find(&format!(".{class} button[type=submit]"))
+            .unwrap()
+            .click();
+        settle().await;
+    }
+
+    fn take(&self) -> Vec<LogicCommand> {
+        self.sent.try_update(std::mem::take).unwrap()
+    }
+}
+
+impl Drop for Spaces {
+    fn drop(&mut self) {
+        self.root.remove();
+    }
+}
+
+/// The sidebar offers a signed-in user a control that creates a space, and
+/// the new space shows once the Logic thread lists it (`MURMURE-583`). A
+/// blank name sends nothing and keeps the form open.
+#[wasm_bindgen_test]
+async fn a_space_created_from_the_sidebar_shows_in_it() {
+    let owner = Owner::new();
+    let spaces = Spaces::mount(&owner);
+    assert!(spaces.names().is_empty());
+
+    spaces.submit("murmure-new-space", "   ").await;
+    assert!(spaces.take().is_empty(), "a blank name creates nothing");
+    assert!(spaces.find(".murmure-new-space-field").is_some());
+
+    let field: web_sys::HtmlInputElement = spaces
+        .find(".murmure-new-space-field")
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    field.set_value("Acme");
+    field
+        .dispatch_event(&web_sys::Event::new("input").unwrap())
+        .unwrap();
+    spaces
+        .find(".murmure-new-space button[type=submit]")
+        .unwrap()
+        .click();
+    settle().await;
+    let sent = spaces.take();
+    let (space_id, name, now) = match sent.as_slice() {
+        [
+            LogicCommand::CreateSpace {
+                space_id,
+                name,
+                now,
+            },
+        ] => Some((*space_id, name.clone(), *now)),
+        _ => None,
+    }
+    .expect("one space created");
+    assert_eq!((name.as_str(), now), ("Acme", Spaces::NOW));
+    assert!(
+        spaces.find(".murmure-new-space-field").is_none(),
+        "a sent form closes"
+    );
+
+    // The Logic thread shows the new space at once, its creator the owner.
+    spaces.catalogue(space_id, "Acme", Role::Owner).await;
+    assert_eq!(spaces.names(), ["Acme"]);
+}
+
+/// A space offers its owner and its editors a control that creates a public
+/// channel, last in its catalogue. The channel opens once created
+/// (`MURMURE-584`). A viewer is offered no such control.
+#[wasm_bindgen_test]
+async fn an_admin_creates_a_public_channel_that_opens_once_created() {
+    let owner = Owner::new();
+    let spaces = Spaces::mount(&owner);
+    let (acme, kept) = (Id::<Space>::mint(), Id::<Space>::mint());
+    spaces.catalogue(acme, "Acme", Role::Editor).await;
+    spaces.catalogue(kept, "Kept", Role::Viewer).await;
+    assert_eq!(spaces.names(), ["Acme", "Kept"]);
+    let toggles = spaces
+        .root
+        .query_selector_all(".murmure-new-channel-toggle")
+        .unwrap();
+    assert_eq!(toggles.length(), 1, "the viewer's space offers none");
+
+    spaces.submit("murmure-new-channel", "budget").await;
+    let sent = spaces.take();
+    let (space_id, draft, now) = match sent.as_slice() {
+        [
+            LogicCommand::Space {
+                space_id,
+                command: SpaceCommand::CreatePublicChannel { draft, now },
+            },
+        ] => Some((*space_id, draft.clone(), *now)),
+        _ => None,
+    }
+    .expect("one public channel created");
+    assert_eq!((space_id, now), (acme, Spaces::NOW));
+    assert_eq!(draft.name.as_str(), "budget");
+    assert_eq!(draft.position, ambre_bus::Rank::FIRST);
+    // A viewer's space creates nothing, whatever calls the relay.
+    assert!(
+        spaces
+            .relay
+            .create_channel(kept, "x".to_owned(), Spaces::NOW)
+            .is_none()
+    );
+
+    let created = draft.channel_id;
+    let answered = spaces.relay.absorb(&Event::Space {
+        space_id: acme,
+        event: SpaceEvent::ChannelCreated {
+            channel_id: created,
+        },
+    });
+    assert!(
+        matches!(
+            answered.as_slice(),
+            [LogicCommand::ListMemberChannels, LogicCommand::OpenChannel { channel_id }]
+                if *channel_id == created
+        ),
+        "{answered:?}"
+    );
+    assert_eq!(
+        spaces.relay.pane.get_untracked(),
+        MurmurePane::channel(created)
+    );
+}
+
+/// A space offers its owner a control that invites another user into it. The
+/// invite fetches the key of the address typed, against the space document,
+/// for the check of the pin (`MURMURE-585`). An editor is offered none.
+#[wasm_bindgen_test]
+async fn the_owner_of_a_space_invites_another_user_into_it() {
+    let owner = Owner::new();
+    let spaces = Spaces::mount(&owner);
+    let (acme, shared) = (Id::<Space>::mint(), Id::<Space>::mint());
+    spaces.catalogue(acme, "Acme", Role::Owner).await;
+    spaces.catalogue(shared, "Shared", Role::Editor).await;
+    let toggles = spaces
+        .root
+        .query_selector_all(".murmure-space-invite-toggle")
+        .unwrap();
+    assert_eq!(toggles.length(), 1, "the editor's space offers none");
+
+    spaces
+        .submit("murmure-space-invite", " bob@dev.local ")
+        .await;
+    let sent = spaces.take();
+    let (document_id, invitee_email) = match sent.as_slice() {
+        [
+            LogicCommand::Rest {
+                cmd:
+                    RestCommand::FetchInviteeKey {
+                        document_id,
+                        invitee_email,
+                    },
+                ..
+            },
+        ] => Some((*document_id, invitee_email.clone())),
+        _ => None,
+    }
+    .expect("one key fetched");
+    assert_eq!(document_id, acme.document_id());
+    assert_eq!(invitee_email, ambre_core::Email::from("bob@dev.local"));
+    assert!(
+        spaces
+            .relay
+            .invite_to_space(shared, "bob@dev.local".to_owned())
+            .is_none(),
+        "an editor invites nobody"
+    );
 }

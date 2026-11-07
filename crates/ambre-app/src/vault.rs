@@ -4,7 +4,7 @@
 //! The Sync worker holds the key and seals each row on request. This thread
 //! moves the sealed bytes to the store and back, and never holds the key
 //! (`RESID-025`, `RESID-026`). Requests ride the service plane, so Logic
-//! relays them verbatim, and their answers are taken off the per-frame relay
+//! relays them verbatim, and their answers are taken off the switchboard
 //! before any view sees them.
 
 use std::cell::RefCell;

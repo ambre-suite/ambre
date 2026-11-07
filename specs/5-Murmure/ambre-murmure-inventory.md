@@ -35,7 +35,7 @@
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 28 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 16 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
-| `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
+| `murmure-calls` | A member starts an audio and video call from a channel in one click. | design-only | 7 |  |
 | `murmure-forums` | A forum is a channel of posts. | design-only | 11 |  |
 | `murmure-import` | A team moving from Slack or Discord brings its history along. | design-only | 11 |  |
 | `murmure-link-previews` | A link in a message shows a preview: the title and image of a web page, or the name of an Ambre document. | design-only | 8 |  |

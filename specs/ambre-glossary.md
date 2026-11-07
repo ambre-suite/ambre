@@ -30,7 +30,10 @@
 | worker | a browser worker hosting a thread | | `1-Foundations/ambre-spec-architecture.md` |
 | queue | a bounded, typed link between two threads | | `1-Foundations/ambre-spec-architecture.md` |
 | conduit | the lock-free queue of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
+| feed | the receiving end of a view on the Logic to UI queue | | `1-Foundations/ambre-spec-message-bus.md` |
 | doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
+| call worker | the instance that seals the audio and video of one call | media worker | `1-Foundations/ambre-spec-call-media.md` |
+| switchboard | the Main thread module that sends each Logic event to a view or an effect | frame relay, per-frame relay | `1-Foundations/ambre-spec-architecture.md` |
 | plane | a class of traffic on the bus | | `1-Foundations/ambre-spec-message-bus.md` |
 | content plane | the plane carrying document edits | | `1-Foundations/ambre-spec-message-bus.md` |
 | service plane | the plane carrying correlated requests and responses | | `1-Foundations/ambre-spec-message-bus.md` |
@@ -111,6 +114,10 @@
 | :--- | :--- | :--- | :--- |
 | seal | encrypt, and bind the ciphertext to its context | | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | sealed envelope | the shape every encrypted message takes | sealed frame | `1-Foundations/ambre-spec-sealed-envelope.md` |
+| call | live audio and video between members of one channel | huddle | `1-Foundations/ambre-spec-call-media.md` |
+| chunk | one encoded picture or audio packet of a call | media frame, video frame, audio frame | `1-Foundations/ambre-spec-call-media.md` |
+| sender key | the key one participant seals its chunks with during a call | meeting key | `1-Foundations/ambre-spec-call-media.md` |
+| SFU | the server that forwards the sealed chunks of a call | media server | `1-Foundations/ambre-spec-call-media.md` |
 | commitment tag | the tag binding a ciphertext to one key | | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | Alice | an honest member in a scenario, like Bob and Carol | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | Mallory | a malicious member in a scenario, holding a legitimate key | | `1-Foundations/ambre-spec-zero-knowledge.md` |

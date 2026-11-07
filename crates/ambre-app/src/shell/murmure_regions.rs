@@ -216,6 +216,7 @@ impl Acme {
             space_id: self.space,
             event: SpaceEvent::Catalogue {
                 name: Some(ambre_core::Validated::<ambre_core::Name>::parse("Acme").unwrap()),
+                role: ambre_bus::Role::Viewer,
                 categories: vec![CategoryView {
                     id: team,
                     name: ambre_core::Validated::<ambre_core::Name>::parse("Team").unwrap(),

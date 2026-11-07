@@ -25,8 +25,7 @@ compromises.
 | **Prose** | Collaborative word processing |
 | **Trame** | Collaborative spreadsheet: calculation engine, formulas, dependency DAG |
 | **Toile** | Infinite whiteboard and presentations. **A Miro, not a Figma** |
-| **Murmure** | Secure messaging with E2EE channels |
-| **Rendez-Vous** | E2EE video conferencing (WebRTC/SFrame). Ephemeral, not a document type |
+| **Murmure** | Secure messaging with E2EE channels, and E2EE audio and video calls started from a channel |
 
 ## Core Principles (Non-Negotiable Pillars)
 
@@ -65,6 +64,7 @@ GPU rendering via wgpu, real-time CRDT collaboration.
 | **Collaboration** | CRDT | Conflict resolution without a central truth server. Compatible with E2EE (no server content understanding). Offline-first editing. |
 | **Internal serialization** | Compact binary format | IPC between workers and network protocol. Small, fast to parse, no textual overhead. JSON only for REST API. |
 | **Real-time transport** | Binary WebSocket | CRDT deltas, presence, cursors. Persistent connection, low per-message overhead. |
+| **Calls** | Browser WebRTC, each chunk sealed in Rust, an SFU in Rust over str0m | The browser alone holds the capture, the codecs and the echo canceller. The SFU forwards chunks it cannot open (`specs/1-Foundations/ambre-spec-call-media.md`). |
 | **HTTP transport** | HTTP/2 minimum, HTTP/3 (QUIC) targeted | Multiplexing (HTTP/2), reduced mobile latency (QUIC eliminates TCP head-of-line blocking). |
 | **Encryption** | Modern pure-Rust primitives | AEAD (XChaCha20-Poly1305), signatures (Ed25519), key exchange (X25519), hash (BLAKE2b), KDF (Argon2). No OpenSSL bindings. |
 | **Compression** | zstd, pure Rust implementation | Applied before encryption. WASM-compatible. |
@@ -128,7 +128,7 @@ The `specs/` directory is the source of truth for behaviour. Layout:
 | `specs/1-Foundations/` | Horizontal specs: the three-thread stack, the message bus, the zero-knowledge boundary, the persisted schema and testing, then one document per shared subsystem -- client side, the Sync worker, the sealed envelope, delta order, membership, key rotation, the media transfer; relay side, the blind relay, the session, the sequencer, the broadcast, the blob store, organizations -- and one per shared feature: the UI thread, the frame, the render assets, the drawing surface, the inline text editor, high density, the chrome shell, the text input pipe, accessibility, the adaptive layout, the launcher, key verification, the command model, the design tokens, the clipboard, presence, the native file, the fixtures. It also holds four things that are not specs: the budget register, the generated inventory of the layer, the generated contract ledger and the generated pair the ledger cannot answer for -- one record per contract row, and one edge per citation those rows make. |
 | `specs/2-Trame/`, `specs/3-Toile/`, `specs/4-Prose/`, `specs/5-Murmure/` | Vertical specs, one directory per application. |
 | `specs/<app>/features/` | One document per feature, always current: its contract, its model and its whole surface. A feature is the smallest thing a user can name, ship alone and specify end to end. |
-| `specs/Todo/` | Sketches of what has no spec yet: Rendez-Vous. |
+| `specs/Todo/` | Sketches of an application that has not started. None today. |
 | `research/` | Working notes that are not specs: the evidence a design decision rests on, such as the Murmure user research. |
 | [`specs/audits/security-audit.md`](specs/audits/security-audit.md) | Numbered audit findings. A contract row that closes a finding cites it. |
 

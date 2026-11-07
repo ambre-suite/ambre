@@ -96,10 +96,15 @@
 | Macro run started by a gesture (wall clock, network waits included) | -- | 30 s | Macro sandbox | the worker is terminated at the ceiling -- **none exists** |
 | Macro run fired by an edit trigger (wall clock) | -- | 2 s | Macro sandbox | the worker is terminated at the ceiling -- **none exists** |
 | Macro run fork, 10k-cell workbook | < 50 ms | -- | Logic | criterion -- **none exists** |
+| Call chunk, one seal or one open in the transform | < 5 ms (P99) | -- | Call worker | **none exists**, and no code either |
+| Call worker load: three VP8 sizes and Opus sent, nine videos and the loudest audio received, about 1 500 chunks per second | < 25 % of one core | -- | Call worker | measured while the Sync worker seals a file -- **none exists**, and no code either |
+| Call sender key switch, from a leave or a removal to the fresh key in use | 5 s | 12 s | Sync -> Call worker | the delay lets late wraps arrive, and a member who left opens chunks until it ends (`CALL-027`) -- **none exists**, and no code either |
+| Call participants | 50 | 50 | -- | a cap: a join beyond it is refused (`CALL-021`). A broadcast to hundreds is another product |
+| Call mouth to ear, two phones on 4G | < 300 ms | < 400 ms through TURN | Browser | the inter-user budget of the README, applied to sound -- **none exists**, and no code either |
 
 * **The transport is not the cost.** UI <-> Logic stays zero-cost (`ambre_bus::conduit` by move,
   shared heap). The Logic <-> Sync `postMessage` hop adds a postcard encode plus a structured clone,
-  or a zero-copy `ArrayBuffer` transfer for a large payload. The relay's per-frame cadence bounds
+  or a zero-copy `ArrayBuffer` transfer for a large payload. The switchboard's cadence bounds
   it, well under the < 300 ms inter-user budget, because network latency dominates that path. The
   crypto bottleneck is Ed25519, 80 to 250 us.
 * **p99 over peak.** A stable 45 FPS reads as smoother than 60 FPS with stutters, so the target is
@@ -168,6 +173,7 @@
 | OIDC auth callback | < 200 ms | Provider token exchange | **none exists** |
 | Global S3 flush batch, 15 s cycle | < 2 s for 1000 deltas | Parallel S3 upload | **none exists** |
 | Presence write, per heartbeat | < 2 ms | Two Redis round trips: the entry, then its own expiry | **none exists** |
+| SFU load, one call of 50 participants | < 2 vCPU | packet forwarding and the layer choice per receiver | **none exists**, and no code either |
 
 ---
 

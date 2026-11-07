@@ -68,7 +68,7 @@ pub fn channel_of(
     let (events, from_logic) =
         local(ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<8>());
     let view = MurmureView::new(
-        Some(ambre_bus::Inbox::direct(from_logic)),
+        Some(ambre_bus::Feed::direct(from_logic)),
         None,
         ambre_canvas::BusyPublisher::new(),
         reads,

@@ -292,6 +292,7 @@ impl LogicState {
             space_id,
             event: SpaceEvent::Catalogue {
                 name: space.state.name(),
+                role: space.role,
                 categories: space.state.categories(),
                 channels,
             },

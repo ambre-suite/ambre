@@ -26,9 +26,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | `ambre_sync::membership_log::tests::a_channel_log_heeds_the_word_of_its_space` -- a link a space admin signed counts as verified; `ambre_sync::channels::tests::a_listed_meta_walks_under_the_word_of_its_open_space` | none | verified |
 | `MURMURE-301` | `INV` | A space with no retention set MUST keep every segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-302` | `OBS` | The interface MUST state the retention as a range: at least its duration, at most that plus the span of a segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-583` | `OBS` | The sidebar MUST offer a signed-in user a control that creates a space, and the new space MUST show in the sidebar once created. | this spec section 4 | not built | unbuilt -- lands with the `Spaces and channels created from the sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-584` | `OBS` | A space MUST offer its owner and its editors a control that creates a public channel in it, and the new channel MUST open once created. | this spec section 4 | not built | unbuilt -- lands with the `Spaces and channels created from the sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-585` | `OBS` | A space MUST offer its owner a control that invites another user into it. | this spec section 4 | not built | unbuilt -- lands with the `Spaces and channels created from the sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-583` | `OBS` | The sidebar MUST offer a signed-in user a control that creates a space, and the new space MUST show in the sidebar once created. | this spec section 4 | `ambre_murmure::chrome_relay::a_space_created_from_the_sidebar_shows_in_it` -- wasm tier, a blank name sends nothing, a name sends the creation and the space lists once its catalogue lands | none | verified |
+| `MURMURE-584` | `OBS` | A space MUST offer its owner and its editors a control that creates a public channel in it, and the new channel MUST open once created. | this spec section 4 | `ambre_murmure::chrome_relay::an_admin_creates_a_public_channel_that_opens_once_created` -- wasm tier, an editor creates the channel last in the catalogue, a viewer is offered no control, and the created channel shows | none | verified |
+| `MURMURE-585` | `OBS` | A space MUST offer its owner a control that invites another user into it. | this spec section 4 | `ambre_murmure::chrome_relay::the_owner_of_a_space_invites_another_user_into_it` -- wasm tier, the owner fetches the key of the address on the space document, an editor is offered no control | none | verified |
 
 ### 1.2 Create a space
 
@@ -90,10 +90,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 29 `verified`, 8 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 32 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
-  database tier holds the leave and the delete. The Sync worker and the Logic thread hold the key
-  rotation on a leave. The guest and the retention are unbuilt.
+  database tier holds the leave and the delete, and the wasm tier the controls of the sidebar. The
+  Sync worker and the Logic thread hold the key rotation on a leave. The guest and the retention are
+  unbuilt.
 
 ---
 
@@ -182,7 +183,9 @@ and accepts a self-join.
 
 | Trigger | Behaviour |
 |---|---|
-| create a space | a new space, with its creator as owner |
+| create a space, from the sidebar | a new space, with its creator as owner, listed in the sidebar |
+| create a public channel, from the space in the sidebar | an owner or an editor lists a new channel, which opens at once |
+| invite a user into a space, from the space in the sidebar | the owner names an email, and the user joins the space document once the key check passes |
 | the catalogue of a space | the public channels, grouped by category, joined ones marked |
 | join on a public channel | the channel opens, and joins the sidebar |
 | invite a guest into a channel | the guest reaches that channel alone |
@@ -209,5 +212,6 @@ and accepts a self-join.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Built.** A new space, the catalogue, the public channel it lists, the signed self-join, the
-  leave with its key rotation, and the delete of a space.
+  leave with its key rotation, and the delete of a space. The sidebar creates a space and a public
+  channel, and invites a user into a space.
 * **Not built.** The guest and the retention.
