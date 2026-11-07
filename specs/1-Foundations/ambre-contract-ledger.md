@@ -21,13 +21,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3967 rows: 3377 shipped, of which 13 loose. 590 unbuilt.**
+**3967 rows: 3377 shipped, of which 11 loose. 590 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 975 | 479 | 873 | 618 | 419 | 3364 |
+| `verified` | 977 | 479 | 873 | 618 | 419 | 3366 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 2 |  |  |  |  | 2 |
+| `untested` |  |  |  |  |  | 0 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
 | `unimplemented` | 229 | 57 | 29 | 109 | 166 | 590 |
@@ -42,7 +42,7 @@
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 7 |  | 1 |
 | `ambre-spec-architecture.md` | 72 | 72 | 63 | 9 |  |
 | `ambre-spec-broadcast.md` | 28 | 27 | 27 |  | 1 |
-| `ambre-spec-call-media.md` | 37 | 8 | 6 | 2 | 29 |
+| `ambre-spec-call-media.md` | 37 | 8 | 8 |  | 29 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 19 | 18 | 18 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |

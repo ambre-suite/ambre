@@ -122,10 +122,14 @@ fn firefox_capabilities(downloads: &Path) -> Value {
             // page under test.
             "browser.startup.homepage_override.mstone": "ignore",
             "datareporting.policy.dataSubmissionEnabled": false,
-            // A call test captures the fake camera and microphone, with no prompt. It reaches
-            // the SFU on the loopback, which Firefox refuses as a candidate by default.
+            // A call test captures the fake camera and microphone, with no prompt. The two
+            // grants are a real permission, which `media.navigator.permission.disabled` is
+            // not. A page without it gets one ICE candidate on the default route, behind an
+            // mDNS name. That candidate cannot pair with the loopback address of the SFU.
             "media.navigator.streams.fake": true,
-            "media.navigator.permission.disabled": true,
+            "permissions.default.camera": 1,
+            "permissions.default.microphone": 1,
+            // Firefox gathers no loopback candidate by default.
             "media.peerconnection.ice.loopback": true,
         },
     });
