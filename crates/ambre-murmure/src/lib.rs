@@ -114,6 +114,6 @@ pub use opening::{Opening, OpeningChannel, Receipt};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
 pub use search::Query;
 pub use sequence::{Order, Position};
-pub use sidebar::{Activity, Sidebar, SidebarEntry, SidebarGroup, SidebarSection};
+pub use sidebar::{Activity, Sidebar, SidebarEntry, SidebarGroup, SidebarSection, SpaceHead};
 pub use space::{Listing, SpaceState};
 pub use watchers::{Sample, TICK_PERIOD, TYPING_EXPIRY, TYPING_REFRESH, Watchers};

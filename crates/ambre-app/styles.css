@@ -494,6 +494,35 @@ input[type="radio"] {
     overflow: auto;
 }
 
+/* The spaces of the Murmure sidebar (the Murmure spaces spec): the control
+   that creates a space, then each space with the controls its role allows. */
+.murmure-spaces {
+    padding: var(--space-2) var(--space-4) 0;
+}
+
+.murmure-spaces ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.murmure-space-name {
+    margin: var(--space-2) 0 var(--space-1);
+    font-size: var(--font-body);
+    font-weight: 600;
+}
+
+.murmure-spaces form {
+    display: flex;
+    gap: var(--space-1);
+    margin: var(--space-1) 0;
+}
+
+.murmure-spaces input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 /* The Murmure channel list (the Murmure layout spec): one section per group,
    one button per channel, its mark or its counts at the end. */
 .murmure-channel-list {
