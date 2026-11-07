@@ -96,6 +96,9 @@ mod landing;
 /// The local store the Main thread drives, within its budget (`RESID-002`).
 #[cfg(target_arch = "wasm32")]
 mod local_store;
+/// The Murmure chrome, fed from the Logic thread's events.
+#[cfg(target_arch = "wasm32")]
+mod murmure_mirror;
 /// The system notifications of an open tab.
 #[cfg(target_arch = "wasm32")]
 mod notify;
@@ -1004,39 +1007,10 @@ pub fn main() {
         switchboard::Page::Document
     });
     let relay_tx = shell_outbox.clone();
-    // A click on a notification opens its channel at its message (the
-    // Murmure notifications spec). The permission is asked once per page.
-    let notice_asked = Rc::new(std::cell::Cell::new(notify::Question::Unasked));
-    let open_noticed: Rc<dyn Fn(Id<ambre_core::id::Channel>, Option<ambre_murmure::MessageRef>)> = {
-        let tx = shell_outbox.clone();
-        Rc::new(move |channel, at| {
-            if let Some(command) = murmure_relay.open_at(channel, at) {
-                tx.send(command.map(AppCommand::embed));
-            }
-        })
-    };
-    // A Murmure page refreshes this user's presence on each of its spaces once
-    // per refresh period (the Murmure members spec). It ticks the shown channel
-    // too (the Murmure typing spec). An interval, not the frame loop: a hidden
-    // tab pauses its frames, yet holds its spaces open. The interval lives as
-    // long as the page.
+    // The Murmure chrome, fed from each event, and its presence refresh.
+    let murmure_mirror = murmure_mirror::MurmureMirror::new(murmure_relay, shell_outbox.clone());
     if boot_is_murmure {
-        let presence_tx = shell_outbox.clone();
-        let refresh = Closure::<dyn FnMut()>::new(move || {
-            let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
-            // The tick is lossy and the next period offers it again. The
-            // presence refresh of a space is not, so the outbox holds it.
-            for command in murmure_relay.refresh_presence(now) {
-                presence_tx.offer(command.map(AppCommand::embed));
-            }
-        });
-        if let Some(window) = web_sys::window() {
-            let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
-                refresh.as_ref().unchecked_ref(),
-                ambre_murmure::REFRESH_PERIOD.to_timer_i32(),
-            );
-        }
-        refresh.forget();
+        murmure_mirror.keep_presence();
     }
     // The switchboard's handle on the view fan-out: it routes every view's
     // events, and prunes a child sender whose receiver has been dropped.
@@ -1194,15 +1168,7 @@ pub fn main() {
             // (`ARCH-018`). The launcher names no variant.
             trame_relay.absorb(&ev);
             toile_relay.absorb(&ev);
-            for command in murmure_relay.absorb(&ev) {
-                relay_tx.send(command.map(AppCommand::embed));
-            }
-            if let Some(notice) = murmure_relay.notice(
-                &ev,
-                ambre_murmure::chrome::PageVisibility::visible_if(notify::page_visible()),
-            ) {
-                notify::deliver(notice, &notice_asked, Rc::clone(&open_noticed));
-            }
+            murmure_mirror.mirror(&ev);
             // The relay decides what a service event calls for, and this
             // closure applies each decision in order.
             let shown = switchboard::Shown {
@@ -1567,8 +1533,6 @@ mod platform;
 #[cfg(target_arch = "wasm32")]
 mod shell;
 
-#[cfg(target_arch = "wasm32")]
-use ambre_bus::{Authored, Instant};
 #[cfg(target_arch = "wasm32")]
 use platform::*;
 #[cfg(target_arch = "wasm32")]
