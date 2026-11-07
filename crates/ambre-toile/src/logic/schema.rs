@@ -31,7 +31,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(1);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(2);
 
 /// Write the current version into a board's `meta` register.
 ///
@@ -83,11 +83,24 @@ pub fn read_version(doc: &LoroDoc) -> Result<Version<Schema>, SchemaError> {
 
 /// Toile's registry: one row per version bump, appended never rewritten.
 ///
-/// Version 1 is the first layout, and no build before it shipped, so the list
-/// is empty. A board with no version reads as 0 (`SCHEMA-005`), and the walk
-/// finds no step from 0 and refuses it. The first layout change after the
-/// release adds its row here.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
+/// Version 1 is the first layout. A board with no version reads as 0
+/// (`SCHEMA-005`), and the walk finds no step from 0 and refuses it.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
+    from: Version::new(1),
+    to: Version::new(2),
+    apply: document_locale_v2,
+}];
+
+/// Version 1 to 2: `meta` carries the board's locale (`ambre-spec-locale.md`).
+///
+/// The step rewrites nothing but the register. A version-1 board names no
+/// locale, and an absent key reads as none (`LOCALE-013`), so no element moves
+/// (`LOCALE-009`).
+fn document_locale_v2(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
 
 /// The full-state read rule, applied before the caller touches a single
 /// container (`SCHEMA-006`).

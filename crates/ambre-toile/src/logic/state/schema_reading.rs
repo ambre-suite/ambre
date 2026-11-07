@@ -299,6 +299,13 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 verdict(version, SCHEMA_VERSION)
             ))
         }
+        Root::Meta if stored.key(0)? == ambre_core::schema::MetaKey::Locale.as_str() => {
+            let LoroValue::String(tag) = &stored.value else {
+                return None;
+            };
+            let locale = ambre_core::DocumentLocale::from_register(Some(tag.as_str()));
+            Some(format!("in {:?}", locale.as_str()?))
+        }
         Root::Board if BoardKey::parse(stored.key(0)?) == Some(BoardKey::GridSize) => {
             Some(format!(
                 "grid unit {} world px",

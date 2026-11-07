@@ -5,7 +5,6 @@
 // fields/helpers of the parent module through the `use super::*` glob.
 
 use super::*;
-use crate::formula::text::CellText;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
 
@@ -109,7 +108,7 @@ impl TrameState {
     pub(super) fn commit_cell_edit(
         &mut self,
         session: ambre_bus::Token<crate::EditSession>,
-        text: &CellText<SourceForm>,
+        text: &super::locale::Typed,
     ) -> TrameOutcome {
         let Some(anchor) = self.edit_anchor.take_if(|a| a.session == session) else {
             // Dropped when its cell went, and the UI was told then.
@@ -135,7 +134,7 @@ impl TrameState {
     fn write_at_anchor(
         &mut self,
         anchor: &EditAnchor,
-        text: &CellText<SourceForm>,
+        typed: &super::locale::Typed,
     ) -> TrameOutcome {
         let Some(at) = self.locate_anchor(anchor) else {
             let session = anchor.session;
@@ -144,7 +143,10 @@ impl TrameState {
         // The cell write and its derived commits are one undo item, which the
         // next `CommitEdit` seals.
         let _ = self.undo_manager.group_start();
-        self.write_cell(at, text);
+        if typed.kind == super::locale::TypedKind::Date {
+            self.format_typed_date(at);
+        }
+        self.write_cell(at, &typed.text);
         self.finish_cell_writes()
     }
 

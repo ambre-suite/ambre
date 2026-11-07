@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-107` | `OBS` | A date-formatted cell MUST show a calendar date, never the day serial behind it. | this spec section 5 | `ambre_trame::logic::tests::group1::date_and_time_cells_show_the_calendar`; `ambre_trame::logic::number_format::tests::date_and_time_render_the_calendar` | none | verified |
 | `TRAME-108` | `OBS` | A formatted value MUST read the same everywhere it is shown as text. | this spec section 5 | `ambre_trame::logic::tests::group7::find_matches_the_formatted_value`; `ambre_trame::logic::tests::group7::csv_export_writes_the_formatted_value` | none | verified |
 | `TRAME-109` | `OBS` | A cell carrying a custom pattern MUST show that pattern applied. | this spec section 5 | `ambre_trame::logic::tests::group1::custom_pattern_is_applied`; `ambre_trame::logic::number_format::tests::custom_numeric_patterns`; `::custom_literals_and_interleaved_digits`; `::custom_sections_choose_by_sign`; `::custom_date_and_time_tokens` | none | verified |
-| `TRAME-110` | `OBS` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `TRAME-110` | `OBS` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5; `1-Foundations/ambre-spec-locale.md` section 3 | `ambre_trame::logic::tests::group15::a_currency_and_a_date_follow_the_document_locale`; `ambre_trame::logic::number_format::tests::a_pattern_prints_the_marks_and_names_of_its_locale` -- the forms come from the CLDR table `just locale-table-check` holds | none | verified |
 
 ### 1.2 Change the decimal count
 
@@ -46,18 +46,18 @@ A reader types a number into a cell. The reader convention picks the separators 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-237` | `POST` | Typed input MUST be parsed under the reader's convention: a French reader typing `3,5`, under the default convention, stores 3.5. | this spec section 5; `1-Foundations/ambre-spec-locale.md`, `LOCALE-016` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `TRAME-238` | `FRAME` | A typed number MUST be stored without the locale it was typed in. | this spec section 5; `1-Foundations/ambre-spec-locale.md`, `LOCALE-014` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `TRAME-237` | `POST` | Typed input MUST be parsed under the reader's convention: a French reader typing `3,5`, under the default convention, stores 3.5. | `1-Foundations/ambre-spec-locale.md` section 3, `LOCALE-016` | `ambre_trame::logic::tests::group15::a_number_typed_in_the_readers_locale_is_stored_in_none`; `ambre_core::locale::tests::a_typed_number_reads_back_canonical` | none | verified |
+| `TRAME-238` | `FRAME` | A typed number MUST be stored without the locale it was typed in. | `1-Foundations/ambre-spec-locale.md` section 3, `LOCALE-014` | `ambre_trame::logic::tests::group15::a_number_typed_in_the_readers_locale_is_stored_in_none`; `ambre_core::locale::tests::a_localized_number_reads_back_as_the_canonical_one` | none | verified |
 
 * **Budget.** none of its own. A format is a pure function of a value and a pattern, applied per
   displayed cell inside the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a format is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 11 `verified`, 3 `unimplemented`. What holds is the pair at the root of the
-  area. A type-level argument gives what a cell holds (`TRAME-102`), and one test that packs a
-  formatted cell gives what it shows (`TRAME-157`). The decimal step, the calendar, the custom
-  pattern and the reach past the grid each have their test. What is loose is the surface: no control
-  lets a user type a pattern, so `TRAME-109` holds for patterns only a document carries.
+* **Verification.** 14 `verified`. What holds is the pair at the root of the area. A type-level
+  argument gives what a cell holds (`TRAME-102`), and one test that packs a formatted cell gives
+  what it shows (`TRAME-157`). The decimal step, the calendar, the custom pattern and the reach past
+  the grid each have their test. What is loose is the surface: no control lets a user type a
+  pattern, so `TRAME-109` holds for patterns only a document carries.
 
 ---
 
@@ -148,11 +148,9 @@ format edit is a restyle -- one undo item, one delta, whole-cell last-writer-win
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The currency is the euro, in the code** (`TRAME-110`). There is no currency choice and no
-  document locale. The decimal separator, the thousands separator and the date order are whatever
-  the format function was written to emit.
-* **Typed input reads one form** (`TRAME-237`). A cell parses `3.5` and nothing else, whoever types
-  it. Under the reader's convention, a French reader will type `3,5` and store the same number.
+* **The currency is the euro, in the code.** There is no currency choice. The workbook's locale
+  places the symbol and writes the marks (`TRAME-110`). It never picks the currency, so a locale
+  change does not turn one amount into another.
 * **Nothing keeps a decimal count off a family that ignores it** (`TRAME-104`). The predicate is
   exhaustive, and its one use is greying the two buttons. The command merges whatever `decimals` it
   is given into whatever family the cell carries. A document written by anything but the toolbar --

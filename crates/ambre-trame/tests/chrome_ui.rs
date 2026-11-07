@@ -288,7 +288,8 @@ fn status_bar_renders_label_and_aggregates() {
         }));
         let perf = RwSignal::new(PerfSnapshot::default());
         let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
-        view! { <StatusBar stats=stats perf=perf zoom=zoom /> }
+        let locale = RwSignal::new(None);
+        view! { <StatusBar stats=stats perf=perf zoom=zoom locale=locale /> }
     });
 
     let text = container.text_content().unwrap_or_default();
@@ -768,13 +769,46 @@ fn totals(values: &[f64]) -> Option<ambre_trame::message::NumericStats> {
     NumericStats::of_all(&numbers, Bounded::<CellFloat>::new(values.iter().sum()))
 }
 
+/// `LOCALE-021`: a status band in another locale than the workbook's says
+/// so, and one in the workbook's says nothing.
+#[wasm_bindgen_test]
+fn the_status_bar_says_when_it_shows_another_locale() {
+    let notice = |convention| {
+        let container = mount_in_container(move || {
+            let stats = RwSignal::new(None);
+            let perf = RwSignal::new(PerfSnapshot::default());
+            let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
+            let locale = RwSignal::new(Some(ambre_trame::ui::locale::LocaleView {
+                document: ambre_core::DocumentLocale::parse("en").unwrap(),
+                reader: ambre_core::ReaderLocale {
+                    own: ambre_core::DocumentLocale::parse("fr").unwrap(),
+                    convention,
+                },
+            }));
+            view! { <StatusBar stats=stats perf=perf zoom=zoom locale=locale /> }
+        });
+        let text = container
+            .query_selector(".statusbar-locale")
+            .unwrap()
+            .and_then(|node| node.text_content());
+        container.remove();
+        text
+    };
+    assert_eq!(
+        notice(ambre_core::NumberConvention::AllMine).as_deref(),
+        Some("Numbers shown in fr; the document is in en")
+    );
+    assert_eq!(notice(ambre_core::NumberConvention::TypeMine), None);
+}
+
 /// Mount the status band over `stats` and return its text.
 fn status_text(stats: Option<SelStats>) -> String {
     let container = mount_in_container(move || {
         let stats = RwSignal::new(stats);
         let perf = RwSignal::new(PerfSnapshot::default());
         let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
-        view! { <StatusBar stats=stats perf=perf zoom=zoom /> }
+        let locale = RwSignal::new(None);
+        view! { <StatusBar stats=stats perf=perf zoom=zoom locale=locale /> }
     });
     let text = container
         .query_selector(".statusbar-stats")
@@ -892,6 +926,7 @@ fn relay() -> chrome::TrameRelay {
         filter_values: RwSignal::new(Vec::new()),
         sheets: RwSignal::new(Vec::new()),
         sel_stats: RwSignal::new(None),
+        locale: RwSignal::new(None),
     }
 }
 

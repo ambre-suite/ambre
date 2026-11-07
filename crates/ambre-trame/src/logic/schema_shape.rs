@@ -402,6 +402,9 @@ pub(super) fn workbook_of_every_key() -> TrameState {
     state.handle_command(TrameCommand::CreateSheet {
         name: crate::test_support::sheet("Two"),
     });
+    state.handle_command(TrameCommand::SetDocumentLocale {
+        locale: ambre_core::DocumentLocale::parse("fr").expect("a well-formed tag"),
+    });
     state
 }
 
@@ -462,6 +465,21 @@ fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
             }
             doc.get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
                 .insert(&format!("{row}:{col}"), "={1_0|1_1}+1")
+                .expect("a cell");
+            doc.commit();
+            doc
+        }
+        // Version 2: a workbook with one cell and no locale. The step to 3
+        // rewrites none of it.
+        2 => {
+            let doc = LoroDoc::new();
+            doc.set_peer_id(1).expect("a fixed peer");
+            let sheet = default_sheet();
+            let _ = doc
+                .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 2_i64);
+            doc.get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
+                .insert("0000000000000001_00000000:0000000000000001_00000001", "3.5")
                 .expect("a cell");
             doc.commit();
             doc

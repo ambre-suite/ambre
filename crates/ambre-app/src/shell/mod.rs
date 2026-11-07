@@ -197,12 +197,14 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         // Each application fills its panels from its own events, and turns
         // their intents into its own commands (`ARCH-018`). The switchboard
         // reads both back through the slot.
+        let trame_locale = RwSignal::new(None::<ambre_trame::ui::locale::LocaleView>);
         let trame_relay = trame_chrome::TrameRelay {
             sort_dialog,
             filter_popover,
             filter_values,
             sheets,
             sel_stats,
+            locale: trame_locale,
         };
         let toile_relay = toile_chrome::ToileRelay {
             sel_stats: sel_stats_toile,
@@ -311,6 +313,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             invite_role,
             me,
             sel_stats,
+            trame_locale,
             sel_stats_toile,
             present_toile,
             presenter_slide,

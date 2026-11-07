@@ -1,0 +1,19 @@
+{
+  "generator": "toile/shapes_and_frame",
+  "generator_version": 2,
+  "seed": 1669982087086081,
+  "doc_type": "Toile",
+  "ambre_version": 1,
+  "schema_version": 1,
+  "digest": "2f27accdb72cafcbd2c50ac7c4da850b61bd0071fe07e5cad3bd82a77ea4a126",
+  "shape": {
+    "peers": 1,
+    "body": {
+      "Toile": {
+        "elements": 10,
+        "frames": 1,
+        "connectors": 0
+      }
+    }
+  }
+}

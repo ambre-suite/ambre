@@ -434,6 +434,46 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event(), ToileEvent::DeckChanged])
     }
 
+    /// The board's locale, [`DocumentLocale::NONE`] when the register is
+    /// absent or holds no well-formed tag.
+    ///
+    /// [`DocumentLocale::NONE`]: ambre_core::DocumentLocale::NONE
+    #[must_use]
+    pub fn document_locale(&self) -> ambre_core::DocumentLocale {
+        let value = self
+            .doc
+            .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            .get(ambre_core::schema::MetaKey::Locale.as_str())
+            .and_then(|value| value.into_value().ok());
+        match value {
+            Some(loro::LoroValue::String(text)) => {
+                ambre_core::DocumentLocale::from_register(Some(text.as_str()))
+            }
+            _ => ambre_core::DocumentLocale::NONE,
+        }
+    }
+
+    /// Write `locale` into the `meta` register: one delta, and no element
+    /// moves (`LOCALE-009`). The same locale writes nothing.
+    pub(super) fn set_document_locale(
+        &mut self,
+        locale: &ambre_core::DocumentLocale,
+    ) -> ToileOutcome {
+        if *locale == self.document_locale() {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        let meta = self
+            .doc
+            .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str());
+        let key = ambre_core::schema::MetaKey::Locale.as_str();
+        let _ = match locale.as_str() {
+            Some(tag) => meta.insert(key, tag),
+            None => meta.delete(key),
+        };
+        self.doc.commit();
+        self.emit_with_update(Vec::new())
+    }
+
     /// Clamp every child of `frame` to paint after (above) the frame in
     /// `layers`. A child sitting below the frame is moved to just above it, and
     /// this repeats until the invariant holds. The caller commits, so the
@@ -734,6 +774,25 @@ mod tests {
                 _ => None,
             })
             .expect("a create names its element")
+    }
+
+    /// `LOCALE-001`, `LOCALE-004`, `LOCALE-005`: a board carries one locale,
+    /// two peers setting it at once converge, and a save and an open keep it.
+    #[test]
+    fn the_board_locale_converges_and_survives_a_reopen() {
+        let tag = |t: &str| ambre_core::DocumentLocale::parse(t).unwrap();
+        let mut alice = ToileState::new();
+        let mut bob = ToileState::new();
+        assert_eq!(alice.document_locale(), ambre_core::DocumentLocale::NONE);
+        let from_alice =
+            alice.handle_command(ToileCommand::SetDocumentLocale { locale: tag("fr") });
+        let from_bob = bob.handle_command(ToileCommand::SetDocumentLocale { locale: tag("de") });
+        alice.apply_remote(from_bob.update.as_ref().expect("a set is one delta"));
+        bob.apply_remote(from_alice.update.as_ref().expect("a set is one delta"));
+        assert_eq!(alice.document_locale(), bob.document_locale());
+        let mut reopened = ToileState::new();
+        reopened.import_snapshot(&alice.export_snapshot()).unwrap();
+        assert_eq!(reopened.document_locale(), alice.document_locale());
     }
 
     /// `TOILE-011`: the clamp ends on a paint order holding a duplicate entry,

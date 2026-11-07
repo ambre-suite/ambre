@@ -212,6 +212,44 @@ pub(crate) fn dev_user_from_url() -> Option<ambre_core::Validated<ambre_core::Di
         .and_then(|u| ambre_core::Validated::<ambre_core::DisplayName>::parse(u).ok())
 }
 
+/// localStorage key holding the reader's own locale tag, empty for none
+/// (`ambre-spec-locale.md` section 3). It lives on the device and in no
+/// document.
+const READER_LOCALE_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =
+    ambre_core::StaticKey::new("ambre.reader_locale");
+
+/// The reader's own locale and convention. The first run reads the browser's
+/// language once and stores it, so a later boot reads the device's setting
+/// and never the machine again (`LOCALE-012`). A store that cannot be read
+/// gives the first-run reading, unstored.
+pub(crate) fn reader_locale() -> ambre_core::ReaderLocale {
+    let Some(window) = web_sys::window() else {
+        return ambre_core::ReaderLocale::default();
+    };
+    let storage = window.local_storage().ok().flatten();
+    let stored = storage
+        .as_ref()
+        .and_then(|s| s.get_item(READER_LOCALE_KEY.as_str()).ok().flatten());
+    if let Some(tag) = stored {
+        return ambre_core::ReaderLocale {
+            own: ambre_core::DocumentLocale::from_register(Some(tag.as_str())),
+            convention: ambre_core::NumberConvention::default(),
+        };
+    }
+    // The browser's language, read once; a malformed one is no locale.
+    let reader = ambre_core::ReaderLocale {
+        own: ambre_core::DocumentLocale::from_register(window.navigator().language().as_deref()),
+        convention: ambre_core::NumberConvention::default(),
+    };
+    if let Some(storage) = storage {
+        let _ = storage.set_item(
+            READER_LOCALE_KEY.as_str(),
+            reader.own.as_str().unwrap_or_default(),
+        );
+    }
+    reader
+}
+
 /// localStorage key holding the active dev username, so a refresh
 /// re-establishes the dev session without `?user=` in the URL.
 const DEV_USER_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =

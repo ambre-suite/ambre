@@ -308,6 +308,9 @@ struct Wiring {
     /// cell. Set by the switchboard on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
+    /// The workbook's locale and the reader's half, set by the switchboard
+    /// on `TrameEvent::LocaleState` (`LOCALE-021`, `LOCALE-022`).
+    trame_locale: RwSignal<Option<ambre_trame::ui::locale::LocaleView>>,
     /// Toile status-bar selection aggregates (toile-status-bar): element count +
     /// combined world bounds; `None` on an empty selection. Set by the switchboard on `ToileEvent::SelectionStats`.
     sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
@@ -772,6 +775,11 @@ pub fn main() {
     // which has both, fetches on its behalf and ships the raw bytes across as
     // `LogicCommand::LoadFonts`. Fire-and-forget on a `spawn_local`: export
     // happens far later, and a slow fetch must not stall boot.
+    // The reader's own locale, read from the device before the first open, so
+    // a document reads and seeds under it (`LOCALE-015`, `LOCALE-019`).
+    let _ = shell_outbox.send(LogicCommand::SetReaderLocale {
+        reader: platform::reader_locale(),
+    });
     {
         let fonts_tx = shell_outbox.clone();
         wasm_bindgen_futures::spawn_local(async move {

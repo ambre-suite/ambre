@@ -94,6 +94,7 @@ test-native:
     cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-canvas/tokens
     just fixtures-check
     just tokens-check
+    just locale-table-check
 
 # Regenerate `fixtures/current/` in place and drop any artifact whose generator
 # is gone (`ambre-spec-fixtures.md` section 3). The fix for a red
@@ -126,6 +127,21 @@ tokens-write:
 # token drift: fail when a generated theme file is not what `tokens.ron` gives.
 tokens-check:
     cargo run -q -p ambre-canvas --features tokens --bin ambre-tokens
+
+# The number and date forms of each locale (`ambre-spec-locale.md`), from a
+# pinned CLDR. `locale-table-fetch` is the one step that reads the network: it
+# refreshes `scripts/data/cldr-locale-subset.json` from the npm registry, each
+# package checked against its pinned integrity. `locale-table` writes the Rust
+# table from that subset, and `locale-table-check` fails, offline, on a table
+# the subset does not give. No value of the table is typed by hand.
+locale-table-fetch:
+    python3 scripts/locale_table.py --fetch
+
+locale-table:
+    python3 scripts/locale_table.py
+
+locale-table-check:
+    python3 scripts/locale_table.py --check
 
 # Copy one artifact out of `current/` into `frozen/`, deriving the version
 # suffix from its manifest. Takes a generator name (`trame/grid_literals`),
