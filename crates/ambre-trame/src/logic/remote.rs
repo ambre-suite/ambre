@@ -90,22 +90,46 @@ impl Default for Imported {
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether the subscription notes a local commit as it notes an import.
+    pub(super) enum LocalNote {
+        /// A local commit keeps the caches on its own path.
+        Ignored,
+        /// An undo or a redo runs: its commit is noted, so the tail carries
+        /// the engine by what it wrote, as after a remote batch.
+        Noted,
+    }
+}
+
+/// What the subscription writes, and whether it notes a local commit.
+#[derive(Debug, Default)]
+pub(super) struct Note {
+    imported: Imported,
+    local: LocalNote,
+}
+
 /// The shared note a document subscription writes into.
-pub(super) type ImportSink = Arc<Mutex<Imported>>;
+pub(super) type ImportSink = Arc<Mutex<Note>>;
 
 /// Subscribe to `doc`, noting into the returned sink what every import
-/// writes. A local commit, an undo and a checkout are not noted: their own
-/// paths keep the caches. The subscription lives as long as the handle.
+/// writes. A local commit is noted only while an undo or a redo runs
+/// ([`LocalNote`]). A checkout is never noted. The subscription lives as
+/// long as the handle.
 pub(super) fn watch(doc: &LoroDoc) -> (ImportSink, Subscription) {
     let sink: ImportSink = Arc::default();
     let into = Arc::clone(&sink);
     let subscription = doc.subscribe_root(Arc::new(move |event: DiffEvent<'_>| {
-        if event.triggered_by != EventTriggerKind::Import {
+        let mut held = into.lock().unwrap_or_else(PoisonError::into_inner);
+        let noted = match event.triggered_by {
+            EventTriggerKind::Import => true,
+            EventTriggerKind::Local => held.local == LocalNote::Noted,
+            EventTriggerKind::Checkout => false,
+        };
+        if !noted {
             return;
         }
-        let mut imported = into.lock().unwrap_or_else(PoisonError::into_inner);
         for change in &event.events {
-            note(change, &mut imported);
+            note(change, &mut held.imported);
         }
     }));
     (sink, subscription)
@@ -210,6 +234,19 @@ pub(super) enum RemotePath {
     Reseed,
 }
 
+ambre_core::define_flag! {
+    /// When the carried step compiles again the formulas that read positions.
+    pub(super) enum Readers {
+        /// When the batch moved a line of the sheet on screen.
+        OnMove,
+        /// Always: an undo or a redo. A local write that adds a line leaves
+        /// a formula reading a position the line now holds, which a reseed
+        /// would bind to the line. The history step binds it too, so the
+        /// engine equals a reseed after it (`TRAME-285`).
+        Always,
+    }
+}
+
 /// What the engine does once a remote batch merged, and the caches are
 /// rebuilt.
 struct RemoteStep {
@@ -230,7 +267,21 @@ struct RemoteStep {
 impl TrameState {
     /// Take what the imports since the last call wrote, the note cleared.
     pub(super) fn take_imported(&self) -> Imported {
-        std::mem::take(&mut *self.imported.lock().unwrap_or_else(PoisonError::into_inner))
+        std::mem::take(
+            &mut self
+                .imported
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .imported,
+        )
+    }
+
+    /// Note, or stop noting, the local commits, for an undo or a redo.
+    pub(super) fn note_local(&self, local: LocalNote) {
+        self.imported
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .local = local;
     }
 
     /// Whether the engine may carry a batch that wrote `imported`, judged on
@@ -263,6 +314,19 @@ impl TrameState {
     /// whole window when the engine reseeded after all (`TRAME-167`). `imported` is what the batch wrote, and
     /// [`carries`](Self::carries) accepted it.
     pub(super) fn carry_after_merge(&mut self, imported: &Imported) -> Vec<TrameEvent> {
+        self.adopt_imported_cursor();
+        let (conflicts, repaint) = self.carry_imported(imported, Readers::OnMove);
+        self.merge_events(conflicts, repaint)
+    }
+
+    /// Rebuild the caches `imported` reached and run the engine step, with
+    /// no event built. Returns the merge conflicts and the repaint. A remote
+    /// batch and an undo or a redo share it (`TRAME-285`).
+    pub(super) fn carry_imported(
+        &mut self,
+        imported: &Imported,
+        readers: Readers,
+    ) -> (Vec<TrameEvent>, Repaint) {
         let active = self.active_sheet.clone();
         let moved = imported.axes.contains(&active);
         let layout = if moved {
@@ -270,7 +334,6 @@ impl TrameState {
         } else {
             BatchLayout::Kept
         };
-        self.adopt_imported_cursor();
         if imported.keys == LineRead::Skipped {
             self.note_unreadable_key();
         }
@@ -285,7 +348,7 @@ impl TrameState {
         };
         let step = change
             .filter(|_| self.masked_cells.is_empty())
-            .and_then(|change| self.remote_step(imported, change));
+            .and_then(|change| self.remote_step(imported, change, readers));
         let mut repaint = match step {
             Some(step) => self.carry_remote(step),
             None => {
@@ -335,7 +398,7 @@ impl TrameState {
         if moved || imported.filters.contains(&active) {
             self.rebuild_filter();
         }
-        self.merge_events(conflicts, repaint)
+        (conflicts, repaint)
     }
 
     /// Take the active sheet's layout after the batch as the position cache.
@@ -378,6 +441,7 @@ impl TrameState {
         &self,
         imported: &Imported,
         change: Option<&LayoutChange>,
+        readers: Readers,
     ) -> Option<RemoteStep> {
         let others = self.other_engine_indices();
         let index_of = |sheet: Pos<EngineSheet>| {
@@ -471,7 +535,7 @@ impl TrameState {
             }
         }
         let mut reread = Vec::new();
-        if change.is_some() {
+        if change.is_some() || readers == Readers::Always {
             for cell in self.engine.structural_reach(&removed) {
                 // A cell the batch also wrote may hold the text it compiled
                 // from, over lines the batch moved or removed. It compiles
@@ -510,7 +574,7 @@ impl TrameState {
 
     /// The layout of every sheet but the active one, keyed by engine index,
     /// as [`engine_indices`](Self::engine_indices) builds them.
-    fn other_engine_indices(&self) -> HashMap<Pos<EngineSheet>, SheetIndex> {
+    pub(super) fn other_engine_indices(&self) -> HashMap<Pos<EngineSheet>, SheetIndex> {
         self.sheets_by_idx
             .iter()
             .enumerate()

@@ -5,6 +5,7 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
+use super::line_cells;
 use super::*;
 use crate::formula::ACTIVE_SHEET;
 use crate::formula::SheetQualifier;
@@ -29,13 +30,9 @@ impl TrameState {
     /// formula names its cells by lines the edit leaves in place, so its text
     /// cannot change. When the engine cannot name them, the walk reads every
     /// formula, and the engine reseeds.
-    pub(super) fn reanchor_formulas(
-        &self,
-        edit: AxisEdit,
-        gone: &[Uid],
-        inserted: Option<Uid>,
-    ) -> Walk {
-        let new = self.next_index(edit, gone, inserted);
+    ///
+    /// `new` is the layout after the edit, which the caller derived.
+    pub(super) fn reanchor_formulas(&self, edit: AxisEdit, gone: &[Uid], new: SheetIndex) -> Walk {
         if self.engine_needs_reseed() {
             self.reanchor_every_formula(edit, &new);
             return Walk {
@@ -126,26 +123,17 @@ impl TrameState {
     }
 
     /// The layout of the active sheet after `edit`, whose lists already hold
-    /// it. An insert of the line `inserted` and a delete of the lines `gone`
-    /// derive it from the layout before, with no read of the lists. A reorder,
-    /// or a view the derivation cannot follow, reads the lists.
-    fn next_index(&self, edit: AxisEdit, gone: &[Uid], inserted: Option<Uid>) -> SheetIndex {
+    /// it. An insert of the line `inserted` derives it from the layout before,
+    /// with no read of the lists. A reorder, or a view the derivation cannot
+    /// follow, reads the lists. A delete derives its layout as it removes each
+    /// line ([`Axes::delete`]).
+    pub(super) fn next_index(&self, edit: AxisEdit, inserted: Option<Uid>) -> SheetIndex {
         let derived = match (edit, inserted) {
             (AxisEdit::Rows(LineEdit::Insert { at, .. }), Some(uid)) => {
                 self.index.clone().with_line::<Row>(at, uid)
             }
             (AxisEdit::Cols(LineEdit::Insert { at, .. }), Some(uid)) => {
                 self.index.clone().with_line::<Col>(at, uid)
-            }
-            (AxisEdit::Rows(LineEdit::Delete { .. }), _) => {
-                gone.iter().try_fold(self.index.clone(), |index, uid| {
-                    index.without_line::<Row>(uid)
-                })
-            }
-            (AxisEdit::Cols(LineEdit::Delete { .. }), _) => {
-                gone.iter().try_fold(self.index.clone(), |index, uid| {
-                    index.without_line::<Col>(uid)
-                })
             }
             _ => None,
         };
@@ -297,7 +285,10 @@ impl TrameState {
             self.reseed_engine();
             return;
         }
-        let indices = self.engine_indices();
+        // The active sheet's layout is lent to the engine for the call, not
+        // copied, as the remote step lends it.
+        let mut indices = self.other_engine_indices();
+        indices.insert(ACTIVE_SHEET, std::mem::take(&mut self.index));
         let texts: Vec<(CellId, CellText<StoredForm>)> = reread
             .into_iter()
             .map(|r| {
@@ -321,6 +312,9 @@ impl TrameState {
         let carried = self
             .engine
             .apply_structural(&removed, &texts, &indices, &ctx);
+        if let Some(index) = indices.remove(&ACTIVE_SHEET) {
+            self.index = index;
+        }
         if carried == Carry::CycleMet {
             self.reseed_engine();
         }
@@ -342,11 +336,8 @@ impl TrameState {
         if self.axes().insert(at, uid).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
-        let walk = self.reanchor_formulas(
-            L::edit(LineEdit::Insert { at, n: Len::ONE }),
-            &[],
-            Some(uid),
-        );
+        let edit = L::edit(LineEdit::Insert { at, n: Len::ONE });
+        let walk = self.reanchor_formulas(edit, &[], self.next_index(edit, Some(uid)));
         self.doc.commit();
         self.after_structural(Some(walk))
     }
@@ -358,13 +349,16 @@ impl TrameState {
     /// ([`reanchor_formulas`](Self::reanchor_formulas)). A no-op in virtual
     /// space.
     pub(super) fn delete_axis<L: SheetLine>(&mut self, at: Pos<L>) -> TrameOutcome {
-        let Some(removal) = self.remove_line(at) else {
+        // The delete reads the layout it already holds, not the lists.
+        let mut layout = Some(self.index.clone());
+        let Some(removal) = self.remove_line(&mut layout, at) else {
             return TrameOutcome::display_only(vec![]);
         };
+        let new = self.layout_after(layout);
         let walk = self.reanchor_formulas(
             L::edit(LineEdit::Delete { at, n: Len::ONE }),
             &[removal.uid],
-            None,
+            new,
         );
         self.doc.commit();
         self.after_line_removal(walk, removal.filter_dropped)
@@ -385,13 +379,24 @@ impl TrameState {
         Axes::of(&self.doc, &self.active_sheet)
     }
 
+    /// The layout after a delete: the one its removals derived, or a read of
+    /// the lists when they could not derive it.
+    fn layout_after(&self, layout: Option<SheetIndex>) -> SheetIndex {
+        layout.unwrap_or_else(|| self.build_sheet_index(&self.active_sheet))
+    }
+
     /// Remove the row/column at grid position `at` and purge what it carried,
-    /// with no commit, so several removals land as one. `None` when the line is
-    /// virtual and nothing was removed.
-    fn remove_line<L: SheetLine>(&mut self, at: Pos<L>) -> Option<Removal> {
+    /// with no commit, so several removals land as one. `layout` is the layout
+    /// before the removal, and the line leaves it ([`Axes::delete`]). `None`
+    /// when the line is virtual and nothing was removed.
+    fn remove_line<L: SheetLine>(
+        &mut self,
+        layout: &mut Option<SheetIndex>,
+        at: Pos<L>,
+    ) -> Option<Removal> {
         // A virtual line has nothing materialized to remove. Every element of
         // the line goes, the hidden ones too (`TRAME-269`).
-        let removed = self.axes().delete(at)?;
+        let removed = self.axes().delete(layout, at)?;
         let filter_dropped = self.purge_axis(&removed, L::AXIS);
         Some(Removal {
             uid: removed.uid,
@@ -414,7 +419,8 @@ impl TrameState {
         if self.axes().move_line(from, to).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
-        let walk = self.reanchor_formulas(L::edit(LineEdit::Reorder), &[], None);
+        let edit = L::edit(LineEdit::Reorder);
+        let walk = self.reanchor_formulas(edit, &[], self.next_index(edit, None));
         self.doc.commit();
         self.after_reorder(walk)
     }
@@ -436,9 +442,10 @@ impl TrameState {
             return TrameOutcome::display_only(vec![]);
         };
         let mut removals: Vec<Removal> = Vec::new();
+        let mut layout = Some(self.index.clone());
         let mut at = Some(end);
         while let Some(line) = at.filter(|line| *line >= start) {
-            removals.extend(self.remove_line(line));
+            removals.extend(self.remove_line(&mut layout, line));
             at = line.prev();
         }
         if removals.is_empty() {
@@ -447,7 +454,8 @@ impl TrameState {
         // The removed lines are the materialized run from `start`.
         let n = Len::of(removals.len());
         let gone: Vec<Uid> = removals.iter().map(|r| r.uid).collect();
-        let walk = self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }), &gone, None);
+        let new = self.layout_after(layout);
+        let walk = self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }), &gone, new);
         self.doc.commit();
         self.after_line_removal(walk, removals.iter().any(|r| r.filter_dropped))
     }
@@ -520,36 +528,37 @@ impl TrameState {
     /// row/column id, so a deleted line leaves no orphan entries behind.
     /// `true` when the removed column carried the active filter, which went
     /// with it.
+    ///
+    /// The keys come from the index by line, not from a walk of the maps
+    /// (`TRAME-081`). Each test checks them against that walk.
     pub(super) fn purge_axis(&mut self, removed: &Removed, axis: Axis) -> bool {
-        for root in [SheetRoot::Cells, SheetRoot::CellStyle] {
+        for root in line_cells::PURGED {
+            let mut stale: Vec<CellKey> = {
+                let lines = line_cells::read(&self.lines);
+                removed
+                    .elements
+                    .iter()
+                    .flat_map(|element| lines.keys_on(root, &self.active_sheet, axis, element))
+                    .collect()
+            };
+            stale.sort_unstable();
+            #[cfg(test)]
+            assert_eq!(
+                stale,
+                self.walked_stale(root, removed, axis),
+                "the index by line holds the keys a walk finds"
+            );
             let map = self
                 .doc
                 .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
-            let LoroValue::Map(entries) = map.get_value() else {
-                continue;
-            };
-            let stale: Vec<String> = entries
-                .keys()
-                .filter(|k| {
-                    parse_cell_key(k).is_some_and(|(rl, cl)| {
-                        let element = match axis {
-                            Axis::Row => rl,
-                            Axis::Col => cl,
-                        };
-                        removed.elements.contains(&element)
-                    })
-                })
-                .cloned()
-                .collect();
             for key in stale {
-                let _ = map.delete(&key);
+                let _ = map.delete(key.as_str());
                 // A formula under a gone line of the other axis goes too, and
                 // the walk no longer reads it (`TRAME-280`).
                 if root == SheetRoot::Cells
-                    && let Some((row, col)) = parse_cell_key(&key)
                     && let Some(keys) = self.unplaced.get_mut(&self.active_sheet)
                 {
-                    keys.remove(&CellKey::of(row, col));
+                    keys.remove(&key);
                 }
             }
         }
@@ -579,6 +588,32 @@ impl TrameState {
             }
         }
         filter_dropped
+    }
+
+    /// The keys a walk of the whole map `root` finds under the elements
+    /// `removed` of `axis`, sorted. It is the reference model of the index
+    /// by line.
+    #[cfg(test)]
+    fn walked_stale(&self, root: SheetRoot, removed: &Removed, axis: Axis) -> Vec<CellKey> {
+        let map = self
+            .doc
+            .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
+        let LoroValue::Map(entries) = map.get_value() else {
+            return Vec::new();
+        };
+        let mut keys: Vec<CellKey> = entries
+            .keys()
+            .filter_map(|k| parse_cell_key(k))
+            .filter(|(row, col)| {
+                removed.elements.contains(match axis {
+                    Axis::Row => row,
+                    Axis::Col => col,
+                })
+            })
+            .map(|(row, col)| CellKey::of(row, col))
+            .collect();
+        keys.sort_unstable();
+        keys
     }
 
     /// Shared tail of every structural op. It rebuilds the position <-> id

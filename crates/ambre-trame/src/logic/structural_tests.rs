@@ -88,6 +88,7 @@ enum Step {
         col: u32,
     },
     Undo,
+    Redo,
     /// A peer writes a cell, and the delta merges into both states. Both
     /// carry it, as both carry a local write: the remote path has its own
     /// reference model (`TRAME-282`).
@@ -136,6 +137,7 @@ fn step() -> impl Strategy<Value = Step> {
         1 => (0..ROWS - 1, 0..COLS - 1).prop_map(|(row, col)| Step::Merge { row, col }),
         1 => (0..ROWS, 0..COLS).prop_map(|(row, col)| Step::Unmerge { row, col }),
         1 => Just(Step::Undo),
+        1 => Just(Step::Redo),
         1 => (0..ROWS, 0..COLS, text()).prop_map(|(row, col, text)| Step::Remote { row, col, text }),
     ]
 }
@@ -202,6 +204,7 @@ fn commands(step: &Step) -> Vec<TrameCommand> {
             col: Pos::<Col>::new(col),
         }],
         Step::Undo => vec![TrameCommand::Undo],
+        Step::Redo => vec![TrameCommand::Redo],
         Step::Remote { .. } => Vec::new(),
     }
 }
@@ -327,12 +330,19 @@ pub(super) fn same_values(carried: &TrameState, rebuilt: &TrameState) -> Result<
     Ok(())
 }
 
+/// Whether the index by line the state keeps equals a walk of its maps
+/// (`TRAME-081`).
+pub(super) fn lines_kept(st: &TrameState) -> bool {
+    *super::line_cells::read(&st.lines) == super::line_cells::LineCells::walk(&st.doc)
+}
+
 proptest! {
     #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
 
     /// Each structural edit leaves the incrementally carried engine, and the
     /// text the narrowed walk wrote, equal to a full walk and a full reseed
-    /// (`TRAME-280`).
+    /// (`TRAME-280`). So does each undo and each redo (`TRAME-285`). The index
+    /// by line equals a walk of the maps after each step (`TRAME-081`).
     #[test]
     fn a_carried_engine_equals_a_full_rebuild(program in proptest::collection::vec(step(), 1..16)) {
         let mut carried = seeded(StructuralPath::Carry);
@@ -359,6 +369,7 @@ proptest! {
             prop_assert_eq!(engine(&carried), engine(&rebuilt), "the engine differs after {:?}", step);
             let same = same_values(&carried, &rebuilt);
             prop_assert!(same.is_ok(), "a value differs after {:?}: {:?}", step, same);
+            prop_assert!(lines_kept(&carried), "the index by line differs after {:?}", step);
         }
     }
 }

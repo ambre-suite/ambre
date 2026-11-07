@@ -306,6 +306,11 @@ pub struct TrameState {
     imported: remote::ImportSink,
     /// Held so the subscription lives as long as the state.
     _imports: loro::Subscription,
+    /// The keys of the cell and style maps by line, kept by a subscription to
+    /// [`Self::doc`] for the purge of a deleted line (`TRAME-081`).
+    lines: line_cells::LineSink,
+    /// Held so the subscription lives as long as the state.
+    _lines: loro::Subscription,
 }
 
 /// The workbook scaffolding, which every peer writes on open, before any edit.
@@ -421,6 +426,7 @@ impl TrameState {
         // retracts it (`AUTHOR-009`).
         undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
         let (imported, imports) = remote::watch(&doc);
+        let (lines, lines_watch) = line_cells::watch(&doc);
         let mut state = Self {
             active: CellPos::ORIGIN,
             selection: TrackedSelection {
@@ -466,6 +472,8 @@ impl TrameState {
             served_version: ambre_core::Seq::ZERO,
             imported,
             _imports: imports,
+            lines,
+            _lines: lines_watch,
         };
         // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
         state.rebuild_sheet_maps();
@@ -593,6 +601,7 @@ mod find;
 pub mod fixtures;
 mod helpers;
 mod interop;
+mod line_cells;
 mod merges;
 mod metrics;
 mod number_format;
