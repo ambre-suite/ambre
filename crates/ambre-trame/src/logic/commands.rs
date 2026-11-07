@@ -19,7 +19,12 @@ impl TrameState {
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
         // A command names the cells it changed, and no command before it.
         self.engine.changed.clear();
+        let depth = self.undo_manager.undo_count();
+        let history = matches!(cmd, TrameCommand::Undo | TrameCommand::Redo);
         let mut outcome = self.dispatch_command(cmd);
+        if !history {
+            self.follow_manager(depth);
+        }
         // Any command that produced a CRDT delta also moved the `UndoManager`
         // stacks, so the chrome's Undo/Redo affordances must be refreshed. Undo
         // and Redo already append their own `UndoState`; skip the duplicate.
@@ -232,8 +237,8 @@ impl TrameState {
             TrameCommand::SortSelectionMulti { sort_keys, header } => {
                 self.sort_selection_multi(&sort_keys, header)
             }
-            TrameCommand::Undo => self.apply_history(HistoryStep::Undo),
-            TrameCommand::Redo => self.apply_history(HistoryStep::Redo),
+            TrameCommand::Undo => self.step_history(HistoryStep::Undo),
+            TrameCommand::Redo => self.step_history(HistoryStep::Redo),
             TrameCommand::DefineName { name, reference } => {
                 match self.name_target(&name, &reference) {
                     Ok(target) => self.define_name(&name, &target),
@@ -371,7 +376,8 @@ impl TrameState {
         }
     }
 
-    /// Apply one undo or redo step from Loro's `UndoManager`. Then bring
+    /// Apply one undo or redo step from Loro's `UndoManager`, for a managed
+    /// step of the history (`step_history`). Then bring
     /// every derived cache to the new CRDT state, and broadcast the inverse
     /// ops (`trame-undo`).
     ///
@@ -411,11 +417,11 @@ impl TrameState {
         }
     }
 
-    /// The tail of an undo, under its own name. `scripts/instructions.py`
-    /// counts it apart from the Loro step before it and from a redo. Never
-    /// inlined, so the name survives the build.
+    /// The tail of an undo, under its own name, so a profile reads it apart
+    /// from the step before it and from a redo. Never inlined, so the name
+    /// survives the build.
     #[inline(never)]
-    fn after_undo(
+    pub(super) fn after_undo(
         &mut self,
         written: &super::remote::Imported,
         order: &[Id<Sheet>],
@@ -426,7 +432,7 @@ impl TrameState {
     /// The tail of a redo, counted by its own name as
     /// [`after_undo`](Self::after_undo) is.
     #[inline(never)]
-    fn after_redo(
+    pub(super) fn after_redo(
         &mut self,
         written: &super::remote::Imported,
         order: &[Id<Sheet>],
@@ -480,8 +486,8 @@ impl TrameState {
     /// Current undo/redo availability, for the chrome's Undo/Redo affordances.
     pub(super) fn undo_state_event(&self) -> TrameEvent {
         TrameEvent::UndoState {
-            undo: ambre_core::Availability::from_bool(self.undo_manager.can_undo()),
-            redo: ambre_core::Availability::from_bool(self.undo_manager.can_redo()),
+            undo: self.can_undo(),
+            redo: self.can_redo(),
         }
     }
 }

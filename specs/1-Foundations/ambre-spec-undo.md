@@ -93,6 +93,9 @@ which is why one undo item is one commit rather than one container write.
 undo_manager: loro::UndoManager,
 ```
 
+Trame adds one history beside it, for a line delete whose item the manager would replay too slowly
+(`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-286`).
+
 **Steps, when a user undoes or redoes.** The same five everywhere; step 3 is the application's own.
 
 1. ask the history to revert or replay one item, and read whether anything moved;

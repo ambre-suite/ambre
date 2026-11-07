@@ -215,6 +215,10 @@ pub struct TrameState {
     /// reference model, which walks every formula and reseeds.
     #[cfg(test)]
     structural_path: structural::StructuralPath,
+    /// The path a line delete takes. Only the test of `TRAME-286` sets the
+    /// reference model, which leaves every delete to the undo manager.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    history_path: line_history::HistoryPath,
     /// How many full engine reseeds ran, for the tests that hold a remote
     /// batch to its carried path (`TRAME-282`).
     #[cfg(test)]
@@ -260,6 +264,12 @@ pub struct TrameState {
     /// it, hence it is created after the constructor's initial commit so that the
     /// implicit-sheet registration is never undoable.
     undo_manager: UndoManager,
+    /// The steps an undo walks back and a redo walks forward: the items of
+    /// [`undo_manager`](Self::undo_manager), and the line deletes Trame
+    /// replays itself (`TRAME-286`).
+    history: line_history::History,
+    /// What the line delete under way wrote so far, `None` outside one.
+    journal: std::cell::RefCell<Option<line_history::Journal>>,
     /// Per-session monotonic counter for minting explicit `sheet_id`s. Combined
     /// with the document `PeerID` so two peers that concurrently add a sheet mint
     /// distinct ids that both survive (`trame-sheets`). Not persisted: ids, once
@@ -428,6 +438,8 @@ impl TrameState {
         // The registry entry is bookkeeping, not an edit: an undo never
         // retracts it (`AUTHOR-009`).
         undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
+        // A line delete is a step of Trame's own history (`TRAME-286`).
+        undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Recorded.as_str());
         let (imported, imports) = remote::watch(&doc);
         let (lines, lines_watch) = line_cells::watch(&doc);
         let mut state = Self {
@@ -455,6 +467,8 @@ impl TrameState {
             unplaced: HashMap::new(),
             #[cfg(test)]
             structural_path: structural::StructuralPath::Carry,
+            #[cfg(all(test, not(target_arch = "wasm32")))]
+            history_path: line_history::HistoryPath::Recorded,
             #[cfg(test)]
             reseeds: 0,
             #[cfg(test)]
@@ -467,6 +481,8 @@ impl TrameState {
             write_refusals: Vec::new(),
             edit_anchor: None,
             undo_manager,
+            history: line_history::History::default(),
+            journal: std::cell::RefCell::new(None),
             sheet_counter: Some(ambre_core::IdCounter::ZERO),
             uid_counter: Some(ambre_core::IdCounter::ZERO),
             sheet_list_sent: false,
@@ -606,6 +622,7 @@ pub mod fixtures;
 mod helpers;
 mod interop;
 mod line_cells;
+mod line_history;
 mod locale;
 mod merges;
 mod metrics;
@@ -636,6 +653,12 @@ mod tests;
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod convergence_tests;
+
+// Host-only, on `proptest` like the convergence tests: a recorded line delete
+// against the undo manager (`TRAME-286`).
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod line_history_tests;
 
 // Host-only, on `proptest` like the convergence tests: the incremental
 // structural path against a full rebuild (`TRAME-280`).
