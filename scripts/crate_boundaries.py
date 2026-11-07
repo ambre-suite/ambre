@@ -112,7 +112,8 @@ Sync queue.
 **The switchboard decides on the host** (`ARCH-072`). The switchboard asks
 `switchboard.rs` what each event calls for, and applies the answer. So no line of
 that file above its tests names a browser API, the interface toolkit or a
-signal, and its decisions stay testable on the host.
+signal, and its decisions stay testable on the host. No such line reads a
+clock either: the wiring passes the instant, and a test sets it.
 
 **One kinetic model** (`KINETIC-012`). Pan, flick, wheel momentum and edge
 scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
@@ -475,6 +476,10 @@ BROWSER_BOUND = re.compile(
     r"\b(?:web_sys|js_sys|wasm_bindgen\w*|leptos\w*|gloo\w*)\b"
     r"|\b(?:Rw|Read|Write|Arc)?Signal\b|\bStoredValue\b"
 )
+# A clock the switchboard would read for itself. The wiring reads the clock
+# and passes the instant, so a decision that depends on time runs on the host
+# under a clock the test sets (`ARCH-072`).
+CLOCK_READ = re.compile(r"\bSystemTime\b|\bstd::time::Instant\b|\bInstant::now\b|\bnow\(\)")
 APP_MESSAGE = re.compile(
     r"\bambre_bus::app\b|\b(?:Trame|Toile|Prose|Murmure|App)(?:Command|Event)\b|\bLogicCommand\b|\bUiEvent\b"
 )
@@ -1568,7 +1573,8 @@ def check_engine_and_relay(errors: list[str]) -> int:
 
 def check_switchboard_decisions(errors: list[str]) -> int:
     """`ARCH-072`: the switchboard's decisions name no browser API, no toolkit
-    and no signal, so the host builds them for their tests."""
+    and no signal, so the host builds them for their tests. They read no
+    clock either: the wiring passes each instant."""
     path = ROOT / SWITCHBOARD_DECISIONS
     if not path.exists():
         errors.append(f"{SWITCHBOARD_DECISIONS}: gone from the tree, so the switchboard's decisions are unread")
@@ -1577,6 +1583,9 @@ def check_switchboard_decisions(errors: list[str]) -> int:
         found = BROWSER_BOUND.search(line)
         if found:
             errors.append(f"{SWITCHBOARD_DECISIONS}:{number}: the switchboard's decisions name the browser: `{found.group(0)}`")
+        clock = CLOCK_READ.search(line)
+        if clock:
+            errors.append(f"{SWITCHBOARD_DECISIONS}:{number}: the switchboard reads a clock, not the instant it is given: `{clock.group(0)}`")
     return 1
 
 
@@ -2350,7 +2359,7 @@ def main() -> int:
         f"{renderer_reach} manifests read for the renderer reaching the thread protocol, "
         f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
         f"{engine} launcher files read for a second engine or a relay out of the frame, "
-        f"{decisions} switchboard decision file read for a browser API, "
+        f"{decisions} switchboard decision file read for a browser API or a clock, "
         f"{handlers} engine files read for a handler that sends on a queue, "
         f"{outboxes} launcher files read for a write past its outbox, "
         f"{latches} launcher files read for a failure that waits on a queue, "

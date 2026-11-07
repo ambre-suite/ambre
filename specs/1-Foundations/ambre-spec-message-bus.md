@@ -25,6 +25,7 @@ prefix is `BUS`.
 | `BUS-002` | `INV` | A document command MUST reach the Logic thread as a variant of a closed sum, never as an opaque payload. | this spec section 2 | exhaustive-match -- `AppCommand` and `AppEvent` are closed enums, so a missing document type fails the exhaustive `match` in `ambre_logic::data::handle_app_command` | none | verified |
 | `BUS-006` | `INV` | The document registry MUST stay flat: an embedded child MUST be addressed by its own identity, in one lookup. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-084` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` -- each seeds a parent and a child side by side and asserts the child's role decides, which only holds if the child is its own entry | none | verified |
 | `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_bus::host::the_ui_to_logic_path_carries_nothing_an_encoder_takes` -- `LogicCommand` and `UiEvent` implement no `Serialize`, whatever they carry; `ambre_logic::app::tests::the_sums_on_the_ui_to_logic_path_carry_nothing_an_encoder_takes` -- nor do the two sums they carry | none | verified |
+| `BUS-044` | `INV` | An event MUST reach each view of its document once. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-UI-340` | `ambre_app::switchboard::tests::two_views_of_one_document_never_take_an_event_twice` -- of two views of one document, the one that took an event first is not offered it again when the other reads; type-level -- each view queue holds a backlog of its own | none | verified |
 | `BUS-029` | `INV` | A message field that carries an identifier MUST carry a type of its own, never a bare string or integer. | this spec section 2; `ai/ambre-rust-style.md`; `UI-THREAD-060`, the same rule for a shell signal | ci-gate -- `scripts/crate_boundaries.py` refuses an `id`, `*_id` or `*_ids` field of a bare primitive type in `ambre-bus` above its tests; type-level -- the sheet, filter view, conditional format and paragraph style ids each carry a newtype, so a swapped name and id fail to compile | none | verified |
 | `BUS-032` | `INV` | An application's content commands and events MUST be declared in that application's crate, never in the crate that carries the envelopes. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-018` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a command or event enum of `ambre-bus` other than the four envelopes and the service family, above its tests; type-level -- `LogicCommand` and `UiEvent` take the document command and event as a parameter and the channel types through a `ChannelPlane`, so the bus names none of an application's | none | verified |
 | `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | exhaustive-match -- `LogicCommand::Channel` carries the `Murmure` plane's `MurmureCommand`, a closed enum matched in `ambre_logic::channels::handle_channel_command`, so a new command does not build until its arm is written; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` | none | verified |
@@ -90,17 +91,21 @@ is what a full queue means.
 | `BUS-038` | `POST` | An event for a view MUST reach that view in the order the Logic thread sent it, past a full queue. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-UI-340` | `ambre_app::switchboard::tests::a_refused_main_view_event_waits_and_arrives_in_order` -- three events on a queue of one reach the main view in send order; `::the_main_view_backlog_drains_on_the_next_frame` -- the next frame's flush hands over what waited, ahead of that frame's fresh event; `::a_refused_event_waits_and_arrives_in_order` -- the same for an embedded view | none | verified |
 | `BUS-039` | `FAIL` | An event that a view's full queue refuses MUST NOT be dropped in silence. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-UI-340` | `ambre_app::switchboard::tests::an_overflowing_main_view_backlog_says_what_it_dropped` -- past its bound the backlog drops its oldest event and logs one error per drop; `::an_overflowing_backlog_says_what_it_dropped` -- the same for an embedded view | none | verified |
 | `BUS-040` | `FRAME` | An event waiting for one view MUST NOT hold back the events of another view. | this spec section 2; `BUS-038` | `ambre_app::switchboard::tests::a_full_view_holds_back_no_other_view` -- a full main view leaves a child its events, and a full child leaves the main view its own | none | verified |
+| `BUS-041` | `POST` | A view that lost an event MUST have its document resent once its queue takes events again. | this spec section 2; `BUS-039`; `ambre-spec-budgets.md section 6` | `ambre_app::switchboard::tests::a_main_view_that_lost_an_event_has_its_document_resent_once_it_reads` -- once, and not while the view still lags; `::an_embedded_view_that_lost_an_event_has_its_document_resent_once_it_reads`; `::a_view_gone_after_a_loss_asks_for_nothing` | none | verified |
+| `BUS-042` | `POST` | A resend of an open Trame or Toile document MUST hand its views the events that draw it whole. | this spec section 2; `BUS-041` | `ambre_logic::dispatch::tests::a_resend_hands_a_trame_view_its_whole_state` -- the re-fetch of the window, the tab strip, the cell toggles and the undo state; `::a_resend_hands_a_toile_view_its_whole_state` -- the viewport, the board and deck changes and the undo state; `::a_resend_of_a_document_not_open_answers_nothing` | none | verified |
+| `BUS-045` | `FRAME` | A resend MUST NOT reach the relay. | this spec section 2; `BUS-042` | `ambre_logic::dispatch::tests::a_resend_hands_a_trame_view_its_whole_state` -- the Sync worker hears nothing; `::a_resend_hands_a_toile_view_its_whole_state`; `::a_resend_of_a_document_not_open_answers_nothing` | none | verified |
+| `BUS-043` | `POST` | A Prose view that lost an event MUST come back to the text the Logic thread holds. | this spec section 2; `BUS-041`; `ambre-spec-prose-text-editing.md section 3` | not built | unbuilt -- lands with the `A Prose view that lost an event catches up` Story (`ambre-roadmap.md` E7). The view reconciles its text change by change, numbered, so a resent layout leaves a lost change out of its count | unimplemented |
 
 * **Budget.** two rows of `ambre-spec-budgets.md section 1`: the queue send and receive at
   < 1 us, and the Logic to Sync `postMessage` hop at < 1 ms. Neither is measured.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 40 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
-  viewer's edit, a child's role. They also drive a service round trip, a late response, the lossy
-  gate and a full queue. Native views drive the input gate, the re-offer and the refused commit. A
-  gate refuses a handler that sends on a queue, and the browser tier reads the busy notice. The
-  native tier drives the view fan-out past a full queue.
+* **Verification.** 44 `verified`, 1 `unimplemented`. Host tests drive the Logic dispatcher: a role,
+  a service round trip, the lossy gate, a full queue and a resend. Native views drive the input gate
+  and the re-offer. A gate refuses a handler that sends on a queue, and the browser tier reads the
+  busy notice. The native tier drives the view fan-out past its bound, and the Prose resend is not
+  built.
 ---
 
 ## 2. MODEL
@@ -263,7 +268,19 @@ and loses nothing.
 fan-out, which holds the main view's sender and the sender of each embedded view. What a full
 queue refuses waits in a backlog per view, in send order (`BUS-038`). The switchboard offers it
 again on the next frame, before anything newer. Past its bound the backlog drops its oldest event
-and logs an error (`BUS-039`). One view's backlog holds back no other view (`BUS-040`).
+and logs an error (`BUS-039`). Each view keeps a backlog of its own, so it holds back no other view
+(`BUS-040`) and takes each event once (`BUS-044`).
+
+**A view that lost an event is resent its document.** The bound is reachable: a hidden page relays
+its events on a timer, and its views read nothing until it shows again
+(`ambre-spec-budgets.md section 6`). The backlog notes the document of each event it drops. Once
+the backlog is empty again, the switchboard asks the Logic thread to resend that document
+(`BUS-041`). It waits for that moment, since a view that reads nothing would lose the answer too.
+
+The Logic thread answers from the state it holds, with the events a whole import answers with
+(`BUS-042`). Nothing reaches the relay, and nothing is written (`BUS-045`). A Trame view
+re-fetches its window and reads its tabs, its toggles and its undo state again. A Toile view takes
+a viewport and re-reads its panels. A Prose view is resent nothing yet (`BUS-043`).
 
 **A fixed-width value crosses as its bytes.** A key, a nonce, a signature or a digest has a width
 its role states once. The worker hop encodes it as that many bytes, in order, with no length
@@ -298,6 +315,10 @@ The bus has no control of its own. What a user meets is what it does under load.
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
+| A view that lost an event is resent its document once it reads again | a resend asked the moment the event drops | the view reads nothing then: a hidden page or a stalled frame is what filled it. The answer would wait behind the backlog, or be dropped in turn |
+| A view that lost an event is resent its document once it reads again | a backlog with no bound | a page hidden for an hour holds every event of that hour, in the heap the Logic thread shares (`ambre-spec-budgets.md section 6`) |
+| A view that lost an event is resent its document once it reads again | the Logic thread importing its own snapshot, or a close and an open | the import reseeds a Trame formula engine whole: at 10k formula cells, about a second and a half on the target phone (`ambre-spec-budgets.md section 1`). A close and an open reach the relay and the store for a state this thread already holds |
+| Each view keeps a backlog of its own | one backlog per document, shared by its views | a full view holds back the event the other view took, and both are offered it again: that view applies it twice |
 | A closed sum per direction, one variant per document type | a trait object plus a registry of boxed controllers | it re-creates a crate cycle, because the sum resolves downstream of every application crate, and it gives up the exhaustive dispatch the compiler proves today |
 | A closed sum per direction, one variant per document type | an opaque byte payload decoded by the receiver | the dispatch becomes a run-time match on bytes: adding a document type still builds, and the missing arm is found when a message arrives rather than at compile time |
 | The service family is defined once and carried by a thin envelope | four nearly identical enums, one per direction | modelling each service operation as a variant in each of the four directions is about three hundred lines of one-to-one copying, and the failure mode is a field copied into the wrong place. Defined once, the whole service dispatch is a single arm |
@@ -329,10 +350,11 @@ The bus has no control of its own. What a user meets is what it does under load.
   one document, and a channel is several (`MURMURE-021`). `LogicCommand::Channel` carries its
   commands through the `Murmure` plane, and a channel delta leaves as the `SendUpdate` of the
   document it names.
-* **A saturated view still loses its oldest event.** The backlog bound trades a stalled view's
-  memory for a lost event, which the log names (`BUS-039`). A lost delta leaves the view behind its
-  document until it redraws from scratch. The busy signal of `BUS-016` covers the command direction
-  alone, so the user sees nothing.
+* **An event that names no document is lost for good.** The backlog bound trades a stalled
+  view's memory for a lost event, which the log names (`BUS-039`). A view event names its document,
+  so the document is resent (`BUS-041`). A service answer or a channel event names none, so nothing
+  resends it. The busy signal of `BUS-016` covers the command direction alone, so the user sees
+  nothing.
 * **Nothing bounds how long a service request may stay outstanding.** A request whose answer never
   arrives leaves its route recorded, and nothing times it out.
 

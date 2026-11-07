@@ -47,13 +47,13 @@ use ambre_bus::conduit::{self, Marks};
 use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
 #[cfg(target_arch = "wasm32")]
 use ambre_chrome::{
-    AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
-    Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar,
+    AppShell, CanvasCell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, Panel, Sidebar,
+    StatusBar, Tabs, ToastHost, Toasts, Toolbar,
 };
 #[cfg(target_arch = "wasm32")]
 use ambre_core::id::{Document, Frame, Id, User};
 #[cfg(target_arch = "wasm32")]
-use ambre_core::{Board, Doc, Scale, View};
+use ambre_core::{Board, Doc, PageLoad, Scale, View};
 #[cfg(target_arch = "wasm32")]
 use ambre_logic::app::{AppCommand, LogicCommand, UiEvent};
 #[cfg(target_arch = "wasm32")]
@@ -86,6 +86,13 @@ use wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+/// The selection anchor, mirrored from the canvas into the chrome.
+#[cfg(target_arch = "wasm32")]
+mod anchor;
+/// The chrome of each document application, fed from the Logic thread's
+/// events.
+#[cfg(target_arch = "wasm32")]
+mod chrome_mirror;
 #[cfg(target_arch = "wasm32")]
 mod host;
 #[cfg(target_arch = "wasm32")]
@@ -93,19 +100,31 @@ mod landing;
 /// The local store the Main thread drives, within its budget (`RESID-002`).
 #[cfg(target_arch = "wasm32")]
 mod local_store;
+/// The Murmure chrome, fed from the Logic thread's events.
+#[cfg(target_arch = "wasm32")]
+mod murmure_mirror;
 /// The system notifications of an open tab.
 #[cfg(target_arch = "wasm32")]
 mod notify;
 /// The launcher's one writer on the UI to Logic queue (`BUS-035`).
 #[cfg(target_arch = "wasm32")]
 mod outbox;
+/// The link from the Logic thread to the local store.
+#[cfg(target_arch = "wasm32")]
+mod persist;
 #[cfg(target_arch = "wasm32")]
 mod route;
+/// The route binding, polled each frame.
+#[cfg(target_arch = "wasm32")]
+mod route_binding;
 #[cfg(target_arch = "wasm32")]
 mod signin;
 /// What the switchboard decides, testable on the host.
 #[cfg(any(target_arch = "wasm32", test))]
 mod switchboard;
+/// The browser tab title, written when it changes.
+#[cfg(target_arch = "wasm32")]
+mod tab_title;
 /// The recipient's key, compared and confirmed before a share.
 #[cfg(any(target_arch = "wasm32", test))]
 mod tofu;
@@ -963,71 +982,36 @@ pub fn main() {
     // Keyboard: resolve registered chords and dispatch to the routed document.
     install_command_keys(keymap, commands.clone());
 
-    // Local persistence: open the IndexedDB store on this (Main) thread, where
-    // the event loop is live. On open, restore the BOOT document's snapshot (if
-    // any) so an edit survives a refresh without a network round-trip. The store
-    // is shared with the switchboard below, which saves snapshots Logic emits.
-    let persist_store: Rc<RefCell<Option<local_store::LocalStore>>> = Rc::new(RefCell::new(None));
-    // Set when the store will never open, so the writes waiting for it go.
-    let persist_gone = Rc::new(std::cell::Cell::new(false));
     // The Sync worker seals each row the store keeps and opens it again
     // (`RESID-025`).
     let vault = vault::Vault::new(shell_outbox.clone());
-    // Set once a session holds the key: the page's document comes back from
-    // its copy only then.
-    let session_seen = Rc::new(std::cell::Cell::new(false));
     // The drafts the composer keeps go to the same store
     // (`ambre-spec-murmure-composer.md`).
     let draft_keeper = host::DraftKeeper::new(murmure_relay.drafts(), vault.clone());
-    {
-        let store_slot = Rc::clone(&persist_store);
-        let keeper = draft_keeper.clone();
-        let gone = Rc::clone(&persist_gone);
-        let full_tx = shell_outbox.clone();
-        let vault = vault.clone();
-        let session_seen = Rc::clone(&session_seen);
-        wasm_bindgen_futures::spawn_local(async move {
-            let store = match ambre_logic::persistence::PersistenceStore::open().await {
-                Ok(Ok(store)) => store,
-                Ok(Err(e)) => {
-                    tracing::warn!("Persistence: store unavailable ({e})");
-                    gone.set(true);
-                    return;
-                }
-                Err(_) => {
-                    tracing::warn!("Persistence: open channel dropped");
-                    gone.set(true);
-                    return;
-                }
-            };
-            keeper.store_opened(store.clone());
-            let local = local_store::LocalStore::open(store, full_tx, vault, boot_doc_typed).await;
-            // The page's document comes back from its copy once a session
-            // holds the key, whichever of the two came first.
-            if session_seen.get() {
-                local.signed_in();
-            }
-            *store_slot.borrow_mut() = Some(local);
-        });
-    }
+    // Local persistence: open the IndexedDB store on this (Main) thread, where
+    // the event loop is live. The store is shared with the switchboard below,
+    // which saves snapshots Logic emits.
+    let mut persist = persist::PersistLink::open(
+        draft_keeper.clone(),
+        shell_outbox.clone(),
+        vault.clone(),
+        boot_doc_typed,
+        logic_to_persist_rx,
+    );
 
     // The single UI-thread dispatcher, pumped once per frame regardless of route.
     // It runs the persist drain, the Logic->Sync relay and the anchor mirror. It
     // also runs the Logic->UI fan-out: command state to the chrome, session/list
     // to the landing, content to the view.
-    let anchor_pub_pump = anchor_pub.clone();
+    let mut anchor_mirror = anchor::AnchorMirror::new(anchor_pub.clone(), anchor_pos);
     let perf_pub_pump = perf_pub.clone();
     let filter_open_pump = filter_open_pub.clone();
     let busy_pump = busy_pub.clone();
     let notice_pump = notice_pub.clone();
-    let persist_store_frame = Rc::clone(&persist_store);
-    let persist_gone_frame = Rc::clone(&persist_gone);
+    let persist_store_frame = persist.store();
     let vault_frame = vault.clone();
-    let session_seen_frame = Rc::clone(&session_seen);
-    let mut persist_waiting: Vec<(Id<Document>, ambre_logic::PersistWrite)> = Vec::new();
-    let mut last_anchor: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>> = None;
     let mut busy_notice = switchboard::BusyNotice::default();
-    let mut last_perf_push_ms: f64 = 0.0;
+    let mut perf_cadence = switchboard::PerfCadence::default();
     // The relay's decisions, and the state they keep across frames.
     let mut decisions = switchboard::Switchboard::new(if boot_is_murmure {
         switchboard::Page::Murmure
@@ -1035,150 +1019,48 @@ pub fn main() {
         switchboard::Page::Document
     });
     let relay_tx = shell_outbox.clone();
-    // A click on a notification opens its channel at its message (the
-    // Murmure notifications spec). The permission is asked once per page.
-    let notice_asked = Rc::new(std::cell::Cell::new(notify::Question::Unasked));
-    let open_noticed: Rc<dyn Fn(Id<ambre_core::id::Channel>, Option<ambre_murmure::MessageRef>)> = {
-        let tx = shell_outbox.clone();
-        Rc::new(move |channel, at| {
-            if let Some(command) = murmure_relay.open_at(channel, at) {
-                tx.send(command.map(AppCommand::embed));
-            }
-        })
+    // The chrome of each document application, fed from each event.
+    let chrome_mirror = chrome_mirror::ChromeMirror {
+        store,
+        toile_store,
+        prose_signals,
+        style_state,
+        toasts,
+        trame_panels: trame_relay,
+        toile_panels: toile_relay,
     };
-    // A Murmure page refreshes this user's presence on each of its spaces once
-    // per refresh period (the Murmure members spec). It ticks the shown channel
-    // too (the Murmure typing spec). An interval, not the frame loop: a hidden
-    // tab pauses its frames, yet holds its spaces open. The interval lives as
-    // long as the page.
+    // The Murmure chrome, fed from each event, and its presence refresh.
+    let murmure_mirror = murmure_mirror::MurmureMirror::new(murmure_relay, shell_outbox.clone());
     if boot_is_murmure {
-        let presence_tx = shell_outbox.clone();
-        let refresh = Closure::<dyn FnMut()>::new(move || {
-            let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
-            // The tick is lossy and the next period offers it again. The
-            // presence refresh of a space is not, so the outbox holds it.
-            for command in murmure_relay.refresh_presence(now) {
-                presence_tx.offer(command.map(AppCommand::embed));
-            }
-        });
-        if let Some(window) = web_sys::window() {
-            let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
-                refresh.as_ref().unchecked_ref(),
-                ambre_murmure::REFRESH_PERIOD.to_timer_i32(),
-            );
-        }
-        refresh.forget();
+        murmure_mirror.keep_presence();
     }
     // The switchboard's handle on the view fan-out: it routes every view's
     // events, and prunes a child sender whose receiver has been dropped.
     let view_fan_out_relay = Rc::clone(&view_fan_out);
 
-    // SPA route binding, polled each frame on the main thread (where the `!Send`
-    // canvas handle lives, so it stays OUT of the Leptos tree). The client URL is
-    // the single source of truth: `leptos_router` pushState navigations and
-    // browser back/forward both land here. On a change we close the previous
-    // document, open the next, and point the persistent canvas at it. We then
-    // gate the rAF render: paint the doc, or freeze it behind the landing
-    // overlay. We publish the active document, so every command trigger targets
-    // it.
-    let route_switcher = Rc::clone(&switcher_slot);
-    let route_tx = shell_outbox.clone();
-    let route_raf = raf.clone();
-    let mut prev_route: Option<route::Route> = None;
-    let mut last_title: Option<ComposedName> = None;
+    // The SPA route binding, polled each frame: the client URL is the single
+    // source of truth for the routed document.
+    let mut route_binding = route_binding::RouteBinding::new(
+        Rc::clone(&switcher_slot),
+        shell_outbox.clone(),
+        raf.clone(),
+        current_doc,
+        chrome_status,
+    );
+    let mut tab_title = tab_title::TabTitle::new(docs);
 
     let pre_frame = move || {
         // What the launcher's outbox held on an earlier turn leaves first, so
         // nothing this turn sends overtakes it (`BUS-011`). The relay runs on
         // the hidden page's timer too, so the flush does as well (`CANVAS-075`).
         relay_tx.flush();
-        let cur_route = route::current();
-        let cur_doc = cur_route.doc();
-        if let Some(step) = route::step(prev_route.as_ref(), &cur_route) {
-            if let Some(document_id) = step.close {
-                route_tx.send(LogicCommand::CloseDocument { document_id });
-            }
-            if let Some((doc_type, document_id)) = step.open {
-                route_tx.send(LogicCommand::OpenDocument {
-                    document_id,
-                    doc_type,
-                });
-            }
-            if step.close.is_some() || step.open.is_some() {
-                current_doc.set(step.show);
-                // Arm the loading overlay when entering a document; clear it on
-                // the landing route. The relay clears `hydrating` on the matching
-                // `DocumentReady` (see the per-frame pump below).
-                chrome_status.update(|s| {
-                    s.hydrating = cur_doc.is_some();
-                    if cur_doc.is_none() {
-                        s.connected = ambre_core::LinkState::Disconnected;
-                    }
-                });
-            }
-            match step.show {
-                Some(document_id) => {
-                    if let Some(sw) = route_switcher.borrow().as_ref() {
-                        sw.set_document(document_id);
-                    }
-                    route_raf.set_cover(ambre_canvas::Cover::Document);
-                }
-                // Freeze the canvas behind the landing overlay (the relay below
-                // keeps running -- only the render is gated).
-                None => route_raf.set_cover(ambre_canvas::Cover::Launcher),
-            }
-            prev_route = Some(cur_route);
-        }
+        let cur_doc = route_binding.poll();
 
-        // Browser tab title (`ComposedName::tab_title`). Recomputed each frame
-        // so a rename or a late-arriving document list updates the tab; the
-        // DOM write happens only when the title changes.
-        let title = match cur_doc {
-            Some((doc_type, document_id)) => {
-                let name = docs.with_untracked(|list| {
-                    list.iter()
-                        .find(|d| d.document_id == document_id)
-                        .and_then(|d| d.name.clone())
-                });
-                ComposedName::tab_title(Some((doc_type, name.as_ref())))
-            }
-            None => ComposedName::tab_title(None),
-        };
-        if last_title.as_ref() != Some(&title) {
-            if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                title.set_as_title(&doc);
-            }
-            last_title = Some(title);
-        }
+        // Browser tab title, recomputed each frame and written on a change.
+        tab_title.show(cur_doc);
 
-        // Persist Logic -> local store. Writes wait here until the store is
-        // open: a delta dropped would be missing from every restore until the
-        // next snapshot. Best-effort; the put() commits as the event loop idles.
-        persist_waiting.extend(logic_to_persist_rx.try_iter());
-        if persist_gone_frame.get() {
-            // A store that never opens holds no copy: each reopen waiting on
-            // one is answered empty, and fetches from the relay (`RESID-012`).
-            for (document_id, write) in persist_waiting.drain(..) {
-                if let ambre_logic::PersistWrite::ReadBack { doc_type } = write {
-                    relay_tx.send(LogicCommand::RestoreLocalSnapshot {
-                        document_id,
-                        doc_type,
-                        snapshot: None,
-                        deltas: Vec::new(),
-                        sessions: Vec::new(),
-                    });
-                }
-            }
-        }
-        if let Some(local) = persist_store_frame.borrow().as_ref() {
-            local.tick();
-            // Each write is sealed, then passes the store's ledger, which
-            // keeps it within its budget and meets the quota (`RESID-002`,
-            // `RESID-025`).
-            for (document_id, write) in persist_waiting.drain(..) {
-                local.apply(document_id, write);
-            }
-        }
+        // Persist Logic -> local store, once the store is open.
+        persist.drain();
 
         // A plaintext file the picker read: its payload lands sealed, as every
         // copy does (`RESID-025`).
@@ -1195,6 +1077,7 @@ pub fn main() {
             tofu::confirm(
                 &p,
                 invite_role.get_untracked(),
+                Instant::<Authored>::new(js_sys::Date::now() as u64),
                 |user, key| {
                     if let Some(local) = persist_store_frame.borrow().as_ref() {
                         local.store().save_trusted_key(user, key);
@@ -1224,8 +1107,11 @@ pub fn main() {
 
         // Re-offer what a view's queue could not take on an earlier turn
         // (`BUS-038`). Ordered, and ahead of the fresh stream, so a view never
-        // sees a later delta before an earlier one.
-        view_fan_out_relay.flush();
+        // sees a later delta before an earlier one. A view that lost an event
+        // and reads again has its document resent (`BUS-041`).
+        for document_id in view_fan_out_relay.flush() {
+            relay_tx.send(LogicCommand::ResendState { document_id });
+        }
 
         // Mark the turn that takes Logic's answers off the channel: the mark
         // splits a keystroke's confirmation between the relay and the view.
@@ -1247,7 +1133,8 @@ pub fn main() {
                     Some(rx) => rx.await.ok().flatten(),
                     None => None,
                 };
-                match tofu::classify(prompt, pinned, role_sig.get_untracked()) {
+                let now = Instant::<Authored>::new(js_sys::Date::now() as u64);
+                match switchboard::pin_read(prompt, pinned, role_sig.get_untracked(), now) {
                     tofu::Next::Proceed(cmd) => {
                         relay.send(cmd);
                     }
@@ -1278,45 +1165,9 @@ pub fn main() {
                 },
                 ev => ev,
             };
-            // Mirror authoritative command-toggle state into the chrome store.
-            // The active app owns the event->toggle mapping; the launcher names
-            // no content event variant.
-            trame_chrome::mirror_event(&store, &ev);
-            // Mirror Toile's Undo/Redo availability into its own command store,
-            // so the menu bar disables the two rows from the Logic thread's
-            // `UndoState` alone (`UNDO-006`).
-            toile_chrome::mirror_event(&toile_store, &ev);
-            // Prose's history availability, into the signals its context
-            // menu reads (`UNDO-006`).
-            prose_signals.mirror_event(&ev);
-            // Mirror the active cell's rich style into the formatting toolbar
-            // (`trame-cell-styles`). A no-op for non-style events.
-            trame_chrome::apply_style_event(&style_state, &ev);
-            // Surface Trame's user-facing notifications (rejections, validation
-            // errors, sheet-lifecycle errors, sort/filter completion) as toasts.
-            // The app owns the event->toast mapping; the launcher names no variant.
-            trame_chrome::notify_event(&toasts, &ev);
-            // Surface Toile's interop outcomes -- the lossy-import report, a
-            // refused file, a finished export -- as toasts (`TOILE-IO-022`). The
-            // app owns the event->toast mapping; the launcher names no variant.
-            toile_chrome::notify_event(&toasts, &ev);
-            // Prose's conversion reports, the same way (`PROSE-IO-053`).
-            ambre_prose::chrome::notify_event(&toasts, &ev);
-            // Murmure's root of a copy not reached, the same way.
-            ambre_murmure::chrome::notify_event(&toasts, &ev);
-            // Each application fills its own panels from its own events
-            // (`ARCH-018`). The launcher names no variant.
-            trame_relay.absorb(&ev);
-            toile_relay.absorb(&ev);
-            for command in murmure_relay.absorb(&ev) {
-                relay_tx.send(command.map(AppCommand::embed));
-            }
-            if let Some(notice) = murmure_relay.notice(
-                &ev,
-                ambre_murmure::chrome::PageVisibility::visible_if(notify::page_visible()),
-            ) {
-                notify::deliver(notice, &notice_asked, Rc::clone(&open_noticed));
-            }
+            // Each application's chrome, then Murmure's, from this event.
+            chrome_mirror.mirror(&ev);
+            murmure_mirror.mirror(&ev);
             // The relay decides what a service event calls for, and this
             // closure applies each decision in order.
             let shown = switchboard::Shown {
@@ -1341,10 +1192,7 @@ pub fn main() {
                         username.set(Some(display_name.clone()));
                         me.set(Some(user_id));
                         draft_keeper.signed_in(user_id);
-                        session_seen_frame.set(true);
-                        if let Some(local) = persist_store_frame.borrow().as_ref() {
-                            local.signed_in();
-                        }
+                        persist.signed_in();
                     }
                     switchboard::Effect::LeaveSession => {
                         let keeper = draft_keeper.clone();
@@ -1401,13 +1249,7 @@ pub fn main() {
             }
         }
 
-        // Mirror the view's published selection anchor into the chrome signal,
-        // only on change so the floating toolbar repositions just when it moves.
-        let next = anchor_pub_pump.read();
-        if next != last_anchor {
-            last_anchor = next;
-            anchor_pos.set(next);
-        }
+        anchor_mirror.step();
 
         // Say that the view stopped taking input, and say when it resumes
         // (`BUS-016`). The view restates the level every frame, so this reads the
@@ -1447,15 +1289,15 @@ pub fn main() {
             commands.send(trame.open_filter());
         }
 
-        // Mirror the view's perf snapshot into the status-bar signal, throttled
-        // to ~2 Hz. The old wgpu HUD refreshed every 500 ms too, and a per-frame
-        // DOM update would be wasteful for a debug read-out.
-        let now_ms = web_sys::window()
+        // Mirror the view's perf snapshot into the status-bar signal, at the
+        // cadence the switchboard decides on the page clock.
+        let now = web_sys::window()
             .and_then(|w| w.performance())
-            .map_or(0.0, |p| p.now());
-        if now_ms - last_perf_push_ms >= 500.0 {
-            last_perf_push_ms = now_ms;
-            perf_snap.set(perf_pub_pump.read());
+            .map_or(Instant::<PageLoad>::EPOCH, |p| {
+                Instant::<PageLoad>::new(p.now())
+            });
+        if let Some(snapshot) = perf_cadence.step(now, &perf_pub_pump) {
+            perf_snap.set(snapshot);
         }
     };
 

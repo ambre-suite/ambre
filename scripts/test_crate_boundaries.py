@@ -919,6 +919,23 @@ class CrateBoundaries(unittest.TestCase):
             errors = self.breach(cb.SWITCHBOARD_DECISIONS, line)
             self.assertTrue(any("name the browser" in e for e in errors), (line, errors))
 
+    def test_a_switchboard_decision_reading_a_clock_is_refused(self):
+        for line in (
+            "fn now() -> SystemTime { SystemTime::now() }\n",
+            "fn now() { let t = std::time::Instant::now(); }\n",
+            "fn due(c: &Clock) -> bool { c.now() > 3 }\n",
+        ):
+            errors = self.breach(cb.SWITCHBOARD_DECISIONS, line)
+            self.assertTrue(any("reads a clock" in e for e in errors), (line, errors))
+
+    def test_a_switchboard_decision_given_its_instant_stays_free(self):
+        text = (
+            "// The wiring reads now() and passes it.\n"
+            "fn step(now: Instant<PageLoad>) -> bool { now - LAST < PERIOD }\n\n"
+            "#[cfg(test)]\nmod tests {\n    fn t() { let _ = std::time::Instant::now(); }\n}\n"
+        )
+        self.assertEqual(self.breach(cb.SWITCHBOARD_DECISIONS, text), [])
+
     def test_a_switchboard_decision_in_words_or_in_a_test_stays_free(self):
         text = (
             "// The wiring reads web_sys; this file does not.\n"

@@ -20,6 +20,7 @@ impl TrameView {
         self.editor = None;
         self.edit_dirty = false;
         self.initial_viewport_sent = false;
+        self.stats_owed = false;
         self.pending_viewport = ViewportQueue::default();
         self.needs_full = true;
         self.viewport_changed = false;
@@ -293,6 +294,13 @@ impl TrameView {
             && !self.send_command_lossy(pending.command().clone())
         {
             self.pending_viewport.re_offer(pending);
+        }
+
+        // A selection-statistics request the queue refused is offered again
+        // until it leaves, so the band fills with no new selection change
+        // (`TRAME-UI-185`, `BUS-024`).
+        if self.stats_owed && self.send_command_lossy(TrameCommand::RequestSelectionStats) {
+            self.stats_owed = false;
         }
 
         // Pick up a theme switch (chrome toggled it): repaint everything with

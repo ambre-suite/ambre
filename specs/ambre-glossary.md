@@ -33,7 +33,7 @@
 | feed | the receiving end of a view on the Logic to UI queue | | `1-Foundations/ambre-spec-message-bus.md` |
 | doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
 | call worker | the instance that seals the audio and video of one call | media worker | `1-Foundations/ambre-spec-call-media.md` |
-| switchboard | the Main thread module that sends each Logic event to a view or an effect | frame relay, per-frame relay | `1-Foundations/ambre-spec-architecture.md` |
+| switchboard | the Main module routing each Logic event to a view or effect | frame relay, per-frame relay | `1-Foundations/ambre-spec-architecture.md` |
 | plane | a class of traffic on the bus | | `1-Foundations/ambre-spec-message-bus.md` |
 | content plane | the plane carrying document edits | | `1-Foundations/ambre-spec-message-bus.md` |
 | service plane | the plane carrying correlated requests and responses | | `1-Foundations/ambre-spec-message-bus.md` |

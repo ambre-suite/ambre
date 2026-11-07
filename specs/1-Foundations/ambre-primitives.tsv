@@ -69,7 +69,6 @@ ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Op
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	local	the address of the Sync worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
 ambre-app | src/switchboard.rs | crate::switchboard | VIEW_BACKLOG_LIMIT | const | usize	math	backlog count
-ambre-app | src/switchboard.rs | crate::switchboard | ViewFanOut::offer_child() | ret | bool	generic	predicate result
 ambre-app | src/switchboard.rs | crate::switchboard | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/switchboard.rs | crate::switchboard | Notice.text | field | String	free-text	the words of a notice the user reads
 ambre-app | src/switchboard.rs | crate::switchboard | Notice::new(text) | param | impl Into<String>	free-text	the words of a notice the user reads
@@ -2993,6 +2992,7 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.formula_text | fi
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.initial_viewport_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.needs_full | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.selecting_drag | field | bool	generic	independent state or style flag, not a mode selector
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.stats_owed | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.viewport_changed | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(value) | param | &str	free-text	free text: user content, label, message or display string
