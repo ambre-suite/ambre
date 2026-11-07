@@ -32,6 +32,9 @@ impl TrameState {
     /// formula, and the engine reseeds.
     ///
     /// `new` is the layout after the edit, which the caller derived.
+    ///
+    /// Never inlined: `scripts/instructions.py` counts it by its name.
+    #[inline(never)]
     pub(super) fn reanchor_formulas(&self, edit: AxisEdit, gone: &[Uid], new: SheetIndex) -> Walk {
         if self.engine_needs_reseed() {
             self.reanchor_every_formula(edit, &new);
@@ -274,6 +277,9 @@ impl TrameState {
     /// Carry the engine across a committed structural edit: the step the walk
     /// chose. A carried step that meets a cycle reseeds after all, so the
     /// feed order decides which cell of it is refused.
+    ///
+    /// Never inlined: `scripts/instructions.py` counts it by its name.
+    #[inline(never)]
     pub(super) fn carry_engine(&mut self, step: EngineStep) {
         let EngineStep::Carry { removed, reread } = step else {
             self.reseed_engine();

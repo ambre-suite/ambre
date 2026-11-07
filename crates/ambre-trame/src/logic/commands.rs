@@ -407,7 +407,7 @@ impl TrameState {
         written: &super::remote::Imported,
         order: &[Id<Sheet>],
     ) -> TrameOutcome {
-        self.after_history(written, order)
+        self.after_history(HistoryStep::Undo, written, order)
     }
 
     /// The tail of a redo, counted by its own name as
@@ -418,19 +418,25 @@ impl TrameState {
         written: &super::remote::Imported,
         order: &[Id<Sheet>],
     ) -> TrameOutcome {
-        self.after_history(written, order)
+        self.after_history(HistoryStep::Redo, written, order)
     }
 
     /// The tail of an undo or a redo that changed the document: every cache,
     /// the engine step, the delta and the events. `written` is what the step
     /// wrote, and `order` the tab order before it.
+    ///
+    /// `step` names the step in the log. It also keeps the two callers apart
+    /// in the build, which would otherwise fold their equal bodies into one.
     fn after_history(
         &mut self,
+        step: HistoryStep,
         written: &super::remote::Imported,
         order: &[Id<Sheet>],
     ) -> TrameOutcome {
         self.leave_a_deleted_sheet(order);
-        let mut outcome = if self.history_carries(written) {
+        let carries = self.history_carries(written);
+        tracing::debug!("[Logic] {step:?} applied, carried: {carries}");
+        let mut outcome = if carries {
             let (mut display, _) = self.carry_imported(written, super::remote::Readers::Always);
             display.push(TrameEvent::DataReset);
             TrameOutcome {
