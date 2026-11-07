@@ -59,8 +59,19 @@ pub struct Step {
     pub close: Option<Id<Document>>,
     /// The document the Logic thread opens.
     pub open: Option<(DocType, Id<Document>)>,
-    /// The document the canvas shows, or `None` to freeze it at home.
+    /// The document the canvas shows, or `None` when it shows none: at home,
+    /// or on a Murmure page.
     pub show: Option<Id<Document>>,
+}
+
+/// Whether the canvas renders on `route`. Home freezes it behind the
+/// launcher. A page renders, a Murmure page too, though it binds no document:
+/// its message list and its composer are drawn there.
+pub fn cover(route: &Route) -> ambre_canvas::Cover {
+    match route {
+        Route::Landing => ambre_canvas::Cover::Launcher,
+        Route::Doc { .. } => ambre_canvas::Cover::Document,
+    }
 }
 
 /// The step from the previous route to the current one, or `None` when the
@@ -283,6 +294,23 @@ mod tests {
         );
         assert_eq!(booted_kind(&page), DocType::Murmure);
         assert_eq!(booted_kind(&Route::Landing), DocType::Trame);
+    }
+
+    /// A Murmure page binds no document and still renders, so its composer
+    /// is drawn and takes a press. Home alone freezes the canvas.
+    #[wasm_bindgen_test]
+    fn a_murmure_page_renders_and_home_freezes() {
+        let murmure = Route::Doc {
+            doc_type: DocType::Murmure,
+            document_id: Id::<Document>::mint(),
+        };
+        assert_eq!(cover(&murmure), ambre_canvas::Cover::Document);
+        assert_eq!(cover(&Route::Landing), ambre_canvas::Cover::Launcher);
+        let prose = Route::Doc {
+            doc_type: DocType::Prose,
+            document_id: Id::<Document>::mint(),
+        };
+        assert_eq!(cover(&prose), ambre_canvas::Cover::Document);
     }
 
     #[wasm_bindgen_test]

@@ -30,6 +30,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-107` | `POST` | The first reply to a message whose `thread` field is absent MUST set it to the thread document. | this spec section 3 | `ambre_murmure::thread_tests::the_link_sets_the_root_thread_field_and_nothing_else` -- the link writes the field, and a second link writes nothing | none | verified |
 | `MURMURE-109` | `POST` | A reply also sent to the channel MUST write a copy in the active segment that names its thread. | this spec section 3 | `ambre_murmure::thread_tests::a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread` -- the copy reads the reply's text and its thread; `ambre_logic::channels::tests::a_first_reply_waits_for_the_thread_it_creates` -- the copy leaves under the active segment; `ambre_murmure::thread_tests::a_reply_to_its_thread_alone_needs_no_active_session` -- before the active segment's PeerID lands, a thread-only reply leaves and a copy waits | none | verified |
+| `MURMURE-588` | `POST` | A reply one member sends in a thread MUST reach the thread of every other member who opens it. | this spec section 3; `MURMURE-106` | none | fails -- in the browser tier, the other member's client opens the thread and replays none of the replies the relay holds. Its Logic thread then refuses the empty thread as a damaged segment; lands with the `Murmure's thread reply and direct message driven in the browser tier` Story (`ambre-roadmap.md` E9) | failing |
 | `MURMURE-110` | `FRAME` | Replying MUST NOT change the root message beyond its `thread` field. | this spec section 3 | `ambre_murmure::thread_tests::the_link_sets_the_root_thread_field_and_nothing_else` -- the delta of the link holds one operation, on that field | none | verified |
 | `MURMURE-484` | `POST` | The first reply to a message of a locked segment MUST record its thread in the amendments of that segment. | this spec section 3; `MURMURE-013` | `ambre_murmure::amending_tests::a_thread_of_a_locked_root_is_recorded_in_its_amendments` -- the reply waits for the amendments, which record the thread; `::another_member_finds_the_thread_of_a_locked_root` -- a second member reads the record and opens the thread; `::a_thread_record_outside_the_rule_is_refused` -- the check refuses a foreign key, a second thread, a bad value and a removal; `::a_fold_carries_the_thread_of_a_locked_root` -- the fold writes the root's field; `ambre_logic::channels::tests::a_reply_to_a_locked_root_waits_for_its_amendments` -- the link leaves under the amendments | none | verified |
 | `MURMURE-485` | `POST` | An edit, a delete or a reaction on a reply MUST write in its thread document. | this spec section 3; `MURMURE-084`, `MURMURE-091` | `ambre_murmure::thread_tests::an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread` -- each change writes the thread, and a delete leaves the count; `::another_member_reacts_to_a_reply_and_never_edits_it` -- the check takes a reaction, and an edit is refused; `ambre_logic::channels::tests::a_change_on_a_reply_leaves_for_its_thread` -- each change leaves under the thread | none | verified |
@@ -66,10 +67,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, the identifier of its root, and when it
   changes (`ZK-015`, `SRV-162`).
-* **Verification.** 22 `verified`, 6 `unimplemented`. The engine tests hold the thread document,
-  the link, the count, the changes on a reply, a locked root and the mentions. The Logic tests
-  hold the waits, the race, the watch and the read cursor. The Sync tests hold the signal, the
-  light thread and the number a read reaches. The view's host tests hold the read a thread shown sends.
+* **Verification.** 22 `verified`, 1 `failing`, 6 `unimplemented`. The engine tests hold the thread
+  document, the link, the count, the changes on a reply, a locked root and the mentions. The Logic
+  tests hold the waits, the race, the watch and the read cursor. The Sync tests hold the signal, the
+  light thread and the number a read reaches. The view's host tests hold the read a thread shown
+  sends.
 
 ---
 

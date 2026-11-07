@@ -43,6 +43,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-464` | `FRAME` | A new direct message MUST NOT wrap its key for a member under an exchange key the relay changed since the member was chosen. | this spec section 3; `SYNC-010` | `ambre_sync::channels::tests::a_key_other_than_the_pinned_one_is_refused` -- a key the relay serves differently fails the request | none | verified |
 | `MURMURE-251` | `POST` | A new direct message MUST give every member, its creator included, the editor role. | this spec section 3; `MURMURE-252` | `ambre_sync::channels::tests::a_direct_message_makes_every_member_an_editor_under_one_key` -- meta's log replays to every member as an editor; `ambre_server::routes::channels::tests::a_direct_message_has_no_space_and_no_owner` -- the relay holds an editor row for each | none | verified |
 | `MURMURE-053` | `FRAME` | Opening a direct message MUST NOT add a member to an existing one. | this spec section 3 | `ambre_server::routes::channels::tests::the_same_members_reach_the_same_direct_message` -- the existing channel keeps its members; `ambre_logic::direct::tests::an_existing_direct_message_opens_in_place_of_the_new_one` -- nothing is sent to it | none | verified |
+| `MURMURE-589` | `POST` | A direct message one member opens with another MUST open for the other, with what the first wrote in it. | this spec section 3; `MURMURE-051` | none | fails -- in the browser tier, the direct message lists in the other member's sidebar, but most runs never open it. Its Logic thread drops each command for it as not open, and the list stays empty; lands with the `Murmure's thread reply and direct message driven in the browser tier` Story (`ambre-roadmap.md` E9) | failing |
 
 ### 1.4 Name a direct message
 
@@ -130,11 +131,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 40 `verified`, 14 `unimplemented`. The relay holds a private channel, its leave,
-  its delete and its key links. A client creates, deletes and leaves one, and learns its user's
-  channels. A direct message opens, is reused and takes a name; an invite opens a channel, and
-  announces a third member. A rotation closes the active segment and locks the ones it leaves;
-  conversion and archive are not built.
+* **Verification.** 40 `verified`, 1 `failing`, 14 `unimplemented`. The relay holds a private
+  channel, its leave, its delete and its key links. A client creates, deletes and leaves one, and
+  learns its user's channels. A direct message opens, is reused and takes a name; an invite opens a
+  channel, and announces a third member. A rotation closes the active segment and locks the ones it
+  leaves; conversion and archive are not built.
 
 ---
 
