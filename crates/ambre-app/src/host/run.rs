@@ -2,7 +2,7 @@
 // ============================================================================
 // `run_with` wires the canvas element, the transparent textarea input pipe, and
 // the resize / input / clipboard listeners. It also wires the route-independent
-// rAF loop that runs the per-frame relay + dispatcher. Returns the `DocSwitcher`
+// rAF loop that runs the switchboard + dispatcher. Returns the `DocSwitcher`
 // handle the route poll uses to swap the active document in place.
 // ============================================================================
 

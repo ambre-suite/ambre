@@ -401,7 +401,7 @@ mod tests {
             None,
         )
         .await;
-        // The answers reach the vault as the per-frame relay hands them.
+        // The answers reach the vault as the switchboard hands them.
         let vault = local.inner.vault.clone();
         let doc = Id::<Document>::mint();
 

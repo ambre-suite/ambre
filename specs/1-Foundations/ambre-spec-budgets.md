@@ -104,7 +104,7 @@
 
 * **The transport is not the cost.** UI <-> Logic stays zero-cost (`ambre_bus::conduit` by move,
   shared heap). The Logic <-> Sync `postMessage` hop adds a postcard encode plus a structured clone,
-  or a zero-copy `ArrayBuffer` transfer for a large payload. The relay's per-frame cadence bounds
+  or a zero-copy `ArrayBuffer` transfer for a large payload. The switchboard's cadence bounds
   it, well under the < 300 ms inter-user budget, because network latency dominates that path. The
   crypto bottleneck is Ed25519, 80 to 250 us.
 * **p99 over peak.** A stable 45 FPS reads as smoother than 60 FPS with stutters, so the target is
