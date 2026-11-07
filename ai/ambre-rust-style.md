@@ -242,9 +242,14 @@
   tuple struct of a newtype is a workspace call, as `T::new` is, so the report refuses
   `DocOffset(run.get())`.
 
-  The report reads no type. On a receiver whose type it knows, an accessor or a callee that std
-  shares is refused. On a receiver it cannot type, that name is ambiguous, never refused. So is an
-  accessor that many newtypes share. The report does not read an `into` on such a receiver, a
+  The report reads no type. It knows a type by its path, so a name is one type of one crate. A
+  `use` of the file, the crate a path starts at, or a declaration of the current crate places the
+  name. A glob of the workspace places it when one crate answers. A re-export is followed through
+  the `pub use` items of its crate.
+
+  On a receiver whose type it knows, an accessor or a callee that std shares is refused. On a
+  receiver it cannot type, that name is ambiguous, never refused. So is an accessor that many
+  newtypes share. The report does not read an `into` on such a receiver, a
   macro argument, or a closure that returns the unwrap.
 
   A missing or malformed `specs/1-Foundations/ambre-unwrap.tsv` fails the report, which otherwise
