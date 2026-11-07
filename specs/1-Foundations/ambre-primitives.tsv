@@ -3402,6 +3402,7 @@ ambre-primitives | src/scan.rs | crate::scan | FEATURE_ROOTS | const | &[(&str,&
 ambre-primitives | src/scan.rs | crate::scan | MacroMods.file | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | MacroMods.found | field | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/scan.rs | crate::scan | NESTED_WORKSPACES | const | &[&str]	generic	the directories of the workspace root that hold a workspace of their own
+ambre-primitives | src/scan.rs | crate::scan | VENDORED | const | &[&str]	generic	the directories of the workspace root that hold a patched third-party crate
 ambre-primitives | src/scan.rs | crate::scan | SKIPPED | const | &[&str]	generic	the directories of the workspace root that a listing leaves out
 ambre-primitives | src/scan.rs | crate::scan | SQLX | const | &str	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/scan.rs | crate::scan | features() | ret | Vec<String>	free-text	error messages printed to the terminal
@@ -4199,6 +4200,13 @@ ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::histo
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::engine_holds_a_skip() | ret | bool	generic	predicate: whether the engine holds what no dependency names
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::parse(name) | param | &str	foreign-api	a root container name as Loro reports it
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | is_formula() | ret | bool	generic	predicate: whether a stored cell value is a formula
+ambre-sfu | src/forward.rs | crate::forward | <Participant as SeqKind>::NAME | const | &'static str	free-text	the family name a participant number prints through Debug, for a log line
+ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/forward.rs | crate::forward | <Room as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/main.rs | crate | Setting::read() | ret | Result<SocketAddr,String>	free-text	the words of the error the binary prints when a variable holds no socket address
+ambre-sfu | src/main.rs | crate | Setting::variable() | ret | &'static str	newtype-inner	the fieldless enum's own spelling, the name of the environment variable std::env::var takes
 ambre-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-core | src/locale.rs | crate::locale | <MonthDay as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line

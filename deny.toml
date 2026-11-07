@@ -85,7 +85,7 @@ wildcards = "allow"
 # worker, through `ambre-crypto`. The relay must never link it (`ZK-004`).
 [[bans.deny]]
 name = "chacha20poly1305"
-wrappers = ["ambre-crypto"]
+wrappers = ["ambre-crypto", "dimpl"]
 
 # Passphrase KDF. Argon2 runs client-side only (`ZK-003`); the server deriving a
 # key from a passphrase would mean the passphrase reached it.
@@ -97,7 +97,7 @@ wrappers = ["ambre-crypto"]
 # relay does not (`ZK-004`).
 [[bans.deny]]
 name = "x25519-dalek"
-wrappers = ["ambre-crypto", "ambre-sync"]
+wrappers = ["ambre-crypto", "ambre-sync", "dimpl"]
 
 # Ed25519. The one crypto operation the server is allowed: signature
 # verification, plus minting its own access tokens (`SRV-012`).
@@ -107,6 +107,18 @@ wrappers = ["ambre-crypto", "ambre-sync"]
 [[bans.deny]]
 name = "ed25519-dalek"
 wrappers = ["ambre-crypto", "ambre-sync", "ambre-server", "openidconnect"]
+
+# The DTLS of a call's hop. dimpl seals the transport between a browser and the
+# SFU with the two primitives above, and opens no chunk: those are sealed end to
+# end inside the hop (`CALL-012`). Only str0m reaches dimpl, and only the SFU
+# reaches str0m, so the relay still links neither primitive (`ZK-004`).
+[[bans.deny]]
+name = "dimpl"
+wrappers = ["str0m", "str0m-proto", "str0m-rust-crypto"]
+
+[[bans.deny]]
+name = "str0m"
+wrappers = ["ambre-sfu"]
 
 # The client crypto crate itself. `ambre-logic` is listed for its fixtures-only,
 # host-only `hash::chain_hash` use (optional `fixtures` feature) -- not for

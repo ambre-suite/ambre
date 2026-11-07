@@ -195,17 +195,25 @@ const SKIPPED: &[&str] = &[".git", "target"];
 /// listing leaves out its build output.
 pub(crate) const NESTED_WORKSPACES: &[&str] = &["fuzz"];
 
+/// The third-party crates the workspace patches in, which the root
+/// `Cargo.toml` excludes from its members. Their code is not ours, so the
+/// gate reads none of it: a listing leaves each out, and so does the dep-info
+/// check.
+pub(crate) const VENDORED: &[&str] = &["vendor"];
+
 impl Disk {
     /// The tree on disk under the workspace root `root`.
     pub fn at(root: &Path) -> Self {
         let nested = NESTED_WORKSPACES
             .iter()
             .map(|dir| root.join(dir).join("target"));
+        let vendored = VENDORED.iter().map(|dir| root.join(dir));
         Self {
             skipped: SKIPPED
                 .iter()
                 .map(|dir| root.join(dir))
                 .chain(nested)
+                .chain(vendored)
                 .collect(),
         }
     }

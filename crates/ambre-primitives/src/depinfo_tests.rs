@@ -157,6 +157,14 @@ fn a_path_that_holds_a_backslash_fails_with_its_own_message() {
 }
 
 #[test]
+fn a_vendored_crate_is_not_read() {
+    // A patched third-party crate builds from under the root, and its code
+    // is not ours: it is no unit of the gate, whatever it holds.
+    let message = r#"{"reason":"compiler-artifact","package_id":"path+file:///w/vendor/demo#0.1.0","manifest_path":"/w/vendor/demo/Cargo.toml","target":{"kind":["lib"],"src_path":"/w/vendor/demo/src/lib.rs"},"profile":{},"filenames":["/w/target/debug/deps/libdemo-1.rmeta"]}"#;
+    assert!(matches!(artifact(Path::new(ROOT), message), Ok(None)));
+}
+
+#[test]
 fn an_artifact_with_no_test_flag_fails_closed() {
     // SEC-1f read a missing flag as a test build, which no check reads.
     let message = r#"{"reason":"compiler-artifact","package_id":"path+file:///w/crates/demo#0.1.0","manifest_path":"/w/crates/demo/Cargo.toml","target":{"kind":["lib"],"src_path":"/w/crates/demo/src/lib.rs"},"profile":{},"filenames":["/w/target/debug/deps/libdemo-1.rmeta"]}"#;

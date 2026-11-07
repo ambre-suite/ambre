@@ -208,6 +208,15 @@ def scratch(tmp: str) -> Path:
     write(root, f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW)
     for rel, text in WALKS.items():
         write(root, rel, text)
+    write(
+        root,
+        cb.LOCKFILE,
+        '[[package]]\nname = "ambre-sfu"\ndependencies = ["str0m"]\n\n'
+        '[[package]]\nname = "str0m"\ndependencies = ["dimpl 0.9.0"]\n\n'
+        '[[package]]\nname = "dimpl"\nversion = "0.9.0"\n\n'
+        '[[package]]\nname = "ambre-server"\ndependencies = ["ring"]\n\n'
+        '[[package]]\nname = "ring"\n',
+    )
     return root
 
 
@@ -261,6 +270,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_failure_latches(errors)
             cb.check_exit_writes(errors)
             cb.check_walks(errors)
+            cb.check_sfu_crypto(errors)
             return errors
 
     def breach(self, rel: str, text: str) -> list[str]:
@@ -271,6 +281,33 @@ class CrateBoundaries(unittest.TestCase):
             root = scratch(tmp)
             write(root, rel, text)
             return self.run_checks(root)
+
+    def test_the_sfu_reaching_a_c_cryptography_library_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(
+                root,
+                cb.LOCKFILE,
+                '[[package]]\nname = "ambre-sfu"\ndependencies = ["str0m"]\n\n'
+                '[[package]]\nname = "str0m"\ndependencies = ["dimpl"]\n\n'
+                '[[package]]\nname = "dimpl"\ndependencies = ["aws-lc-rs 1.19.0"]\n\n'
+                '[[package]]\nname = "aws-lc-rs"\nversion = "1.19.0"\ndependencies = ["aws-lc-sys"]\n\n'
+                '[[package]]\nname = "aws-lc-sys"\n',
+            )
+            errors = self.run_checks(root)
+        self.assertTrue(any("reaches `aws-lc-sys`" in e for e in errors), errors)
+
+    def test_a_c_cryptography_library_outside_the_sfu_stays_free(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self.run_checks(scratch(tmp)), [])
+
+    def test_a_lockfile_without_the_sfu_is_refused(self):
+        errors = self.breach(cb.LOCKFILE, '[[package]]\nname = "str0m"\n')
+        self.assertTrue(any("no `ambre-sfu` package" in e for e in errors), errors)
 
     def test_a_family_state_is_told_apart_by_its_marker(self):
         web = cb.state_type("Validated<WebAddress>")
