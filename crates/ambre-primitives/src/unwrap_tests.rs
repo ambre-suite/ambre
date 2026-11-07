@@ -1052,3 +1052,35 @@ fn a_re_export_resolves_through_the_pub_use_of_its_crate() {
     assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
     assert_eq!(report.foreign, SiteCount::new(1));
 }
+
+#[test]
+fn a_workspace_glob_places_a_name_only_when_one_crate_answers() {
+    // `one` reaches `Px` through one glob. `two` reaches it through two
+    // globs whose crates both declare a `Px`, so `two` cannot place it.
+    let units = "pub mod px {\n\
+            pub struct Px(u32);\n\
+            impl Px { pub fn get(self) -> u32 { self.0 } }\n\
+        }\n\
+        pub use px::Px;\n";
+    let shapes = "pub struct Px;\n\
+        impl Px { pub fn get(self) -> u32 { 0 } }\n";
+    let draw = "pub fn keep(n: u32) {}\n\
+        pub fn draw(width: Px) { keep(width.get()); }\n";
+    let one = format!("use units::*;\n{draw}");
+    let two = format!("use shapes::*;\nuse units::*;\n{draw}");
+    let report = run_crates(&[
+        ("one", "[dependencies]\nunits = \"1\"\n", &one),
+        ("shapes", "", shapes),
+        (
+            "two",
+            "[dependencies]\nshapes = \"1\"\nunits = \"1\"\n",
+            &two,
+        ),
+        ("units", "", units),
+    ]);
+    assert_eq!(refusals(&report), ["one | src/lib.rs:3 | Px::get -> keep"]);
+    // A name the report cannot place reads as foreign, so `two` holds
+    // no site at all.
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.sites, SiteCount::new(1));
+}
