@@ -30,6 +30,7 @@
 | worker | a browser worker hosting a thread | | `1-Foundations/ambre-spec-architecture.md` |
 | queue | a bounded, typed link between two threads | | `1-Foundations/ambre-spec-architecture.md` |
 | conduit | the lock-free queue of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
+| feed | the receiving end of a view on the Logic to UI queue | | `1-Foundations/ambre-spec-message-bus.md` |
 | doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
 | call worker | the instance that seals the audio and video of one call | media worker | `1-Foundations/ambre-spec-call-media.md` |
 | switchboard | the Main thread module that sends each Logic event to a view or an effect | frame relay, per-frame relay | `1-Foundations/ambre-spec-architecture.md` |
