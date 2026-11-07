@@ -1200,6 +1200,15 @@ ambre-murmure | src/chrome.rs | crate::chrome | entry_view(unnamed) | param | &'
 ambre-murmure | src/chrome.rs | crate::chrome | member_view(choose) | param | Option<(Callback<()>,&'static str)>	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | panel_label() | ret | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | segments() | ret | String	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::create_channel(name) | param | String	free-text	the text of the new channel field as the DOM hands it, blank included; a Name parses from it inside
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::create_space(name) | param | String	free-text	the text of the new space field as the DOM hands it, blank included; a Name parses from it inside
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::invite_to_space(email) | param | String	free-text	the text of the invite field as the DOM hands it, blank included; the Email is built from it inside, trimmed
+ambre-murmure | src/chrome.rs | crate::chrome | PromptControl(on_submit) | param | Callback<String,Option<LogicCommand>>	free-text	the callable a submit hands the text of its field to, as the DOM hands it
+ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.label | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.submit | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.toggle | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | UNNAMED_SPACE | const | &str	free-text	the heading a person reads over a space whose catalogue names none yet
+ambre-murmure | src/chrome.rs | crate::chrome | name_typed(text) | param | &str	free-text	the text of a name field as the DOM hands it; a Name parses from it inside
 ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	free-text	the closed set's display label: the words the shortcut list shows for the place
 ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	free-text	the text of a message a member wrote, as the clipboard takes it
@@ -1407,6 +1416,8 @@ ambre-murmure | src/sequence.rs | crate::sequence | Range::holds() | ret | bool	
 ambre-murmure | src/sequence.rs | crate::sequence | RowTable.0 | field | &'a[u8]	newtype-inner	the raw sequence table of a framed snapshot, cut into fixed rows only by table
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/sidebar.rs | crate::sidebar | SpaceHead::is_admin() | ret | bool	generic	predicate result
+ambre-murmure | src/sidebar.rs | crate::sidebar | SpaceHead::is_owner() | ret | bool	generic	predicate result
 ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content

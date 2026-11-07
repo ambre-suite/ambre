@@ -846,6 +846,9 @@ pub enum SpaceEvent {
     Catalogue {
         /// Absent when the space has no name.
         name: Option<ambre_core::Validated<ambre_core::Name>>,
+        /// The role the relay gives this user on the space document. It
+        /// decides which controls of the space the sidebar offers.
+        role: ambre_bus::Role,
         categories: Vec<CategoryView>,
         channels: Vec<CatalogueEntry>,
     },
