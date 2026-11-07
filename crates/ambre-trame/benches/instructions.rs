@@ -7,11 +7,11 @@
 //!
 //! A structural edit is counted in two private methods of the state, each by
 //! its own name. They are the re-anchor walk and the engine step after the
-//! commit. The
-//! rest of the delete falls outside the count: the purge, the commit, and the
-//! caches of positions, merges, styles and sizes. A remote batch is counted
-//! whole, from the import to the events. Run with no operation named, as
-//! `cargo bench` does, every operation runs once: a smoke test.
+//! commit. A line delete is the same command counted whole: the purge, the
+//! commit and every cache too. Its undo and its redo are each counted whole
+//! in the same way. A remote batch is counted whole, from the import to the
+//! events. Run with no operation named, as `cargo bench` does, every
+//! operation runs once: a smoke test.
 
 use ambre_core::index::{Len, Pos};
 use ambre_trame::logic::TrameState;
@@ -66,6 +66,19 @@ fn ambre_budget_trame_structural_edit(st: &mut TrameState) {
     black_box(st.handle_command(TrameCommand::DeleteRow {
         at: Pos::<Row>::new(FORMULAS / 2),
     }));
+}
+
+/// Undo the delete of the middle row: the row, its two cells and their
+/// formula come back.
+#[inline(never)]
+fn ambre_budget_trame_line_delete_undo(st: &mut TrameState) {
+    black_box(st.handle_command(TrameCommand::Undo));
+}
+
+/// Redo the delete of the middle row.
+#[inline(never)]
+fn ambre_budget_trame_line_delete_redo(st: &mut TrameState) {
+    black_box(st.handle_command(TrameCommand::Redo));
 }
 
 /// The sheet holds every formula the paste wrote, so the edit meets them.
@@ -131,12 +144,48 @@ fn checked_after_batch(st: &mut TrameState) {
     assert!(shows(st, FORMULAS - 2, &last), "the last row moved up one");
 }
 
+/// The rows below the deleted one moved up one, each formula with its row.
+fn checked_after_delete(st: &mut TrameState) {
+    let middle = (2 * (FORMULAS / 2 + 1)).to_string();
+    assert!(shows(st, FORMULAS / 2, &middle), "the next row moved up");
+    let last = (2 * (FORMULAS - 1)).to_string();
+    assert!(shows(st, FORMULAS - 2, &last), "the last row moved up");
+}
+
+/// The deleted row came back, and every row below it with it.
+fn checked_after_undo(st: &mut TrameState) {
+    let middle = (2 * (FORMULAS / 2)).to_string();
+    assert!(shows(st, FORMULAS / 2, &middle), "the deleted row is back");
+    checked(st);
+}
+
 /// Each operation the script may name, with the function that runs it.
 const OPERATIONS: &[(&str, fn())] = &[
     ("structural_edit", || {
         let mut st = sheet();
         checked(&mut st);
         ambre_budget_trame_structural_edit(&mut st);
+    }),
+    ("line_delete", || {
+        let mut st = sheet();
+        checked(&mut st);
+        ambre_budget_trame_structural_edit(&mut st);
+        checked_after_delete(&mut st);
+    }),
+    ("line_delete_undo", || {
+        let mut st = sheet();
+        checked(&mut st);
+        ambre_budget_trame_structural_edit(&mut st);
+        ambre_budget_trame_line_delete_undo(&mut st);
+        checked_after_undo(&mut st);
+    }),
+    ("line_delete_redo", || {
+        let mut st = sheet();
+        checked(&mut st);
+        ambre_budget_trame_structural_edit(&mut st);
+        ambre_budget_trame_line_delete_undo(&mut st);
+        ambre_budget_trame_line_delete_redo(&mut st);
+        checked_after_delete(&mut st);
     }),
     ("remote_batch", || {
         let mut author = sheet();

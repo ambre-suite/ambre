@@ -108,6 +108,7 @@ enum Edit {
         reference: &'static str,
     },
     Undo,
+    Redo,
 }
 
 /// One step of a program.
@@ -145,6 +146,7 @@ fn edit() -> impl Strategy<Value = Edit> {
         1 => prop_oneof![Just("B1:B3"), Just("A2:C2"), Just("Sheet2!A1:A4")]
             .prop_map(|reference| Edit::Rename { reference }),
         1 => Just(Edit::Undo),
+        1 => Just(Edit::Redo),
     ]
 }
 
@@ -227,6 +229,7 @@ fn commands(st: &mut TrameState, edit: &Edit) -> Vec<TrameCommand> {
             reference: reference.to_owned(),
         }],
         Edit::Undo => vec![TrameCommand::Undo],
+        Edit::Redo => vec![TrameCommand::Redo],
     }
 }
 
@@ -319,6 +322,11 @@ fn agree(carried: &TrameState, rebuilt: &TrameState, step: &Step) -> Result<(), 
     );
     let same = same_values(carried, rebuilt);
     prop_assert!(same.is_ok(), "a value differs after {:?}: {:?}", step, same);
+    prop_assert!(
+        super::structural_tests::lines_kept(carried),
+        "the index by line differs after {:?}",
+        step
+    );
     // What decides whether the next local structural edit carries or reseeds:
     // a cell the last reseed left out, and the formulas that read positions.
     prop_assert_eq!(

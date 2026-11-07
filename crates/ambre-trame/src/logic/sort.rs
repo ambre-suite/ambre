@@ -189,7 +189,8 @@ impl TrameState {
         if self.axes().reorder_rows(sort_start, &target).is_none() {
             return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);
         }
-        let walk = self.reanchor_formulas(AxisEdit::Rows(LineEdit::Reorder), &[], None);
+        let edit = AxisEdit::Rows(LineEdit::Reorder);
+        let walk = self.reanchor_formulas(edit, &[], self.next_index(edit, None));
         self.doc.commit();
 
         let mut outcome = self.after_reorder(walk);

@@ -52,6 +52,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-248` | `FAIL` | A key or a line element that spells a uid other than as `{peer:016x}_{counter:08x}` MUST be refused, and the refusal MUST reach the user. | `ambre-spec-trame-schema.md section 2`; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-003`) | `ambre_trame::model::sheet_index::tests::a_uid_reads_back_from_its_canonical_spelling_alone` -- a short, a signed, an upper-case and a wide spelling; `ambre_trame::logic::tests::group12::a_cell_key_in_a_non_canonical_spelling_is_refused_and_said`; `::a_non_canonical_key_in_every_keyed_map_is_said` -- the style, merge, width, height and filter maps; `::a_line_element_in_a_non_canonical_spelling_is_refused_and_said` | none | verified |
 | `TRAME-231` | `POST` | Opening a workbook MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 2; `ambre-spec-budgets.md section 1` | `ambre_trame::logic::tests::group7::a_reader_that_sent_nothing_holds_no_history_of_its_own` -- the reader's version vector equals the author's after the snapshot and after a delta | none | verified |
 | `TRAME-282` | `POST` | After a remote batch, each formula MUST hold the value, the dependencies, the error and the cycle refusal that a full reseed of the merged workbook gives it. | this spec section 3.F; `TRAME-042` | `ambre_trame::logic::remote_tests::a_carried_remote_apply_equals_a_full_rebuild` -- a proptest, 256 cases: two authors write cells and formulas on two sheets, write past the used range at once, insert, delete and move lines, sort, merge, redefine a name, undo and sync with each other. A receiver makes the same edits and switches sheets. One receiver carries its engine across each batch, the other reseeds after it, and they match on the stored text, each value, each dependency, each cycle refusal, the mark that sends the next structural edit to a reseed, and the stored formulas that place on no cell. Each derived layout is checked against a read of the lists; `ambre_trame::logic::remote_tests::a_remote_cell_write_recomputes_its_readers_without_a_reseed`; `::a_remote_row_delete_carries_the_engine_without_a_reseed`; `::a_remote_sheet_rename_reseeds_the_engine`; `::a_line_left_on_another_element_reseeds_the_engine`; `::a_second_key_on_a_cell_reseeds_the_engine`; `::an_undone_remote_delete_brings_back_a_value_written_on_the_gone_row`; `::a_formula_written_with_its_own_text_over_a_removed_row_compiles_again`; `::a_local_write_under_a_second_key_marks_the_engine_as_a_reseed_does`; `::a_purge_drops_a_formula_left_under_a_removed_column` -- each counts the reseeds, or replays a shrunk seed | none | verified |
+| `TRAME-285` | `POST` | After an undo or a redo, each formula MUST hold the value, the dependencies, the error and the cycle refusal that a full reseed of the workbook gives it. | this spec section 3.F; `TRAME-042` | `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- a proptest, 256 cases over two sheets: its steps undo and redo inserts, deletes, moves, sorts, merges, formula writes and remote merges. After each step the carried state matches a state that reseeds after each undo and each redo, on the stored text, each value, each dependency and each cycle refusal; `ambre_trame::logic::remote_tests::a_carried_remote_apply_equals_a_full_rebuild` -- its receiver undoes and redoes its own edits between the batches | none | verified |
 | `TRAME-283` | `POST` | A remote batch that writes one cell and deletes one row of a sheet of 10k formula cells MUST hold the remote batch budget. | this spec section 3.F; `ambre-spec-budgets.md section 1` | `callgrind` -- the `remote_batch` operation of `crates/ambre-trame/benches/instructions.rs`, the whole apply of the batch, under its ceiling in the CI `instructions` job | none | verified |
 | `TRAME-284` | `POST` | A remote batch and a cell write MUST name the cells whose display they changed, unless they repaint the whole state. | this spec section 3.F | `ambre_trame::logic::tests::group7::a_cell_write_names_the_cells_it_changed`; `::a_write_of_the_same_text_still_names_its_cell`; `::a_remote_batch_names_the_cells_it_changed`; `ambre_trame::logic::remote_tests::a_merge_that_loses_its_corner_line_repaints_its_block`; `::a_carried_remote_apply_equals_a_full_rebuild` -- after each batch and each local edit, the range names each cell whose display changed | none | verified |
 | `TRAME-UI-184` | `POST` | On a change that names its cells, the UI MUST re-fetch only the cells of its window that the change names. | this spec section 4; `TRAME-284` | `ambre_trame::ui::grid::tests::viewport::a_ranged_change_refetches_only_its_part_of_the_window`; `::a_later_window_request_carries_a_ranged_change`; `ambre_trame::ui::view::view_tests::a_ranged_change_refetches_its_cells_and_a_reset_the_window`; `ambre_trame::ui::view::tests::a_pending_window_request_covers_a_ranged_one`; `::two_ranged_requests_flush_as_one_over_both` | none | verified |
@@ -63,7 +64,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 23 `verified`. What holds is what a compiler holds: a handler with no queue in
+* **Verification.** 24 `verified`. What holds is what a compiler holds: a handler with no queue in
   reach, an apply that returns display events and cannot broadcast. The sheet index equals a rebuild
   after every step of a random stream, and so does an engine carried across each remote batch. A
   native view reads each refused send in the log.
@@ -275,8 +276,17 @@ Three shapes are deliberately absent, and each one is a rule:
 ### F. A remote batch
 
 A remote batch costs what it wrote, not the workbook (`TRAME-282`). A subscription to the document
-notes, container by container, what each import changes. A local commit, an undo and a checkout
-are not noted: their own paths keep the caches. Once the batch merges, the tail reads the note.
+notes, container by container, what each import changes. A local commit and a checkout are not
+noted: their own paths keep the caches. Once the batch merges, the tail reads the note.
+
+**An undo and a redo take the same tail** (`TRAME-285`). Each commits the inverse of a past local
+commit, and the subscription notes that commit as it notes an import. The tail then reads the note
+as after a batch, under the same five cases of a reseed below.
+
+It also compiles again each formula
+that reads positions, whatever the step moved. A local write that adds a line can leave such a formula
+on a position the line now holds. A reseed binds it to the line. The answer keeps its
+`DataReset`.
 
 | The batch changed | What runs |
 |---|---|

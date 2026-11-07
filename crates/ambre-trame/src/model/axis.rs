@@ -1274,15 +1274,51 @@ impl<'a> Axes<'a> {
     /// Delete the line at `at`: every element of its uid this peer holds, the
     /// hidden ones too (`TRAME-269`). Returns what it removed, `None` past the
     /// end.
-    pub(crate) fn delete<L: AxisOrder>(&self, at: Pos<L>) -> Option<Removed> {
+    ///
+    /// `layout` is the layout of the lists before the call, when the caller
+    /// holds one. The slots are then read from it, not from the list. The call
+    /// removes the line from `layout` too, so the next delete of one commit
+    /// reads the layout after this one. `layout` turns `None` where the view
+    /// cannot follow the list, and a later delete then reads the list.
+    pub(crate) fn delete<L: AxisOrder>(
+        &self,
+        layout: &mut Option<SheetIndex>,
+        at: Pos<L>,
+    ) -> Option<Removed> {
         let list = self.list::<L>();
-        let view = AxisView::<L>::read(&list);
+        let cached = layout
+            .as_ref()
+            .map(L::view)
+            .filter(|view| view.read_state() == LineRead::Clean);
+        #[cfg(test)]
+        if let Some(view) = cached {
+            assert_eq!(
+                *view,
+                AxisView::<L>::read(&list),
+                "the layout is the list's"
+            );
+        }
+        let read;
+        let view = match cached {
+            Some(view) => view,
+            None => {
+                read = AxisView::<L>::read(&list);
+                &read
+            }
+        };
         let uid = view.uid(at)?;
-        let mut elements = Vec::new();
-        for slot in view.slots_of(&uid) {
-            elements.extend(view.elements.get(slot).copied());
+        let slots = view.slots_of(&uid);
+        let elements: Vec<Element> = slots
+            .iter()
+            .filter_map(|slot| view.elements.get(*slot).copied())
+            .collect();
+        let next = layout
+            .take()
+            .and_then(|index| index.without_line::<L>(&uid));
+        for slot in slots {
             list.delete(slot.to_index()?, 1).ok()?;
         }
+        *layout = next;
         Some(Removed { uid, elements })
     }
 
@@ -1531,7 +1567,7 @@ mod tests {
         let index = axes.index();
         assert_eq!(index.row_ids().as_slice(), &[line, uid(1, 0), uid(1, 1)]);
         assert_eq!(index.rows().hidden(), Len::<Slot>::new(1));
-        axes.delete::<Row>(Pos::new(0)).unwrap();
+        axes.delete::<Row>(&mut None, Pos::new(0)).unwrap();
         let index = axes.index();
         assert_eq!(index.row_ids().as_slice(), &[uid(1, 0), uid(1, 1)]);
         assert_eq!(index.rows().hidden(), Len::<Slot>::ZERO);

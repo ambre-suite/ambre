@@ -4188,6 +4188,7 @@ ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::e
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_one(key) | param | &str	foreign-api	a stored cell key as Loro reports it, handed back to the map insert of the rewrite
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_one(text) | param | &str	generic	the stored formula text the walk reads, before it is parsed
 ambre-trame | src/logic/remote.rs | crate::logic::remote | TrameState::carries() | ret | bool	generic	predicate: whether the engine may carry a remote batch
+ambre-trame | src/logic/commands.rs | crate::logic::commands | TrameState::history_carries() | ret | bool	generic	predicate: whether the engine may carry an undo or a redo
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::engine_holds_a_skip() | ret | bool	generic	predicate: whether the engine holds what no dependency names
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::parse(name) | param | &str	foreign-api	a root container name as Loro reports it
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | is_formula() | ret | bool	generic	predicate: whether a stored cell value is a formula
