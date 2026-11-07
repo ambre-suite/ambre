@@ -106,6 +106,7 @@ impl TrameView {
             text_pass: TextPass::WithText,
             draw_stats: DrawStats::default(),
             initial_viewport_sent: false,
+            stats_owed: false,
             pending_viewport: ViewportQueue::default(),
             fatal: false,
             needs_full: true,
@@ -244,7 +245,7 @@ impl TrameView {
     /// a11y, 2.F): the cell reference plus its value, for example `"B2, 42"`. Called on
     /// every selection change so navigating the grid is audible, like a native
     /// spreadsheet.
-    pub(crate) fn announce_active(&self) {
+    pub(crate) fn announce_active(&mut self) {
         let at = self.state.active_cell();
         let value = self.cell_seed(at);
         self.text_input.announce(&cell_announcement(at, &value));
@@ -261,14 +262,19 @@ impl TrameView {
     /// The request is lossy, and a full queue drops it. The band is then
     /// cleared rather than left showing another selection's totals
     /// (`TRAME-UI-136`): an unanswered band reads as an absence, stale numbers
-    /// as a fact.
-    pub(crate) fn refresh_selection_stats(&self) {
-        if stats_band_clears(self.state.selection.is_multi(), || {
-            self.send_command_lossy(TrameCommand::RequestSelectionStats)
+    /// as a fact. The refused request stays owed, and the frame offers it again
+    /// until it leaves (`TRAME-UI-185`).
+    pub(crate) fn refresh_selection_stats(&mut self) {
+        let is_multi = self.state.selection.is_multi();
+        let mut sent = false;
+        if stats_band_clears(is_multi, || {
+            sent = self.send_command_lossy(TrameCommand::RequestSelectionStats);
+            sent
         }) {
             #[cfg(target_arch = "wasm32")]
             self.sel_stats.set(None);
         }
+        self.stats_owed = is_multi && !sent;
     }
 
     /// The active cell's spreadsheet reference (for example `"B2"`), shown in the
