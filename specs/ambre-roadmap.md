@@ -679,7 +679,8 @@ owns the subsystem.
 | `[ ]` The dependency bans green again | MVP | `just deny` fails: the ban on `swash` names `parley` as a wrapper (`deny.toml`), and no edge of the graph matches it, so the job that holds the zero-knowledge and render capability bans is red and a new banned edge would pass unseen. Done when `just deny` passes, and each wrapper of `deny.toml` matches an edge of the graph |
 | `[ ]` The wasm instances back under their ceilings | MVP | `just size` fails: the Main instance weighs 25 655 bytes of brotli over its ceiling and the Sync instance 10 030 over its own, so the job that holds each instance's weight is red and the next growth passes unseen. Done when `just size` passes, and a ceiling that went up names in `ambre-spec-budgets.md` the crate that grew and why |
 | `[ ]` The fuzz job green again | MVP | `just fuzz 60` fails in CI and nobody has read why, so the one minute of libFuzzer on each untrusted reader holds nothing: a panic a peer can cause remotely would pass. Done when `just fuzz 60` passes, and each crash it found has a fixed reader and its input kept as a regression case |
-| `[ ]` The browser belt green again | MVP | `just test-browser` fails in CI and nobody has read why, so every row whose mechanism is the browser belt is held by nothing. Done when `just test-browser` and `just test-browser-firefox` pass |
+| `[x]` The browser belt green again on Chrome | MVP | `just test-browser` fails in CI and nobody has read why, so every row whose mechanism is the browser belt is held by nothing. Done when `just test-browser` passes |
+| `[ ]` The browser belt green again on Firefox | MVP | `just test-browser-firefox` fails on one test: a Trame range copied and pasted in one tab keeps its formula unshifted (`TRAME-UI-061`). Firefox refuses the `web ` types and a Trame copy carries no HTML, so the paste reads the plain-text mirror. Done when `just test-browser-firefox` passes |
 
 ---
 
