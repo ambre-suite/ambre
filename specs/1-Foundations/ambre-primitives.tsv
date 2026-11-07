@@ -4233,3 +4233,7 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Marks.g
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands(mark) | param | char	local	the group mark a pattern's comma prints as
 ambre-trame | src/logic/schema.rs | crate::logic::schema | document_locale_v3() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-toile | src/logic/schema.rs | crate::logic::schema | document_locale_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-trame | src/ui/locale.rs | crate::ui::locale | date_preview() | ret | Option<String>	free-text	the long form of a typed date, as the formula bar shows it to a reader
+ambre-trame | src/ui/locale.rs | crate::ui::locale | date_preview(typed) | param | &str	free-text	what a reader is typing in the formula bar
+ambre-trame | src/ui/locale.rs | crate::ui::locale | locale_notice() | ret | Option<String>	free-text	the notice the status bar shows a reader
+ambre-trame | src/ui/locale.rs | crate::ui::locale | spelled() | ret | &str	local	the tag or the words for none, read by locale_notice() alone

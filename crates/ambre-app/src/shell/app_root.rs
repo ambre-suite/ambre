@@ -237,6 +237,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         invite_role,
         me,
         sel_stats,
+        trame_locale,
         sel_stats_toile,
         present_toile,
         presenter_slide,
@@ -625,6 +626,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         cell_ref=formula_ref
                         content=formula_text
                         on_action=Callback::new(move |action| formula_action.set(Some(action)))
+                        locale=trame_locale
                     />
                 })}
             </FormulaBar>
@@ -659,7 +661,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     .into_any()
                 } else {
                     view! {
-                        <trame_chrome::StatusBar stats=sel_stats perf=perf_snap zoom=zoom />
+                        <trame_chrome::StatusBar
+                            stats=sel_stats
+                            perf=perf_snap
+                            zoom=zoom
+                            locale=trame_locale
+                        />
                     }
                     .into_any()
                 }}
