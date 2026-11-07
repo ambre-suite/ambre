@@ -447,6 +447,7 @@
   {"edge": "verified-by", "from": "ARCH-073", "to": "::a_renamed_dependency_reaches_its_package"},
   {"edge": "verified-by", "from": "ARCH-073", "to": "::a_type_name_two_crates_and_a_foreign_import_share_is_judged_by_each_type"},
   {"edge": "verified-by", "from": "ARCH-073", "to": "::a_workspace_glob_places_a_name_only_when_one_crate_answers"},
+  {"edge": "verified-by", "from": "ARCH-073", "to": "::a_name_two_workspace_globs_answer_is_ambiguous"},
   {"edge": "verified-by", "from": "ARCH-073", "to": "::a_re_export_resolves_through_the_pub_use_of_its_crate"},
   {"edge": "verified-by", "from": "ARCH-073", "to": "::a_method_both_the_workspace_and_std_define_is_ambiguous"},
   {"edge": "verified-by", "from": "ARCH-073", "to": "::a_std_accessor_on_an_unknown_receiver_is_ambiguous"},
