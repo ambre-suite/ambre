@@ -102,6 +102,9 @@ mod notify;
 /// The launcher's one writer on the UI to Logic queue (`BUS-035`).
 #[cfg(target_arch = "wasm32")]
 mod outbox;
+/// The link from the Logic thread to the local store.
+#[cfg(target_arch = "wasm32")]
+mod persist;
 #[cfg(target_arch = "wasm32")]
 mod route;
 /// The route binding, polled each frame.
@@ -964,53 +967,22 @@ pub fn main() {
     // Keyboard: resolve registered chords and dispatch to the routed document.
     install_command_keys(keymap, commands.clone());
 
-    // Local persistence: open the IndexedDB store on this (Main) thread, where
-    // the event loop is live. On open, restore the BOOT document's snapshot (if
-    // any) so an edit survives a refresh without a network round-trip. The store
-    // is shared with the switchboard below, which saves snapshots Logic emits.
-    let persist_store: Rc<RefCell<Option<local_store::LocalStore>>> = Rc::new(RefCell::new(None));
-    // Set when the store will never open, so the writes waiting for it go.
-    let persist_gone = Rc::new(std::cell::Cell::new(false));
     // The Sync worker seals each row the store keeps and opens it again
     // (`RESID-025`).
     let vault = vault::Vault::new(shell_outbox.clone());
-    // Set once a session holds the key: the page's document comes back from
-    // its copy only then.
-    let session_seen = Rc::new(std::cell::Cell::new(false));
     // The drafts the composer keeps go to the same store
     // (`ambre-spec-murmure-composer.md`).
     let draft_keeper = host::DraftKeeper::new(murmure_relay.drafts(), vault.clone());
-    {
-        let store_slot = Rc::clone(&persist_store);
-        let keeper = draft_keeper.clone();
-        let gone = Rc::clone(&persist_gone);
-        let full_tx = shell_outbox.clone();
-        let vault = vault.clone();
-        let session_seen = Rc::clone(&session_seen);
-        wasm_bindgen_futures::spawn_local(async move {
-            let store = match ambre_logic::persistence::PersistenceStore::open().await {
-                Ok(Ok(store)) => store,
-                Ok(Err(e)) => {
-                    tracing::warn!("Persistence: store unavailable ({e})");
-                    gone.set(true);
-                    return;
-                }
-                Err(_) => {
-                    tracing::warn!("Persistence: open channel dropped");
-                    gone.set(true);
-                    return;
-                }
-            };
-            keeper.store_opened(store.clone());
-            let local = local_store::LocalStore::open(store, full_tx, vault, boot_doc_typed).await;
-            // The page's document comes back from its copy once a session
-            // holds the key, whichever of the two came first.
-            if session_seen.get() {
-                local.signed_in();
-            }
-            *store_slot.borrow_mut() = Some(local);
-        });
-    }
+    // Local persistence: open the IndexedDB store on this (Main) thread, where
+    // the event loop is live. The store is shared with the switchboard below,
+    // which saves snapshots Logic emits.
+    let mut persist = persist::PersistLink::open(
+        draft_keeper.clone(),
+        shell_outbox.clone(),
+        vault.clone(),
+        boot_doc_typed,
+        logic_to_persist_rx,
+    );
 
     // The single UI-thread dispatcher, pumped once per frame regardless of route.
     // It runs the persist drain, the Logic->Sync relay and the anchor mirror. It
@@ -1021,11 +993,8 @@ pub fn main() {
     let filter_open_pump = filter_open_pub.clone();
     let busy_pump = busy_pub.clone();
     let notice_pump = notice_pub.clone();
-    let persist_store_frame = Rc::clone(&persist_store);
-    let persist_gone_frame = Rc::clone(&persist_gone);
+    let persist_store_frame = persist.store();
     let vault_frame = vault.clone();
-    let session_seen_frame = Rc::clone(&session_seen);
-    let mut persist_waiting: Vec<(Id<Document>, ambre_logic::PersistWrite)> = Vec::new();
     let mut busy_notice = switchboard::BusyNotice::default();
     let mut last_perf_push_ms: f64 = 0.0;
     // The relay's decisions, and the state they keep across frames.
@@ -1094,34 +1063,8 @@ pub fn main() {
         // Browser tab title, recomputed each frame and written on a change.
         tab_title.show(cur_doc);
 
-        // Persist Logic -> local store. Writes wait here until the store is
-        // open: a delta dropped would be missing from every restore until the
-        // next snapshot. Best-effort; the put() commits as the event loop idles.
-        persist_waiting.extend(logic_to_persist_rx.try_iter());
-        if persist_gone_frame.get() {
-            // A store that never opens holds no copy: each reopen waiting on
-            // one is answered empty, and fetches from the relay (`RESID-012`).
-            for (document_id, write) in persist_waiting.drain(..) {
-                if let ambre_logic::PersistWrite::ReadBack { doc_type } = write {
-                    relay_tx.send(LogicCommand::RestoreLocalSnapshot {
-                        document_id,
-                        doc_type,
-                        snapshot: None,
-                        deltas: Vec::new(),
-                        sessions: Vec::new(),
-                    });
-                }
-            }
-        }
-        if let Some(local) = persist_store_frame.borrow().as_ref() {
-            local.tick();
-            // Each write is sealed, then passes the store's ledger, which
-            // keeps it within its budget and meets the quota (`RESID-002`,
-            // `RESID-025`).
-            for (document_id, write) in persist_waiting.drain(..) {
-                local.apply(document_id, write);
-            }
-        }
+        // Persist Logic -> local store, once the store is open.
+        persist.drain();
 
         // A plaintext file the picker read: its payload lands sealed, as every
         // copy does (`RESID-025`).
@@ -1284,10 +1227,7 @@ pub fn main() {
                         username.set(Some(display_name.clone()));
                         me.set(Some(user_id));
                         draft_keeper.signed_in(user_id);
-                        session_seen_frame.set(true);
-                        if let Some(local) = persist_store_frame.borrow().as_ref() {
-                            local.signed_in();
-                        }
+                        persist.signed_in();
                     }
                     switchboard::Effect::LeaveSession => {
                         let keeper = draft_keeper.clone();
