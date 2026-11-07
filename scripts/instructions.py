@@ -102,6 +102,37 @@ CEILINGS = [
         ceiling=10 * PER_MS,
         also=("carry_engine",),
     ),
+    # One row delete from its command to its outcome: the purge, the reads of
+    # the lists, the walk, the commit, the engine step and every cache.
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="line_delete",
+        symbol="ambre_budget_trame_structural_edit",
+        row="Trame whole line delete, 10k formula cells, one DeleteRow (< 10 ms)",
+        ceiling=10 * PER_MS,
+    ),
+    # The undo of that delete, and its redo, each held to the same budget: a
+    # history step of a structural edit is one more structural edit. Only the
+    # tail after the step of Loro's undo manager is counted: that step alone
+    # costs about 300 million (`ambre-spec-budgets.md`, the whole line delete
+    # row), and no code of this workspace runs inside it.
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="line_delete_undo",
+        symbol="after_undo",
+        row="Trame whole line delete, 10k formula cells, the tail of its undo (< 10 ms)",
+        ceiling=10 * PER_MS,
+    ),
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="line_delete_redo",
+        symbol="after_redo",
+        row="Trame whole line delete, 10k formula cells, the tail of its redo (< 10 ms)",
+        ceiling=10 * PER_MS,
+    ),
     # One remote batch from its import to its events: every cache, the
     # engine step and the layout derived from the list diffs.
     Ceiling(

@@ -358,42 +358,110 @@ impl TrameState {
         }
     }
 
-    /// Apply one undo (`undo = true`) or redo step from Loro's `UndoManager`.
-    /// Then rebuild every derived cache from the resulting CRDT state and
-    /// broadcast the inverse ops it produced (`trame-undo`).
+    /// Apply one undo or redo step from Loro's `UndoManager`. Then bring
+    /// every derived cache to the new CRDT state, and broadcast the inverse
+    /// ops (`trame-undo`).
     ///
     /// `undo()` / `redo()` commit the inverse of a past local commit as fresh
-    /// ops. The rebuild path is therefore identical to a structural op or
-    /// import. The index, merge cache, formula engine and formatting are all
-    /// reseeded from the new document state. Returns the same `DataReset` +
-    /// active-cell state the UI needs to repaint, plus an [`UndoState`]
-    /// reporting the new stack availability. When the requested stack is empty
-    /// the call is a no-op and reports nothing: the availability the chrome
-    /// holds is still true (`UNDO-009`).
+    /// ops, which a subscription notes as it notes an import. The tail then
+    /// carries the engine by what the step wrote, as after a remote batch
+    /// (`TRAME-285`). A step the carried path cannot follow rebuilds every
+    /// cache, as a structural op with no walk does. Returns the same
+    /// `DataReset` + active-cell state the UI needs to repaint, plus an
+    /// [`UndoState`] reporting the new stack availability. When the
+    /// requested stack is empty the call is a no-op and reports nothing: the
+    /// availability the chrome holds is still true (`UNDO-009`).
     ///
     /// [`UndoState`]: crate::message::TrameEvent::UndoState
     pub(super) fn apply_history(&mut self, step: HistoryStep) -> TrameOutcome {
         // An undo can take back the sheet the user is on, an import's above
         // all. The reader then lands where a deletion leaves them (`TRAME-075`).
         let order = self.sheet_order_ids();
+        drop(self.take_imported());
+        self.engine.changed.clear();
+        self.note_local(super::remote::LocalNote::Noted);
         let changed = match step {
             HistoryStep::Undo => self.undo_manager.undo(),
             HistoryStep::Redo => self.undo_manager.redo(),
         }
         .unwrap_or(false);
+        self.note_local(super::remote::LocalNote::Ignored);
+        let written = self.take_imported();
 
         if !changed {
             return TrameOutcome::display_only(Vec::new());
         }
 
-        // The inverse ops are already committed by undo()/redo(); reseed the
-        // derived caches and broadcast the delta exactly as `after_structural`.
-        self.leave_a_deleted_sheet(&order);
-        let mut outcome = self.after_structural(None);
+        match step {
+            HistoryStep::Undo => self.after_undo(&written, &order),
+            HistoryStep::Redo => self.after_redo(&written, &order),
+        }
+    }
+
+    /// The tail of an undo, under its own name. `scripts/instructions.py`
+    /// counts it apart from the Loro step before it and from a redo. Never
+    /// inlined, so the name survives the build.
+    #[inline(never)]
+    fn after_undo(
+        &mut self,
+        written: &super::remote::Imported,
+        order: &[Id<Sheet>],
+    ) -> TrameOutcome {
+        self.after_history(HistoryStep::Undo, written, order)
+    }
+
+    /// The tail of a redo, counted by its own name as
+    /// [`after_undo`](Self::after_undo) is.
+    #[inline(never)]
+    fn after_redo(
+        &mut self,
+        written: &super::remote::Imported,
+        order: &[Id<Sheet>],
+    ) -> TrameOutcome {
+        self.after_history(HistoryStep::Redo, written, order)
+    }
+
+    /// The tail of an undo or a redo that changed the document: every cache,
+    /// the engine step, the delta and the events. `written` is what the step
+    /// wrote, and `order` the tab order before it.
+    ///
+    /// `step` names the step in the log. It also keeps the two callers apart
+    /// in the build, which would otherwise fold their equal bodies into one.
+    fn after_history(
+        &mut self,
+        step: HistoryStep,
+        written: &super::remote::Imported,
+        order: &[Id<Sheet>],
+    ) -> TrameOutcome {
+        self.leave_a_deleted_sheet(order);
+        let carries = self.history_carries(written);
+        tracing::debug!("[Logic] {step:?} applied, carried: {carries}");
+        let mut outcome = if carries {
+            let (mut display, _) = self.carry_imported(written, super::remote::Readers::Always);
+            display.push(TrameEvent::DataReset);
+            TrameOutcome {
+                display,
+                update: self.flush_delta(),
+                ephemeral: None,
+            }
+        } else {
+            self.after_structural(None)
+        };
         outcome.display.push(self.sheet_list_event());
         outcome.display.push(self.style_state_event());
         outcome.display.push(self.undo_state_event());
         outcome
+    }
+
+    /// Whether the engine may carry the history step that wrote `written`,
+    /// as it carries a remote batch. The reference model of the structural
+    /// path rebuilds every cache instead.
+    fn history_carries(&self, written: &super::remote::Imported) -> bool {
+        #[cfg(test)]
+        if self.structural_path == super::structural::StructuralPath::Reseed {
+            return false;
+        }
+        self.carries(written)
     }
 
     /// Current undo/redo availability, for the chrome's Undo/Redo affordances.
