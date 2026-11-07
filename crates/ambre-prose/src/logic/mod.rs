@@ -816,6 +816,7 @@ impl ProseState {
                 self.set_band_align(&tree_id(block_id), align)
             }
             ProseCommand::StampModified { now } => self.stamp_modified(now),
+            ProseCommand::SetDocumentLocale { locale } => self.set_document_locale(&locale),
             ProseCommand::FindStart { query } => self.find_start(query),
             ProseCommand::FindNext => self.find_step(StepDirection::Forward),
             ProseCommand::FindPrev => self.find_step(StepDirection::Backward),

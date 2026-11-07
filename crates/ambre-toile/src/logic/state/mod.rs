@@ -583,6 +583,7 @@ impl ToileState {
             }
             ToileCommand::RemoveFromFrames { ids } => self.remove_from_frames(&ids),
             ToileCommand::RenameFrame { frame, name } => self.rename_frame(&frame, &name),
+            ToileCommand::SetDocumentLocale { locale } => self.set_document_locale(&locale),
             ToileCommand::SetSlideOrder { order } => self.set_slide_order(&order),
             ToileCommand::NextSlide => self.next_slide(),
             ToileCommand::PrevSlide => self.prev_slide(),

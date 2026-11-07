@@ -4232,3 +4232,4 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Marks.d
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Marks.group | field | char	local	what a pattern's thousands comma prints as, read by group_thousands() alone
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands(mark) | param | char	local	the group mark a pattern's comma prints as
 ambre-trame | src/logic/schema.rs | crate::logic::schema | document_locale_v3() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-toile | src/logic/schema.rs | crate::logic::schema | document_locale_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
