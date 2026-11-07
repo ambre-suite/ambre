@@ -593,6 +593,9 @@ pub struct TrameView {
     /// Per-frame sub-phase breakdown produced by the renderer, shown on the HUD.
     draw_stats: DrawStats,
     initial_viewport_sent: bool,
+    /// A selection-statistics request the queue refused, still owed to the
+    /// band. Each frame offers it again until it leaves (`TRAME-UI-185`).
+    stats_owed: bool,
 
     /// Latest viewport request awaiting send, coalesced to <=1 per frame so a
     /// fast key-repeat can't outrun the Logic thread. Set in `handle_input`,

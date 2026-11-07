@@ -2993,6 +2993,7 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.formula_text | fi
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.initial_viewport_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.needs_full | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.selecting_drag | field | bool	generic	independent state or style flag, not a mode selector
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.stats_owed | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.viewport_changed | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(value) | param | &str	free-text	free text: user content, label, message or display string
