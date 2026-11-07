@@ -61,6 +61,23 @@ impl LogicState {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        // This client's own thread holds no update on the relay yet. A
+        // member who read the link now would open an empty thread. So the
+        // root names the thread once the thread went up.
+        if channel.thread_id(root) == Some(thread) && !channel.identified(thread) {
+            self.unnamed_roots.insert(
+                thread,
+                UnnamedRoot {
+                    channel_id,
+                    segment,
+                    root,
+                },
+            );
+            return self.send_to_sync(SyncCommand::OpenDocument {
+                document_id: thread,
+                doc_type: DocType::Murmure,
+            });
+        }
         let linked = match channel.thread_linked(segment, root, thread) {
             Ok(linked) => linked,
             Err(error) => {
@@ -68,15 +85,7 @@ impl LogicState {
             }
         };
         if let Some(named) = linked.root {
-            self.send_to_sync(SyncCommand::SendUpdate {
-                document_id: named.document,
-                payload: named.delta,
-                summary: None,
-            });
-            self.send_to_ui(UiEvent::Channel {
-                channel_id,
-                event: named.event,
-            });
+            self.send_named(channel_id, named);
         }
         if let Some(lost) = linked.replaced {
             // The replies move first: forgetting the session drops what
@@ -94,6 +103,44 @@ impl LogicState {
                 doc_type: DocType::Murmure,
             });
         }
+    }
+
+    /// This client's own `thread` went up whole, its waiting replies after
+    /// it: its root now names it (the Murmure threads spec). A link on the open thread
+    /// only writes the root, so its answer to open is dropped.
+    pub(crate) fn name_root(&mut self, thread: Id<Document>) {
+        let Some(UnnamedRoot {
+            channel_id,
+            segment,
+            root,
+        }) = self.unnamed_roots.remove(&thread)
+        else {
+            return;
+        };
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        match channel.thread_linked(segment, root, thread) {
+            Ok(linked) => {
+                if let Some(named) = linked.root {
+                    self.send_named(channel_id, named);
+                }
+            }
+            Err(error) => tracing::warn!("Logic: thread of {root} not named: {error}"),
+        }
+    }
+
+    /// Send the delta that names a thread in its root, and show the root.
+    fn send_named(&self, channel_id: Id<Channel>, named: ambre_murmure::Sent) {
+        self.send_to_sync(SyncCommand::SendUpdate {
+            document_id: named.document,
+            payload: named.delta,
+            summary: None,
+        });
+        self.send_to_ui(UiEvent::Channel {
+            channel_id,
+            event: named.event,
+        });
     }
 
     /// The creation or the registration of this client's own `thread`
@@ -270,6 +317,15 @@ pub(crate) struct WatchedThread {
     channel_id: Id<Channel>,
     /// The replies past the read cursor that mention this user.
     mentions: ambre_core::Count<Mentions>,
+}
+
+/// A root whose own thread the relay linked, waiting for that thread to go
+/// up before it names it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct UnnamedRoot {
+    channel_id: Id<Channel>,
+    segment: Id<Segment>,
+    root: Id<Message>,
 }
 
 /// The mentions the watched threads of `channel_id` counted.

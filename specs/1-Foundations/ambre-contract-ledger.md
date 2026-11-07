@@ -21,12 +21,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3977 rows: 3414 shipped, of which 13 loose. 563 unbuilt.**
+**3978 rows: 3415 shipped, of which 11 loose. 563 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1001 | 485 | 873 | 618 | 424 | 3401 |
-| `failing` |  |  |  |  | 2 | 2 |
+| `verified` | 1002 | 485 | 873 | 618 | 426 | 3404 |
+| `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
@@ -74,7 +74,7 @@
 | `ambre-spec-sequencer.md` | 70 | 70 | 70 |  |  |
 | `ambre-spec-server.md` | 95 | 89 | 88 | 1 | 6 |
 | `ambre-spec-session.md` | 22 | 22 | 22 |  |  |
-| `ambre-spec-sync.md` | 59 | 58 | 58 |  | 1 |
+| `ambre-spec-sync.md` | 60 | 59 | 59 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
@@ -163,7 +163,7 @@
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-murmure-attachments.md` | 14 | 13 | 13 |  | 1 |
-| `ambre-spec-murmure-channels.md` | 55 | 41 | 40 | 1 | 14 |
+| `ambre-spec-murmure-channels.md` | 55 | 41 | 41 |  | 14 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
 | `ambre-spec-murmure-engine.md` | 14 | 14 | 14 |  |  |
@@ -178,7 +178,7 @@
 | `ambre-spec-murmure-search.md` | 18 | 7 | 7 |  | 11 |
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
 | `ambre-spec-murmure-spaces.md` | 37 | 32 | 32 |  | 5 |
-| `ambre-spec-murmure-threads.md` | 29 | 23 | 22 | 1 | 6 |
+| `ambre-spec-murmure-threads.md` | 29 | 23 | 23 |  | 6 |
 | `ambre-spec-murmure-typing-presence.md` | 16 | 14 | 14 |  | 2 |
 | `ambre-spec-murmure-unread.md` | 18 | 18 | 18 |  |  |
 
@@ -287,7 +287,7 @@
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..247 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236 |
-| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..187 |
+| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..188 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064,102..103 |
 | `ambre-spec-toile-auto-layout.md` | TOILE-FEAT-005,009,029..032,038..054,099,102..104 |

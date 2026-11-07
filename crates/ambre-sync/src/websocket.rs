@@ -23,6 +23,29 @@ fn replay_retry_delay(stop: u32) -> Option<TimeSpan<Ms>> {
         .map(TimeSpan::<Ms>::new)
 }
 
+/// The shortest time between two replay asks of one document on one socket.
+/// The relay answers nothing to a second ask inside its window (`SRV-086`).
+/// So the spacing outlasts that window, with a margin for the frames in
+/// flight (`ambre-spec-budgets.md` section 8).
+const REPLAY_ASK_SPACING: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_250);
+
+/// Whether a replay ask leaves now, or waits for the relay's window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AskSlot {
+    Now,
+    Held,
+}
+
+/// The last replay ask of one document on the open socket.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ReplayAsk {
+    /// When the socket sent it.
+    at: ambre_core::Instant<ambre_core::UnixMs>,
+    /// The cursor of an ask that came inside the window, sent once the
+    /// window passes. Two such asks keep the lower cursor.
+    held: Option<Seq<Relay>>,
+}
+
 /// The stops of one document's replay since its budget last started.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ReplayStops {
@@ -103,8 +126,9 @@ impl SyncState {
     /// subscribed here -- they subscribe after lazy creation materializes them.
     pub(crate) fn resubscribe_all(&mut self) {
         // Each replay below starts afresh, so its stops count from zero
-        // (`SYNC-154`).
+        // (`SYNC-154`). The relay's window counts per socket (`SYNC-188`).
         self.replay_stops.clear();
+        self.replay_asks.borrow_mut().clear();
         for (doc_id, last_seq) in self
             .documents
             .iter()
@@ -355,6 +379,71 @@ impl SyncState {
         }
     }
 
+    /// Whether a replay ask of `document_id` may leave now. The relay answers
+    /// nothing to a second ask inside its window (`SRV-086`). So an ask that
+    /// comes inside it is held, and leaves once the window passes
+    /// (`SYNC-188`).
+    pub(crate) fn space_replay_ask(
+        &self,
+        document_id: Id<Document>,
+        after_seq: Seq<Relay>,
+    ) -> AskSlot {
+        let now = (self.clock)();
+        let mut asks = self.replay_asks.borrow_mut();
+        let Some(ask) = asks.get_mut(&document_id) else {
+            asks.insert(
+                document_id,
+                ReplayAsk {
+                    at: now,
+                    held: None,
+                },
+            );
+            return AskSlot::Now;
+        };
+        let due = ask.at.plus(REPLAY_ASK_SPACING);
+        if now >= due {
+            *ask = ReplayAsk {
+                at: now,
+                held: None,
+            };
+            return AskSlot::Now;
+        }
+        match ask.held {
+            Some(held) => ask.held = Some(held.min(after_seq)),
+            None => {
+                ask.held = Some(after_seq);
+                self.arm_event_timer(SyncEvent::ReplayAskDue { document_id }, due.since(now));
+            }
+        }
+        AskSlot::Held
+    }
+
+    /// Move the worker's clock past the relay's replay window, as the time
+    /// between two asks a test models does.
+    #[cfg(test)]
+    pub(crate) fn pass_replay_window(&mut self) {
+        let before = Rc::clone(&self.clock);
+        self.clock = Rc::new(move || before().plus(REPLAY_ASK_SPACING));
+    }
+
+    /// The window of a held replay ask passed. A document let go since asks
+    /// nothing. A timer that fires early holds the ask again.
+    fn replay_ask_due(&mut self, document_id: Id<Document>) {
+        let held = self
+            .replay_asks
+            .borrow_mut()
+            .get_mut(&document_id)
+            .and_then(|ask| ask.held.take());
+        let subscribed =
+            self.documents.contains_key(&document_id) || self.light.contains_key(&document_id);
+        if let Some(after_seq) = held.filter(|_| subscribed) {
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq,
+            });
+        }
+    }
+
     /// A replay timer fired. A later stop or a reconnect since it was armed
     /// makes it stale. Otherwise ask again from the document's own cursor,
     /// which the delivered part of the replay already advanced (`SYNC-153`).
@@ -568,6 +657,7 @@ impl SyncState {
                 document_id,
                 ticket,
             } => self.resend_failed(document_id, ticket),
+            SyncEvent::ReplayAskDue { document_id } => self.replay_ask_due(document_id),
             SyncEvent::SessionReady {
                 id,
                 user_id,
@@ -2191,6 +2281,61 @@ mod tests {
             .collect()
     }
 
+    /// `SYNC-188`: the relay answers nothing to a second replay ask of one
+    /// document inside its throttle window. So a second ask is held, and
+    /// leaves once the window passed, with the lowest cursor held. A timer
+    /// that fires early holds it again, a document let go asks nothing, and
+    /// a reopened socket asks at once.
+    #[test]
+    fn a_replay_ask_inside_the_relay_window_waits_for_it_to_pass() {
+        let (mut state, _rx, wire, id) = with_relay_document();
+        let clock = std::rc::Rc::new(std::cell::Cell::new(1_000_000_u64));
+        let now = std::rc::Rc::clone(&clock);
+        state.clock = std::rc::Rc::new(move || Instant::<UnixMs>::new(now.get()));
+        let ask = |after: u64| WsClientMsg::RequestMissing {
+            document_id: id,
+            after_seq: Seq::<Relay>::new(after),
+        };
+        let asked = || -> Vec<u64> {
+            sent(&wire)
+                .into_iter()
+                .filter_map(|m| match m {
+                    WsClientMsg::RequestMissing { after_seq, .. } => Some(after_seq.get()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let pass = |ms: u64| clock.set(clock.get().saturating_add(ms));
+        let due = || SyncEvent::ReplayAskDue { document_id: id };
+
+        state.ws_send(&ask(5));
+        state.ws_send(&ask(3));
+        state.ws_send(&ask(4));
+        assert_eq!(asked(), [5], "the asks inside the window are held");
+        pass(1_000);
+        state.handle_sync_event(due());
+        assert_eq!(
+            asked(),
+            Vec::<u64>::new(),
+            "a timer that fires early asks nothing"
+        );
+        pass(250);
+        state.handle_sync_event(due());
+        assert_eq!(asked(), [3], "the lowest cursor, once the window passed");
+
+        state.ws_send(&ask(6));
+        let doc = state.documents.remove(&id).expect("held");
+        pass(1_250);
+        state.handle_sync_event(due());
+        assert_eq!(asked(), Vec::<u64>::new(), "a document let go asks nothing");
+
+        state.documents.insert(id, doc);
+        state.ws_send(&ask(7));
+        let _ = asked();
+        state.handle_sync_event(SyncEvent::WsOpened);
+        assert_eq!(asked(), [7], "a reopened socket asks at once");
+    }
+
     /// `SYNC-153`: a stopped replay is asked again from the document's own
     /// cursor once its timer fires, and not before. A timer a later stop
     /// replaced asks nothing.
@@ -2265,6 +2410,7 @@ mod tests {
         let _ = sent(&wire);
         state.handle_sync_event(stopped(id));
         assert_eq!(counted(&state, id), 1);
+        state.pass_replay_window();
         state.handle_sync_event(retry(id, armed(&state, id)));
         assert!(matches!(
             sent(&wire)[..],

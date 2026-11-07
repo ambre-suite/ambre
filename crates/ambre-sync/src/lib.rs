@@ -258,6 +258,11 @@ enum SyncEvent {
         document_id: Id<Document>,
         ticket: ambre_core::Seq<generation::ResendTicket>,
     },
+    /// Fired by the timer armed when a replay ask came inside the relay's
+    /// window: send the ask it held (`SYNC-188`).
+    ReplayAskDue {
+        document_id: Id<Document>,
+    },
     /// The WebSocket `onopen` fired: the socket is now OPEN, so (re)subscriptions
     /// can be sent (they would be dropped if sent while still CONNECTING).
     WsOpened,
@@ -1129,6 +1134,9 @@ pub struct SyncState {
     /// The stops of each document's replay since the socket last opened.
     /// Cleared on every open (`SYNC-153`, `SYNC-154`).
     replay_stops: HashMap<Id<Document>, websocket::ReplayStops>,
+    /// The last replay of each document this socket asked, and the ask held
+    /// past the relay's window. Cleared on every open (`SYNC-188`).
+    replay_asks: RefCell<HashMap<Id<Document>, websocket::ReplayAsk>>,
     /// The ticket of the last replay timer armed. It only grows, so a timer
     /// armed before a reset never matches one armed after it.
     replay_ticket: ambre_core::Issuer<generation::ReplayTicket>,
@@ -1148,7 +1156,7 @@ pub struct SyncState {
     /// notifications spec).
     listed_keys: HashMap<Id<Channel>, (Id<Meta>, DocumentKey)>,
     /// The documents of spaces this client created and the relay does not
-    /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
+    /// hold yet. Their lazy creation marks them spaces (`SYNC-188`).
     new_spaces: HashSet<Id<Document>>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
@@ -1232,6 +1240,7 @@ impl SyncState {
             inbound_held: false,
             held_outbox: RefCell::new(Vec::new()),
             replay_stops: HashMap::new(),
+            replay_asks: RefCell::new(HashMap::new()),
             replay_ticket: ambre_core::Issuer::default(),
             resend_ticket: ambre_core::Issuer::default(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -1340,6 +1349,14 @@ impl SyncState {
     fn ws_send(&self, msg: &WsClientMsg) {
         if carries_payload(msg) {
             tracing::error!("[Sync->Server] a payload frame that skipped the seal, dropped");
+            return;
+        }
+        if let WsClientMsg::RequestMissing {
+            document_id,
+            after_seq,
+        } = msg
+            && self.space_replay_ask(*document_id, *after_seq) == websocket::AskSlot::Held
+        {
             return;
         }
         self.push_frame(msg);

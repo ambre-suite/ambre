@@ -1103,6 +1103,7 @@ mod tests {
             new_doc_key: key.clone(),
             links: Vec::new(),
         };
+        state.pass_replay_window();
         state.handle_sync_event(rotated(&new_key));
         assert_eq!(
             requests(),

@@ -445,6 +445,7 @@ impl LogicState {
     /// for its notice is refused, so the view does not wait for it.
     pub(crate) fn forget_murmure_session(&mut self, document_id: Id<Document>) {
         self.murmure_identities.remove(&document_id);
+        self.unnamed_roots.remove(&document_id);
         self.unsent.remove(&document_id);
         for held in self
             .murmure_waiting
@@ -5219,6 +5220,12 @@ mod tests {
             root,
             thread,
         });
+        // The root names its thread once the thread went up.
+        state.grant_identity(thread);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: thread,
+            role: ambre_bus::Role::Owner,
+        });
         let sent = drain(&sync);
         assert!(sent.iter().any(|c| matches!(c,
             SyncCommand::SendUpdate { document_id, summary: None, .. }
@@ -5844,14 +5851,12 @@ mod tests {
         });
         let sent = drain(&sync);
         assert!(sent.iter().any(|c| matches!(c,
-            SyncCommand::SendUpdate { document_id, summary: None, .. }
-                if *document_id == active.document_id())));
-        assert!(sent.iter().any(|c| matches!(c,
             SyncCommand::OpenDocument { document_id, .. } if *document_id == thread)));
         assert!(
-            !sent.iter().any(|c| matches!(c,
-                SyncCommand::SendUpdate { document_id, .. } if *document_id == thread)),
-            "the reply waits for the thread"
+            !sent
+                .iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "the reply and the link wait for the thread, {sent:?}"
         );
 
         state.grant_identity(thread);
@@ -5875,9 +5880,10 @@ mod tests {
             [
                 (thread, false),
                 (thread, true),
-                (active.document_id(), true)
+                (active.document_id(), true),
+                (active.document_id(), false)
             ],
-            "the whole thread, the reply, then its copy"
+            "the whole thread, the reply, its copy, then the link in the root"
         );
         let shown = channel_events(&ui);
         assert!(
@@ -5892,6 +5898,70 @@ mod tests {
                     if *segment == active
                         && messages[0].thread.is_some_and(|head| head.replies.get() == 1))),
             "the root's head counts the reply, {shown:?}"
+        );
+    }
+
+    /// A member who reads the root's link opens a thread the relay holds
+    /// whole (the Murmure threads spec). So the root names this client's own thread only
+    /// once its first update left, and a thread lost before that names
+    /// nothing.
+    #[test]
+    fn a_root_names_its_own_thread_once_the_thread_went_up() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, active, root) = rooted_channel(&mut state, &sync);
+        command(&mut state, channel_id, reply_to(root, "a reply", false));
+        let [(segment, _, thread)] = created_threads(&sync).try_into().expect("one create");
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread,
+        });
+        state.grant_identity(thread);
+        let early = drain(&sync);
+        assert!(
+            !early
+                .iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "nothing leaves before the thread does, {early:?}"
+        );
+
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: thread,
+            role: ambre_bus::Role::Owner,
+        });
+        let sent: Vec<Id<Document>> = drain(&sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(sent, [thread, thread, active.document_id()]);
+        let named = state.channels[&channel_id].messages(active).expect("held")[0]
+            .thread
+            .is_some();
+        assert!(named, "the root names its thread");
+
+        // A thread whose session ends before it went up leaves the root
+        // unnamed: the next reply registers it again.
+        let (channel_id, _, root) = rooted_channel(&mut state, &sync);
+        command(&mut state, channel_id, reply_to(root, "lost", false));
+        let [(segment, _, thread)] = created_threads(&sync).try_into().expect("one create");
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread,
+        });
+        state.forget_murmure_session(thread);
+        state.name_root(thread);
+        assert!(
+            !drain(&sync)
+                .iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "a forgotten thread names no root"
         );
     }
 

@@ -128,6 +128,7 @@ impl LogicState {
                         self.unsent.clear();
                         self.murmure_identities.clear();
                         self.murmure_waiting.clear();
+                        self.unnamed_roots.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);

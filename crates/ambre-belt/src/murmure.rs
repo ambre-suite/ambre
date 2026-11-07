@@ -377,11 +377,15 @@ mod tests {
             .await;
     }
 
-    /// A reply one member sends in a thread reaches the other member's
-    /// thread on the same root, said with its author. It fails today: the
-    /// other member's client replays none of the replies the relay holds.
+    /// `MURMURE-588`: a reply one member sends in a thread reaches the other
+    /// member's thread on the same root, said with its author. The other
+    /// member's client opens the thread once the root names it, so the
+    /// thread must be on the relay by then.
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "fails today; lands with the `Murmure's thread reply and direct message driven in the browser tier` Story"]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
     async fn a_thread_reply_reaches_the_other_member() {
         let relay = Arc::new(Relay::start().await);
         let (ada, bob) = (user(), user());
@@ -449,12 +453,16 @@ mod tests {
             .to_owned()
     }
 
-    /// A member opens a direct message with another from the member list
-    /// and writes in it. It lists in the other's sidebar, and opening it
-    /// shows the message, said with its author. It fails today, most runs:
-    /// the other member's open never completes, and the list stays empty.
+    /// `MURMURE-589`: a member opens a direct message with another from the
+    /// member list and writes in it. It lists in the other's sidebar, and
+    /// opening it shows the message, said with its author. The other client
+    /// watches the new channel, then opens it within the second. Its open
+    /// asks a second replay of `meta` inside the relay's window (`SYNC-188`).
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "fails today; lands with the `Murmure's thread reply and direct message driven in the browser tier` Story"]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
     async fn a_direct_message_reaches_the_member_it_names() {
         let relay = Arc::new(Relay::start().await);
         let (ada, bob) = (user(), user());
