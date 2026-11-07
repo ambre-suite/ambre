@@ -47,8 +47,8 @@ use ambre_bus::conduit::{self, Marks};
 use ambre_bus::{Embed, LogicEvent, MemberInfo, RestCommand, Role, SyncCommand};
 #[cfg(target_arch = "wasm32")]
 use ambre_chrome::{
-    AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
-    Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar,
+    AppShell, CanvasCell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, Panel, Sidebar,
+    StatusBar, Tabs, ToastHost, Toasts, Toolbar,
 };
 #[cfg(target_arch = "wasm32")]
 use ambre_core::id::{Document, Frame, Id, User};
@@ -109,6 +109,9 @@ mod signin;
 /// What the switchboard decides, testable on the host.
 #[cfg(any(target_arch = "wasm32", test))]
 mod switchboard;
+/// The browser tab title, written when it changes.
+#[cfg(target_arch = "wasm32")]
+mod tab_title;
 /// The recipient's key, compared and confirmed before a share.
 #[cfg(any(target_arch = "wasm32", test))]
 mod tofu;
@@ -1079,7 +1082,7 @@ pub fn main() {
     let route_tx = shell_outbox.clone();
     let route_raf = raf.clone();
     let mut prev_route: Option<route::Route> = None;
-    let mut last_title: Option<ComposedName> = None;
+    let mut tab_title = tab_title::TabTitle::new(docs);
 
     let pre_frame = move || {
         // What the launcher's outbox held on an earlier turn leaves first, so
@@ -1124,26 +1127,8 @@ pub fn main() {
             prev_route = Some(cur_route);
         }
 
-        // Browser tab title (`ComposedName::tab_title`). Recomputed each frame
-        // so a rename or a late-arriving document list updates the tab; the
-        // DOM write happens only when the title changes.
-        let title = match cur_doc {
-            Some((doc_type, document_id)) => {
-                let name = docs.with_untracked(|list| {
-                    list.iter()
-                        .find(|d| d.document_id == document_id)
-                        .and_then(|d| d.name.clone())
-                });
-                ComposedName::tab_title(Some((doc_type, name.as_ref())))
-            }
-            None => ComposedName::tab_title(None),
-        };
-        if last_title.as_ref() != Some(&title) {
-            if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                title.set_as_title(&doc);
-            }
-            last_title = Some(title);
-        }
+        // Browser tab title, recomputed each frame and written on a change.
+        tab_title.show(cur_doc);
 
         // Persist Logic -> local store. Writes wait here until the store is
         // open: a delta dropped would be missing from every restore until the
