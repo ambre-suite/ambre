@@ -293,6 +293,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Pinned messages | V1 | messages pinned to a channel for every member, in a `pinned` list of the channel `meta` document |
 | `[ ]` A link to a message | V1 | a link that opens a channel at one message, for a member of the channel |
 | `[ ]` Archived channels | V1 | a channel kept readable and closed to writes |
+| `[ ]` Call stack proofs | V1 | seven proofs before any call code: the call worker under load, iPhone decoding, iOS audio, video into the canvas, the SFU on str0m with no C library, the sender keys, networks open on TCP 443 alone. Each one passes or switches to its stated fallback |
+| `[ ]` Murmure calls | V1 | an audio and video call started from a channel, sealed end to end in a call worker, forwarded by an SFU in Rust, with its signalling on an endpoint of its own |
 
 ---
 
@@ -670,7 +672,6 @@ owns the subsystem.
 | Story | Touches |
 | :--- | :--- |
 | `[ ]` Split-secret organization recovery | the escrow has a release path and no deposit path, and the quorum is clamped to one so the register advertises no guarantee the relay cannot keep. Threshold reconstruction, and a deposit, are what make the clamp liftable |
-| `[ ]` Rendez-Vous | end-to-end encrypted video, and its signalling on an endpoint of its own, and a call started from a Murmure channel |
 | `[ ]` Murmure bots and webhooks | bots holding their own keys, slash commands, interactive messages, and inbound webhooks through an encrypting bridge |
 | `[ ]` Link previews | a preview of a web page fetched once by the sender and sealed in the message, and the name of a linked Ambre document for its members |
 | `[ ]` Murmure export | a channel written to one `.ambre` file, through a container version that holds several documents |

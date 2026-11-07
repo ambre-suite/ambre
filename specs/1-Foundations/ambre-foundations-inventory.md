@@ -55,11 +55,12 @@
 | `sync` | The one part of the client that talks to the network. | partial | 59 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 20 |  |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 22 |  |
+| `call-media` | The audio and video of a call, encrypted end to end. | design-only | 30 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 23 |  |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 21 partial, 5 design-only. 1178 contract rows, 11 loose.**
+**47 features: 20 implemented, 21 partial, 6 design-only. 1210 contract rows, 11 loose.**
