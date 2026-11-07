@@ -52,11 +52,13 @@ mod names;
 mod presence;
 pub use import::{MediaEntries, PendingImports};
 pub use presence::PRESENCE_TTL;
-pub(crate) mod presentation;
-mod reactions;
 /// The schema shape belt (`SCHEMA-018`): the key set, the value types and the
 /// `postcard` layouts a build writes, frozen per `SCHEMA_VERSION`. Test-only,
 /// so no client build carries it.
+#[cfg(test)]
+mod locale_tests;
+pub(crate) mod presentation;
+mod reactions;
 #[cfg(test)]
 mod schema_shape;
 
@@ -583,6 +585,7 @@ impl ToileState {
             }
             ToileCommand::RemoveFromFrames { ids } => self.remove_from_frames(&ids),
             ToileCommand::RenameFrame { frame, name } => self.rename_frame(&frame, &name),
+            ToileCommand::SetLocale { locale } => self.set_locale(&locale),
             ToileCommand::SetSlideOrder { order } => self.set_slide_order(&order),
             ToileCommand::NextSlide => self.next_slide(),
             ToileCommand::PrevSlide => self.prev_slide(),
@@ -701,6 +704,25 @@ impl ToileState {
             }
             ToileCommand::Presence { payload, now } => self.broadcast_presence(&payload, now),
         }
+    }
+
+    // -- document locale (`ambre-spec-locale.md`) ------------------------
+
+    /// The board's locale, read from the `meta` register on every call, so a
+    /// peer's write is seen as soon as it is applied.
+    #[must_use]
+    pub fn locale(&self) -> ambre_core::DocumentLocale {
+        ambre_crdt::read_locale(&self.doc)
+    }
+
+    /// Writes `locale` into the `meta` register as one delta. A locale equal
+    /// to the one held writes nothing. No element moves (`LOCALE-009`).
+    fn set_locale(&mut self, locale: &ambre_core::DocumentLocale) -> ToileOutcome {
+        if self.locale() == *locale || ambre_crdt::write_locale(&self.doc, locale).is_err() {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        self.doc.commit();
+        self.emit_with_update(Vec::new())
     }
 
     // -- remote / persistence --------------------------------------------

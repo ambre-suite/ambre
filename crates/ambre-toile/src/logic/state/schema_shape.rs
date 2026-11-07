@@ -445,6 +445,7 @@ pub(super) fn schema_names() -> Vec<String> {
     found.extend(ConfigKey::ALL.iter().map(|n| n.as_str()));
     found.extend(ThreadKey::ALL.iter().map(|n| n.as_str()));
     found.extend(MessageKey::ALL.iter().map(|n| n.as_str()));
+    found.extend(ambre_core::schema::MetaKey::ALL.iter().map(|n| n.as_str()));
     let mut found: Vec<String> = found.into_iter().map(str::to_owned).collect();
     found.sort();
     found.dedup();
@@ -569,6 +570,9 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.handle_command(ToileCommand::RenameFrame {
         frame: frame.clone(),
         name: "Slide".to_owned(),
+    });
+    st.handle_command(ToileCommand::SetLocale {
+        locale: ambre_core::DocumentLocale::parse("fr-CA").expect("a well-formed tag"),
     });
     st.handle_command(ToileCommand::SetAutoLayout {
         frame: slide.clone(),
@@ -710,10 +714,25 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 
 /// The canonical board of the version a step leaves: that version's layout,
 /// holding what the step rewrites. Each step reads its own, so a step added
-/// later never moves what an earlier one writes. The registry holds no step
-/// yet, so no version has one.
+/// later never moves what an earlier one writes.
 fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
-    panic!("the step from version {from} has no canonical board: write one here")
+    match from.get() {
+        // Version 1: a board holding one element field and its version. The
+        // step to 2 adds no key, so the board holds none for it to rewrite.
+        1 => {
+            let doc = LoroDoc::new();
+            doc.set_peer_id(1).expect("a fixed peer");
+            let _ = doc
+                .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 1_i64);
+            let _ = doc
+                .get_map(Root::Board.as_str())
+                .insert(BoardKey::GridSize.as_str(), 16_i64);
+            doc.commit();
+            doc
+        }
+        _ => panic!("the step from version {from} has no canonical board: write one here"),
+    }
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical board.

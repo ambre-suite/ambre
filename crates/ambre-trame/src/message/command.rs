@@ -700,6 +700,14 @@ pub enum TrameCommand {
     /// name does not exist.
     DeleteName { name: Validated<DefinedName> },
 
+    /// Set the workbook's locale, or clear it with
+    /// [`DocumentLocale::none`](ambre_core::DocumentLocale::none)
+    /// (`ambre-spec-locale.md`). One delta on the `meta` register, and no
+    /// stored value moves with it (`LOCALE-009`). The type holds a well-formed
+    /// tag only, so a malformed one is refused before it reaches the logic
+    /// (`LOCALE-010`).
+    SetLocale { locale: ambre_core::DocumentLocale },
+
     /// Switch the sheet the UI is looking at to `sheet_id`. The Logic thread rebuilds its
     /// active-sheet derived caches (index, merges, formatting, formula engine). It then
     /// replies with a [`DataReset`], so the UI re-fetches the new sheet's viewport
@@ -1131,6 +1139,7 @@ impl std::fmt::Debug for TrameCommand {
                 .field("reference", &RedactedChars::of(reference))
                 .finish(),
             Self::DeleteName { name } => fields!("DeleteName", name),
+            Self::SetLocale { locale } => fields!("SetLocale", locale),
             Self::ActivateSheet { sheet_id } => fields!("ActivateSheet", sheet_id),
             Self::CreateSheet { name } => fields!("CreateSheet", name),
             Self::RenameSheet { sheet_id, name } => fields!("RenameSheet", sheet_id, name),
@@ -1314,6 +1323,7 @@ impl ambre_bus::Mutation for TrameCommand {
             | Self::Redo
             | Self::DefineName { .. }
             | Self::DeleteName { .. }
+            | Self::SetLocale { .. }
             | Self::ActivateSheet { .. }
             | Self::CreateSheet { .. }
             | Self::RenameSheet { .. }

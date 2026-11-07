@@ -64,6 +64,8 @@ mod convergence_tests;
 /// build writes, frozen per `SCHEMA_VERSION`. Test-only, so no client build
 /// carries it.
 #[cfg(test)]
+mod locale_tests;
+#[cfg(test)]
 mod schema_shape;
 
 /// The reading belt (`SCHEMA-017`): what each stored value means, frozen per
@@ -806,6 +808,7 @@ impl ProseState {
             ProseCommand::SetDifferentFirstPage { first_page } => {
                 self.set_different_first_page(first_page)
             }
+            ProseCommand::SetLocale { locale } => self.set_locale(&locale),
             ProseCommand::InsertHeaderField { field, target, pos } => {
                 self.insert_field(bands::Side::Header, field, target, pos)
             }

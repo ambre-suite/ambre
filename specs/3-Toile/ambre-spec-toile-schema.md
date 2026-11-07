@@ -95,7 +95,7 @@ code uses.
 
 | Container | Loro type | Key | Value | LWW unit | Owning feature document | State |
 |---|---|---|---|---|---|---|
-| `meta` | Map | `schema_version` | `u32` | the key | -- (foundation; this spec section 7) | built |
+| `meta` | Map | `schema_version`, `locale` | `u32`, a BCP 47 tag | the key | -- (foundation; this spec section 7); `locale`: `1-Foundations/ambre-spec-locale.md` | built |
 | `board` | Map | `name`, `bg_color`, `grid_size`, `grid_snap` | String, `u32`, `f64`, `bool` | the key | viewport | built |
 | `elements` | Map | `element_id` | one element map | the element entry | elements | built |
 | `elements/{id}` | Map | a field name, per the table below | per field | the field | elements | built |
@@ -247,8 +247,9 @@ Only where a schema decision needs a reason. 40 words each.
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TOILE-027` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
-| Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout, so the registry is empty | architecture section 2.D; `SCHEMA-010` |
+| Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
+| Bump to version 2 | `meta.locale` is a new key (`1-Foundations/ambre-spec-locale.md`). The migration from 1 rewrites nothing: an absent key is no language. A version-1 fixture is frozen in the commit that bumps |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so an `ElementStyle` written by a newer client falls back to `Default` -- no longer silently: the read raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2; `TOILE-231` |
 | Size, blobs | `media` carries a thumbnail inline and the full blob out of band; the board never holds pixels | `features/ambre-spec-toile-media.md section 3` |

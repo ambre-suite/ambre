@@ -100,7 +100,7 @@ race: the last writer takes that whole unit.
 
 | Container | Loro type | Key | Value | LWW unit | Owning feature document | State |
 |---|---|---|---|---|---|---|
-| `meta` | Map | `schema_version` | `u32` | the key | -- (foundation; this spec section 7) | built |
+| `meta` | Map | `schema_version`, `locale` | `u32`, a BCP 47 tag | the key | -- (foundation; this spec section 7); `locale`: `1-Foundations/ambre-spec-locale.md` | built |
 | `workbook` | Map | `name`, `author`, `created` | String | the key | **-- (none; section 5)** | design |
 | `sheet_order` | MovableList | position | `sheet_id` | list order, no LWW | `trame-sheets` | built |
 | `sheets` | Map | `sheet_id` | sheet name (String) | the sheet entry | `trame-sheets` | built |
@@ -219,9 +219,10 @@ stops the eventual container being keyed positionally by whoever writes it first
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TRAME-025` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
-| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing | architecture section 2.D; `SCHEMA-010` |
+| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The rows from 1 to 2 and from 2 to 3 stamp the register and rewrite nothing | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
 | Bump to version 2 | four changes. A cell, style or merge key spells each line's element, so a cell follows its element through a delete (`TRAME-265`). `line_gen_{sheet}` is a new key. A uid listed twice changes its meaning: a version-1 reader would show the line twice. A derived element spells `"{uid}#{element}"`, which a version-1 reader refuses (`TRAME-248`). The migration from 1 rewrites nothing: a version-1 element is a bare minted uid, and its element id is that uid. A version-1 cell key therefore names its elements already. A version-1 reference carries no element id and binds to that element, which no derived uid can equal. A version-1 fixture is frozen in the commit that bumps |
+| Bump to version 3 | `meta.locale` is a new key (`1-Foundations/ambre-spec-locale.md`). The migration from 2 rewrites nothing: an absent key is no language. A version-2 fixture is frozen in the commit that bumps |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so a `StyleRecord` written by a newer client is skipped -- no longer silently: the reseed raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, axes | the used range grows by at most 10 000 lines per write, and holds at most 1 000 columns | `features/ambre-spec-trame-rows-and-columns.md` |
 | Size, keys | a cell key is 51 bytes on two minted lines, and up to 103 on two derived ones; a uid is 25; a 100 000-row axis is 2.5 MB of element values alone. A generation key is 34 bytes, and the record keeps about one per line that has derived a line after it. A derived element is 51 bytes, and a reference to it carries up to 26 more | this spec section 2 |

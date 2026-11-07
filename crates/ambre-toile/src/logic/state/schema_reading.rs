@@ -299,6 +299,12 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 verdict(version, SCHEMA_VERSION)
             ))
         }
+        Root::Meta if stored.key(0)? == ambre_core::schema::MetaKey::Locale.as_str() => {
+            Some(match reader.locale().tag() {
+                Some(tag) => format!("locale {}", tag.as_str()),
+                None => "no locale".to_owned(),
+            })
+        }
         Root::Board if BoardKey::parse(stored.key(0)?) == Some(BoardKey::GridSize) => {
             Some(format!(
                 "grid unit {} world px",

@@ -91,6 +91,20 @@ impl ProseState {
         self.commit_bands()
     }
 
+    /// Write `locale` into the `meta` register as one delta
+    /// (`ambre-spec-locale.md`). A locale equal to the one held writes
+    /// nothing, and no block moves (`LOCALE-009`). The bands answer, since a
+    /// date field reads the register (`PROSE-FEAT-162`).
+    pub(super) fn set_locale(&mut self, locale: &ambre_core::DocumentLocale) -> ProseOutcome {
+        if ambre_crdt::read_locale(&self.doc) == *locale {
+            return ProseOutcome::nothing();
+        }
+        if let Err(e) = ambre_crdt::write_locale(&self.doc, locale) {
+            return Self::err_write(e);
+        }
+        self.commit_bands()
+    }
+
     /// Put a field in a band, in the order section 3 gives: resolve the
     /// target, refuse an inert first-page block, clamp, write
     /// (`PROSE-FEAT-067`, `PROSE-FEAT-068`, `PROSE-FEAT-165`).
