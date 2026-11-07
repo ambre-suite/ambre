@@ -3,7 +3,8 @@
 // The decisions of the switchboard (`ARCH-072`). The switchboard closure in
 // `lib.rs` reads the queues, hands each event to this module, and applies
 // what this module answers. This module names no DOM, no `web_sys` and no
-// signal. So it compiles on the host, and the native tier runs its tests.
+// signal. So it compiles on the host, and the native tier runs its tests. It
+// reads no clock either: the wiring passes each instant, so a test sets it.
 //
 // The view fan-out holds the senders of the main view and of the embedded
 // views. Those are `ambre_bus::conduit` queues, which run on the host as
@@ -16,12 +17,13 @@ use std::collections::{HashMap, VecDeque};
 
 use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::sync_warning::SyncWarningCode;
-use ambre_bus::{DocumentSummary, MemberInfo, RestCommand, RestEvent};
+use ambre_bus::{DocumentSummary, MemberInfo, RestCommand, RestEvent, Role};
+use ambre_canvas::{PerfPublisher, PerfSnapshot};
 use ambre_chrome::ToastKind;
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{
-    Credential, DisplayName, OidcState, Opaque, Payload, PlaintextContainer, ProviderUrls,
-    Validated,
+    Authored, Credential, DisplayName, ExchangePublicKey, FixedBytes, FracMs, Instant, OidcState,
+    Opaque, PageLoad, Payload, PlaintextContainer, ProviderUrls, TimeSpan, Validated,
 };
 use ambre_logic::app::{LogicCommand, UiEvent};
 
@@ -670,6 +672,53 @@ impl BusyNotice {
     }
 }
 
+/// What a fetched key leads to once the wiring has read its pin
+/// (`CHROME-050`, `CHROME-051`). A trusted key sends its request at once,
+/// dated `now`. A new or a changed key asks the user first.
+///
+/// The wiring reads the pin off the thread and the clock after that read, so
+/// the request carries the instant it leaves. `role` is the one an
+/// invitation grants.
+pub(crate) fn pin_read(
+    prompt: TofuPrompt,
+    pinned: Option<FixedBytes<ExchangePublicKey>>,
+    role: Role,
+    now: Instant<Authored>,
+) -> tofu::Next {
+    tofu::classify(prompt, pinned, role, now)
+}
+
+/// The shortest span between two perf read-outs of the status bar. The view
+/// publishes a snapshot every frame, and a text read-out for a developer
+/// needs no more than two a second. The HUD of the frame keeps the same
+/// period (`ambre-spec-frame.md`).
+pub(crate) const PERF_PERIOD: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(500.0);
+
+/// The cadence of the perf read-out: one snapshot per [`PERF_PERIOD`] at
+/// most, on the page clock.
+#[derive(Default)]
+pub(crate) struct PerfCadence {
+    last: Instant<PageLoad>,
+}
+
+impl PerfCadence {
+    /// The snapshot to show at `now`, or `None` while the last one is fresh.
+    ///
+    /// The cadence starts at the page load, so the first snapshot shows one
+    /// period after it.
+    pub(crate) fn step(
+        &mut self,
+        now: Instant<PageLoad>,
+        perf: &PerfPublisher,
+    ) -> Option<PerfSnapshot> {
+        if now - self.last < PERF_PERIOD {
+            return None;
+        }
+        self.last = now;
+        Some(perf.read())
+    }
+}
+
 /// The switchboard's roster on a Murmure page is the Murmure chrome's own.
 #[cfg(target_arch = "wasm32")]
 impl Roster for ambre_murmure::chrome::MurmureRelay {
@@ -685,19 +734,21 @@ impl Roster for ambre_murmure::chrome::MurmureRelay {
 #[cfg(test)]
 mod tests {
     use super::{
-        BusyNotice, Destination, Effect, Load, Notice, Page, Roster, Shown, Switchboard, Target,
-        VIEW_BACKLOG_LIMIT, ViewFanOut, destination,
+        BusyNotice, Destination, Effect, Load, Notice, Page, PerfCadence, Roster, Shown,
+        Switchboard, Target, VIEW_BACKLOG_LIMIT, ViewFanOut, destination, pin_read,
     };
     use crate::ChromeStatus;
-    use crate::tofu::{self, KeyContact, Next, Purpose, TofuPrompt};
+    use crate::tofu::{KeyContact, Next, Purpose, TofuPrompt};
     use ambre_bus::conduit;
     use ambre_bus::sync_warning::SyncWarningCode;
+    use ambre_bus::{Authored, DirectMember, Instant};
     use ambre_bus::{Confidential, DocType, Plaintext, RestCommand, RestEvent, Role};
+    use ambre_canvas::{PerfPublisher, PerfSnapshot};
     use ambre_chrome::ToastKind;
     use ambre_core::id::{Channel, Document, Id, User};
     use ambre_core::{
-        Credential, DisplayName, Email, ExchangePublicKey, FixedBytes, KeyFingerprints, LinkState,
-        OidcState, Opaque, ProviderUrls, Validated,
+        Count, Credential, DisplayName, Email, ExchangePublicKey, FixedBytes, KeyFingerprints,
+        LinkState, Ms, OidcState, Opaque, PageLoad, ProviderUrls, TimeSpan, Validated,
     };
     use ambre_logic::app::{LogicCommand, UiEvent};
     use std::cell::Cell;
@@ -1215,8 +1266,6 @@ mod tests {
 
     /// An invitee's key is classified for its document. With no pin it is a
     /// first contact, and with another pin it is a change. Both ask the user.
-    /// The pinned key reads the browser clock, so the wasm tier holds that
-    /// path (`ambre_app::tofu::tests`).
     #[test]
     fn an_invitee_key_asks_for_a_first_contact_and_for_a_change() {
         let document_id = Id::<Document>::mint();
@@ -1239,13 +1288,121 @@ mod tests {
         );
         assert_eq!(prompt.display_name, Some(name("Ada")));
 
-        match tofu::classify(prompt.clone(), None, Role::Editor) {
+        match pin_read(prompt.clone(), None, Role::Editor, AT) {
             Next::Ask(asked) => assert_eq!(asked.contact, KeyContact::New),
             Next::Proceed(sent) => panic!("a key with no pin left with no prompt: {sent:?}"),
         }
-        match tofu::classify(prompt, Some(key(8)), Role::Editor) {
+        match pin_read(prompt, Some(key(8)), Role::Editor, AT) {
             Next::Ask(asked) => assert_eq!(asked.contact, KeyContact::Changed),
             Next::Proceed(sent) => panic!("a changed key left with no prompt: {sent:?}"),
+        }
+    }
+
+    /// The instant the clock of these tests reads when a request leaves.
+    const AT: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
+
+    /// The pinned key of an invitee sends the invitation with no prompt. It
+    /// grants the role asked, carries the key the user saw, and leaves at the
+    /// instant the wiring read (`CHROME-047`, `CHROME-051`).
+    #[test]
+    fn a_pinned_invitee_key_invites_at_the_instant_read() {
+        let document_id = Id::<Document>::mint();
+        let user_id = Id::<User>::mint();
+        let ev = rest(RestEvent::InviteeKey {
+            document_id,
+            user_id,
+            display_name: name("Ada"),
+            email: Email::from("ada@test.local"),
+            exchange_pub_key: key(7),
+            fingerprint: Opaque::<KeyFingerprints>::new("WXYZ"),
+        });
+        let prompt = classified(Switchboard::new(Page::Document).service(&ev, on(None), &nobody()));
+        let Next::Proceed(LogicCommand::Rest {
+            cmd:
+                RestCommand::InviteToDocument {
+                    document_id: sent_to,
+                    invitee,
+                    role,
+                    expect_exchange_pub_key,
+                    now,
+                    ..
+                },
+            ..
+        }) = pin_read(prompt, Some(key(7)), Role::Viewer, AT)
+        else {
+            panic!("a pinned key did not invite");
+        };
+        assert_eq!(sent_to, document_id);
+        assert_eq!(invitee, user_id);
+        assert_eq!(role, Role::Viewer);
+        assert_eq!(expect_exchange_pub_key, key(7));
+        assert_eq!(now, AT, "the invitation is dated by another clock");
+    }
+
+    /// The pinned key of a Murmure member opens the direct message of the two
+    /// at the instant read. A later clock dates the same request later, so the
+    /// instant comes from the wiring and from no clock of its own.
+    #[test]
+    fn a_pinned_member_key_opens_the_direct_message_at_the_instant_read() {
+        let user_id = Id::<User>::mint();
+        let prompt = classified(Switchboard::new(Page::Murmure).service(
+            &member_key(user_id, 5),
+            on(None),
+            &nobody(),
+        ));
+        let later = AT.plus(TimeSpan::<Ms>::new(60_000));
+        for at in [AT, later] {
+            let Next::Proceed(LogicCommand::OpenDirectMessage { draft, now }) =
+                pin_read(prompt.clone(), Some(key(5)), Role::Editor, at)
+            else {
+                panic!("a pinned member key did not open the direct message");
+            };
+            assert_eq!(now, at);
+            assert_eq!(
+                draft.members,
+                vec![DirectMember {
+                    user_id,
+                    exchange_pub_key: key(5),
+                }]
+            );
+        }
+    }
+
+    /// The perf read-out shows one snapshot per period at most, on the page
+    /// clock the wiring reads. The first one waits a period from the page
+    /// load, and a frame inside the period shows nothing.
+    #[test]
+    fn the_perf_read_out_shows_one_snapshot_per_period() {
+        let perf = PerfPublisher::new();
+        let mut cadence = PerfCadence::default();
+        let at = |ms: f64| Instant::<PageLoad>::new(ms);
+        let shown = |snapshot: Option<PerfSnapshot>| snapshot.map(|s| s.cells_drawn);
+
+        perf.publish(drawn(1));
+        assert_eq!(
+            shown(cadence.step(at(16.0), &perf)),
+            None,
+            "shown before a period"
+        );
+        assert_eq!(shown(cadence.step(at(500.0), &perf)), Some(Count::new(1)));
+        perf.publish(drawn(2));
+        assert_eq!(
+            shown(cadence.step(at(999.0), &perf)),
+            None,
+            "shown twice in a period"
+        );
+        assert_eq!(shown(cadence.step(at(1_000.0), &perf)), Some(Count::new(2)));
+        // A frame late by a whole period shows once, and the period restarts there.
+        assert_eq!(shown(cadence.step(at(2_700.0), &perf)), Some(Count::new(2)));
+        assert_eq!(shown(cadence.step(at(3_100.0), &perf)), None);
+        assert_eq!(shown(cadence.step(at(3_200.0), &perf)), Some(Count::new(2)));
+    }
+
+    /// A snapshot that counts `cells` drawn cells, so two read apart.
+    fn drawn(cells: u32) -> PerfSnapshot {
+        PerfSnapshot {
+            cells_drawn: Count::new(cells),
+            ..PerfSnapshot::default()
         }
     }
 

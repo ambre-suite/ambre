@@ -89,6 +89,8 @@
   {"edge": "verified-by", "from": "ARCH-072", "to": "ambre_app::switchboard::tests::a_murmure_member_key_goes_to_the_invitation_then_to_a_direct_message"},
   {"edge": "verified-by", "from": "ARCH-072", "to": "ambre_app::switchboard::tests::an_invitee_key_asks_for_a_first_contact_and_for_a_change"},
   {"edge": "verified-by", "from": "ARCH-072", "to": "ambre_app::switchboard::tests::the_header_follows_the_routed_document_alone"},
+  {"edge": "verified-by", "from": "ARCH-072", "to": "ambre_app::switchboard::tests::a_pinned_invitee_key_invites_at_the_instant_read"},
+  {"edge": "verified-by", "from": "ARCH-072", "to": "ambre_app::switchboard::tests::the_perf_read_out_shows_one_snapshot_per_period"},
   {"edge": "cites-section", "from": "ARCH-010", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "verified-by", "from": "ARCH-010", "to": "ambre_app::route::tests::path_doc_roundtrip"},
   {"edge": "cites-section", "from": "ARCH-016", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
