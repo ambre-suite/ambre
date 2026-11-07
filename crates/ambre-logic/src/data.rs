@@ -560,6 +560,39 @@ impl LogicState {
         opened
     }
 
+    /// Hold the reader's own locale and convention, and hand them to every
+    /// open document, which repaints under them (`LOCALE-015`). Nothing is
+    /// sent to Sync (`LOCALE-017`).
+    pub(crate) fn set_reader_locale(&mut self, reader: ambre_core::ReaderLocale) {
+        self.reader_locale = reader;
+        let open: Vec<Id<Document>> = self
+            .docs
+            .iter()
+            .filter(|(_, doc)| matches!(doc.state, DocState::Trame(_)))
+            .map(|(id, _)| *id)
+            .collect();
+        for document_id in open {
+            let command = AppCommand::Trame(ambre_trame::TrameCommand::SetReaderLocale {
+                reader: self.reader_locale.clone(),
+            });
+            self.handle_app_command(document_id, command);
+        }
+    }
+
+    /// Write the creator's locale into a document this reader created, once,
+    /// as its first edit (`LOCALE-019`). The seed is no resolution: every
+    /// later read takes the register (`LOCALE-012`).
+    pub(crate) fn seed_locale(&mut self, document_id: Id<Document>) {
+        let Some(locale) = self.locale_seeds.remove(&document_id) else {
+            return;
+        };
+        let Some(doc) = self.docs.get(&document_id) else {
+            return;
+        };
+        let command = doc.state.locale_command(locale);
+        self.handle_app_command(document_id, command);
+    }
+
     /// A new state for a document of `doc_type`, seeded with what the session
     /// already knows: the user, the display name and the faces.
     pub(crate) fn fresh_state(&self, doc_type: DocType) -> Option<DocState> {
@@ -576,6 +609,8 @@ impl LogicState {
         // measures on the same set as one opened before it. A sealed measuring
         // context holds nothing until this runs.
         state.load_faces(&self.base_faces);
+        // The reader's convention, so the first viewport reads under it.
+        state.set_reader_locale(&self.reader_locale);
         Some(state)
     }
 
