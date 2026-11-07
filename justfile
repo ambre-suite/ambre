@@ -519,11 +519,13 @@ inventory-write:
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part
 # of the graph being checked rather than invisible to it. No network build: this
-# reads `Cargo.lock` and the advisory database only.
+# reads `Cargo.lock` and the advisory database only. A wrapper no edge of the
+# graph matches is an error, not a warning: it grants a capability to a crate
+# that no longer takes it, so the day one does no one reviews the edge.
 
 # cargo-deny: advisories, licences, sources, and the ZK capability bans.
 deny:
-    cargo deny check
+    cargo deny check --deny unused-wrapper
 
 # cargo-fuzz: each untrusted reader, for `seconds` apiece (`ambre-spec-testing.md
 # section 2`). The targets live in `fuzz/`, a workspace of its own, so the

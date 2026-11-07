@@ -232,7 +232,7 @@ atomic-waker = "1.1"
 futures-channel = "0.3"
 
 # Compression
-ruzstd = "0.8"
+ruzstd = "0.9"
 
 # CRDT
 loro = "1.10"
