@@ -41,8 +41,8 @@ this document alone.
 | `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3; `CANVAS-001` | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-031` | `INV` | A participant MUST complete the DTLS handshake with the SFU through the RustCrypto backend alone. | this spec section 3; `CALL-013` | `ambre_sfu::tests::a_participant_completes_dtls_with_the_sfu_over_rust_crypto` -- an in-memory link between a browser connection and the SFU reaches the connected state, and a wrong fingerprint fails it | none | verified |
 | `CALL-032` | `INV` | The SFU MUST forward each RTP packet of a participant to every other participant of its room, its payload unchanged. | this spec section 3, the SFU | `ambre_sfu::forward::tests::each_packet_reaches_every_other_participant_of_the_room_unchanged` | none | verified |
-| `CALL-036` | `INV` | The SFU MUST serve its signalling on a port of its own, apart from the relay. | `ambre-spec-broadcast.md`, `SRV-049`; this spec section 3, signalling | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier | none | verified |
-| `CALL-037` | `OBS` | Two browsers in one room MUST each decode the audio and the video of the other through the SFU. | this spec section 3, the stack | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier, under Chrome and under Firefox | none | verified |
+| `CALL-036` | `INV` | The SFU MUST serve its signalling on a port of its own, apart from the relay. | `ambre-spec-broadcast.md`, `SRV-049`; this spec section 3, signalling | none | unheld -- the belt test `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` exists and has never run: locally chromedriver 147 cannot drive Chromium 153 and no Firefox runs, and the CI Actions runs fail before any job starts; lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | untested |
+| `CALL-037` | `OBS` | Two browsers in one room MUST each decode the audio and the video of the other through the SFU. | this spec section 3, the stack | none | unheld -- the belt test `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` exists and has never run: locally chromedriver 147 cannot drive Chromium 153 and no Firefox runs, and the CI Actions runs fail before any job starts; lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | untested |
 
 ### 1.2 Join a call
 
@@ -91,8 +91,9 @@ A participant sends a packet to the SFU, and the SFU forwards it within the room
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 8 `verified`, 29 `unimplemented`. The SFU links no C cryptography, completes DTLS,
-  and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-037`). No call code exists beyond it.
+* **Verification.** 6 `verified`, 2 `untested`, 29 `unimplemented`. The SFU links no C cryptography,
+  completes DTLS and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-035`). The browser
+  proof exists and has never run (`CALL-036`, `CALL-037`).
 
 ---
 
