@@ -8,8 +8,12 @@ mod tests {
     use crate::driver::Engine;
     use crate::page::{Page, STEP};
 
-    /// `TRAME-IO-040`: a file the full queue cannot carry tells the user that
-    /// it did not import.
+    /// `TRAME-IO-051`: a file picked while the queue is full waits in the
+    /// launcher's outbox, and imports once the Logic thread drains the queue.
+    ///
+    /// The view takes no input while the lane holds a command (`BUS-016`). So
+    /// the flood leaves the lane far below its bound, and the import is held.
+    /// The refusal past the bound is `TRAME-IO-040`.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -19,7 +23,7 @@ mod tests {
         feature = "firefox",
         ignore = "pauses a worker through the DevTools Protocol, which Firefox does not speak"
     )]
-    async fn an_import_the_full_queue_refuses_says_so() {
+    async fn an_import_on_a_full_queue_lands_once_it_drains() {
         let page = Page::new_document("trame").await;
         let paused = pause_logic(&page).await;
         clear_cell(&page, FLOOD).await;
@@ -28,9 +32,8 @@ mod tests {
         page.arm_picker().await;
         page.command("Import CSV").await;
         page.pick("one.csv", "text/csv", b"a,b\n1,2\n").await;
-        page.wait_toast("The file did not import").await;
-        // The toast is the whole answer: let the worker go before the page closes.
         page.resume_worker(paused).await;
+        page.wait_toast("Imported 2 rows x 2 columns").await;
     }
 
     /// Selects `A1:B1`, and records each asynchronous clipboard write the page
