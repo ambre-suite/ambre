@@ -230,7 +230,6 @@ impl TrameState {
                 }
             }
             TrameCommand::DeleteName { name } => self.delete_name(&name),
-            TrameCommand::SetLocale { locale } => self.set_locale(&locale),
             TrameCommand::ActivateSheet { sheet_id } => self.activate_sheet(&sheet_id),
             TrameCommand::CreateSheet { name } => self.create_sheet(&name),
             TrameCommand::RenameSheet { sheet_id, name } => self.rename_sheet(&sheet_id, &name),

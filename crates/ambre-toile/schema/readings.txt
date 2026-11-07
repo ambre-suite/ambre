@@ -1,6 +1,19 @@
+# ambre-toile/schema/readings.txt  The frozen schema readings (`SCHEMA-017`).
+#
+# One section per `SCHEMA_VERSION`, each holding what a build stores and what
+# it reads back, for every value of the shape belt's board. A line reads
+# `path = stored => reading`. The path collapses ids and list positions as
+# `shapes.txt` does. The reading is taken by a second board that reopened the
+# first one's snapshot, in absolute units: world px, degrees, ms, a colour as
+# `#aarrggbb` up to v4 and as `#rrggbbaa` from v5, one-based positions. A
+# register no reader of the build reads says so.
+#
+# Written by `logic::state::schema_reading`, which fails when a build stores or
+# reads a value otherwise than the section frozen for its version. A reading
+# that moves needs a raised `SCHEMA_VERSION` and a new section below, never an
+# edit to the section above: a section is the record of what that version meant.
 
-
-== v2
+== v1
 board/bg_color = 505290495 => read by no reader of this build
 board/grid_size = 32 => grid unit 32 world px
 board/grid_snap = false => read by no reader of this build
@@ -72,8 +85,7 @@ media/*/h = 2 => read by no reader of this build
 media/*/mime = "image/png" => read by no reader of this build
 media/*/thumb = 89504e470d0a1a0a0000000d49484452000000010000000208060000009981b62700000015494441547801010a00f5ff00000000000000000000000a0001072729540000000049454e44ae426082 => thumbnail 1x2 px
 media/*/w = 1 => read by no reader of this build
-meta/locale = "fr-CA" => locale fr-CA
-meta/schema_version = 2 => version 2, Current
+meta/schema_version = 1 => version 1, Current
 presentation_config/autoplay = false => read by no reader of this build
 presentation_config/loop = false => read by no reader of this build
 presentation_config/transition_ms = 300 => slides change over 300 ms

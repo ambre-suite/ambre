@@ -400,9 +400,15 @@ pub(super) fn document_of_every_key() -> ProseState {
     hide_the_rule(&mut state);
     write_a_thread(&mut state, root);
     write_a_suggestion(&mut state, root);
-    state.handle_command(ProseCommand::SetLocale {
-        locale: ambre_core::DocumentLocale::parse("fr").expect("a well-formed tag"),
-    });
+    // No command sets the document locale yet, so the scenario writes the
+    // register directly: the freeze still has to hold its type.
+    if doc::meta(&state.doc)
+        .insert(doc::MetaKey::Locale, "fr")
+        .is_err()
+    {
+        panic!("the scenario could not write the locale");
+    }
+    state.doc.commit();
     for key in mark_roots_to_apply() {
         // The style path refuses an anchor its own command owns
         // (`PROSE-FEAT-298`). The scenario still has to reach every root, so

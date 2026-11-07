@@ -1864,14 +1864,6 @@ pub enum ToileCommand {
         frame: Id<Element>,
         name: String,
     },
-    /// Set the board's locale, or clear it with
-    /// [`DocumentLocale::none`](ambre_core::DocumentLocale::none)
-    /// (`ambre-spec-locale.md`). One delta on the `meta` register, and no
-    /// element moves with it (`LOCALE-009`). The type holds a well-formed tag
-    /// only (`LOCALE-010`). One undo item.
-    SetLocale {
-        locale: ambre_core::DocumentLocale,
-    },
 
     // -- Presentation (`toile-presentation`) --
     /// Set the shared slide sequence: the frames, in playback order
@@ -2255,7 +2247,6 @@ impl fmt::Debug for ToileCommand {
                 .field("frame", frame)
                 .field("name", &ambre_core::RedactedChars::of(name))
                 .finish(),
-            Self::SetLocale { locale } => fields!("SetLocale", locale),
             Self::SetSlideOrder { order } => fields!("SetSlideOrder", order),
             Self::NextSlide => f.write_str("NextSlide"),
             Self::PrevSlide => f.write_str("PrevSlide"),
@@ -2385,7 +2376,6 @@ impl ambre_bus::Mutation for ToileCommand {
             | Self::SetFrameChildren { .. }
             | Self::RemoveFromFrames { .. }
             | Self::RenameFrame { .. }
-            | Self::SetLocale { .. }
             | Self::SetSlideOrder { .. }
             | Self::NextSlide
             | Self::PrevSlide

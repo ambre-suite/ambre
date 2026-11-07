@@ -40,9 +40,6 @@ crate::crdt_names! {
     pub enum MetaKey: FieldKey {
         /// The version, an unsigned integer.
         SchemaVersion = "schema_version",
-        /// The document locale, a BCP 47 tag (`ambre-spec-locale.md`). The
-        /// key Prose, Trame and Toile share. An absent key is no language.
-        Locale = "locale",
     }
 }
 

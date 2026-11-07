@@ -2902,8 +2902,6 @@ ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | line_element(
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | line_element(input) | param | &str	generic	the stored formula text a nom parser reads
 ambre-trame | src/formula/render.rs | crate::formula::render | render_element() | ret | String	generic	the stored text of a line reference: the codec of a struct of two fields
 ambre-trame | src/logic/schema.rs | crate::logic::schema | line_elements_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
-ambre-trame | src/logic/schema.rs | crate::logic::schema | locale_v3() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
-ambre-toile | src/logic/schema.rs | crate::logic::schema | locale_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-trame | src/model/axis.rs | crate::model::axis | <Col as AxisOrder>::ROOT_KEY | const | &'static str	generic	the key half that names the column root in the generation record: the codec of a closed set
 ambre-trame | src/model/axis.rs | crate::model::axis | <Col as AxisOrder>::TAG | const | u8	generic	the byte the derivation hashes to name the column axis: hash input, a codec of a closed set
 ambre-trame | src/model/axis.rs | crate::model::axis | <LineGeneration as VersionKind>::NAME | const | &'static str	free-text	the name a version prints through Debug, for a log line
@@ -4139,8 +4137,6 @@ ambre-prose | src/message/mod.rs | crate::message | <CodeLang as Rule>::admit(te
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit() | ret | Result<String,NotALangTag>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
-ambre-core | src/lang.rs | crate::lang | DocumentLocale::parse(text) | param | &str	newtype-inner	DocumentLocale, the text its one fallible constructor checks
-ambre-core | src/lang.rs | crate::lang | DocumentLocale::read(stored) | param | Option<&str>	newtype-inner	DocumentLocale, the stored register text it reads, a malformed one as no language
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit() | ret | Result<String,ContentHashError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/media.rs | crate::media | <ContentHash as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line

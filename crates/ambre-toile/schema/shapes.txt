@@ -1,6 +1,19 @@
+# ambre-toile/schema/shapes.txt  The frozen schema shapes (`TOILE-028`).
+#
+# One section per `SCHEMA_VERSION`, each holding the key set, the value types
+# and the `postcard` layouts a build writes at that version. One sorted line
+# per reachable path, naming the type under it and never the value. A minted
+# id, a user id and a content hash each collapse to `*`, so the text is the
+# schema and not the run. A `postcard/` line carries the hex encoding of one
+# canonical value of a binary register, so a field added, dropped, reordered
+# or retyped moves it.
+#
+# Written by `logic::state::schema_shape`, which fails when a build's shape
+# leaves the section frozen for its version. A shape that moves needs a raised
+# `SCHEMA_VERSION` and a new section below, never an edit to the section
+# above: a section is the record of what that version wrote.
 
-
-== v2
+== v1
 board/bg_color: i64
 board/grid_size: f64
 board/grid_snap: bool
@@ -57,7 +70,6 @@ media/*/thumb: binary
 media/*/w: i64
 media/*: map
 media: map
-meta/locale: string
 meta/schema_version: i64
 meta: map
 postcard/comments/*/anchor#element: 000165

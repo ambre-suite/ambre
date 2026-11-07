@@ -257,7 +257,7 @@ impl SheetLine for Col {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(3);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(2);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -265,18 +265,11 @@ pub const SCHEMA_VERSION: Version<Schema> = Version::new(3);
 /// therefore reaches the document before any user edit. It then travels through
 /// every persistence path, not through the one that happens to check it.
 pub(crate) fn stamp(doc: &LoroDoc) {
-    stamp_at(doc, SCHEMA_VERSION);
-}
-
-/// Write `version` into a workbook's `meta` register. A migration step stamps
-/// the version it reaches, never the build's, so a later bump leaves what a
-/// published step writes unchanged (`AUTHOR-024`).
-fn stamp_at(doc: &LoroDoc, version: Version<Schema>) {
     let _ = doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-            i64::from(version.get()),
+            i64::from(SCHEMA_VERSION.get()),
         );
 }
 
@@ -318,18 +311,11 @@ pub fn read_version(doc: &LoroDoc) -> Result<Version<Schema>, SchemaError> {
 ///
 /// Version 1 is the first layout. A workbook with no version reads as 0
 /// (`SCHEMA-005`), and the walk finds no step from 0 and refuses it.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
-    SchemaMigration {
-        from: Version::new(1),
-        to: Version::new(2),
-        apply: line_elements_v2,
-    },
-    SchemaMigration {
-        from: Version::new(2),
-        to: Version::new(3),
-        apply: locale_v3,
-    },
-];
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
+    from: Version::new(1),
+    to: Version::new(2),
+    apply: line_elements_v2,
+}];
 
 /// Version 1 to 2: a line a write adds takes a derived uid
 /// (`ambre-spec-trame-schema.md section 7`).
@@ -340,18 +326,7 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
 /// `line_gen_{sheet}` starts empty: no line of a version-1 workbook was derived
 /// (`TRAME-272`).
 fn line_elements_v2(doc: &LoroDoc) -> Result<(), String> {
-    stamp_at(doc, Version::new(2));
-    doc.commit();
-    Ok(())
-}
-
-/// Version 2 to 3: the `meta` map gains the `locale` key
-/// (`ambre-spec-locale.md` section 3).
-///
-/// The step rewrites nothing but the register. An absent key reads as no
-/// language, so a version-2 workbook keeps its bytes and opens with none.
-fn locale_v3(doc: &LoroDoc) -> Result<(), String> {
-    stamp_at(doc, Version::new(3));
+    stamp(doc);
     doc.commit();
     Ok(())
 }
@@ -494,19 +469,6 @@ mod tests {
         }
         doc.commit();
         Payload::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
-    }
-
-    /// A version-2 workbook, written before the `locale` key, migrates to 3
-    /// and opens with no language: the bytes it stored still read.
-    #[test]
-    fn a_version_2_workbook_opens_with_no_locale() {
-        let bytes = snapshot_at(Some(Version::new(2)));
-        let mut state = TrameState::new();
-        state
-            .import_snapshot(&bytes)
-            .expect("a version-2 workbook migrates");
-        assert_eq!(state.schema_version(), SCHEMA_VERSION);
-        assert_eq!(state.locale(), ambre_core::DocumentLocale::none());
     }
 
     #[test]

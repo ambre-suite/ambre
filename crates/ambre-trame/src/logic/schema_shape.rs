@@ -134,11 +134,6 @@ pub(super) fn declared_keys() -> Vec<String> {
         .map(|root| root.as_str().to_owned())
         .collect();
     found.extend(FilterKey::ALL.iter().map(|key| key.as_str().to_owned()));
-    found.extend(
-        ambre_core::schema::MetaKey::ALL
-            .iter()
-            .map(|key| key.as_str().to_owned()),
-    );
     found.extend(declared_string_consts(SCHEMA_SOURCE));
     found
 }
@@ -407,9 +402,6 @@ pub(super) fn workbook_of_every_key() -> TrameState {
     state.handle_command(TrameCommand::CreateSheet {
         name: crate::test_support::sheet("Two"),
     });
-    state.handle_command(TrameCommand::SetLocale {
-        locale: ambre_core::DocumentLocale::parse("fr-CA").expect("a well-formed tag"),
-    });
     state
 }
 
@@ -471,16 +463,6 @@ fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
             doc.get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
                 .insert(&format!("{row}:{col}"), "={1_0|1_1}+1")
                 .expect("a cell");
-            doc.commit();
-            doc
-        }
-        // Version 2: the version-1 workbook, stamped 2. The step to 3 adds
-        // no key, so the workbook holds none for it to rewrite.
-        2 => {
-            let doc = canonical(ambre_core::Version::new(1));
-            let _ = doc
-                .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 2_i64);
             doc.commit();
             doc
         }

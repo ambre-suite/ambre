@@ -1,10 +1,9 @@
 # AMBRE -- FEATURE: THE DOCUMENT LOCALE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the register is built: Prose, Trame and Toile store it, and a
-`SetLocale` command writes it in each. Prose's date field reads it. The resolution, the reader
-convention and every other consumer land with the
-`Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8).
+**Implementation:** design-only -- no command writes a locale today, and every consumer that needs
+one names the gap. Prose's date field already reads the register. The rest lands with the
+`One document locale` Story (`ambre-roadmap.md` E8).
 
 > A document carries one language tag, so two collaborators on differently configured machines read
 > the same number, the same currency and the same date. What the reader sees in the menus stays the
@@ -26,17 +25,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `LOCALE`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `LOCALE-001` | `INV` | A document MUST carry one locale, and one only. | this spec section 3 | type-level -- the register is one key of the last-writer-wins `meta` map, and `ambre_crdt::read_locale` answers one `DocumentLocale` for it; `ambre_crdt::locale::tests::a_written_locale_reads_back_and_none_clears_it`; `ambre_trame::logic::tests::group15::a_new_workbook_names_no_locale`; `ambre_toile::logic::state::locale_tests::a_new_board_names_no_locale`; `ambre_prose::logic::locale_tests::a_new_document_names_no_locale` | none | verified |
-| `LOCALE-002` | `INV` | The locale MUST be a well-formed BCP 47 language tag. | this spec section 3 | type-level -- a `DocumentLocale` holds a `Validated<LangTag>` or nothing, and a stored text that is no tag reads as nothing; `ambre_core::lang::tests::a_malformed_stored_locale_reads_as_none`; `ambre_crdt::locale::tests::a_malformed_register_reads_as_no_language`; `ambre_trame::logic::tests::group15::a_malformed_stored_locale_reads_as_none`; `ambre_toile::logic::state::locale_tests::a_malformed_stored_locale_reads_as_none` | none | verified |
-| `LOCALE-003` | `INV` | The language of the menus, the chips and the dialogs MUST be the reader's own, never the document's locale. | this spec section 3; `ambre-spec-chrome.md` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8). It is the half the register is easiest to get wrong: one tag in the document would otherwise translate the interface of every collaborator who opens it | unimplemented |
-| `LOCALE-004` | `CONC` | Two peers setting the locale concurrently MUST converge on one tag, the later write standing. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_crdt::locale::tests::two_peers_setting_the_locale_converge_on_the_later_write`; `ambre_trame::logic::tests::group15::two_peers_setting_the_locale_converge_on_one_tag`; `ambre_toile::logic::state::locale_tests::two_peers_setting_the_locale_converge_on_one_tag`; `ambre_prose::logic::locale_tests::two_peers_setting_the_locale_converge_on_one_tag` | none | verified |
-| `LOCALE-005` | `IO` | The locale MUST survive a save and an open. | this spec section 3; `ambre-spec-docfile.md` | `ambre_trame::logic::tests::group15::the_locale_survives_a_save_and_an_open`; `ambre_toile::logic::state::locale_tests::the_locale_survives_a_save_and_an_open`; `ambre_prose::logic::locale_tests::the_locale_survives_a_save_and_an_open`; `ambre_trame::logic::schema::tests::a_version_2_workbook_opens_with_no_locale`; `ambre_toile::logic::state::locale_tests::a_version_1_board_opens_with_no_locale` -- the last two open a document stored before the key, with no language | none | verified |
-| `LOCALE-006` | `IO` | The locale MUST leave the client sealed, and the relay MUST NOT learn it. | this spec section 3; `ambre-spec-zero-knowledge.md` | structural -- `ambre_trame::logic::tests::group15::setting_the_locale_is_one_delta_and_rewrites_no_stored_value` and its Toile and Prose twins assert the write leaves as the command's CRDT delta, which `ZK-001` seals before it leaves the client and `ZK-007` keeps out of what the relay sees | none | verified |
-| `LOCALE-014` | `INV` | A number, a date and a formula MUST be stored in no locale. | this spec section 3; `2-Trame/features/ambre-spec-trame-number-formats.md` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8). It is what lets one stored value show in any locale, which `LOCALE-009` relies on | unimplemented |
-| `LOCALE-015` | `INV` | Each reader MUST carry one convention of three: everything in the document's locale, shown in the document's and typed in their own, or everything in their own. | this spec section 3 | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `LOCALE-016` | `INV` | A reader who picked no convention MUST see the document's locale and type in their own. | this spec section 3 | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `LOCALE-018` | `INV` | Formula text MUST be stored in one canonical form: a decimal point, and a comma between arguments. | this spec section 3; `2-Trame/features/ambre-spec-trame-formula-engine.md` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `LOCALE-021` | `OBS` | A view that shows the reader locale where it differs from the document's MUST say so. | this spec section 3 | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-001` | `INV` | A document MUST carry one locale, and one only. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-002` | `INV` | The locale MUST be a well-formed BCP 47 language tag. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-003` | `INV` | The language of the menus, the chips and the dialogs MUST be the reader's own, never the document's locale. | this spec section 3; `ambre-spec-chrome.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). It is the half the register is easiest to get wrong: one tag in the document would otherwise translate the interface of every collaborator who opens it | unimplemented |
+| `LOCALE-004` | `CONC` | Two peers setting the locale concurrently MUST converge on one tag, the later write standing. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-005` | `IO` | The locale MUST survive a save and an open. | this spec section 3; `ambre-spec-docfile.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). It travels between peers as an ordinary delta, which is `LOCALE-004`'s convergence and not a rule of its own: the register is a key of the document map, so the file and the wire carry it like every other key | unimplemented |
+| `LOCALE-006` | `IO` | The locale MUST leave the client sealed, and the relay MUST NOT learn it. | this spec section 3; `ambre-spec-zero-knowledge.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). It is a content key inside the document map, so the sealed envelope carries it like any other; the row exists because a language tag is the kind of small field a later routing or indexing feature is tempted to lift out | unimplemented |
+| `LOCALE-014` | `INV` | A number, a date and a formula MUST be stored in no locale. | this spec section 3; `2-Trame/features/ambre-spec-trame-number-formats.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). It is what lets one stored value show in any locale, which `LOCALE-009` relies on | unimplemented |
+| `LOCALE-015` | `INV` | Each reader MUST carry one convention of three: everything in the document's locale, shown in the document's and typed in their own, or everything in their own. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-016` | `INV` | A reader who picked no convention MUST see the document's locale and type in their own. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-018` | `INV` | Formula text MUST be stored in one canonical form: a decimal point, and a comma between arguments. | this spec section 3; `2-Trame/features/ambre-spec-trame-formula-engine.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-021` | `OBS` | A view that shows the reader locale where it differs from the document's MUST say so. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 ### 1.2 Set the document locale
 
@@ -45,11 +44,11 @@ and no stored value with it.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `LOCALE-007` | `PRE` | Setting the locale MUST require the write access an edit requires. | this spec section 4; `ambre-spec-membership.md` | structural -- the write leaves as the delta every edit sends, asserted by `ambre_trame::logic::tests::group15::setting_the_locale_is_one_delta_and_rewrites_no_stored_value` and its Toile and Prose twins, and the relay writes nothing for a read-only member (`SRV-008`) | none | verified |
-| `LOCALE-008` | `POST` | After a locale is set, every view that formats a number, a currency or a date MUST show the new locale's form, on every peer. | this spec section 3; `2-Trame/features/ambre-spec-trame-number-formats.md`, `TRAME-110` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `LOCALE-009` | `FRAME` | Setting the locale MUST NOT rewrite a stored value: what a cell, a field or a block holds MUST be unchanged. | this spec section 3; `2-Trame/features/ambre-spec-trame-cell-editing.md` | `ambre_trame::logic::tests::group15::setting_the_locale_is_one_delta_and_rewrites_no_stored_value`; `ambre_toile::logic::state::locale_tests::setting_the_locale_is_one_delta_and_rewrites_no_stored_value`; `ambre_prose::logic::locale_tests::setting_the_locale_is_one_delta_and_rewrites_no_stored_value` -- every root but `meta` reads the same before and after | none | verified |
-| `LOCALE-010` | `FAIL` | A locale that is not a well-formed tag MUST be refused, and the document MUST keep the locale it had. | this spec section 4 | type-level -- each application's `SetLocale` command carries a `DocumentLocale`, whose one constructor from text refuses a malformed tag, so no command can carry one and the register keeps what it held; `ambre_core::lang::tests::a_malformed_locale_is_refused` | none | verified |
-| `LOCALE-019` | `POST` | A new document MUST be seeded with its creator's default locale. | this spec section 3 | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8). The seed writes the register once, at creation, and it is no resolution, so `LOCALE-012` holds | unimplemented |
+| `LOCALE-007` | `PRE` | Setting the locale MUST require the write access an edit requires. | this spec section 4; `ambre-spec-membership.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-008` | `POST` | After a locale is set, every view that formats a number, a currency or a date MUST show the new locale's form, on every peer. | this spec section 3; `2-Trame/features/ambre-spec-trame-number-formats.md`, `TRAME-110` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-009` | `FRAME` | Setting the locale MUST NOT rewrite a stored value: what a cell, a field or a block holds MUST be unchanged. | this spec section 3; `2-Trame/features/ambre-spec-trame-cell-editing.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). It is what makes the register re-localizable: the raw text is the document and the form is derived, so a second locale re-renders where a stored string would have to be migrated | unimplemented |
+| `LOCALE-010` | `FAIL` | A locale that is not a well-formed tag MUST be refused, and the document MUST keep the locale it had. | this spec section 4 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-019` | `POST` | A new document MUST be seeded with its creator's default locale. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). The seed writes the register once, at creation, and it is no resolution, so `LOCALE-012` holds | unimplemented |
 
 ### 1.3 Resolve a locale for a view or an export
 
@@ -57,10 +56,10 @@ A consumer asks for the language to format in. It may be given one, and the docu
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `LOCALE-011` | `POST` | A consumer MUST resolve the locale in one order: the one the request names, then the document's, then none. | this spec section 3; `4-Prose/features/ambre-spec-prose-pdf-export.md`, `PROSE-IO-035` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `LOCALE-012` | `FRAME` | Resolution MUST NOT read the machine's locale, its clock zone or its region. | this spec section 3 | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8). It is the rule the whole register exists for: a machine default is what makes two collaborators read one document two ways, and it is invisible to whoever is not on the second machine | unimplemented |
-| `LOCALE-013` | `FAIL` | When no locale resolves, the consumer MUST carry none and MUST NOT fall back on a fixed language. | this spec section 3; `4-Prose/features/ambre-spec-prose-pdf-export.md`, `PROSE-IO-035` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `LOCALE-020` | `POST` | Every export, print, PDF and CSV MUST render in the document's locale, whoever runs it. | this spec section 3; `4-Prose/features/ambre-spec-prose-pdf-export.md` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8). A locale the request names still wins (`LOCALE-011`); the reader's convention never does | unimplemented |
+| `LOCALE-011` | `POST` | A consumer MUST resolve the locale in one order: the one the request names, then the document's, then none. | this spec section 3; `4-Prose/features/ambre-spec-prose-pdf-export.md`, `PROSE-IO-035` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-012` | `FRAME` | Resolution MUST NOT read the machine's locale, its clock zone or its region. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). It is the rule the whole register exists for: a machine default is what makes two collaborators read one document two ways, and it is invisible to whoever is not on the second machine | unimplemented |
+| `LOCALE-013` | `FAIL` | When no locale resolves, the consumer MUST carry none and MUST NOT fall back on a fixed language. | this spec section 3; `4-Prose/features/ambre-spec-prose-pdf-export.md`, `PROSE-IO-035` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-020` | `POST` | Every export, print, PDF and CSV MUST render in the document's locale, whoever runs it. | this spec section 3; `4-Prose/features/ambre-spec-prose-pdf-export.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). A locale the request names still wins (`LOCALE-011`); the reader's convention never does | unimplemented |
 
 ### 1.4 Read and type under a convention
 
@@ -69,9 +68,9 @@ document stores neither.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `LOCALE-022` | `PRE` | A typed numeric date whose day and month could swap MUST show an unambiguous long-form preview, in the reader's language, before it is committed. | this spec section 3 | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `LOCALE-023` | `POST` | The edit bar MUST show a formula in the reader's convention, and store what the reader types in the canonical form. | this spec section 3; `LOCALE-018` | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
-| `LOCALE-017` | `FRAME` | A reader's convention MUST NOT change what the document stores. | this spec section 3 | not built | unbuilt -- lands with the `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-022` | `PRE` | A typed numeric date whose day and month could swap MUST show an unambiguous long-form preview, in the reader's language, before it is committed. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-023` | `POST` | The edit bar MUST show a formula in the reader's convention, and store what the reader types in the canonical form. | this spec section 3; `LOCALE-018` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `LOCALE-017` | `FRAME` | A reader's convention MUST NOT change what the document stores. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 * **Budget.** none of its own: a locale is one register read when a view formats, and the formatting
   itself is the consumer's frame cost in `ambre-spec-budgets.md`. Setting it is one delta, under the
@@ -79,9 +78,8 @@ document stores neither.
 * **Boundary.** the locale is content. It is a key of the document map, sealed with everything else,
   and `ambre-spec-zero-knowledge.md` is what keeps it there (`LOCALE-006`). Nothing here reaches the
   relay in clear.
-* **Verification.** 8 `verified`, 15 `unimplemented`. The register rows are held: state,
-  convergence, save and open, sealing, write access, the frame and the refusal. The resolution, the
-  conventions and the consumers are the gaps, and section 6 lists them.
+* **Verification.** 23 `unimplemented`. No command writes the register, and the four consumers
+  that need it each name the same gap. Section 6 lists them.
 
 ---
 
@@ -115,7 +113,7 @@ pub struct DocumentLocale(Option<Validated<LangTag>>);
 
 impl DocumentLocale {
     /// The locale a text spells. Refuses a text that is no well-formed tag (`LOCALE-010`).
-    pub fn parse(text: &str) -> Result<Self, NotALangTag>;
+    pub fn parse(text: &str) -> Result<Self, LocaleError>;
 }
 ```
 
@@ -164,11 +162,9 @@ interface language is a property of the reader, held by the client and never wri
 2. otherwise the document's tag, when it has one;
 3. otherwise none, carried as none (`LOCALE-013`). The machine is never read (`LOCALE-012`).
 
-**Code.** `ambre_core::DocumentLocale` is the value, and `ambre_crdt::read_locale` and
-`ambre_crdt::write_locale` are the one reading and the one write of the register. Prose, Trame and
-Toile each carry a `SetLocale` command over them. Trame reached the key at schema version 3, and
-Toile at 2. Each step writes the version alone, since an absent key is no language. Section 6 holds
-what is left.
+**Code.** not built -- it lands with the `One document locale` Story (`ambre-roadmap.md` E8).
+Prose's schema already declares the register, and Prose's date field reads it. No command writes
+it yet, and section 6 holds what is left.
 
 ---
 
@@ -201,11 +197,11 @@ The reader's own interface language is set outside the document, and no document
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No gesture writes a locale.** The three `SetLocale` commands exist, and no menu sends one. The
-  picker, the seed, the conventions and the resolution order are a design bound to the
-  `Numbers and dates in the document locale` Story (`ambre-roadmap.md` E8), not code.
+* **No command writes a locale.** The picker, the seed, the conventions and the resolution order are
+  a design bound to the `One document locale` Story (`ambre-roadmap.md` E8), not code.
 * **One key, decided.** The Prose, Trame and Toile schemas share one key, `meta.locale`, and Prose's
-  former `lang` is dropped. Murmure carries no locale.
+  former `lang` is dropped. Prose holds the key today, and its date field reads it. Each schema
+  document declares the key; Trame and Toile add it with the Story.
 * **Four consumers wait on it.** Trame's currencies and dates (`TRAME-110`), Prose's date field
   (`PROSE-FEAT-162`), the PDF writer (`PROSE-IO-035`), and the collation a find uses
   (`ambre-spec-find.md`). Each names the gap, and none invents an answer. The date field stores a
