@@ -30,7 +30,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::font::PX_PER_PT;
 use crate::scale::Scale;
 use crate::space::{
-    Board, Css, Doc, Float, Rescale, Scalar, ScalesTo, Space, StoredBoard, Surface, View,
+    Board, CanvasCss, Css, Doc, Float, Rescale, Scalar, ScalesTo, Space, StoredBoard, Surface, View,
 };
 use crate::span::{FracMs, TimeSpan};
 
@@ -783,6 +783,16 @@ impl Px<Css> {
     }
 }
 
+impl Px<CanvasCss> {
+    /// The same length in surface pixels. A CSS pixel is a surface pixel in
+    /// size (`CANVAS-032`), and every `u32` has an exact `f64`, so nothing is
+    /// lost.
+    #[must_use]
+    pub fn surface_length(self) -> Px<Surface> {
+        Px::new(f64::from(self.0))
+    }
+}
+
 impl Px<Surface> {
     /// The coordinate on the view, for a view whose top-left corner sits at
     /// `view_origin` on the surface.
@@ -944,7 +954,7 @@ impl Point<Px<Css>> {
 #[cfg(test)]
 mod tests {
     use super::{Mm, PrintLength, Pt, ViewSpeed};
-    use crate::{Css, Doc, Image, Point, Px, Scale, Size, Surface, Vector, View};
+    use crate::{CanvasCss, Css, Doc, Image, Point, Px, Scale, Size, Surface, Vector, View};
     use crate::{FracMs, TimeSpan};
 
     #[test]
@@ -977,6 +987,14 @@ mod tests {
         assert_eq!(Px::<View>::new(6.0) / a, 2.0);
         assert_eq!(-a, Px::<View>::new(-3.0));
         assert_eq!([a, a].into_iter().sum::<Px<View>>(), Px::<View>::new(6.0));
+    }
+
+    #[test]
+    fn a_canvas_box_edge_carries_over_to_the_surface_as_it_is() {
+        assert_eq!(
+            Px::<CanvasCss>::new(u32::MAX).surface_length(),
+            Px::<Surface>::new(f64::from(u32::MAX))
+        );
     }
 
     #[test]
