@@ -49,9 +49,11 @@ pub struct ActivityJson {
 pub async fn set_read_cursor(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<ReadCursorRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<ReadCursorRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let not_found = || AppError::NotFound {
         resource: Resource::Document,
     };
@@ -115,7 +117,7 @@ pub async fn mark_read(
     body: Option<Json<MarkReadRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
     let wanted: Option<std::collections::HashSet<Id<Document>>> = body
-        .and_then(|Json(req)| req.documents)
+        .and_then(|body| body.into_inner().documents)
         .map(|ids| ids.into_iter().collect());
     let cursors: Vec<(Id<Document>, ambre_core::Seq<ambre_core::Relay>)> =
         last_numbers(&state, &auth.user_id)
@@ -245,8 +247,8 @@ mod tests {
         match set_read_cursor(
             State(state.clone()),
             who,
-            PathId(document),
-            Json(ReadCursorRequest {
+            PathId::new(document),
+            Json::new(ReadCursorRequest {
                 seq: ambre_core::Seq::<ambre_core::Relay>::new(seq),
             }),
         )
@@ -557,9 +559,13 @@ mod tests {
         let body = MarkReadRequest {
             documents: Some(vec![segments[0], strangers[0]]),
         };
-        mark_read(State(state.clone()), session(alice, 1), Some(Json(body)))
-            .await
-            .expect("mark read");
+        mark_read(
+            State(state.clone()),
+            session(alice, 1),
+            Some(Json::new(body)),
+        )
+        .await
+        .expect("mark read");
         assert_eq!(cursor_of(&state.db, alice, segments[0]).await, Some(5));
         assert_eq!(cursor_of(&state.db, alice, segments[1]).await, None);
         assert_eq!(cursor_of(&state.db, alice, strangers[0]).await, None);

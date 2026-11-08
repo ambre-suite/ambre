@@ -66,8 +66,9 @@ pub struct SetupAccountResponse {
 
 pub async fn setup_account(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<SetupAccountRequest>,
+    body: Json<SetupAccountRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     validate_email(&req.email)?;
     let display_name = req.display_name;
     let mk_enc = req.master_key_enc;
@@ -140,8 +141,9 @@ pub struct LogoutRequest {
 pub async fn logout(
     State(state): State<Arc<AppState>>,
     auth: auth::AccountSession,
-    Json(req): Json<LogoutRequest>,
+    body: Json<LogoutRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     if let Some(token) = req.refresh_token.as_ref() {
         // Only revoke a token that actually belongs to the caller. Without this an
         // authenticated user could delete another user's refresh token (session
@@ -255,8 +257,9 @@ pub struct CreateDocumentResponse {
 pub async fn create_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Json(req): Json<CreateDocumentRequest>,
+    body: Json<CreateDocumentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     let s = auth;
 
     let name_enc = req.name_enc;
@@ -348,8 +351,9 @@ pub struct GetDocumentResponse {
 pub async fn get_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
+    ids: PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
     // The extractor refuses an anonymous caller before the register is read, so
     // no query runs on behalf of nobody (`SRV-018`).
     let doc = db::get_document(&state.db, &doc_id)
@@ -389,9 +393,11 @@ pub struct RenameDocumentRequest {
 pub async fn rename_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<RenameDocumentRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<RenameDocumentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -408,8 +414,9 @@ pub async fn rename_document(
 pub async fn delete_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
+    ids: PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -497,8 +504,9 @@ pub async fn search_users(
 pub async fn get_pubkeys(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(uid): PathId<Id<User>>,
+    ids: PathId<Id<User>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let uid = ids.into_inner();
     let _s = auth;
     let u = db::get_user(&state.db, &uid)
         .await?
@@ -549,8 +557,9 @@ pub struct MemberInfoJson {
 pub async fn list_document_members(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
+    ids: PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
     let s = auth;
     // A non-member and an absent document draw the same 404 (`SRV-005`). The
     // client reads that 404 as a document not created yet, and opens it locally.
@@ -621,9 +630,11 @@ pub struct UpdateMemberRoleRequest {
 pub async fn update_document_member_role(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, target)): PathId<(Id<Document>, Id<User>)>,
-    Json(req): Json<UpdateMemberRoleRequest>,
+    ids: PathId<(Id<Document>, Id<User>)>,
+    body: Json<UpdateMemberRoleRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let (doc_id, target) = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?

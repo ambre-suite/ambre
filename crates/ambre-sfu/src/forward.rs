@@ -686,7 +686,7 @@ impl Member {
                     (stream.mid(), stream.rid())
                 };
                 let params = *self.rtc.codec_config().find(|p| p.pt() == pt)?;
-                let layer = Layer(rid);
+                let layer = Layer::new(rid);
                 let now = self.now;
                 if packet
                     .header
@@ -729,12 +729,12 @@ impl Member {
     /// layer for none.
     fn request_keyframe(&mut self, mid: Mid, layer: Option<Layer>, kind: KeyframeRequestKind) {
         let rids: Vec<Option<Rid>> = match layer {
-            Some(Layer(rid)) => vec![rid],
+            Some(layer) => vec![layer.get()],
             None => self
                 .tracks_in
                 .iter()
                 .find(|t| t.mid == mid)
-                .map(|t| t.layers.iter().map(|(Layer(rid), _)| *rid).collect())
+                .map(|t| t.layers.iter().map(|(layer, _)| layer.get()).collect())
                 .filter(|rids: &Vec<_>| !rids.is_empty())
                 .unwrap_or_else(|| vec![None]),
         };

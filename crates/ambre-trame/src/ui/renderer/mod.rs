@@ -350,7 +350,7 @@ mod tests {
             let region = cells::sheet_camera(&state)
                 .inverse()
                 .transform_rect_bbox(cell_area);
-            let cells = cells::CacheCells(&state.cell_cache);
+            let cells = cells::CacheCells::new(&state.cell_cache);
             let view = SheetView {
                 cells: &cells,
                 axes: cells::sheet_axes(&state),

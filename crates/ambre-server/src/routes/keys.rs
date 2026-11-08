@@ -26,8 +26,9 @@ pub struct StoreMasterKeysRequest {
 pub async fn store_master_keys(
     State(state): State<Arc<AppState>>,
     auth: auth::AccountSession,
-    Json(req): Json<StoreMasterKeysRequest>,
+    body: Json<StoreMasterKeysRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     let s = auth;
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;
@@ -148,8 +149,9 @@ pub struct RotateMasterKeysRequest {
 pub async fn rotate_master_keys(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Json(req): Json<RotateMasterKeysRequest>,
+    body: Json<RotateMasterKeysRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     let s = auth;
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;

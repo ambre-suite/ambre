@@ -83,8 +83,9 @@ pub struct DevLoginResponse {
 /// `Config::dev_mode` is set, so a production server always rejects it.
 pub async fn dev_login(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<DevLoginRequest>,
+    body: Json<DevLoginRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     if state.config.dev_mode == crate::state::DevMode::Off {
         return Err(AppError::Unauthorized);
     }
@@ -152,8 +153,9 @@ pub struct RefreshResponse {
 /// two concurrent requests bearing the same token both mint a session.
 pub async fn refresh(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<RefreshRequest>,
+    body: Json<RefreshRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     let data = redis_ops::refresh_consume(&state.redis, &req.refresh_token)
         .await?
         .ok_or(AppError::Unauthorized)?;
@@ -211,8 +213,9 @@ pub async fn oidc_login(
 pub async fn oidc_callback(
     State(state): State<Arc<AppState>>,
     Path(provider): Path<String>,
-    Json(req): Json<CallbackRequest>,
+    body: Json<CallbackRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     let (provider, provider_state) = provider_client(&state, &provider)?;
 
     let stored_state = redis_ops::oidc_state_take(&state.redis, &req.state).await?;

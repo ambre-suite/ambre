@@ -19,7 +19,25 @@ use crate::error::{AppError, Resource};
 /// A request body read as JSON. A body that does not parse, or that names a
 /// word outside a closed set, answers `409` (`SRV-178`). A missing content
 /// type and a body that cannot be read keep the framework's answer.
-pub struct Json<T>(pub T);
+pub struct Json<T>(T);
+
+impl<T> Json<T> {
+    /// A body already decoded, as a test hands it to a handler.
+    #[cfg(test)]
+    pub fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    /// The decoded body.
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+
+    /// The decoded body, borrowed.
+    pub fn get(&self) -> &T {
+        &self.0
+    }
+}
 
 /// The answer to a body the framework refused. The caller learns that the
 /// body does not decode, not where.
@@ -142,7 +160,20 @@ async fn read_path<T: PathPart, S: Send + Sync>(
 
 /// The identifiers of a route path. One that does not parse answers the 404
 /// of its resource, as an identifier nobody holds does.
-pub struct PathId<T>(pub T);
+pub struct PathId<T>(T);
+
+impl<T> PathId<T> {
+    /// Identifiers already parsed, as a test hands them to a handler.
+    #[cfg(test)]
+    pub fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    /// The parsed identifiers.
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
 
 impl<T: PathPart, S: Send + Sync> FromRequestParts<S> for PathId<T> {
     type Rejection = Response;
@@ -158,7 +189,20 @@ impl<T: PathPart, S: Send + Sync> FromRequestParts<S> for PathId<T> {
 /// The identifiers of a channel route path. One that does not parse answers
 /// the 403 of an identifier the caller may not use, so the route tells nothing
 /// apart.
-pub struct OpaquePathId<T>(pub T);
+pub struct OpaquePathId<T>(T);
+
+impl<T> OpaquePathId<T> {
+    /// Identifiers already parsed, as a test hands them to a handler.
+    #[cfg(test)]
+    pub fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    /// The parsed identifiers.
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
 
 impl<T: PathPart, S: Send + Sync> FromRequestParts<S> for OpaquePathId<T> {
     type Rejection = Response;
@@ -198,7 +242,7 @@ mod tests {
     async fn answer(content_type: Option<&str>, body: &'static str) -> StatusCode {
         let app = axum::Router::new().route(
             "/",
-            axum::routing::post(|Json(_): Json<Probe>| async { StatusCode::OK }),
+            axum::routing::post(|_: Json<Probe>| async { StatusCode::OK }),
         );
         let mut req = Request::post("/");
         if let Some(ct) = content_type {
@@ -243,15 +287,11 @@ mod tests {
         let app = axum::Router::new()
             .route(
                 "/d/{doc}/u/{user}",
-                axum::routing::get(|PathId(_): PathId<(Id<Document>, Id<User>)>| async {
-                    StatusCode::OK
-                }),
+                axum::routing::get(|_: PathId<(Id<Document>, Id<User>)>| async { StatusCode::OK }),
             )
             .route(
                 "/c/{channel}",
-                axum::routing::get(|OpaquePathId(_): OpaquePathId<Id<Channel>>| async {
-                    StatusCode::OK
-                }),
+                axum::routing::get(|_: OpaquePathId<Id<Channel>>| async { StatusCode::OK }),
             );
         let resp = app
             .oneshot(Request::get(uri).body(Body::empty()).unwrap())

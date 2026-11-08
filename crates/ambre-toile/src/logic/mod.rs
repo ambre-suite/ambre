@@ -40,7 +40,14 @@ pub use state::ToileState;
 
 /// A board document as a `Debug` form prints it: its length in bytes and
 /// none of its content (`ZK-006`).
-pub(crate) struct ByteLen<'a>(pub(crate) &'a str);
+pub(crate) struct ByteLen<'a>(&'a str);
+
+impl<'a> ByteLen<'a> {
+    /// The form of `document`, which prints its length alone.
+    pub(crate) fn new(document: &'a str) -> Self {
+        Self(document)
+    }
+}
 
 impl std::fmt::Debug for ByteLen<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -50,7 +57,14 @@ impl std::fmt::Debug for ByteLen<'_> {
 
 /// A board outline as a `Debug` form prints it: how many path elements it
 /// holds and none of their points (`ZK-006`).
-pub(crate) struct PathLen<'a>(pub(crate) &'a kurbo::BezPath);
+pub(crate) struct PathLen<'a>(&'a kurbo::BezPath);
+
+impl<'a> PathLen<'a> {
+    /// The form of `outline`, which prints its element count alone.
+    pub(crate) fn new(outline: &'a kurbo::BezPath) -> Self {
+        Self(outline)
+    }
+}
 
 impl std::fmt::Debug for PathLen<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -25,7 +25,21 @@ const UPGRADE_MARGIN: f64 = 1.25;
 
 /// One layer of a video track: its RTP stream id, or none for a track sent without simulcast.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Layer(pub Option<Rid>);
+pub struct Layer(Option<Rid>);
+
+impl Layer {
+    /// The layer of the RTP stream id `rid`, or of a track sent without
+    /// simulcast when it is `None`.
+    pub fn new(rid: Option<Rid>) -> Self {
+        Self(rid)
+    }
+
+    /// The RTP stream id of the layer, `None` for a track sent without
+    /// simulcast.
+    pub fn get(self) -> Option<Rid> {
+        self.0
+    }
+}
 
 /// One layer a sender offers, with the bitrate the SFU measures on it.
 #[derive(Clone, Copy, Debug)]
