@@ -99,7 +99,7 @@ impl Journal {
 
     /// The step the journal holds, each value after the delete read from
     /// `doc`. `None` when a write escaped the journal.
-    fn finish(mut self, doc: &LoroDoc) -> Option<LineStep> {
+    pub(super) fn finish(mut self, doc: &LoroDoc) -> Option<LineStep> {
         if self.partial == Partial::Lost {
             return None;
         }
@@ -149,16 +149,20 @@ impl LineStep {
     fn write(&self, doc: &LoroDoc, step: HistoryStep) {
         // The elements come back in the reverse order of their deletes, so
         // the element before each one stands again when it lands.
-        match step {
-            HistoryStep::Undo => {
-                for delete in self.deletes.iter().rev() {
-                    restore(doc, delete);
-                }
-            }
-            HistoryStep::Redo => {
-                for delete in &self.deletes {
-                    remove(doc, delete);
-                }
+        let ordered: Vec<&ListDelete> = match step {
+            HistoryStep::Undo => self.deletes.iter().rev().collect(),
+            HistoryStep::Redo => self.deletes.iter().collect(),
+        };
+        // One run per list, so each run reads its list once, however many
+        // lines it puts back or takes out.
+        for run in ordered.chunk_by(|a, b| a.list == b.list) {
+            let Some(first) = run.first() else {
+                continue;
+            };
+            let spots: Vec<&Spot> = run.iter().map(|delete| &delete.spot).collect();
+            match step {
+                HistoryStep::Undo => crate::model::restore_spots(doc, &first.list, &spots),
+                HistoryStep::Redo => crate::model::remove_spots(doc, &first.list, &spots),
             }
         }
         for write in &self.writes {
@@ -178,16 +182,6 @@ impl LineStep {
             };
         }
     }
-}
-
-/// Put the element of `delete` back after the element that stood before it.
-fn restore(doc: &LoroDoc, delete: &ListDelete) {
-    crate::model::restore_spot(doc, &delete.list, &delete.spot);
-}
-
-/// Take the element of `delete` out of its list again, wherever it stands.
-fn remove(doc: &LoroDoc, delete: &ListDelete) {
-    crate::model::remove_spot(doc, &delete.list, &delete.spot);
 }
 
 /// One step of the history: an item of the undo manager, or a line delete

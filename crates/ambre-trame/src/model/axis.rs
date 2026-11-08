@@ -29,7 +29,7 @@
 //! A string names a container anywhere, so `scripts/crate_boundaries.py`
 //! refuses an axis container name outside this file.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use ambre_bus::{CellPos, CellRect, Col, Row};
 use ambre_core::id::{Id, Sheet};
@@ -38,6 +38,7 @@ use ambre_core::{OpenRange, Version, VersionKind};
 use blake2::{Blake2b512, Digest};
 use loro::{
     ContainerID, ContainerTrait, ContainerType, LoroDoc, LoroMap, LoroMovableList, LoroValue,
+    ValueOrContainer,
 };
 
 use super::line::Line;
@@ -1249,19 +1250,15 @@ pub(crate) struct Spot {
     pub(crate) after: Option<Element>,
 }
 
-/// The list `id` and its values, in order. The values stay shared with the
-/// document: a copy of a long list costs more than the read.
-fn list_of(doc: &LoroDoc, id: &ContainerID) -> Option<(LoroMovableList, LoroValue)> {
-    let ContainerID::Root {
-        name,
-        container_type: ContainerType::MovableList,
-    } = id
-    else {
-        return None;
-    };
-    let list = doc.get_movable_list(name.as_str());
-    let values = list.get_value();
-    Some((list, values))
+/// The root name of the movable list `id`, `None` for any other container.
+fn movable_list(id: &ContainerID) -> Option<&str> {
+    match id {
+        ContainerID::Root {
+            name,
+            container_type: ContainerType::MovableList,
+        } => Some(name.as_str()),
+        _ => None,
+    }
 }
 
 /// The values a list read holds, none for any other value.
@@ -1279,36 +1276,86 @@ fn slot_of(values: &[LoroValue], spelled: &str) -> Option<usize> {
         .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == spelled))
 }
 
-/// Put the element of `spot` back into the list `id`, after the element that
-/// stood before it. When that one is gone too, the element goes back to its
-/// old slot, or to the end of a shorter list. An element already in the list
-/// stays where it is.
-pub(crate) fn restore_spot(doc: &LoroDoc, id: &ContainerID, spot: &Spot) {
-    let Some((list, values)) = list_of(doc, id) else {
-        return;
-    };
-    let values = items(&values);
-    let spelled = spot.element.spell();
-    if slot_of(values, &spelled).is_some() {
-        return;
-    }
-    let at = match spot.after {
-        None => 0,
-        Some(after) => match slot_of(values, &after.spell()) {
-            Some(slot) => slot + 1,
-            None => spot.slot.to_usize().min(values.len()),
-        },
-    };
-    let _ = list.insert(at, spelled.as_str());
+/// Whether the element at `slot` of `list` is the one spelled `spelled`. One
+/// lookup in the list, not a read of it.
+fn holds(list: &LoroMovableList, slot: usize, spelled: &str) -> bool {
+    matches!(
+        list.get(slot),
+        Some(ValueOrContainer::Value(LoroValue::String(s))) if s.as_str() == spelled
+    )
 }
 
-/// Take the element of `spot` out of the list `id` again, wherever it stands.
-pub(crate) fn remove_spot(doc: &LoroDoc, id: &ContainerID, spot: &Spot) {
-    let Some((list, values)) = list_of(doc, id) else {
+/// Put the elements of `spots` back into the list `id`, in the order given,
+/// each after the element that stood before it. When that one is gone too,
+/// the element goes back to its old slot. An element the list already holds
+/// is left alone.
+///
+/// The list is read once for the whole run, to find the elements it already
+/// holds. Each element is then checked at the slot it held, where the step
+/// finds it unless another write moved the list. Only a miss reads the list
+/// again, so an undo of many lines costs one read and a lookup per element.
+pub(crate) fn restore_spots(doc: &LoroDoc, id: &ContainerID, spots: &[&Spot]) {
+    let Some(list) = movable_list(id).map(|name| doc.get_movable_list(name)) else {
         return;
     };
-    if let Some(slot) = slot_of(items(&values), &spot.element.spell()) {
-        let _ = list.delete(slot, 1);
+    // Sorted, so the read tells each list value apart by a binary search and
+    // hashes nothing.
+    let mut wanted: Vec<String> = spots.iter().map(|spot| spot.element.spell()).collect();
+    wanted.sort_unstable();
+    wanted.dedup();
+    // One read: `for_each` looks each slot up on its own, which costs more.
+    let mut held: BTreeSet<String> = items(&list.get_value())
+        .iter()
+        .filter_map(|value| match value {
+            LoroValue::String(s) => Some(s.as_str()),
+            _ => None,
+        })
+        .filter(|s| wanted.binary_search_by(|w| w.as_str().cmp(s)).is_ok())
+        .map(str::to_owned)
+        .collect();
+    for spot in spots {
+        let spelled = spot.element.spell();
+        if held.contains(&spelled) {
+            continue;
+        }
+        let at = match spot.after {
+            None => 0,
+            Some(after) => {
+                let after = after.spell();
+                let hint = spot.slot.to_usize();
+                match hint.checked_sub(1) {
+                    Some(before) if holds(&list, before, &after) => hint,
+                    _ => match slot_of(items(&list.get_value()), &after) {
+                        Some(slot) => slot + 1,
+                        None => hint.min(list.len()),
+                    },
+                }
+            }
+        };
+        if list.insert(at, spelled.as_str()).is_ok() {
+            held.insert(spelled);
+        }
+    }
+}
+
+/// Take the elements of `spots` out of the list `id` again, in the order
+/// given, wherever each one stands. Each element is checked at the slot it
+/// held first, as [`restore_spots`] checks it.
+pub(crate) fn remove_spots(doc: &LoroDoc, id: &ContainerID, spots: &[&Spot]) {
+    let Some(list) = movable_list(id).map(|name| doc.get_movable_list(name)) else {
+        return;
+    };
+    for spot in spots {
+        let spelled = spot.element.spell();
+        let hint = spot.slot.to_usize();
+        let slot = if holds(&list, hint, &spelled) {
+            Some(hint)
+        } else {
+            slot_of(items(&list.get_value()), &spelled)
+        };
+        if let Some(slot) = slot {
+            let _ = list.delete(slot, 1);
+        }
     }
 }
 

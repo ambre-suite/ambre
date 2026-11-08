@@ -19,10 +19,10 @@ use ambre_core::index::Pos;
 use loro::LoroValue;
 use proptest::prelude::*;
 
-use super::TrameState;
-use super::line_history::HistoryPath;
+use super::line_history::{HistoryPath, Journal};
 use super::structural::StructuralPath;
 use super::structural_tests::{PEER, Step, commands, seeded, step, write};
+use super::{SheetContainer, SheetRoot, TrameState};
 use crate::{CellPos, Col, Row, SortOrder, TrameCommand};
 
 /// Every root the document stores, the peer registry aside: the registry is
@@ -162,6 +162,25 @@ fn an_undone_delete_keeps_one_element_through_a_managed_sort() {
     }
 }
 
+/// A row inserted, deleted, then undone twice: the recorded delete, then the
+/// insert through the undo manager. The undo of the delete puts back a new
+/// list element. The manager's undo of the insert takes out the old one, gone
+/// already, and the inserted row stays. The proptest drew it on 2026-11-08,
+/// and it fails today as the sort above does.
+#[test]
+#[ignore = "fails: a managed undo of an insert misses the element an undone line delete put back anew"]
+fn an_undone_delete_of_an_inserted_row_lets_its_insert_undo() {
+    let program = [
+        Step::InsertRow { at: 0 },
+        Step::DeleteRows { from: 0, to: 0 },
+        Step::Undo,
+        Step::Undo,
+    ];
+    if let Err(failure) = lockstep(&program) {
+        panic!("{failure}");
+    }
+}
+
 /// A row insert, then a move of the new row, each undone and redone. A line
 /// insert that recorded its own step put a new list element back on its redo.
 /// The manager's redo of the move then revived the element the undo took out,
@@ -240,4 +259,85 @@ fn an_undone_line_delete_keeps_a_later_write_of_a_peer() {
             "the peer's write stands after the redo"
         );
     }
+}
+
+/// The journal holds every write a line delete makes to a value in a root map,
+/// and only those. It gives up on each of the three writes it cannot replay,
+/// and the delete then goes to the undo manager (`TRAME-290`):
+///
+/// 1. a write to a map nested in another container;
+/// 2. a write over a value that is a container;
+/// 3. a write that leaves a container as the value.
+#[test]
+fn the_journal_names_each_write_it_hands_to_the_undo_manager() {
+    let doc = loro::LoroDoc::new();
+    let root = doc.get_map("cells_s0");
+    root.insert("plain", "1").expect("a root map takes a value");
+    let nested = root
+        .insert_container("nested", loro::LoroMap::new())
+        .expect("a root map takes a container");
+    root.insert_container("over", loro::LoroMap::new())
+        .expect("a root map takes a container");
+    doc.commit();
+    let whole = |note: &dyn Fn(&mut Journal)| {
+        let mut journal = Journal::default();
+        note(&mut journal);
+        journal.finish(&doc).is_some()
+    };
+    assert!(
+        whole(&|j| j.note(&root, "plain")),
+        "a value in a root map is held"
+    );
+    assert!(
+        !whole(&|j| j.note(&nested, "key")),
+        "a nested map goes to the manager"
+    );
+    assert!(
+        !whole(&|j| j.note(&root, "over")),
+        "a container value goes to the manager"
+    );
+    let mut journal = Journal::default();
+    journal.note(&root, "after");
+    root.insert_container("after", loro::LoroMap::new())
+        .expect("a root map takes a container");
+    assert!(
+        journal.finish(&doc).is_none(),
+        "a container written by the edit goes to the manager"
+    );
+}
+
+/// A row whose cell holds a container, as a peer's write can leave it. Its
+/// delete cannot record the purge of that cell, so it goes to the undo
+/// manager. The undo still brings the row back whole (`TRAME-290`).
+#[test]
+fn a_line_delete_over_a_container_goes_to_the_undo_manager() {
+    let mut st = TrameState::with_peer(ambre_core::PeerId::new(1));
+    for (row, text) in [(0, "1"), (1, "2"), (2, "3")] {
+        st.handle_command(write(row, 0, text));
+    }
+    let cells = st
+        .doc
+        .get_map(SheetContainer::of(SheetRoot::Cells, &st.active_sheet).as_str());
+    let key = cells
+        .keys()
+        .map(|key| key.to_string())
+        .find(|key| {
+            matches!(cells.get(key), Some(loro::ValueOrContainer::Value(LoroValue::String(s))) if s.as_str() == "2")
+        })
+        .expect("the second row holds its cell");
+    cells
+        .insert_container(&key, loro::LoroMap::new())
+        .expect("a cell key takes a container");
+    st.doc.commit();
+    let before = content(&st);
+    st.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(1),
+    });
+    assert!(
+        !st.last_step_is_recorded(),
+        "the delete went to the undo manager"
+    );
+    assert_eq!(shows(&st, 1, 0), "3", "the row below moved up");
+    st.handle_command(TrameCommand::Undo);
+    assert_eq!(content(&st), before, "the undo brings the row back whole");
 }

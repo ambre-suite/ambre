@@ -9,9 +9,11 @@
 //! its own name. They are the re-anchor walk and the engine step after the
 //! commit. A line delete is the same command counted whole: the purge, the
 //! commit and every cache too. Its undo and its redo are each counted whole
-//! in the same way, and so are those of a row insert. A remote batch is
-//! counted whole, from the import to the events. Run with no operation named, as `cargo bench` does, every
-//! operation runs once: a smoke test.
+//! in the same way. So are those of a row insert and of a delete of `MANY`
+//! rows. A remote batch is counted whole, from the import to the events.
+//!
+//! Run with no operation named, as `cargo bench` does, every operation runs
+//! once: a smoke test.
 
 use ambre_core::index::{Len, Pos};
 use ambre_trame::logic::TrameState;
@@ -88,6 +90,22 @@ fn insert_middle_row(st: &mut TrameState) {
     });
 }
 
+/// Rows the many-line delete takes out, from the middle of the sheet.
+const MANY: u32 = 500;
+
+/// Delete `MANY` rows from the middle of the sheet as one selection.
+fn delete_many_rows(st: &mut TrameState) {
+    st.handle_command(TrameCommand::SetActiveCell {
+        row: Pos::<Row>::new(FORMULAS / 2 + MANY - 1),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(FORMULAS / 2),
+        anchor_col: Pos::<Col>::new(0),
+        extra: Vec::new(),
+        kind: ambre_trame::SelectionKind::Cells,
+    });
+    st.handle_command(TrameCommand::DeleteSelectedRows);
+}
+
 /// The rows below the inserted one moved down one, each formula with its row.
 fn checked_after_insert(st: &mut TrameState) {
     assert!(shows(st, FORMULAS / 2, ""), "the inserted row is blank");
@@ -95,6 +113,17 @@ fn checked_after_insert(st: &mut TrameState) {
     assert!(
         shows(st, FORMULAS / 2 + 1, &middle),
         "the next row moved down"
+    );
+}
+
+/// The `MANY` rows are gone, and the rows below them moved up.
+fn checked_after_many_delete(st: &mut TrameState) {
+    let next = (2 * (FORMULAS / 2 + MANY)).to_string();
+    assert!(shows(st, FORMULAS / 2, &next), "the rows below moved up");
+    let last = (2 * (FORMULAS - 1)).to_string();
+    assert!(
+        shows(st, FORMULAS - 1 - MANY, &last),
+        "the last row moved up"
     );
 }
 
@@ -219,6 +248,22 @@ const OPERATIONS: &[(&str, fn())] = &[
         ambre_budget_trame_undo(&mut st);
         ambre_budget_trame_redo(&mut st);
         checked_after_insert(&mut st);
+    }),
+    ("many_line_delete_undo", || {
+        let mut st = sheet();
+        checked(&mut st);
+        delete_many_rows(&mut st);
+        checked_after_many_delete(&mut st);
+        ambre_budget_trame_undo(&mut st);
+        checked_after_undo(&mut st);
+    }),
+    ("many_line_delete_redo", || {
+        let mut st = sheet();
+        checked(&mut st);
+        delete_many_rows(&mut st);
+        ambre_budget_trame_undo(&mut st);
+        ambre_budget_trame_redo(&mut st);
+        checked_after_many_delete(&mut st);
     }),
     ("remote_batch", || {
         let mut author = sheet();
