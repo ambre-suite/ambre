@@ -31,6 +31,24 @@ struct Link {
     returning: Vec<(Instant, Vec<TwccAck>)>,
     /// The target after each step, with its instant.
     targets: Vec<(Instant, Bitrate)>,
+    /// The next layer step the sender offers the controller to probe, if any.
+    step_up: Option<Bitrate>,
+    /// After each step: whether the delay bound read overuse, and whether a probe padded.
+    probes: Vec<(Overuse, Padding)>,
+}
+
+/// Whether the delay bound read overuse after one step of the sender.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Overuse {
+    No,
+    Yes,
+}
+
+/// Whether a probe padded the link after one step of the sender.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Padding {
+    No,
+    Yes,
 }
 
 impl Link {
@@ -52,6 +70,8 @@ impl Link {
             next_feedback: now + FEEDBACK,
             returning: Vec::new(),
             targets: Vec::new(),
+            step_up: None,
+            probes: Vec::new(),
         }
     }
 
@@ -63,7 +83,17 @@ impl Link {
     }
 
     fn step(&mut self) {
-        let rate = self.congestion.target().min(self.ideal);
+        // A probe pads above the media, up to its pace.
+        let rate = match self.step_up {
+            Some(step) => {
+                self.congestion.probe(Some(step), self.now);
+                let media = self.congestion.target().min(self.ideal);
+                self.congestion
+                    .padding(self.now)
+                    .map_or(media, |pace| pace.max(media))
+            }
+            None => self.congestion.target().min(self.ideal),
+        };
         self.debt += rate.as_f64() * STEP.as_secs_f64() / 8.0;
         while self.debt >= PACKET as f64 {
             self.debt -= PACKET as f64;
@@ -110,6 +140,16 @@ impl Link {
             self.congestion.on_feedback(&report);
         }
         self.targets.push((now, self.congestion.target()));
+        let overuse = if self.congestion.congested() {
+            Overuse::Yes
+        } else {
+            Overuse::No
+        };
+        let padding = match self.congestion.padding(now) {
+            Some(_) => Padding::Yes,
+            None => Padding::No,
+        };
+        self.probes.push((overuse, padding));
         self.now += STEP;
     }
 
@@ -184,5 +224,66 @@ fn the_target_falls_under_random_loss_above_ten_percent() {
     assert!(
         lowest.as_f64() < Bitrate::mbps(2).as_f64(),
         "at a loss of 20 %, the target stayed at {lowest} or more"
+    );
+}
+
+/// `CALL-052`: a probe that raises overuse stops at once. A link carries 1 Mbit/s at 20 ms of
+/// round trip and 2 % loss, under 600 kbit/s of media. So the delay bound reads overuse within
+/// the send span of a probe. The sender then offers a step of 2.5 Mbit/s, which the link cannot
+/// carry. Each step that reads overuse pads nothing, no probe pads longer than its send span,
+/// and the target never takes the step.
+#[test]
+fn a_probe_that_raises_overuse_stops_at_once() {
+    let mut link = Link::new(
+        Bitrate::mbps(1),
+        Duration::from_millis(20),
+        0.02,
+        Bitrate::kbps(600),
+    );
+    link.run(Duration::from_secs(20));
+    let from = link.probes.len();
+    link.step_up = Some(Bitrate::kbps(2500));
+    link.run(Duration::from_secs(20));
+    let after = link.probes.get(from..).unwrap_or_default();
+    let padded = after.iter().filter(|(_, p)| *p == Padding::Yes).count();
+    let both = after
+        .iter()
+        .filter(|(o, p)| *o == Overuse::Yes && *p == Padding::Yes)
+        .count();
+    // The longest run of steps that padded, and whether the probe that ended it saw overuse.
+    let mut longest = 0;
+    let mut run = 0;
+    let mut stopped_by_overuse = 0;
+    for pair in after.windows(2) {
+        if let [(_, Padding::Yes), (overuse, next)] = pair {
+            run += 1;
+            longest = longest.max(run);
+            if *next == Padding::No && *overuse == Overuse::Yes {
+                stopped_by_overuse += 1;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    eprintln!("{padded} steps padded, {stopped_by_overuse} probes stopped by overuse");
+    assert!(padded > 0, "no probe padded the link");
+    assert!(
+        stopped_by_overuse > 0,
+        "no probe raised overuse in its send span"
+    );
+    assert_eq!(both, 0, "{both} steps padded under overuse");
+    assert!(
+        Duration::from_millis(5) * longest <= PROBE_SEND,
+        "a probe padded for {longest} steps"
+    );
+    let highest = link
+        .targets
+        .iter()
+        .skip(from)
+        .map(|(_, t)| t.as_f64())
+        .fold(0.0, f64::max);
+    assert!(
+        highest < 2_500_000.0,
+        "the target took the step: {highest:.0} bit/s"
     );
 }

@@ -9,6 +9,12 @@
 //! * the loss bound, which a loss above 10 % lowers, as the GCC draft states. Up to 10 % of loss
 //!   holds it, so a random loss of a few percent leaves the target where the delay puts it
 //!   (`CALL-044`).
+//!
+//! A decrease sets the target under the acknowledged rate, and the target then grows back by
+//! about one packet per round trip. A drop on a delay step with no lasting congestion would
+//! hold for many seconds. So while the delay bound reads no overuse and a higher layer exists,
+//! the controller probes: it paces at the next layer step for a short span. The target takes
+//! that step when the link carries it with no overuse (`CALL-050`).
 
 mod delay;
 
@@ -62,6 +68,35 @@ const RTT_WEIGHT: f64 = 0.125;
 
 /// The round trip before the first sample.
 const RTT_START: Duration = Duration::from_millis(100);
+
+/// How long a probe paces at its rate. The span holds one window of the acknowledged rate, and
+/// the gap between two feedback reports.
+const PROBE_SEND: Duration = Duration::from_millis(300);
+
+/// How long a probe waits for its verdict after its send span, beyond one round trip.
+const PROBE_SLACK: Duration = Duration::from_millis(100);
+
+/// The pace of a probe, as a multiple of the step it probes. The padding fills the gaps between
+/// the media alone, so the pacer sends less than its pace.
+const PROBE_PACE: f64 = 1.6;
+
+/// The share of the step the acknowledged rate reaches when the link carries the probe. The
+/// rest absorbs the random loss of the link.
+const PROBE_DELIVERED: f64 = 0.95;
+
+/// The wait before the next probe, after the first failed probe. Each further failure doubles
+/// it, up to the longest wait, so a capped link sees a probe rarely.
+const PROBE_BACKOFF: Duration = Duration::from_secs(1);
+const PROBE_BACKOFF_MAX: Duration = Duration::from_secs(30);
+
+/// One probe: the controller paces at `rate` from `started`.
+#[derive(Debug, Clone, Copy)]
+struct Probe {
+    rate: Bitrate,
+    started: Instant,
+    /// The target when the probe started. A decrease the probe causes stops there.
+    floor: Bitrate,
+}
 
 /// What one feedback report says of the loss.
 #[derive(Debug, Clone, Copy)]
@@ -132,6 +167,15 @@ pub struct Congestion {
     acked: VecDeque<(Instant, Count<Octets>)>,
     rtt: Option<Duration>,
     target: Bitrate,
+    probe: Option<Probe>,
+    /// The target before a probe that raised overuse, and the end of the guard. Until the
+    /// overuse ends, no decrease goes under it: the queue is the probe's, and it drains once the
+    /// probe stops. The guard ends anyway at its end, so a cap that falls during a probe still
+    /// lowers the target.
+    guard: Option<(Bitrate, Instant)>,
+    /// The earliest instant of the next probe, after a failed one.
+    next_probe: Option<Instant>,
+    backoff: Duration,
 }
 
 impl Congestion {
@@ -148,6 +192,94 @@ impl Congestion {
             acked: VecDeque::new(),
             rtt: None,
             target: initial.clamp(MIN_TARGET, MAX_TARGET),
+            probe: None,
+            guard: None,
+            next_probe: None,
+            backoff: PROBE_BACKOFF,
+        }
+    }
+
+    /// Reads the rate of the next layer step of the receiver, or none at the top, and starts or
+    /// stops a probe.
+    ///
+    /// A probe starts while the delay bound reads no overuse, no loss above 10 % bounds the
+    /// target, and `step` is above the target. It stops when no step above the target is left.
+    pub fn probe(&mut self, step: Option<Bitrate>, now: Instant) {
+        let above = step.filter(|rate| rate.as_f64() > self.target.as_f64());
+        if self.probe.is_some() {
+            if above.is_none() {
+                self.probe = None;
+            }
+            return;
+        }
+        let quiet = !self.delay.overusing() && self.loss.bound.is_none() && self.guard.is_none();
+        let due = self.next_probe.is_none_or(|at| now >= at);
+        if let (Some(rate), true, true) = (above, quiet, due) {
+            self.probe = Some(Probe {
+                rate,
+                started: now,
+                floor: self.target,
+            });
+        }
+    }
+
+    /// What the pacer pads up to during the send span of a probe, none outside it.
+    pub fn padding(&self, now: Instant) -> Option<Bitrate> {
+        self.probe
+            .filter(|p| now < p.started + PROBE_SEND)
+            .map(|p| p.rate * PROBE_PACE)
+    }
+
+    /// The rate the pacer sends at most: the pace of a probe during its send span, else the
+    /// target.
+    pub fn pacing(&self, now: Instant) -> Bitrate {
+        self.padding(now)
+            .map_or(self.target, |pace| pace.max(self.target))
+    }
+
+    /// Whether a probe runs, or waits for its verdict.
+    pub fn probing(&self) -> bool {
+        self.probe.is_some()
+    }
+
+    /// Ends the probe as failed, and doubles the wait before the next one.
+    fn fail(&mut self, now: Instant) {
+        self.probe = None;
+        self.next_probe = Some(now + self.backoff);
+        self.backoff = (self.backoff * 2).min(PROBE_BACKOFF_MAX);
+    }
+
+    /// Judges the running probe on one feedback report.
+    fn judge(&mut self, acked: Bitrate, rtt: Duration, now: Instant) {
+        let Some(probe) = self.probe else {
+            return;
+        };
+        if self.delay.overusing() {
+            // The probe stops at once, and its queue lowers nothing under the target it found.
+            self.guard = Some((probe.floor, now + rtt + PROBE_SEND * 2));
+            self.fail(now);
+        } else if now >= probe.started + rtt + ACKED_SPAN
+            && acked.as_f64() >= probe.rate.as_f64() * PROBE_DELIVERED
+        {
+            self.delay.raise(probe.rate, now);
+            self.probe = None;
+            self.next_probe = None;
+            self.backoff = PROBE_BACKOFF;
+        } else if now >= probe.started + rtt + PROBE_SEND + PROBE_SLACK {
+            self.fail(now);
+        }
+    }
+
+    /// Holds the target of a failed probe while the overuse it caused lasts.
+    fn hold_guard(&mut self, now: Instant) {
+        let Some((guard, until)) = self.guard else {
+            return;
+        };
+        if self.delay.overusing() && now < until {
+            self.delay.restore(guard);
+            self.loss.bound = self.loss.bound.map(|bound| bound.max(guard));
+        } else {
+            self.guard = None;
         }
     }
 
@@ -192,12 +324,15 @@ impl Congestion {
         let acked = Bitrate::from(bytes.get() as f64 * 8.0 / ACKED_SPAN.as_secs_f64());
         let rtt = self.rtt.unwrap_or(RTT_START);
         self.delay.update(arrivals.into_iter(), acked, rtt, now);
+        self.judge(acked, rtt, now);
+        self.hold_guard(now);
         let report = Report {
             at: now,
             packets: Count::of(acks.len()),
             lost: Count::of(acks.iter().filter(|a| a.remote_recv.is_none()).count()),
         };
         self.loss.update(report, self.delay.target(), rtt);
+        self.hold_guard(now);
         let target = self
             .loss
             .bound

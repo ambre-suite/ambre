@@ -88,14 +88,22 @@ pub fn choose(estimate: Bitrate, candidates: &[Candidate]) -> Vec<Option<Layer>>
         .collect()
 }
 
-/// The minimum and the desired rate of the estimator of a receiver, from the layers `chosen`
-/// for `candidates`.
+/// The rates the pacer of a receiver works toward.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rates {
+    /// What the SFU pads up to: the layers the receiver gets, plus the next step up.
+    pub minimum: Bitrate,
+    /// Every layer the receiver would get on an open link.
+    pub desired: Bitrate,
+    /// The rate a probe pads up to, when a step up exists: the minimum then.
+    pub probe: Option<Bitrate>,
+}
+
+/// The rates of the pacer of a receiver, from the layers `chosen` for `candidates`.
 ///
-/// The minimum holds the layers the receiver gets, plus the next step up. The desired rate
-/// holds every layer the receiver would get on an open link. Both carry the share and the
-/// margin of the choice. Without them, the estimate stays at what one layer sends, and the
-/// choice never moves up.
-pub fn rates(candidates: &[Candidate], chosen: &[Option<Layer>]) -> (Bitrate, Bitrate) {
+/// Each rate carries the share and the margin of the choice. Without them, the estimate stays
+/// at what one layer sends, and the choice never moves up.
+pub fn rates(candidates: &[Candidate], chosen: &[Option<Layer>]) -> Rates {
     let scale = UPGRADE_MARGIN / VIDEO_SHARE;
     let rate_of =
         |c: &Candidate, layer: Layer| c.layers.iter().find(|o| o.layer == layer).map(|o| o.rate);
@@ -138,7 +146,11 @@ pub fn rates(candidates: &[Candidate], chosen: &[Option<Layer>]) -> (Bitrate, Bi
     }
     let desired = wanted * scale;
     let minimum = ((granted + next.unwrap_or(Bitrate::bps(0))) * scale).min(desired);
-    (minimum, desired)
+    Rates {
+        minimum,
+        desired,
+        probe: next.is_some().then_some(minimum),
+    }
 }
 
 /// What the layer `offered` of `candidate` costs against the estimate. A layer above the one

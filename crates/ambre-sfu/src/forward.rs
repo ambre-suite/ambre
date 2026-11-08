@@ -609,7 +609,7 @@ impl Sfu {
                 })
                 .collect();
             let chosen = choose(member.congestion.target(), &choices);
-            let (minimum, desired) = rates(&choices, &chosen);
+            let rates = rates(&choices, &chosen);
             let video: Vec<Feed> = videos
                 .iter()
                 .zip(&chosen)
@@ -669,9 +669,22 @@ impl Sfu {
                     let feed = feed.filter(|f| f.is_track(target.source, target.mid))?;
                     offered.iter().position(|o| o.layer == feed.layer)
                 };
-                slot.hold = match (rank(Some(target)), rank(slot.current), congested) {
-                    (Some(to), Some(from), Congested::Yes) if to < from => Hold::Lowering,
-                    _ => Hold::Flowing,
+                let lowering = match (rank(Some(target)), rank(slot.current)) {
+                    (Some(to), Some(from)) => to < from,
+                    _ => false,
+                };
+                slot.hold = match (slot.hold, lowering, congested) {
+                    (_, true, Congested::Yes) | (Hold::Lowering, true, Congested::No) => {
+                        Hold::Lowering
+                    }
+                    (Hold::Lowering, false, _) => {
+                        // The held layer missed pictures, so it resumes on a keyframe alone,
+                        // and its sequence numbers continue from the last packet written
+                        // (`CALL-040`).
+                        slot.current = None;
+                        Hold::Flowing
+                    }
+                    (Hold::Flowing, _, _) => Hold::Flowing,
                 };
                 if slot.current != Some(target)
                     && slot.asked.is_none_or(|at| now >= at + KEYFRAME_RETRY)
@@ -685,9 +698,18 @@ impl Sfu {
             let minimum = if member.congestion.congested() {
                 Bitrate::bps(0)
             } else {
-                minimum
+                rates.minimum
             };
-            member.rtc.bwe().set_bitrate(minimum, desired);
+            // A probe pads above the next layer step for a short span (`CALL-050`).
+            member.congestion.probe(rates.probe, now);
+            let pacing = member.congestion.pacing(now);
+            let (minimum, desired) = match member.congestion.padding(now) {
+                Some(pace) => (minimum.max(pace), rates.desired.max(pace)),
+                None => (minimum, rates.desired),
+            };
+            let mut bwe = member.rtc.bwe();
+            bwe.set_estimate(Some(pacing));
+            bwe.set_bitrate(minimum, desired);
             member.touched = true;
         }
         for feed in asks {
@@ -850,14 +872,22 @@ impl Member {
                 Some(Propagated::TrackOpen(self.id))
             }
             Event::EgressTwccFeedback(acks) => {
-                let before = (self.congestion.target(), self.congestion.congested());
-                if let Some(target) = self.congestion.on_feedback(&acks) {
-                    self.rtc.bwe().set_estimate(Some(target));
-                }
-                // A lower target or a change of overuse takes effect at once. A congested
-                // receiver then drops its layer and its padding before the next period.
+                let before = (
+                    self.congestion.target(),
+                    self.congestion.congested(),
+                    self.congestion.probing(),
+                );
+                self.congestion.on_feedback(&acks);
+                let pacing = self.congestion.pacing(self.now);
+                self.rtc.bwe().set_estimate(Some(pacing));
+                // A lower target, a change of overuse or the end of a probe takes effect at
+                // once. A congested receiver then drops its layer and its padding before the
+                // next period, and a probe that passed climbs.
                 let (target, congested) = (self.congestion.target(), self.congestion.congested());
-                if target.as_f64() < before.0.as_f64() || congested != before.1 {
+                if target.as_f64() < before.0.as_f64()
+                    || congested != before.1
+                    || self.congestion.probing() != before.2
+                {
                     self.rechoose = true;
                 }
                 None
