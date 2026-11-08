@@ -9,6 +9,8 @@ use super::find::Replacement;
 use super::locale::TypedKind;
 use super::*;
 use crate::formula::text::CellText;
+use crate::message::{CsvImport, TrameExport, TrameImport};
+use ambre_bus::interop::{Direction, InteropAnswer, InteropError, InteropRequest};
 use ambre_core::HistoryStep;
 use ambre_core::index::Pos;
 
@@ -297,28 +299,28 @@ impl TrameState {
                 }
                 None => Self::replace_nothing(),
             },
-            TrameCommand::ImportCsv {
+            TrameCommand::Interop(InteropRequest::Import(TrameImport::Csv(CsvImport {
                 data,
                 delimiter,
                 header,
                 target_sheet_id,
                 start_row,
                 start_col,
-            } => self.import_csv(
+            }))) => self.import_csv(
                 data,
                 delimiter,
                 header,
                 target_sheet_id,
                 CellPos::new(start_row, start_col),
             ),
-            TrameCommand::ExportCsv {
+            TrameCommand::Interop(InteropRequest::Export(TrameExport::Csv {
                 sheet_id,
                 delimiter,
                 range,
-            } => self.export_csv(&sheet_id, delimiter, range),
-            TrameCommand::ExportActiveSheetCsv => {
-                let sheet = self.active_sheet.clone();
-                self.export_csv(&sheet, None, None)
+            })) => {
+                // No sheet named: the active one (`trame-import-export`).
+                let sheet = sheet_id.unwrap_or_else(|| self.active_sheet.clone());
+                self.export_csv(&sheet, delimiter, range)
             }
             // Served by the Logic thread: the container's header carries the
             // document's identity, which a workbook does not know
@@ -326,12 +328,14 @@ impl TrameState {
             // before the document lookup, so this arm is reached only by a
             // caller driving `TrameState` directly. It answers rather than
             // falling silent.
-            TrameCommand::ExportAmbreFile | TrameCommand::ExportAmbreFileSealed { .. } => {
-                TrameOutcome::display_only(vec![TrameEvent::Error {
-                    message: "the file is written by the Logic thread, not by the workbook"
-                        .to_owned(),
-                }])
-            }
+            TrameCommand::Interop(InteropRequest::Export(
+                TrameExport::Ambre | TrameExport::AmbreSealed { .. },
+            )) => TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
+                Direction::Export,
+                InteropError::Stopped(
+                    "the file is written by the Logic thread, not by the workbook".to_owned(),
+                ),
+            ))]),
 
             TrameCommand::ReplaceOne { query, replacement } => match query {
                 Some(query) => {

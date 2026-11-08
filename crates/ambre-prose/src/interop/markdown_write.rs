@@ -8,7 +8,7 @@
 //! document writes the same bytes (`PROSE-IO-003`).
 use std::fmt::Write as _;
 
-use crate::message::{ConversionFormat, ConversionReport, MarkdownFlavor, UnsupportedFeature};
+use crate::message::{ConversionReport, MarkdownFlavor, UnsupportedFeature};
 
 use crate::numbering::ListItem;
 
@@ -26,7 +26,10 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
     let mut writer = Writer {
         flavor,
         out: String::new(),
-        warnings: Warnings::new(ConversionFormat::Markdown),
+        warnings: Warnings::new(
+            ambre_bus::interop::Direction::Export,
+            ambre_bus::interop::FileFormat::Markdown,
+        ),
     };
     if ir.meta.paged == Paging::Paged {
         writer.warnings.unsupported(UnsupportedFeature::PageFormat);
@@ -514,7 +517,7 @@ fn longest_run(text: &str, c: char) -> usize {
 mod tests {
     use super::*;
     use crate::interop::{IrFootnote, IrMeta, IrTableCell};
-    use crate::message::{ConversionWarning, FootnoteCall};
+    use crate::message::{FootnoteCall, ProseConstruct};
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
@@ -597,10 +600,10 @@ mod tests {
 
     fn features(report: &ConversionReport) -> Vec<&'static str> {
         report
-            .warnings
+            .entries()
             .iter()
-            .filter_map(|w| match w {
-                ConversionWarning::FeatureNotSupported { feature, .. } => Some(feature.label()),
+            .filter_map(|entry| match entry.construct {
+                ProseConstruct::Feature(feature) => Some(feature.label()),
                 _ => None,
             })
             .collect()
@@ -658,7 +661,7 @@ mod tests {
             text,
             "## Title\n\n**bold*both*** and [here](https://example.org)\n\n```rust\nfn main() {}\n```\n"
         );
-        assert!(report.warnings.is_empty(), "{report:?}");
+        assert!(report.entries().is_empty(), "{report:?}");
     }
 
     #[test]
@@ -775,8 +778,9 @@ mod tests {
             ]
         );
         assert!(matches!(
-            report.warnings[2],
-            ConversionWarning::FeatureNotSupported { count, .. } if count.get() == 2
+            report.entries().get(2),
+            Some(entry) if matches!(entry.construct, ProseConstruct::Feature(_))
+                && entry.count.get() == 2
         ));
     }
 

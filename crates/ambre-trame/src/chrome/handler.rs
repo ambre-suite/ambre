@@ -111,13 +111,15 @@ impl CommandHandler for TrameHandler {
             IMPORT_CSV => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Csv,
                 unreadable: "Could not read the CSV file",
-                read: Box::new(|data| TrameCommand::ImportCsv {
-                    data,
-                    delimiter: None,
-                    header: crate::message::HeaderRow::Absent,
-                    target_sheet_id: None,
-                    start_row: Pos::<ambre_bus::Row>::ZERO,
-                    start_col: Pos::<ambre_bus::Col>::ZERO,
+                read: Box::new(|data| {
+                    TrameCommand::import_csv(crate::message::CsvImport {
+                        data,
+                        delimiter: None,
+                        header: crate::message::HeaderRow::Absent,
+                        target_sheet_id: None,
+                        start_row: Pos::<ambre_bus::Row>::ZERO,
+                        start_col: Pos::<ambre_bus::Col>::ZERO,
+                    })
                 }),
             }),
             _ => match command_to_app(id) {
@@ -161,7 +163,9 @@ impl CommandHandler for TrameHandler {
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) -> Option<TrameCommand> {
         // The passphrase goes into the command and nowhere else (`ARCH-004`).
-        Some(TrameCommand::ExportAmbreFileSealed { passphrase })
+        Some(TrameCommand::export(
+            crate::message::TrameExport::AmbreSealed { passphrase },
+        ))
     }
 }
 

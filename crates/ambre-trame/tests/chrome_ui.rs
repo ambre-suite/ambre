@@ -757,6 +757,45 @@ fn a_lost_edit_reaches_the_user() {
     root.remove();
 }
 
+/// `INTEROP-007`: what an import carried and left out reaches the user as the
+/// shared sentence, on screen and not in the log alone.
+#[wasm_bindgen_test]
+fn an_interop_report_reaches_the_user() {
+    use ambre_bus::interop::{Direction, FileFormat, InteropAnswer, Occurrences, Outcome};
+    use ambre_trame::message::{TrameConstruct, TrameReport};
+    let _owner = OwnerScope::new();
+    let toasts = ambre_chrome::Toasts::new();
+    let mut report = TrameReport::new(Direction::Import, FileFormat::Csv);
+    report.record_count(
+        TrameConstruct::Row,
+        Outcome::Carried,
+        ambre_core::Count::<Occurrences>::new(2),
+    );
+    report.record_count(
+        TrameConstruct::Column,
+        Outcome::Carried,
+        ambre_core::Count::<Occurrences>::new(2),
+    );
+    report.record(TrameConstruct::UnreadableRecord, Outcome::Dropped);
+    chrome::notify_event(
+        &toasts,
+        &Event::Viewport {
+            document_id: Id::<Document>::mint(),
+            event: TrameEvent::Interop(InteropAnswer::ImportCompleted { report }),
+        },
+    );
+    let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });
+    let text = root
+        .query_selector(".ambre-toast")
+        .unwrap()
+        .expect("the report is on screen")
+        .text_content()
+        .unwrap_or_default();
+    assert!(text.contains("Imported 2 rows and 2 columns"), "{text}");
+    assert!(text.contains("unreadable record"), "{text}");
+    root.remove();
+}
+
 /// The totals of `values`, each a finite cell number. Their plain sum stands
 /// for the Logic thread's exact one: the band shows what it is given.
 fn totals(values: &[f64]) -> Option<ambre_trame::message::NumericStats> {

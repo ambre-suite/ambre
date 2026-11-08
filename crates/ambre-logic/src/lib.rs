@@ -306,53 +306,66 @@ impl DocState {
         Some((filename, plaintext))
     }
 
-    /// A finished export, as the display event the owning application surfaces.
-    /// The bytes are whatever the caller has: a plaintext container, or the
-    /// sealed one the Sync worker returned. The surface downloads either the
-    /// same way, and never tells them apart.
+    /// A finished native export, as the shared display event the owning
+    /// application surfaces (`INTEROP-001`). The bytes are whatever the caller
+    /// has: a plaintext container, or the sealed one the Sync worker returned.
+    /// The surface downloads either the same way, and never tells them apart.
     fn export_complete_event(
         &self,
         filename: ambre_core::ExportFilename,
         data: ambre_core::Payload<ambre_core::FileBytes>,
     ) -> AppEvent {
+        let file = ambre_bus::interop::ExportedFile {
+            filename,
+            media_type: ambre_core::MediaType::from("application/octet-stream"),
+            data,
+        };
+
         match self {
-            DocState::Trame(_) => {
-                AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { filename, data })
-            }
-            DocState::Toile(_) => {
-                AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete {
-                    filename,
-                    data,
-                    skipped: Vec::new(),
-                })
-            }
-            DocState::Prose(_) => AppEvent::Prose(ambre_prose::message::ProseEvent::ExportReady {
-                filename,
-                media_type: ambre_prose::message::ExportFormat::Ambre.media_type(),
-                data,
-                report: ambre_prose::message::ConversionReport::clean(
-                    ambre_prose::message::ConversionFormat::Ambre,
-                ),
-            }),
+            DocState::Trame(_) => AppEvent::Trame(ambre_trame::message::TrameEvent::Interop(
+                ambre_bus::interop::InteropAnswer::ExportReady {
+                    file,
+                    report: ambre_bus::interop::ConversionReport::new(
+                        ambre_bus::interop::Direction::Export,
+                        ambre_bus::interop::FileFormat::Ambre,
+                    ),
+                },
+            )),
+            DocState::Toile(_) => AppEvent::Toile(ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::ExportReady {
+                    file,
+                    report: ambre_bus::interop::ConversionReport::new(
+                        ambre_bus::interop::Direction::Export,
+                        ambre_bus::interop::FileFormat::Ambre,
+                    ),
+                },
+            )),
+            DocState::Prose(_) => AppEvent::Prose(ambre_prose::message::ProseEvent::Interop(
+                ambre_bus::interop::InteropAnswer::ExportReady {
+                    file,
+                    report: ambre_bus::interop::ConversionReport::new(
+                        ambre_bus::interop::Direction::Export,
+                        ambre_bus::interop::FileFormat::Ambre,
+                    ),
+                },
+            )),
         }
     }
 
-    /// An export that produced no file, as the display event the owning
-    /// application surfaces. Trame has no export-failure variant of its own, so
-    /// it says it through the generic error the chrome already toasts.
+    /// An export that produced no file, as the shared display event the owning
+    /// application surfaces (`INTEROP-011`).
     fn export_failed_event(&self, reason: String) -> AppEvent {
+        let error = ambre_bus::interop::InteropError::Stopped(reason);
+        let direction = ambre_bus::interop::Direction::Export;
         match self {
-            DocState::Trame(_) => {
-                AppEvent::Trame(ambre_trame::message::TrameEvent::Error { message: reason })
-            }
-            DocState::Toile(_) => {
-                AppEvent::Toile(ambre_toile::message::ToileEvent::ExportFailed(reason))
-            }
-            DocState::Prose(_) => AppEvent::Prose(ambre_prose::message::ProseEvent::Error(
-                ambre_prose::message::ProseError::new(
-                    ambre_prose::message::RefusedAction::Exporting,
-                    ambre_prose::message::ProseRefusal::WriteFailed(reason),
-                ),
+            DocState::Trame(_) => AppEvent::Trame(ambre_trame::message::TrameEvent::Interop(
+                ambre_bus::interop::InteropAnswer::failed(direction, error),
+            )),
+            DocState::Toile(_) => AppEvent::Toile(ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::failed(direction, error),
+            )),
+            DocState::Prose(_) => AppEvent::Prose(ambre_prose::message::ProseEvent::Interop(
+                ambre_bus::interop::InteropAnswer::failed(direction, error),
             )),
         }
     }
@@ -1660,10 +1673,11 @@ mod pass_tests {
     fn import(document_id: Id<Document>, n: usize) -> LogicCommand {
         LogicCommand::App {
             document_id,
-            command: AppCommand::Toile(ambre_toile::message::ToileCommand::ImportSvg {
-                bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(n)),
-                at: kurbo::Point::ZERO,
-            }),
+            command: AppCommand::Toile(ambre_toile::message::ToileCommand::import(
+                ambre_toile::message::ToileImportFormat::Svg,
+                ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(n)),
+                kurbo::Point::ZERO,
+            )),
         }
     }
 
@@ -1775,10 +1789,11 @@ mod pass_tests {
         assert!(state.has_pending_work());
         let mut peer = ambre_toile::ToileState::new();
         let delta = peer
-            .handle_command(ambre_toile::message::ToileCommand::ImportSvg {
-                bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(1)),
-                at: kurbo::Point::new(-50.0, 0.0),
-            })
+            .handle_command(ambre_toile::message::ToileCommand::import(
+                ambre_toile::message::ToileImportFormat::Svg,
+                ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(1)),
+                kurbo::Point::new(-50.0, 0.0),
+            ))
             .update
             .expect("the peer's delta");
         state.apply_remote(

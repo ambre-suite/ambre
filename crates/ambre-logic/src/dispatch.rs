@@ -874,7 +874,7 @@ mod tests {
         assert!(sync.try_recv().is_err());
     }
 
-    /// Drive `ExportAmbreFile` on a live document of `doc_type` and hand back
+    /// Drive the native export on a live document of `doc_type` and hand back
     /// the bytes the UI would download.
     ///
     /// Goes through the real dispatcher rather than calling the engine, because
@@ -885,13 +885,17 @@ mod tests {
         let (mut state, ui, _sync) = harness();
         state.open_with_identity(document_id, doc_type);
         let command = match doc_type {
-            DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFile),
-            DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFile),
-            DocType::Prose => {
-                AppCommand::Prose(ambre_prose::message::ProseCommand::ExportDocument {
-                    format: ambre_prose::message::ExportFormat::Ambre,
-                })
-            }
+            DocType::Trame => AppCommand::Trame(TrameCommand::export(
+                ambre_trame::message::TrameExport::Ambre,
+            )),
+            DocType::Toile => AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Ambre,
+            )),
+            DocType::Prose => AppCommand::Prose(ambre_prose::message::ProseCommand::Interop(
+                ambre_bus::interop::InteropRequest::Export(
+                    ambre_prose::message::ExportFormat::Ambre,
+                ),
+            )),
             other => panic!("no engine for {other:?}"),
         };
         state.handle_logic_command(LogicCommand::App {
@@ -902,42 +906,23 @@ mod tests {
         // produced is a viewport refresh.
         std::iter::from_fn(|| ui.try_recv().ok())
             .find_map(|evt| match evt {
-                UiEvent::Viewport {
-                    event:
-                        AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete {
-                            data, ..
-                        }),
-                    ..
-                }
-                | UiEvent::Viewport {
-                    event:
-                        AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete {
-                            data, ..
-                        }),
-                    ..
-                }
-                | UiEvent::Viewport {
-                    event:
-                        AppEvent::Prose(ambre_prose::message::ProseEvent::ExportReady { data, .. }),
-                    ..
-                } => Some(data.into_bytes()),
+                UiEvent::Viewport { event, .. } => event
+                    .exported_file()
+                    .map(|file| file.data.as_bytes().to_vec()),
                 _ => None,
             })
             .expect("the export answered with bytes")
     }
 
-    /// The bytes `ExportAmbreFile` would answer with, for a document already
+    /// The bytes the native export would answer with, for a document already
     /// live in `state`. The command path itself is driven by
     /// [`exported_file`]; this reads the same answer without a second registry.
     fn exported_file_from(state: &LogicState, document_id: Id<Document>) -> Vec<u8> {
         let doc = state.docs.get(&document_id).expect("a live document");
-        match doc.state.ambre_file_event(document_id) {
-            AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. })
-            | AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete { data, .. })
-            | AppEvent::Prose(ambre_prose::message::ProseEvent::ExportReady { data, .. }) => {
-                data.into_bytes()
-            }
-            other => panic!("the export answered with {other:?}"),
+        let event = doc.state.ambre_file_event(document_id);
+        match event.exported_file() {
+            Some(file) => file.data.as_bytes().to_vec(),
+            None => panic!("the export answered with {event:?}"),
         }
     }
 
@@ -1212,8 +1197,12 @@ mod tests {
         let passphrase =
             ambre_core::Confidential::<ambre_core::Passphrase>::new("a passphrase".to_owned());
         let command = match doc_type {
-            DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFileSealed { passphrase }),
-            DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFileSealed { passphrase }),
+            DocType::Trame => AppCommand::Trame(TrameCommand::export(
+                ambre_trame::message::TrameExport::AmbreSealed { passphrase },
+            )),
+            DocType::Toile => AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::AmbreSealed { passphrase },
+            )),
             other => panic!("no engine for {other:?}"),
         };
         state.handle_logic_command(LogicCommand::App {
@@ -1235,16 +1224,9 @@ mod tests {
     /// The file bytes of the one export event on `ui`, if there is one.
     fn export_bytes(ui: &Receiver<UiEvent>) -> Option<Vec<u8>> {
         std::iter::from_fn(|| ui.try_recv().ok()).find_map(|evt| match evt {
-            UiEvent::Viewport {
-                event:
-                    AppEvent::Trame(ambre_trame::message::TrameEvent::ExportComplete { data, .. }),
-                ..
-            }
-            | UiEvent::Viewport {
-                event:
-                    AppEvent::Toile(ambre_toile::message::ToileEvent::ExportComplete { data, .. }),
-                ..
-            } => Some(data.into_bytes()),
+            UiEvent::Viewport { event, .. } => event
+                .exported_file()
+                .map(|file| file.data.as_bytes().to_vec()),
             _ => None,
         })
     }
@@ -1303,25 +1285,14 @@ mod tests {
             assert!(
                 events.iter().any(|e| matches!(
                     e,
-                    UiEvent::Viewport {
-                        event: AppEvent::Trame(ambre_trame::message::TrameEvent::Error { .. })
-                            | AppEvent::Toile(ambre_toile::message::ToileEvent::ExportFailed(_)),
-                        ..
-                    }
+                    UiEvent::Viewport { event, .. } if event.interop_failure().is_some()
                 )),
                 "{doc_type:?}: the failure did not reach the surface",
             );
             assert!(
                 !events.iter().any(|e| matches!(
                     e,
-                    UiEvent::Viewport {
-                        event: AppEvent::Trame(
-                            ambre_trame::message::TrameEvent::ExportComplete { .. }
-                        ) | AppEvent::Toile(
-                            ambre_toile::message::ToileEvent::ExportComplete { .. }
-                        ),
-                        ..
-                    }
+                    UiEvent::Viewport { event, .. } if event.exported_file().is_some()
                 )),
                 "{doc_type:?}: a failed seal produced a file",
             );
@@ -1782,14 +1753,14 @@ mod tests {
         let file = b"Quarterly report,Owner\nNorth region,Alice Marchand\n".to_vec();
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
-            command: AppCommand::Trame(TrameCommand::ImportCsv {
+            command: AppCommand::Trame(TrameCommand::import_csv(ambre_trame::message::CsvImport {
                 data: ambre_core::Payload::<ambre_core::FileBytes>::new(file.clone()),
                 delimiter: None,
                 header: ambre_trame::message::HeaderRow::Absent,
                 target_sheet_id: None,
                 start_row: Pos::<Row>::new(0),
                 start_col: Pos::<Col>::new(0),
-            }),
+            })),
         });
         let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
         assert!(
@@ -2026,11 +1997,11 @@ mod tests {
     fn import_one_image(state: &mut LogicState, doc_id: Id<Document>) -> Seq<Request> {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
-            command: AppCommand::Toile(ToileCommand::ImportImage {
-                bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
-                mime: "image/png".into(),
-                at: kurbo::Point::ZERO,
-            }),
+            command: AppCommand::Toile(ToileCommand::import(
+                ambre_toile::message::ToileImportFormat::Image("image/png".into()),
+                ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+                kurbo::Point::ZERO,
+            )),
         });
         assert_eq!(
             state.rest_routes.len(),
@@ -2135,7 +2106,7 @@ mod tests {
         );
         assert!(
             events.iter().any(|e| matches!(e, UiEvent::Viewport { .. })),
-            "the abort should emit an ImportFailed viewport event"
+            "the abort should emit an import failure viewport event"
         );
     }
 
@@ -2516,7 +2487,9 @@ mod tests {
         ui_rx.try_iter().for_each(drop);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
-            command: AppCommand::Toile(ToileCommand::ExportPdf),
+            command: AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Pdf,
+            )),
         });
         ui_rx
             .try_iter()
@@ -2558,7 +2531,12 @@ mod tests {
         let doc_id = board_with_content(&mut state);
         let answer = export_pdf_answer(&mut state, &ui_rx, doc_id);
         assert!(
-            matches!(answer, ambre_toile::message::ToileEvent::ExportFailed(_)),
+            matches!(
+                answer,
+                ambre_toile::message::ToileEvent::Interop(
+                    ambre_bus::interop::InteropAnswer::Failed(_)
+                )
+            ),
             "an export with no font context must say why"
         );
     }
@@ -2572,9 +2550,11 @@ mod tests {
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         let doc_id = board_with_content(&mut state);
         match export_pdf_answer(&mut state, &ui_rx, doc_id) {
-            ambre_toile::message::ToileEvent::ExportComplete { filename, data, .. } => {
-                assert_eq!(filename.as_str(), "deck.pdf");
-                assert!(data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
+            ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::ExportReady { file, .. },
+            ) => {
+                assert_eq!(file.filename.as_str(), "deck.pdf");
+                assert!(file.data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
             }
             other => panic!("expected the file, got {other:?}"),
         }
@@ -2592,7 +2572,9 @@ mod tests {
         let answer = export_pdf_answer(&mut state, &ui_rx, doc_id);
         assert!(matches!(
             answer,
-            ambre_toile::message::ToileEvent::ExportComplete { .. }
+            ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::ExportReady { .. }
+            )
         ));
         assert!(sync_rx.try_recv().is_err(), "the export sent a delta");
     }

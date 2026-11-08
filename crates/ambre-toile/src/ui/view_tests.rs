@@ -1062,11 +1062,22 @@ fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
     let before = rig.paint();
     DOWNLOADS.with(|d| d.borrow_mut().clear());
 
-    rig.answer(ToileEvent::ExportComplete {
-        filename: ambre_core::ExportFilename::named("deck", ambre_core::ExportExtension::Pdf),
-        data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"%PDF-1.7".to_vec()),
-        skipped: Vec::new(),
-    });
+    rig.answer(ToileEvent::Interop(
+        ambre_bus::interop::InteropAnswer::ExportReady {
+            file: ambre_bus::interop::ExportedFile {
+                filename: ambre_core::ExportFilename::named(
+                    "deck",
+                    ambre_core::ExportExtension::Pdf,
+                ),
+                media_type: ambre_core::MediaType::from("application/pdf"),
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"%PDF-1.7".to_vec()),
+            },
+            report: crate::message::ToileReport::new(
+                ambre_bus::interop::Direction::Export,
+                ambre_bus::interop::FileFormat::Pdf,
+            ),
+        },
+    ));
     rig.frame();
 
     let handed = DOWNLOADS.with(|d| d.borrow().clone());

@@ -418,26 +418,12 @@ pub enum TrameEvent {
         description: String,
     },
 
-    /// A [`ImportCsv`](super::TrameCommand::ImportCsv) finished writing
-    /// the parsed rows into the workbook (`trame-import-export`).
-    /// Rides alongside a [`DataReset`](Self::DataReset) so the UI re-fetches the
-    /// populated region. `rows` / `cols` are the dimensions actually written;
-    /// `sheet_id` is the (possibly freshly created) target sheet.
-    ImportComplete {
-        sheet_id: Id<Sheet>,
-        rows: Len<Row>,
-        cols: Len<Col>,
-    },
-
-    /// An export ([`ExportCsv`](super::TrameCommand::ExportCsv)) produced
-    /// a file for download (`trame-import-export`). The Logic thread
-    /// holds the document, so it serializes the bytes; the UI Thread receives them
-    /// and triggers the browser download. `filename` already carries the right
-    /// extension.
-    ExportComplete {
-        filename: ambre_core::ExportFilename,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
-    },
+    /// The shared answer of an import or an export (`INTEROP-001`). A
+    /// finished import rides with a [`DataReset`](Self::DataReset) and a
+    /// [`SheetList`](Self::SheetList) that names the target sheet active. Its
+    /// report counts the rows and the columns written, and what was left out.
+    /// A finished export carries the file for the UI thread to download.
+    Interop(ambre_bus::interop::InteropAnswer<TrameConstruct>),
 
     /// A remote delta edited a protected range its author was not allowed to
     /// (`trame-cell-editing`). The delta IS applied (CRDT convergence is
@@ -578,12 +564,7 @@ impl std::fmt::Debug for TrameEvent {
                 "description",
                 description
             ),
-            Self::ImportComplete {
-                sheet_id,
-                rows,
-                cols,
-            } => fields!("ImportComplete", sheet_id, rows, cols),
-            Self::ExportComplete { filename, data } => fields!("ExportComplete", filename, data),
+            Self::Interop(event) => f.debug_tuple("Interop").field(event).finish(),
             Self::ProtectionViolationWarning {
                 row,
                 col,
@@ -924,3 +905,42 @@ mod tests {
         );
     }
 }
+
+/// A construct a workbook conversion carries or loses, as its report names it
+/// (`INTEROP-003`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TrameConstruct {
+    /// A row written, the unit an import counts what it carried in.
+    Row,
+    /// A column written.
+    Column,
+    /// A record the reader could not read (`TRAME-IO-039`).
+    UnreadableRecord,
+    /// A record past the last row of the grid (`TRAME-IO-050`).
+    RecordPastLastRow,
+    /// A field past the last column of the grid (`TRAME-IO-050`).
+    FieldPastLastColumn,
+}
+
+impl ambre_bus::interop::Construct for TrameConstruct {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Row => "row",
+            Self::Column => "column",
+            Self::UnreadableRecord => "unreadable record",
+            Self::RecordPastLastRow => "record past the last row",
+            Self::FieldPastLastColumn => "field past the last column",
+        }
+    }
+
+    fn plural(self) -> &'static str {
+        match self {
+            Self::Row => "rows",
+            Self::Column => "columns",
+            other => other.label(),
+        }
+    }
+}
+
+/// What a finished workbook conversion carried and lost.
+pub type TrameReport = ambre_bus::interop::ConversionReport<TrameConstruct>;

@@ -266,14 +266,16 @@ fn trame_paste() -> Reading {
 fn trame_import() -> Reading {
     let mut bench = Bench::open(DocType::Trame);
     let csv: String = (0..1_000).map(|i| format!("{i},a,b\n")).collect();
-    bench.command(AppCommand::Trame(TrameCommand::ImportCsv {
-        data: ambre_core::Payload::<ambre_core::FileBytes>::new(csv.into_bytes()),
-        delimiter: None,
-        header: ambre_trame::message::HeaderRow::Absent,
-        target_sheet_id: None,
-        start_row: Pos::<Row>::new(0),
-        start_col: Pos::<Col>::new(0),
-    }));
+    bench.command(AppCommand::Trame(TrameCommand::import_csv(
+        ambre_trame::message::CsvImport {
+            data: ambre_core::Payload::<ambre_core::FileBytes>::new(csv.into_bytes()),
+            delimiter: None,
+            header: ambre_trame::message::HeaderRow::Absent,
+            target_sheet_id: None,
+            start_row: Pos::<Row>::new(0),
+            start_col: Pos::<Col>::new(0),
+        },
+    )));
     Reading {
         stimulus: "Trame, CSV import of 1 000 lines",
         events: bench.pass(),
@@ -290,10 +292,11 @@ fn toile_import() -> Reading {
         svg.push_str(&format!(r#"<rect x="{i}" y="0" width="5" height="5"/>"#));
     }
     svg.push_str("</svg>");
-    bench.command(AppCommand::Toile(ToileCommand::ImportSvg {
-        bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.into_bytes()),
-        at: kurbo::Point::ZERO,
-    }));
+    bench.command(AppCommand::Toile(ToileCommand::import(
+        ambre_toile::message::ToileImportFormat::Svg,
+        ambre_core::Payload::<ambre_core::FileBytes>::new(svg.into_bytes()),
+        kurbo::Point::ZERO,
+    )));
     let (events, passes) = bench.passes();
     Reading {
         stimulus: "Toile, SVG import of 5 000 nodes, per slice",

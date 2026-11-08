@@ -9,9 +9,23 @@
 use super::*;
 use crate::formula::ACTIVE_SHEET;
 use crate::formula::text::CellText;
+use crate::message::{TrameConstruct, TrameReport};
 use crate::{CsvDelimiter, TOTAL_COLS, TOTAL_ROWS};
+use ambre_bus::interop::{
+    Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, Occurrences, Outcome,
+};
+use ambre_core::Count;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
+
+/// The answer to an import that writes nothing: the document is as it was,
+/// and the user reads why (`INTEROP-011`, `TRAME-IO-028`).
+fn import_failed(reason: String) -> TrameOutcome {
+    TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
+        Direction::Import,
+        InteropError::Stopped(reason),
+    ))])
+}
 
 impl TrameState {
     /// Import CSV bytes into the workbook (`trame-import-export`). Parses the
@@ -36,26 +50,28 @@ impl TrameState {
             .from_reader(data.as_bytes());
         // An unreadable record is counted and reported, never dropped in
         // silence (`TRAME-IO-039`).
+        let mut report = TrameReport::new(Direction::Import, FileFormat::Csv);
         let mut unreadable = 0u32;
         let mut records: Vec<Vec<String>> = reader
             .records()
             .filter_map(|rec| rec.inspect_err(|_| unreadable += 1).ok())
             .map(|rec| rec.iter().map(str::to_owned).collect())
             .collect();
-        let unreadable_notice = (unreadable > 0).then(|| TrameEvent::Error {
-            message: format!(
-                "{unreadable} record(s) of the file could not be read and were skipped"
-            ),
-        });
+        report.record_count(
+            TrameConstruct::UnreadableRecord,
+            Outcome::Dropped,
+            Count::<Occurrences>::new(unreadable),
+        );
         if header == HeaderRow::Present && !records.is_empty() {
             records.remove(0);
         }
         if records.is_empty() {
-            return TrameOutcome::display_only(vec![unreadable_notice.unwrap_or(
-                TrameEvent::Error {
-                    message: "the file holds no record to import".to_owned(),
-                },
-            )]);
+            let reason = if unreadable > 0 {
+                format!("none of the {unreadable} record(s) of the file could be read")
+            } else {
+                "the file holds no record to import".to_owned()
+            };
+            return import_failed(reason);
         }
         // The grid ends at `LAST_ROW` and `LAST_COL`, and a field past either
         // would land outside it: cut the records there, and say so
@@ -72,21 +88,25 @@ impl TrameState {
                 cut
             })
             .sum();
-        let cut_notice = (cut_records > 0 || cut_fields > 0).then(|| TrameEvent::Error {
-            message: format!(
-                "the grid ends at row {} and column {}: {cut_records} record(s) and \
-                 {cut_fields} field(s) past its edge were left out",
-                TOTAL_ROWS.get(),
-                TOTAL_COLS.get()
-            ),
-        });
+        report.record_count(
+            TrameConstruct::RecordPastLastRow,
+            Outcome::Dropped,
+            Count::<Occurrences>::of(cut_records),
+        );
+        report.record_count(
+            TrameConstruct::FieldPastLastColumn,
+            Outcome::Dropped,
+            Count::<Occurrences>::of(cut_fields),
+        );
         // A start past the edge cuts every field: nothing is left to write,
         // so the document stays untouched, as for an empty file
         // (`TRAME-IO-028`).
-        if cut_notice.is_some() && records.iter().all(Vec::is_empty) {
-            return TrameOutcome::display_only(
-                unreadable_notice.into_iter().chain(cut_notice).collect(),
-            );
+        if records.iter().all(Vec::is_empty) && (cut_records > 0 || cut_fields > 0) {
+            return import_failed(format!(
+                "the grid ends at row {} and column {}, and no field of the file fits",
+                TOTAL_ROWS.get(),
+                TOTAL_COLS.get()
+            ));
         }
 
         // Resolve the target sheet: an existing id is reused, anything else
@@ -97,10 +117,7 @@ impl TrameState {
             Some(id) if self.all_sheet_ids().iter().any(|s| s == &id) => (id, false),
             _ => {
                 let Some(id) = self.mint_sheet_id() else {
-                    let mut display = vec![super::sheets::sheet_ids_exhausted()];
-                    display.extend(unreadable_notice);
-                    display.extend(cut_notice);
-                    return TrameOutcome::display_only(display);
+                    return TrameOutcome::display_only(vec![super::sheets::sheet_ids_exhausted()]);
                 };
                 (id, true)
             }
@@ -114,8 +131,8 @@ impl TrameState {
         self.active_sheet = sheet_id.clone();
         self.reseed_active_sheet();
 
-        let rows = Len::<Row>::of(records.len());
-        let cols = Len::<Col>::of(records.iter().map(Vec::len).max().unwrap_or(0));
+        let rows = Count::<Occurrences>::of(records.len());
+        let cols = Count::<Occurrences>::of(records.iter().map(Vec::len).max().unwrap_or(0));
         let land = |r: usize, c: usize| {
             CellPos::new(start.row + Len::<Row>::of(r), start.col + Len::<Col>::of(c))
         };
@@ -159,20 +176,20 @@ impl TrameState {
         let mut outcome = self.finish_cell_writes();
         outcome.display.push(self.sheet_list_event());
         outcome.display.push(self.style_state_event());
-        outcome.display.push(TrameEvent::ImportComplete {
-            sheet_id,
-            rows,
-            cols,
-        });
-        outcome.display.extend(unreadable_notice);
-        outcome.display.extend(cut_notice);
+        report.record_count(TrameConstruct::Row, Outcome::Carried, rows);
+        report.record_count(TrameConstruct::Column, Outcome::Carried, cols);
+        outcome
+            .display
+            .push(TrameEvent::Interop(InteropAnswer::ImportCompleted {
+                report,
+            }));
         outcome
     }
 
     /// Export a sheet (or sub-range) to CSV bytes (`trame-import-export`).
     /// Read-only: emits no
     /// CRDT delta. Cells are written by their displayed value (formula results
-    /// included). Returns an [`TrameEvent::ExportComplete`] carrying the bytes.
+    /// included). Returns an [`InteropAnswer::ExportReady`] carrying the bytes.
     pub(super) fn export_csv(
         &self,
         sheet_id: &Id<Sheet>,
@@ -181,9 +198,10 @@ impl TrameState {
     ) -> TrameOutcome {
         // An export that writes no file says why (`TRAME-IO-041`).
         let nothing = |message: &str| {
-            TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: message.to_owned(),
-            }])
+            TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
+                Direction::Export,
+                InteropError::Stopped(message.to_owned()),
+            ))])
         };
         let Some(&idx) = self.engine_sheet_by_id.get(sheet_id) else {
             return nothing("the sheet to export no longer exists");
@@ -226,14 +244,20 @@ impl TrameState {
         };
         // A sheet name is user text, so the file name is cleaned of what a
         // host refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
-        TrameOutcome::display_only(vec![TrameEvent::ExportComplete {
-            filename: ambre_core::ExportFilename::from_title(
-                &name,
-                "sheet",
-                ambre_core::ExportExtension::Csv,
-            ),
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
-        }])
+        // Every displayed value leaves as text, so CSV loses nothing the grid
+        // shows: the report is clean.
+        TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::ExportReady {
+            file: ExportedFile {
+                filename: ambre_core::ExportFilename::from_title(
+                    &name,
+                    "sheet",
+                    ambre_core::ExportExtension::Csv,
+                ),
+                media_type: ambre_core::MediaType::from("text/csv; charset=utf-8"),
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
+            },
+            report: TrameReport::new(Direction::Export, FileFormat::Csv),
+        })])
     }
 
     /// The bottom-right corner of the content on

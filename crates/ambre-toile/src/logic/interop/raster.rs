@@ -35,7 +35,7 @@ pub fn import_raster(
     bytes: &ambre_core::Payload<ambre_core::FileBytes>,
     limits: &Limits,
 ) -> Result<ImportBatch, ImportError> {
-    let mut batch = ImportBatch::default();
+    let mut batch = ImportBatch::new(ambre_bus::interop::FileFormat::Image);
     let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
     let blob = decode_media(bytes.as_bytes(), limits, media.clone())?;
     let size = Size::new(
@@ -51,7 +51,6 @@ pub fn import_raster(
         correlate: None,
     });
     batch.media.push(blob);
-    batch.report.imported = ambre_core::Count::<crate::message::Elements>::new(1);
     Ok(batch)
 }
 
@@ -149,7 +148,6 @@ mod tests {
         let batch = import_raster(&Payload::new(png.clone()), &Limits::default()).unwrap();
         assert_eq!(batch.commands.len(), 1);
         assert_eq!(batch.media.len(), 1);
-        assert_eq!(batch.report.imported.get(), 1);
 
         let blob = &batch.media[0];
         assert_eq!(blob.size, ambre_core::Size::new(Px::new(64), Px::new(48)));

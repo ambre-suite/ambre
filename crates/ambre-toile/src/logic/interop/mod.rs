@@ -103,7 +103,7 @@ pub struct ImportConnector {
 /// atomically, and the media plaintext blobs the Sync layer will
 /// encrypt/upload. Plus the human-facing report of what was and was not
 /// mapped (import report).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ImportBatch {
     /// The `CreateElement` batch, applied in one undo group by the
     /// dispatcher. Parent-before-child order, so a group/frame is created
@@ -121,8 +121,23 @@ pub struct ImportBatch {
     /// Plaintext media referenced by the commands (an `image` element's hash is a
     /// key here). Handed to Sync for encrypt-then-upload; interop holds no keys.
     pub media: Vec<MediaBlob>,
-    /// What was imported and what was dropped (unsupported constructs,).
+    /// What was imported and what was dropped (unsupported constructs).
     pub report: ImportReport,
+}
+
+impl ImportBatch {
+    /// An empty batch read from a file of `format`.
+    #[must_use]
+    pub const fn new(format: ambre_bus::interop::FileFormat) -> Self {
+        Self {
+            commands: Vec::new(),
+            styles: Vec::new(),
+            groups: Vec::new(),
+            connectors: Vec::new(),
+            media: Vec::new(),
+            report: ImportReport::new(ambre_bus::interop::Direction::Import, format),
+        }
+    }
 }
 
 /// Translate every element of `batch` so the batch's top-left corner sits at
@@ -154,24 +169,10 @@ pub fn place_batch_at(batch: &mut ImportBatch, at: Point) {
     }
 }
 
-/// Import outcome summary surfaced to the UI. `imported` counts created
-/// elements; `skipped` lists dropped/unsupported constructs (a gradient fill, a
-/// pattern, an unhandled node) so the user knows the import was lossy.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct ImportReport {
-    pub imported: ambre_core::Count<crate::message::Elements>,
-    pub skipped: Vec<ambre_core::Opaque<crate::message::SkipReasons>>,
-}
-
-impl ImportReport {
-    /// Record a dropped/unsupported construct in the report.
-    pub fn skip(&mut self, reason: impl Into<String>) {
-        self.skipped
-            .push(ambre_core::Opaque::<crate::message::SkipReasons>::new(
-                reason,
-            ));
-    }
-}
+/// What an import carried and what it left behind (`INTEROP-003`): the
+/// shared report over the board's constructs. The converter records what it
+/// could not map, and the apply pass adds what landed.
+pub type ImportReport = crate::message::ToileReport;
 
 /// One plaintext media blob produced by an import. `media` names it by its
 /// import slot until Sync returns the content address (blake2b), since interop

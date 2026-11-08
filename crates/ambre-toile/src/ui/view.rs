@@ -42,6 +42,7 @@ const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was remov
 /// (`TOILE-UI-160`).
 #[cfg(any(test, target_arch = "wasm32"))]
 const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
+use ambre_bus::interop::InteropAnswer;
 use ambre_bus::{Feed, LogicCommand, LossyOutcome, Outbox, Port, SendOutcome, UiEvent};
 use ambre_canvas::{
     BusyLevel, BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
@@ -1350,14 +1351,14 @@ impl ToileView {
             // accompanying `ViewportData` already triggered the repaint; log the
             // lossy-import summary so a dropped construct is visible in
             // diagnostics. UI toasts are the app shell's job.
-            ToileEvent::ImportReport { imported, skipped } => {
-                tracing::info!(
-                    "Toile import: {imported} elements, {} construct(s) dropped",
-                    skipped.len()
-                );
+            ToileEvent::Interop(InteropAnswer::ImportCompleted { report }) => {
+                tracing::info!("Toile import: {:?}", report.entries());
             }
-            ToileEvent::ImportFailed(reason) => {
-                tracing::warn!("Toile import failed: {reason}");
+            // A slice landed; its `ViewportData` repaints, and the shell draws
+            // the bar.
+            ToileEvent::Interop(InteropAnswer::Progress(_)) => {}
+            ToileEvent::Interop(InteropAnswer::Failed(failure)) => {
+                tracing::warn!("Toile conversion failed: {:?}", failure);
             }
             // A thread changed (`toile-comments`). The pins ride the display
             // viewport, so ask for a fresh one. The panel holds no state of its
@@ -1391,21 +1392,13 @@ impl ToileView {
             // thread holds the board and serialized the bytes; the UI thread
             // owns the DOM, so this arm triggers the download (`TOILE-IO-085`).
             // Nothing on the board changed.
-            ToileEvent::ExportComplete {
-                filename,
-                data,
-                skipped,
-            } => {
+            ToileEvent::Interop(InteropAnswer::ExportReady { file, report }) => {
                 // What the file could not express (`TOILE-IO-025`). The board
-                // is unchanged; the user is told what left it behind.
-                for line in &skipped {
-                    tracing::warn!("Toile: the export skipped {line}");
+                // is unchanged; the shell tells the user what left it behind.
+                if !report.is_lossless() {
+                    tracing::warn!("Toile: the export left out {:?}", report.entries());
                 }
-                trigger_download(&filename, &data);
-            }
-            // Nothing to download: the notice is the shell's (`TOILE-IO-022`).
-            ToileEvent::ExportFailed(reason) => {
-                tracing::warn!("Toile: export failed: {reason}");
+                trigger_download(&file.filename, &file.data);
             }
             // Both schema notices are the chrome's to surface (`notify_event`):
             // the canvas has nothing to repaint for either. The board never
@@ -4253,16 +4246,14 @@ impl ToileView {
             self.cam.size.height / 2.0,
         ));
         let at = self.cam.screen_to_world() * screen;
+        use crate::message::ToileImportFormat;
         let cmd = match file.mime.as_str() {
-            "image/svg+xml" => ToileCommand::ImportSvg {
-                bytes: file.bytes,
+            "image/svg+xml" => ToileCommand::import(ToileImportFormat::Svg, file.bytes, at),
+            m if m.starts_with("image/") => ToileCommand::import(
+                ToileImportFormat::Image(ambre_core::MediaType::from(m)),
+                file.bytes,
                 at,
-            },
-            m if m.starts_with("image/") => ToileCommand::ImportImage {
-                bytes: file.bytes,
-                mime: ambre_core::MediaType::from(m),
-                at,
-            },
+            ),
             // The shell asks `ui::interop::accepts` before it reads a file. A
             // type reaching here at all is a bug on that side, not a user error.
             // Drop it rather than send the board something no converter reads.

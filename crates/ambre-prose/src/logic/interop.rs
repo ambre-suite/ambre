@@ -32,13 +32,14 @@ use super::tables::Grid;
 use super::text::{MarkedRun, body_span, marked_runs, write_runs};
 use crate::doc::{self, StoredLevel};
 use crate::events::grid::{CellPos, Col, Row};
-use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
+use crate::events::{ProseEvent, ProseOutcome};
 use crate::interop::{
     Banding, Commenting, IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun,
     IrTableCell, IrTableRow, Merging, OwnStyle, Paging, ProseIr, Referencing, Suggesting, Warnings,
     markdown_read, markdown_write,
 };
 use crate::mark::MarkRoot;
+use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
 
 /// The place of one operation in the list an import builds. A later
 /// operation names its parent by it, before any block exists.
@@ -478,12 +479,14 @@ impl ProseState {
             ambre_core::ExportExtension::Markdown,
         );
         let (text, report) = markdown_write::write(&ir, flavor);
-        ProseOutcome::display_only(vec![ProseEvent::ExportReady {
-            filename,
-            media_type: format.media_type(),
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(text.into_bytes()),
+        ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::ExportReady {
+            file: ExportedFile {
+                filename,
+                media_type: format.media_type(),
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(text.into_bytes()),
+            },
             report,
-        }])
+        })])
     }
 
     /// Bring a file in after the last block, in one commit
@@ -497,7 +500,11 @@ impl ProseState {
         let ImportFormat::Markdown = format;
         let (ir, report) = match markdown_read::read(data) {
             Ok(read) => read,
-            Err(e) => return ProseOutcome::refused(ProseRefusal::Interop(e)),
+            Err(e) => {
+                return ProseOutcome::display_only(vec![ProseEvent::Interop(
+                    InteropAnswer::failed(Direction::Import, e),
+                )]);
+            }
         };
         let mut warnings = Warnings::from_report(report);
         let ops = build(&ir, &mut warnings);
@@ -515,7 +522,9 @@ impl ProseState {
     pub(super) fn apply_import(&mut self, ops: &[ImportOp], warnings: Warnings) -> ProseOutcome {
         let report = warnings.report();
         if ops.is_empty() {
-            return ProseOutcome::display_only(vec![ProseEvent::ImportCompleted { report }]);
+            return ProseOutcome::display_only(vec![ProseEvent::Interop(
+                InteropAnswer::ImportCompleted { report },
+            )]);
         }
         let Some(mut rehearsal) = Self::new() else {
             return Self::err_write(doc::WriteError::Refused(
@@ -528,7 +537,9 @@ impl ProseState {
         if let Err(refused) = self.write_import(ops) {
             return refused;
         }
-        self.commit_with(vec![ProseEvent::ImportCompleted { report }])
+        self.commit_with(vec![ProseEvent::Interop(InteropAnswer::ImportCompleted {
+            report,
+        })])
     }
 
     /// Write the operations, uncommitted, after the last block.
@@ -641,37 +652,37 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, ProseCommand, tree_id};
-    use crate::message::{ConversionWarning, InteropError, MarkdownFlavor, UnsupportedFeature};
+    use crate::message::{
+        ConversionReport, InteropError, MarkdownFlavor, ProseConstruct, ProseImport,
+        UnsupportedFeature,
+    };
     use crate::view::tests::append;
+    use ambre_bus::interop::{InteropFailure, InteropRequest, Outcome};
 
     fn document() -> ProseState {
         ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built")
     }
 
     fn import(state: &mut ProseState, markdown: &str) -> ProseOutcome {
-        state.handle_command(ProseCommand::ImportDocument {
+        state.handle_command(ProseCommand::Interop(InteropRequest::Import(ProseImport {
             format: ImportFormat::Markdown,
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(markdown.as_bytes().to_vec()),
-        })
+        })))
     }
 
-    fn export(state: &mut ProseState, flavor: MarkdownFlavor) -> (String, Vec<ConversionWarning>) {
-        let outcome = state.handle_command(ProseCommand::ExportDocument {
-            format: ExportFormat::Markdown(flavor),
-        });
-        let Some(ProseEvent::ExportReady {
-            data,
-            report,
-            media_type,
-            ..
-        }) = outcome.display.into_iter().next()
+    fn export(state: &mut ProseState, flavor: MarkdownFlavor) -> (String, ConversionReport) {
+        let outcome = state.handle_command(ProseCommand::Interop(InteropRequest::Export(
+            ExportFormat::Markdown(flavor),
+        )));
+        let Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, report })) =
+            outcome.display.into_iter().next()
         else {
             panic!("an export answers with a file");
         };
-        assert_eq!(media_type.as_str(), "text/markdown; charset=utf-8");
+        assert_eq!(file.media_type.as_str(), "text/markdown; charset=utf-8");
         (
-            String::from_utf8(data.into_bytes()).expect("UTF-8"),
-            report.warnings,
+            String::from_utf8(file.data.into_bytes()).expect("UTF-8"),
+            report,
         )
     }
 
@@ -693,10 +704,10 @@ mod tests {
         let mut state = document();
         let outcome = import(&mut state, SAMPLE);
         assert!(
-            outcome
-                .display
-                .iter()
-                .any(|e| matches!(e, ProseEvent::ImportCompleted { .. })),
+            outcome.display.iter().any(|e| matches!(
+                e,
+                ProseEvent::Interop(InteropAnswer::ImportCompleted { .. })
+            )),
             "{:?}",
             outcome.display
         );
@@ -736,17 +747,16 @@ mod tests {
             border: None,
             padding: None,
         });
-        let (_, warnings) = export(&mut state, MarkdownFlavor::Gfm);
-        assert!(
-            warnings.iter().any(|w| matches!(
-                w,
-                ConversionWarning::FeatureNotSupported {
-                    feature: UnsupportedFeature::CellFormatting,
-                    count,
-                    ..
-                } if count.get() == 1
-            )),
-            "{warnings:?}"
+        let (_, report) = export(&mut state, MarkdownFlavor::Gfm);
+        assert_eq!(
+            report
+                .count(
+                    ProseConstruct::Feature(UnsupportedFeature::CellFormatting),
+                    Outcome::Dropped
+                )
+                .get(),
+            1,
+            "{report:?}"
         );
     }
 
@@ -768,15 +778,18 @@ mod tests {
     fn a_file_that_does_not_read_changes_nothing() {
         let mut state = document();
         let before = state.doc.oplog_vv();
-        let outcome = state.handle_command(ProseCommand::ImportDocument {
-            format: ImportFormat::Markdown,
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
-        });
+        let outcome =
+            state.handle_command(ProseCommand::Interop(InteropRequest::Import(ProseImport {
+                format: ImportFormat::Markdown,
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
+            })));
         assert!(outcome.update.is_none());
         assert!(matches!(
             outcome.display.as_slice(),
-            [ProseEvent::Error(error)]
-                if matches!(error.reason, ProseRefusal::Interop(InteropError::ParseFailed(_)))
+            [ProseEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                direction: Direction::Import,
+                error: InteropError::ParseFailed(_),
+            }))]
         ));
         assert_eq!(state.doc.oplog_vv(), before);
     }
@@ -801,7 +814,7 @@ mod tests {
             paragraph(Parent::Root, "second"),
             paragraph(Parent::Op(Pos::<Op>::new(1)), "refused"),
         ];
-        let warnings = Warnings::new(crate::message::ConversionFormat::Markdown);
+        let warnings = Warnings::new(Direction::Import, ambre_bus::interop::FileFormat::Markdown);
         let outcome = state.apply_import(&ops, warnings);
         assert!(outcome.update.is_none());
         assert!(matches!(outcome.display.as_slice(), [ProseEvent::Error(_)]));
@@ -817,20 +830,25 @@ mod tests {
     fn a_block_the_item_refuses_is_lifted_and_reported() {
         let mut state = document();
         let outcome = import(&mut state, "- item\n\n  ```\n  code\n  ```\n");
-        let Some(ProseEvent::ImportCompleted { report }) = outcome
-            .display
-            .iter()
-            .find(|e| matches!(e, ProseEvent::ImportCompleted { .. }))
+        let Some(ProseEvent::Interop(InteropAnswer::ImportCompleted { report })) =
+            outcome.display.iter().find(|e| {
+                matches!(
+                    e,
+                    ProseEvent::Interop(InteropAnswer::ImportCompleted { .. })
+                )
+            })
         else {
             panic!("no report");
         };
-        assert!(report.warnings.iter().any(|w| matches!(
-            w,
-            ConversionWarning::BlockLifted {
-                block: LiftedBlock::CodeBlock,
-                ..
-            }
-        )));
+        assert_eq!(
+            report
+                .count(
+                    ProseConstruct::Block(LiftedBlock::CodeBlock),
+                    Outcome::Moved
+                )
+                .get(),
+            1
+        );
         let tree = doc::blocks(&state.doc);
         let roots = doc::roots(&tree);
         assert_eq!(roots.len(), 2);
@@ -881,13 +899,14 @@ mod tests {
     #[test]
     fn the_page_model_is_reported() {
         let mut state = document();
-        let (_, warnings) = export(&mut state, MarkdownFlavor::CommonMark);
-        assert!(warnings.iter().any(|w| matches!(
-            w,
-            ConversionWarning::FeatureNotSupported {
-                feature: UnsupportedFeature::PageFormat,
-                ..
-            }
-        )));
+        let (_, report) = export(&mut state, MarkdownFlavor::CommonMark);
+        assert!(
+            !report
+                .count(
+                    ProseConstruct::Feature(UnsupportedFeature::PageFormat),
+                    Outcome::Dropped
+                )
+                .is_zero()
+        );
     }
 }

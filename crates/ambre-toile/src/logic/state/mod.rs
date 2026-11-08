@@ -85,6 +85,8 @@ use crate::logic::index::{SpatialIndex, Viewport};
 use crate::logic::model::{ElementKind, ElementStyle, NodeId, PlaybackState};
 use crate::logic::schema;
 use crate::logic::text_merge::Edit;
+use crate::message::{ToileExport, ToileImport, ToileImportFormat};
+use ambre_bus::interop::{Direction, InteropAnswer, InteropError, InteropRequest};
 
 use ambre_core::{Instant, PageLoad};
 pub(crate) use names::{BoardKey, ElementKey, Root};
@@ -662,39 +664,40 @@ impl ToileState {
             ToileCommand::RequestSelectionStats { ids, kind } => self.selection_stats(&ids, kind),
             ToileCommand::RequestSelectionData { ids } => self.selection_data(&ids),
             ToileCommand::RequestBoardIds => self.board_ids(),
-            ToileCommand::ImportSvg { bytes, at } => self.import_svg_bytes(&bytes, at),
-            ToileCommand::ImportImage { bytes, mime: _, at } => self.import_image_bytes(&bytes, at),
-            ToileCommand::ExportSvg => self.export_svg_document(),
-            // Served by the Logic thread, which holds the base font faces the
-            // render walk needs (`toile-pdf-export`, `TOILE-IO-029`). Its
-            // dispatcher intercepts the command before the document lookup. Only
-            // a caller driving `ToileState` directly therefore lands here, and
-            // this arm answers rather than falling silent.
-            ToileCommand::ExportPdf => ToileOutcome::display_only(vec![ToileEvent::ExportFailed(
-                "the deck is exported by the Logic thread, not by the board".to_owned(),
-            )]),
-            // Served by the Logic thread for a different reason: the container's
-            // header carries the document's identity, which a board does not
-            // know (`ambre-spec-docfile.md`). Same shape of answer, same reason
-            // for answering -- a silent arm is indistinguishable from a gesture
-            // that never arrived.
-            ToileCommand::ExportAmbreFile | ToileCommand::ExportAmbreFileSealed { .. } => {
-                ToileOutcome::display_only(vec![ToileEvent::ExportFailed(
-                    "the file is written by the Logic thread, not by the board".to_owned(),
-                )])
+            ToileCommand::Interop(InteropRequest::Import(ToileImport { format, data, at })) => {
+                match format {
+                    ToileImportFormat::Svg => self.import_svg_bytes(&data, at),
+                    ToileImportFormat::Image(_) => self.import_image_bytes(&data, at),
+                    // No converter reads either format yet. The refusal names
+                    // the one asked for and touches nothing (`TOILE-IO-094`).
+                    ToileImportFormat::Figma => {
+                        Self::interop_failed(Direction::Import, "Figma import is not yet available")
+                    }
+                    ToileImportFormat::Miro => {
+                        Self::interop_failed(Direction::Import, "Miro import is not yet available")
+                    }
+                }
             }
-            // No converter reads either format yet. The refusal names the one
-            // asked for and touches nothing (`TOILE-IO-094`).
-            ToileCommand::ImportFigma { .. } => {
-                ToileOutcome::display_only(vec![ToileEvent::ImportFailed(
-                    "Figma import is not yet available".to_owned(),
-                )])
-            }
-            ToileCommand::ImportMiro { .. } => {
-                ToileOutcome::display_only(vec![ToileEvent::ImportFailed(
-                    "Miro import is not yet available".to_owned(),
-                )])
-            }
+            ToileCommand::Interop(InteropRequest::Export(format)) => match format {
+                ToileExport::Svg => self.export_svg_document(),
+                // Served by the Logic thread, which holds the base font faces
+                // the render walk needs (`toile-pdf-export`, `TOILE-IO-029`).
+                // Its dispatcher intercepts the command before the document
+                // lookup. Only a caller driving `ToileState` directly therefore
+                // lands here, and this arm answers rather than falling silent.
+                ToileExport::Pdf => Self::interop_failed(
+                    Direction::Export,
+                    "the deck is exported by the Logic thread, not by the board",
+                ),
+                // Served by the Logic thread for a different reason: the
+                // container's header carries the document's identity, which a
+                // board does not know (`ambre-spec-docfile.md`). A silent arm
+                // is indistinguishable from a gesture that never arrived.
+                ToileExport::Ambre | ToileExport::AmbreSealed { .. } => Self::interop_failed(
+                    Direction::Export,
+                    "the file is written by the Logic thread, not by the board",
+                ),
+            },
             ToileCommand::SetViewport(vp) => {
                 self.viewport = vp;
                 self.viewport_version = self.viewport_version.next();
@@ -1112,6 +1115,15 @@ impl ToileState {
 
     /// Wrap the current export delta (since `exported_vv`) into the outcome.
     /// Every mutating command routes through here.
+    /// The answer to a conversion that produced nothing: the board is as it
+    /// was, and the user reads why (`INTEROP-011`).
+    pub(super) fn interop_failed(direction: Direction, reason: impl Into<String>) -> ToileOutcome {
+        ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::failed(
+            direction,
+            InteropError::Stopped(reason.into()),
+        ))])
+    }
+
     pub(super) fn emit_with_update(&mut self, display: Vec<ToileEvent>) -> ToileOutcome {
         ToileOutcome {
             display,

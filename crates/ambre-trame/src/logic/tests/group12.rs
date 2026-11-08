@@ -23,14 +23,14 @@ fn with_one_edit() -> TrameState {
 }
 
 fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<Id<Sheet>>) -> TrameOutcome {
-    state.handle_command(TrameCommand::ImportCsv {
+    state.handle_command(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(data.to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id,
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
-    })
+    }))
 }
 
 /// Text that Rust's number parse reads, but as a number that is not finite.
@@ -455,14 +455,14 @@ fn a_file_with_no_record_leaves_the_document_alone() {
     for data in [&b""[..], b"\n\n", b"name,age\n"] {
         let mut state = with_one_edit();
         let before = state.doc.len_ops();
-        let out = state.handle_command(TrameCommand::ImportCsv {
+        let out = state.handle_command(TrameCommand::import_csv(crate::message::CsvImport {
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(data.to_vec()),
             delimiter: None,
             header: HeaderRow::Present,
             target_sheet_id: None,
             start_row: Pos::<Row>::new(0),
             start_col: Pos::<Col>::new(0),
-        });
+        }));
         assert!(out.update.is_none(), "{data:?}");
         assert_eq!(state.sheet_order_ids().len(), 1, "{data:?}");
         assert_eq!(state.doc.len_ops(), before, "{data:?}");
@@ -502,14 +502,14 @@ fn a_separator_outside_the_three_is_named_by_the_caller() {
     // A pipe is not guessed: the line lands whole.
     import_result(&import(&mut state, b"a|b\n", None));
     assert_eq!(read_cell(&mut state, 0, 0), "a|b");
-    let out = state.handle_command(TrameCommand::ImportCsv {
+    let out = state.handle_command(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a|b\n".to_vec()),
         delimiter: crate::CsvDelimiter::new(b'|').ok(),
         header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
-    });
+    }));
     import_result(&out);
     assert_eq!(read_cell(&mut state, 0, 1), "b");
 }
@@ -526,12 +526,16 @@ fn a_csv_export_writes_nothing() {
     let before = state.doc.len_ops();
     let version = state.doc.oplog_vv();
     for cmd in [
-        TrameCommand::ExportActiveSheetCsv,
-        TrameCommand::ExportCsv {
-            sheet_id: crate::logic::default_sheet(),
+        TrameCommand::export(crate::message::TrameExport::Csv {
+            sheet_id: None,
+            delimiter: None,
+            range: None,
+        }),
+        TrameCommand::export(crate::message::TrameExport::Csv {
+            sheet_id: Some(crate::logic::default_sheet()),
             delimiter: Some(crate::CsvDelimiter::SEMICOLON),
             range: None,
-        },
+        }),
     ] {
         let out = state.handle_command(cmd);
         assert!(!export_bytes(&out).is_empty());

@@ -44,6 +44,8 @@
 //! enforced while walking. Any breach aborts the whole import atomically: the
 //! returned `Err` carries no commands.
 
+use crate::message::ToileConstruct;
+use ambre_bus::interop::Outcome;
 use ambre_core::{Count, Elements, Rgb, Rgba};
 use ambre_core::{Px, StoredBoard, index::Pos};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
@@ -74,7 +76,7 @@ pub fn import_svg(
     let opt = usvg::Options::default();
     let tree = usvg::Tree::from_data(bytes, &opt).map_err(|e| ImportError::Parse(e.to_string()))?;
 
-    let mut batch = ImportBatch::default();
+    let mut batch = ImportBatch::new(ambre_bus::interop::FileFormat::Svg);
     // The source tree, for the text nodes usvg refuses to carry. A body that is
     // not UTF-8, or not well-formed XML, costs the drawing its text. The report
     // says so, rather than letting the shapes land as though the file had
@@ -83,14 +85,13 @@ pub fn import_svg(
     let doc = source.and_then(|src| match roxmltree::Document::parse(src) {
         Ok(d) => Some(d),
         Err(e) => {
-            batch
-                .report
-                .skip(format!("text: the source is not well-formed XML ({e})"));
+            tracing::debug!("[Toile] the SVG source is not well-formed XML: {e}");
+            batch.report.record(ToileConstruct::Text, Outcome::Dropped);
             None
         }
     });
     if source.is_none() {
-        batch.report.skip("text: the source is not UTF-8");
+        batch.report.record(ToileConstruct::Text, Outcome::Dropped);
     }
     let root_xml = doc.as_ref().map(|d| d.root_element());
     // The document root is not itself a `<g>`; its direct-member refs are dropped
@@ -106,7 +107,6 @@ pub fn import_svg(
     if batch.commands.is_empty() {
         return Err(ImportError::Empty);
     }
-    batch.report.imported = ambre_core::Count::<crate::message::Elements>::of(batch.commands.len());
     Ok(batch)
 }
 
@@ -134,9 +134,7 @@ fn import_text_node(
         .collect();
     let body = body.trim().to_owned();
     if body.is_empty() {
-        batch
-            .report
-            .skip("text: a node the reader could not read a body from");
+        batch.report.record(ToileConstruct::Text, Outcome::Dropped);
         return Ok(None);
     }
     limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
@@ -237,11 +235,12 @@ fn walk_group(
                     // board can rebuild. Its children keep their geometry and
                     // the structure the drawing had is reported lost
                     // (`TOILE-IO-079`).
-                    0 => batch.report.skip("group: every child was skipped"),
+                    0 => batch.report.record(ToileConstruct::Group, Outcome::Dropped),
                     1 => {
+                        // The member lands, and the group around it does not.
                         batch
                             .report
-                            .skip("group: one member left, so no group was rebuilt");
+                            .record(ToileConstruct::Group, Outcome::Approximated);
                         members.extend(child_members);
                     }
                     _ => {
@@ -317,13 +316,15 @@ fn import_image(
     let raw: &[u8] = match image.kind() {
         usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) => d.as_slice(),
         usvg::ImageKind::GIF(_) | usvg::ImageKind::WEBP(_) => {
-            batch.report.skip("image: GIF/WebP not decoded in Phase 0");
+            batch
+                .report
+                .record(ToileConstruct::UndecodedPicture, Outcome::Dropped);
             return Ok(None);
         }
         usvg::ImageKind::SVG(_) => {
             batch
                 .report
-                .skip("image: nested SVG not inlined in Phase 0");
+                .record(ToileConstruct::NestedSvg, Outcome::Dropped);
             return Ok(None);
         }
     };
@@ -467,7 +468,9 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
             ambre_core::Bounded::<ambre_core::Opacity>::clamped(fill.opacity().get()),
         ) {
             Some(rgba) => style.fill = Some(rgba),
-            None => batch.report.skip("path fill: non-solid paint dropped"),
+            None => batch
+                .report
+                .record(ToileConstruct::NonSolidPaint, Outcome::Dropped),
         }
     }
     if let Some(stroke) = path.stroke() {
@@ -479,7 +482,9 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
                 style.stroke = Some(rgba);
                 style.stroke_w = Px::<StoredBoard>::new(stroke.width().get());
             }
-            None => batch.report.skip("path stroke: non-solid paint dropped"),
+            None => batch
+                .report
+                .record(ToileConstruct::NonSolidPaint, Outcome::Dropped),
         }
     }
     style

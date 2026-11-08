@@ -9,7 +9,6 @@ use crate::message::{ProseCommand, ProseError, ProseEvent, ProseRefusal, Refused
 use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::Toasts;
 
-use crate::interop::report_message;
 use crate::view::annotate::LostReply;
 
 /// Surface what a conversion lost, and a file that produced nothing, as a
@@ -23,18 +22,15 @@ pub fn notify_event<S: Embed<ProseEvent>, P: ambre_bus::ChannelPlane>(
         return;
     };
     match event {
-        ProseEvent::ImportCompleted { report } => match report_message(report) {
-            Some(lost) => toasts.warning(format!("Imported. {lost}")),
-            None => toasts.info("Imported"),
-        },
-        ProseEvent::ExportReady {
-            filename, report, ..
-        } => match report_message(report) {
-            Some(lost) => toasts.warning(format!("Exported {filename}. {lost}")),
-            None => toasts.info(format!("Exported {filename}")),
-        },
-        ProseEvent::Error(error) if matches!(error.reason, ProseRefusal::Interop(_)) => {
-            toasts.warning(format!("Import failed: {}", error.reason));
+        // The shared sentence (`INTEROP-007`, `INTEROP-011`).
+        ProseEvent::Interop(interop) => {
+            if let Some(message) = interop.message() {
+                if interop.is_warning() {
+                    toasts.warning(message);
+                } else {
+                    toasts.info(message);
+                }
+            }
         }
         // A reply sent as a peer deleted its thread (`PROSE-UI-232`).
         ProseEvent::Error(error) if is_refused_reply(error) => {

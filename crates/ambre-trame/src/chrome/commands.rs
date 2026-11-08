@@ -87,8 +87,7 @@ pub fn mirror_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
             | TrameEvent::CondFormatsUpdated { .. }
             | TrameEvent::ValidationError { .. }
             | TrameEvent::ValidationWarning { .. }
-            | TrameEvent::ImportComplete { .. }
-            | TrameEvent::ExportComplete { .. }
+            | TrameEvent::Interop(_)
             | TrameEvent::ProtectionDenied { .. }
             | TrameEvent::Clipboard(_)
             | TrameEvent::ProtectionViolationWarning { .. } => {}
@@ -175,15 +174,15 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
         }
         // Interop (`trame-import-export`): confirm an import/export finished (the
         // download itself is triggered canvas-side on ExportComplete).
-        TrameEvent::ImportComplete { rows, cols, .. } => {
-            toasts.info(format!(
-                "Imported {} rows x {} columns",
-                rows.get(),
-                cols.get()
-            ));
-        }
-        TrameEvent::ExportComplete { filename, .. } => {
-            toasts.info(format!("Exported {filename}"));
+        // The shared sentence (`INTEROP-007`, `INTEROP-011`).
+        TrameEvent::Interop(interop) => {
+            if let Some(message) = interop.message() {
+                if interop.is_warning() {
+                    toasts.warning(message);
+                } else {
+                    toasts.info(message);
+                }
+            }
         }
         // A paste blocked by a protected range (Post-MVP); no CRDT mutation.
         TrameEvent::PasteRejected { reason } => {
