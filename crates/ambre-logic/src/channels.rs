@@ -1282,6 +1282,11 @@ impl LogicState {
             | MurmureCommand::ShowPicture { .. }
             // A file writes no document: its message does, once it sends.
             | MurmureCommand::UploadFile { .. } => None,
+            // Murmure reads and writes no format yet, so neither half exists.
+            MurmureCommand::Interop(interop) => match interop {
+                ambre_bus::interop::InteropRequest::Import(never) => match *never {},
+                ambre_bus::interop::InteropRequest::Export(never) => match *never {},
+            },
         };
         if let Some(document_id) = target {
             let identified = self

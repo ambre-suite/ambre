@@ -1835,21 +1835,24 @@ pub enum ProseCommand {
     Redo,
 
     // -- Import and export (`features/ambre-spec-prose-import-export.md`) --
-    /// Write the whole document out in `format`, and answer
-    /// [`ProseEvent::ExportReady`]. Read-only: an export emits no delta
-    /// (`PROSE-IO-017`). The Logic dispatcher serves it, because the native
-    /// header needs the identity its registry holds.
-    ExportDocument {
-        format: ExportFormat,
-    },
-    /// Bring a file into the document, after its last block, as one batch
-    /// (`PROSE-IO-027`, `PROSE-IO-051`). Answers
-    /// [`ProseEvent::ImportCompleted`], or a refusal carrying an
-    /// [`InteropError`] when the file produced nothing (`PROSE-IO-047`).
-    ImportDocument {
-        format: ImportFormat,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
-    },
+    /// The shared import and export shape (`INTEROP-001`). An export writes
+    /// the whole document out and emits no delta (`PROSE-IO-017`); the Logic
+    /// dispatcher serves it, because the native header needs the identity its
+    /// registry holds. An import brings a file in after the last block, as one
+    /// batch (`PROSE-IO-027`, `PROSE-IO-051`). Each answers one
+    /// [`ProseEvent::Interop`].
+    Interop(ProseInterop),
+}
+
+/// The shared import and export command, over the formats Prose reads and
+/// writes (`INTEROP-001`).
+pub type ProseInterop = ambre_bus::interop::InteropRequest<ProseImport, ExportFormat>;
+
+/// A file to bring into the document, and the format to read it as.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProseImport {
+    pub format: ImportFormat,
+    pub data: ambre_core::Payload<ambre_core::FileBytes>,
 }
 
 // A text a user typed prints its length alone, and every other field its own
@@ -2067,8 +2070,7 @@ impl fmt::Debug for ProseCommand {
             Self::UpdateCursor { pos } => fields!("UpdateCursor", pos),
             Self::Undo => f.write_str("Undo"),
             Self::Redo => f.write_str("Redo"),
-            Self::ExportDocument { format } => fields!("ExportDocument", format),
-            Self::ImportDocument { format, data } => fields!("ImportDocument", format, data),
+            Self::Interop(command) => f.debug_tuple("Interop").field(command).finish(),
         }
     }
 }
@@ -2101,67 +2103,37 @@ pub enum MarkdownFlavor {
     CommonMark,
 }
 
-/// The format a report speaks of.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ConversionFormat {
-    Ambre,
-    Markdown,
+/// What a finished Prose conversion carried and lost (`INTEROP-003`).
+pub type ConversionReport = ambre_bus::interop::ConversionReport<ProseConstruct>;
+
+/// Why a conversion produced nothing (`INTEROP-002`, `PROSE-IO-047`).
+pub use ambre_bus::interop::InteropError;
+
+/// A construct a Prose conversion carries or loses, as its report names it.
+/// Three families have their own outcome. What a format lacks is dropped, and
+/// so is what a reader does not know. What the tree refuses is moved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ProseConstruct {
+    /// A construct the format has no syntax for (`PROSE-IO-004`).
+    Feature(UnsupportedFeature),
+    /// An element the reader does not recognise, its text kept where it has
+    /// any (`PROSE-IO-005`).
+    Element(DroppedElement),
+    /// A block the tree refuses where the file put it (`PROSE-IO-026`).
+    Block(LiftedBlock),
 }
 
-/// What a finished conversion lost, for the user to read (`PROSE-IO-004`,
-/// `PROSE-IO-053`). A conversion that produced nothing answers an
-/// [`InteropError`] instead: the two are never one type (`PROSE-IO-047`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConversionReport {
-    pub format: ConversionFormat,
-    pub warnings: Vec<ConversionWarning>,
-}
-
-impl ConversionReport {
-    /// A report of nothing lost.
-    #[must_use]
-    pub fn clean(format: ConversionFormat) -> Self {
-        Self {
-            format,
-            warnings: Vec::new(),
+impl ambre_bus::interop::Construct for ProseConstruct {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Feature(feature) => feature.label(),
+            Self::Element(element) => element.label(),
+            Self::Block(block) => block.label(),
         }
     }
 }
 
-/// The times one construct was lost in a conversion, the figure a
-/// warning carries in place of a repeat.
-pub enum ConversionLosses {}
-
-impl ambre_core::CountKind for ConversionLosses {
-    type Repr = u32;
-    const NAME: &'static str = "WarningCount";
-}
-
-/// One fidelity loss. The same construct lost twice is one warning with its
-/// count, so a long file does not bury the user in repeats.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ConversionWarning {
-    /// A construct the format has no syntax for, dropped or approximated.
-    FeatureNotSupported {
-        feature: UnsupportedFeature,
-        format: ConversionFormat,
-        count: Count<ConversionLosses>,
-    },
-    /// An element the reader does not recognise, dropped with its markup
-    /// and its text kept where it has any (`PROSE-IO-005`).
-    ElementDropped {
-        element: DroppedElement,
-        count: Count<ConversionLosses>,
-    },
-    /// A block the tree refuses where the file put it, moved to the nearest
-    /// place it allows (`PROSE-IO-026`, `PROSE-IO-052`).
-    BlockLifted {
-        block: LiftedBlock,
-        count: Count<ConversionLosses>,
-    },
-}
-
-/// A construct a format has no syntax for, the subject of a [`ConversionWarning::FeatureNotSupported`].
+/// A construct a format has no syntax for, the subject of a [`ProseConstruct::Feature`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnsupportedFeature {
     PageFormat,
@@ -2233,7 +2205,7 @@ impl fmt::Display for UnsupportedFeature {
     }
 }
 
-/// An element a reader does not recognise, the subject of a [`ConversionWarning::ElementDropped`].
+/// An element a reader does not recognise, the subject of a [`ProseConstruct::Element`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DroppedElement {
     Footnote,
@@ -2269,7 +2241,7 @@ impl fmt::Display for DroppedElement {
     }
 }
 
-/// The kind of block a [`ConversionWarning::BlockLifted`] moved. The three table types read as one table.
+/// The kind of block a [`ProseConstruct::Block`] names. The three table types read as one table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LiftedBlock {
     Paragraph,
@@ -2331,33 +2303,16 @@ impl fmt::Display for FindRefusal {
     }
 }
 
-/// Why a conversion produced nothing (`PROSE-IO-010`, `PROSE-IO-047`).
-///
-/// The reason of a parse failure may quote the foreign file, so `Debug`
-/// prints its length alone.
-#[derive(Clone, PartialEq, Eq, thiserror::Error)]
-pub enum InteropError {
-    /// The bytes do not read as the format named.
-    #[error("the file could not be read: {0}")]
-    ParseFailed(String),
-    /// The file is larger than a conversion accepts.
-    #[error("the file is too large to import ({} bytes)", .0.get())]
-    TooLarge(ambre_core::Count<ambre_core::Octets>),
-}
-
-impl std::fmt::Debug for InteropError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ExportFormat {
+    /// The format a report of this writer names.
+    #[must_use]
+    pub const fn file_format(self) -> ambre_bus::interop::FileFormat {
         match self {
-            Self::ParseFailed(reason) => f
-                .debug_tuple("ParseFailed")
-                .field(&ambre_core::RedactedChars::of(reason))
-                .finish(),
-            Self::TooLarge(size) => f.debug_tuple("TooLarge").field(size).finish(),
+            Self::Ambre => ambre_bus::interop::FileFormat::Ambre,
+            Self::Markdown(_) => ambre_bus::interop::FileFormat::Markdown,
         }
     }
-}
 
-impl ExportFormat {
     /// The media type of the bytes this format writes (`PROSE-IO-020`).
     #[must_use]
     pub fn media_type(self) -> ambre_core::MediaType {
@@ -2451,8 +2406,7 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::UpdateCursor { .. }
             | Self::Undo
             | Self::Redo
-            | Self::ExportDocument { .. }
-            | Self::ImportDocument { .. } => ambre_bus::Traffic::Lossless,
+            | Self::Interop(_) => ambre_bus::Traffic::Lossless,
         }
     }
 }
@@ -2479,8 +2433,10 @@ impl ProseCommand {
                 | Self::FindPrev
                 | Self::FindClose
                 | Self::FollowCrossRef { .. }
-                | Self::ExportDocument { .. }
-        )
+        ) && match self {
+            Self::Interop(command) => command.is_mutating(),
+            _ => true,
+        }
     }
 
     /// The name of [`ProseCommand::ReplyToComment`], for a reader that must
@@ -2568,8 +2524,10 @@ impl ProseCommand {
             Self::UpdateCursor { .. } => "moving the cursor",
             Self::Undo => "undoing",
             Self::Redo => "redoing",
-            Self::ExportDocument { .. } => "saving to a file",
-            Self::ImportDocument { .. } => "importing a file",
+            Self::Interop(command) => match command.direction() {
+                ambre_bus::interop::Direction::Export => "saving to a file",
+                ambre_bus::interop::Direction::Import => "importing a file",
+            },
         })
     }
 }
@@ -2580,9 +2538,6 @@ impl ProseCommand {
 
 /// One thing the view is told. A second enum would put a document fact in two
 /// places and leave the dispatch with a hole (`PROSE-UI-001`).
-///
-/// The interop reports reach this enum later, with the Story that builds them
-/// (`ambre-roadmap.md` E5).
 #[derive(Clone, PartialEq)]
 pub enum ProseEvent {
     /// A layout the Logic thread computed and shaped, whole. The view draws it
@@ -2630,19 +2585,13 @@ pub enum ProseEvent {
     },
     /// A full-state read the schema gate refused (`SCHEMA-008`).
     DocumentRefused { reason: String },
-    /// A finished export: the bytes, the name to save them under, and their
-    /// media type, so one download path serves every format (`PROSE-IO-020`).
-    /// The view hands them to the browser (`PROSE-IO-056`).
-    ExportReady {
-        filename: ambre_core::ExportFilename,
-        media_type: ambre_core::MediaType,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
-        /// What the format could not carry (`PROSE-IO-018`).
-        report: ConversionReport,
-    },
-    /// An import landed, and what the file lost on the way in
-    /// (`PROSE-IO-053`).
-    ImportCompleted { report: ConversionReport },
+    /// The shared answer of an import or an export (`INTEROP-001`). A
+    /// finished export carries the bytes, their name and their media type, so
+    /// one download path serves every format (`PROSE-IO-020`). The view hands
+    /// them to the browser (`PROSE-IO-056`). Each finished conversion carries
+    /// its report (`PROSE-IO-053`), and one that produced nothing its error
+    /// (`PROSE-IO-047`).
+    Interop(ambre_bus::interop::InteropAnswer<ProseConstruct>),
     /// The entries of one table-of-contents block, rebuilt from a layout
     /// (`PROSE-FEAT-003`).
     TocUpdated {
@@ -2750,13 +2699,7 @@ impl fmt::Debug for ProseEvent {
                 blocks,
             } => fields!("MediaArrived", content_hash, blocks),
             Self::DocumentRefused { reason } => fields!("DocumentRefused", reason),
-            Self::ExportReady {
-                filename,
-                media_type,
-                data,
-                report,
-            } => fields!("ExportReady", filename, media_type, data, report),
-            Self::ImportCompleted { report } => fields!("ImportCompleted", report),
+            Self::Interop(event) => f.debug_tuple("Interop").field(event).finish(),
             Self::TocUpdated { block_id, toc } => fields!("TocUpdated", block_id, toc),
             Self::WordCountUpdated { count } => fields!("WordCountUpdated", count),
             Self::SelectionMarks {
@@ -2990,9 +2933,6 @@ pub enum ProseRefusal {
     /// A write the CRDT engine itself refused.
     #[error("the document engine could not write the change: {0}")]
     WriteFailed(String),
-    /// A file that produced nothing (`PROSE-IO-047`).
-    #[error(transparent)]
-    Interop(#[from] InteropError),
 }
 
 impl fmt::Debug for ProseRefusal {
@@ -3034,7 +2974,6 @@ impl fmt::Debug for ProseRefusal {
             Self::NoCrossRef => f.write_str("NoCrossRef"),
             Self::NonFiniteLength => f.write_str("NonFiniteLength"),
             Self::WriteFailed(why) => tuple!("WriteFailed", why),
-            Self::Interop(error) => tuple!("Interop", error),
         }
     }
 }

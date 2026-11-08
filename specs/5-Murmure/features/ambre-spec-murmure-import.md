@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-368` | `POST` | Importing an archive MUST create one private channel of the chosen space per channel of the archive. | this spec section 3; `MURMURE-048` | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-369` | `POST` | An import MUST write the history as final segments, in the order of the archive. | this spec section 3; `MURMURE-063` | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-370` | `POST` | An import MUST attach the files the archive holds, through the shared media flow. | this spec section 3; `MURMURE-132` | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-371` | `POST` | An import MUST end with a report that lists what it could not carry. | this spec section 3 | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-371` | `POST` | An import MUST end with a report that lists what it could not carry. | this spec section 3; `INTEROP-003`; `INTEROP-012` | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-372` | `FAIL` | Given an archive it cannot read, the import MUST stop before it creates anything. | this spec section 3 | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-373` | `FRAME` | An import MUST NOT change an existing channel. | this spec section 3 | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -71,8 +71,8 @@ imported message is authored by the importing member, which the authorship check
 a live message, which an imported one never had. The import is the only author of those snapshots,
 so it confirms them itself (`AUTHOR-021`).
 
-**Formats.** The Slack export and the JSON export of Discord. The report follows the shared model
-of the `One interop vocabulary` Story (`ambre-roadmap.md` E8).
+**Formats.** The Slack export and the JSON export of Discord, with the shared report
+(`1-Foundations/ambre-spec-interop.md section 3`).
 
 **The way out.** The container of `ambre-spec-docfile.md` holds one document, and a channel is
 several. The `Murmure export` Story (`ambre-roadmap.md` E5) adds a container version that holds
@@ -115,4 +115,4 @@ a list. A segment the member cannot open stays out of the file.
 |---|---|
 | How a private channel is created | `features/ambre-spec-murmure-channels.md` |
 | How a file is uploaded | `ambre-spec-media.md` |
-| What a conversion report holds | the `One interop vocabulary` Story (`ambre-roadmap.md` E8) |
+| What a conversion report holds | `1-Foundations/ambre-spec-interop.md` |

@@ -180,8 +180,10 @@ impl TrameView {
             // Interop export (`trame-import-export`): the Logic thread
             // serialized the file bytes; the UI Thread owns the DOM, so the
             // download is triggered here. No canvas state changes.
-            TrameEvent::ExportComplete { filename, data } => {
-                trigger_download(&filename, &data);
+            TrameEvent::Interop(ambre_bus::interop::InteropAnswer::ExportReady {
+                file, ..
+            }) => {
+                trigger_download(&file.filename, &file.data);
             }
             // Authoritative copy reply (`trame-clipboard`): the Logic thread
             // serialized the whole tracked selection from the document (no viewport
@@ -206,7 +208,7 @@ impl TrameView {
             // Interop import finished (`trame-import-export`): the accompanying
             // DataReset already re-fetches the populated region, so this is purely
             // informational here (the chrome relay may toast it).
-            TrameEvent::ImportComplete { .. } => {}
+            TrameEvent::Interop(_) => {}
             // Chrome-only variants: surfaced as toasts / toolbar state / undo-redo
             // enablement by the switchboard (`ambre-app`). No canvas state
             // changes -- the cache is refreshed by the DataReset that accompanies

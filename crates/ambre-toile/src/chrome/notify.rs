@@ -4,15 +4,13 @@
 // every event and names no Toile variant itself, so the mapping from event to
 // toast lives here, exactly as Trame's does.
 //
-// The wording is pure and host-tested in `ui::interop`; this is the collage that
-// puts it on screen.
+// The wording is the shared report sentence (`ambre_bus::interop`); this is the
+// collage that puts it on screen.
 // ============================================================================
 
 use crate::message::ToileEvent;
 use ambre_bus::{Embed, UiEvent};
 use ambre_chrome::Toasts;
-
-use crate::ui::interop::import_message;
 
 /// Surface a Toile `UiEvent` as a transient toast when it carries something the
 /// user must see. That is: what an import brought in and what it dropped
@@ -28,30 +26,20 @@ pub fn notify_event<S: Embed<ToileEvent>, P: ambre_bus::ChannelPlane>(
         return;
     };
     match te {
-        // The import landed. A lossy one says so here and nowhere else: the
-        // diagnostic log is not a surface a user reads (`TOILE-IO-022`).
-        ToileEvent::ImportReport { imported, skipped } => {
-            let message = import_message(*imported, skipped);
-            if skipped.is_empty() {
-                toasts.info(message);
-            } else {
-                toasts.warning(message);
+        // The shared sentence (`INTEROP-007`, `INTEROP-011`). A lossy import
+        // says so here and nowhere else: the diagnostic log is not a surface a
+        // user reads (`TOILE-IO-022`). A refused file leaves the board as it
+        // was, and without a word the drop looks like a miss. An export that
+        // produced nothing is otherwise silent (`TOILE-IO-029`). The download
+        // starts canvas-side on the same event.
+        ToileEvent::Interop(interop) => {
+            if let Some(message) = interop.message() {
+                if interop.is_warning() {
+                    toasts.warning(message);
+                } else {
+                    toasts.info(message);
+                }
             }
-        }
-        // Nothing was applied, and the board looks exactly as it did: without a
-        // word the user cannot tell the drop from a miss.
-        ToileEvent::ImportFailed(reason) => {
-            toasts.warning(format!("Import failed: {reason}"));
-        }
-        // The download starts canvas-side on this same event; the toast confirms
-        // which file left.
-        ToileEvent::ExportComplete { filename, .. } => {
-            toasts.info(format!("Exported {filename}"));
-        }
-        // An export that produced nothing is silent otherwise: no file lands,
-        // and the board looks exactly as it did (`TOILE-IO-029`).
-        ToileEvent::ExportFailed(reason) => {
-            toasts.warning(format!("Export failed: {reason}"));
         }
         // The board was written by a newer client (`SCHEMA-008`). An error, not
         // a warning: nothing opened, and the remedy is not on this board.

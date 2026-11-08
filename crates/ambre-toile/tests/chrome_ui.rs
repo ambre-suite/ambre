@@ -25,6 +25,9 @@
 )]
 
 use ambre_bus::UiEvent;
+use ambre_bus::interop::{
+    Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, Occurrences, Outcome,
+};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
@@ -47,6 +50,7 @@ use ambre_toile::message::{
     Elements, PresencePayload, PresenceUpdate, PresentMode, Slide, SlidePosition, ToileCommand,
     ToileEvent,
 };
+use ambre_toile::message::{ToileConstruct, ToileReport};
 use ambre_toile::ui::menu::{self, ClickSite, CtxScope, GroupHeld, LockMix};
 use ambre_toile::ui::menu_bar::ZOOM_IN;
 use ambre_toile::ui::{PanelState, Tool};
@@ -890,10 +894,16 @@ fn mount_notified(event: ToileEvent) -> web_sys::Element {
 fn an_import_report_reaches_the_user() {
     let owner = Owner::new();
     owner.set();
-    let root = mount_notified(ToileEvent::ImportReport {
-        imported: ambre_core::Count::<ambre_toile::message::Elements>::new(4),
-        skipped: vec![ambre_core::Opaque::<ambre_toile::message::SkipReasons>::new("gradient")],
-    });
+    let mut report = ToileReport::new(Direction::Import, FileFormat::Svg);
+    report.record_count(
+        ToileConstruct::Element,
+        Outcome::Carried,
+        ambre_core::Count::<Occurrences>::new(4),
+    );
+    report.record(ToileConstruct::NonSolidPaint, Outcome::Dropped);
+    let root = mount_notified(ToileEvent::Interop(InteropAnswer::ImportCompleted {
+        report,
+    }));
     let toast = root
         .query_selector(".ambre-toast")
         .unwrap()
@@ -910,7 +920,10 @@ fn an_import_report_reaches_the_user() {
 fn a_refused_file_reaches_the_user() {
     let owner = Owner::new();
     owner.set();
-    let root = mount_notified(ToileEvent::ImportFailed("not an SVG".to_owned()));
+    let root = mount_notified(ToileEvent::Interop(InteropAnswer::failed(
+        Direction::Import,
+        InteropError::ParseFailed("not an SVG".to_owned()),
+    )));
     let text = root
         .query_selector(".ambre-toast")
         .unwrap()
@@ -926,11 +939,14 @@ fn a_refused_file_reaches_the_user() {
 fn a_finished_export_names_its_file() {
     let owner = Owner::new();
     owner.set();
-    let root = mount_notified(ToileEvent::ExportComplete {
-        skipped: Vec::new(),
-        filename: ambre_core::ExportFilename::named("board", ambre_core::ExportExtension::Svg),
-        data: ambre_core::Payload::<ambre_core::FileBytes>::default(),
-    });
+    let root = mount_notified(ToileEvent::Interop(InteropAnswer::ExportReady {
+        file: ExportedFile {
+            filename: ambre_core::ExportFilename::named("board", ambre_core::ExportExtension::Svg),
+            media_type: ambre_core::MediaType::from("image/svg+xml"),
+            data: ambre_core::Payload::<ambre_core::FileBytes>::default(),
+        },
+        report: ToileReport::new(Direction::Export, FileFormat::Svg),
+    }));
     let text = root
         .query_selector(".ambre-toast")
         .unwrap()
@@ -948,9 +964,10 @@ fn a_finished_export_names_its_file() {
 fn a_refused_export_says_why() {
     let owner = Owner::new();
     owner.set();
-    let root = mount_notified(ToileEvent::ExportFailed(
-        "the fonts are still loading".to_owned(),
-    ));
+    let root = mount_notified(ToileEvent::Interop(InteropAnswer::failed(
+        Direction::Export,
+        InteropError::Stopped("the fonts are still loading".to_owned()),
+    )));
     let text = root
         .query_selector(".ambre-toast")
         .unwrap()

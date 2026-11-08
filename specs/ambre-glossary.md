@@ -144,6 +144,8 @@
 | doc_type | the header byte naming the owning application | | `1-Foundations/ambre-spec-docfile.md` |
 | magic | the four bytes opening every container | | `1-Foundations/ambre-spec-docfile.md` |
 | sealed container | a container a passphrase opens | | `1-Foundations/ambre-spec-docfile.md` |
+| conversion report | what a finished import or export carried and lost, construct by construct | | `1-Foundations/ambre-spec-interop.md` |
+| construct | a thing a document holds that a conversion carries or loses | | `1-Foundations/ambre-spec-interop.md` |
 | commit | land a transaction | | `1-Foundations/ambre-spec-docfile.md` |
 | schema version | the version of the CRDT shape inside a payload | | `1-Foundations/ambre-spec-schema-version.md` |
 | CRDT container | a map, list, text or counter inside a document's CRDT | | `1-Foundations/ambre-spec-schema-version.md` |

@@ -68,8 +68,8 @@ export owns no other state.
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::ExportPdf { sheet_id, page_setup }` | UI to Logic | the sheet, and an optional one-off format that overrides the stored one |
-| `TrameEvent::ExportComplete { filename, data }` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, and the bytes, on the same path a CSV export uses |
+| `TrameCommand::Interop(Export(TrameExport::Pdf { sheet_id, page_setup }))` | UI to Logic | the sheet, and an optional one-off format that overrides the stored one |
+| `TrameEvent::Interop(ExportReady { file, report })` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, and the bytes, on the same path a CSV export uses (`1-Foundations/ambre-spec-interop.md section 3`) |
 
 **The page format:**
 

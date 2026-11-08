@@ -8,7 +8,8 @@
 // drains both the same way (`PROSE-UI-056`).
 // ============================================================================
 
-use crate::message::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand};
+use crate::message::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand, ProseImport};
+use ambre_bus::interop::InteropRequest;
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
 use ambre_commands::{ClipboardWrite, PasteForm};
 use ambre_core::{Commands, StaticKey};
@@ -30,7 +31,7 @@ impl CommandHandler for ProseHandler {
     type Command = ProseCommand;
 
     fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<ProseCommand>> {
-        let export = |format| ProseCommand::ExportDocument { format };
+        let export = |format| ProseCommand::Interop(InteropRequest::Export(format));
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
             SAVE_FILE => ShellAction::Send(export(ExportFormat::Ambre)),
@@ -41,9 +42,11 @@ impl CommandHandler for ProseHandler {
             IMPORT_MARKDOWN => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Markdown,
                 unreadable: "Could not read the Markdown file",
-                read: Box::new(|data| ProseCommand::ImportDocument {
-                    format: ImportFormat::Markdown,
-                    data,
+                read: Box::new(|data| {
+                    ProseCommand::Interop(InteropRequest::Import(ProseImport {
+                        format: ImportFormat::Markdown,
+                        data,
+                    }))
                 }),
             }),
             // A menu row or the palette; the chords are the view's.

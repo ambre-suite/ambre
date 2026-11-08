@@ -19,7 +19,7 @@
 // here.
 // ============================================================================
 
-use crate::message::{PresentFocus, ToileCommand};
+use crate::message::{PresentFocus, ToileCommand, ToileExport};
 use ambre_core::{Commands, StaticKey};
 
 use super::menu;
@@ -261,9 +261,9 @@ pub fn menu_bar_edit(id: StaticKey<Commands>) -> Option<ToileCommand> {
         // The board is on the Logic thread, so the serialization is too. The
         // bytes come back as an event the view hands to the browser
         // (`TOILE-IO-085`).
-        EXPORT_SVG => Some(ToileCommand::ExportSvg),
-        EXPORT_PDF => Some(ToileCommand::ExportPdf),
-        SAVE_FILE => Some(ToileCommand::ExportAmbreFile),
+        EXPORT_SVG => Some(ToileCommand::export(ToileExport::Svg)),
+        EXPORT_PDF => Some(ToileCommand::export(ToileExport::Pdf)),
+        SAVE_FILE => Some(ToileCommand::export(ToileExport::Ambre)),
         _ => None,
     }
 }
@@ -271,6 +271,7 @@ pub fn menu_bar_edit(id: StaticKey<Commands>) -> Option<ToileCommand> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::interop::InteropRequest;
 
     fn item_commands(rows: &[MenuRow]) -> Vec<StaticKey<Commands>> {
         rows.iter()
@@ -303,7 +304,9 @@ mod tests {
         );
         assert!(matches!(
             menu_bar_edit(SAVE_FILE),
-            Some(ToileCommand::ExportAmbreFile)
+            Some(ToileCommand::Interop(InteropRequest::Export(
+                ToileExport::Ambre
+            )))
         ));
     }
 
@@ -394,11 +397,15 @@ mod tests {
         assert!(cmds.contains(&EXPORT_PDF));
         assert!(matches!(
             menu_bar_edit(EXPORT_SVG),
-            Some(ToileCommand::ExportSvg)
+            Some(ToileCommand::Interop(InteropRequest::Export(
+                ToileExport::Svg
+            )))
         ));
         assert!(matches!(
             menu_bar_edit(EXPORT_PDF),
-            Some(ToileCommand::ExportPdf)
+            Some(ToileCommand::Interop(InteropRequest::Export(
+                ToileExport::Pdf
+            )))
         ));
     }
 
@@ -406,8 +413,8 @@ mod tests {
     /// role gate must let a read-only viewer take a copy out.
     #[test]
     fn exports_are_not_mutating() {
-        assert!(!ToileCommand::ExportSvg.is_mutating());
-        assert!(!ToileCommand::ExportPdf.is_mutating());
+        assert!(!ToileCommand::export(ToileExport::Svg).is_mutating());
+        assert!(!ToileCommand::export(ToileExport::Pdf).is_mutating());
     }
 
     /// The two placement entries are UI-only intents (`TOILE-086`,

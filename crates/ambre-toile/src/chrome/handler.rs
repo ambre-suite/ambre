@@ -153,7 +153,9 @@ impl CommandHandler for ToileHandler {
         passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) -> Option<ToileCommand> {
         // The passphrase goes into the command and nowhere else (`ARCH-004`).
-        Some(ToileCommand::ExportAmbreFileSealed { passphrase })
+        Some(ToileCommand::export(
+            crate::message::ToileExport::AmbreSealed { passphrase },
+        ))
     }
 }
 

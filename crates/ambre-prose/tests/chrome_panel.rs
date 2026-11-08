@@ -213,6 +213,53 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     root.remove();
 }
 
+/// `INTEROP-007`: what an export lost reaches the user as the shared
+/// sentence, on screen and not in the log alone.
+#[wasm_bindgen_test]
+fn an_interop_report_reaches_the_user() {
+    use ambre_bus::interop::{Direction, ExportedFile, FileFormat, InteropAnswer, Outcome};
+    use ambre_prose::message::{ConversionReport, ProseConstruct, UnsupportedFeature};
+    let owner = Owner::new();
+    owner.set();
+    let toasts = ambre_chrome::Toasts::new();
+    let mut report = ConversionReport::new(Direction::Export, FileFormat::Markdown);
+    report.record(
+        ProseConstruct::Feature(UnsupportedFeature::Footnote),
+        Outcome::Dropped,
+    );
+    report.record(
+        ProseConstruct::Feature(UnsupportedFeature::Footnote),
+        Outcome::Dropped,
+    );
+    chrome::notify_event(
+        &toasts,
+        &Event::Viewport {
+            document_id: Id::<Document>::mint(),
+            event: ProseEvent::Interop(InteropAnswer::ExportReady {
+                file: ExportedFile {
+                    filename: ambre_core::ExportFilename::named(
+                        "notes",
+                        ambre_core::ExportExtension::Markdown,
+                    ),
+                    media_type: ambre_core::MediaType::from("text/markdown"),
+                    data: ambre_core::Payload::<ambre_core::FileBytes>::default(),
+                },
+                report,
+            }),
+        },
+    );
+    let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });
+    let text = root
+        .query_selector(".ambre-toast")
+        .unwrap()
+        .expect("the report is on screen")
+        .text_content()
+        .unwrap_or_default();
+    assert!(text.contains("notes.md"), "{text}");
+    assert!(text.contains("footnote (2)"), "{text}");
+    root.remove();
+}
+
 /// The ruler element sits on the column the view gave it, moved onto the page
 /// by the canvas origin. Each handle is centred on the position the state
 /// gives it (`PROSE-UI-065`). The element adds no offset of its own, at any

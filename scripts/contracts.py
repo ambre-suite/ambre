@@ -517,8 +517,8 @@ MECHANISM_PATH = re.compile(
 # the shared code, never that an application calls it: `KINETIC-002` read
 # `verified` while Toile broke it.
 APPLICATIONS = re.compile(r"^\*\*Applications:\*\*\s+(?P<apps>.+?)\s*$")
-APPLICATION_NAMES = ("Prose", "Trame", "Toile")
-APPLICATION_LABEL = re.compile(r"(?:^|;)\s*(Prose|Trame|Toile)\s+`")
+APPLICATION_NAMES = ("Prose", "Trame", "Toile", "Murmure")
+APPLICATION_LABEL = re.compile(r"(?:^|;)\s*(Prose|Trame|Toile|Murmure)\s+`")
 
 
 def declared_applications(line: str) -> tuple[list[str], list[str]] | None:

@@ -546,7 +546,7 @@ owns the subsystem.
 | `[ ]` One find and replace | V1 | one match session with a live cursor, in every app, instead of Trame's whole-grid re-scan |
 | `[ ]` One zoom model | V1 | one zoom engine behind the shared widget: Trame gains keyboard and pinch zoom and zoom-to-selection, Prose gains zoom. Pinch belongs here, in every app, and a finger's pan and flick to the "One kinetic scroll" row |
 | `[ ]` One text-editing substrate | V1 | one editing core under both layout drivers: the input pipe, composition, the caret and selection model |
-| `[ ]` One interop vocabulary | MVP | the same import and export events, the same conversion report, the same progress model, in every app |
+| `[x]` One interop vocabulary | MVP | the same import and export events, the same conversion report, the same progress model, in every app |
 | `[x]` One document locale | MVP | the document carries its locale, so collaborators on differently configured machines read identical numbers and dates: the display and the typed input of numbers, dates and separators, the reader's convention, a new document seeded with its creator's default locale, and exports in the document's locale. Done when `LOCALE-001` to `LOCALE-023`, `TRAME-110`, `TRAME-237` and `TRAME-238` read `verified` |
 | `[ ]` One resize command | V1 | one row and column resize primitive for both table models. No shared table object |
 | `[ ]` One media cache | V1 | every decoded image goes through one bounded cache, Toile and Trame included |

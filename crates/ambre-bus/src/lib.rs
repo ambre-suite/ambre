@@ -31,6 +31,7 @@ pub mod command;
 pub mod conduit;
 pub mod content;
 pub mod event;
+pub mod interop;
 pub mod logic;
 pub mod lossy;
 pub mod outbox;

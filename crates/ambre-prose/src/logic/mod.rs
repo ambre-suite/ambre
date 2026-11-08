@@ -96,7 +96,9 @@ use crate::layout::reflow::Paginator;
 use crate::layout::run::LayoutVersion;
 use crate::layout::run::ShapedLayout;
 use crate::mark;
+use crate::message::ProseImport;
 use crate::schema;
+use ambre_bus::interop::InteropRequest;
 
 /// How many font faces a document measures on (`PROSE-115`).
 pub enum Faces {}
@@ -889,8 +891,10 @@ impl ProseState {
             // The native header needs the identity the registry holds. So the
             // Logic dispatcher serves that export before the document is
             // reached (`PROSE-IO-028`). A text format is the document's own.
-            ProseCommand::ExportDocument { format } => self.export_document(format),
-            ProseCommand::ImportDocument { format, data } => self.import_document(format, &data),
+            ProseCommand::Interop(InteropRequest::Export(format)) => self.export_document(format),
+            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, data })) => {
+                self.import_document(format, &data)
+            }
         }
     }
 

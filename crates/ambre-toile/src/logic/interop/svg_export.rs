@@ -22,23 +22,26 @@ use kurbo::Rect;
 
 use super::ExportElement;
 use crate::logic::model::{ElementKind, ShapeKind};
+use crate::message::{ToileConstruct, ToileReport};
+use ambre_bus::interop::{Direction, FileFormat, Outcome};
 
 /// One SVG export: the document, and what it could not express
 /// (`TOILE-IO-025`).
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SvgExport {
     pub document: String,
-    /// One line per element the serializer has no shape for, in board order.
-    pub skipped: Vec<String>,
+    /// Each kind the serializer has no shape for, with its count, in the
+    /// order the board first holds it.
+    pub report: ToileReport,
 }
 
-/// The document prints as its length alone (`ZK-006`). A skipped line names
-/// an element kind, never its content, so it prints whole.
+/// The document prints as its length alone (`ZK-006`). The report names
+/// element kinds, never their content, so it prints whole.
 impl std::fmt::Debug for SvgExport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SvgExport")
             .field("document", &crate::logic::ByteLen::new(&self.document))
-            .field("skipped", &self.skipped)
+            .field("report", &self.report)
             .finish()
     }
 }
@@ -68,7 +71,7 @@ pub fn export_svg(elements: &[ExportElement]) -> SvgExport {
         f(h)
     );
     out.push('\n');
-    let mut skipped = Vec::new();
+    let mut report = ToileReport::new(Direction::Export, FileFormat::Svg);
     for el in elements {
         match element_svg(el) {
             Some(frag) => {
@@ -76,27 +79,28 @@ pub fn export_svg(elements: &[ExportElement]) -> SvgExport {
                 out.push_str(&frag);
                 out.push('\n');
             }
-            None => skipped.push(format!("{}: no SVG shape expresses it", kind_name(el.kind))),
+            None => report.record(kind_construct(el.kind), Outcome::Dropped),
         }
     }
     out.push_str("</svg>\n");
     SvgExport {
         document: out,
-        skipped,
+        report,
     }
 }
 
 /// What a skipped element is called in the report. A user reads this, so it
 /// names the thing on the board rather than the variant.
-fn kind_name(kind: ElementKind) -> &'static str {
+const fn kind_construct(kind: ElementKind) -> ToileConstruct {
     match kind {
-        ElementKind::Sticky => "a sticky note",
-        ElementKind::Group => "a group",
-        ElementKind::Frame => "a frame",
-        ElementKind::Embed => "an embed",
-        ElementKind::DocEmbed => "an embedded document",
-        ElementKind::Drawing => "a freehand stroke",
-        _ => "an element",
+        ElementKind::Sticky => ToileConstruct::StickyNote,
+        ElementKind::Group => ToileConstruct::Group,
+        ElementKind::Frame => ToileConstruct::Frame,
+        ElementKind::Embed => ToileConstruct::Embed,
+        ElementKind::DocEmbed => ToileConstruct::EmbeddedDocument,
+        ElementKind::Drawing => ToileConstruct::FreehandStroke,
+        ElementKind::Image => ToileConstruct::Picture,
+        _ => ToileConstruct::Element,
     }
 }
 
@@ -394,10 +398,23 @@ mod tests {
             ExportElement::new(ElementKind::Drawing, Rect::new(0.0, 0.0, 10.0, 10.0)),
         ];
         let export = export_svg(&els);
-        assert_eq!(export.skipped.len(), 3, "{:?}", export.skipped);
-        assert!(export.skipped[0].contains("sticky"));
-        assert!(export.skipped[1].contains("group"));
-        assert!(export.skipped[2].contains("stroke"));
+        let named: Vec<ToileConstruct> = export
+            .report
+            .entries()
+            .iter()
+            .filter(|entry| entry.outcome == Outcome::Dropped)
+            .map(|entry| entry.construct)
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ToileConstruct::StickyNote,
+                ToileConstruct::Group,
+                ToileConstruct::FreehandStroke
+            ],
+            "{:?}",
+            export.report
+        );
         // The rect still left, and nothing it wrote names the skipped kinds.
         assert!(export.document.contains("<rect"));
     }
@@ -475,7 +492,15 @@ mod tests {
         );
         let export = export_svg(&[el]);
         assert!(!export.document.contains("<image"));
-        assert_eq!(export.skipped.len(), 1, "{:?}", export.skipped);
+        assert_eq!(
+            export
+                .report
+                .count(ToileConstruct::Picture, Outcome::Dropped)
+                .get(),
+            1,
+            "{:?}",
+            export.report
+        );
     }
 
     /// `TOILE-IO-088`: text carries the size and the ink it was drawn with,

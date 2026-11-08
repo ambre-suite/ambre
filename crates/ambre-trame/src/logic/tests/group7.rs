@@ -28,7 +28,11 @@ fn csv_export_typed_6x10_has_no_trailing_columns() {
             });
         }
     }
-    let out = state.handle_command(TrameCommand::ExportActiveSheetCsv);
+    let out = state.handle_command(TrameCommand::export(crate::message::TrameExport::Csv {
+        sheet_id: None,
+        delimiter: None,
+        range: None,
+    }));
     let text = String::from_utf8(export_bytes(&out)).unwrap();
     for line in text.lines() {
         assert_eq!(
@@ -52,11 +56,11 @@ fn csv_export_evaluates_formulas() {
         col: Pos::<Col>::new(1),
         text: "=A1*3".to_owned(),
     });
-    let out = state.handle_command(TrameCommand::ExportCsv {
-        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
+    let out = state.handle_command(TrameCommand::export(crate::message::TrameExport::Csv {
+        sheet_id: Some(Id::<Sheet>::from_text("s0".to_owned())),
         delimiter: None,
         range: None,
-    });
+    }));
     let bytes = export_bytes(&out);
     assert_eq!(String::from_utf8(bytes).unwrap(), "2,6\n");
 }
@@ -627,11 +631,11 @@ fn find_matches_the_formatted_value() {
 #[test]
 fn csv_export_writes_the_formatted_value() {
     let mut state = percent_sheet();
-    let out = state.handle_command(TrameCommand::ExportCsv {
-        sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
+    let out = state.handle_command(TrameCommand::export(crate::message::TrameExport::Csv {
+        sheet_id: Some(Id::<Sheet>::from_text("s0".to_owned())),
         delimiter: None,
         range: None,
-    });
+    }));
     assert_eq!(String::from_utf8(export_bytes(&out)).unwrap(), "50.0%\n");
 }
 
@@ -640,18 +644,19 @@ fn csv_export_writes_the_formatted_value() {
 #[test]
 fn import_reports_unreadable_records() {
     let mut state = TrameState::new();
-    let out = state.handle_command(TrameCommand::ImportCsv {
+    let out = state.handle_command(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\n\xff\xfe,c\nd,e\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: Some(Id::<Sheet>::from_text("s0".to_owned())),
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
-    });
-    assert!(
-        out.display
-            .iter()
-            .any(|e| matches!(e, TrameEvent::Error { message } if message.starts_with("1 record"))),
+    }));
+    assert_eq!(
+        import_report(&out)
+            .count(TrameConstruct::UnreadableRecord, Outcome::Dropped)
+            .get(),
+        1,
         "the skipped record is reported: {:?}",
         out.display
     );
@@ -669,29 +674,35 @@ fn an_import_past_the_grid_edge_is_cut_and_said() {
     data.extend(b",\n".repeat(crate::TOTAL_ROWS.to_usize() - 1));
     data.extend(b"z\n");
     let mut state = TrameState::new();
-    let out = state.handle_command(TrameCommand::ImportCsv {
+    let out = state.handle_command(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: Some(Id::<Sheet>::from_text("s0".to_owned())),
         start_row: Pos::<Row>::new(0),
         start_col: crate::LAST_COL.prev().expect("a column before the last"),
-    });
-    assert!(
-        out.display.iter().any(|e| matches!(
-            e,
-            TrameEvent::Error { message } if message.ends_with(
-                "1 record(s) and 1 field(s) past its edge were left out"
-            )
-        )),
-        "the cut is reported: {:?}",
-        out.display
+    }));
+    let report = import_report(&out);
+    assert_eq!(
+        (
+            report
+                .count(TrameConstruct::RecordPastLastRow, Outcome::Dropped)
+                .get(),
+            report
+                .count(TrameConstruct::FieldPastLastColumn, Outcome::Dropped)
+                .get(),
+        ),
+        (1, 1),
+        "the cut is reported: {report:?}"
     );
-    assert!(out.display.iter().any(|e| matches!(
-        e,
-        TrameEvent::ImportComplete { rows, cols, .. }
-            if *rows == crate::TOTAL_ROWS && cols.get() == 2
-    )));
+    assert_eq!(
+        report.count(TrameConstruct::Row, Outcome::Carried).get(),
+        crate::TOTAL_ROWS.get()
+    );
+    assert_eq!(
+        report.count(TrameConstruct::Column, Outcome::Carried).get(),
+        2
+    );
     assert_eq!(state.index.col_len(), crate::TOTAL_COLS);
     assert_eq!(read_cell(&mut state, 0, crate::LAST_COL.get()), "b");
 }
@@ -707,19 +718,22 @@ fn an_import_starting_past_the_grid_edge_writes_nothing() {
         (crate::TOTAL_ROWS.as_end(), Pos::<Col>::new(0)),
         (Pos::<Row>::new(0), crate::TOTAL_COLS.as_end()),
     ] {
-        let out = state.handle_command(TrameCommand::ImportCsv {
+        let out = state.handle_command(TrameCommand::import_csv(crate::message::CsvImport {
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\n".to_vec()),
             delimiter: None,
             header: HeaderRow::Absent,
             target_sheet_id: None,
             start_row,
             start_col,
-        });
+        }));
         assert!(out.update.is_none(), "{:?}", out.display);
         assert!(
             matches!(
                 out.display.as_slice(),
-                [TrameEvent::Error { message }] if message.contains("past its edge")
+                [TrameEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                    error: InteropError::Stopped(message),
+                    ..
+                }))] if message.contains("no field of the file fits")
             ),
             "{:?}",
             out.display
@@ -734,13 +748,19 @@ fn an_import_starting_past_the_grid_edge_writes_nothing() {
 fn export_with_nothing_to_write_says_so() {
     let mut state = TrameState::new();
     for sheet_id in ["s0", "nope"] {
-        let out = state.handle_command(TrameCommand::ExportCsv {
-            sheet_id: Id::<Sheet>::from_text(sheet_id.to_owned()),
+        let out = state.handle_command(TrameCommand::export(crate::message::TrameExport::Csv {
+            sheet_id: Some(Id::<Sheet>::from_text(sheet_id.to_owned())),
             delimiter: None,
             range: None,
-        });
+        }));
         assert!(
-            matches!(&out.display[..], [TrameEvent::Error { .. }]),
+            matches!(
+                &out.display[..],
+                [TrameEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                    direction: Direction::Export,
+                    ..
+                }))]
+            ),
             "{sheet_id}: {:?}",
             out.display
         );

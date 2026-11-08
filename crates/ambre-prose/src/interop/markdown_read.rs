@@ -7,9 +7,7 @@
 //! kept where it has any (`PROSE-IO-005`). A file that is not text, or is too
 //! large, fails as a typed error and yields no form at all (`PROSE-IO-010`).
 
-use crate::message::{
-    CodeLang, ConversionFormat, ConversionReport, DroppedElement, HeadingLevel, InteropError,
-};
+use crate::message::{CodeLang, ConversionReport, DroppedElement, HeadingLevel, InteropError};
 use ambre_core::Validated;
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
@@ -129,7 +127,10 @@ impl Default for Reader {
             strike: 0,
             links: Vec::new(),
             image: 0,
-            warnings: Warnings::new(ConversionFormat::Markdown),
+            warnings: Warnings::new(
+                ambre_bus::interop::Direction::Import,
+                ambre_bus::interop::FileFormat::Markdown,
+            ),
         }
     }
 }
@@ -479,7 +480,7 @@ fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {
 mod tests {
     use super::*;
     use crate::interop::markdown_write;
-    use crate::message::{ConversionWarning, MarkdownFlavor};
+    use crate::message::{MarkdownFlavor, ProseConstruct};
 
     /// [`read`] over a file of `bytes`.
     fn read_bytes(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
@@ -577,10 +578,10 @@ mod tests {
             read_bytes(b"> quoted\n\n<div>raw</div>\n\n![alt](x.png)\n").expect("reads");
         assert_eq!(ir.blocks, vec![para(vec![IrRun::plain("quoted")])]);
         let dropped: Vec<_> = report
-            .warnings
+            .entries()
             .iter()
-            .filter_map(|w| match w {
-                ConversionWarning::ElementDropped { element, .. } => Some(element.label()),
+            .filter_map(|entry| match entry.construct {
+                ProseConstruct::Element(element) => Some(element.label()),
                 _ => None,
             })
             .collect();
@@ -625,7 +626,7 @@ mod tests {
             "{}",
             depth(&ir.blocks)
         );
-        assert!(!report.warnings.is_empty());
+        assert!(!report.is_lossless());
     }
 
     /// Written then read, the form comes back: the reader and the writer
