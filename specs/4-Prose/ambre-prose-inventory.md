@@ -27,7 +27,7 @@
 | `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | implemented | 14 |  |
 | `prose-tables` | A grid of cells inside the document. | implemented | 47 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | implemented | 45 |  |
-| `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 3 |  |
+| `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 5 | 1 |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 14 |  |
 | `prose-clipboard` | Copy, cut and paste. | partial | 25 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | partial | 45 |  |
@@ -44,4 +44,4 @@
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 14 implemented, 10 partial, 4 design-only. 701 contract rows, 0 loose.**
+**28 features: 14 implemented, 10 partial, 4 design-only. 703 contract rows, 1 loose.**
