@@ -904,7 +904,7 @@ fn laid_on(selection: &Selection, layout: &Layout<Brush>) -> Selection {
 }
 
 /// `caret`, a box `layout` gives a cursor, moved right by the start of the
-/// line it is drawn on. Parley 0.12 leaves a line's start out of a caret,
+/// line it is drawn on. Parley 0.10 leaves a line's start out of a caret,
 /// though it draws, hits and selects the glyphs past it. An indented line
 /// would draw its caret left of its text (`CANVAS-085`).
 fn on_its_line(layout: &Layout<Brush>, caret: BoundingBox) -> BoundingBox {

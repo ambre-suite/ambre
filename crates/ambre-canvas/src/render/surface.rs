@@ -385,13 +385,9 @@ impl DrawSurface for WgpuSurface<'_> {
         let parley_run = run.run();
         let font_data = parley_run.font();
         let font_size = Px::<crate::space::Parley>::new(parley_run.font_size());
-        // swash reads the raw bits. A static face has no coordinate, and an
-        // empty Vec does not allocate.
-        let coords: Vec<i16> = parley_run
-            .normalized_coords()
-            .iter()
-            .map(|c| c.to_bits())
-            .collect();
+        // swash reads the raw F2Dot14 bits, which parley 0.10 hands out as
+        // they are. A static face has no coordinate, and an empty slice is free.
+        let coords: &[i16] = parley_run.normalized_coords();
         let clip = self.active_clip();
 
         // A rotated run (Toile: a rotated sticky / text) rotates each glyph bitmap,
@@ -421,7 +417,7 @@ impl DrawSurface for WgpuSurface<'_> {
             let slot = match self.renderer.atlas.get_or_rasterize(
                 font_data,
                 raster,
-                &coords,
+                coords,
                 GlyphId::new(glyph.id as u16),
             ) {
                 Some(s) => s,
