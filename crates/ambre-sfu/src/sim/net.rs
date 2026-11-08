@@ -41,6 +41,8 @@ pub struct Member {
     pub id: Seq<Participant>,
     pub up: Impairment,
     pub down: Impairment,
+    /// The offers the SFU sent this participant.
+    pub offers: usize,
 }
 
 /// The simulated network.
@@ -55,13 +57,16 @@ pub struct Net {
 }
 
 impl Net {
-    pub fn new() -> Self {
+    /// A network with no participant. `seed` seeds the random numbers str0m draws on this
+    /// thread, so a run follows one path whatever the load of the machine.
+    pub fn new(seed: u64) -> Self {
+        fastrand::seed(seed);
         let now = Instant::now();
         let sfu_addr: SocketAddr = (Ipv4Addr::new(10, 0, 0, 254), 4000).into();
         Self {
             now,
             epoch: now,
-            sfu: Sfu::new(sfu_addr),
+            sfu: Sfu::serial(sfu_addr),
             sfu_addr,
             members: Vec::new(),
             flights: BinaryHeap::new(),
@@ -88,6 +93,7 @@ impl Net {
             id,
             up: Impairment::new(profile, seed.wrapping_mul(2)),
             down: Impairment::new(profile, seed.wrapping_mul(2).wrapping_add(1)),
+            offers: 0,
         });
         index
     }
@@ -136,6 +142,7 @@ impl Net {
         self.sfu.poll(self.now, |t| from_sfu.push(t));
         while let Some((id, Signal::Offer(offer))) = self.sfu.poll_signal() {
             if let Some(m) = self.members.iter_mut().find(|m| m.id == id) {
+                m.offers += 1;
                 let answer = m.synth.accept_offer(offer);
                 self.sfu.accept_answer(id, answer);
             }

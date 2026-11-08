@@ -12,8 +12,12 @@ use str0m::bwe::Bitrate;
 use str0m::media::Rid;
 
 /// The count of videos one receiver gets: the most recent speakers (`CALL-041`), from the call
-/// row of `ambre-spec-budgets.md section 1`.
+/// row of `ambre-spec-budgets.md section 1`. Each receiver holds this many video slots.
 pub const VIDEOS_PER_RECEIVER: usize = 9;
+
+/// The count of audio slots of one receiver: the most recent speakers (`CALL-047`), from the
+/// call row of `ambre-spec-budgets.md section 1`.
+pub const AUDIO_SLOTS: usize = 3;
 
 /// The share of the estimate the video may take. The rest absorbs the audio, the
 /// retransmissions and the error of the estimate.
