@@ -60,6 +60,7 @@ SCRIPTS = {
     "glossary": TOOL,
     "instructions": GATE,
     "locale_table": GENERATOR,
+    "merge_generated": TOOL,
     "prose": GATE,
     "schema_freeze": GATE,
     "spec_answers": GATE,

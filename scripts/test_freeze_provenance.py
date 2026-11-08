@@ -270,7 +270,7 @@ class FreezeProvenance(unittest.TestCase):
                     if outer is not None:
                         os.environ["CARGO_TARGET_DIR"] = outer
                     with redirect_stdout(io.StringIO()):
-                        code = fp.main(["--check", "--all", "--regenerate", command], root=self.repo.root)
+                        code = fp.main(["--all", "--regenerate", command], root=self.repo.root)
                 self.assertEqual(code, 0)
                 checkout = Path(outer) if outer else self.repo.root / "target"
                 self.assertEqual(Path(record.read_text().strip()), checkout / fp.RERUN_TARGET)

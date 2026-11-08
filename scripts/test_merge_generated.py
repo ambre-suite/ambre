@@ -32,7 +32,7 @@ WRITERS = ("scripts/contracts.py", "scripts/contract_index.py", "scripts/feature
 GATES = (
     ("scripts/contracts.py",),
     ("scripts/contract_index.py",),
-    ("scripts/feature_inventory.py", "--check"),
+    ("scripts/feature_inventory.py",),
 )
 
 # One row per branch, each appended to the table that holds the anchor row.
