@@ -36,7 +36,7 @@ use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Axis, IdxVec, Len, Pos, Span};
 use ambre_core::{OpenRange, Version, VersionKind};
 use blake2::{Blake2b512, Digest};
-use loro::{ContainerID, ContainerType, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroValue};
+use loro::{LoroDoc, LoroMap, LoroMovableList, LoroValue};
 
 use super::line::Line;
 use super::sheet_index::{CellKey, LineRead, Uid, parse_cell_key};
@@ -1302,73 +1302,6 @@ impl AxisOrder for Col {
 pub(crate) struct Removed {
     pub(crate) uid: Uid,
     pub(crate) elements: Vec<Element>,
-}
-
-/// A root list of either kind: an axis list, or the tab order. A replay of a
-/// history step reaches each list through it, so this module stays the one
-/// door to a line order.
-pub(crate) enum RootList {
-    Plain(LoroList),
-    Movable(LoroMovableList),
-}
-
-/// The root list `id` names, `None` for any other container.
-pub(crate) fn root_list(doc: &LoroDoc, id: &ContainerID) -> Option<RootList> {
-    match id {
-        ContainerID::Root {
-            name,
-            container_type: ContainerType::List,
-        } => Some(RootList::Plain(doc.get_list(name.as_str()))),
-        ContainerID::Root {
-            name,
-            container_type: ContainerType::MovableList,
-        } => Some(RootList::Movable(doc.get_movable_list(name.as_str()))),
-        _ => None,
-    }
-}
-
-impl RootList {
-    /// The values of the list, in order.
-    pub(crate) fn values(&self) -> Vec<LoroValue> {
-        let value = match self {
-            Self::Plain(list) => list.get_value(),
-            Self::Movable(list) => list.get_value(),
-        };
-        match value {
-            LoroValue::List(items) => items.to_vec(),
-            _ => Vec::new(),
-        }
-    }
-
-    /// Insert `value` at `at`.
-    pub(crate) fn put(&self, at: Pos<Slot>, value: &LoroValue) {
-        let _ = match self {
-            Self::Plain(list) => list.insert(at.to_usize(), value.clone()),
-            Self::Movable(list) => list.insert(at.to_usize(), value.clone()),
-        };
-    }
-
-    /// Delete the `len` elements from `at` on.
-    pub(crate) fn take(&self, at: Pos<Slot>, len: Len<Slot>) {
-        let _ = match self {
-            Self::Plain(list) => list.delete(at.to_usize(), len.to_usize()),
-            Self::Movable(list) => list.delete(at.to_usize(), len.to_usize()),
-        };
-    }
-
-    /// Move the element at `from` so it stands at `to`. A plain list has no
-    /// move, so it takes the element out and puts its value back.
-    pub(crate) fn shift(&self, from: Pos<Slot>, to: Pos<Slot>, value: &LoroValue) {
-        match self {
-            Self::Plain(list) => {
-                let _ = list.delete(from.to_usize(), 1);
-                let _ = list.insert(to.to_usize(), value.clone());
-            }
-            Self::Movable(list) => {
-                let _ = list.mov(from.to_usize(), to.to_usize());
-            }
-        }
-    }
 }
 
 /// The axes of one sheet of one document: every read and write of a line

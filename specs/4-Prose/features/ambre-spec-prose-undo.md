@@ -25,7 +25,7 @@ shared steps once for both.
 | `PROSE-UI-073` | `POST` | A selection open when the undo or the redo runs MUST collapse to that caret. | this spec section 2 | `ambre_prose::logic::history::tests::an_open_selection_collapses_to_the_placed_caret` | none | verified |
 | `PROSE-UI-074` | `FRAME` | Moving the caret after an undo or a redo MUST NOT write to the document: where this author looks is not a change a peer receives. | derived | `ambre_prose::logic::history::tests::placing_the_caret_writes_nothing_beyond_the_inverse` | none | verified |
 | `PROSE-133` | `POST` | After an undo puts a deleted block back, every later undo and redo MUST act on that block. | this spec section 2; `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`) | `ambre_prose::logic::undo_identity_tests::an_undone_delete_then_an_undone_insert_leaves_no_block`; `::an_undone_delete_after_a_move_restores_the_place_and_the_text`; `::undo_and_redo_follow_a_loaded_page_rebuilt_by_hand` -- a proptest, 256 cases of deletes, moves, typing, undos and redos on a loaded page of four blocks, against a page kept by hand | none | verified |
-| `PROSE-134` | `POST` | A redo of an undone block insertion MUST put back the block that the insertion created. | this spec section 2; `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`) | none | fails -- the redo creates a node under a new identity, and the body stays keyed by the old one. Text typed into the block before the undo comes back in no live block. The ignored tests `ambre_prose::logic::undo_identity_tests::a_redone_insert_puts_back_the_same_block` and `::undo_and_redo_follow_a_page_rebuilt_by_hand` reproduce it. No local fix exists, since Loro mints a new tree identity for each create, so it lands with the `One undo history for the suite` Story (`ambre-roadmap.md` E8) | failing |
+| `PROSE-134` | `POST` | A redo of an undone block insertion MUST put back the block that the insertion created. | this spec section 2; `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`) | none | fails -- the redo creates a node under a new identity, and the body stays keyed by the old one. Text typed into the block before the undo comes back in no live block. The ignored tests `ambre_prose::logic::undo_identity_tests::a_redone_insert_puts_back_the_same_block` and `::undo_and_redo_follow_a_page_rebuilt_by_hand` reproduce it. No local fix exists, since Loro mints a new tree identity for each create, so it lands with the `Toile and Prose on the one undo history` Story (`ambre-roadmap.md` E8) | failing |
 
 * **Budget.** none: an undo applies one inverse operation and exports the delta it produced, the
   local-write row of `ambre-spec-budgets.md section 1` and no cost of its own. The unbounded
@@ -42,8 +42,9 @@ shared steps once for both.
 
 **Containers.** None: in memory, on the Logic thread, for the session only.
 
-**The manager** is the shared `undo_manager` (`ambre-spec-undo.md section 3`), a field of the engine
-state (`features/ambre-spec-prose-engine.md section 3`) recording local transactions on the document.
+**The manager** is a field of the engine state (`features/ambre-spec-prose-engine.md section 3`)
+recording local transactions on the document. It is still the Loro undo manager: the `Toile and
+Prose on the one undo history` Story (`ambre-roadmap.md` E8).
 
 **Where the caret lands.** The engine reads the edit point from the step's diff and sends it
 beside the delta. The view holds no document to read it from. A text edit wins over
