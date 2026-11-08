@@ -1,0 +1,35 @@
+[package]
+name = "ambre-primitives-driver"
+version = "0.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+description = "The rustc driver of the primitive gate: writes every site the gate judges, read with types (ambre-spec-testing.md section 2)."
+
+# Its own workspace, outside the Ambre one: the driver links the private
+# crates of rustc, so it builds only on the pinned nightly with the
+# `rustc-dev` component. CI installs that component in the lint job alone,
+# and `just primitives` builds the driver from outside the repository, since
+# the `build-std` key of `.cargo/config.toml` would link a second `std` beside
+# the one `rustc_driver` links.
+[workspace]
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+# The lint table of the workspace, copied: this workspace inherits none.
+[lints.rust]
+unsafe_code = "forbid"
+unfulfilled_lint_expectations = "deny"
+
+[lints.clippy]
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+allow_attributes = "deny"

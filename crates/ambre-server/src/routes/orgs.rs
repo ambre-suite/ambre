@@ -161,8 +161,9 @@ async fn require_org_role(
 pub async fn create_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    Json(req): Json<CreateOrgRequest>,
+    body: Json<CreateOrgRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let req = body.into_inner();
     let session = auth;
     let owner_id = session.user_id;
 
@@ -197,8 +198,9 @@ pub async fn list_orgs(
 pub async fn get_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<Id<Org>>,
+    ids: PathId<Id<Org>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let org_id = ids.into_inner();
     let session = auth;
     let uid = session.user_id;
 
@@ -223,9 +225,11 @@ pub async fn get_org(
 pub async fn update_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<Id<Org>>,
-    Json(req): Json<UpdateOrgRequest>,
+    ids: PathId<Id<Org>>,
+    body: Json<UpdateOrgRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let org_id = ids.into_inner();
+    let req = body.into_inner();
     let session = auth;
     let uid = session.user_id;
 
@@ -244,8 +248,9 @@ pub async fn update_org(
 pub async fn delete_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<Id<Org>>,
+    ids: PathId<Id<Org>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let org_id = ids.into_inner();
     let session = auth;
     let uid = session.user_id;
 
@@ -275,9 +280,11 @@ fn refuse_share(share: Option<&serde::de::IgnoredAny>) -> Result<(), AppError> {
 pub async fn add_member(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<Id<Org>>,
-    Json(req): Json<AddMemberRequest>,
+    ids: PathId<Id<Org>>,
+    body: Json<AddMemberRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let org_id = ids.into_inner();
+    let req = body.into_inner();
     let session = auth;
     let uid = session.user_id;
 
@@ -321,8 +328,9 @@ pub async fn add_member(
 pub async fn list_members(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<Id<Org>>,
+    ids: PathId<Id<Org>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let org_id = ids.into_inner();
     let session = auth;
     let uid = session.user_id;
 
@@ -343,8 +351,9 @@ pub async fn list_members(
 pub async fn remove_member(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((org_id, target_uid)): PathId<(Id<Org>, Id<User>)>,
+    ids: PathId<(Id<Org>, Id<User>)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let (org_id, target_uid) = ids.into_inner();
     let session = auth;
     let uid = session.user_id;
 
@@ -377,9 +386,11 @@ pub async fn remove_member(
 pub async fn update_member_role(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((org_id, target_uid)): PathId<(Id<Org>, Id<User>)>,
-    Json(req): Json<UpdateMemberRoleRequest>,
+    ids: PathId<(Id<Org>, Id<User>)>,
+    body: Json<UpdateMemberRoleRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let (org_id, target_uid) = ids.into_inner();
+    let req = body.into_inner();
     let session = auth;
     let uid = session.user_id;
 
@@ -411,8 +422,9 @@ pub async fn update_member_role(
 pub async fn recover_master_key(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((org_id, target_uid)): PathId<(Id<Org>, Id<User>)>,
+    ids: PathId<(Id<Org>, Id<User>)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let (org_id, target_uid) = ids.into_inner();
     let session = auth;
     let caller_uid = session.user_id;
 

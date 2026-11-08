@@ -152,15 +152,14 @@
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
   line of that file by hand (`ARCH-035`).
 
-  The gate reads a `type` alias a module of the workspace declares as its target. Such an alias
-  hides no primitive and no `bool` from a check. The gate reads aliases and `use` items by module
-  only. So a site whose path starts with an alias or a rename that a block declares fails the scan.
-  So does a site whose path starts with a block import of an alias, a rename or a primitive. An
-  alias of a foreign crate, and a site a macro writes, are a reviewer's to read (`ARCH-043`,
-  `ARCH-044`).
+  The gate reads the code through rustc, with types, once every macro expands (`ambre-spec-testing.md
+  section 2`). So an alias reads as its target, a foreign one included, and hides no primitive and
+  no `bool` from a check (`ARCH-044`). A macro of the workspace writes sites as the source does
+  (`ARCH-043`). A foreign macro writes sites from its own signatures, so a reviewer reads the types
+  the source hands one (`ARCH-076`).
 
   The gate checks the category word. It also refutes a `newtype-inner` or a `trait` line whose
-  site lacks the shape stated below (`ARCH-036`). It refuses seven more defects, whatever the line
+  site lacks the shape stated below (`ARCH-036`). It refuses eight more defects, whatever the line
   says:
   1. a `Deref` or a `DerefMut` to a primitive (`ARCH-037`);
   2. a `local` line on a site that is not private (`ARCH-038`);
@@ -170,30 +169,19 @@
   5. `expose`, `expose_mut` or `clone_secret` named outside `ambre-crypto`, the Secret module and
      the relay's `src/secrets/` (`ARCH-045`, `ARCH-048`);
   6. a name of the `zeroize` crate outside the Secret module (`ARCH-046`);
-  7. a sink named outside the file of its foreign call (`ARCH-049`). The name `include` in any
-     form, in each file the gate reads (`ARCH-047`), since the gate reads no file an `include!`
-     names. A `#[path]` the gate cannot follow fails the scan, and so does a `#![feature]` in a
-     crate root.
+  7. a sink named outside the file of its foreign call (`ARCH-049`);
+  8. a field of a tuple struct that is not private (`NEWTYPE-001`).
 
-     A `mod` a macro holds fails too, unless it is an inline module in the literal tokens of a
-     `macro_rules!` transcriber. A call the transcriber writes passes no `mod`, and neither does
-     a group after a metavariable. A lever of the build configuration fails too: a `-Z` flag,
-     `crate-attr` or `feature(`. So does a compiler wrapper, an `include` or an `[env]` entry. The
-     gate reads them in each cargo config cargo reads, a manifest and its own environment. It
-     reads the `justfile` and the CI workflow as a literal tripwire, which shell quoting passes.
+  It refuses a `.rs` file no compile of the lint reads, and a unit cargo builds whose record the
+  driver did not write. A build outside the compiles of the lint is a reviewer's (`ARCH-077`).
 
-     So does a file a shipped build reads that the walk neither reads nor names as data, or a
-     `.rs` file no compile reads (`ARCH-033`). A data file that parses as Rust items fails too, as
-     defence in depth. A build outside those compiles, and a `mod` a foreign macro writes, are a
-     reviewer's (`ARCH-050`). An exemption holds only when the path with each `..` undone and the
-     path with each link followed both sit in it.
+  The gate catches the accidental misuse of a contributor who writes plain code, and fails
+  closed on each form it cannot follow. Review holds a deliberate evasion by a committer
+  (`ARCH-047`).
 
-     The gate catches the accidental misuse of a contributor who writes plain code, and fails
-     closed on each form it cannot follow. Review holds a deliberate evasion by a
-     committer (`ARCH-047`): a macro trick, a lever outside the forms checked, a proc macro.
-
-  Test code is what `cfg(test)`, a `cfg(all(test, ..))` or a test macro marks. A module named
-  `*_tests` with no test `cfg`, and code behind a feature such as `test-helpers`, are scanned.
+  Test code is what a test build compiles: `cfg(test)`, a test macro, an integration test, a
+  bench and an example. A module named `*_tests` with no test `cfg`, and code behind a feature such
+  as `test-helpers`, are read.
 
   The categories are a closed set, and no category means "to type later". A value still to type
   has no line, so the gate fails until the change types it.
@@ -230,10 +218,10 @@
     impl writes as a generic argument of the trait, or as the type it implements for. So
     `impl Add<u32> for Px` and `impl Add<Px> for u32` both take a type at the site.
   * The note of a line describes the value truthfully. A reviewer reads the note as code.
-* **The unwrap report holds the newtype rule inside a body.** The gate reads signatures, so a body
-  can still unwrap a newtype early. `ARCH-073` states what `ambre-primitives unwrap` refuses, how
-  it places a type name, what reads as ambiguous, and how `specs/1-Foundations/ambre-unwrap.tsv`
-  excuses a key. CI runs the report with `--strict`, through `just primitives`.
+* **The unwrap report holds the newtype rule inside a body.** The allowlist reads signatures, so a
+  body can still unwrap a newtype early. `ARCH-073` states what `ambre-primitives unwrap` refuses,
+  and how `specs/1-Foundations/ambre-unwrap.tsv` excuses a key. The driver reads each body with its
+  types, so no site is ambiguous. CI runs the report with `--strict`, through `just primitives`.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
   Rust is preferred. The workspace lint table forbids `unsafe_code`, and every crate inherits it.

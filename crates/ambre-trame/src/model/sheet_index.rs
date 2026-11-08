@@ -101,6 +101,16 @@ impl CellKey {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Where the key reads in `index`, and its rank against another key at
+    /// the same place. `None` for a key whose element is gone.
+    #[must_use]
+    pub fn place_in(
+        &self,
+        index: &super::SheetIndex,
+    ) -> Option<(ambre_bus::CellPos, super::CellRank)> {
+        index.place(&self.0)
+    }
 }
 
 /// Inverse of [`CellKey::of`]: parse a stored key back into its `(row, col)`

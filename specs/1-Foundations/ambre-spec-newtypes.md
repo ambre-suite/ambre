@@ -7,6 +7,7 @@
 > A newtype over a primitive of the census list below is an instance of a family below.
 > If none fits, it is a line of `ambre-newtypes.tsv` with its reason. The rule is `ARCH-062`,
 > which the primitive gate holds, and the truth of a reason is `ARCH-063`, which a reviewer holds.
+> The one rule this page owns is the private field of a newtype, `NEWTYPE-001`.
 
 ---
 
@@ -27,12 +28,25 @@
 | A door no family keeps closed | `SealedBlob` is built by the seal alone, while `Payload::new` is public |
 | A crate that cannot depend on `ambre-core` | the primitive gate, which reads the workspace and links none of it |
 
+A newtype hands its value out by a named method and never by its field. A caller that reads `.0`
+unwraps the newtype with no accessor a reader sees. The unwrap check of `ARCH-073` reads the call
+of an accessor. The prefix of the row below is `NEWTYPE`.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `NEWTYPE-001` | `INV` | A tuple struct of the workspace MUST NOT hold a field that is not private. A newtype MUST hand its value out by a named method, such as `get()` or `into_inner()`. | `ai/ambre-rust-style.md`, the newtype rule; `ambre-spec-architecture.md`, `ARCH-073` | `ambre_primitives::driver::checks::a_public_field_of_a_tuple_struct_is_refused`; ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, through its rustc driver. The driver refuses each tuple struct the source or a macro of the workspace writes with a field that is not private, and no line of an allowlist admits one | none | verified |
+
+* **Budget.** None: the check runs in the compiles of the primitive gate, whose time is a row of
+  `ambre-spec-budgets.md` section 7.
+* **Boundary.** None: the rule shapes the code of every crate and reaches no relay.
+* **Verification.** 1 `verified`.
+
 | Element | Where | What holds it |
 | :--- | :--- | :--- |
-| The rule | `ambre-spec-architecture.md` section 1.1, `ARCH-062` | the primitive gate, `crates/ambre-primitives/src/newtypes.rs` |
+| The rule | `ambre-spec-architecture.md` section 1.1, `ARCH-062` | the primitive gate: its rustc driver reads each struct, and `crates/ambre-primitives/src/newtypes.rs` judges it |
 | The exceptions | `specs/1-Foundations/ambre-newtypes.tsv`: a key, then a reason | the gate refuses a newtype no line names, a line that names none, and an empty reason. A reviewer reads each reason a change adds, `ARCH-063` |
-| The census | every struct of the walk outside a test, with one field once `PhantomData` is set apart, over a primitive of the census list. A struct of `ambre-core` with a type or a const parameter is a family and stays out. A generic struct of another crate is in: no row of section 2 declares it | the gate reads the type as the source writes it: an alias or a macro hides it, and a reviewer holds both |
-| The census list | an integer, a float, a `bool`, a `char`, a `String`, a `Uuid`, a `Vec<u8>`; a `str` or a `[u8]`, bare or behind a reference; a `Cow` of a `str` or of a `[u8]`; an `Option` of any of these | the gate matches the last segment of the path, so `uuid::Uuid` and `ambre_core::Uuid` read alike |
+| The census | every struct a compile of the lint reads outside a test, the source or a macro of the workspace writing it, with one field once `PhantomData` is set apart, over a primitive of the census list. A struct of `ambre-core` with a type or a const parameter is a family and stays out. A generic struct of another crate is in: no row of section 2 declares it | the driver reads the type rustc gives the field, every alias resolved. A struct a foreign macro writes takes its field from that crate, and stays out |
+| The census list | an integer, a float, a `bool`, a `char`, a `String`, a `Uuid`, a `Vec<u8>`; a `str` or a `[u8]`, bare or behind a reference; a `Cow` of a `str` or of a `[u8]`; an `Option` of any of these | the `Uuid` of the `uuid` crate and the one of `ambre-core` both count |
 | A name | an alias that stands for a family alone, section 3 | the gate refuses it, `ARCH-066`. It reads the families from section 2, and refuses one that `ambre-core` declares as no generic struct. A reviewer and `clippy::type_complexity` hold an alias of a compound type, `ARCH-067` |
 | A stale line | a line whose newtype was folded or removed | `cargo run -p ambre-primitives -- --prune` removes it, and nothing else |
 
@@ -87,7 +101,7 @@ A marker is written one way, so a reader meets no variant of it.
 | A closed set | a sealed marker trait | a crate downstream adds no marker where the set is a decision |
 | A capability | a trait the marker implements, one line per marker | a method that some markers must not have is never inherent |
 | A name | the family and its marker in full: `Count<EditUpdates>` | a type alias hides the family, so none stands for a family instance alone. An alias stays only where the compound type it names -- a tuple, a container, a closure -- fails `clippy::type_complexity` once written out at its uses |
-| The fields | private, read through `new` and `get` | a family that checks nothing still has one door |
+| The fields | private, read through `new` and `get` | a family that checks nothing still has one door. A hand-written newtype keeps its field private too, `NEWTYPE-001` |
 
 ---
 

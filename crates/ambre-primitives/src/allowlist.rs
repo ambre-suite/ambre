@@ -17,7 +17,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use crate::scan::{Scan, SiteKey};
+use crate::records::{Claim, Privacy, Records, Role, Shape, SiteKey};
 
 /// The header line, the first line of the file that is not a comment.
 pub const HEADER: &str = "key\tcategory\tnote";
@@ -296,8 +296,7 @@ impl Allowlist {
     /// privacy refusals hold for every category (`ARCH-038` to `ARCH-040`),
     /// with two exceptions. A `foreign-api` line takes no `bool` field
     /// refusal. A `trait` line takes no literal refusal.
-    pub fn refuted(&self, scan: &Scan) -> Vec<Refuted> {
-        let listed: BTreeSet<SiteKey> = self.raw.keys().cloned().collect();
+    pub fn refuted(&self, records: &Records) -> Vec<Refuted> {
         let mut found = Vec::new();
         for line in &self.lines {
             let Line::Entry {
@@ -308,26 +307,34 @@ impl Allowlist {
             else {
                 continue;
             };
+            // A key the driver did not find passes: the stale check reports it.
+            let Some(site) = records.sites.get(key) else {
+                continue;
+            };
             let shape = match category {
-                Category::NewtypeInner => scan.newtype_inner(key),
-                Category::Trait => scan.foreign_signature(key),
+                Category::NewtypeInner => claim(&site.inner, records),
+                Category::Trait => claim(&site.trait_claim, records),
                 _ => Ok(()),
             };
-            let local = match category {
-                Category::Local => scan.local_site(key),
+            let local = match (category, site.privacy) {
+                (Category::Local, Privacy::Private) => Ok(()),
+                (Category::Local, privacy) => Err(format!(
+                    "the site is not private, it is {privacy}: a local line names a private site \
+                     only (ARCH-038)"
+                )),
                 _ => Ok(()),
             };
             // A field that mirrors a schema the workspace does not control
             // keeps its bool under foreign-api, converted at that boundary.
             let field = match category {
                 Category::ForeignApi => Ok(()),
-                _ => scan.bool_field(key),
+                _ => bool_field(key, site),
             };
             // A foreign signature fixes the type of a `trait` site, so a
             // literal its callers write cannot be typed there.
             let literal = match category {
                 Category::Trait => Ok(()),
-                _ => scan.bool_literal(key, &listed),
+                _ => bool_literal(site, records),
             };
             let claims = [
                 (Defect::Shape, shape),
@@ -365,6 +372,70 @@ impl Allowlist {
         }
         out
     }
+}
+
+/// Whether a shape claim holds. An associated type holds when a generic
+/// newtype of the workspace holds it as its one field (`ARCH-036`).
+fn claim(claim: &Claim, records: &Records) -> Result<(), String> {
+    match claim {
+        Claim::Holds => Ok(()),
+        Claim::Representation(path) if records.representations.contains(path) => Ok(()),
+        Claim::Representation(path) => Err(format!(
+            "no generic newtype of the workspace holds {path} as its one field"
+        )),
+        Claim::Fails(reason) => Err(reason.clone()),
+    }
+}
+
+/// Checks that a field holding a `bool` is private (`ARCH-039`). The one
+/// `bool` of a tuple variant is the value its variant names, and passes.
+fn bool_field(key: &SiteKey, site: &crate::records::Site) -> Result<(), String> {
+    let value = site.role == Role::VariantValue && site.shape == Shape::Bool;
+    if key.kind() != "field"
+        || site.shape == Shape::Other
+        || site.privacy == Privacy::Private
+        || value
+    {
+        return Ok(());
+    }
+    Err(format!(
+        "a bool field that is {}: it is an enum, define_flag! writes one, unless the field \
+         mirrors a schema the workspace does not control, under foreign-api (ARCH-039)",
+        site.privacy
+    ))
+}
+
+/// Checks that no call of the workspace writes a `bool` parameter that is not
+/// private as a literal (`ARCH-040`). The driver resolves each call to its
+/// `fn`, so a literal reaches exactly one parameter, or a trait item and the
+/// impl it resolves to.
+fn bool_literal(site: &crate::records::Site, records: &Records) -> Result<(), String> {
+    let Some(slot) = &site.slot else {
+        return Ok(());
+    };
+    if site.shape == Shape::Other || site.privacy == Privacy::Private {
+        return Ok(());
+    }
+    let hits: Vec<&String> = records
+        .literals
+        .iter()
+        .filter(|(at, _)| at == slot)
+        .map(|(_, at)| at)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let Some(first) = hits.first() else {
+        return Ok(());
+    };
+    let more = match hits.len() {
+        1 => String::new(),
+        n => format!(" and {} more", n - 1),
+    };
+    Err(format!(
+        "a caller writes this bool parameter as a literal at {first}{more}, and the site is {}: \
+         it is an enum (ARCH-040)",
+        site.privacy
+    ))
 }
 
 #[cfg(test)]

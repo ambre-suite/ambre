@@ -354,37 +354,42 @@ index-write:
 # from a closed set (`ARCH-033`). No category means "to type later". A line
 # that names no site fails too (`ARCH-034`). It prints the lines per category.
 #
-# The gate finds the files with a syn walk, and rustc is the source of truth
-# for them. So it reads the compile lines of `lint` and `lint-wasm` from this
-# file and runs each as written, with its flags and its clippy arguments, and
-# reads the dep-info of each unit. cargo fingerprints both, so after `just
-# lint` and `just lint-wasm` every unit is fresh and the gate compiles nothing.
-# A file a shipped build reads fails, whatever its name, unless the walk reads
-# it or a string literal of a walked file names it as data. A `.rs` file under
-# the root that no compile reads fails too. This half runs first.
+# The gate reads the code through rustc. It builds the driver of
+# `crates/ambre-primitives/driver` on the pinned nightly, which needs the
+# `rustc-dev` component. Then it reads the compile lines of `lint` and
+# `lint-wasm` from this file and runs each as `cargo check`, the driver in
+# place of rustc. So the gate reads each unit clippy lints, under the same
+# target, `cfg` and feature set (`ARCH-050`). Clippy holds the wrapper of the
+# lint, so the gate makes cargo compile each workspace unit again; the
+# dependencies stay fresh in the shared target directory. A `.rs` file no
+# compile reads fails.
 #
-# `--unwrap-strict` runs the strict unwrap report on the same scan, so one
-# walk of the sources serves both, and prints both verdicts whatever the first
-# says. CI runs this recipe alone, since it holds all three.
+# `--unwrap-strict` runs the strict unwrap report on the same records, and
+# prints both verdicts whatever the first says. CI runs this recipe alone,
+# since it holds both.
 primitives:
     cargo run -q -p ambre-primitives -- check --unwrap-strict
 
-# The dep-info half of the gate alone, as `fixtures-check` is the drift half of
-# the fixtures. The allowlist half is red while the workspace is typed, so a
-# local run of this half gives its verdict alone. CI does not run it, since
-# `primitives` runs it first.
-primitives-files:
-    cargo run -q -p ambre-primitives -- files
-
-# The unwrap report (`ARCH-073`). It refuses a
-# newtype unwrapped early inside a body, unless a line of
-# `specs/1-Foundations/ambre-unwrap.tsv` names its key with a count and a
-# reason.
-# In strict mode, an unlisted key, a line over its count and a stale line all
-# fail. The report walks the syntax and compiles nothing. CI runs it through
-# `primitives`, on the scan of the gate; this recipe runs it alone.
+# The unwrap report (`ARCH-073`). It refuses a newtype unwrapped early inside
+# a body, unless a line of `specs/1-Foundations/ambre-unwrap.tsv` names its
+# key with a count and a reason. In strict mode, an unlisted key, a line over
+# its count and a stale line all fail. CI runs it through `primitives`; this
+# recipe runs it alone, on a compile of its own.
 unwrap:
     cargo run -q -p ambre-primitives -- unwrap --strict
+
+# The driver of the primitive gate: its format, its clippy and its fixture
+# tests, which compile fixture crates through it (`ambre-spec-testing.md`
+# section 2). It is a workspace of its own, which no line of `lint` reads, so
+# this recipe holds it. Cargo reads its configuration from the root of the
+# disk (`-C /`), since the `build-std` key of `.cargo/config.toml` would link a
+# second `std` beside the one of `rustc_driver`. The recipe starts at the root
+# of the repository, so rustup picks the pinned toolchain and no line names
+# one (`ARCH-075`). Needs the `rustc-dev` component.
+primitives-driver:
+    cargo fmt --manifest-path crates/ambre-primitives/driver/Cargo.toml --check
+    cargo -Z unstable-options -C / clippy --release --all-targets --manifest-path "{{justfile_directory()}}/crates/ambre-primitives/driver/Cargo.toml" -- -D warnings
+    cargo -Z unstable-options -C / test --release --manifest-path "{{justfile_directory()}}/crates/ambre-primitives/driver/Cargo.toml"
 
 # Remove the lines that name no site, after a value was typed. No recipe adds
 # a line: a new one is a hand edit a reviewer reads (`ARCH-035`).

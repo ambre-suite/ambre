@@ -385,7 +385,7 @@ impl TrameState {
         if let Some(keys) = imported.styled.get(&active) {
             repaint = keys
                 .iter()
-                .filter_map(|key| self.index.place(key.as_str()))
+                .filter_map(|key| key.place_in(&self.index))
                 .map(|(at, _)| at)
                 .fold(repaint, Repaint::with);
         }
@@ -470,7 +470,7 @@ impl TrameState {
             for key in keys {
                 // A key whose line is gone reads nowhere, and a structural
                 // edit still walks its formula (`TRAME-280`).
-                let Some((at, _)) = index.place(key.as_str()) else {
+                let Some((at, _)) = key.place_in(index) else {
                     let entry = (sheet.clone(), key.clone());
                     if map
                         .get(key.as_str())
@@ -497,7 +497,7 @@ impl TrameState {
             if let Some(keys) = self.unplaced.get(active) {
                 placed.extend(
                     keys.iter()
-                        .filter(|key| self.index.place(key.as_str()).is_some())
+                        .filter(|key| key.place_in(&self.index).is_some())
                         .map(|key| (active.clone(), key.clone())),
                 );
             }

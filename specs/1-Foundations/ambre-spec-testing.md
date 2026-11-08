@@ -60,86 +60,59 @@ compiler needs no test, no run and no reading.
 | `insta` snapshots | read consequences instead of code; reveals unintended blast radius | deterministic structured output: `RecordingSurface` op sequences, wire encodings. **Acceptance stays human** -- `cargo insta accept` accepts blindly |
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
-**The primitive gate reads the items rustc reads.** It parses each crate from its roots without
-expanding a macro, and never takes a site from test code.
+**The primitive gate reads the code through rustc.** Its driver, `crates/ambre-primitives/driver`,
+stands in for rustc in each compile of the lint. It reads each item with the types rustc gives it,
+after every macro expands, and never takes a site from test code.
 
 **The gate guards against accidental misuse.** It catches a contributor who writes plain code, and
 it fails closed on each form it cannot follow. It does not hold a deliberate evasion by a
 committer, who can ship a build script or a dependency anyway. Review of every change holds that
-threat (`ARCH-047`). Five examples:
-* a macro trick;
-* build configuration, an environment or a wrapper outside the forms the gate checks;
-* a recipe line that shell quoting or a line continuation hides from the literal tripwire;
-* a `${{ vars.* }}` in the CI workflow;
-* a proc or a foreign macro.
- Test code is what `cfg(test)`, a
-`cfg(all(test, ..))` or a test macro marks. A module name and a feature such as `test-helpers`
-mark none, since a release build can compile either. A site is a field, a parameter, a
-return, a constant, a static or an alias whose type holds a primitive. Its key names the crate, the
-file, the module, the item, the kind and the type, and no line number.
+threat (`ARCH-047`). Two examples:
+* a function that lends a bare secret out under another name;
+* a build outside the compiles of the lint (`ARCH-077`).
 
-* **rustc holds the files the walk reads** (`ARCH-033`). The gate reads the compile lines of the
-  `lint` and `lint-wasm` recipes from the `justfile`, and runs each as written. cargo then deems
-  fresh each unit the lint built, so the gate compiles nothing the lint compiled. It reads the
-  dep-info of each unit of the workspace, where clippy lists its configuration as data.
+Test code is what a test build compiles: `cfg(test)`, a test macro, an integration test, a bench
+and an example. A module name and a feature such as `test-helpers` mark none, since a release build
+can compile either. A site is a field, a parameter, a return, a constant, a static, an alias or an
+associated type of an impl. Its type holds a primitive, each alias resolved. Its key names the
+crate, the file, the module, the item, the kind and the type as written, and no line number.
 
-  A line the gate cannot run as `just` runs it fails closed. That is a prefix, a shell expansion,
-  or an argument that changes what the gate reads. A file that a shipped build reads fails, whatever its
-  name, unless the walk reads it or a walked file names it as data. Data is the string literal of
-  an `include_str!` or an `include_bytes!`, or the directory a `sqlx::migrate!` names. A bare
-  `migrate!` counts only where a `use` imports `sqlx::migrate`.
+* **One mechanism, decided on 2026-11-08.** Every check that reads a type runs in the driver. That
+  covers the sites, the privacy and `bool` refusals, the literals and the `Deref` targets. It
+  covers the secret names, the census, the aliases, the private fields and the unwrap check too.
+  The table holds the figures of the spike that decided it, read on commit `968e85c`. It holds
+  those of the switch too, read on 2026-11-08 with `just primitives` and `wc -l`, tests apart.
 
-  An `include!` file, a misread `#[path]` and a data path a macro builds each land there. The
-  dep-info does not tell a module from data, so a `mod` a macro writes could compile a data file
-  unseen. The scan refuses that door: a `mod` keyword a macro holds fails, raw or not, in a
-  `macro_rules!` body, a macro call or an attribute. An inline `mod name { .. }` passes in one
-  place: the literal tokens of a `macro_rules!` transcriber, outside a call the transcriber
-  writes. Its child `mod` is read the same way. A macro can reorder the tokens of a call, so an
-  inline module there fails.
+  | Measure | syn walk | rustc driver |
+  | :--- | :--- | :--- |
+  | Allowlist lines the driver finds | -- | 4 178 of 4 312 at the first try. Then 4 312 of 4 316, once it read an `impl Trait` parameter, an `async fn` return and a component body. The 4 left were stale |
+  | Unwrap refusals the other missed | 14 | 1, a false refusal of the syn walk |
+  | Sites left ambiguous | 137 | 0 |
+  | Code of the gate | 12 198 lines | 5 179 lines: the driver 2 714, the judge 2 465 |
+  | Run, every workspace unit compiled again | 7.3 s to 16 s | 106 s to 110 s for the nine lint lines, `ambre-spec-budgets.md` section 7 |
 
-  A `#![feature]` in a crate root fails, unless `FEATURE_ROOTS` names the root.
+  The tracks it refused are rows of section 10. The cost is the `rustc-dev` component, which the
+  CI `lint` job alone installs, and one edit of the driver per deliberate bump of the nightly.
 
-  A lever of the build configuration fails too: a `-Z` flag, `crate-attr` or `feature(`. Such a
-  lever enables syntax the pinned syn may not parse. The check reads five sources:
-  1. each `.cargo/config.toml` and `.cargo/config` under the root, above it and in the cargo
-     home. It reads each `rustflags` and `rustdocflags` value, and each key of an `[unstable]`
-     table. `UNSTABLE` names one key with its exact value: `build-std` of the root config, for
-     the threaded wasm build. A `rustc`, `rustc-wrapper` or `rustc-workspace-wrapper` key fails
-     at any depth. So do an `include` key and each `[env]` entry, since `CONFIG_ENV` names none;
-  2. each `Cargo.toml`: a `cargo-features` key, and a `rustflags` or `rustdocflags` key. The scan
-     reads `sqlx::migrate!` by its name, so another crate under that name fails. That is a
-     rename, a `path` or `git` source, and a `[patch]` or `[replace]` of `sqlx`;
-  3. the environment of the gate, before any compile. A flag variable such as `RUSTFLAGS` or
-     `CARGO_ENCODED_RUSTFLAGS` fails on a lever. Any `CARGO_UNSTABLE_*` variable fails, and so
-     does any variable that names `rustc` or a wrapper. CI sets none of them;
-  4. the `justfile`, each line that is no comment;
-  5. `.github/workflows/ci.yml`, each line that is no comment.
+* **rustc holds the files** (`ARCH-050`). The gate reads the compile lines of the `lint` and
+  `lint-wasm` recipes from the `justfile`. It runs each as `cargo check`, with its flags and its
+  arguments. A line the gate cannot run as written fails closed: a shell expansion, or an argument
+  that changes what the gate reads. Clippy holds the wrapper slot of the lint, so the gate drops
+  the fingerprints of the workspace units first, and the dependencies stay fresh.
 
-  Sources 4 and 5 are a literal tripwire. Shell quoting, a line continuation and a
-  `${{ vars.* }}` pass it. A config or a manifest that does not parse as TOML fails. A flag set
-  elsewhere is a reviewer's (`ARCH-050`): in the environment of another job, or in a `--config`
-  argument the tripwire does not see.
+  The driver writes one record file per unit. A unit cargo builds without a record, through a cache
+  or a wrapper, fails the gate. So does a failed compile.
 
-  A data file that parses as Rust items fails too, as defence in depth. syn and rustc parse
-  apart, so this guard is best effort. A refusal of what syn cannot parse would refuse the real
-  shaders and style sheets, which lex as Rust tokens and do not parse.
-
-  A test build may read any file. A `.rs` file under the workspace root that no compile reads
-  fails, whatever its name. The check leaves out the `.git/` and `target/` of the root. It leaves
-  out the nested workspace `fuzz/` that `NESTED_WORKSPACES` names too, and a test holds that its
-  manifest declares one. Any other manifest with a top-level `workspace` key in its TOML fails. The
-  listing follows no link to a directory.
+  The driver records each file rustc read, a `#[path]` module and an `include!` file included. A
+  `.rs` file under the root that no compile
+  reads fails, test builds included. The check leaves out the `.git/`, `target/` and `vendor/` of
+  the root, and the nested workspaces `fuzz/` and the driver. It refuses any other manifest that
+  declares a workspace.
 
   Each feature a workspace manifest declares is on in a shipped build of these compiles, as cargo
   reports it. Otherwise a line of `specs/1-Foundations/ambre-features.tsv` excludes it with its
-  reason. A feature no compile turns on fails. So does a line that names no declared feature, or one a
-  compile turns on.
-
-  A failed compile and a lint the line denies fail closed. So do a missing dep-info file, a unit
-  with no test flag or no feature list, and a dep-info line the parser cannot read whole.
-  `just primitives-files` runs this half alone. `just primitives` runs the strict unwrap report on
-  the same scan. A build none of these compiles makes, under another target, `cfg`, feature set or
-  profile, is a reviewer's (`ARCH-050`).
+  reason. A feature no compile turns on fails, and so does a line that names no declared feature,
+  or one a compile turns on. A build none of these compiles makes is a reviewer's (`ARCH-077`).
 
 * **The primitive allowlist is `specs/1-Foundations/ambre-primitives.tsv`.** One line per site:
   the key, a category and a note. The categories are a closed set: `free-text`, `foreign-api`,
@@ -150,98 +123,57 @@ file, the module, the item, the kind and the type, and no line number.
 * **A new line is a hand edit, read by a reviewer** (`ARCH-035`). The gate checks the word, and
   never the meaning a line claims. A `local` line meets the four conditions of
   `ai/ambre-rust-style.md`, and its note names the reason.
-* **A `newtype-inner` site is the own representation of its type** (`ARCH-036`). The gate checks
-  that shape from the site. It sits in the impl of a struct with one field, a `PhantomData`
-  marker apart, or of a fieldless enum. It may instead be the one field of a tuple variant. The
-  orphan rule may put that impl in the crate of a workspace trait. Its reader still picks the one
-  true category of a spelling (`ARCH-035`).
+* **A `newtype-inner` site is the own representation of its type** (`ARCH-036`). The driver reads
+  that shape from the code. It is the field of a struct of one field, a `PhantomData` marker apart,
+  or the one field of a tuple variant. It may be a parameter or a return of the codec of such a struct or
+  of a fieldless enum. It may be an associated type that a generic newtype holds as its one field.
 * **A `trait` site sits in an impl of a foreign trait** (`ARCH-036`), or is a closure type that
   names a foreign type. A primitive the impl writes as a trait argument, or as the type it is for,
-  refutes the line: the workspace chose it. A `use ... as` rename of a trait is undone before the
-  lookup.
-* **An alias of a module reads as its target.** Each `type` alias a module of the workspace
-  declares resolves in the module that names it, across crates, before any check reads the type.
-  The key keeps the type as written.
-  * The path is placed through child modules, `use` items, `use ... as` and `extern crate`
-    renames, and globs. A name a `use` imports that is no alias shadows one. So do a generic
-    parameter of an enclosing item and an item an enclosing block declares.
-  * An argument resolves where the use writes it, and takes the place of the next parameter of its
-    kind. A parameter with no argument takes its default, and the target resolves in the module of
-    the alias.
-  * A `use ... as` that renames a primitive of the toolchain, through any chain of imports, reads
-    as that primitive.
-  * A path that ends in an alias name and cannot be placed fails the scan, and so does a glob `use`
-    the gate cannot place. So do a chain past 32 aliases and an expansion past 4096.
-  * The gate reads aliases and `use` items by module only. So a site that names an alias a block
-    declares fails the scan. A path that starts with a name a block `use` or `extern crate` brings
-    in fails when that item renames. It fails too when the item imports an alias, a rename or a
-    primitive, or when the path ends in an alias name.
-  * An alias of a foreign crate reads as itself (`ARCH-044`), and the gate reads no site a macro
-    writes (`ARCH-043`).
-* **A `Deref` to a primitive fails, whatever the file says** (`ARCH-037`). The gate reads the
-  `Target` of each `Deref` impl, and a `DerefMut` takes the target of the `Deref` of its type in
-  its module. A reference, a slice, an array and a `Vec`, `Box`, `Rc`, `Arc` or `Cow` expose their
-  element. A generic target fails closed, a bound that names a primitive included, since which
-  instance makes it a primitive is rustc's to resolve. A target the gate cannot read fails too.
-
-  The impls nested in a constant, a static or an enum discriminant, and those a `macro_rules!`
-  body writes, are read. A body that writes `impl ... Deref` and does not parse fails. So does
-  a call of any other macro whose tokens write one, since the gate expands no macro.
+  refutes the line: the workspace chose it.
+* **Every alias reads as its target**, a foreign one included (`ARCH-044`). A type spelled `Self`
+  and a default argument write no primitive. The key keeps the type as written.
+* **A macro of the workspace writes sites as the source does** (`ARCH-043`), keyed at its call. A
+  foreign macro writes sites from its own signatures, so the driver reads none there. A reviewer
+  reads the types the source hands one (`ARCH-076`). The body a Leptos component holds is
+  read as the component's own, keyed under its name.
+* **A `Deref` to a primitive fails, whatever the file says** (`ARCH-037`). The driver reads the
+  target rustc gives each `Deref` and `DerefMut`, whoever writes the impl. A type parameter and a
+  projection fail closed.
 * **A site that is not private fails three checks, whatever its category.** A site is not private
-  when it is `pub`, `pub(crate)`, `pub(super)` or `pub(in path)`, or sits in a trait impl. A field
-  is not private either on a type of `ambre-bus`, or on a type that derives `Serialize`,
-  `Deserialize` or `FromRow`.
+  when it is `pub`, `pub(crate)`, `pub(super)` or `pub(in path)` as written, or sits in a trait
+  impl. A field is not private either on a type of `ambre-bus`, or on a type that derives
+  `Serialize`, `Deserialize` or `FromRow`.
   1. A `local` line on such a site fails (`ARCH-038`).
   2. Such a field that holds a `bool` fails, unless its line is `foreign-api` (`ARCH-039`). A
      `bool` in a callable's signature is not held. The one field of a tuple variant with exactly
      one field may be a `bool`.
   3. Such a `bool` parameter fails when a call passes it a literal, unless its line is `trait`
      (`ARCH-040`).
-* **The literal check reads every file of a crate, tests included.** A call matches a parameter by
-  the name of its `fn` and by its position, and a `view!` prop matches a component parameter by
-  name. A call in a crate that reaches the site's crate matches a `pub` site too. A crate reaches
-  its dependencies, a renamed one included, and the crates they re-export. A call that matches two
-  sites refutes both, since a name cannot tell them apart.
-
-  A literal counts bare, in parentheses, or in a block or an `unsafe` block of one expression. It
-  counts behind `&` or `!`, under `Some`, and in a tuple, an array or a `vec!`. It counts in a
-  branch of an `if` and in an arm of a `match`. A `use ... as` rename holds in its own module,
-  and a `pub use ... as` names the `fn` to every crate that reaches it. A call through a value,
-  a literal in any other shape, and code a macro writes, stay out of reach (`ARCH-041`).
+* **The literal check reads every compile, tests included.** The driver resolves each call to its
+  `fn`, so a literal reaches one parameter. A trait method reaches the trait item and its impl. A
+  prop of a component reaches its parameter by name. A literal counts in the shapes `ARCH-040`
+  names. A call through a value, and a literal a macro writes, stay out of reach (`ARCH-041`).
+* **A tuple struct holds no field that is not private** (`NEWTYPE-001`). The driver refuses each
+  one, and no line admits it.
 * **A secret is read in two places and wiped in one module** (`ARCH-045`, `ARCH-046`,
-  `ARCH-048`). Outside test code, the gate refuses `expose`, `expose_mut` and `clone_secret`
+  `ARCH-048`). Outside test code, the driver refuses `expose`, `expose_mut` and `clone_secret`
   outside `ambre-crypto`, `crates/ambre-core/src/secret.rs` and the relay's
-  `crates/ambre-server/src/secrets/`. It refuses a name of the `zeroize` crate outside that one
-  file, and a manifest that renames the crate. The two other places that read get no wipe.
-  * It refuses a sink outside the file of its one foreign call (`ARCH-049`). It refuses the name
-    `include` in each file it reads and in each form the source writes, since it reads no file
-    an `include!` names. A foreign macro that splices a file under another name is a reviewer's
-    (`ARCH-047`).
-  * It reads the files the walk reaches, and the dep-info check holds them to the files rustc
-    reads (`ARCH-033`). A `#[path]` the walk cannot follow fails the scan: one inside a
-    `cfg_attr`, one that is no string literal, and one on an inline module. So does one whose
-    file lies outside the crate, is not `.rs` or lies under `target/`.
-  * An exemption keys on the file the source names with each `..` undone, and on the file the disk
-    holds with each link followed. A check applies when it applies to one of the two. So neither a
-    `..` nor a link moves a file into the relay's `src/secrets/` (`ARCH-048`).
-  * It reads names, not types. A method call, a path, a `use` item, a signature, an attribute and
-    every token of a macro count. So a method of another type with a refused name fails closed.
-  * A hand-written `Display`, `Clone` or `Serialize` of a type that holds a `Secret` reads the
-    value through `expose`, and so does a `serialize_with` function. Each is refused outside the
-    places that read. A derive of one of them does not compile, since `Secret` implements none.
-  * A type that holds a newtype with a serde form of its own derives it with no refused name. A
-    reviewer reads that door (`ARCH-047`). So also a function that lends out the bare value under
-    another name, and code a macro or a derive writes.
-  * The check holds a name the source writes, in a crate root or in a module a `mod` item
-    declares (`ARCH-045`). A name a macro builds, and a file a deliberate evasion hides from the
-    walk, are a reviewer's (`ARCH-047`).
-* **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
-  over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
-  already under both, gives the line of a `bool` literal through its `span-locations` feature.
-  `serde_json` reads the messages of each compile, which name the dep-info file of each unit.
-
-  `toml` parses each manifest and each cargo config as cargo reads them. The lockfile already
-  holds it under `leptos`. The tree walk uses `std` rather than a crate.
+  `crates/ambre-server/src/secrets/`. It refuses an item of the `zeroize` crate, or one of its
+  names, outside that one file. A manifest that renames the crate fails too.
+  * It refuses a sink outside the file of its one foreign call (`ARCH-049`).
+  * It reads a name a path, a method call or a declaration writes, in the code each macro expands
+    to. So a method of another type with a refused name fails closed.
+  * An exemption keys on the file with each `..` undone, and on the file with each link followed.
+    A check applies when it applies to one of the two.
+  * A function that lends out the bare value under another name is a reviewer's (`ARCH-047`).
+* **The unwrap check reads each body with its types** (`ARCH-073`). A refusal names its key, and a
+  line of `specs/1-Foundations/ambre-unwrap.tsv` excuses a key with a count and a reason.
+* **The driver links the private crates of rustc, on the pinned nightly.** It needs the
+  `rustc-dev` component and no crate of its own. It builds from outside the repository, since the
+  `build-std` key of `.cargo/config.toml` would link a second `std` beside rustc's own.
+  `just primitives-driver` runs its format, its clippy and its fixture tests, which compile fixture
+  crates through it. The judge, `ambre-primitives`, reads the records with `serde_json` for the
+  messages of cargo and `toml` for the manifests.
 
 ---
 
@@ -270,17 +202,18 @@ more, and asserts identical final states once every delta has been exchanged.
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
-**The four obstacles.** The first three hold one row each today: the frame on the phone, the page a
-deployment serves, and what an allowlist line means. The fourth holds seven rows of the primitive
-gate, `ARCH-041` to `ARCH-044`, `ARCH-047`, `ARCH-050` and `ARCH-067`: what rustc and clippy resolve
-and syn does not.
+**The four obstacles.** Read on 2026-11-08 with `just contracts`, the first two hold one row each:
+the frame on the phone and the page a deployment serves. The third holds three rows that a reader
+decides by meaning: `ARCH-035`, `ARCH-063` and `ARCH-076`. The fourth holds five rows of the
+primitive gate, `ARCH-041`, `ARCH-042`, `ARCH-047`, `ARCH-067` and `ARCH-077`. They hold what
+flows at run time, what clippy scores, and the builds the gate does not run.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
-| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it | -- |
-| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, what a macro writes, what an alias of a foreign crate stands for, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate parses with `syn`, expands nothing and reads no foreign source. It reads what rustc read in its own compiles alone | -- |
+| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures | -- |
+| `type-resolution` | what the compiles of the lint do not settle: which `fn` a call through a value reaches, which signature takes a closure, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate reads each compile of the lint through rustc, with types, and nothing else | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
@@ -433,7 +366,7 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`, `tests/chrome_ui.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel, the suggestion popover, the format bar, the slash menu and the ruler are mounted in Chrome |
 | `ambre-sfu` | yes | -- | an in-memory link between two str0m connections | the DTLS handshake between a participant and the SFU over the RustCrypto backend, and its refusal of a wrong fingerprint (`CALL-031`). The lockfile gate holds what it links (`CALL-013`) |
 | `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user. Trame and Prose are typed into end to end, and each converges across two browsers whose edits cross; Toile carries a board between two; two Murmure users share a channel, its unread count, a thread reply and a direct message |
-| `ambre-primitives` | yes | -- | `Tree`, a source tree held in memory | the primitive gate itself: every kind of site read, a module resolved where rustc finds it, test code and macro output never read, a file rustc reads and the walk misses failing the gate, and a file no compile reads, the allowlist failing on a missing site, a stale line and a word outside the set, and a secret read or wiped outside the code that may |
+| `ambre-primitives` | yes | -- | fixture crates the driver compiles in a temporary directory; record files held in memory | the primitive gate itself. The driver tests compile fixture crates through it: every kind of site read with its facts, test code never read, a macro of the workspace read and a foreign one not, each literal resolved, each refusal of a `Deref`, a secret name, a sink and a public tuple field, the census, the aliases, the unwrap sites, and each file rustc reads. The judge tests read records: the allowlist failing on a missing site, a stale line, a word outside the set and a refuted claim, the lint lines, the features and a file no compile reads |
 | `ambre-murmure` | yes (`proptest`, `criterion`) | yes (`tests/chrome_relay.rs`) | a `ChannelState` peer forked from another, a `MurmureRelay` fed by hand | CRDT convergence of a channel across its `meta`, segment and thread documents over generated interleavings, a forged delta refused by the authorship check, and a false final snapshot caught by the second client. Eviction is the shared residency's belt, and the decoded pictures hold their own cap. The browser tier drives two users through the relay |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
@@ -453,7 +386,7 @@ run the same command.
 
 | Job | Runs |
 | :--- | :--- |
-| `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, and the primitive gate |
+| `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, the driver of the primitive gate and the gate itself. It alone installs `rustc-dev` |
 | `test-native` | the host tier, plus `ambre-server` on the native target, then `just fixtures-check`: the corpus regenerated against its committed bytes and manifests |
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
 | `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
@@ -484,7 +417,7 @@ whether it blocks the current MVP.
 | `proptest` | wired | `ambre-crypto`, the Trame formula engine, convergence on Trame, Toile and Murmure, and the Toile index against rebuild |
 | `cargo-fuzz` | wired | seven targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser, the Markdown reader, the sealed open path, and the Trame and Toile file readers, one minute each in the CI `fuzz` job. The sealed target opens under a fixed key, so a key-holding peer's plaintext reaches the decompression |
 | `cargo-mutants` | wired, host tier | `ambre-sync`, `ambre-crypto` and the Murmure channel module, measured 2026-11-05: 2862 mutants, and 183 survivors left after triage. A second reading the same day covered `ambre-sync` and the fold, relocation and thread modules, through `cargo mutants -F` in four slice shards: 1904 mutants, 162 survivors and 1 timeout. Each survivor then got a test seen killing it in a targeted rerun, or an exclusion with its reason. No full run has measured the scope since. The wasm and browser tiers run per mutation nowhere |
-| `cargo-llvm-cov` | wired, non-blocking, host tier alone | an `lcov` baseline only. No diff-mode gate on added lines. The wasm tier has none: `-C instrument-coverage` needs `-Zno-profiler-runtime` on wasm32, a lever the primitive gate refuses (`ARCH-033`) |
+| `cargo-llvm-cov` | wired, non-blocking, host tier alone | an `lcov` baseline only. No diff-mode gate on added lines. The wasm tier has none: `-C instrument-coverage` needs `-Zno-profiler-runtime` on wasm32, a flag of the nightly that no line of the CI sets |
 | `criterion` | benches in `ambre-crypto`, `ambre-toile` and `ambre-murmure` | a desktop figure only. **The mobile measurement the targets are written against has never been taken** |
 | `callgrind` | wired, five budgets | the CI `instructions` job holds the Toile body commit, the content walk of a busy Toile board, the Prose text layout of a paragraph, the Trame re-anchor walk and the Trame remote batch under their ceilings, and the bound the Toile diff cap allows. Every other budget row has no ceiling yet |
 | `insta` | absent | candidates: `RecordingSurface` op sequences, wire encodings, and the `KrillaSurface` primitives |
@@ -512,6 +445,11 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 
 | Rejected | Why |
 | :--- | :--- |
+| The primitive gate on `syn`, kept by decision | the walk resolved names and types again: glob imports, re-exports, aliases, a guard on files rustc reads. Each approximation became a story, and 137 unwrap sites stayed ambiguous. The driver reads the types rustc gives, and found 14 refusals the walk missed |
+| Clippy's `disallowed-methods` for the secret checks | it holds the secret names alone, and adds a second mechanism beside the driver for 913 lines. Twenty files would carry an expectation each, several of them for test modules |
+| The crates of rust-analyzer for the gate | one load reads one target, so the two wasm-only newtypes went unread. Version 0.0.349 built only once `salsa` was pinned below a patch release that broke it |
+| Dylint for the driver | it adds `cargo-dylint` and a `clippy_utils` pinned to one nightly, and the bare driver needs neither |
+| One `#[expect]` per allowlist line | 4 312 attributes in the code, and a reviewer reads a line of the allowlist as one file |
 | A `QUALITY & TESTABILITY` section per spec | nineteen of them held the same four things with the names changed, and the two that seemed to hold a unique fact held it in three other places. A method restated per document is a method that disagrees with itself |
 | A test list in a spec | it has no join to the suite and no way to fail. 82 names were cited across the corpus and 23 resolved |
 | A "Definition of Done" per component | identical in nineteen files, and its only checkable half is already held by `contracts.py`: no row may lack a `Status` |

@@ -114,9 +114,11 @@ pub struct InviteResponse {
 pub async fn invite_to_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<InviteRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<InviteRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -251,9 +253,10 @@ pub struct RemovalRequest {
 pub async fn revoke_from_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, target)): PathId<(Id<Document>, Id<User>)>,
+    ids: PathId<(Id<Document>, Id<User>)>,
     body: Option<Json<RemovalRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let (doc_id, target) = ids.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -269,7 +272,7 @@ pub async fn revoke_from_document(
         role: None,
         key: Some(None),
     };
-    let text = body.as_ref().and_then(|Json(body)| body.entry.as_ref());
+    let text = body.as_ref().and_then(|body| body.get().entry.as_ref());
     let entry = checked_entry(&state, &s, doc_id, text, expected).await?;
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
     // mirror is raised first: no delta slips in between the commit and it.
@@ -355,9 +358,11 @@ pub struct RevokeRequest {
 pub async fn revoke_and_rotate(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<RevokeRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<RevokeRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let target = req.user_id;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
@@ -584,8 +589,9 @@ fn decode_link(
 pub async fn list_key_links(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
+    ids: PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
     // The admin who re-keys a public channel reads the chain it extends
     // (`SRV-146`).
     if db::get_document_member(&state.db, &doc_id, &auth.user_id)
@@ -627,9 +633,11 @@ pub struct RotateKeyEntry {
 pub async fn rotate_document_key(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<RotateKeyRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<RotateKeyRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?;
     // Owner-only outside a debt. Rotating the document key rewraps EVERY

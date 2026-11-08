@@ -6,75 +6,62 @@
 //! copies the primitive it sees in the next signature, so a review rule alone
 //! loses ground on every change. The gate makes the count only go down.
 //!
-//! Three modes, one per recipe:
+//! The gate reads the code through rustc. It runs the compile lines of the
+//! `lint` and `lint-wasm` recipes with the driver of `driver/` in place of
+//! rustc (`run.rs`). The driver writes the sites and the facts of each one;
+//! this binary judges them against the allowlists. Three modes:
 //!
-//!   * `check`, the default, fails on nine defects, then prints the lines
-//!     per category. Two defects compare the file with the sites: a site no
-//!     line names, and a line that names no site. Three read the site: a
-//!     claimed shape the site lacks, a privacy refusal, and a `Deref` of a
-//!     workspace type to a primitive. The sixth reads names: a secret reader outside `ambre-crypto`, or
-//!     the `zeroize` crate outside the Secret module (`ARCH-045`,
-//!     `ARCH-046`).
-//!
-//!     The seventh holds the walk to rustc. It runs the compile lines of
-//!     the lint recipes as the `justfile` writes them, so it reads the
-//!     dep-info the lint wrote. It refuses a file a compile reads that the
-//!     walk neither reads nor names as data, and a `.rs` file no compile
-//!     reads. It refuses a build lever that enables an
-//!     unstable feature too, in the build configuration or in the gate's
-//!     own environment. It refuses a feature a manifest declares that no
-//!     compile turns on and no line of the feature exclusions names
-//!     (`ARCH-033`, `features.rs`).
-//!
-//!     The eighth is the newtype census (`ARCH-062`, `newtypes.rs`). It
-//!     refuses a hand-written newtype over a primitive that no exception line
-//!     names, and a line that names none.
-//!
-//!     The ninth refuses an alias that stands for a family of `ambre-core`
-//!     alone (`ARCH-066`, `aliases.rs`). It reads test code too;
-//!   * `check --unwrap-strict` runs `check`, then the strict unwrap report
-//!     on the same scan, and prints both verdicts. It fails when either
-//!     fails. One walk of the sources serves both;
-//!   * `files` runs the seventh check alone, so a red allowlist hides no
-//!     file the walk misses;
-//!   * `--prune` removes the lines that name no site, and the exception
-//!     lines that name no newtype, and nothing else;
+//!   * `check`, the default, fails on each defect of these checks, then prints
+//!     the lines per category:
+//!     * a site no line names, and a line that names no site (`ARCH-033`,
+//!       `ARCH-034`);
+//!     * a claimed shape the site lacks, and the three privacy refusals
+//!       (`ARCH-036` to `ARCH-040`);
+//!     * each refusal the code alone settles (`ARCH-037`, `ARCH-045` to
+//!       `ARCH-049`, `NEWTYPE-001`). A `Deref` to a primitive is one, and a
+//!       secret read or wiped outside its module is another. So are a sink
+//!       outside its file and a public field of a tuple struct;
+//!     * the newtype census (`ARCH-062`) and the bare-alias check
+//!       (`ARCH-066`);
+//!     * a feature no compile turns on, a `.rs` file no compile reads, and a
+//!       stray workspace (`features.rs`, `files.rs`);
+//!   * `check --unwrap-strict` also runs the strict unwrap report on the same
+//!     records, and prints both verdicts. It fails when either fails;
+//!   * `--prune` removes the lines that name no site, and the exception lines
+//!     that name no newtype, and nothing else;
 //!   * `unwrap` reports each workspace newtype unwrapped before a workspace
-//!     call, rather than at the foreign call that takes the primitive
-//!     (`unwrap.rs`). Report mode fails only on an unwrap allowlist that
-//!     is missing or does not parse. `--strict` also fails on a refusal no
-//!     line names, and on a line whose count differs from its sites.
-//!     `--ambiguous` prints the ambiguous sites too.
+//!     callee (`ARCH-073`, `unwraps.rs`). `--strict` also fails on a refusal
+//!     no line names, and on a line whose count differs from its sites.
+//!
+//! `--records <dir>` judges the records of an earlier run and compiles
+//! nothing, for a run by hand.
 
 mod aliases;
 mod allowlist;
-mod depinfo;
 mod features;
+mod files;
 mod newtypes;
-mod scan;
-mod secrets;
-mod unwrap;
+mod records;
+mod run;
+mod unwraps;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use allowlist::{Allowlist, Category, Defect, HEADER};
-use scan::Scan;
-use unwrap::Strictness;
+use records::Records;
+use unwraps::{Strictness, UNWRAP_ALLOWLIST};
 
 /// The allowlist, relative to the workspace root. It sits beside the other
 /// files the gates of the corpus read.
 const ALLOWLIST: &str = "specs/1-Foundations/ambre-primitives.tsv";
 
-/// The unwrap allowlist, beside the primitive one.
-const UNWRAP_ALLOWLIST: &str = "specs/1-Foundations/ambre-unwrap.tsv";
-
 /// What one run does.
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
     Check(Report),
-    Files,
     Prune,
-    Unwrap(Strictness, Shown),
+    Unwrap(Strictness),
 }
 
 /// What `check` reports.
@@ -82,8 +69,7 @@ enum Mode {
 enum Report {
     /// The primitive gate alone.
     Primitives,
-    /// The primitive gate, then the strict unwrap report on the same scan:
-    /// one walk of the sources serves both verdicts.
+    /// The primitive gate, then the strict unwrap report on the same records.
     WithStrictUnwrap,
 }
 
@@ -119,159 +105,119 @@ impl Verdict {
     }
 }
 
-/// Which sites the unwrap report prints.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Shown {
-    Refusals,
-    WithAmbiguous,
-}
+const USAGE: &str = "usage: ambre-primitives [check [--unwrap-strict] | --prune | unwrap \
+                     [--strict]] [--records <dir>]";
 
-const USAGE: &str = "usage: ambre-primitives [check [--unwrap-strict] | files | --prune | unwrap \
-                     [--strict] [--ambiguous]]";
+/// The mode and the records directory the arguments name.
+fn arguments(args: &[String]) -> Result<(Mode, Option<PathBuf>), String> {
+    let mut records = None;
+    let mut words = Vec::new();
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--records" {
+            let dir = iter.next().ok_or("--records takes a directory")?;
+            records = Some(PathBuf::from(dir));
+        } else {
+            words.push(arg.as_str());
+        }
+    }
+    let mode = match words.as_slice() {
+        [] | ["check"] => Mode::Check(Report::Primitives),
+        ["check", "--unwrap-strict"] => Mode::Check(Report::WithStrictUnwrap),
+        ["--prune"] => Mode::Prune,
+        ["unwrap"] => Mode::Unwrap(Strictness::Report),
+        ["unwrap", "--strict"] => Mode::Unwrap(Strictness::Strict),
+        _ => return Err(format!("unknown arguments {args:?}")),
+    };
+    Ok((mode, records))
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let mode = match args.first().map(String::as_str) {
-        None | Some("check") if args.len() <= 1 => Mode::Check(Report::Primitives),
-        Some("check") if args.get(1..) == Some(&["--unwrap-strict".to_owned()][..]) => {
-            Mode::Check(Report::WithStrictUnwrap)
-        }
-        Some("files") if args.len() == 1 => Mode::Files,
-        Some("--prune") if args.len() == 1 => Mode::Prune,
-        Some("unwrap") => {
-            let mut strictness = Strictness::Report;
-            let mut shown = Shown::Refusals;
-            for flag in args.iter().skip(1) {
-                match flag.as_str() {
-                    "--strict" => strictness = Strictness::Strict,
-                    "--ambiguous" => shown = Shown::WithAmbiguous,
-                    other => {
-                        eprintln!("primitives: unknown argument {other:?} -- {USAGE}");
-                        return ExitCode::FAILURE;
-                    }
-                }
-            }
-            Mode::Unwrap(strictness, shown)
-        }
-        _ => {
-            eprintln!("primitives: unknown arguments {args:?} -- {USAGE}");
+    let (mode, given) = match arguments(&args) {
+        Ok(parsed) => parsed,
+        Err(why) => {
+            eprintln!("primitives: {why} -- {USAGE}");
             return ExitCode::FAILURE;
         }
     };
     let root = workspace_root();
-    let crates = root.join("crates");
-    let disk = scan::Disk::at(&root);
-    let scan = scan::scan(&disk, &crates);
-    if !scan.errors.is_empty() {
-        for error in &scan.errors {
+    let (dir, compiled) = match given {
+        Some(dir) => (dir, None),
+        None => match run::compile(&root) {
+            Ok(compiled) => (compiled.records.clone(), Some(compiled)),
+            Err(errors) => {
+                for error in errors {
+                    eprintln!("primitives: {error}");
+                }
+                return ExitCode::FAILURE;
+            }
+        },
+    };
+    let records = Records::read(&dir);
+    if !records.errors.is_empty() {
+        for error in &records.errors {
             eprintln!("primitives: {error}");
         }
         return ExitCode::FAILURE;
     }
     let verdict = match mode {
-        Mode::Unwrap(strictness, shown) => unwraps(&scan, &disk, &root, strictness, shown),
-        Mode::Check(Report::WithStrictUnwrap) => {
-            // Both reports read the one scan, and the second runs whatever
-            // the first says, so a red gate hides no unwrap verdict.
-            let primitives = gate(&mode, &scan, &disk, &root);
-            let unwrap = unwraps(&scan, &disk, &root, Strictness::Strict, Shown::Refusals);
-            println!(
-                "primitives: the primitive gate {}, the strict unwrap report {}",
-                primitives.word(),
-                unwrap.word()
-            );
-            primitives.and(unwrap)
-        }
-        Mode::Check(Report::Primitives) | Mode::Files | Mode::Prune => {
-            gate(&mode, &scan, &disk, &root)
+        Mode::Unwrap(strictness) => unwraps(&records, &root, strictness),
+        Mode::Prune => prune(&records, &root),
+        Mode::Check(report) => {
+            let primitives = gate(&records, &root, compiled.as_ref());
+            match report {
+                Report::Primitives => primitives,
+                Report::WithStrictUnwrap => {
+                    // Both reports read the one set of records, and the second
+                    // runs whatever the first says.
+                    let unwrap = unwraps(&records, &root, Strictness::Strict);
+                    println!(
+                        "primitives: the primitive gate {}, the strict unwrap report {}",
+                        primitives.word(),
+                        unwrap.word()
+                    );
+                    primitives.and(unwrap)
+                }
+            }
         }
     };
     verdict.exit()
 }
 
-/// The primitive gate on one scan: the dep-info half, then the allowlist
-/// half. Or the prune, which compiles nothing.
-fn gate(mode: &Mode, scan: &Scan, disk: &scan::Disk, root: &Path) -> Verdict {
-    let unread = match mode {
-        Mode::Prune | Mode::Unwrap(..) => Vec::new(),
-        Mode::Check(_) | Mode::Files => files(scan, disk, root),
-    };
-    if let Mode::Files = mode {
-        return if unread.is_empty() {
-            Verdict::Pass
-        } else {
-            Verdict::Fail
-        };
-    }
-    let path = root.join(ALLOWLIST);
-    let Ok(text) = std::fs::read_to_string(&path) else {
-        eprintln!("primitives: cannot read {ALLOWLIST}");
-        return Verdict::Fail;
-    };
-    let list = match Allowlist::parse(&text) {
-        Ok(list) => list,
-        Err(errors) => {
-            for error in errors {
-                eprintln!("primitives: {ALLOWLIST}: {error}");
-            }
-            return Verdict::Fail;
-        }
-    };
-    let census = root.join(newtypes::NEWTYPES);
-    let exceptions = std::fs::read_to_string(&census).ok();
-    match mode {
-        Mode::Check(_) | Mode::Files | Mode::Unwrap(..) => {
-            let refused = newtypes::judge(exceptions.as_deref(), &scan.newtypes);
-            let bare = aliases::check(disk, root);
-            check(&list, scan, &unread, &refused, &bare)
-        }
-        Mode::Prune => {
-            if let Some(text) = exceptions
-                && let Err(e) = std::fs::write(&census, newtypes::pruned(&text, &scan.newtypes))
-            {
-                eprintln!("primitives: cannot write {}: {e}", newtypes::NEWTYPES);
-                return Verdict::Fail;
-            }
-            prune(&list, &scan.sites, &path)
-        }
-    }
+/// The workspace root, two levels above this crate's manifest.
+fn workspace_root() -> PathBuf {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    manifest
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or(manifest)
+        .to_path_buf()
 }
 
-/// The unwrap report: each refusal, then the counts. A missing or
-/// malformed allowlist fails in both modes. In strict mode, a refusal no
-/// line names fails, and so does a line whose count differs from its sites.
-fn unwraps(
-    scan: &Scan,
-    disk: &scan::Disk,
-    root: &Path,
-    strictness: Strictness,
-    shown: Shown,
-) -> Verdict {
-    let report = unwrap::report(disk, scan);
-    for error in &report.errors {
-        eprintln!("primitives: {error}");
+/// The allowlist, parsed, or the errors that keep it from parsing.
+fn allowlist(root: &Path) -> Result<(Allowlist, PathBuf), Vec<String>> {
+    let path = root.join(ALLOWLIST);
+    let text =
+        std::fs::read_to_string(&path).map_err(|_| vec![format!("cannot read {ALLOWLIST}")])?;
+    let list = Allowlist::parse(&text).map_err(|errors| {
+        errors
+            .into_iter()
+            .map(|e| format!("{ALLOWLIST}: {e}"))
+            .collect::<Vec<_>>()
+    })?;
+    Ok((list, path))
+}
+
+/// The unwrap report: each refusal, then the counts.
+fn unwraps(records: &Records, root: &Path, strictness: Strictness) -> Verdict {
+    for (key, at) in &records.unwraps {
+        println!("{at}: {key}");
     }
-    for refusal in &report.refusals {
-        println!("{refusal}");
-    }
-    if shown == Shown::WithAmbiguous {
-        for site in &report.ambiguous {
-            println!("ambiguous: {site}");
-        }
-    }
-    println!(
-        "unwrap: {} refusals, {} ambiguous ({} by the callee, {} by the receiver), {} at a \
-         foreign call, {} sites scanned, {} newtypes",
-        report.refusals.len(),
-        report.ambiguous.len(),
-        report.ambiguous_callees(),
-        report.ambiguous_receivers(),
-        report.foreign,
-        report.sites,
-        report.newtypes
-    );
+    println!("unwrap: {} refusals", records.unwraps.len());
     let text = std::fs::read_to_string(root.join(UNWRAP_ALLOWLIST)).ok();
-    let judgement = match unwrap::judge(&report, text.as_deref(), strictness) {
+    let keys = records.unwraps.iter().map(|(key, _)| key.as_str());
+    let judgement = match unwraps::judge(keys, text.as_deref(), strictness) {
         Ok(judgement) => judgement,
         Err(errors) => {
             for error in errors {
@@ -289,82 +235,104 @@ fn unwraps(
         judgement.unlisted, judgement.over, judgement.stale
     );
     match judgement.outcome {
-        unwrap::Outcome::Pass => Verdict::Pass,
-        unwrap::Outcome::Fail => Verdict::Fail,
+        unwraps::Outcome::Pass => Verdict::Pass,
+        unwraps::Outcome::Fail => Verdict::Fail,
     }
 }
 
-/// Every refusal of the dep-info check, printed with its count. Each compile
-/// runs in the workspace, so the check reads the files the recipes build.
-/// The build configuration is read first, and refused whatever the
-/// compiles say: a lever can make a compile fail, or pass. A lever in the
-/// gate's own environment stops the check before any compile, since a
-/// wrapper it names would run.
-fn files(scan: &Scan, disk: &scan::Disk, root: &Path) -> Vec<String> {
-    let environment = depinfo::env_levers(std::env::vars_os());
-    let compile = environment.is_empty();
-    let mut refusals = environment;
-    refusals.append(&mut depinfo::levers(disk, root));
-    refusals.append(&mut depinfo::outer_levers(
-        disk,
-        root,
-        cargo_home().as_deref(),
-    ));
-    refusals.append(&mut depinfo::stray_workspaces(disk, root));
-    if compile {
-        let compiled = depinfo::lint_compiles(disk, root)
-            .and_then(|compiles| depinfo::collect(root, &compiles, &|_| {}));
-        match compiled {
-            Ok(compiled) => {
-                refusals.append(&mut features::check(disk, root, &compiled.features));
-                let sources = depinfo::sources(disk, root);
-                let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-                refusals.append(&mut depinfo::cross_check(
-                    scan, &compiled, &sources, &root, disk,
-                ));
+/// Removes the lines that name no site, and the census lines that name no
+/// newtype.
+fn prune(records: &Records, root: &Path) -> Verdict {
+    let (list, path) = match allowlist(root) {
+        Ok(found) => found,
+        Err(errors) => {
+            for error in errors {
+                eprintln!("primitives: {error}");
             }
-            Err(mut errors) => refusals.append(&mut errors),
+            return Verdict::Fail;
         }
+    };
+    let census = root.join(newtypes::NEWTYPES);
+    let found = records.newtypes.keys().cloned().collect();
+    if let Ok(text) = std::fs::read_to_string(&census)
+        && let Err(e) = std::fs::write(&census, newtypes::pruned(&text, &found))
+    {
+        eprintln!("primitives: cannot write {}: {e}", newtypes::NEWTYPES);
+        return Verdict::Fail;
     }
-    for refusal in &refusals {
-        eprintln!("primitives: {refusal}");
+    let keys = records.keys();
+    let stale = list.compare(&keys).stale.len();
+    if let Err(e) = std::fs::write(&path, list.pruned(&keys)) {
+        eprintln!("primitives: cannot write {ALLOWLIST}: {e}");
+        return Verdict::Fail;
     }
-    println!(
-        "primitives: dep-info: {} refusals of the file set rustc compiles",
-        refusals.len()
+    println!("primitives: removed {stale} lines that named no site");
+    Verdict::Pass
+}
+
+/// The primitive gate on one set of records. `compiled` carries the features
+/// of the compiles, absent when the records come from an earlier run.
+fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Verdict {
+    let mut failed = false;
+    let mut report = |what: &str, refusals: Vec<String>| {
+        for refusal in &refusals {
+            eprintln!("primitives: {refusal}");
+        }
+        if !refusals.is_empty() {
+            eprintln!("primitives: {} refusals of {what}.", refusals.len());
+            failed = true;
+        }
+    };
+    if let Some(compiled) = compiled {
+        report(
+            "the feature check (ARCH-033)",
+            features::check(root, &compiled.features),
+        );
+    }
+    report(
+        "the file check (ARCH-033, ARCH-046)",
+        files::check(root, &records.files),
     );
-    refusals
-}
-
-/// The cargo home whose config cargo reads: `CARGO_HOME`, or `.cargo` in
-/// the home directory, as cargo finds it.
-fn cargo_home() -> Option<PathBuf> {
-    std::env::var_os("CARGO_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".cargo")))
-}
-
-/// The workspace root, two levels above this crate's manifest.
-fn workspace_root() -> PathBuf {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    manifest
-        .parent()
-        .and_then(Path::parent)
-        .unwrap_or(manifest)
-        .to_path_buf()
-}
-
-fn check(
-    list: &Allowlist,
-    scan: &Scan,
-    unread: &[String],
-    newtypes: &[String],
-    aliases: &[String],
-) -> Verdict {
-    let sites = &scan.sites;
-    let verdict = list.compare(sites);
+    let census = std::fs::read_to_string(root.join(newtypes::NEWTYPES)).ok();
+    let found = records.newtypes.keys().cloned().collect();
+    report(
+        "the newtype census (ARCH-062)",
+        newtypes::judge(census.as_deref(), &found),
+    );
+    let spec = std::fs::read_to_string(root.join(aliases::SPEC)).ok();
+    report(
+        "the bare-alias check (ambre-spec-newtypes.md section 3)",
+        aliases::judge(spec.as_deref(), records),
+    );
+    for (check, message) in &records.refusals {
+        eprintln!("primitives: {check}: {message}");
+    }
+    if !records.refusals.is_empty() {
+        eprintln!(
+            "primitives: {} refusals the code settles: a Deref to a primitive, a secret read \
+             or wiped outside its module, a sink outside its file, a public field of a tuple \
+             struct. No line of {ALLOWLIST} admits one.",
+            records.refusals.len()
+        );
+        failed = true;
+    }
+    let list = match allowlist(root) {
+        Ok((list, _)) => list,
+        Err(errors) => {
+            for error in errors {
+                eprintln!("primitives: {error}");
+            }
+            return Verdict::Fail;
+        }
+    };
+    let keys = records.keys();
+    let verdict = list.compare(&keys);
     for key in &verdict.missing {
-        eprintln!("primitives: no line names the site\n  {key}");
+        let (at, origin) = records
+            .sites
+            .get(key)
+            .map_or(("", ""), |site| (site.at.as_str(), site.origin.as_str()));
+        eprintln!("primitives: no line names the site at {at}, written by {origin}\n  {key}");
     }
     if !verdict.missing.is_empty() {
         eprintln!(
@@ -385,7 +353,7 @@ fn check(
             verdict.stale.len()
         );
     }
-    let refuted = list.refuted(scan);
+    let refuted = list.refuted(records);
     for refuted in &refuted {
         match refuted.defect {
             Defect::Shape => eprintln!(
@@ -398,60 +366,11 @@ fn check(
             ),
         }
     }
-    let shapes = refuted
-        .iter()
-        .filter(|refuted| refuted.defect == Defect::Shape)
-        .count();
-    if shapes > 0 {
+    if !refuted.is_empty() {
         eprintln!(
-            "primitives: {shapes} lines claim a shape their site does not have. Type the value, or \
-             give the line the category true of its site."
-        );
-    }
-    let private = refuted.len() - shapes;
-    if private > 0 {
-        eprintln!(
-            "primitives: {private} refusals name a site that is not private, where the rule wants \
-             a private one. Type the value: only a bool field that mirrors a foreign schema may \
-             move to foreign-api."
-        );
-    }
-    for deref in &scan.derefs {
-        eprintln!("primitives: {deref}");
-    }
-    if !scan.derefs.is_empty() {
-        eprintln!(
-            "primitives: {} impls dereference a workspace type to a primitive. No line of \
-             {ALLOWLIST} admits one: remove the impl.",
-            scan.derefs.len()
-        );
-    }
-    for secret in &scan.secrets {
-        eprintln!("primitives: {secret}");
-    }
-    if !scan.secrets.is_empty() {
-        eprintln!(
-            "primitives: {} names read a secret, or wipe one, outside the code that may. Move \
-             the read into ambre-crypto, and hold the value in an ambre_core::Secret.",
-            scan.secrets.len()
-        );
-    }
-    for refusal in newtypes {
-        eprintln!("primitives: {refusal}");
-    }
-    if !newtypes.is_empty() {
-        eprintln!(
-            "primitives: {} refusals of the newtype census (ARCH-062).",
-            newtypes.len()
-        );
-    }
-    for refusal in aliases {
-        eprintln!("primitives: {refusal}");
-    }
-    if !aliases.is_empty() {
-        eprintln!(
-            "primitives: {} refusals of the bare-alias check (ambre-spec-newtypes.md section 3).",
-            aliases.len()
+            "primitives: {} lines are refused from their site. Type the value, or give the line \
+             the category true of its site.",
+            refuted.len()
         );
     }
     let counts: Vec<String> = Category::ALL
@@ -463,31 +382,10 @@ fn check(
             )
         })
         .collect();
-    println!("primitives: {} sites; {}", sites.len(), counts.join(", "));
-    if verdict.is_clean()
-        && refuted.is_empty()
-        && scan.derefs.is_empty()
-        && scan.secrets.is_empty()
-        && unread.is_empty()
-        && newtypes.is_empty()
-        && aliases.is_empty()
-    {
-        Verdict::Pass
-    } else {
+    println!("primitives: {} sites; {}", keys.len(), counts.join(", "));
+    if failed || !verdict.is_clean() || !refuted.is_empty() {
         Verdict::Fail
+    } else {
+        Verdict::Pass
     }
-}
-
-fn prune(
-    list: &Allowlist,
-    sites: &std::collections::BTreeSet<scan::SiteKey>,
-    path: &Path,
-) -> Verdict {
-    let stale = list.compare(sites).stale.len();
-    if let Err(e) = std::fs::write(path, list.pruned(sites)) {
-        eprintln!("primitives: cannot write {ALLOWLIST}: {e}");
-        return Verdict::Fail;
-    }
-    println!("primitives: removed {stale} lines that named no site");
-    Verdict::Pass
 }

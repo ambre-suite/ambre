@@ -33,9 +33,11 @@ pub struct UploadUrlResponse {
 pub async fn media_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<UploadUrlRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<UploadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -83,9 +85,11 @@ pub struct DownloadUrlResponse {
 pub async fn media_download_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<DownloadUrlRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<DownloadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -121,9 +125,11 @@ pub struct ConfirmUploadRequest {
 pub async fn media_confirm_upload(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<ConfirmUploadRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<ConfirmUploadRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -179,11 +185,9 @@ pub struct MediaConfirmed {
 pub async fn media_erase(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, content_hash)): PathId<(
-        Id<Document>,
-        ambre_core::Validated<ambre_core::ContentHash>,
-    )>,
+    ids: PathId<(Id<Document>, ambre_core::Validated<ambre_core::ContentHash>)>,
 ) -> Result<impl IntoResponse, AppError> {
+    let (doc_id, content_hash) = ids.into_inner();
     let s = auth;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?

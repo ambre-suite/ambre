@@ -253,7 +253,7 @@ impl std::fmt::Debug for ExportElement {
             .field("rect", &self.rect)
             .field("rotation", &self.rotation)
             .field("style", &self.style)
-            .field("path", &self.path.as_ref().map(PathLen))
+            .field("path", &self.path.as_ref().map(PathLen::new))
             .field("text", &self.text.as_deref().map(ambre_core::Redacted::new))
             .field("media_hash", &self.media_hash)
             .field("image_png", &self.image_png)

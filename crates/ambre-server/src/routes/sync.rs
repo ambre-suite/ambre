@@ -42,8 +42,9 @@ pub struct ReferenceSnapshot {
 pub async fn get_snapshot_metadata(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
+    ids: PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
     let s = auth;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -92,8 +93,9 @@ pub struct ConfirmedSnapshotJson {
 pub async fn confirm_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, snap_id)): PathId<(Id<Document>, Id<Snapshot>)>,
+    ids: PathId<(Id<Document>, Id<Snapshot>)>,
 ) -> Result<axum::Json<ConfirmedSnapshotJson>, AppError> {
+    let (doc_id, snap_id) = ids.into_inner();
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -144,9 +146,11 @@ pub struct ReportSnapshotRequest {
 pub async fn report_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, snap_id)): PathId<(Id<Document>, Id<Snapshot>)>,
-    Json(req): Json<ReportSnapshotRequest>,
+    ids: PathId<(Id<Document>, Id<Snapshot>)>,
+    body: Json<ReportSnapshotRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let (doc_id, snap_id) = ids.into_inner();
+    let req = body.into_inner();
     use ed25519_dalek::{Signature, VerifyingKey};
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
@@ -224,9 +228,11 @@ pub struct CreateSnapshotResponse {
 pub async fn create_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<CreateSnapshotRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<CreateSnapshotRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -298,9 +304,11 @@ pub struct SnapshotUploadUrlResponse {
 pub async fn snapshot_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<SnapshotUploadUrlRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<SnapshotUploadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -351,9 +359,11 @@ pub struct SnapshotDownloadUrlResponse {
 pub async fn snapshot_download_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
-    Json(req): Json<SnapshotDownloadUrlRequest>,
+    ids: PathId<Id<Document>>,
+    body: Json<SnapshotDownloadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
+    let req = body.into_inner();
     let s = auth;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
@@ -403,9 +413,10 @@ pub struct DeltasResponse {
 pub async fn get_deltas(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<Id<Document>>,
+    ids: PathId<Id<Document>>,
     Query(params): Query<DeltasQuery>,
 ) -> Result<impl IntoResponse, AppError> {
+    let doc_id = ids.into_inner();
     let s = auth;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?

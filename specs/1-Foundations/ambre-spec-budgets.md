@@ -378,6 +378,7 @@
 | `just fixtures` | ~30 s | A slow corpus is a corpus developers stop regenerating |
 | `just fixtures-check` in CI | ~10 s | Holds only because the frozen set is capped at three per `doc_type`, and the check loads and migrates every one |
 | Committed fixture artifact | 256 KB each, ~5 MB total | Indicative cap over `fixtures/current/` and `fixtures/frozen/`. The scale corpora are git-ignored and produced on demand (`ambre-spec-fixtures.md section 2`) |
+| `just primitives`, the dependencies fresh, every workspace unit compiled again through the driver | 120 s, a ceiling | Measured on 2026-11-08 in a cloud container of 4 vCPU. The nine lint lines took 106 s after an earlier run of the gate, and 110 s right after `just lint` and `just lint-wasm`, 116 s for the whole recipe. The host line takes 29.5 s, the line of `ambre-belt` 2.2 s and the seven wasm lines 79 s, each printed by the gate. The spike timed the host library line alone at 9.3 s. A first run after a cold lint rebuilds the dependencies whose feature set differs, 7 min 50 s on the same day |
 
 ---
 

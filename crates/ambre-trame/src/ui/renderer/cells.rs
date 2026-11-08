@@ -12,7 +12,14 @@ use crate::{CellPos, MergeSpan};
 use ambre_core::{FracMs, TimeSpan};
 
 /// The screen cache as the sheet walk reads it.
-pub(super) struct CacheCells<'a>(pub(super) &'a HashMap<CellPos, CellData>);
+pub(super) struct CacheCells<'a>(&'a HashMap<CellPos, CellData>);
+
+impl<'a> CacheCells<'a> {
+    /// The walk's view of the screen cache `cache`.
+    pub(super) fn new(cache: &'a HashMap<CellPos, CellData>) -> Self {
+        Self(cache)
+    }
+}
 
 impl SheetCells for CacheCells<'_> {
     fn cell(&self, at: CellPos) -> Option<SheetCell<'_>> {
@@ -119,7 +126,7 @@ pub fn draw_cells<S: DrawSurface>(
     let camera = sheet_camera(state);
     let region = camera.inverse().transform_rect_bbox(strip);
     let view = SheetView {
-        cells: &CacheCells(&state.cell_cache),
+        cells: &CacheCells::new(&state.cell_cache),
         axes: sheet_axes(state),
         palette,
         text_pass,

@@ -21,14 +21,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4012 rows: 3450 shipped, of which 12 loose. 562 unbuilt.**
+**4015 rows: 3453 shipped, of which 11 loose. 562 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1028 | 490 | 874 | 619 | 427 | 3438 |
+| `verified` | 1032 | 490 | 874 | 619 | 427 | 3442 |
 | `failing` |  |  |  | 1 |  | 1 |
 | `untested` |  |  |  |  |  | 0 |
-| `human-review` | 9 |  |  |  |  | 9 |
+| `human-review` | 8 |  |  |  |  | 8 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
 | `unimplemented` | 207 | 54 | 29 | 109 | 163 | 562 |
 
@@ -40,7 +40,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 7 |  | 1 |
-| `ambre-spec-architecture.md` | 75 | 75 | 66 | 9 |  |
+| `ambre-spec-architecture.md` | 77 | 77 | 69 | 8 |  |
 | `ambre-spec-broadcast.md` | 28 | 27 | 27 |  | 1 |
 | `ambre-spec-call-media.md` | 49 | 20 | 20 |  | 29 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
@@ -62,6 +62,7 @@
 | `ambre-spec-media.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-membership.md` | 36 | 36 | 36 |  |  |
 | `ambre-spec-message-bus.md` | 45 | 44 | 44 |  | 1 |
+| `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-object-store.md` | 18 | 17 | 17 |  | 1 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-organizations.md` | 14 | 12 | 12 |  | 2 |
@@ -193,7 +194,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..075 |
+| `ambre-spec-architecture.md` | ARCH-001..077 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237 |
 | `ambre-spec-call-media.md` | CALL-001..049 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |
@@ -246,6 +247,7 @@
 | `ambre-spec-murmure-threads.md` | MURMURE-105..112,260..261,290..295,415,484..485,497,532..533,538..539,545..548,588 |
 | `ambre-spec-murmure-typing-presence.md` | MURMURE-121..127,296..297,515..518,521,536..537 |
 | `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495,499,587 |
+| `ambre-spec-newtypes.md` | NEWTYPE-001 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158 |
 | `ambre-spec-op-authorship.md` | AUTHOR-001..029 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077,229,231,233 |
