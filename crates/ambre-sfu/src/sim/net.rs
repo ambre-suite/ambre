@@ -15,8 +15,10 @@ use super::client::Synth;
 use super::impair::{Impairment, Profile};
 use crate::forward::{Participant, Room, Sfu, Signal};
 
-/// The step of the simulated clock.
-const STEP: Duration = Duration::from_millis(2);
+/// The step of the simulated clock. The SFU wakes str0m at the timeout it asks, and tokio
+/// rounds that timeout to 1 ms. The pacer of str0m sends one padding packet per wake. A coarser step
+/// would starve a probe of the padding the SFU sends (`CALL-050`).
+const STEP: Duration = Duration::from_millis(1);
 
 /// Where a datagram in flight goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

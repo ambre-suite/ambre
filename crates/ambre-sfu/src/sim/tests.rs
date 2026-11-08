@@ -386,3 +386,101 @@ fn a_joiner_gets_no_backlog_of_audio_at_connect() {
         "the joiner heard audio {worst:?} late"
     );
 }
+
+/// The delay step of the recovery runs: a one-way delay that grows once, mid-call, and stays.
+const DELAY_STEP: Duration = Duration::from_millis(40);
+
+/// `CALL-050`: a false drop recovers. A call of three runs at 150 ms of round trip and 2 %
+/// loss. The one-way delay of the downlink of a receiver then grows once by 40 ms, with no
+/// cap. The receiver gets the top layer of the speaker again within 2 s of the step. It keeps
+/// that layer for the rest of the run, on each path of [`SEEDS`].
+#[test]
+fn a_receiver_climbs_back_to_the_top_layer_after_a_delay_step() {
+    for seed in SEEDS {
+        let mut net = seeded_call(3, proof_link(), seed);
+        net.run(Duration::from_secs(15));
+        let before = net.now - Duration::from_secs(1);
+        assert!(
+            since(track(&net, 1, 0), before).all(|a| a.layer == 2),
+            "seed {seed}: before the step, the receiver gets the top layer of the speaker"
+        );
+        let stepped = net.now;
+        net.member(1).down.profile.delay += DELAY_STEP;
+        net.run(Duration::from_secs(8));
+        let arrivals: Vec<&Arrival> = since(track(&net, 1, 0), stepped).collect();
+        let dropped = arrivals
+            .iter()
+            .find(|a| a.layer < 2)
+            .map(|a| a.at - stepped);
+        // The last packet below the top layer: the receiver holds the top layer after it.
+        let back = arrivals
+            .iter()
+            .rposition(|a| a.layer < 2)
+            .and_then(|i| arrivals.get(i + 1))
+            .map(|a| a.at - stepped);
+        eprintln!("seed {seed}: dropped after {dropped:?}, back on the top layer after {back:?}");
+        let tail = arrivals
+            .iter()
+            .filter(|a| a.at >= stepped + Duration::from_secs(7))
+            .count();
+        assert!(
+            tail > 0,
+            "seed {seed}: no video of the speaker in the last second"
+        );
+        assert!(
+            dropped.is_none() || back.is_some_and(|b| b <= Duration::from_secs(2)),
+            "seed {seed}: dropped after {dropped:?}, back on the top layer after {back:?}"
+        );
+    }
+}
+
+/// A cap above the middle layer of the speaker and the lowest layer of the other sender, with
+/// the margin of a move up. It holds no top layer of the speaker.
+const MIDDLE_CAP: u64 = 1_200_000;
+
+/// The target the top layer of the speaker needs, beside the lowest layer of the other sender.
+/// It is their sum under the share and the margin of the layer choice: about 2.43 Mbit/s.
+const TOP_NEEDS: f64 = (1_500_000.0 + 150_000.0) * 1.25 / 0.85;
+
+/// `CALL-051`: a probe never lifts a capped receiver to a layer its downlink cannot carry. A
+/// call of three runs at 150 ms of round trip and 2 % loss. The downlink of a receiver is then
+/// capped below the top layer of the speaker for 20 s. After its drop, the receiver gets no
+/// packet of the top layer. Its target stays under what the top layer needs, on each path of
+/// [`SEEDS`].
+#[test]
+fn a_receiver_capped_below_the_top_layer_never_climbs_to_it() {
+    for seed in SEEDS {
+        let mut net = seeded_call(3, proof_link(), seed);
+        net.run(Duration::from_secs(15));
+        let capped = net.now;
+        net.member(1).down.profile.cap = Some(MIDDLE_CAP);
+        let id = net.member(1).id;
+        let mut highest: f64 = 0.0;
+        for _ in 0..2000 {
+            net.run(Duration::from_millis(10));
+            let target = net.sfu.estimate_of(id).expect("a receiver").as_f64();
+            if net.now >= capped + Duration::from_secs(3) {
+                highest = highest.max(target);
+            }
+        }
+        let settled = capped + Duration::from_secs(3);
+        let layers: Vec<u8> = since(track(&net, 1, 0), settled).map(|a| a.layer).collect();
+        let top = layers.iter().filter(|l| **l == 2).count();
+        let moves = layers.windows(2).filter(|w| w.first() != w.last()).count();
+        eprintln!(
+            "seed {seed}: {} packets after the drop, {top} on the top layer, {moves} switches, \
+             highest target {highest:.0} bit/s",
+            layers.len()
+        );
+        assert!(
+            layers.len() > 500,
+            "seed {seed}: {} packets of the speaker after the drop",
+            layers.len()
+        );
+        assert_eq!(top, 0, "seed {seed}: {top} packets on the top layer");
+        assert!(
+            highest < TOP_NEEDS,
+            "seed {seed}: the target reached {highest:.0} bit/s"
+        );
+    }
+}

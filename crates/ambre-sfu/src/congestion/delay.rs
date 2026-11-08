@@ -529,4 +529,20 @@ impl DelayControl {
     pub fn target(&self) -> Bitrate {
         self.rate.target
     }
+
+    /// Sets the target to `rate`, which a probe saw the link carry with no overuse. The link
+    /// carries more than at the last decrease, so its known capacity no longer holds.
+    pub fn raise(&mut self, rate: Bitrate, now: Instant) {
+        if rate.as_f64() > self.rate.target.as_f64() {
+            self.rate.capacity = None;
+            self.rate.set(rate, now);
+        }
+    }
+
+    /// Lifts the target back to `floor`, after a decrease that a failed probe caused.
+    pub fn restore(&mut self, floor: Bitrate) {
+        if floor.as_f64() > self.rate.target.as_f64() {
+            self.rate.target = floor.clamp(self.rate.floor, self.rate.ceiling);
+        }
+    }
 }
