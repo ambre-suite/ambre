@@ -173,6 +173,9 @@ pub struct Records {
     /// Each type, alias or trait the protocol, the worker or the relay
     /// declares: the package, the name, `public` or `private`, and where.
     pub decls: BTreeSet<(String, String, String, String)>,
+    /// Each fact of the launcher's wiring: its name, its value and where it
+    /// sits.
+    pub facts: BTreeSet<(String, String, String)>,
     /// Each file a compile read.
     pub files: BTreeSet<PathBuf>,
     /// Each record the judge could not read.
@@ -278,6 +281,10 @@ impl Records {
                         (*public).to_owned(),
                         (*at).to_owned(),
                     ));
+                }
+                ["fact", name, value, at] => {
+                    self.facts
+                        .insert(((*name).to_owned(), (*value).to_owned(), (*at).to_owned()));
                 }
                 ["file", path] => {
                     self.files.insert(PathBuf::from(path));

@@ -107,11 +107,9 @@ def scratch(tmp: str) -> Path:
     root = Path(tmp)
     write(root, "crates/ambre-app/Cargo.toml", '[dependencies]\nambre-logic = { path = "../ambre-logic" }\n')
     write(root, cb.CHROME, '[dependencies]\nambre-commands = { path = "../ambre-commands" }\n')
-    for rel in cb.FIXTURE_MODULES:
-        write(root, rel, "impl S {\n    fn read(&self) { self.doc.get_map(X); }\n}\n\nfn build_a(s: &mut S) {\n    s.handle_command(C);\n}\n")
     write(
         root,
-        f"{cb.LAUNCHER}/lib.rs",
+        "crates/ambre-app/src/lib.rs",
         "// Fed by `TrameEvent::SheetList` (`ARCH-018`).\n"
         "fn relay(ev: &UiEvent) { trame_relay.absorb(ev); }\n"
         "fn keys() { register(trame_chrome::COMMANDS); }\n"
@@ -124,12 +122,10 @@ def scratch(tmp: str) -> Path:
     )
     write(
         root,
-        cb.SHELL_OUTBOX,
+        "crates/ambre-app/src/outbox.rs",
         "pub(crate) struct ShellOutbox { hold: StoredValue<Hold, LocalStorage> }\n"
         "fn new(to_logic: Sender<LogicCommand>) -> Self { Self::with_lane(Lane::new(to_logic)) }\n",
     )
-    write(root, cb.FRAME_HOST, "fn go() { drive_frame(&raf_c, &mut pre_frame, render); }\n")
-    write(root, cb.SWITCHBOARD_DECISIONS, "pub(crate) fn decide(ev: &UiEvent) -> Vec<Effect> { Vec::new() }\n")
     write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
     write(root, f"{cb.RENDERER}/mod.rs", "fn quad(c: Color) -> [f32; 4] { c.components }\n")
     write(
@@ -144,7 +140,7 @@ def scratch(tmp: str) -> Path:
         '[workspace]\nmembers = [\n    "crates/ambre-sync",\n]\n\n'
         '[workspace.lints.clippy]\nunwrap_used = "deny"\n',
     )
-    write(root, f"{cb.WORKER}/http.rs", "fn put() { gloo_net::http::Request::put(url); }\n")
+    write(root, "crates/ambre-sync/src/http.rs", "fn put() { gloo_net::http::Request::put(url); }\n")
     write(root, "crates/ambre-canvas/src/host.rs", "fn font() { window.fetch_with_str(url); }\n")
     write(
         root,
@@ -158,7 +154,6 @@ def scratch(tmp: str) -> Path:
         "        display: inline;\n    }\n}\n",
     )
     write(root, cb.PIPE, 'fn create() {\n    for (k, v) in [("tabindex", "0")] {}\n}\n')
-    write(root, f"{cb.RELAY}/ws.rs", 'fn put() {\n    tracing::info!(seq, len = payload.len(), "update {doc_id}");\n}\n')
     write(root, cb.KINETIC_MODEL, "pub const DECAY_MS: f64 = 325.0;\n")
     write(root, cb.AXIS_MODULE, "fn list() -> SheetRoot { SheetRoot::Rows }\n")
     write(root, cb.DRAW_TRAIT, "pub trait DrawSurface {\n    fn fill_rect(&mut self, rect: Rect, color: Color);\n}\n")
@@ -190,7 +185,7 @@ def scratch(tmp: str) -> Path:
     )
     write(
         root,
-        cb.WORKER_SPAWNER,
+        "crates/ambre-app/src/platform.rs",
         "fn spawn() {\n    web_sys::Worker::new(URL);\n"
         "    let e = Closure::new(|_| { ambre_canvas::signal_fatal(r); });\n"
         "    worker.set_onerror(Some(e));\n}\n",
@@ -212,9 +207,6 @@ class CrateBoundaries(unittest.TestCase):
     def run_checks(self, root: Path) -> list[str]:
         with Tree(root):
             errors: list[str] = []
-            cb.check_generators(errors)
-            cb.check_generator_reads(errors)
-            cb.check_passphrase(errors)
             cb.check_fonts(errors)
             cb.check_renderer_colors(errors)
             cb.check_ui_thread(errors)
@@ -224,7 +216,6 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_modals_and_drags(errors)
             cb.check_key_verification(errors)
             cb.check_accessibility(errors)
-            cb.check_payload_logs(errors)
             cb.check_kinetic_copy(errors)
             cb.check_axis_lists(errors)
             cb.check_primitives(errors)
@@ -234,17 +225,10 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_one_event_copy(errors)
             cb.check_signal_types(errors)
             cb.check_bus_ids(errors)
-            cb.check_message_crdt(errors)
             cb.check_wire_ids(errors)
             cb.check_typed_answers(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
-            cb.check_request_ids(errors)
-            cb.check_engine_and_relay(errors)
-            cb.check_switchboard_decisions(errors)
-            cb.check_handlers(errors)
-            cb.check_launcher_outbox(errors)
-            cb.check_failure_latches(errors)
             cb.check_exit_writes(errors)
             cb.check_walks(errors)
             return errors
@@ -267,29 +251,15 @@ class CrateBoundaries(unittest.TestCase):
         self.assertIsNone(cb.state_type("Id<User>"))
         self.assertEqual(shown, "RwSignal<Option<Validated<DisplayName>>>")
 
-    def test_a_view_holding_the_document_is_refused(self):
-        for line in (
-            "fn draw(d: &loro::LoroDoc) {}\n",
-            "fn draw(s: &ProseState) {}\n",
-            "fn load(b: &[u8]) { let m = ExportMode::Snapshot; }\n",
-        ):
-            for rel in ("crates/ambre-toile/src/ui/view.rs", "crates/ambre-trame/src/ui/grid.rs"):
-                errors = self.breach(rel, line)
-                self.assertTrue(any("holds the document" in e for e in errors), (rel, line, errors))
-
     def test_a_view_converting_a_file_is_refused(self):
         line = "fn read(b: &[u8]) { let r = csv::ReaderBuilder::new(); }\n"
         errors = self.breach("crates/ambre-trame/src/ui/menu.rs", line)
         self.assertTrue(any("converts a file" in e for e in errors), errors)
 
-    def test_a_tree_address_and_a_test_engine_stay_free(self):
-        text = "fn hit(id: loro::TreeID) {}\n\n#[cfg(test)]\nmod tests {\n    fn s() -> ProseState {}\n}\n"
-        self.assertEqual(self.breach("crates/ambre-prose/src/view/hit.rs", text), [])
-
     def test_a_module_declared_for_the_tests_stays_free(self):
         import tempfile
 
-        engine = "fn s() -> TrameState { TrameState::new() }\n"
+        engine = "fn s() { let r = csv::ReaderBuilder::new(); }\n"
         with tempfile.TemporaryDirectory() as tmp:
             root = scratch(tmp)
             view = '#[cfg(all(test, not(target_arch = "wasm32")))]\nmod view_tests;\nmod input;\n'
@@ -299,7 +269,7 @@ class CrateBoundaries(unittest.TestCase):
             write(root, "crates/ambre-trame/src/ui/grid/mod.rs", "#[cfg(test)]\nmod tests;\n")
             write(root, "crates/ambre-trame/src/ui/grid/tests/mod.rs", "mod viewport;\n")
             write(root, "crates/ambre-trame/src/ui/grid/tests/viewport.rs", engine)
-            errors = [e for e in self.run_checks(root) if "holds the document" in e]
+            errors = [e for e in self.run_checks(root) if "converts a file" in e]
         self.assertEqual(len(errors), 1, errors)
         self.assertIn("ui/view/input.rs", errors[0])
 
@@ -542,229 +512,6 @@ class CrateBoundaries(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(self.run_checks(scratch(tmp)), [])
 
-    def test_a_generator_writing_to_the_crdt_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(
-                root,
-                cb.FIXTURE_MODULES[0],
-                "fn build_a(s: &mut S) {\n    s.doc.get_map(CELLS).insert(k, v);\n}\n",
-            )
-            errors = self.run_checks(root)
-        self.assertTrue(any("reaches the CRDT" in e for e in errors), errors)
-
-    def test_the_reading_half_of_a_fixture_module_stays_free(self):
-        """`fixture_shape` counts the CRDT it was handed. Only free functions are read."""
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            errors = self.run_checks(root)
-        self.assertEqual([e for e in errors if "reaches the CRDT" in e], [])
-
-    def test_a_generator_reading_a_file_is_refused(self):
-        for line in (
-            'let b = include_bytes!("board.ambre");',
-            'let t = std::fs::read_to_string(p);',
-            "let f = File::open(p);",
-            'let s = std::env::var("SEED");',
-        ):
-            errors = self.breach(cb.FIXTURE_MODULES[0], f"fn build_a(s: &mut S) {{\n    {line}\n}}\n")
-            self.assertTrue(any("reads besides its seed" in e for e in errors), (line, errors))
-
-    def test_a_generator_module_no_list_names_is_read(self):
-        """A new application's generator is found by its file name, not by a list."""
-        errors = self.breach("crates/ambre-murmure/src/fixtures.rs", 'const B: &[u8] = include_bytes!("x");\n')
-        self.assertTrue(any("ambre-murmure" in e and "reads besides its seed" in e for e in errors), errors)
-
-    def test_the_driver_and_a_test_module_may_read_files(self):
-        errors = self.breach(cb.FIXTURE_DRIVER, "fn load(p: &Path) { std::fs::read(p); }\n")
-        self.assertEqual([e for e in errors if "reads besides its seed" in e], [])
-        errors = self.breach(
-            cb.FIXTURE_MODULES[0],
-            "fn build_a(s: &mut S) {\n    s.handle_command(C);\n}\n\n#[cfg(test)]\nmod tests {\n"
-            "    fn t() { std::fs::read(p); }\n}\n",
-        )
-        self.assertEqual([e for e in errors if "reads besides its seed" in e], [])
-
-    def test_a_tree_with_no_generator_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            for rel in cb.FIXTURE_MODULES:
-                (root / rel).unlink()
-            errors = self.run_checks(root)
-        self.assertTrue(any("no generator module found" in e for e in errors), errors)
-
-    def test_a_request_carrying_a_passphrase_is_refused(self):
-        import tempfile
-
-        for text in (
-            "#[derive(Serialize)]\nstruct Body {\n    pub passphrase: String,\n}\n",
-            "#[derive(Debug, Serialize)]\n#[serde(rename_all = \"camelCase\")]\n"
-            "pub(crate) struct Body {\n    user_password: Vec<u8>,\n}\n",
-            "#[derive(Serialize)]\nstruct Body {\n    #[serde(rename = \"passphrase\")]\n    p: String,\n}\n",
-            "fn send() { let b = serde_json::json!({ \"passphrase\": p }); }\n",
-            "#[derive(Serialize)]\nstruct Body {\n    secret: Option<Confidential<Plaintext>>,\n}\n",
-        ):
-            with tempfile.TemporaryDirectory() as tmp:
-                root = scratch(tmp)
-                write(root, f"{cb.WORKER}/auth.rs", text)
-                errors = self.run_checks(root)
-            self.assertTrue(any("names a passphrase" in e for e in errors), (text, errors))
-
-    def test_a_passphrase_outside_a_request_body_stays_free(self):
-        """A handler parameter, a deserialized reply and a log line send nothing."""
-        import tempfile
-
-        text = (
-            "fn unlock(passphrase: Confidential<Passphrase>) {\n"
-            "    tracing::warn!(\"wrong passphrase\");\n}\n"
-            "#[derive(Deserialize)]\nstruct Reply {\n    passphrase_hint: String,\n}\n"
-            "#[derive(Serialize)]\nstruct Body {\n    salt: Vec<u8>,\n}\n"
-            "fn later(passphrase: Confidential<Passphrase>) {}\n"
-        )
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, f"{cb.WORKER}/auth.rs", text)
-            errors = self.run_checks(root)
-        self.assertEqual(errors, [])
-
-    def test_a_relay_log_naming_a_payload_is_refused(self):
-        for text in (
-            'fn put() {\n    tracing::info!("stored {payload:?}");\n}\n',
-            "fn put() {\n    tracing::debug!(\n        doc = %id,\n        body = ?request_body,\n    );\n}\n",
-            "#[instrument(fields(blob))]\nfn put(blob: Vec<u8>) {}\n",
-        ):
-            errors = self.breach(f"{cb.RELAY}/blob.rs", text)
-            self.assertTrue(any("names a payload" in e for e in errors), (text, errors))
-
-    def test_a_payload_length_a_message_word_and_a_test_stay_free(self):
-        text = (
-            'fn put(payload: Vec<u8>) {\n    tracing::warn!(payload_len, "payload too large");\n'
-            "    tracing::info!(n = payload.len());\n}\n"
-            '#[cfg(test)]\nmod tests {\n    fn t() { println!("{payload:?}"); }\n}\n'
-        )
-        self.assertEqual(self.breach(f"{cb.RELAY}/blob.rs", text), [])
-
-    def test_a_file_that_logs_and_reads_a_payloads_bytes_is_refused(self):
-        log = 'fn put() {\n    tracing::info!(seq, "stored");\n}\n'
-        for read in (
-            "fn r() { let x = frame.expose_bytes(); }\n",
-            "fn keep(c: &ambre_protocol::messages::Ciphertext) {}\n",
-            "fn keep(c: &ambre_core::Payload<ambre_protocol::messages::Ciphertext>) {}\n",
-        ):
-            text = log + read
-            errors = self.breach(f"{cb.RELAY}/store.rs", text)
-            self.assertTrue(any("reads a payload's bytes" in e for e in errors), (text, errors))
-
-    def test_a_file_that_reads_bytes_without_logging_stays_free(self):
-        text = (
-            "fn keep(c: &Ciphertext, frame: &StoredPayload) {\n    put(&c.0, frame.expose_bytes());\n}\n"
-            '#[cfg(test)]\nmod tests {\n    fn t() { tracing::info!("x"); }\n}\n'
-        )
-        self.assertEqual(self.breach(f"{cb.RELAY}/store.rs", text), [])
-        logs = 'fn put(frame: &StoredPayload) {\n    tracing::info!(len = frame.len(), "stored");\n}\n'
-        self.assertEqual(self.breach(f"{cb.RELAY}/handler.rs", logs), [])
-
-    def test_a_handler_that_sends_on_a_queue_is_refused(self):
-        for line in (
-            "struct S { tx: Sender<UiEvent> }\n",
-            "fn h(s: &mut S) { s.out.try_send(e); }\n",
-            "fn h(s: &mut S) { s.send_to_sync(c); }\n",
-        ):
-            for rel in ("crates/ambre-trame/src/logic/state.rs", "crates/ambre-new/src/logic/mod.rs"):
-                errors = self.breach(rel, line)
-                self.assertTrue(any("sends on a queue" in e for e in errors), (rel, line, errors))
-
-    def test_a_handler_that_returns_an_outcome_stays_free(self):
-        text = "fn h(&mut self, c: Command) -> Outcome { Outcome::default() }\n"
-        self.assertEqual(self.breach("crates/ambre-toile/src/logic/state.rs", text), [])
-
-    def test_a_launcher_writing_past_its_outbox_is_refused(self):
-        for line in (
-            "struct W { to_logic: ambre_bus::conduit::Sender<LogicCommand> }\n",
-            "fn view() { let p = Port::embedded(tx); }\n",
-            "fn rig() { let p = ambre_bus::Port::direct(tx); }\n",
-            "fn second() { let lane = ambre_bus::Lane::new(tx); }\n",
-            "fn bound() { let lane = Lane::with_capacity(tx, 4); }\n",
-        ):
-            errors = self.breach(f"{cb.LAUNCHER}/landing.rs", line)
-            self.assertTrue(any("writes past its outbox" in e for e in errors), (line, errors))
-
-    def test_a_raw_sender_kept_past_the_outbox_is_refused(self):
-        text = (
-            "fn queues() {\n    let (ui_tx, ui_rx) =\n        conduit::to_worker::<LogicCommand>(CAP, &bell);\n"
-            "    let relay = ui_tx.clone();\n    let shell = outbox::ShellOutbox::new(ui_tx);\n}\n"
-        )
-        errors = self.breach(cb.APP_LIB, text)
-        self.assertTrue(any("used past its outbox" in e for e in errors), errors)
-        kept = "fn queues() {\n    let (ui_tx, ui_rx) =\n        conduit::to_worker::<LogicCommand>(CAP, &bell);\n}\n"
-        errors = self.breach(cb.APP_LIB, kept)
-        self.assertTrue(any("never moves into the outbox" in e for e in errors), errors)
-
-    def test_a_relay_that_neither_flushes_nor_tells_is_refused(self):
-        text = (
-            "fn queues() {\n    let (ui_tx, ui_rx) =\n        conduit::to_worker::<LogicCommand>(CAP, &bell);\n"
-            "    let shell = outbox::ShellOutbox::new(ui_tx);\n}\n"
-            "fn turn() { sync_inbox.borrow_mut().flush(); }\n"
-        )
-        errors = self.breach(cb.APP_LIB, text)
-        self.assertTrue(any("does not flush the launcher's outbox" in e for e in errors), errors)
-        self.assertTrue(any("no refusal of the launcher's outbox" in e for e in errors), errors)
-
-    def test_a_switchboard_decision_naming_the_browser_is_refused(self):
-        for line in (
-            "fn go() { let w = web_sys::window(); }\n",
-            "fn now() -> f64 { js_sys::Date::now() }\n",
-            "use leptos::prelude::*;\n",
-            "struct S { shown: RwSignal<Option<Id<Document>>> }\n",
-            "fn spawn() { wasm_bindgen_futures::spawn_local(f); }\n",
-        ):
-            errors = self.breach(cb.SWITCHBOARD_DECISIONS, line)
-            self.assertTrue(any("name the browser" in e for e in errors), (line, errors))
-
-    def test_a_switchboard_decision_reading_a_clock_is_refused(self):
-        for line in (
-            "fn now() -> SystemTime { SystemTime::now() }\n",
-            "fn now() { let t = std::time::Instant::now(); }\n",
-            "fn due(c: &Clock) -> bool { c.now() > 3 }\n",
-        ):
-            errors = self.breach(cb.SWITCHBOARD_DECISIONS, line)
-            self.assertTrue(any("reads a clock" in e for e in errors), (line, errors))
-
-    def test_a_switchboard_decision_given_its_instant_stays_free(self):
-        text = (
-            "// The wiring reads now() and passes it.\n"
-            "fn step(now: Instant<PageLoad>) -> bool { now - LAST < PERIOD }\n\n"
-            "#[cfg(test)]\nmod tests {\n    fn t() { let _ = std::time::Instant::now(); }\n}\n"
-        )
-        self.assertEqual(self.breach(cb.SWITCHBOARD_DECISIONS, text), [])
-
-    def test_a_switchboard_decision_in_words_or_in_a_test_stays_free(self):
-        text = (
-            "// The wiring reads web_sys; this file does not.\n"
-            "fn decide() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { let s = RwSignal::new(0); }\n}\n"
-        )
-        self.assertEqual(self.breach(cb.SWITCHBOARD_DECISIONS, text), [])
-
-    def test_a_port_built_in_a_test_or_the_outbox_stays_free(self):
-        text = "fn f() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { Port::direct(tx); }\n}\n"
-        self.assertEqual(self.breach(f"{cb.LAUNCHER}/host/prose.rs", text), [])
-
-    def test_a_panic_hook_that_latches_nothing_is_refused(self):
-        text = "fn hook() { std::panic::set_hook(Box::new(|i| { tracing::error!(\"{i}\"); })); }\n"
-        errors = self.breach(cb.APP_LIB, text)
-        self.assertTrue(any("panic hook does not latch" in e for e in errors), errors)
-
-    def test_a_worker_error_that_latches_nothing_is_refused(self):
-        text = "fn spawn() {\n    let e = Closure::new(|_| { tracing::error!(\"x\"); });\n    worker.set_onerror(Some(e));\n}\n"
-        errors = self.breach(cb.WORKER_SPAWNER, text)
-        self.assertTrue(any("error event does not latch" in e for e in errors), errors)
-
     def test_a_build_that_unwinds_on_a_panic_is_refused(self):
         for text in ('[unstable]\nbuild-std = ["std", "panic_unwind"]\n', "[unstable]\n"):
             errors = self.breach(cb.CARGO_CONFIG, text)
@@ -945,22 +692,6 @@ class CrateBoundaries(unittest.TestCase):
             errors = self.run_checks(root)
         self.assertTrue(any("identifier boundary reads nothing" in e for e in errors), errors)
 
-    def test_a_message_naming_a_crdt_handle_is_refused(self):
-        for text in (
-            "pub enum E {\n    Doc { doc: loro::LoroDoc },\n}\n",
-            "pub struct S {\n    pub tree: LoroTree,\n}\n",
-        ):
-            errors = self.breach(f"{cb.APP_MESSAGES[-1]}/mod.rs", text)
-            self.assertTrue(any("names a CRDT handle" in e for e in errors), (text, errors))
-
-    def test_a_message_carrying_payload_bytes_or_naming_loro_in_a_comment_stays_free(self):
-        text = (
-            "//! No `loro::LoroDoc` handle here.\n"
-            "pub enum E {\n    Updated { payload: ambre_core::LoroPayload },\n}\n"
-            "#[cfg(test)]\nmod tests {\n    fn t(_: loro::LoroDoc) {}\n}\n"
-        )
-        self.assertEqual(self.breach(f"{cb.APP_MESSAGES[-1]}/mod.rs", text), [])
-
     def test_an_application_vocabulary_gone_from_the_tree_is_an_error_not_a_pass(self):
         import tempfile
 
@@ -1048,34 +779,6 @@ class CrateBoundaries(unittest.TestCase):
         self.assertEqual(self.breach("crates/ambre-app/src/shell/narrow.rs", free), [])
         sandboxed = frame + 'fn g() { f.set_attribute("sandbox", S); }\n'
         self.assertEqual(self.breach("crates/ambre-app/src/host/extra.rs", sandboxed), [])
-
-    def test_a_worker_id_or_an_app_message_is_refused(self):
-        for line in (
-            "fn f() { let id = ambre_bus::next_request(); }\n",
-            "fn f() { let id = Seq::<Request>::ZERO.next(); }\n",
-            "fn f() { let id = Seq::new(1); }\n",
-            "fn f() { let id = ambre_core::Seq::ZERO.next(); }\n",
-            "static ISSUER: SharedIssuer<ambre_bus::Request> = SharedIssuer::new(());\n",
-            "fn f() { let issuer = Issuer::<Request>::new(()); }\n",
-        ):
-            errors = self.breach(f"{cb.WORKER}/extra.rs", line)
-            self.assertTrue(any("allocates a request id" in e for e in errors), (line, errors))
-
-    def test_a_worker_test_allocating_an_id_stays_free(self):
-        text = "fn f() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { next_request(); }\n}\n"
-        self.assertEqual(self.breach(f"{cb.WORKER}/extra.rs", text), [])
-
-    def test_a_second_engine_start_is_refused(self):
-        errors = self.breach(f"{cb.LAUNCHER}/again.rs", "fn again() { ambre_logic::run(bell); }\n")
-        self.assertTrue(any("starts the Logic runtime 2 times" in e for e in errors), errors)
-
-    def test_a_frame_that_draws_without_the_relay_is_refused(self):
-        errors = self.breach(cb.FRAME_HOST, "fn go() { drive_frame(&raf_c, || {}, render); }\n")
-        self.assertTrue(any("does not run `pre_frame`" in e for e in errors), errors)
-
-    def test_a_relay_that_drains_no_sync_queue_is_refused(self):
-        errors = self.breach(cb.APP_LIB, "fn boot() { ambre_logic::run(bell); }\n")
-        self.assertTrue(any("does not drain the Logic to Sync queue" in e for e in errors), errors)
 
     def test_a_walk_reaching_a_screen_module_is_refused(self):
         rel = "crates/ambre-prose/src/view/walk.rs"

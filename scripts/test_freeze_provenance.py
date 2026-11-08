@@ -296,3 +296,29 @@ class FreezeProvenance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GeneratorScan(unittest.TestCase):
+    """The scan of a generator module at a past commit, which is text alone."""
+
+    def test_a_generator_reading_a_file_is_refused(self):
+        for line in (
+            'let b = include_bytes!("board.ambre");',
+            "let t = std::fs::read_to_string(p);",
+            "let f = File::open(p);",
+            'let s = std::env::var("SEED");',
+        ):
+            found = fp.file_reads(f"fn build_a(s: &mut S) {{\n    {line}\n}}\n")
+            self.assertEqual([n for n, _ in found], [2], line)
+
+    def test_a_generator_module_no_list_names_is_read(self):
+        """A new application's generator is found by its file name, not by a list."""
+        paths = ["crates/ambre-murmure/src/fixtures.rs", "crates/ambre-murmure/src/lib.rs"]
+        self.assertEqual(fp.generator_modules(paths), ["crates/ambre-murmure/src/fixtures.rs"])
+
+    def test_the_driver_and_a_test_module_may_read_files(self):
+        self.assertEqual(fp.generator_modules([fp.FIXTURE_DRIVER]), [])
+        text = "fn build_a(s: &mut S) {\n    s.handle_command(C);\n}\n\n#[cfg(test)]\nmod tests {\n"
+        text += "    fn t() { std::fs::read(p); }\n}\n"
+        self.assertEqual(fp.file_reads(text), [])
+        self.assertEqual(fp.file_reads("// `std::fs` is out of reach (FIXTURE-032).\n"), [])

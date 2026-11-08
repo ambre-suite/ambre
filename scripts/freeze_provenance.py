@@ -19,9 +19,11 @@ the seed its manifest names. Bytes no generator wrote, or a later writer's,
 never sat there and are refused.
 
 **The generator read nothing besides its seed** (`FIXTURE-032`). The generator
-modules of that same commit are read for a file read, with the scan of
-`crate_boundaries.py`. An artifact rebuilt from a seed by such a generator came
-from no user's document.
+modules of that same commit are read for a file read, by a scan of their text.
+The rustc driver of `just primitives` holds the rule on the tree of today; a
+commit of the past is text alone, since building it through the driver would
+cost a build per artifact. An artifact rebuilt from a seed by such a generator
+came from no user's document.
 
 **New artifacts, not the whole set.** A rerun builds the generator at an old
 commit, which costs a build. A frozen artifact never changes, so the check of
@@ -41,12 +43,9 @@ import os
 import shlex
 import subprocess
 import sys
+import re
 import tempfile
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import crate_boundaries  # noqa: E402  -- the scan of a generator module
 
 ROOT = Path(__file__).resolve().parent.parent
 FROZEN = "fixtures/frozen"
@@ -55,6 +54,14 @@ CURRENT = "fixtures/current"
 RERUN_TARGET = "freeze-provenance"
 # The live corpus, rewritten at the commit the frozen bytes were taken from.
 REGENERATE = "cargo run --quiet -p ambre-logic --features fixtures --bin ambre-fixtures -- generate"
+# The corpus driver reads and writes the corpus by design, so it is the one
+# `fixtures.rs` that holds no generator.
+FIXTURE_DRIVER = "crates/ambre-logic/src/fixtures.rs"
+# Naming any of these reads something besides the seed: a file, or the host.
+FILE_READS = re.compile(
+    r"\bstd::fs\b|\bfs::|\bFile::|\bOpenOptions\b|\binclude_bytes!|\binclude_str!"
+    r"|\bread_to_string\b|\bstd::env\b|\benv::var"
+)
 
 
 def git(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -130,12 +137,37 @@ def source_commit(root: Path, parent: str, live: str, want: str) -> str | None:
     return None
 
 
+def generator_modules(paths: list[str]) -> list[str]:
+    """The paths that hold a generator: each `fixtures.rs` of a crate's source,
+    the driver aside. Read off the tree rather than listed, so a generator a new
+    application adds is read without anyone naming it here."""
+    return sorted(
+        p
+        for p in paths
+        if p.startswith("crates/") and "/src/" in p and p.endswith("/fixtures.rs") and p != FIXTURE_DRIVER
+    )
+
+
+def file_reads(source: str) -> list[tuple[int, str]]:
+    """Each line of a generator module that reads besides its seed, with what it
+    names. The test module is not read: it builds no artifact, and a comment
+    that cites a rule is no read."""
+    found = []
+    for number, line in enumerate(source.splitlines(), 1):
+        if line.strip() == "#[cfg(test)]":
+            break
+        hit = FILE_READS.search(line.split("//", 1)[0])
+        if hit:
+            found.append((number, hit.group(0)))
+    return found
+
+
 def generator_reads(root: Path, rev: str) -> list[str]:
     """Each read besides the seed in the generator modules of `rev`."""
     paths = git(root, "ls-tree", "-r", "--name-only", rev, "--", "crates").stdout.split()
     found = []
-    for rel in crate_boundaries.generator_modules(paths):
-        for line, token in crate_boundaries.file_reads(text_at(root, rev, rel) or ""):
+    for rel in generator_modules(paths):
+        for line, token in file_reads(text_at(root, rev, rel) or ""):
             found.append(f"{rel}:{line}: `{token}`")
     return found
 

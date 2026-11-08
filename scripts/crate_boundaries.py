@@ -9,27 +9,11 @@ The crate boundaries that a manifest or a resolved name settles moved to
 `just primitives`. The judge reads the manifests from `cargo metadata`, and
 its rustc driver reads each path once it resolves, so an alias, a re-export
 and the code a macro writes name what they reach (`ambre-spec-testing.md`
-section 2). What stays here is a stylesheet, a page, a string a check reads
-as text, and the code rules that still wait for the driver.
-
-**A generator drives commands** (`FIXTURE-004`). A generator that wrote to the
-`LoroDoc` directly would produce a document no user action can reach, so the
-fixture would prove nothing. The reading side of the same files is legitimate
-and lives in `impl` blocks (`fixture_shape`, `canonical_dump`); the generating
-side is the free functions. No free function of a fixture module may name a
-CRDT container.
-
-**A generator reads only its seed** (`FIXTURE-032`). A real document and a
-generated one are both Loro bytes. A generator that reads no file and nothing
-of the host builds from the seed alone, so what it rebuilds came from no user.
-No line of a generator module may read a file, embed one, or read the host's
-environment.
-
-**No request carries a passphrase** (`ZK-012`). The worker holds the
-passphrase in `Confidential<Passphrase>`, which serializes so that it can cross the client
-bus. So no serialized struct of `ambre-sync` declares a secret-typed field or
-a field named for a passphrase or a password, and no JSON key or serde rename
-spells one.
+section 2). The driver also reads the types and the bodies a rule needs: a
+generator's reads, a request id, a passphrase field, a payload in a relay log,
+the switchboard's reach and the launcher's wiring. What stays here is a
+stylesheet, a page, a string a check reads as text, and the code rules that
+still wait for the driver.
 
 **The renderer holds no colour** (`CANVAS-060`). Every colour it paints or
 clears to comes from the view's palette. So no line of `render/` above its
@@ -37,15 +21,6 @@ tests names a colour constant or builds one from components.
 
 **No font is embedded in a binary** (`CANVAS-018`). The faces are fetched from
 the page origin. So no Rust line includes the bytes of a font file.
-
-**The relay logs no payload** (`SRV-170`). A log line or a span may
-carry identifiers, lengths and sequence numbers. So no log macro or span of
-`ambre-server` names a value called for a payload, a blob, a body or its
-bytes, unless it reads only the length. A payload under a neutral name
-passes that scan, so `SRV-001` adds a second: a file that reads a payload's
-bytes -- `StoredPayload::expose_bytes`, a ciphertext's field, or a
-ciphertext taken whole -- holds no log line. Every other binding is a
-`StoredPayload`, which has no `Debug`.
 
 **A fixture benchmark reports no frame rate** (`FIXTURE-024`). A fixture is a
 document, not a screen, so a figure measured on one is the cost of an
@@ -55,20 +30,6 @@ operation. No code line of a benchmark that loads a fixture names a frame rate.
 page loads two artefacts: the launcher, and the Sync worker as a worker of its
 own, and names no worker two tabs would share. Every frame the code creates is
 sandboxed. The manifests and the spawn are `just primitives`.
-
-**The worker mints no request id** (`BUS-004`). Its counter is not the Main
-instance's, so no line of `ambre-sync` above its tests allocates one by name.
-
-**One engine, one relay per frame** (`ARCH-007`, `ARCH-010`). The launcher
-starts the Logic runtime from one line. The frame loop hands the route-free
-relay to `drive_frame` as its first step, and that relay drains the Logic to
-Sync queue.
-
-**The switchboard decides on the host** (`ARCH-072`). The switchboard asks
-`switchboard.rs` what each event calls for, and applies the answer. So no line of
-that file above its tests names a browser API, the interface toolkit or a
-signal, and its decisions stay testable on the host. No such line reads a
-clock either: the wiring passes the instant, and a test sets it.
 
 **One kinetic model** (`KINETIC-012`). Pan, flick, wheel momentum and edge
 scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
@@ -85,14 +46,6 @@ names in `logic/schema.rs` spells each name once, on its declaration line.
 **One composed name** (`CHROME-080`). The placeholder of an unnamed document
 is spelled in `composed.rs` alone, whose type converts to no `String`. So no
 Rust line outside that file spells it above its tests.
-
-**The launcher writes through one outbox** (`BUS-035`). A sender of the
-launcher that owns no frame shares one outbox, flushed by the switchboard. So the queue's raw end moves into that outbox on the line after its
-creation, and no other launcher line names it. Above its tests, no file of
-`ambre-app` but `outbox.rs` names a raw sender of that queue or builds a port
-over one. Nor does it build a lane, since a second lane on that queue holds
-apart from the first (`BUS-037`). The relay in `lib.rs` flushes that outbox
-and tells the user of a refusal (`BUS-036`).
 
 **An identifier typed on the bus** (`BUS-029`). Two identifiers carried as
 two strings swap without a compile error. So no field of `ambre-bus` named
@@ -130,34 +83,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-
-# Fixture modules: the reading half sits in `impl` blocks, the generating half
-# in free functions.
-FIXTURE_MODULES = [
-    "crates/ambre-trame/src/logic/fixtures.rs",
-    "crates/ambre-toile/src/logic/state/fixtures.rs",
-]
-
-# Naming any of these reaches a CRDT container rather than a command.
-CRDT_CALLS = re.compile(
-    r"\bLoroDoc\b|\.doc\b|\bget_map\(|\bget_list\(|\bget_movable_list\(|\bget_text\(|\bget_tree\("
-)
-
-# The corpus driver reads and writes the corpus by design, so it is the one
-# `fixtures.rs` that holds no generator.
-FIXTURE_DRIVER = "crates/ambre-logic/src/fixtures.rs"
-
-# Naming any of these reads something besides the seed: a file, or the host.
-FILE_READS = re.compile(
-    r"\bstd::fs\b|\bfs::|\bFile::|\bOpenOptions\b|\binclude_bytes!|\binclude_str!"
-    r"|\bread_to_string\b|\bstd::env\b|\benv::var"
-)
-
 # The manifest of the shared chrome toolkit.
 CHROME = "crates/ambre-chrome/Cargo.toml"
-
-# The launcher's source.
-LAUNCHER = "crates/ambre-app/src"
 
 # The crates, and the one file that reads the display density.
 CRATES = "crates"
@@ -173,20 +100,6 @@ NON_CLIENT_CRATES = (
     "crates/ambre-belt/",
     "crates/ambre-primitives/",
 )
-
-# The Sync worker's source.
-WORKER = "crates/ambre-sync/src"
-
-# What a passphrase in a request body looks like: a field of a serialized
-# struct, or a string that a JSON body or a serde rename uses as a key.
-SECRET_NAME = r"\w*(?:passphrase|password)\w*"
-SERIALIZE_DERIVE = re.compile(r"#\[derive\([^)]*\bSerialize\b")
-STRUCT_OPEN = re.compile(r"\bstruct\s+\w+[^;]*\{\s*$")
-SECRET_FIELD = re.compile(
-    rf"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:({SECRET_NAME})\s*:|\w+\s*:.*\b(Confidential)\b)",
-    re.IGNORECASE,
-)
-SECRET_KEY = re.compile(rf"\"({SECRET_NAME})\"\s*:|rename\s*=\s*\"({SECRET_NAME})\"", re.IGNORECASE)
 
 # The renderer's source, and what a colour of its own looks like there: a
 # named constant or one built from components.
@@ -241,11 +154,6 @@ MENU_KEYS = re.compile(r"\bon_menu_keydown\b|\b(?:event_)?menu_key\b")
 PIPE = "crates/ambre-canvas/src/text_input.rs"
 PIPE_ORDER = '("tabindex", "0")'
 PIPE_HIDDEN = re.compile(r"\baria-hidden\b|\binert\b|\"tabindex\",\s*\"-")
-# What holding the document looks like: a CRDT container, an export, or an
-# engine's state. A tree node's identifier is an address, not the document.
-ENGINE = re.compile(
-    r"\bLoro[A-Z]\w*|\bloro::(?!TreeID\b)\w+|\bExportMode\b|\b(?:Trame|Toile|Prose|Murmure)State\b"
-)
 # What converting a file looks like: the CSV reader or writer. A conversion
 # runs in the Logic thread alone (`TRAME-IO-001`).
 CONVERSION = re.compile(r"\bcsv::\w+")
@@ -319,65 +227,13 @@ HIDING = re.compile(r"\bdisplay:\s*none\b|\bvisibility:\s*hidden\b")
 THRESHOLD = re.compile(r"\((?:min|max)-width:\s*\d+(?:px|em|rem)\s*\)|\bmatch_media\b|\bmatchMedia\b")
 # A media read that asks for the user's motion setting, which no width rides.
 MOTION_QUERY = re.compile(r"\(prefers-reduced-motion:\s*reduce\)")
-# The relay's log lines, and the words that name a payload in them.
-RELAY = "crates/ambre-server/src"
-LOG_MACRO = re.compile(
-    r"\b(?:tracing::|log::)?(?:(?:info|warn|error|debug|trace)(?:_span)?|println|eprintln|print|eprint)!\s*\("
-    r"|#\[(?:tracing::)?instrument\b"
-)
-PAYLOAD_NAME = re.compile(
-    r"\b\w*(?:payload|blob|plaintext|ciphertext|cipher|sealed|bytes|body)\w*\b", re.IGNORECASE
-)
-PAYLOAD_SAFE = re.compile(r"_(?:len|size|count|key|id|hash)$", re.IGNORECASE)
-# A reading of a payload's bytes: the one accessor of the relay's payload type,
-# or a ciphertext taken whole by a function, bare or as the role of the
-# generic `Payload<Ciphertext>`. The field of a ciphertext is private to
-# `ambre-core`, so no relay file can read it.
-PAYLOAD_BYTES = re.compile(
-    r"\bexpose_bytes\b|:\s*&(?:\w+::)*(?:Payload\s*<\s*(?:\w+::)*)?Ciphertext\b"
-)
-STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
-INTERPOLATION = re.compile(r"\{(\w+)")
 
 # The page, its two artefacts, and what would serve two tabs or merge them.
 PAGE = "crates/ambre-app/index.html"
 RUST_LINK = re.compile(r'<link\s+data-trunk\s+rel="rust"[^>]*>', re.DOTALL)
 WORKER_LINK = re.compile(r'href="\.\./ambre-sync/Cargo\.toml"[^>]*data-type="worker"')
-WORKER_SPAWNER = "crates/ambre-app/src/platform.rs"
 SHARED_WORKER = re.compile(r"\bSharedWorker\b|\bServiceWorker\w*|\bserviceWorker\b|\bservice_worker\b")
 FRAME_CREATE = re.compile(r'create_element\(\s*"iframe"\s*\)')
-
-
-# The wire types, and what the worker may not name.
-# Each way the worker could mint a request id by name: the allocator, a
-# number built with no family named, an issuer or a sequence number of the
-# `Request` family, and the successor of the zero one. Inference can still
-# hide the family, so the row's Mechanism claims these forms alone.
-REQUEST_ALLOC = re.compile(
-    r"\bnext_request\b|\bSeq\s*::\s*new\b|\bZERO\s*\.\s*next\b"
-    r"|\b(?:Shared)?Issuer\s*(?:::\s*)?<\s*(?:\w+::)*Request\s*>"
-    r"|\bSeq\s*::\s*<\s*(?:\w+::)*Request\s*>"
-)
-ENGINE_SPAWN = re.compile(r"\bambre_logic::run\(")
-APP_SRC = "crates/ambre-app/src"
-APP_LIB = "crates/ambre-app/src/lib.rs"
-FRAME_HOST = "crates/ambre-app/src/host/run.rs"
-# The relay is either borrowed whole, or shared with the hidden page's timer.
-FRAME_RELAY = re.compile(
-    r"drive_frame\(\s*&\w+,\s*(?:&mut pre_frame\b|\|\|\s*\(pre_frame\.borrow_mut\(\)\)\(\))"
-)
-SYNC_DRAIN = re.compile(r"\.drain\(&logic_to_sync_rx\b")
-# The switchboard's decisions, and what would tie them to the browser: a
-# browser API, the interface toolkit, or a signal of it (`ARCH-072`).
-SWITCHBOARD_DECISIONS = "crates/ambre-app/src/switchboard.rs"
-BROWSER_BOUND = re.compile(
-    r"\b(?:web_sys|js_sys|wasm_bindgen\w*|leptos\w*|gloo\w*)\b"
-    r"|\b(?:Rw|Read|Write|Arc)?Signal\b|\bStoredValue\b"
-)
-# A clock the switchboard would read for itself. The wiring reads the clock
-# and passes the instant, so a decision that depends on time runs on the host
-# under a clock the test sets (`ARCH-072`).
-CLOCK_READ = re.compile(r"\bSystemTime\b|\bstd::time::Instant\b|\bInstant::now\b|\bnow\(\)")
 
 # The shared kinetic model, and the words a second copy of it would need.
 BENCH_FIXTURE = re.compile(r"fixture", re.IGNORECASE)
@@ -529,12 +385,6 @@ APP_MESSAGES = (
     "crates/ambre-prose/src/message",
     "crates/ambre-murmure/src/message",
 )
-# The command and event enums ambre-bus may declare: the four envelopes and the
-# service family they carry. An application's own lives in its crate
-# (`BUS-032`), so the Sync worker builds against none (`ARCH-070`).
-# A document handle of the CRDT engine, by path or by name. A message carries
-# bytes, so the payload newtype `LoroPayload` is no handle (`PROSE-001`).
-MESSAGE_CRDT = re.compile(r"\bloro\s*::|\bLoro(?!Payload\b)\w+")
 BUS_ID_FIELD = re.compile(r"\b((?:\w+_)?ids?)\s*:\s*(?!:)")
 # The relay's rows and routes and the HTTP layer of Sync, whose identifiers
 # each take their newtype and reach JSON as their text (`SRV-179`).
@@ -601,11 +451,6 @@ ONE_EVENT_COPY_ACCEPTED = {
     "ToileEvent::SlideChanged -> presenter_frame": "the view keeps the glide; the panel keeps the notes' frame",
 }
 
-# The two failure paths that reach the page with no queue: the panic hook of the
-# shared instance, and the error event of the Sync worker.
-PANIC_HOOK = "std::panic::set_hook("
-WORKER_ERROR = "worker.set_onerror("
-FATAL_LATCH = "ambre_canvas::signal_fatal("
 
 # What runs on a failing thread's way out. The client build aborts on a panic,
 # so no destructor runs then; a destructor in a thread that writes a document
@@ -615,28 +460,7 @@ BUILD_STD = re.compile(r"build-std\s*=\s*\[([^\]]*)\]")
 EXIT_WRITERS = ("crates/ambre-logic/src", "crates/*/src/logic", "crates/ambre-sync/src")
 DESTRUCTOR = re.compile(r"\bimpl\b[^{]*\bDrop\s+for\b")
 
-# The launcher's one writer on the UI to Logic queue, and what a second
-# writer would need: a raw sender of the queue, or a port built over one
-# (`BUS-035`).
-SHELL_OUTBOX = "crates/ambre-app/src/outbox.rs"
-LAUNCHER_QUEUE = re.compile(
-    r"\bSender<\s*LogicCommand\b|\bPort::(?:embedded|direct)\b|\bLane::(?:new|with_capacity)\b"
-)
-# The relay's two calls on that outbox: the flush of what it holds, and the
-# refusal it tells the user of. A queue's own flush through a borrow is not
-# the outbox's, so the receiver must be a bare name.
-OUTBOX_FLUSH = re.compile(r"(?<![\w).])[a-z_][a-z0-9_]*\.flush\(\)")
-OUTBOX_REFUSAL = re.compile(r"\.take_refusal\(\)")
-UI_QUEUE_BINDING = re.compile(
-    r"let\s*\(\s*(\w+)\s*,\s*\w+\s*\)\s*=\s*conduit::to_worker::<LogicCommand>"
-)
 
-# The engines' command handlers, found by layout so an engine added later is read
-# too, and the names a handler that sends on a queue would need.
-ENGINE_LOGIC = "crates/*/src/logic"
-QUEUE_SEND = re.compile(
-    r"\b(?:Sender|WorkerSender|Outbox)\b|\bconduit::|\.try_send\(|\bsend_to_(?:sync|ui|persist)\b"
-)
 
 # A content view reading the window rather than the box it is given.
 CONTENT_VIEWS = (
@@ -658,119 +482,9 @@ def read(rel: str) -> str:
     return path.read_text() if path.exists() else ""
 
 
-def free_functions(source: str) -> list[tuple[int, str]]:
-    """Each free function of the file, as `(line number, body)`.
-
-    A free function starts at column 0, which is what separates it from the
-    `impl` blocks that hold the reading half of these modules. Its body runs to
-    the next item at column 0.
-    """
-    lines = source.splitlines()
-    starts = [i for i, line in enumerate(lines) if line.startswith("fn ")]
-    bounds = [
-        i
-        for i, line in enumerate(lines)
-        if line and not line[0].isspace() and not line.startswith("fn ")
-    ] + [len(lines)]
-    out = []
-    for start in starts:
-        end = next(b for b in bounds if b > start)
-        out.append((start + 1, "\n".join(lines[start:end])))
-    return out
-
-
-def check_generators(errors: list[str]) -> int:
-    """`FIXTURE-004`: no free function of a fixture module names a CRDT container."""
-    held = 0
-    for rel in FIXTURE_MODULES:
-        source = read(rel)
-        if not source:
-            errors.append(f"{rel}: gone from the tree, so no generator is read")
-            continue
-        for line, body in free_functions(source):
-            found = CRDT_CALLS.search(body)
-            if found:
-                errors.append(f"{rel}:{line}: a generator reaches the CRDT: `{found.group(0)}`")
-            held += 1
-    return held
-
-
-def generator_modules(paths: list[str]) -> list[str]:
-    """The paths that hold a generator: each `fixtures.rs` of a crate's source,
-    the driver aside. Read off the tree rather than listed, so a generator a new
-    application adds is read without anyone naming it here."""
-    return sorted(
-        p
-        for p in paths
-        if p.startswith("crates/") and "/src/" in p and p.endswith("/fixtures.rs") and p != FIXTURE_DRIVER
-    )
-
-
-def file_reads(source: str) -> list[tuple[int, str]]:
-    """Each line of a generator module that reads besides its seed, with what it
-    names. The test module is not read: it builds no artifact."""
-    found = []
-    for number, line in enumerate(source.splitlines(), 1):
-        if line.strip() == "#[cfg(test)]":
-            break
-        hit = FILE_READS.search(code(line))
-        if hit:
-            found.append((number, hit.group(0)))
-    return found
-
-
-def check_generator_reads(errors: list[str]) -> int:
-    """`FIXTURE-032`: a generator reads no file and nothing of the host.
-
-    Its output is then a function of the seed alone, so an artifact it rebuilds
-    came from no user's document.
-    """
-    paths = [p.relative_to(ROOT).as_posix() for p in (ROOT / CRATES).rglob("fixtures.rs")]
-    modules = generator_modules(paths)
-    if not modules:
-        errors.append(f"{CRATES}: no generator module found, so no generator read is checked")
-        return 0
-    for rel in modules:
-        for line, token in file_reads(read(rel)):
-            errors.append(f"{rel}:{line}: a generator reads besides its seed: `{token}`")
-    return len(modules)
-
-
 def code(line: str) -> str:
     """The line without its comment, so a rule a comment cites is not a breach."""
     return line.split("//", 1)[0]
-
-
-def check_passphrase(errors: list[str]) -> int:
-    """`ZK-012`: no request body of the worker names a passphrase."""
-    files = sorted((ROOT / WORKER).rglob("*.rs"))
-    if not files:
-        errors.append(f"{WORKER}: gone from the tree, so the passphrase boundary reads nothing")
-        return 0
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        derived = False
-        depth = 0
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            text = code(line)
-            found = SECRET_KEY.search(text)
-            if found:
-                key = found.group(1) or found.group(2)
-                errors.append(f"{rel}:{number}: a request key names a passphrase: `{key}`")
-            if depth:
-                field = SECRET_FIELD.match(text) if depth == 1 else None
-                if field:
-                    name = field.group(1) or field.group(2)
-                    errors.append(f"{rel}:{number}: a serialized field names a passphrase: `{name}`")
-                depth += text.count("{") - text.count("}")
-            elif SERIALIZE_DERIVE.search(text):
-                derived = True
-            elif derived and STRUCT_OPEN.search(text):
-                derived = False
-                depth = 1
-            elif derived and not text.strip().startswith("#["):
-                derived = False
-    return len(files)
 
 
 def rust_files() -> list[Path]:
@@ -877,12 +591,13 @@ def above_tests(path: Path) -> list[tuple[int, str]]:
 
 
 def check_ui_thread(errors: list[str]) -> int:
-    """`UI-THREAD-058`, `-002`, `-020`, `-050`, `-051`, `-060`: what the UI thread may name.
+    """`UI-THREAD-058`, `-002`, `-050`, `-060`: what the UI thread may name.
 
-    No CRDT and no engine state, no file conversion, no blocking wait, and no
-    canvas or drawing context outside the surface (`TRAME-UI-001`,
-    `TRAME-IO-001`). No canvas point read outside the two files that listen on
-    the canvas, and no content hit-test in an interface component.
+    No file conversion, no blocking wait, and no canvas or drawing context
+    outside the surface (`TRAME-UI-001`, `TRAME-IO-001`). No canvas point read
+    outside the two files that listen on the canvas, and no content hit-test
+    in an interface component. The document and the engine state are `just
+    primitives` (`UI-THREAD-020`, `UI-THREAD-051`).
     """
     files = sources(UI_THREAD)
     if not files:
@@ -895,9 +610,6 @@ def check_ui_thread(errors: list[str]) -> int:
         for number, line in above_tests(path):
             page_point = page_point or PAGE_POINT.search(line)
             canvas_name = canvas_name or CANVAS_NAME.search(line)
-            found = ENGINE.search(line)
-            if found:
-                errors.append(f"{rel}:{number}: the UI thread holds the document: `{found.group(0)}`")
             found = CONVERSION.search(line)
             if found:
                 errors.append(f"{rel}:{number}: the UI thread converts a file: `{found.group(0)}`")
@@ -1096,60 +808,6 @@ def check_accessibility(errors: list[str]) -> int:
     return len(files) + 1
 
 
-def log_invocations(lines: list[tuple[int, str]]) -> list[tuple[int, str]]:
-    """Each log macro or span of the lines, joined until its brackets close."""
-    found: list[tuple[int, str]] = []
-    index = 0
-    while index < len(lines):
-        number, line = lines[index]
-        start = LOG_MACRO.search(line)
-        if not start:
-            index += 1
-            continue
-        text = line[start.start():]
-        depth = text.count("(") + text.count("[") - text.count(")") - text.count("]")
-        while depth > 0 and index + 1 < len(lines):
-            index += 1
-            more = lines[index][1]
-            text += " " + more
-            depth += more.count("(") + more.count("[") - more.count(")") - more.count("]")
-        found.append((number, text))
-        index += 1
-    return found
-
-
-def payload_names(invocation: str) -> list[str]:
-    """The names of the invocation that call a payload and read more than its length."""
-    names = INTERPOLATION.findall(" ".join(STRING_LITERAL.findall(invocation)))
-    rest = STRING_LITERAL.sub(" ", invocation)
-    names += [m.group(0) for m in PAYLOAD_NAME.finditer(rest) if not rest[m.end():].startswith(".len()")]
-    return [n for n in names if PAYLOAD_NAME.fullmatch(n) and not PAYLOAD_SAFE.search(n)]
-
-
-def check_payload_logs(errors: list[str]) -> int:
-    """`SRV-170`: no log line or span of the relay names a payload."""
-    files = sources((RELAY,))
-    if not files:
-        errors.append(f"{RELAY}: gone from the tree, so the relay's log lines are unread")
-        return 0
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        lines = above_tests(path)
-        invocations = log_invocations(lines)
-        for number, invocation in invocations:
-            if invocation.startswith("#[") and "skip_all" in invocation:
-                continue
-            for name in payload_names(invocation):
-                errors.append(f"{rel}:{number}: a log line or span names a payload: `{name}`")
-        # `SRV-001`: the bytes are read only where nothing is logged, so no
-        # binding of them, whatever its name, sits beside a log line.
-        reads = [(n, m.group(0)) for n, line in lines for m in [PAYLOAD_BYTES.search(line)] if m]
-        if reads and invocations:
-            number, found = reads[0]
-            errors.append(f"{rel}:{number}: a file that logs reads a payload's bytes: `{found}`")
-    return len(files)
-
-
 def check_instances(errors: list[str]) -> int:
     """`ARCH-001`, `ARCH-011`, `SYNC-056`: the page loads two artefacts, names no
     shared worker, and every frame the code creates is sandboxed.
@@ -1183,75 +841,6 @@ def check_instances(errors: list[str]) -> int:
     return len(files) + 1
 
 
-def check_request_ids(errors: list[str]) -> int:
-    """`BUS-004`: the worker allocates no request id by name above its tests."""
-    files = sources((WORKER,))
-    if not files:
-        errors.append(f"{WORKER}: gone from the tree, so no request id is read")
-        return 0
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        for number, line in above_tests(path):
-            found = REQUEST_ALLOC.search(line)
-            if found:
-                errors.append(f"{rel}:{number}: the worker allocates a request id: `{found.group(0)}`")
-    return len(files)
-
-
-def check_engine_and_relay(errors: list[str]) -> int:
-    """`ARCH-007`, `ARCH-010`: one Logic start, and a relay that drains before the draw."""
-    files = sources((APP_SRC,))
-    starts = [
-        f"{path.relative_to(ROOT).as_posix()}:{number}"
-        for path in files
-        for number, line in enumerate(path.read_text().splitlines(), 1)
-        if ENGINE_SPAWN.search(code(line))
-    ]
-    if len(starts) != 1:
-        errors.append(f"{APP_SRC}: starts the Logic runtime {len(starts)} times, not once: {starts}")
-    if not FRAME_RELAY.search(read(FRAME_HOST)):
-        errors.append(f"{FRAME_HOST}: the frame loop does not run `pre_frame` as its relay")
-    if not SYNC_DRAIN.search(read(APP_LIB)):
-        errors.append(f"{APP_LIB}: the relay does not drain the Logic to Sync queue")
-    return len(files)
-
-
-def check_switchboard_decisions(errors: list[str]) -> int:
-    """`ARCH-072`: the switchboard's decisions name no browser API, no toolkit
-    and no signal, so the host builds them for their tests. They read no
-    clock either: the wiring passes each instant."""
-    path = ROOT / SWITCHBOARD_DECISIONS
-    if not path.exists():
-        errors.append(f"{SWITCHBOARD_DECISIONS}: gone from the tree, so the switchboard's decisions are unread")
-        return 0
-    for number, line in above_tests(path):
-        found = BROWSER_BOUND.search(line)
-        if found:
-            errors.append(f"{SWITCHBOARD_DECISIONS}:{number}: the switchboard's decisions name the browser: `{found.group(0)}`")
-        clock = CLOCK_READ.search(line)
-        if clock:
-            errors.append(f"{SWITCHBOARD_DECISIONS}:{number}: the switchboard reads a clock, not the instant it is given: `{clock.group(0)}`")
-    return 1
-
-
-def check_failure_latches(errors: list[str]) -> int:
-    """`ARCH-014`: each thread failure latches the page without a queue. A panic
-    latches from the hook, and a failed Sync worker from its error event."""
-    source = read(APP_LIB)
-    hook = source.find(PANIC_HOOK)
-    # The hook's body, up to the call that closes it.
-    body = source[hook : source.find("}));", hook)] if hook >= 0 else ""
-    if FATAL_LATCH not in body:
-        errors.append(f"{APP_LIB}: the panic hook does not latch the fatal screen")
-    source = read(WORKER_SPAWNER)
-    handler = source.find(WORKER_ERROR)
-    # The closure the handler installs, declared just above it.
-    closure = source[source.rfind("Closure::", 0, handler) : handler] if handler >= 0 else ""
-    if FATAL_LATCH not in closure:
-        errors.append(f"{WORKER_SPAWNER}: the Sync worker's error event does not latch the fatal screen")
-    return 2
-
-
 def check_exit_writes(errors: list[str]) -> int:
     """`ARCH-015`: a failing thread writes nothing on its way out. The client
     build aborts on a panic, and no thread that writes a document has a
@@ -1267,65 +856,6 @@ def check_exit_writes(errors: list[str]) -> int:
             if DESTRUCTOR.search(line):
                 errors.append(f"{rel}:{number}: a thread that writes a document runs a destructor on its way out")
     return len(files) + 1
-
-
-def check_handlers(errors: list[str]) -> int:
-    """`BUS-010`: an engine's command handler names no queue. It returns an
-    outcome, and the dispatcher fans it out."""
-    dirs = sorted(ROOT.glob(ENGINE_LOGIC))
-    if not dirs:
-        errors.append(f"{ENGINE_LOGIC}: no engine found, so no handler is read")
-        return 0
-    files = [path for directory in dirs for path in sorted(directory.rglob("*.rs"))]
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        for number, line in above_tests(path):
-            found = QUEUE_SEND.search(line)
-            if found:
-                errors.append(f"{rel}:{number}: a command handler sends on a queue: `{found.group(0)}`")
-    return len(files)
-
-
-def check_launcher_outbox(errors: list[str]) -> int:
-    """`BUS-035`: the launcher writes to the Logic thread through one outbox.
-
-    The raw end of the UI to Logic queue moves into the outbox where it is
-    made, so the compiler refuses a later use of it. No other launcher file
-    names a raw sender of that queue, builds a port over one, or builds a
-    lane (`BUS-037`). The relay flushes the outbox, and tells the user of a
-    refusal (`BUS-036`)."""
-    if not (ROOT / SHELL_OUTBOX).exists():
-        errors.append(f"{SHELL_OUTBOX}: gone from the tree, so the launcher outbox reads nothing")
-        return 0
-    files = sources((LAUNCHER,))
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        if rel == SHELL_OUTBOX:
-            continue
-        lines = above_tests(path)
-        for number, line in lines:
-            found = LAUNCHER_QUEUE.search(line)
-            if found:
-                errors.append(f"{rel}:{number}: the launcher writes past its outbox: `{found.group(0)}`")
-        if rel != APP_LIB:
-            continue
-        binding = UI_QUEUE_BINDING.search(" ".join(line for _, line in lines))
-        if not binding:
-            errors.append(f"{rel}: creates no UI to Logic queue, so the outbox rule reads nothing")
-            continue
-        name = re.compile(rf"\b{re.escape(binding.group(1))}\b")
-        moved = re.compile(rf"ShellOutbox::new\(\s*{re.escape(binding.group(1))}\s*\)")
-        uses = [(number, line) for number, line in lines if name.search(line)]
-        for number, line in uses[1:]:
-            if not moved.search(line):
-                errors.append(f"{rel}:{number}: the raw UI to Logic sender is used past its outbox")
-        if not any(moved.search(line) for _, line in uses):
-            errors.append(f"{rel}: the raw UI to Logic sender never moves into the outbox")
-        if not any(OUTBOX_FLUSH.search(line) for _, line in lines):
-            errors.append(f"{rel}: the relay does not flush the launcher's outbox")
-        if not any(OUTBOX_REFUSAL.search(line) for _, line in lines):
-            errors.append(f"{rel}: the relay tells the user of no refusal of the launcher's outbox")
-    return len(files)
 
 
 def check_kinetic_copy(errors: list[str]) -> int:
@@ -1670,24 +1200,6 @@ def typed_fields(line: str) -> list[tuple[str, str]]:
     return pairs
 
 
-def check_message_crdt(errors: list[str]) -> int:
-    """`PROSE-001`: an application's message vocabulary names no CRDT handle.
-
-    The application crate depends on `loro`, so the crate graph no longer
-    keeps a document handle out of the messages its views and engine share.
-    Above its tests, no line of a vocabulary names a path into `loro` or a
-    Loro type other than the payload bytes.
-    """
-    files = sources(APP_MESSAGES)
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        for number, line in above_tests(path):
-            found = MESSAGE_CRDT.search(line)
-            if found:
-                errors.append(f"{rel}:{number}: a message names a CRDT handle: `{found.group(0)}`")
-    return len(files)
-
-
 def check_bus_ids(errors: list[str]) -> int:
     """`BUS-029`: no message field of `ambre-bus`, or of an application's
     message vocabulary, carries an identifier as a bare primitive.
@@ -1898,9 +1410,6 @@ def main() -> int:
     args = parser.parse_args()
 
     errors: list[str] = []
-    generators = check_generators(errors)
-    generator_reads = check_generator_reads(errors)
-    secrets = check_passphrase(errors)
     fonts = check_fonts(errors)
     colors = check_renderer_colors(errors)
     ui_thread = check_ui_thread(errors)
@@ -1910,7 +1419,6 @@ def main() -> int:
     controls = check_modals_and_drags(errors)
     keys = check_key_verification(errors)
     access = check_accessibility(errors)
-    relay_logs = check_payload_logs(errors)
     kinetic = check_kinetic_copy(errors)
     axes = check_axis_lists(errors)
     primitives = check_primitives(errors)
@@ -1920,33 +1428,22 @@ def main() -> int:
     event_copies = check_one_event_copy(errors)
     signal_types = check_signal_types(errors)
     bus_ids = check_bus_ids(errors)
-    message_crdt = check_message_crdt(errors)
     wire_ids = check_wire_ids(errors)
     answers = check_typed_answers(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
-    request_ids = check_request_ids(errors)
-    engine = check_engine_and_relay(errors)
-    decisions = check_switchboard_decisions(errors)
-    handlers = check_handlers(errors)
-    outboxes = check_launcher_outbox(errors)
-    latches = check_failure_latches(errors)
     exits = check_exit_writes(errors)
     walks = check_walks(errors)
     print(
-        f"{generators} generator functions read for CRDT calls, "
-        f"{generator_reads} generator modules read for a file read, "
-        f"{secrets} worker files read for a passphrase in a request, "
         f"{fonts} Rust files read for an embedded font, "
         f"{colors} renderer files read for a colour of their own, "
-        f"{ui_thread} UI-thread files read for the document, a wait, a drawing or a hit-test, "
+        f"{ui_thread} UI-thread files read for a conversion, a wait, a drawing or a hit-test, "
         f"{stores} client files read for a persistence path, "
         f"{subset} sources read for a compute pass or a storage buffer, "
         f"{widths} files read for a width spelled twice, "
         f"{controls} files read for a modal, a drag or a named creation, "
         f"{keys} manifests and files read for a key hash or an invitation, "
         f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe, "
-        f"{relay_logs} relay files read for a payload in a log line, "
         f"{kinetic} Rust files read for a second kinetic model, "
         f"{axes} Trame files read for an axis list outside its module, "
         f"{primitives} drawing primitives read for a screen-only parameter, "
@@ -1956,17 +1453,10 @@ def main() -> int:
         f"{event_copies} relay arms read for an event a view also keeps, "
         f"{signal_types} shell signals read for a bare primitive payload, "
         f"{bus_ids} bus and message files read for an identifier field of a primitive type, "
-        f"{message_crdt} message files read for a CRDT handle, "
         f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes or a closed set held as text, "
         f"{answers} relay files read for an answer built with `json!`, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third artefact, a shared worker or an unsandboxed frame, "
-        f"{request_ids} worker files read for a request id, "
-        f"{engine} launcher files read for a second engine or a relay out of the frame, "
-        f"{decisions} switchboard decision file read for a browser API or a clock, "
-        f"{handlers} engine files read for a handler that sends on a queue, "
-        f"{outboxes} launcher files read for a write past its outbox, "
-        f"{latches} launcher files read for a failure that waits on a queue, "
         f"{exits} build and thread files read for a write on the way out, "
         f"{walks} walks read for a screen module or screen state"
     )

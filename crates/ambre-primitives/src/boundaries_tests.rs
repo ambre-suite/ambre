@@ -307,3 +307,83 @@ fn a_wire_type_redeclared_by_the_worker_or_the_relay_is_refused() {
     );
     assert_eq!(wire(&declared(&[])).len(), 1);
 }
+
+/// The records of the wiring facts `facts`, with every file the boundaries
+/// close read by a compile.
+fn facts(facts: &[(&str, &str, &str)]) -> Records {
+    let mut records = Records::default();
+    for (name, value, at) in facts {
+        records.add(&format!("fact\t{name}\t{value}\t{at}"));
+    }
+    for (anchor, _) in ANCHORS {
+        records.add(&format!("file\t/work/{anchor}"));
+    }
+    records
+}
+
+/// The facts of a launcher wired as the rules ask.
+const WIRED: &[(&str, &str, &str)] = &[
+    ("logic-start", "-", "crates/ambre-app/src/lib.rs:780"),
+    ("frame-relay", "drains", "crates/ambre-app/src/lib.rs:1510"),
+    ("panic-hook", "latched", "crates/ambre-app/src/lib.rs:475"),
+    (
+        "worker-error",
+        "latched",
+        "crates/ambre-app/src/platform.rs:371",
+    ),
+    ("ui-queue", "-", "crates/ambre-app/src/lib.rs:507"),
+    ("outbox-move", "-", "crates/ambre-app/src/lib.rs:512"),
+    ("outbox-flush", "-", "crates/ambre-app/src/lib.rs:1056"),
+    (
+        "outbox-take_refusal",
+        "-",
+        "crates/ambre-app/src/lib.rs:1271",
+    ),
+];
+
+// A launcher wired as the rules ask passes. A second start, read in another
+// unit, is refused. So is each fact no unit records: a rule never holds by
+// reading nothing (`ARCH-007`, `ARCH-010`, `ARCH-014`, `BUS-035`,
+// `BUS-036`).
+#[test]
+fn a_second_start_or_a_missing_fact_of_the_wiring_is_refused() {
+    assert_eq!(wiring(&facts(WIRED)), Vec::<String>::new());
+    let mut twice = WIRED.to_vec();
+    twice.push(("logic-start", "-", "crates/ambre-app/src/other.rs:3"));
+    let refused = wiring(&facts(&twice));
+    assert_eq!(refused.len(), 1, "{refused:#?}");
+    assert!(refused[0].contains("2 times, not once"), "{refused:#?}");
+    // A flush outside the relay's file holds no relay.
+    let moved: Vec<_> = WIRED
+        .iter()
+        .map(|&(n, v, at)| {
+            if n == "outbox-flush" {
+                (n, v, "crates/ambre-app/src/view.rs:4")
+            } else {
+                (n, v, at)
+            }
+        })
+        .collect();
+    assert_eq!(
+        wiring(&facts(&moved)),
+        vec!["the relay does not flush the launcher's outbox (BUS-036)"]
+    );
+    assert_eq!(wiring(&facts(&[])).len(), 8);
+}
+
+// A file a boundary closes that no compile reads holds that boundary over
+// nothing, so it fails closed (`ARCH-072`).
+#[test]
+fn a_closed_file_no_compile_reads_is_refused() {
+    let mut records = facts(WIRED);
+    records
+        .files
+        .retain(|f| !f.ends_with("crates/ambre-app/src/switchboard.rs"));
+    assert_eq!(
+        wiring(&records),
+        vec![
+            "crates/ambre-app/src/switchboard.rs: no compile reads it, so ARCH-072 reads nothing, \
+             and fails closed"
+        ]
+    );
+}
