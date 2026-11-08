@@ -110,6 +110,42 @@ fn a_layer_drop_for_one_receiver_leaves_another_receiver_on_its_layer() {
     }
 }
 
+/// The noise of a downlink: up to 40 ms of jitter, and 30 % of loss for 300 ms.
+const JITTER: Duration = Duration::from_millis(40);
+const BURST: Duration = Duration::from_millis(300);
+const BURST_LOSS: f64 = 0.30;
+
+/// A fast drop must not drop on noise. A call of three runs at 150 ms of round trip and 2 %
+/// loss. The downlink of a receiver carries jitter from its join, then a short burst of loss,
+/// and no lasting congestion. The receiver keeps the top layer of the speaker, on each path of
+/// [`SEEDS`].
+#[test]
+fn a_receiver_keeps_its_layer_through_jitter_and_a_loss_burst() {
+    for seed in SEEDS {
+        let mut net = Net::new(seed);
+        for index in 0..3 {
+            let mut profile = proof_link();
+            if index == 1 {
+                profile.jitter = JITTER;
+            }
+            net.join("r", profile, seed * 1000 + index + 1);
+            net.run(Duration::from_millis(200));
+        }
+        net.member(0).synth.speaking = true;
+        net.run(Duration::from_secs(15));
+        let from = net.now;
+        net.run(Duration::from_secs(2));
+        net.member(1).down.profile.loss = BURST_LOSS;
+        net.run(BURST);
+        net.member(1).down.profile.loss = proof_link().loss;
+        net.run(Duration::from_secs(3));
+        let layers: Vec<u8> = since(track(&net, 1, 0), from).map(|a| a.layer).collect();
+        assert!(!layers.is_empty(), "seed {seed}: no video of the speaker");
+        let lower = layers.iter().filter(|l| **l < 2).count();
+        assert_eq!(lower, 0, "seed {seed}: {lower} packets below the top layer");
+    }
+}
+
 /// `CALL-044`: a receiver in a call of twenty keeps the top layer of the speaker. The links
 /// carry 150 ms of round trip and a random loss of 2 % or of 10 %. str0m's estimate held it on the middle
 /// layer at 2 %.

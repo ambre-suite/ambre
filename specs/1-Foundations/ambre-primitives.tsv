@@ -4179,3 +4179,6 @@ ambre-sfu | src/forward.rs | crate::forward | Feed::is_track() | ret | bool	gene
 ambre-sfu | src/forward.rs | crate::forward | Slot::carries() | ret | bool	generic	predicate
 ambre-sfu | src/layer.rs | crate::layer | AUDIO_SLOTS | const | usize	math	cap count of the audio slots of a receiver, the budget row of audio per receiver
 ambre-sfu | src/rewrite.rs | crate::rewrite | Clock::ticks_per_ms() | ret | u128	math	the ticks of an RTP clock in one millisecond, a conversion factor of 48 or 90
+ambre-sfu | src/congestion.rs | crate::congestion | Congestion::congested() | ret | bool	generic	predicate result
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | DelayControl::overusing() | ret | bool	generic	predicate result
+ambre-sfu | src/forward.rs | crate::forward | Member.rechoose | field | bool	generic	fact flag: the congestion control lowered its target or changed its overuse since the last choice, selects no mode

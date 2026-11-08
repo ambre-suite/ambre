@@ -212,6 +212,8 @@ admits under a pseudonymous identifier per call. The SFU mints the TURN credenti
   errors. A random loss of exactly 10 % reads above 10 % in half of its windows.
 * The SFU pads up to the rate of the next layer step. The target grows by 8 % per second, and by
   100 % per second before its first decrease, never above 1.5 times the acknowledged rate.
+* Under overuse, the SFU pads nothing. The padding would hold the queue of the bottleneck full,
+  and the keyframe of the lower layer would wait behind it.
 * Each receiver holds three audio slots and nine video slots (`CALL-045`). The SFU offers them
   once, when the room first carries a track of another participant.
 * A change of speaker moves a slot to another sender, and renegotiates nothing (`CALL-046`). The
@@ -219,7 +221,8 @@ admits under a pseudonymous identifier per call. The SFU mints the TURN credenti
 * Each receiver gets the video of the nine most recent speakers (`CALL-041`), and the audio of the
   three most recent speakers (`CALL-047`). The audio level of each packet, which the seal leaves
   in clear, names who speaks.
-* The layer choice runs per receiver, every 100 ms. Each of the nine gets its lowest layer while
+* The layer choice runs per receiver, every 100 ms, and at once when a target falls or overuse
+  starts or ends. Each of the nine gets its lowest layer while
   the estimate holds it. Then the most recent speaker moves up to the highest layer the rest
   holds. A move up needs a margin, so a receiver near a boundary stays on its layer.
 * A switch to another layer waits for a keyframe of that layer (`CALL-039`). The SFU shifts the

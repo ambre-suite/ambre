@@ -156,6 +156,11 @@ impl Congestion {
         self.target
     }
 
+    /// Whether the queue delay of the downlink grows now: the delay bound reads overuse.
+    pub fn congested(&self) -> bool {
+        self.delay.overusing()
+    }
+
     /// Reads one transport-wide feedback report, and answers the new target when it moved.
     pub fn on_feedback(&mut self, acks: &[TwccAck]) -> Option<Bitrate> {
         let now = acks.iter().map(|a| a.feedback_recv).max()?;
