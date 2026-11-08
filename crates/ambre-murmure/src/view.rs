@@ -966,12 +966,19 @@ impl MurmureView {
     }
 
     /// The focused message as the target of its actions, held at the foot
-    /// of its row, where the menu opens below it (`MURMURE-511`). `None`
+    /// of its row, where the menu opens below it (`MURMURE-511`). The row
+    /// is found by its key, never by the last paint, so rows that arrived
+    /// since that paint do not move the target (`MURMURE-590`). `None`
     /// with no focus on screen, or on a band.
     fn target_of_focus(&self) -> Option<MessageTarget> {
-        let RowBounds { top, bottom } = self.last.as_ref()?.focus?;
-        let middle = ambre_core::Point::new(Px::<View>::ZERO, (top + bottom) / 2.0);
-        let mut target = self.target_at(middle, Press::Click)?;
+        let key = self.focus?;
+        let RowBounds { bottom, .. } = self.last.as_ref()?.focus?;
+        let i = {
+            let lists = self.lists.borrow();
+            let list = self.shown(&lists.conversations, (self.reads.pane)())?;
+            row_of(&list.keys(), key)?
+        };
+        let mut target = self.target_of_row(i)?;
         target.pressed = Some(ambre_core::Point::new(Px::<View>::ZERO, bottom));
         Some(target)
     }
@@ -3748,6 +3755,36 @@ mod tests {
             assert_eq!(target.canvas, CHANNEL_CANVAS);
         }
         assert!(page.commands.try_recv().is_err(), "nothing was sent");
+    }
+
+    /// `MURMURE-590`: the menu key acts on the focused message even when
+    /// the list changed since the last paint. Rows that arrive above it
+    /// shift its place, and the focus stays on its message.
+    #[test]
+    fn the_menu_key_acts_on_the_focused_message_after_the_list_shifts() {
+        let (mut page, channel, rows) = long_channel(3);
+        frame(&mut page.view);
+        assert!(key(
+            &mut page,
+            Key::ArrowUp,
+            ModifierKeys::NONE,
+            Instant::<PageLoad>::new(20.0)
+        ));
+        frame(&mut page.view);
+        // Older rows land above the focus, and no paint follows them.
+        segment(&page, channel, 0, 2);
+        page.view.update();
+        let shift_f10 = InputEvent::Key {
+            key: Key::F(FunctionKey::F10),
+            mods: ModifierKeys::SHIFT,
+        };
+        assert!(page.view.handle_input(&shift_f10).is_yes());
+        let acted = page.acted.borrow();
+        let target = acted
+            .last()
+            .and_then(Option::as_ref)
+            .expect("the focused message");
+        assert_eq!(target.message, rows[2].id);
     }
 
     /// The pane that names a message rests the list on it, a quarter down,
