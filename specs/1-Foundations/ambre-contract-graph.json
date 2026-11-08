@@ -830,6 +830,7 @@
   {"edge": "verified-by", "from": "UI-THREAD-054", "to": "ambre_app::host::pipe::tests::a_paste_after_a_landed_write_reads_the_clipboard_back"},
   {"edge": "cites-section", "from": "UI-THREAD-055", "section": "2", "to": "1-Foundations/ambre-spec-clipboard.md"},
   {"edge": "verified-by", "from": "UI-THREAD-055", "to": "ambre_app::host::tests::a_browser_refusing_the_web_types_still_gets_the_mirror_and_the_html"},
+  {"edge": "verified-by", "from": "UI-THREAD-055", "to": "ambre_app::host::tests::a_write_refusing_the_web_types_still_publishes_the_mirror_and_the_html"},
   {"edge": "verified-by", "from": "UI-THREAD-055", "to": "ambre_belt::trame::tests::a_deferred_copy_writes_inside_the_activation_window"},
   {"edge": "verified-by", "from": "UI-THREAD-055", "to": "ambre_belt::prose::tests::the_token_reads_back_from_the_html_firefox_hands_back"},
   {"edge": "cites-section", "from": "UI-THREAD-057", "section": "2", "to": "1-Foundations/ambre-spec-clipboard.md"},

@@ -29,7 +29,9 @@ ambre-app | src/host/mod.rs | crate::host | desktop_in() | ret | bool	generic	pr
 ambre-app | src/host/mod.rs | crate::host | is_other_editable() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | ClipboardFormat::mime() | ret | &'static str	newtype-inner	the enum's own MIME name, unwrapped at the clipboard API call
 ambre-app | src/host/mod.rs | crate::host | clipboard_item(entries) | param | &[(ClipboardFormat,Option<&str>)]	foreign-api	each value is the string the ClipboardItem record takes; its type is already a ClipboardFormat
+ambre-app | src/host/mod.rs | crate::host | dropped_item(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
 ambre-app | src/host/mod.rs | crate::host | publish_item(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
+ambre-app | src/host/mod.rs | crate::host | publish(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
 ambre-app | src/host/murmure.rs | crate::host::murmure | LocalTime::format() | ret | String	free-text	formatted time text
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field | HashMap<DraftKey,u64>	math	write counter per draft key
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
