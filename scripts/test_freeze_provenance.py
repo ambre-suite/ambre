@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -254,6 +256,24 @@ class FreezeProvenance(unittest.TestCase):
         code, out = repo.check("--base", "main")
         self.assertEqual(code, 1, out)
         self.assertIn("1 frozen artifacts checked", out)
+
+    def test_a_rerun_never_builds_into_the_target_of_the_checkout(self):
+        # A rerun that shared the checkout's target left an old commit's
+        # `ambre-fixtures` there, and the next `just fixtures-check` ran it.
+        bumped(self.repo)
+        record = Path(self.tmp.name) / "target-of-the-rerun"
+        command = f"sh -c 'echo \"$CARGO_TARGET_DIR\" > {record}; sh {GEN}'"
+        for outer in (None, str(Path(self.tmp.name) / "elsewhere")):
+            with self.subTest(CARGO_TARGET_DIR=outer):
+                with mock.patch.dict(os.environ):
+                    os.environ.pop("CARGO_TARGET_DIR", None)
+                    if outer is not None:
+                        os.environ["CARGO_TARGET_DIR"] = outer
+                    with redirect_stdout(io.StringIO()):
+                        code = fp.main(["--check", "--all", "--regenerate", command], root=self.repo.root)
+                self.assertEqual(code, 0)
+                checkout = Path(outer) if outer else self.repo.root / "target"
+                self.assertEqual(Path(record.read_text().strip()), checkout / fp.RERUN_TARGET)
 
     def test_a_missing_base_is_an_error(self):
         bumped(self.repo)

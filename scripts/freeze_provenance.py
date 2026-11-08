@@ -52,6 +52,8 @@ ROOT = Path(__file__).resolve().parent.parent
 FROZEN = "fixtures/frozen"
 CURRENT = "fixtures/current"
 # The live corpus, rewritten at the commit the frozen bytes were taken from.
+# The subdirectory of the checkout's target that a rerun builds into.
+RERUN_TARGET = "freeze-provenance"
 REGENERATE = "cargo run --quiet -p ambre-logic --features fixtures --bin ambre-fixtures -- generate"
 
 
@@ -138,11 +140,24 @@ def generator_reads(root: Path, rev: str) -> list[str]:
     return found
 
 
+def rerun_target(root: Path, env: dict[str, str]) -> Path:
+    """The target directory of a rerun: a directory of its own, under the
+    target of the checkout.
+
+    Cargo takes a binary that a worktree build leaves in a shared target as
+    fresh for the checkout. A rerun that built into the checkout's own target
+    would leave there a binary of an old commit, anchored to a worktree that is
+    gone. The next `just fixtures-check` would then run that binary unbuilt.
+    The directory persists, so a later rerun builds incrementally.
+    """
+    return Path(env.get("CARGO_TARGET_DIR") or root / "target") / RERUN_TARGET
+
+
 def regenerate(root: Path, rev: str, live: str, command: str) -> bytes | str:
     """The live artifact `live` as the generator of `rev` rebuilds it, or why
     it could not be rebuilt."""
     env = dict(os.environ)
-    env.setdefault("CARGO_TARGET_DIR", str(root / "target"))
+    env["CARGO_TARGET_DIR"] = str(rerun_target(root, env))
     with tempfile.TemporaryDirectory() as tmp:
         tree = Path(tmp) / "tree"
         added = git(root, "worktree", "add", "--detach", str(tree), rev)
