@@ -115,17 +115,7 @@ impl Journal {
         if self.partial == Partial::Lost {
             return None;
         }
-        let reached = |d: &ListDelete| {
-            reach
-                .iter()
-                .flat_map(|places| places.iter())
-                .any(|(list, from)| {
-                    list.as_ref().is_none_or(|list| *list == d.list)
-                        && d.spot
-                            .placed
-                            .is_none_or(|id| id.peer == peer && id.counter >= *from)
-                })
-        };
+        let reached = |d: &ListDelete| reach.iter().any(|places| places.reaches(d, peer));
         if self.deletes.iter().any(reached) {
             return None;
         }
@@ -216,18 +206,85 @@ fn remove(doc: &LoroDoc, delete: &ListDelete) {
     crate::model::remove_spot(doc, &delete.list, &delete.spot);
 }
 
-/// Where an item of the manager places list elements: each list, `None` for
-/// every list, with the first operation of this peer that places there. An
-/// undo of the item deletes or moves what it placed.
-pub(super) type Places = Vec<(Option<ContainerID>, Counter)>;
+/// The lists an operation of an item places elements in.
+#[derive(Clone, Debug, PartialEq)]
+enum Reach {
+    /// Every list: an item pushed by an undo or a redo, whose event the
+    /// manager does not give.
+    Every,
+    /// One movable list.
+    List(ContainerID),
+}
 
-/// Fold `more` into `places`, each list keeping its first operation.
-fn widen(places: &mut Places, more: Places) {
-    for (list, from) in more {
-        match places.iter_mut().find(|(at, _)| *at == list) {
-            Some((_, first)) => *first = (*first).min(from),
-            None => places.push((list, from)),
+/// Where an item of the manager places list elements, with the first
+/// operation of this peer that places there.
+#[derive(Clone, Debug)]
+struct Place {
+    reach: Reach,
+    from: Counter,
+}
+
+/// Where an item of the manager places list elements: each list it places in,
+/// with its first operation there. An undo of the item deletes or moves what
+/// it placed.
+#[derive(Clone, Debug, Default)]
+pub(super) struct Places(Vec<Place>);
+
+impl Places {
+    /// An item that places in every list, from operation `from` on.
+    fn every(from: Counter) -> Self {
+        Self(vec![Place {
+            reach: Reach::Every,
+            from,
+        }])
+    }
+
+    /// An item that places in each of `lists`, from operation `from` on.
+    fn lists(lists: impl IntoIterator<Item = ContainerID>, from: Counter) -> Self {
+        let mut places = Self::default();
+        places.widen(Self(
+            lists
+                .into_iter()
+                .map(|list| Place {
+                    reach: Reach::List(list),
+                    from,
+                })
+                .collect(),
+        ));
+        places
+    }
+
+    /// Whether the item places nowhere.
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Fold `more` into these places, each list keeping its first operation.
+    fn widen(&mut self, more: Self) {
+        for place in more.0 {
+            match self.0.iter_mut().find(|at| at.reach == place.reach) {
+                Some(at) => at.from = at.from.min(place.from),
+                None => self.0.push(place),
+            }
         }
+    }
+
+    /// Whether the element `delete` removed is in reach: the item places in
+    /// its list, and placed the element or may have. An element with no
+    /// placing operation on record may have been placed by the item. One
+    /// placed by `peer` was, at or after the item's first operation there.
+    fn reaches(&self, delete: &ListDelete, peer: PeerID) -> bool {
+        self.0.iter().any(|place| {
+            let in_list = match &place.reach {
+                Reach::Every => true,
+                Reach::List(list) => *list == delete.list,
+            };
+            in_list
+                && delete
+                    .spot
+                    .placed
+                    .is_none_or(|id| id.peer == peer && id.counter >= place.from)
+        })
     }
 }
 
@@ -258,20 +315,22 @@ impl History {
     /// An empty history that watches each item `manager` pushes. An item
     /// pushed by an undo or a redo carries no event, and counts as placing.
     pub(super) fn watching(manager: &mut UndoManager) -> Self {
-        let placing = Arc::new(Mutex::new(Places::new()));
+        let placing = Arc::new(Mutex::new(Places::default()));
         let seen = Arc::clone(&placing);
         manager.set_on_push(Some(Box::new(move |_, span, event| {
-            let places: Places = match event {
-                None => vec![(None, span.start)],
-                Some(event) => event
-                    .events
-                    .iter()
-                    .filter(|diff| diff.target.container_type() == ContainerType::MovableList)
-                    .map(|diff| (Some(diff.target.clone()), span.start))
-                    .collect(),
+            let places = match event {
+                None => Places::every(span.start),
+                Some(event) => Places::lists(
+                    event
+                        .events
+                        .iter()
+                        .filter(|diff| diff.target.container_type() == ContainerType::MovableList)
+                        .map(|diff| diff.target.clone()),
+                    span.start,
+                ),
             };
             if let Ok(mut seen) = seen.lock() {
-                widen(&mut seen, places);
+                seen.widen(places);
             }
             UndoItemMeta::new()
         })));
@@ -380,7 +439,7 @@ impl TrameState {
                 .rev()
                 .find(|s| matches!(s, Step::Managed(_)))
         {
-            widen(top, placed);
+            top.widen(placed);
         }
         // A checkout or a new peer id empties the manager's stacks.
         History::trim_bottom(&mut self.history.past, now);

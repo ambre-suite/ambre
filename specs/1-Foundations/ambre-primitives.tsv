@@ -3794,9 +3794,16 @@ ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_
 ambre-trame | src/logic/line_history.rs | crate::logic::line_history | History::managed() | ret | usize	foreign-api	how many items of the undo manager a stack names, compared to the count its API returns as usize
 ambre-trame | src/logic/line_history.rs | crate::logic::line_history | History::trim_bottom(count) | param | usize	foreign-api	the depth of a stack of the undo manager, as its API returns it
 ambre-trame | src/logic/line_history.rs | crate::logic::line_history | History::trim_top(count) | param | usize	foreign-api	the depth of a stack of the undo manager, as its API returns it
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Journal::finish(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Journal::note(key) | param | &str	foreign-api	a key of any map a line delete writes, as the Loro map call takes it
 ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Partial::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Partial::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Place.from | field | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Places::every(from) | param | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Places::is_empty() | ret | bool	generic	predicate result
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Places::lists(from) | param | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Places::reaches() | ret | bool	generic	predicate result
+ambre-trame | src/logic/line_history.rs | crate::logic::line_history | Places::reaches(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-trame | src/logic/line_history.rs | crate::logic::line_history | TrameState::follow_manager(depth) | param | usize	foreign-api	the depth of the undo stack before a command, as the undo manager returns it
 ambre-trame | src/logic/line_history.rs | crate::logic::line_history | TrameState::note_write(key) | param | &str	foreign-api	a key of any map a line delete writes, as the Loro map call takes it
 ambre-trame | src/logic/locale.rs | crate::logic::locale | canonical_formula() | ret | String	local	the formula text in the canonical separators, which typed_source() stores
