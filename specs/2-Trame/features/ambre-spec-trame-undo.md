@@ -112,7 +112,7 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 | replacing every match in the sheet | one (`ambre-spec-find.md`, `FIND-006`) |
 | activating a personal filter view | none: it changes no document (`TRAME-FEAT-016`) |
 | adding or removing a validation or a protection | none: a rule over the cells is configuration, not data (`features/ambre-spec-trame-cell-editing.md section 3`) |
-| deleting a selection of five rows | five, and the rule says one (`TRAME-088`) |
+| deleting a selection of five rows | one (`TRAME-088`) |
 
 **Code:**
 
