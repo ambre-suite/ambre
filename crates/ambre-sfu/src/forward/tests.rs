@@ -186,7 +186,7 @@ impl Net {
                 return;
             }
             for t in to_sfu {
-                self.sfu.receive(self.now, t.source, datagram(&t));
+                self.sfu.receive(self.now, t.source, &t.contents);
             }
             // str0m keeps one received packet until the next poll: each delivery is polled.
             let mut back = Vec::new();
@@ -197,7 +197,7 @@ impl Net {
                 }
             }
             for t in back {
-                self.sfu.receive(self.now, t.source, datagram(&t));
+                self.sfu.receive(self.now, t.source, &t.contents);
             }
         }
     }

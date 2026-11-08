@@ -408,10 +408,12 @@ version = "0.1.0"
 dependencies = [
  "ambre-core",
  "axum",
+ "futures-util",
  "serde",
  "serde_json",
  "str0m",
  "tokio",
+ "tokio-tungstenite 0.29.0",
 ]
 
 [[package]]

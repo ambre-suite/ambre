@@ -99,6 +99,9 @@ pub async fn run(addresses: Addresses) -> std::io::Result<()> {
     axum::serve(listener, app).await
 }
 
+/// The most datagrams one turn of the media loop reads before it polls the SFU.
+const BATCH: usize = 64;
+
 /// Owns the SFU: reads the socket and the commands, and sends what the SFU answers.
 async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver<Command>) {
     let mut sfu = Sfu::new(media);
@@ -117,9 +120,19 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
         tokio::select! {
             read = udp.recv_from(&mut buf) => {
                 if let Ok((n, source)) = read
-                    && let Some(datagram) = buf.get(..n).and_then(|d| d.try_into().ok())
+                    && let Some(datagram) = buf.get(..n)
                 {
                     sfu.receive(Instant::now(), source, datagram);
+                }
+                // Every datagram already queued goes in before one poll, so the cost of a
+                // poll spreads over a batch.
+                for _ in 0..BATCH {
+                    let Ok((n, source)) = udp.try_recv_from(&mut buf) else {
+                        break;
+                    };
+                    if let Some(datagram) = buf.get(..n) {
+                        sfu.receive(Instant::now(), source, datagram);
+                    }
                 }
             }
             command = inbox.recv() => match command {

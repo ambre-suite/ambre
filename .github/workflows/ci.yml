@@ -326,6 +326,10 @@ jobs:
       - uses: actions/checkout@v5
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      # The TURN test runs coturn behind a TCP front on port 443, which the runner user may
+      # bind once the unprivileged range starts there.
+      - name: TURN relay
+        run: sudo apt-get install -y coturn && sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
       # Headless Firefox makes its WebGL2 context through an X display and the
       # Mesa EGL driver: `xvfb-run` gives it the display.
       - name: System deps (Firefox)
