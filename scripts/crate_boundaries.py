@@ -505,6 +505,7 @@ WALK_REACH = {
     },
     "ambre-trame": {
         "crate": "the sheet's dimensions",
+        "crate::hash": "the hash table type, which holds no state of its own",
         "crate::render": "the sheet's layout and cell drawing, in sheet coordinates",
     },
     "ambre-toile": {

@@ -47,10 +47,7 @@ pub struct TableHasher(SeedableRandomState);
 
 impl Default for TableHasher {
     fn default() -> Self {
-        Self(SeedableRandomState::with_seed(
-            next_table_seed(),
-            process_key(),
-        ))
+        Self(next_table_state())
     }
 }
 
@@ -82,22 +79,23 @@ fn draw_key<E>(fill: impl FnOnce(&mut [u8]) -> Result<(), E>) -> SharedSeed {
     }
 }
 
-/// A seed per table, distinct on each call within a thread.
+/// The state of a new table: the key of the process, and a seed per table,
+/// distinct on each call within a thread.
 ///
 /// The seed need not be secret: the key of the process is, and foldhash mixes
 /// the two. A counter keeps the cost to one thread-local read.
-fn next_table_seed() -> u64 {
-    // The odd constant is 2^64 divided by the golden ratio: successive seeds
-    // then differ in their high bits as well as their low bits.
-    const STEP: u64 = 0x9E37_79B9_7F4A_7C15;
+fn next_table_state() -> SeedableRandomState {
     thread_local! {
         static NEXT: Cell<u64> = const { Cell::new(0) };
     }
-    NEXT.with(|next| {
-        let seed = next.get().wrapping_add(STEP);
+    let seed = NEXT.with(|next| {
+        // The odd step is 2^64 divided by the golden ratio: successive seeds
+        // then differ in their high bits as well as their low bits.
+        let seed = next.get().wrapping_add(0x9E37_79B9_7F4A_7C15);
         next.set(seed);
         seed
-    })
+    });
+    SeedableRandomState::with_seed(seed, process_key())
 }
 
 #[cfg(test)]
