@@ -202,7 +202,7 @@ The reader's own interface language is set outside the document, and no document
 | The content's language and the interface's are two | one language for the document and the menus | it translates the interface of every collaborator who opens a French document, which nobody asked for and no gesture undoes (`LOCALE-003`) |
 | None is a value, and no fixed fallback | defaulting to one language when nothing resolves | it is wrong for every reader who does not share it, and the file says nothing about being wrong -- the same rule `PROSE-IO-035` already holds for the PDF writer |
 | The forms generated from CLDR, at a pinned version | a table typed by hand | a group mark such as French's narrow no-break space or Swiss German's apostrophe is the value a hand types wrong, and no reader sees that it is wrong |
-| A compact table of thirteen locales in `ambre-core` | `icu4x` | several hundred kilobytes of WebAssembly against the 2 MB first download (`ambre-spec-budgets.md`), for a set of locales the table already covers |
+| A compact table of thirteen locales in `ambre-core` | `icu4x` | several hundred kilobytes of WebAssembly against the 4 MB first download (`ambre-spec-budgets.md`), for a set of locales the table already covers |
 | Storing the tag, never the rendered form | storing the formatted text beside the raw value | a formatted string in the CRDT is a second source of truth: it goes stale on the first locale change, and every formula reading the cell reads the wrong one (`LOCALE-009`) |
 | A key of the existing `meta` map | a root container of its own | one string does not earn a container, and `meta` already holds the per-document registers every application stamps at construction |
 

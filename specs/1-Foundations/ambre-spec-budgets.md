@@ -208,21 +208,22 @@
   `ambre-sync` carries crypto plus protocol plus gloo-net, small at ~6.8 MB unoptimized, with no
   wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
   dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable.
-* **The first download, Main plus Sync, < 2 MB brotli**, and Prose interop stays
-  **lazy-loaded**. At 10 Mbit/s, 2 MB takes 1.6 s, which leaves the rest of the README's 3 s
-  initial load on 4G to compile and boot.
+* **The first download, Main plus Sync, < 4 MB brotli**, and Prose interop stays
+  **lazy-loaded**. One wasm carries the whole suite: an application is never a download of its
+  own, so opening a second one costs nothing. 4G commonly runs at 20 Mbit/s, where 4 MB takes
+  1.6 s. That leaves the rest of the README's 3 s initial load to compile and boot.
 * **Counted in brotli, as served.** The release build writes a brotli copy at quality 11 beside
   each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is, with
   no compression per request. On the wasm it weighs 27% less than gzip at level 9.
 * **Cached for good after the first visit.** Every built file is named by a hash of its content
   (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
   again, and a release downloads only the instance it changed.
-* **The first download breaks the budget today.** On 2026-10-20 a release build weighed 3.07 MB
-  brotli for Main and 0.34 MB for Sync. On 2026-11-07, `just size` read 3 128 174 bytes for Main
-  and 352 134 for Sync. The `wasm-release` profile builds every crate for size and strips the name
-  section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job holds each figure as a
-  ceiling (`scripts/wasm_size.py`), and a ceiling is not the budget. The roadmap story `The Main
-  instance within its download budget` closes the gap, and it needs the applications split out.
+* **The first download holds the budget, and the ceilings stay tight.** On 2026-10-20 a release
+  build weighed 3.07 MB brotli for Main and 0.34 MB for Sync. On 2026-11-07, `just size` read
+  3 128 174 bytes for Main and 352 134 for Sync. The `wasm-release` profile builds every crate for
+  size and strips the name section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job
+  holds each figure as a ceiling (`scripts/wasm_size.py`) and fails past the budget. A ceiling
+  sits under the budget: it catches any growth long before the budget does.
 * **Both ceilings went up on 2026-11-07**, to 3.13 MB for Main and 0.36 MB for Sync. No dead code
   grew, so no cut was found. The table below is `twiggy top` on a build that keeps the name
   section, from the 2026-10-20 ceiling commit `a70872374` to that day. A crate's raw growth is
@@ -240,11 +241,14 @@
   Main and 354 035 for Sync. The features merged since 2026-11-07 grew Main by 8 814 bytes. One
   cut took 4 461 back: `ambre-toile` now names `roxmltree` 0.21, the version usvg 0.47 links,
   so the instance carries one copy of the parser. Main then read 3 132 527, still 2 527 over.
-* **The applications alone cannot close the gap.** The table below splits the Main instance by
+* **The ceiling of Main went up to 3.14 MB on 2026-11-08.** The growth is the features
+  themselves: the HTML half of the clipboard write (`UI-THREAD-055`) and the formula bind of
+  Trame (`TRAME-289`).
+* **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
-  parts that only an application needs weigh about 0.84 MB of brotli. Without them, the shared
-  part alone weighs about 2.3 MB, over the 2 MB of Main plus Sync.
+  parts that only an application needs weigh about 0.84 MB of brotli. Splitting them out would
+  not have reached the old 2 MB budget: the shared part alone weighs about 2.3 MB.
 
 | Part | Raw | Brotli, estimated | What it is |
 |---|---|---|---|

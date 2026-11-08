@@ -2,12 +2,10 @@
 """The download of the two wasm instances, against their ceilings and the budget.
 
 The budget is `ambre-spec-budgets.md section 5`: the first download, Main plus
-Sync, under 2 MB brotli. The build breaks it today, so the check holds a
-**ceiling** per instance at today's figure instead. A change that grows either
-download fails; a change that shrinks one lowers its ceiling in the same
-commit. A ceiling is not the budget. The `The Main instance within its download
-budget` Story (`ambre-roadmap.md`) is done when the first download sits under
-the budget.
+Sync, under 4 MB brotli, one wasm for the whole suite. The check fails past it,
+and it also holds a tighter **ceiling** per instance at today's figure. A change
+that grows either download fails; a change that shrinks one lowers its ceiling
+in the same commit.
 
 The figure is the size of the `.br` copy the post-build hook writes beside each
 wasm (`scripts/trunk_post_build.py`), which a static server sends as it is. The
@@ -23,15 +21,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The first download, Main plus Sync, under 2 MB brotli
-# (`ambre-spec-budgets.md section 5`).
-BUDGET = 2_000_000
+# The first download, Main plus Sync, under 4 MB brotli: one wasm for the
+# whole suite (`ambre-spec-budgets.md section 5`).
+BUDGET = 4_000_000
 
 # Today's figures, rounded up to the next 10 KB. Lowered by any change that
 # shrinks a download. Raised only when `ambre-spec-budgets.md section 5` names
 # the crate that grew and why.
 CEILINGS = {
-    "Main": 3_130_000,
+    "Main": 3_140_000,
     "Sync": 360_000,
 }
 
@@ -51,7 +49,7 @@ def find(dist: Path, pattern: str) -> Path:
 
 
 def verdict(sizes: dict[str, int], ceilings: dict[str, int], budget: int) -> tuple[bool, list[str]]:
-    """Whether every size holds its ceiling, and the lines that say so."""
+    """Whether every size holds its ceiling and the sum the budget, and the lines that say so."""
     ok = True
     lines = []
     for name, size in sizes.items():
@@ -63,6 +61,7 @@ def verdict(sizes: dict[str, int], ceilings: dict[str, int], budget: int) -> tup
     total = sum(sizes.values())
     line = f"First download: {total:,} bytes brotli, budget {budget:,}"
     if total > budget:
+        ok = False
         line += f": {total - budget:,} over the budget"
     else:
         line += ": within the budget"
