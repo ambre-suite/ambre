@@ -155,12 +155,16 @@ fn a_missing_or_malformed_exclusions_file_fails_closed() {
 }
 
 #[test]
-fn a_manifest_of_a_nested_workspace_or_with_no_package_declares_nothing() {
+fn a_manifest_of_a_nested_workspace_a_vendored_crate_or_with_no_package_declares_nothing() {
     let tree = workspace("", Some(EMPTY));
     for (path, text) in [
         (
             "fuzz/Cargo.toml",
             "[package]\nname = \"fuzz\"\n\n[features]\nf = []\n",
+        ),
+        (
+            "vendor/str0m/Cargo.toml",
+            "[package]\nname = \"str0m\"\n\n[features]\nf = []\n",
         ),
         ("crates/virtual/Cargo.toml", "[features]\nf = []\n"),
     ] {

@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::allowlist::LineNo;
-use crate::files::{NESTED_WORKSPACES, listing};
+use crate::files::{NESTED_WORKSPACES, VENDORED, listing};
 
 /// The exclusions file, relative to the workspace root.
 pub(crate) const EXCLUSIONS: &str = "specs/1-Foundations/ambre-features.tsv";
@@ -38,7 +38,8 @@ const HEADER: &str = "feature\treason";
 ///
 /// A manifest that does not parse as TOML is the file check's to refuse, so
 /// this check skips it. A manifest under a nested workspace builds apart, and
-/// is left out.
+/// a vendored crate is a dependency the workspace does not declare: both are
+/// left out.
 pub(crate) fn check(root: &Path, turned_on: &BTreeMap<PathBuf, BTreeSet<String>>) -> Vec<String> {
     let none = BTreeSet::new();
     let declared = declared(root);
@@ -92,9 +93,14 @@ pub(crate) fn check(root: &Path, turned_on: &BTreeMap<PathBuf, BTreeSet<String>>
 
 /// The package name and the declared features of each manifest under
 /// `root`, by its canonical path. A manifest with no `[package]` name, one
-/// that does not parse, and one under a nested workspace are left out.
+/// that does not parse, one under a nested workspace and one of a vendored
+/// crate are left out.
 fn declared(root: &Path) -> BTreeMap<PathBuf, (String, BTreeSet<String>)> {
-    let nested: Vec<PathBuf> = NESTED_WORKSPACES.iter().map(|dir| root.join(dir)).collect();
+    let nested: Vec<PathBuf> = NESTED_WORKSPACES
+        .iter()
+        .chain(VENDORED)
+        .map(|dir| root.join(dir))
+        .collect();
     listing(root)
         .into_iter()
         .filter(|path| path.file_name().is_some_and(|name| name == "Cargo.toml"))

@@ -2084,9 +2084,7 @@ ambre-primitives | src/run.rs | crate::run | SHELL_CHARS | const | &[char]	gener
 ambre-primitives | src/run.rs | crate::run | WRAPPERS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/run.rs | crate::run | artifact() | ret | Result<Option<Artifact>,String>	free-text	error messages printed to the terminal
 ambre-primitives | src/run.rs | crate::run | artifact(message) | param | &str	generic	a line of JSON cargo prints, parsed at once
-ambre-primitives | src/run.rs | crate::run | cargo(toolchain) | param | &str	foreign-api	the toolchain channel that rustup takes after +
 ambre-primitives | src/run.rs | crate::run | cargo_sysroot() | ret | Result<PathBuf,Vec<String>>	free-text	the errors of the sysroot lookup, each a message
-ambre-primitives | src/run.rs | crate::run | cargo_sysroot(toolchain) | param | &str	foreign-api	the toolchain channel that rustup takes after +
 ambre-primitives | src/run.rs | crate::run | compile() | ret | Result<Compiled,Vec<String>>	free-text	the errors of the compiles, each a message
 ambre-primitives | src/run.rs | crate::run | compile_line() | ret | Result<Option<Compile>,String>	free-text	the parsed line, or an error message printed to the terminal
 ambre-primitives | src/run.rs | crate::run | compile_line(line) | param | &str	generic	a line of the justfile, parsed at once
@@ -2094,7 +2092,6 @@ ambre-primitives | src/run.rs | crate::run | compiles() | ret | Result<Vec<Compi
 ambre-primitives | src/run.rs | crate::run | compiles(justfile) | param | &str	generic	the text of the justfile, parsed at once
 ambre-primitives | src/run.rs | crate::run | error_text() | ret | Option<String>	free-text	a compiler error printed to the terminal
 ambre-primitives | src/run.rs | crate::run | error_text(message) | param | &str	generic	a line of JSON cargo prints, parsed at once
-ambre-primitives | src/run.rs | crate::run | pinned() | ret | Result<String,String>	foreign-api	the toolchain channel that rustup takes after +, or the message that says why none is pinned
 ambre-primitives | src/unwraps.rs | crate::unwraps | HEADER | const | &str	generic	the header line the parser matches back against the file: part of the codec of the allowlist
 ambre-primitives | src/unwraps.rs | crate::unwraps | Judgement.problems | field | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/unwraps.rs | crate::unwraps | SiteCount.0 | field | usize	newtype-inner	the inside of SiteCount, or its constructor
