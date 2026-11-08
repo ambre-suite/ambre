@@ -254,6 +254,11 @@ impl TrameState {
         let _ = axes
             .grow(&mut self.index, rows)
             .and_then(|()| axes.grow(&mut self.index, cols));
+        // A formula that read a position past the used range now reads a
+        // line, as a reseed would bind it (`TRAME-289`).
+        if grew {
+            self.bind_grown_readers();
+        }
         // Commit the implicit scaffolding under the excluded origin so it stays
         // OUT of the undo stack (see `CommitOrigin::Materialize`). A cell edit's intent
         // is the value, not the row/column placeholders it forced into existence.
@@ -267,6 +272,71 @@ impl TrameState {
             self.doc.commit();
         }
         self.index.resolve(at).ok_or(Unmaterialized::Unwritten)
+    }
+
+    /// Compile again each formula that reads, by a position, a line the
+    /// active sheet just gained. The compile binds the position to the line,
+    /// as a full reseed does. The next edit then finds the dependency on the
+    /// line's cell, and not on a position (`TRAME-289`). A compile that meets
+    /// a cycle reseeds, so the feed order decides which cell is refused.
+    fn bind_grown_readers(&mut self) {
+        let bound = self.engine.bound_by_growth(ACTIVE_SHEET, &self.index);
+        if bound.is_empty() {
+            return;
+        }
+        let mut indices = self.other_engine_indices();
+        let mut reread = Vec::with_capacity(bound.len());
+        for cell in bound {
+            let index = if cell.sheet == ACTIVE_SHEET {
+                &self.index
+            } else {
+                let Some(index) = indices.get(&cell.sheet) else {
+                    continue;
+                };
+                index
+            };
+            let (Some(sheet), Some(row), Some(col)) = (
+                self.sheets_by_idx.get(cell.sheet.to_usize()),
+                cell.row_uid(),
+                cell.col_uid(),
+            ) else {
+                continue;
+            };
+            let Some(at) = index.pos_of(&row, &col) else {
+                continue;
+            };
+            let map = self
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str());
+            // The key the engine was fed: the first one the map holds, as
+            // every reader takes it (`TRAME-279`).
+            let Some(text) = index.keys_at(at).into_iter().find_map(|key| {
+                match map.get(key.as_str()).map(|v| v.get_deep_value()) {
+                    Some(LoroValue::String(text)) => Some(text.to_string()),
+                    _ => None,
+                }
+            }) else {
+                continue;
+            };
+            reread.push((cell, CellText::<StoredForm>::new(text)));
+        }
+        // The active sheet's layout is lent to the engine for the call, not
+        // copied, as the structural step lends it.
+        indices.insert(ACTIVE_SHEET, std::mem::take(&mut self.index));
+        let ctx = TrameCtx {
+            engine_sheet_by_name: &self.engine_sheet_by_name,
+            engine_sheet_by_id: &self.engine_sheet_by_id,
+            named: &self.named,
+        };
+        let carried = self
+            .engine
+            .apply_structural(&HashSet::new(), &reread, &indices, &ctx);
+        if let Some(index) = indices.remove(&ACTIVE_SHEET) {
+            self.index = index;
+        }
+        if carried == crate::formula::engine::Carry::CycleMet {
+            self.reseed_engine();
+        }
     }
 
     /// Rebuild [`Self::index`] from the active sheet's `rows_/cols_` lists.

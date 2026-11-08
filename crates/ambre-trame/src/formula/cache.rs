@@ -37,6 +37,10 @@ pub struct BytecodeCache {
     /// The formulas refused for a static cycle. A refused formula keeps no
     /// edge, so the graph cannot say what it reads.
     cyclic: HashSet<CellId>,
+    /// The formulas that read a cell by a virtual axis: a position past the
+    /// used range. A write that adds the line at that position binds it on
+    /// the next compile, so such a formula compiles again (`TRAME-289`).
+    unbound: HashSet<CellId>,
 }
 
 impl BytecodeCache {
@@ -48,6 +52,7 @@ impl BytecodeCache {
             compiles: 0,
             positional: HashSet::new(),
             cyclic: HashSet::new(),
+            unbound: HashSet::new(),
         }
     }
 
@@ -61,6 +66,11 @@ impl BytecodeCache {
     /// The formulas that read positions, which a structural edit re-reads.
     pub fn positional(&self) -> impl Iterator<Item = &CellId> {
         self.positional.iter()
+    }
+
+    /// The formulas that read a cell by a virtual axis (`TRAME-289`).
+    pub fn unbound(&self) -> impl Iterator<Item = &CellId> {
+        self.unbound.iter()
     }
 
     /// Whether a formula is refused for a static cycle.
@@ -121,6 +131,7 @@ impl BytecodeCache {
         }
         self.positional.remove(&cell);
         self.cyclic.remove(&cell);
+        self.unbound.remove(&cell);
 
         let Some(formula_text) = raw.formula_body() else {
             // No longer a formula: drop its bytecode and the dependencies it
@@ -155,6 +166,9 @@ impl BytecodeCache {
                 let bc = compile(&ast, indices);
                 match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
                     Ok(()) => {
+                        if bc.cell_deps.iter().any(CellId::reads_a_virtual_axis) {
+                            self.unbound.insert(cell);
+                        }
                         self.entries.insert(cell, bc);
                         self.sources.insert(cell, raw);
                         if !follows {

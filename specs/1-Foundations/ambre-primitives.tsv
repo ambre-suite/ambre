@@ -2819,6 +2819,8 @@ ambre-trame | src/formula/text.rs | crate::formula::text | fold_char() | ret | i
 ambre-trame | src/formula/text.rs | crate::formula::text | fold_char(ch) | param | char	generic	one char of a text a comparison ignoring case folds: a query, a cell's text or a SEARCH argument
 ambre-trame | src/formula/text.rs | crate::formula::text | fold_char_simple() | ret | char	generic	the one char a char folds to, or the char itself when its fold is several
 ambre-trame | src/formula/text.rs | crate::formula::text | fold_char_simple(ch) | param | char	generic	one char of a SEARCH argument, folded to one so positions stay aligned
+ambre-trame | src/formula/types.rs | crate::formula::types | CellId::binds_in() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/formula/types.rs | crate::formula::types | CellId::reads_a_virtual_axis() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Text.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
