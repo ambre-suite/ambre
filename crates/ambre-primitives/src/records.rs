@@ -170,6 +170,9 @@ pub struct Records {
     pub unwraps: BTreeSet<(String, String)>,
     /// Each refusal the code alone settles: the check, then the message.
     pub refusals: BTreeSet<(String, String)>,
+    /// Each type, alias or trait the protocol, the worker or the relay
+    /// declares: the package, the name, `public` or `private`, and where.
+    pub decls: BTreeSet<(String, String, String, String)>,
     /// Each file a compile read.
     pub files: BTreeSet<PathBuf>,
     /// Each record the judge could not read.
@@ -267,6 +270,14 @@ impl Records {
                 ["refuse", check, message] => {
                     self.refusals
                         .insert(((*check).to_owned(), (*message).to_owned()));
+                }
+                ["decl", krate, name, public, at] => {
+                    self.decls.insert((
+                        (*krate).to_owned(),
+                        (*name).to_owned(),
+                        (*public).to_owned(),
+                        (*at).to_owned(),
+                    ));
                 }
                 ["file", path] => {
                     self.files.insert(PathBuf::from(path));

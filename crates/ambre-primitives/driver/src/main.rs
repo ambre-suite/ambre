@@ -20,7 +20,8 @@
 //! | `alias` | `ARCH-066` | an alias whose target is an instance of a generic struct of `ambre-core` |
 //! | `generic` | `ARCH-066` | a generic struct of `ambre-core` |
 //! | `unwrap` | `ARCH-073` | a newtype unwrapped and handed to a workspace callee |
-//! | `refuse` | `ARCH-037`, `ARCH-045` to `ARCH-049`, the private field | a refusal the code alone settles |
+//! | `refuse` | `ARCH-037`, `ARCH-045` to `ARCH-049`, the private field, the crate boundaries | a refusal the code alone settles |
+//! | `decl` | `ARCH-006` | a type, an alias or a trait of the protocol, the worker or the relay |
 //! | `file` | `ARCH-033` | a file the compile read |
 
 #![feature(rustc_private)]
@@ -35,6 +36,7 @@ extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
 
+mod bounds;
 mod checks;
 mod literals;
 mod place;
@@ -81,6 +83,8 @@ pub struct Gate {
     /// The `fn` a Leptos `#[component]` writes for each component, by the
     /// snake-case name it gives it.
     components: HashMap<String, String>,
+    /// Each boundary refused on a line, so a line is refused once per rule.
+    bounded: BTreeSet<(&'static str, String)>,
 }
 
 rustc_session::impl_lint_pass!(Gate => [AMBRE_PRIMITIVE_GATE]);
@@ -93,6 +97,7 @@ impl Gate {
             records: BTreeSet::new(),
             serialised: Default::default(),
             components: HashMap::new(),
+            bounded: BTreeSet::new(),
         }
     }
 
@@ -228,6 +233,9 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         if let hir::ItemKind::Fn { ident, .. } = item.kind {
             self.name_check(tcx, ident.as_str(), None, ident.span);
         }
+        if !self.test {
+            self.declaration(tcx, item, def);
+        }
         if !self.test
             && let hir::ItemKind::Fn { ident, .. } = item.kind
             && let Some(component) = self.components.get(ident.as_str()).cloned()
@@ -301,13 +309,21 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
     }
 
     fn check_path(&mut self, cx: &LateContext<'tcx>, path: &hir::Path<'tcx>, _: hir::HirId) {
-        if self.test {
-            return;
-        }
         let def = match path.res {
             Res::Def(_, def) => Some(def),
             _ => None,
         };
+        for segment in path.segments {
+            if let Res::Def(_, reached) = segment.res {
+                self.bound_check(cx.tcx, reached, segment.ident.span);
+            }
+        }
+        if let Some(reached) = def {
+            self.bound_check(cx.tcx, reached, path.span);
+        }
+        if self.test {
+            return;
+        }
         for segment in path.segments {
             let resolved = match segment.res {
                 Res::Def(_, def) => Some(def),
@@ -322,6 +338,9 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         match expr.kind {
             hir::ExprKind::MethodCall(seg, _, args, _) => {
                 let callee = cx.typeck_results().type_dependent_def_id(expr.hir_id);
+                if let Some(callee) = callee {
+                    self.bound_check(tcx, callee, seg.ident.span);
+                }
                 if !self.test {
                     self.name_check(tcx, seg.ident.as_str(), callee, seg.ident.span);
                 }
@@ -337,9 +356,19 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                     self.literals(cx, func, callee, args, false);
                 }
             }
-            hir::ExprKind::Path(hir::QPath::TypeRelative(_, seg)) if !self.test => {
+            hir::ExprKind::Path(hir::QPath::TypeRelative(_, seg)) => {
                 let callee = cx.typeck_results().type_dependent_def_id(expr.hir_id);
-                self.name_check(tcx, seg.ident.as_str(), callee, seg.ident.span);
+                if let Some(callee) = callee {
+                    self.bound_check(tcx, callee, seg.ident.span);
+                }
+                if !self.test {
+                    self.name_check(tcx, seg.ident.as_str(), callee, seg.ident.span);
+                }
+            }
+            hir::ExprKind::Lit(lit) => {
+                if let rustc_ast::LitKind::Str(text, _) = lit.node {
+                    self.density_literal(tcx, text.as_str(), lit.span);
+                }
             }
             _ => {}
         }

@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Three boundaries a manifest line or a stray call could erase silently.
+"""The boundaries that neither rustc nor cargo reads, held by a scan of the text.
 
 Each is true of the tree today, and each was held by nothing: the rule read
 as a fact about the current source rather than as a check the next commit has
-to pass. Read the three as one question -- what is reachable from where.
+to pass. Read them as one question -- what is reachable from where.
 
-**Fixture machinery out of the client** (`FIXTURE-007`). The machinery sits
-behind a non-default `fixtures` feature, and Cargo never enables a dependency
-feature implicitly. Two lines would undo that: `ambre-app` naming the feature
-on a dependency, or any crate folding it into its own `default`. Both are
-refused here.
+The crate boundaries that a manifest or a resolved name settles moved to
+`just primitives`. The judge reads the manifests from `cargo metadata`, and
+its rustc driver reads each path once it resolves, so an alias, a re-export
+and the code a macro writes name what they reach (`ambre-spec-testing.md`
+section 2). What stays here is a stylesheet, a page, a string a check reads
+as text, and the code rules that still wait for the driver.
 
 **A generator drives commands** (`FIXTURE-004`). A generator that wrote to the
 `LoroDoc` directly would produce a document no user action can reach, so the
@@ -24,49 +25,11 @@ of the host builds from the seed alone, so what it rebuilds came from no user.
 No line of a generator module may read a file, embed one, or read the host's
 environment.
 
-**A shared control emits one field** (`SCHEMA-002`). `ambre-chrome` depends on
-no application crate, so a shared control has no whole-style type to emit and
-can only report the scalar it edits. That holds as long as the manifest says
-so.
-
-**The launcher holds no application logic** (`ARCH-018`). What a command does
-belongs to its application's crate. The launcher hands each event to the
-application, sends the commands the application builds, and routes a command
-id to the application's handler. So no line of `ambre-app` names a variant of
-an application's command or event, or one of its command ids.
-
-**One component reads the density** (`CANVAS-031`, `CANVAS-043`). Views lay
-out in logical pixels, and the factor to device pixels never leaves
-`ambre-canvas`. A second read of it anywhere is a second scale a view could
-apply on top of the renderer's. So no Rust line outside `density.rs` names it.
-
-**The network leaves from the Sync worker** (`ARCH-005`). The workspace hands
-every crate the browser's request and socket types, so the manifests prove
-nothing on their own. Two lines are read instead: a manifest naming a
-transport crate outside the worker, the relay and the SFU, and a Rust line
-naming a network call outside them. The two reads `UI-THREAD-004` names, the font fetch
-and the sign-in configuration, are the stated exception, file by file.
-
-**The worker writes nothing to the browser's storage** (`SYNC-054`,
-`SYNC-060`). A decrypted blob and a session token both live in its memory, so
-no Rust line of `ambre-sync` names browser storage, the browser database, the
-cache or a cookie.
-
 **No request carries a passphrase** (`ZK-012`). The worker holds the
 passphrase in `Confidential<Passphrase>`, which serializes so that it can cross the client
 bus. So no serialized struct of `ambre-sync` declares a secret-typed field or
 a field named for a passphrase or a password, and no JSON key or serde rename
 spells one.
-
-**Every crate takes the workspace lints** (`ARCH-032`). A lint denied in the
-root table binds only the crates that inherit it, and a new crate starts with
-the default set. So the root carries `[workspace.lints]`, and every member of
-the workspace inherits it.
-
-**The PDF back end runs in the Logic thread** (`CANVAS-028`). The crate graph
-keeps krilla out of the startup bundle, but says nothing about which thread
-calls it. So outside `ambre-pdf`, no Rust line names krilla, `ambre_pdf` or
-`KrillaSurface` unless it sits under a crate's `src/logic/`.
 
 **The renderer holds no colour** (`CANVAS-060`). Every colour it paints or
 clears to comes from the view's palette. So no line of `render/` above its
@@ -90,19 +53,11 @@ operation. No code line of a benchmark that loads a fixture names a frame rate.
 
 **Two instances, one client per tab** (`ARCH-001`, `ARCH-011`, `SYNC-056`). The
 page loads two artefacts: the launcher, and the Sync worker as a worker of its
-own. No crate but the worker depends on it, so the two never merge. The
-launcher spawns one worker, and every frame it creates is sandboxed. No line
-names a shared worker or a service worker, which would serve two tabs.
+own, and names no worker two tabs would share. Every frame the code creates is
+sandboxed. The manifests and the spawn are `just primitives`.
 
-**Each thread declares what it may reach** (`ARCH-003`, `SYNC-096`). The Logic
-runtime declares no render runtime and no interface toolkit. The Sync worker
-reaches neither, nor the graphics stack, through any crate of ours.
-
-**The wire types and the worker's messages** (`ARCH-006`, `BUS-004`,
-`BUS-021`). The worker and the relay redeclare no type of `ambre-protocol`.
-The worker allocates no request id, since its counter is not the Main
-instance's. And it names no application message, so a payload crosses it as
-bytes.
+**The worker mints no request id** (`BUS-004`). Its counter is not the Main
+instance's, so no line of `ambre-sync` above its tests allocates one by name.
 
 **One engine, one relay per frame** (`ARCH-007`, `ARCH-010`). The launcher
 starts the Logic runtime from one line. The frame loop hands the route-free
@@ -171,14 +126,10 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The crate that is built into the wasm artifact.
-CLIENT = "crates/ambre-app/Cargo.toml"
-FIXTURE_FEATURE = "fixtures"
 
 # Fixture modules: the reading half sits in `impl` blocks, the generating half
 # in free functions.
@@ -202,57 +153,29 @@ FILE_READS = re.compile(
     r"|\bread_to_string\b|\bstd::env\b|\benv::var"
 )
 
-# The shared chrome toolkit, and the crates a whole-style type could come from.
+# The manifest of the shared chrome toolkit.
 CHROME = "crates/ambre-chrome/Cargo.toml"
-APP_CRATES = ("ambre-bus", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-logic")
 
-# The launcher's source, and what naming an application's logic looks like
-# there: a variant of its command or event, or one of its command ids. The
-# id table itself (`COMMANDS`) is what the shell registers, so it stays legal.
+# The launcher's source.
 LAUNCHER = "crates/ambre-app/src"
-APP_VARIANT = re.compile(r"\b(?:Trame|Toile|Prose|Murmure)(?:Command|Event)::[A-Z]\w*")
-APP_COMMAND_ID = re.compile(
-    r"\b(?:trame_chrome|toile_chrome|prose_chrome|murmure_chrome"
-    r"|ambre_(?:trame|toile|prose|murmure)::(?:\w+::)*(?:commands|chrome))"
-    r"::(?!COMMANDS\b)[A-Z][A-Z0-9_]*\b"
-)
 
-# The one file allowed to read the display density, and what reading it looks
-# like from Rust: the `web_sys` call or the JavaScript property it wraps.
+# The crates, and the one file that reads the display density.
 CRATES = "crates"
 DENSITY = "crates/ambre-canvas/src/density.rs"
-DENSITY_READ = re.compile(r"\bdevice_pixel_ratio\b|\bdevicePixelRatio\b")
 
-# The crates a network call may leave from: the Sync worker, the relay and the
-# SFU, which are servers and not one of the two client instances. The browser
-# belt is neither instance either: it is a test harness that serves the build
-# and speaks WebDriver, and it ships nothing.
-NETWORK_CRATES = (
+# The crates that are neither client instance: the Sync worker, the relay and
+# the SFU, which are servers, the browser belt, a test harness that ships
+# nothing, and the primitive gate, which no build reaches.
+NON_CLIENT_CRATES = (
     "crates/ambre-sync/",
     "crates/ambre-server/",
     "crates/ambre-sfu/",
     "crates/ambre-belt/",
-)
-# The two reads `UI-THREAD-004` names as its exception: the same-origin font
-# fetch and the pre-session sign-in configuration.
-NETWORK_EXCEPTIONS = ("crates/ambre-canvas/src/host.rs", "crates/ambre-app/src/platform.rs")
-TRANSPORT_CRATES = re.compile(
-    r"^\s*(gloo-net|reqwest|tungstenite|tokio-tungstenite|ewebsock|ws_stream_wasm)\s*=",
-    re.MULTILINE,
-)
-NETWORK_CALL = re.compile(
-    r"\bfetch_with_(?:request|str)\w*|\bWebSocket::new\w*|\bXmlHttpRequest\b|\bEventSource\b"
-    r"|\bsend_beacon\b|\bRtcPeerConnection\b|\bgloo_net\b|\breqwest\b"
+    "crates/ambre-primitives/",
 )
 
-# The Sync worker's source, and what reaching the browser's storage looks like
-# from it: web storage, the browser database, the cache, the private file
-# system or a cookie.
+# The Sync worker's source.
 WORKER = "crates/ambre-sync/src"
-STORAGE_CALL = re.compile(
-    r"\blocal_storage\b|\bsession_storage\b|\bStorage\b|\bindexed_db\b|\bIdb\w+"
-    r"|\bcaches\b|\bCacheStorage\b|\bStorageManager\b|\bget_directory\b|[Cc]ookie"
-)
 
 # What a passphrase in a request body looks like: a field of a serialized
 # struct, or a string that a JSON body or a serde rename uses as a key.
@@ -264,25 +187,6 @@ SECRET_FIELD = re.compile(
     re.IGNORECASE,
 )
 SECRET_KEY = re.compile(rf"\"({SECRET_NAME})\"\s*:|rename\s*=\s*\"({SECRET_NAME})\"", re.IGNORECASE)
-
-
-# The root manifest, its member list, its lint table, and the two lines that
-# make a member inherit that table.
-WORKSPACE = "Cargo.toml"
-# The resolved graph of the workspace, read for what the SFU links (`CALL-013`).
-LOCKFILE = "Cargo.lock"
-SFU = "ambre-sfu"
-# The C cryptography libraries a Rust crate can link: the SFU takes none of them.
-C_CRYPTO = frozenset({"aws-lc-sys", "aws-lc-fips-sys", "ring", "openssl-sys", "boring-sys"})
-MEMBERS = re.compile(r"^members\s*=\s*\[([^\]]*)\]", re.MULTILINE)
-LINT_TABLE = re.compile(r"^\[workspace\.lints(?:\.\w+)?\]", re.MULTILINE)
-INHERITS_LINTS = re.compile(r"^\[lints\]\s*\n\s*workspace\s*=\s*true\b", re.MULTILINE)
-
-# The PDF back end's own crate, the one directory per crate allowed to call
-# it, and what calling it looks like from Rust.
-PDF_CRATE = "crates/ambre-pdf/"
-LOGIC_DIR = "/src/logic/"
-PDF_CALL = re.compile(r"\bkrilla\b|\bambre_pdf\b|\bKrillaSurface\b")
 
 # The renderer's source, and what a colour of its own looks like there: a
 # named constant or one built from components.
@@ -439,29 +343,12 @@ INTERPOLATION = re.compile(r"\{(\w+)")
 PAGE = "crates/ambre-app/index.html"
 RUST_LINK = re.compile(r'<link\s+data-trunk\s+rel="rust"[^>]*>', re.DOTALL)
 WORKER_LINK = re.compile(r'href="\.\./ambre-sync/Cargo\.toml"[^>]*data-type="worker"')
-SYNC_MANIFEST = "crates/ambre-sync/Cargo.toml"
-SYNC_DEP = re.compile(r"^ambre-sync\s*=", re.MULTILINE)
-WORKER_SPAWN = re.compile(r"\bWorker::new\w*\s*\(")
 WORKER_SPAWNER = "crates/ambre-app/src/platform.rs"
 SHARED_WORKER = re.compile(r"\bSharedWorker\b|\bServiceWorker\w*|\bserviceWorker\b|\bservice_worker\b")
 FRAME_CREATE = re.compile(r'create_element\(\s*"iframe"\s*\)')
 
-# What the Logic runtime and the Sync worker may not reach.
-LOGIC_MANIFEST = "crates/ambre-logic/Cargo.toml"
-RENDER_OR_TOOLKIT = ("ambre-canvas", "ambre-chrome", "ambre-app", "wgpu", "vello", "leptos")
-SYNC_UNREACHABLE = RENDER_OR_TOOLKIT + (
-    "ambre-draw", "ambre-crdt", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure",
-    "ambre-logic",
-)
-# What the renderer may not reach: the protocol between the threads. A test
-# build counts, so the dev tables are read too (`ARCH-071`).
-CANVAS_MANIFEST = "crates/ambre-canvas/Cargo.toml"
-CANVAS_UNREACHABLE = ("ambre-bus",)
-PATH_DEP = re.compile(r'^([\w-]+)\s*=\s*\{[^}]*\bpath\s*=\s*"\.\./([\w-]+)"', re.MULTILINE)
 
 # The wire types, and what the worker may not name.
-PROTOCOL = "crates/ambre-protocol/src"
-TYPE_DECL = re.compile(r"^\s*pub(?:\([^)]*\))?\s+(?:struct|enum)\s+([A-Z]\w*)", re.MULTILINE)
 # Each way the worker could mint a request id by name: the allocator, a
 # number built with no family named, an issuer or a sequence number of the
 # `Request` family, and the successor of the zero one. Inference can still
@@ -491,9 +378,6 @@ BROWSER_BOUND = re.compile(
 # and passes the instant, so a decision that depends on time runs on the host
 # under a clock the test sets (`ARCH-072`).
 CLOCK_READ = re.compile(r"\bSystemTime\b|\bstd::time::Instant\b|\bInstant::now\b|\bnow\(\)")
-APP_MESSAGE = re.compile(
-    r"\bambre_bus::app\b|\b(?:Trame|Toile|Prose|Murmure|App)(?:Command|Event)\b|\bLogicCommand\b|\bUiEvent\b"
-)
 
 # The shared kinetic model, and the words a second copy of it would need.
 BENCH_FIXTURE = re.compile(r"fixture", re.IGNORECASE)
@@ -648,8 +532,6 @@ APP_MESSAGES = (
 # The command and event enums ambre-bus may declare: the four envelopes and the
 # service family they carry. An application's own lives in its crate
 # (`BUS-032`), so the Sync worker builds against none (`ARCH-070`).
-BUS_ENVELOPES = {"LogicCommand", "UiEvent", "SyncCommand", "LogicEvent", "RestCommand", "RestEvent"}
-BUS_MESSAGE_ENUM = re.compile(r"\bpub\s+enum\s+(\w*(?:Command|Event))\b")
 # A document handle of the CRDT engine, by path or by name. A message carries
 # bytes, so the payload newtype `LoroPayload` is no handle (`PROSE-001`).
 MESSAGE_CRDT = re.compile(r"\bloro\s*::|\bLoro(?!Payload\b)\w+")
@@ -776,37 +658,6 @@ def read(rel: str) -> str:
     return path.read_text() if path.exists() else ""
 
 
-def dependency_features(manifest: str) -> list[tuple[str, str]]:
-    """Every `features = [...]` list of the manifest, with the line it sits on."""
-    return [(m.group(0), m.group(1)) for m in re.finditer(r"features\s*=\s*\[([^\]]*)\]", manifest)]
-
-
-def default_features(manifest: str) -> str:
-    """The body of the manifest's own `default = [...]`, or an empty string."""
-    m = re.search(r"^\s*default\s*=\s*\[([^\]]*)\]", manifest, re.MULTILINE)
-    return m.group(1) if m else ""
-
-
-def check_client(errors: list[str]) -> int:
-    """`FIXTURE-007`: no manifest line reaches the fixture feature from the client."""
-    held = 0
-    client = read(CLIENT)
-    if not client:
-        errors.append(f"{CLIENT}: gone from the tree, so the client boundary reads nothing")
-        return held
-    for line, body in dependency_features(client):
-        if FIXTURE_FEATURE in body:
-            errors.append(f"{CLIENT}: the client enables `{FIXTURE_FEATURE}`: {line.strip()}")
-    held += 1
-
-    for path in sorted(ROOT.glob("crates/*/Cargo.toml")):
-        rel = path.relative_to(ROOT).as_posix()
-        if FIXTURE_FEATURE in default_features(path.read_text()):
-            errors.append(f"{rel}: `{FIXTURE_FEATURE}` is in this crate's `default` feature set")
-        held += 1
-    return held
-
-
 def free_functions(source: str) -> list[tuple[int, str]]:
     """Each free function of the file, as `(line number, body)`.
 
@@ -885,94 +736,9 @@ def check_generator_reads(errors: list[str]) -> int:
     return len(modules)
 
 
-def check_chrome(errors: list[str]) -> int:
-    """`SCHEMA-002`: the shared toolkit cannot name an application's style type."""
-    manifest = read(CHROME)
-    if not manifest:
-        errors.append(f"{CHROME}: gone from the tree, so the chrome boundary reads nothing")
-        return 0
-    for crate in APP_CRATES:
-        if re.search(rf"^\s*{re.escape(crate)}\s*=", manifest, re.MULTILINE):
-            errors.append(f"{CHROME}: the shared toolkit depends on `{crate}`")
-    return 1
-
-
 def code(line: str) -> str:
     """The line without its comment, so a rule a comment cites is not a breach."""
     return line.split("//", 1)[0]
-
-
-def check_launcher(errors: list[str]) -> int:
-    """`ARCH-018`: no line of the launcher names an application's logic."""
-    root = ROOT / LAUNCHER
-    files = sorted(root.rglob("*.rs"))
-    if not files:
-        errors.append(f"{LAUNCHER}: gone from the tree, so the launcher boundary reads nothing")
-        return 0
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            found = APP_VARIANT.search(code(line)) or APP_COMMAND_ID.search(code(line))
-            if found:
-                errors.append(f"{rel}:{number}: the launcher names application logic: `{found.group(0)}`")
-    return len(files)
-
-
-def check_density(errors: list[str]) -> int:
-    """`CANVAS-031`: the density is read in `density.rs` and nowhere else."""
-    if not DENSITY_READ.search(read(DENSITY)):
-        errors.append(f"{DENSITY}: reads no density, so the density boundary holds nothing")
-        return 0
-    files = sorted((ROOT / CRATES).rglob("*.rs"))
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        if rel == DENSITY or "/target/" in rel:
-            continue
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            found = DENSITY_READ.search(code(line))
-            if found:
-                errors.append(f"{rel}:{number}: reads the display density: `{found.group(0)}`")
-    return len(files)
-
-
-def check_network(errors: list[str]) -> int:
-    """`ARCH-005`: no transport crate and no network call outside the worker."""
-    held = 0
-    for path in sorted(ROOT.glob("crates/*/Cargo.toml")):
-        rel = path.relative_to(ROOT).as_posix()
-        if rel.startswith(NETWORK_CRATES):
-            continue
-        for found in TRANSPORT_CRATES.finditer(path.read_text()):
-            errors.append(f"{rel}: declares the transport crate `{found.group(1)}`")
-        held += 1
-    files = sorted((ROOT / CRATES).rglob("*.rs"))
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        if rel.startswith(NETWORK_CRATES) or rel in NETWORK_EXCEPTIONS or "/target/" in rel:
-            continue
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            found = NETWORK_CALL.search(code(line))
-            if found:
-                errors.append(f"{rel}:{number}: a network call outside the Sync worker: `{found.group(0)}`")
-        held += 1
-    if not held:
-        errors.append(f"{CRATES}: no crate read, so the network boundary holds nothing")
-    return held
-
-
-def check_storage(errors: list[str]) -> int:
-    """`SYNC-054`, `SYNC-060`: the worker names no browser storage."""
-    files = sorted((ROOT / WORKER).rglob("*.rs"))
-    if not files:
-        errors.append(f"{WORKER}: gone from the tree, so the storage boundary reads nothing")
-        return 0
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            found = STORAGE_CALL.search(code(line))
-            if found:
-                errors.append(f"{rel}:{number}: the Sync worker reaches browser storage: `{found.group(0)}`")
-    return len(files)
 
 
 def check_passphrase(errors: list[str]) -> int:
@@ -1007,46 +773,9 @@ def check_passphrase(errors: list[str]) -> int:
     return len(files)
 
 
-def check_lints(errors: list[str]) -> int:
-    """`ARCH-032`: the root carries a lint table, and every member inherits it."""
-    root = read(WORKSPACE)
-    if not LINT_TABLE.search(root):
-        errors.append(f"{WORKSPACE}: no `[workspace.lints]` table, so a crate has nothing to inherit")
-        return 0
-    members = MEMBERS.search(root)
-    if not members:
-        errors.append(f"{WORKSPACE}: no `members` list, so no crate is read for the lint table")
-        return 0
-    held = 0
-    for member in re.findall(r'"([^"]+)"', members.group(1)):
-        rel = f"{member}/Cargo.toml"
-        if not INHERITS_LINTS.search(read(rel)):
-            errors.append(f"{rel}: does not inherit the workspace lints (`[lints]` `workspace = true`)")
-        held += 1
-    return held
-
-
 def rust_files() -> list[Path]:
     """Every Rust file of the crates, build output left out."""
     return [p for p in sorted((ROOT / CRATES).rglob("*.rs")) if "/target/" not in p.as_posix()]
-
-
-def check_pdf(errors: list[str]) -> int:
-    """`CANVAS-028`: the PDF back end is named from a Logic directory alone."""
-    files = rust_files()
-    held = 0
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        if rel.startswith(PDF_CRATE) or LOGIC_DIR in rel:
-            continue
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            found = PDF_CALL.search(code(line))
-            if found:
-                errors.append(f"{rel}:{number}: the PDF back end outside the Logic thread: `{found.group(0)}`")
-        held += 1
-    if not held:
-        errors.append(f"{CRATES}: no Rust file read, so the PDF boundary holds nothing")
-    return held
 
 
 def check_renderer_colors(errors: list[str]) -> int:
@@ -1197,7 +926,7 @@ def check_client_storage(errors: list[str]) -> int:
     files = [
         path
         for path in rust_files()
-        if not path.relative_to(ROOT).as_posix().startswith(NETWORK_CRATES)
+        if not path.relative_to(ROOT).as_posix().startswith(NON_CLIENT_CRATES)
         and path.relative_to(ROOT).as_posix() not in STORAGE_OWNERS
     ]
     for path in files:
@@ -1421,39 +1150,14 @@ def check_payload_logs(errors: list[str]) -> int:
     return len(files)
 
 
-def manifest_dependencies(manifest: str) -> set[str]:
-    """The names the manifest's dependency tables declare, dev and build tables left out."""
-    names: set[str] = set()
-    table = ""
-    for line in manifest.splitlines():
-        header = re.match(r"^\s*\[([^\]]+)\]", line)
-        if header:
-            table = header.group(1)
-            continue
-        if table.endswith("dependencies") and "dev-" not in table and "build-" not in table:
-            entry = re.match(r"^\s*([\w-]+)\s*=", line)
-            if entry:
-                names.add(entry.group(1))
-    return names
-
-
-def path_closure(crate: str) -> set[str]:
-    """Every crate of ours the crate reaches through its normal path dependencies."""
-    seen: set[str] = set()
-    todo = [crate]
-    while todo:
-        name = todo.pop()
-        if name in seen:
-            continue
-        seen.add(name)
-        manifest = read(f"{CRATES}/{name}/Cargo.toml")
-        declared = manifest_dependencies(manifest)
-        todo.extend(target for dep, target in PATH_DEP.findall(manifest) if dep in declared)
-    return seen
-
-
 def check_instances(errors: list[str]) -> int:
-    """`ARCH-001`, `ARCH-011`, `SYNC-056`: two artefacts, one worker, nothing shared."""
+    """`ARCH-001`, `ARCH-011`, `SYNC-056`: the page loads two artefacts, names no
+    shared worker, and every frame the code creates is sandboxed.
+
+    The manifests and the spawn of a worker are read by `just primitives`, from
+    `cargo metadata` and through the rustc driver. An HTML page and the
+    attribute a frame takes are text neither reads.
+    """
     page = read(PAGE)
     if not page:
         errors.append(f"{PAGE}: gone from the tree, so the artefacts the page loads are unread")
@@ -1465,102 +1169,32 @@ def check_instances(errors: list[str]) -> int:
         errors.append(f"{PAGE}: the page loads {len(links)} wasm artefacts, not the launcher and the Sync worker")
     if SHARED_WORKER.search(page):
         errors.append(f"{PAGE}: the page names a worker that two tabs would share")
-    if "cdylib" not in read(SYNC_MANIFEST):
-        errors.append(f"{SYNC_MANIFEST}: the Sync worker no longer builds an artefact of its own")
-    manifests = sorted((ROOT / CRATES).glob("*/Cargo.toml"))
-    for path in manifests:
-        rel = path.relative_to(ROOT).as_posix()
-        if rel != SYNC_MANIFEST and SYNC_DEP.search(path.read_text()):
-            errors.append(f"{rel}: depends on the Sync worker, which merges it into a second instance")
     files = rust_files()
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
         if rel.startswith("crates/ambre-server/"):
             continue
         lines = above_tests(path)
-        for number, line in lines:
-            found = WORKER_SPAWN.search(line)
-            if found and rel != WORKER_SPAWNER:
-                errors.append(f"{rel}:{number}: a worker spawned outside the launcher: `{found.group(0)}`")
-            found = SHARED_WORKER.search(line)
-            if found:
-                errors.append(f"{rel}:{number}: a worker that two tabs would share: `{found.group(0)}`")
         text = path.read_text()
         test_only = "wasm_bindgen_test" in text
         if not test_only and any(FRAME_CREATE.search(line) for _, line in lines):
             if not any('"sandbox"' in line for _, line in lines):
                 errors.append(f"{rel}: creates a frame and never sandboxes it")
-    return len(manifests) + len(files) + 1
+    return len(files) + 1
 
 
-def check_thread_reach(errors: list[str]) -> int:
-    """`ARCH-003`, `SYNC-096`: the Logic runtime and the worker reach no rendering."""
-    logic = read(LOGIC_MANIFEST)
-    if not logic or not read(SYNC_MANIFEST):
-        errors.append(f"{LOGIC_MANIFEST} or {SYNC_MANIFEST}: gone from the tree, so the thread reach is unread")
+def check_request_ids(errors: list[str]) -> int:
+    """`BUS-004`: the worker allocates no request id by name above its tests."""
+    files = sources((WORKER,))
+    if not files:
+        errors.append(f"{WORKER}: gone from the tree, so no request id is read")
         return 0
-    for name in sorted(manifest_dependencies(logic) & set(RENDER_OR_TOOLKIT)):
-        errors.append(f"{LOGIC_MANIFEST}: the Logic runtime declares `{name}`")
-    closure = path_closure("ambre-sync")
-    for crate in sorted(closure):
-        manifest = f"{CRATES}/{crate}/Cargo.toml"
-        reached = (manifest_dependencies(read(manifest)) | {crate}) & set(SYNC_UNREACHABLE)
-        for name in sorted(reached):
-            errors.append(f"{manifest}: the Sync worker reaches `{name}` through `{crate}`")
-    return len(closure) + 1
-
-
-def all_dependencies(manifest: str) -> set[str]:
-    """The names every dependency table of the manifest declares, dev and target tables included."""
-    names: set[str] = set()
-    table = ""
-    for line in manifest.splitlines():
-        header = re.match(r"^\s*\[([^\]]+)\]", line)
-        if header:
-            table = header.group(1)
-            continue
-        if table.endswith("dependencies"):
-            entry = re.match(r"^\s*([\w-]+)\s*=", line)
-            if entry:
-                names.add(entry.group(1))
-    return names
-
-
-def check_renderer_reach(errors: list[str]) -> int:
-    """`ARCH-071`: the renderer reaches no protocol between the threads."""
-    canvas = read(CANVAS_MANIFEST)
-    if not canvas:
-        errors.append(f"{CANVAS_MANIFEST}: gone from the tree, so the renderer reach is unread")
-        return 0
-    for name in sorted(all_dependencies(canvas) & set(CANVAS_UNREACHABLE)):
-        errors.append(f"{CANVAS_MANIFEST}: the renderer declares `{name}`")
-    closure = path_closure("ambre-canvas") - {"ambre-canvas"}
-    for crate in sorted(closure):
-        manifest = f"{CRATES}/{crate}/Cargo.toml"
-        # The crate that declares the edge is named, never the crate it reaches.
-        for name in sorted(manifest_dependencies(read(manifest)) & set(CANVAS_UNREACHABLE)):
-            errors.append(f"{manifest}: the renderer reaches `{name}` through `{crate}`")
-    return len(closure) + 1
-
-
-def check_worker_messages(errors: list[str]) -> int:
-    """`ARCH-006`, `BUS-004`, `BUS-021`: one wire type, no worker id, no app message."""
-    wire = {name for path in sources((PROTOCOL,)) for name in TYPE_DECL.findall(path.read_text())}
-    if not wire:
-        errors.append(f"{PROTOCOL}: declares no type, so the wire boundary holds nothing")
-        return 0
-    files = sources((WORKER, "crates/ambre-server/src"))
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
         for number, line in above_tests(path):
-            found = TYPE_DECL.match(line)
-            if found and found.group(1) in wire:
-                errors.append(f"{rel}:{number}: redeclares the wire type `{found.group(1)}`")
-            if not rel.startswith(WORKER):
-                continue
-            found = REQUEST_ALLOC.search(line) or APP_MESSAGE.search(line)
+            found = REQUEST_ALLOC.search(line)
             if found:
-                errors.append(f"{rel}:{number}: the worker allocates an id or names an app message: `{found.group(0)}`")
+                errors.append(f"{rel}:{number}: the worker allocates a request id: `{found.group(0)}`")
     return len(files)
 
 
@@ -2036,24 +1670,6 @@ def typed_fields(line: str) -> list[tuple[str, str]]:
     return pairs
 
 
-def check_bus_vocabulary(errors: list[str]) -> int:
-    """`BUS-032`, `ARCH-070`: ambre-bus declares no application's commands or
-    events.
-
-    Above its tests, every command or event enum of the bus is an envelope or
-    the service family. An application's enum declared there would reach the
-    Sync worker, which depends on the bus.
-    """
-    files = sorted((ROOT / BUS).rglob("*.rs"))
-    for path in files:
-        rel = path.relative_to(ROOT).as_posix()
-        for number, line in above_tests(path):
-            found = BUS_MESSAGE_ENUM.search(line)
-            if found and found.group(1) not in BUS_ENVELOPES:
-                errors.append(f"{rel}:{number}: the bus declares an application's message `{found.group(1)}`")
-    return len(files)
-
-
 def check_message_crdt(errors: list[str]) -> int:
     """`PROSE-001`: an application's message vocabulary names no CRDT handle.
 
@@ -2277,50 +1893,14 @@ def check_walks(errors: list[str]) -> int:
     return held
 
 
-def check_sfu_crypto(errors: list[str]) -> int:
-    """`CALL-013`: the SFU links no C cryptography library.
-
-    The lockfile holds the graph cargo resolved for the whole workspace, so the
-    walk from the SFU is a superset of what its own build links: a refusal can
-    be stricter than the build, never looser."""
-    path = ROOT / LOCKFILE
-    if not path.exists():
-        errors.append(f"{LOCKFILE}: gone from the tree, so what the SFU links is unread")
-        return 0
-    packages = tomllib.loads(path.read_text()).get("package", [])
-    edges = {pkg["name"]: [dep.split(" ")[0] for dep in pkg.get("dependencies", [])] for pkg in packages}
-    if SFU not in edges:
-        errors.append(f"{LOCKFILE}: no `{SFU}` package, so what the SFU links is unread")
-        return len(packages)
-    seen: set[str] = set()
-    todo = [SFU]
-    while todo:
-        name = todo.pop()
-        if name in seen:
-            continue
-        seen.add(name)
-        todo.extend(edges.get(name, []))
-    for name in sorted(seen & C_CRYPTO):
-        errors.append(f"{LOCKFILE}: `{SFU}` reaches `{name}`, a C cryptography library")
-    return len(packages)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     args = parser.parse_args()
 
     errors: list[str] = []
-    manifests = check_client(errors)
     generators = check_generators(errors)
     generator_reads = check_generator_reads(errors)
-    toolkits = check_chrome(errors)
-    launcher = check_launcher(errors)
-    density = check_density(errors)
-    network = check_network(errors)
-    storage = check_storage(errors)
     secrets = check_passphrase(errors)
-    lints = check_lints(errors)
-    pdf = check_pdf(errors)
     fonts = check_fonts(errors)
     colors = check_renderer_colors(errors)
     ui_thread = check_ui_thread(errors)
@@ -2341,14 +1921,11 @@ def main() -> int:
     signal_types = check_signal_types(errors)
     bus_ids = check_bus_ids(errors)
     message_crdt = check_message_crdt(errors)
-    bus_vocabulary = check_bus_vocabulary(errors)
     wire_ids = check_wire_ids(errors)
     answers = check_typed_answers(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
-    reach = check_thread_reach(errors)
-    renderer_reach = check_renderer_reach(errors)
-    worker_messages = check_worker_messages(errors)
+    request_ids = check_request_ids(errors)
     engine = check_engine_and_relay(errors)
     decisions = check_switchboard_decisions(errors)
     handlers = check_handlers(errors)
@@ -2356,19 +1933,10 @@ def main() -> int:
     latches = check_failure_latches(errors)
     exits = check_exit_writes(errors)
     walks = check_walks(errors)
-    sfu = check_sfu_crypto(errors)
     print(
-        f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
         f"{generator_reads} generator modules read for a file read, "
-        f"{toolkits} shared toolkit read for an application dependency, "
-        f"{launcher} launcher files read for application logic, "
-        f"{density} Rust files read for a density read, "
-        f"{network} manifests and Rust files read for a network call, "
-        f"{storage} worker files read for browser storage, "
         f"{secrets} worker files read for a passphrase in a request, "
-        f"{lints} member manifests read for the workspace lints, "
-        f"{pdf} Rust files read for the PDF back end, "
         f"{fonts} Rust files read for an embedded font, "
         f"{colors} renderer files read for a colour of their own, "
         f"{ui_thread} UI-thread files read for the document, a wait, a drawing or a hit-test, "
@@ -2389,66 +1957,53 @@ def main() -> int:
         f"{signal_types} shell signals read for a bare primitive payload, "
         f"{bus_ids} bus and message files read for an identifier field of a primitive type, "
         f"{message_crdt} message files read for a CRDT handle, "
-        f"{bus_vocabulary} bus files read for an application's message, "
         f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes or a closed set held as text, "
         f"{answers} relay files read for an answer built with `json!`, "
         f"{benches} fixture benchmarks read for a frame rate, "
-        f"{instances} files read for a third instance or a shared worker, "
-        f"{reach} manifests read for a thread reaching the rendering, "
-        f"{renderer_reach} manifests read for the renderer reaching the thread protocol, "
-        f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
+        f"{instances} files read for a third artefact, a shared worker or an unsandboxed frame, "
+        f"{request_ids} worker files read for a request id, "
         f"{engine} launcher files read for a second engine or a relay out of the frame, "
         f"{decisions} switchboard decision file read for a browser API or a clock, "
         f"{handlers} engine files read for a handler that sends on a queue, "
         f"{outboxes} launcher files read for a write past its outbox, "
         f"{latches} launcher files read for a failure that waits on a queue, "
         f"{exits} build and thread files read for a write on the way out, "
-        f"{walks} walks read for a screen module or screen state, "
-        f"{sfu} locked packages read for a C cryptography library under the SFU"
+        f"{walks} walks read for a screen module or screen state"
     )
     for line in errors:
         print(f"  {line}")
 
     if errors:
         print(
-            "\nERROR: a crate boundary was crossed. Fixture machinery must stay "
-            "out of the client build, a generator must drive `handle_command` "
-            "rather than the CRDT, the shared chrome must name no "
-            "application type, the launcher must name no application's "
-            "command, event or command id, only density.rs may read the "
-            "display density, the network leaves from the Sync worker alone, "
-            "the worker writes nothing to browser storage, no request "
-            "it sends names a passphrase, every crate inherits the "
-            "workspace lints, the PDF back end is called from the Logic "
-            "thread alone, the renderer holds no colour, no font is "
-            "embedded in a binary, the UI thread holds no document, waits on "
-            "nothing, draws and hit-tests on the surface alone, browser storage is reached "
-            "from the named paths, no shader leaves the shared subset, the "
-            "chrome's widths live in one stylesheet, one file renders the modal, "
-            "a drag control debounces, a document is created unnamed, the worker "
-            "alone hashes a key, an invitation waits on the trust decision, a "
-            "two-state attribute says false, only the shared dialog is a "
-            "modal, a menu answers the keyboard, the pipe stays reachable, the "
-            "relay logs no payload, one file holds the kinetic model, one module "
-            "reaches a Trame line order, a drawing "
-            "primitive takes geometry and paint alone, one file "
-            "composes a document's name, no view "
-            "holds the state a shell signal holds, no event feeds both a view "
-            "field and the relay's signal, no bus field carries an identifier as "
-            "a bare primitive, an identifier on the JSON wire takes its newtype "
-            "and its text adapter and a closed set its enum, a fixture "
-            "benchmark reports no frame rate, the page "
-            "loads two instances and shares no worker, neither the Logic runtime "
-            "nor the worker reaches the rendering, the renderer reaches no thread "
-            "protocol, and the worker redeclares no "
-            "wire type, allocates no request id and names no app message. The launcher "
-            "starts one engine, and every frame relays before it draws. The relay "
-            "decides in a module that names no browser API. A command "
+            "\nERROR: a boundary was crossed. A generator must drive "
+            "`handle_command` rather than the CRDT and read its seed alone, no "
+            "request the worker sends names a passphrase, the renderer holds no "
+            "colour, no font is embedded in a binary, the UI thread holds no "
+            "document, waits on nothing, draws and hit-tests on the surface "
+            "alone, browser storage is reached from the named paths, no shader "
+            "leaves the shared subset, the chrome's widths live in one "
+            "stylesheet, one file renders the modal, a drag control debounces, "
+            "a document is created unnamed, the worker alone hashes a key, an "
+            "invitation waits on the trust decision, a two-state attribute says "
+            "false, only the shared dialog is a modal, a menu answers the "
+            "keyboard, the pipe stays reachable, the relay logs no payload, one "
+            "file holds the kinetic model, one module reaches a Trame line "
+            "order, a drawing primitive takes geometry and paint alone, one file "
+            "composes a document's name, no view holds the state a shell signal "
+            "holds, no event feeds both a view field and the relay's signal, no "
+            "bus field carries an identifier as a bare primitive, an identifier "
+            "on the JSON wire takes its newtype and its text adapter and a "
+            "closed set its enum, a fixture benchmark reports no frame rate, the "
+            "page loads two instances and shares no worker, every frame is "
+            "sandboxed, and the worker allocates no request id. The launcher "
+            "starts one engine, and every frame relays before it draws. The "
+            "relay decides in a module that names no browser API. A command "
             "handler returns an outcome and names no queue. The launcher writes "
             "to the Logic thread through its one outbox. A panic and a failed "
-            "worker each latch the fatal screen without a queue, and a failing thread "
-            "writes nothing on its way out. A walk reaches no screen state. The SFU "
-            "links no C cryptography library.",
+            "worker each latch the fatal screen without a queue, and a failing "
+            "thread writes nothing on its way out. A walk reaches no screen "
+            "state. The crate boundaries rustc and cargo read are `just "
+            "primitives`.",
             file=sys.stderr,
         )
         return 1

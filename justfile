@@ -367,6 +367,11 @@ index-write:
 # `--unwrap-strict` runs the strict unwrap report on the same records, and
 # prints both verdicts whatever the first says. CI runs this recipe alone,
 # since it holds both.
+#
+# The same run holds the crate boundaries (`ambre-spec-architecture.md`
+# section 2). The driver refuses a resolved path that reaches what its part of
+# the workspace must not, and the judge reads the graph `cargo metadata`
+# resolves: two instances, the network from the worker, one wire definition.
 primitives:
     cargo run -q -p ambre-primitives -- check --unwrap-strict
 
@@ -495,10 +500,9 @@ schema-freeze:
 freeze-provenance:
     python3 scripts/freeze_provenance.py
 
-# Three reachability rules a manifest line could erase: fixture machinery out
-# of the client build (`FIXTURE-007`), a generator driving commands rather than
-# the CRDT (`FIXTURE-004`) and reading no file (`FIXTURE-032`), and a shared
-# control with no whole-style type to emit (`SCHEMA-002`).
+# The boundaries neither rustc nor cargo reads, held by a scan of the text: a
+# stylesheet, a page, a string, and the code rules that still wait for the
+# driver of `just primitives`, which holds every other crate boundary.
 crate-boundaries:
     python3 scripts/crate_boundaries.py
 

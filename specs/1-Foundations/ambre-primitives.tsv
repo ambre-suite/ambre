@@ -2012,6 +2012,47 @@ ambre-primitives | src/allowlist.rs | crate::allowlist | Verdict::is_clean() | r
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_field() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_literal() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | claim() | ret | Result<(),String>	free-text	the refusal a reviewer reads beside the key
+ambre-primitives | src/boundaries.rs | crate::boundaries | APP_CRATES | const | &[&str]	generic	the package names a shared control's style type could come from, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | CLIENT | const | &str	generic	the package name of the launcher, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | C_CRYPTO | const | &[&str]	generic	the package names of the C cryptography libraries, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | Declared.features | field | Vec<String>	generic	the feature names a dependency entry turns on, as cargo metadata writes them
+ambre-primitives | src/boundaries.rs | crate::boundaries | Declared.kind | field | Option<String>	generic	the dependency kind as cargo metadata writes it: none, dev or build, compared once
+ambre-primitives | src/boundaries.rs | crate::boundaries | Declared.name | field | String	generic	the package name a dependency entry takes, as cargo metadata writes it
+ambre-primitives | src/boundaries.rs | crate::boundaries | FIXTURES | const | &str	generic	the feature name of the fixture machinery, matched against the features cargo metadata lists
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph.edges | field | BTreeMap<String,Vec<(String,bool)>>	generic	each resolved edge by package id, and whether cargo metadata lists it as a normal dependency
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph.members | field | Vec<String>	generic	the package ids of the workspace members, as cargo metadata writes them
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph.packages | field | BTreeMap<String,Package>	generic	each package by the id cargo metadata gives it
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph.root | field | String	generic	the path of the root manifest, read back as TOML
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::closure() | ret | BTreeSet<String>	generic	the package ids a walk of the graph reaches
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::closure(from) | param | &[&str]	generic	the package ids a walk of the graph starts from
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::direct() | ret | Vec<&str>	generic	the package ids of the direct dependencies cargo resolved
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::direct(id) | param | &str	generic	a package id as cargo metadata writes it
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::member() | ret | Option<&str>	generic	the package id of a workspace member, as cargo metadata writes it
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::member(name) | param | &str	generic	a package name as cargo metadata spells it, matched against the graph; the gate links no ambre-core, so no family holds it
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::name() | ret | &'a str	generic	the package name cargo metadata gives an id, printed in a refusal or matched against a list
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::name(id) | param | &'a str	generic	a package id as cargo metadata writes it
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::parse() | ret | Result<Self,String>	free-text	the error of a metadata the check cannot read, printed to the terminal
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::parse(text) | param | &str	generic	the JSON text cargo metadata prints
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached() | ret | Vec<(&'a str,&'a str)>	generic	the package names of each edge into a refused package, printed in a refusal
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached(closure) | param | &'a BTreeSet<String>	generic	the package ids a walk of the graph reached
+ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached(names) | param | &[&str]	generic	the package names a walk must not reach
+ambre-primitives | src/boundaries.rs | crate::boundaries | NETWORK_CRATES | const | &[&str]	generic	the package names a network call may leave from, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | Package.crate_types | field | Vec<String>	generic	the crate types of each target, as cargo metadata writes them
+ambre-primitives | src/boundaries.rs | crate::boundaries | Package.features | field | BTreeMap<String,Vec<String>>	generic	the feature table of a package, as cargo metadata writes it
+ambre-primitives | src/boundaries.rs | crate::boundaries | Package.manifest | field | String	generic	the path of the manifest, printed in a refusal and read back as TOML
+ambre-primitives | src/boundaries.rs | crate::boundaries | Package.name | field | String	generic	the package name, as cargo metadata writes it
+ambre-primitives | src/boundaries.rs | crate::boundaries | RENDER_OR_TOOLKIT | const | &[&str]	generic	the package names of the render runtime and the toolkit, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | SYNC_UNREACHABLE | const | &[&str]	generic	the package names the Sync worker must not link, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | TRANSPORT_CRATES | const | &[&str]	generic	the package names of the transport crates, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries.rs | crate::boundaries | WIRE | const | &str	generic	the package directory of the protocol crate, matched against the declaration records of the driver
+ambre-primitives | src/boundaries.rs | crate::boundaries | WIRE_READERS | const | &[&str]	generic	the package directories of the worker and the relay, matched against the declaration records of the driver
+ambre-primitives | src/boundaries.rs | crate::boundaries | at(key) | param | &str	generic	the key of a JSON object cargo metadata prints
+ambre-primitives | src/boundaries.rs | crate::boundaries | fixture_entry() | ret | bool	generic	a predicate over one entry of a feature table
+ambre-primitives | src/boundaries.rs | crate::boundaries | fixture_entry(entry) | param | &str	generic	one entry of a feature table, as cargo metadata writes it
+ambre-primitives | src/boundaries.rs | crate::boundaries | manifests() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/boundaries.rs | crate::boundaries | manifests(read) | param | &dyn Fn(&str)->Option<String>	generic	reads a manifest by its path, and hands back its text
+ambre-primitives | src/boundaries.rs | crate::boundaries | metadata() | ret | Result<String,String>	generic	the JSON text cargo metadata prints, or the error message printed to the terminal
+ambre-primitives | src/boundaries.rs | crate::boundaries | wire() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/features.rs | crate::features | EXCLUSIONS | const | &str	generic	the path of the feature exclusions file, below the root; the gate links no ambre-core, so no family holds it
 ambre-primitives | src/features.rs | crate::features | HEADER | const | &str	generic	the header line the parser matches back against the file: part of the codec of the exclusions file
 ambre-primitives | src/features.rs | crate::features | check() | ret | Vec<String>	free-text	error messages printed to the terminal
@@ -2050,6 +2091,7 @@ ambre-primitives | src/records.rs | crate::records | Claim::Representation.0 | f
 ambre-primitives | src/records.rs | crate::records | Claim::parse(text) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/records.rs | crate::records | Privacy::parse(word) | param | &str	newtype-inner	the word of a closed enum, as the allowlist file writes it
 ambre-primitives | src/records.rs | crate::records | Records.aliases | field | BTreeSet<(String,String,String)>	generic	the family, the alias and the position of each alias record, as the driver writes them
+ambre-primitives | src/records.rs | crate::records | Records.decls | field | BTreeSet<(String,String,String,String)>	generic	the package, the name, the visibility word and the position of each declaration record, as the driver writes them
 ambre-primitives | src/records.rs | crate::records | Records.errors | field | Vec<String>	free-text	each record the judge cannot read, as a message
 ambre-primitives | src/records.rs | crate::records | Records.generics | field | BTreeSet<String>	generic	the names of the generic structs of ambre-core, compared with the families table
 ambre-primitives | src/records.rs | crate::records | Records.literals | field | Vec<(String,String)>	generic	the slot and the position of each literal, as the driver writes them

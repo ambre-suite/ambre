@@ -352,7 +352,7 @@ impl Gate {
 
 /// The path of a file from the workspace root, once with each `..` undone and
 /// once with each link followed. An exemption holds only when both sit in it.
-fn shown_paths(root: &Path, path: &Path) -> Vec<String> {
+pub fn shown_paths(root: &Path, path: &Path) -> Vec<String> {
     let lexical = place::lexical(path);
     let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| lexical.clone());
     let root_canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());

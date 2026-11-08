@@ -6,6 +6,8 @@
 mod harness;
 
 #[cfg(test)]
+mod bounds;
+#[cfg(test)]
 mod checks;
 #[cfg(test)]
 mod literals;

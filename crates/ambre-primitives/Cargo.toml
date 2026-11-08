@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
-description = "The primitive gate: every site whose type holds a primitive is typed, or named by the allowlist (ambre-spec-testing.md section 2)."
+description = "The primitive gate: every site whose type holds a primitive is typed, or named by the allowlist, and the crate boundaries hold (ambre-spec-testing.md section 2)."
 
 # Host only, like the relay and the browser belt: the gate compiles the
 # workspace through its rustc driver, and no client build reaches it.
@@ -16,7 +16,8 @@ description = "The primitive gate: every site whose type holds a primitive is ty
 # each unit cargo built and the features cargo turned on for it (`ARCH-033`).
 serde_json  = { workspace = true }
 # Each manifest, parsed as cargo reads it: the features a manifest declares,
-# a nested workspace, a renamed crate (`ARCH-033`, `ARCH-046`).
+# a nested workspace, a renamed crate, the lint table a member inherits
+# (`ARCH-033`, `ARCH-046`, `ARCH-032`).
 toml        = { workspace = true }
 
 [lints]
