@@ -20,6 +20,13 @@ use crate::forward::{Participant, Room, Sfu, Signal};
 /// would starve a probe of the padding the SFU sends (`CALL-050`).
 const STEP: Duration = Duration::from_millis(1);
 
+/// Where the simulated clock starts, past the origin of str0m's clock. The test exports of
+/// str0m pin the wall clock of that origin, so each simulated instant maps to one NTP time
+/// in every process. Started from `Instant::now()` instead, the RTT str0m reads from a
+/// sender report rounds another way in each process. That RTT times the retries of a NACK,
+/// and a retry one step apart moved the layer choice of a capped receiver.
+const ORIGIN_OFFSET: Duration = Duration::from_secs(1);
+
 /// Where a datagram in flight goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum To {
@@ -35,6 +42,61 @@ struct Flight {
     to: To,
     source: SocketAddr,
     contents: Vec<u8>,
+}
+
+/// The trace of the path of a run: what the guard of `sim/paths.rs` compares between
+/// processes.
+#[derive(Debug)]
+pub struct Path {
+    /// The datagrams that entered a link.
+    pub datagrams: u64,
+    /// An FNV-1a digest of each datagram: its time, its link, its size and its fate.
+    pub digest: u64,
+}
+
+/// One direction of the link of a participant, by its index.
+#[derive(Clone, Copy, Debug)]
+enum Hop {
+    Up(usize),
+    Down(usize),
+}
+
+/// The FNV-1a offset basis and prime, 64 bits.
+const FNV_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+impl Default for Path {
+    fn default() -> Self {
+        Self {
+            datagrams: 0,
+            digest: FNV_BASIS,
+        }
+    }
+}
+
+impl Path {
+    /// Notes a datagram of `contents` that entered `hop` at `at` past the epoch, and
+    /// leaves it at `out`, or never.
+    ///
+    /// The size of a DTLS record stays out. Its handshake keys come from the OS generator,
+    /// so the length of its ECDSA signature varies by a byte or two between processes. Its
+    /// time and its link stay in.
+    fn note(&mut self, at: Duration, hop: Hop, contents: &[u8], out: Option<Duration>) {
+        // RFC 7983: a first byte from 20 to 63 opens a DTLS record.
+        let dtls = contents.first().is_some_and(|b| (20..=63).contains(b));
+        let size = if dtls { 0 } else { contents.len() };
+        let hop = match hop {
+            Hop::Up(index) => index as u64 * 2,
+            Hop::Down(index) => index as u64 * 2 + 1,
+        };
+        let fate = out.map_or(u64::MAX, |d| d.as_nanos() as u64);
+        self.datagrams += 1;
+        for word in [at.as_nanos() as u64, hop, size as u64, fate] {
+            for byte in word.to_le_bytes() {
+                self.digest = (self.digest ^ u64::from(byte)).wrapping_mul(FNV_PRIME);
+            }
+        }
+    }
 }
 
 /// One participant and its link.
@@ -56,6 +118,9 @@ pub struct Net {
     pub members: Vec<Member>,
     flights: BinaryHeap<Reverse<Flight>>,
     order: u64,
+    /// The seed of the run, which the trace of its path names.
+    pub seed: u64,
+    pub path: Path,
 }
 
 impl Net {
@@ -63,7 +128,7 @@ impl Net {
     /// thread, so a run follows one path whatever the load of the machine.
     pub fn new(seed: u64) -> Self {
         fastrand::seed(seed);
-        let now = Instant::now();
+        let now = str0m::_internal_test_exports::time_origin() + ORIGIN_OFFSET;
         let sfu_addr: SocketAddr = (Ipv4Addr::new(10, 0, 0, 254), 4000).into();
         Self {
             now,
@@ -73,6 +138,8 @@ impl Net {
             members: Vec::new(),
             flights: BinaryHeap::new(),
             order: 0,
+            seed,
+            path: Path::default(),
         }
     }
 
@@ -160,7 +227,15 @@ impl Net {
             let Some(m) = self.members.get_mut(index) else {
                 continue;
             };
-            if let Some(at) = m.down.admit(self.now, t.contents.len()) {
+            let admitted = m.down.admit(self.now, t.contents.len());
+            let since = |at: Instant| at - self.epoch;
+            self.path.note(
+                since(self.now),
+                Hop::Down(index),
+                &t.contents,
+                admitted.map(since),
+            );
+            if let Some(at) = admitted {
                 self.order += 1;
                 self.flights.push(Reverse(Flight {
                     at,
@@ -171,9 +246,17 @@ impl Net {
                 }));
             }
         }
-        for m in &mut self.members {
+        for (index, m) in self.members.iter_mut().enumerate() {
             for t in m.synth.outbox.drain(..) {
-                if let Some(at) = m.up.admit(self.now, t.contents.len()) {
+                let admitted = m.up.admit(self.now, t.contents.len());
+                let since = |at: Instant| at - self.epoch;
+                self.path.note(
+                    since(self.now),
+                    Hop::Up(index),
+                    &t.contents,
+                    admitted.map(since),
+                );
+                if let Some(at) = admitted {
                     self.order += 1;
                     self.flights.push(Reverse(Flight {
                         at,
