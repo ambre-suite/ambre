@@ -98,6 +98,10 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import NamedTuple
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
+from corpus import continues_bullet, row_cells  # noqa: E402,F401  -- re-exported
+
 # Every closed vocabulary this file checks against is the template's, read from
 # it. What each one means is stated there, beside the table it is read from, and
 # is not repeated here (`ambre-spec-template.md section 1`).
@@ -248,20 +252,16 @@ AUDIT_CITE = re.compile(r"audit\s+(`[^`]+`(?:\s*,\s*`[^`]+`)*)")
 FINDING = re.compile(r"^[CHMN]\d{1,2}$")
 # Where the audit declares one: a section heading, a row of a status table, or a
 # story of a remediation wave. A finding named in running prose is a mention.
-FINDING_HEAD = re.compile(r"^###\s+(.*)$")
 FINDING_ROW = re.compile(r"^\|\s*`?([CHMN]\d{1,2})`?\s*\|")
 FINDING_STORY = re.compile(r"^-\s*\[[ x]\]\s*\*\*([CHMN]\d{1,2})\*\*")
 
-ROW = re.compile(
-    r"^\|\s*`(?P<id>[A-Z][A-Z0-9-]*-\d{3})`\s*\|"
-    r"(?P<rest>.*)\|\s*(?P<status>[a-z-]+)\s*\|\s*$"
-)
-
-# The header of a contract table. A table keyed by `ID` that declares `Kind` is
-# a contract table, and it MUST declare `Gap` too: the mechanism and what the
-# mechanism leaves open are two columns, and a header that merges them back into
-# one is refused (`ambre-spec-template.md section 1.B`).
-TABLE_HEAD = re.compile(r"^\|\s*ID\s*\|")
+# What a table, a contract row and its cells are is `corpus.py`'s to say: every
+# gate reads the corpus through it, so no two of them read one table two ways.
+# A table keyed by `ID` that declares `Kind` is a contract table, and it MUST
+# declare `Gap` too: the mechanism and what the mechanism leaves open are two
+# columns, and a header that merges them back into one is refused
+# (`ambre-spec-template.md section 1.B`).
+#
 # `**Frame:** `UI-THREAD-044`` on the line that closes an operation table: the
 # operation leaves alone what a shared `FRAME` row states, so it cites that row
 # instead of copying its statement under a second id.
@@ -276,23 +276,7 @@ def header_cells(header: str) -> list[str]:
     reordered header opt the document out of every check below in silence, which
     is the failure mode this whole file exists to refuse.
     """
-    return [c.strip() for c in header.strip().strip("|").split("|")]
-
-
-def row_cells(columns: list[str] | None, rest: str) -> dict[str, str]:
-    """One row's cells, keyed by the name its own header declares.
-
-    `rest` starts after the `ID` cell, so a header index shifts by one. A cell
-    read by its position is what a new column breaks in silence: "the last one
-    before the status" names a different cell the day a column is inserted
-    there, and no check sees the shift (`ambre-spec-template.md section 1.B`).
-    """
-    if not columns:
-        return {}
-    cells = [c.strip() for c in rest.split("|")]
-    return {
-        name: cells[at - 1] for at, name in enumerate(columns) if 0 < at <= len(cells)
-    }
+    return list(corpus.cells_of(header))
 
 
 # `STATE_KINDS` and `OPERATION_KINDS` come from the template's `Binds` column:
@@ -774,19 +758,30 @@ def story_keys(name: str) -> list[str]:
     return keys
 
 
+def stories(path: Path):
+    """Yield `(epic, row)` for every story row of one schedule file, in order.
+
+    The epic is the last `##` heading above the row that names one: a heading
+    that names no epic, `## 1. Rules`, leaves the epic above it in force.
+    """
+    doc = corpus.read(path)
+    heads = [(h.no, m["key"]) for h in doc.headings
+             if h.level == 2 and (m := EPIC_HEAD.match(h.text))]
+    for table in doc.tables:
+        for row in table.rows:
+            found = STORY_ROW.match(row.text)
+            if not found:
+                continue
+            epic = next((key for no, key in reversed(heads) if no < row.no), "?")
+            yield epic, row, found
+
+
 def read_schedule(path: Path) -> dict[str, tuple[str, bool, int, str]]:
     """Every story of one schedule file, per key: epic, ticked, line, name."""
     index: dict[str, tuple[str, bool, int, str]] = {}
-    epic = "?"
-    for lineno, line in enumerate(path.read_text().splitlines(), 1):
-        head = EPIC_HEAD.match(line)
-        if head:
-            epic = head["key"]
-            continue
-        row = STORY_ROW.match(line)
-        if row:
-            for key in story_keys(row["name"]):
-                index[key] = (epic, row["done"] == "x", lineno, row["name"].strip())
+    for epic, row, found in stories(path):
+        for key in story_keys(found["name"]):
+            index[key] = (epic, found["done"] == "x", row.no, found["name"].strip())
     return index
 
 
@@ -803,19 +798,10 @@ def read_milestones(path: Path) -> dict[str, tuple[str, bool]]:
     column, and a story there is `post-V1` by where it sits.
     """
     milestones: dict[str, tuple[str, bool]] = {}
-    epic = "?"
-    for line in path.read_text().splitlines():
-        head = EPIC_HEAD.match(line)
-        if head:
-            epic = head["key"]
-            continue
-        row = STORY_ROW.match(line)
-        if not row:
-            continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        milestone = "post-V1" if epic.upper() == "POST-V1" else cells[1]
-        for key in story_keys(row["name"]):
-            milestones[key] = (milestone, row["done"] == "x")
+    for epic, row, found in stories(path):
+        milestone = "post-V1" if epic.upper() == "POST-V1" else row.cells[1]
+        for key in story_keys(found["name"]):
+            milestones[key] = (milestone, found["done"] == "x")
     return milestones
 
 
@@ -874,25 +860,19 @@ def read_obstacles(text: str) -> tuple[dict[str, str | None], list[str]]:
     a parse that stops matching returns nothing, and an empty set would let a
     row cite any word. So a count off the table is an error, never a narrowing.
     """
-    lines = text.splitlines()
-    at = [i for i, line in enumerate(lines) if OBSTACLES_AT.search(line)]
+    doc = corpus.parse(text)
+    at = [line.no for line in doc.lines if OBSTACLES_AT.search(line.text)]
     if len(at) != 1:
         return {}, [f"{TESTING}: {len(at)} lines carry '**The <n> obstacles.**', want 1"]
-    word = OBSTACLES_AT.search(lines[at[0]])["count"] or "no"
+    word = OBSTACLES_AT.search(doc.line(at[0]).text)["count"] or "no"
     obstacles: dict[str, str | None] = {}
-    started = False
-    for line in lines[at[0] + 1 :]:
-        if not line.startswith("|"):
-            if started:
-                break
-            continue
-        started = True
-        row = OBSTACLE_ROW.match(line)
-        if not row:
+    table = doc.table_after(at[0])
+    for row in table.rows if table else ():
+        found = OBSTACLE_ROW.match(row.text)
+        if not found:
             continue  # the header and the separator
-        lifted = line.strip().strip("|").split("|")[-1].strip()
-        cite = CITED_STORY.search(lifted)
-        obstacles[row["name"]] = cite["name"].strip('`"') if cite else None
+        cite = CITED_STORY.search(row.cells[-1])
+        obstacles[found["name"]] = cite["name"].strip('`"') if cite else None
     if {"no": 0, "one": 1, **NUMBERS}.get(word) != len(obstacles):
         return obstacles, [
             f"{TESTING}: the obstacles heading counts {word}, its table carries "
@@ -996,18 +976,15 @@ def duplicate_stories(path: Path) -> list[str]:
     """
     seen: dict[str, int] = {}
     errors: list[str] = []
-    for lineno, line in enumerate(path.read_text().splitlines(), 1):
-        row = STORY_ROW.match(line)
-        if not row:
-            continue
-        for key in story_keys(row["name"]):
+    for _, row, found in stories(path):
+        for key in story_keys(found["name"]):
             if key in seen:
                 errors.append(
-                    f"{path.name}:{lineno}: two stories share the name or code "
+                    f"{path.name}:{row.no}: two stories share the name or code "
                     f"{key!r} (the other is line {seen[key]}) -- a story name is a "
                     f"join key, so an `unimplemented` row cannot name one of them"
                 )
-            seen[key] = lineno
+            seen[key] = row.no
     return errors
 
 
@@ -1189,19 +1166,20 @@ def declared_findings() -> dict[str, int]:
     the dash is read, so `### H4 / H5 -- ...` declares two findings and the title
     beside them declares none.
     """
+    doc = corpus.read(SPECS / AUDIT)
+    declaring: list[tuple[int, list[str]]] = []
+    for heading in doc.headings:
+        if heading.level == 3:
+            title = heading.title.split(" -- ")[0]
+            declaring.append(
+                (heading.no, [t for t in re.split(r"[^A-Za-z0-9]+", title) if FINDING.match(t)])
+            )
+    declaring += [(row.no, [m.group(1)]) for table in doc.tables for row in table.rows
+                  if (m := FINDING_ROW.match(row.text))]
+    declaring += [(line.no, [m.group(1)]) for line in doc.lines
+                  if line.kind == corpus.TEXT and (m := FINDING_STORY.match(line.text))]
     found: dict[str, int] = {}
-    for lineno, line in enumerate((SPECS / AUDIT).read_text().splitlines(), 1):
-        ids: list[str] = []
-        head = FINDING_HEAD.match(line)
-        if head:
-            title = head.group(1).split(" -- ")[0]
-            ids = [t for t in re.split(r"[^A-Za-z0-9]+", title) if FINDING.match(t)]
-        row = FINDING_ROW.match(line)
-        if row:
-            ids = [row.group(1)]
-        story = FINDING_STORY.match(line)
-        if story:
-            ids = [story.group(1)]
+    for lineno, ids in sorted(declaring, key=lambda item: item[0]):
         for fid in ids:
             found.setdefault(fid, lineno)
     return found
@@ -1244,16 +1222,9 @@ def audit_coverage_defects(findings: dict[str, int], cited: set[str]) -> list[st
 # The `Verification` answer under a contract table, and the counts it opens
 # on: `7 `verified`, 1 `untested`, 1 `unimplemented`.` Both separators the
 # corpus uses are read, the comma and the final "and".
-ANSWER = re.compile(r"^\*\s+\*\*Verification\.\*\*\s+(?P<text>.*)$")
+VERIFICATION = "Verification"
 COUNT = re.compile(r"(?P<n>\d+)\s+`(?P<status>[a-z-]+)`")
 COUNT_SEP = re.compile(r",\s+(?:and\s+)?")
-
-
-def continues_bullet(line: str) -> bool:
-    """Whether a line carries on the bullet above it: indented, not blank, and
-    not a nested bullet of its own."""
-    stripped = line.strip()
-    return line[:1] in (" ", "\t") and bool(stripped) and not stripped.startswith(("* ", "- "))
 
 
 def stated_counts(text: str) -> dict[str, int]:
@@ -1340,13 +1311,13 @@ def rewrite_answer(path: Path, lineno: int, counts: Counter) -> bool:
     opens on is replaced, the prose after it is kept, and the bullet is rewrapped
     to the column limit. Answers whether the file changed.
     """
-    lines = path.read_text().split("\n")
-    start = lineno - 1
-    end = start + 1
-    while end < len(lines) and continues_bullet(lines[end]):
-        end += 1
-    head = ANSWER.match(lines[start])
-    text = " ".join([head["text"]] + [l.strip() for l in lines[start + 1:end]])
+    raw = path.read_text()
+    lines = raw.split("\n")
+    bullet = corpus.parse(raw).bullet_at(lineno)
+    if bullet is None:
+        return False
+    start, end = lineno - 1, bullet.end
+    text = bullet.joined
     pos, stated = 0, False
     while (m := COUNT.match(text, pos)) is not None:
         stated, pos = True, m.end()
@@ -1625,12 +1596,12 @@ def main() -> int:
     # Which `verified` rows lean on the same test, for the report below.
     leans: dict[str, list[str]] = defaultdict(list)
     schedule = read_schedule(SPECS / ROADMAP)
-    closed = read_schedule(SPECS / JOURNAL)
+    closed_stories = read_schedule(SPECS / JOURNAL)
     milestones = read_milestones(SPECS / ROADMAP)
     in_progress = current_milestone(milestones)
     errors += duplicate_stories(SPECS / ROADMAP)
     obstacles, found = read_obstacles((SPECS / TESTING).read_text())
-    errors += found + lifting_defects(obstacles, schedule, closed)
+    errors += found + lifting_defects(obstacles, schedule, closed_stories)
     findings = declared_findings()
     cited_audit: set[str] = set()
     cited_obstacles: set[str] = set()
@@ -1646,22 +1617,28 @@ def main() -> int:
     # The rows `split_report` prints: a second keyword the refusal does not reach.
     split_candidates: list[tuple[str, str]] = []
 
-    for path in sorted(SPECS.rglob("*.md")):
+    for path in corpus.markdown(SPECS):
         if path.name == TEMPLATE:
             continue
+        doc = corpus.read(path)
         counts: Counter = Counter()
-        answer: tuple[int, str] | None = None
-        in_answer = False
         rel = str(path.relative_to(SPECS))
-        # The table being read, and whether its header declares `Kind`. A table
-        # ends where the pipes do, so a heading, a bullet or a blank line
-        # closes it and the rows it collected are checked as one operation.
-        table: list[tuple[int, str, str]] = []
-        columns: list[str] | None = None
+        # The tables are the corpus's. A table closes on the first line that is
+        # not blank and carries on no table, and the rows it holds are checked
+        # there as one operation: a `**Frame:**` line closing it answers for it.
+        closing = {t.closer.no: t for t in doc.tables if t.closer is not None}
+        rows_at = {row.no: row for row in doc.contract_rows}
         apps: list[str] | None = None
-        for lineno, line in enumerate(path.read_text().splitlines(), 1):
-            stripped = line.lstrip()
-            declared = declared_applications(line)
+
+        def operation(table) -> list[tuple[int, str, str]]:
+            if not table.contract:
+                return []
+            return [(r.no, r.id, r.cells.get(KIND, "").strip("`")) for r in doc.rows_of(table)]
+
+        for line in doc.lines:
+            lineno = line.no
+            stripped = line.text.lstrip()
+            declared = declared_applications(line.text) if line.kind == corpus.TEXT else None
             if declared:
                 apps, unknown = declared
                 for name in unknown:
@@ -1669,64 +1646,45 @@ def main() -> int:
                         f"{rel}:{lineno}: `**Applications:**` names {name!r} -- "
                         f"the field lists {', '.join(APPLICATION_NAMES)}"
                     )
-            head = TABLE_HEAD.match(line)
-            # A blank line does not close a table: an author who breaks a long
-            # operation table over one still writes one operation, and treating
-            # the halves as two tables checked each half against nothing.
-            framed = FRAME_LINE.match(stripped)
+            framed = FRAME_LINE.match(stripped) if line.kind == corpus.TEXT else None
             frame = FRAME_ID.findall(framed["ids"]) if framed else None
+            closed = closing.get(lineno)
             if framed:
                 for ref in frame:
                     frame_refs.append((f"{rel}:{lineno}", ref))
                 if not frame:
                     errors.append(f"{rel}:{lineno}: a `**Frame:**` line cites no id")
-                elif columns is None or not table:
+                elif closed is None or not operation(closed):
                     errors.append(
                         f"{rel}:{lineno}: a `**Frame:**` line that closes no "
                         f"contract table -- it goes on the line under the "
                         f"operation it frames"
                     )
-            if head or (stripped and not stripped.startswith("|")):
-                if columns is not None and table:
-                    errors += table_defects(rel, table, frame)
-                table = []
-                columns = header_cells(line) if head else None
-                if columns is not None and KIND not in columns:
-                    columns = None  # a table keyed by `ID` that is not a contract
-            m = ROW.match(line)
+            if closed is not None and operation(closed):
+                errors += table_defects(rel, operation(closed), frame)
+            row = rows_at.get(lineno)
             # The row's cells by name. `Gap` is where an `unimplemented` row
             # names its Story, so it is the cell the citation check reads. A row
             # under a header that declares neither `Kind` nor `Gap` is refused
             # below; its last cell is read here so the citation check still runs.
-            cell = row_cells(columns, m["rest"]) if m else {}
+            cell = row.cells if row else {}
             binding = cell.get(GAP, "")
-            if m and not binding:
-                binding = m["rest"].rsplit("|", 1)[-1]
+            if row and not binding:
+                binding = row.rest.rsplit("|", 1)[-1]
             # a story the row's own binding already answers for, checked below
             bound: set[str] = set()
-            if m and m["status"] == "unimplemented":
+            if row and row.status == "unimplemented":
                 cite = cited_story(binding)
                 if cite:
                     bound.add(story_key(cite[0].strip('`"')))
             errors += loose_citation_defects(
-                line, f"{path.relative_to(SPECS)}:{lineno}", bound, schedule, closed
+                line.text, f"{rel}:{lineno}", bound, schedule, closed_stories
             )
-            # A bullet wraps onto indented lines, and a count cut at the end of
-            # the first line must still reach the parse: the continuation is
-            # joined to the text until the bullet ends.
-            bullet = ANSWER.match(line)
-            if bullet:
-                answer = (lineno, bullet["text"])
-                in_answer = True
-            elif in_answer and answer and continues_bullet(line):
-                answer = (answer[0], f"{answer[1]} {stripped}")
-            else:
-                in_answer = False
-            if not m:
+            if not row:
                 continue
-            rid, status, rest = m["id"], m["status"], m["rest"]
-            where = f"{path.relative_to(SPECS)}:{lineno} {rid}"
-            if columns is None:
+            rid, status, rest = row.id, row.status, row.rest
+            where = f"{rel}:{lineno} {rid}"
+            if not row.table.contract:
                 errors.append(
                     f"{where}: a contract row under a header that declares no "
                     f"`Kind` column -- the column is what holds the row to the "
@@ -1741,7 +1699,7 @@ def main() -> int:
                 # Both grammars need the two cells apart. A header that declares
                 # no `Gap` states the mechanism and the argument about it in one
                 # cell, which is the shape neither grammar can read.
-                if GAP not in (columns or []):
+                if GAP not in row.table.header:
                     errors.append(
                         f"{where}: a contract row under a header that declares no "
                         f"`Gap` column -- the mechanism and what it leaves open "
@@ -1757,7 +1715,6 @@ def main() -> int:
                     errors += per_application_defects(where, mechanism, status, bound)
                 kind = kind_cell.strip("`")
                 kind_of[rid] = kind
-                table.append((lineno, rid, kind))
                 if (
                     kind not in BUNDLING_KINDS
                     and not CONJUNCTION.search(statement)
@@ -1777,9 +1734,9 @@ def main() -> int:
                 continue
             if rid in seen:
                 errors.append(f"{where}: duplicate id, already in {seen[rid]}")
-            seen[rid] = str(path.relative_to(SPECS))
+            seen[rid] = rel
 
-            for token in cited_findings(line):
+            for token in cited_findings(line.text):
                 if not FINDING.match(token):
                     errors.append(
                         f"{where}: cites audit `{token}`, which is not a finding "
@@ -1797,7 +1754,7 @@ def main() -> int:
             # the story citation lives in, which the split moved into `Gap`.
             held_by = cell.get(MECHANISM, rest.rsplit("|", 1)[-1])
             if status in OWES_STORY:
-                errors += story_defects(where, status, binding, schedule, closed)
+                errors += story_defects(where, status, binding, schedule, closed_stories)
                 errors += milestone_defects(where, status, binding, milestones, in_progress)
             errors += obstacle_defects(where, status, binding, obstacles)
             if named := leaned_on(status, binding):
@@ -1819,11 +1776,16 @@ def main() -> int:
             counts[status] += 1
             if held_by_a_reviewer(status):
                 reviewed.append((rid, cell.get(STATEMENT, "").strip(), path.name))
-        if columns is not None and table:
-            errors += table_defects(rel, table)
+        last = [t for t in doc.tables if t.closer is None]
+        if last and operation(last[-1]):
+            errors += table_defects(rel, operation(last[-1]))
         if counts:
-            per_spec[str(path.relative_to(SPECS))] = counts
-            found = answer_defects(str(path.relative_to(SPECS)), answer, counts)
+            per_spec[rel] = counts
+            # The last `Verification` answer of the document, its wrapped lines
+            # joined, so a count cut at the end of the first line still parses.
+            verification = [b for b in doc.bullets if b.label == VERIFICATION]
+            answer = (verification[-1].no, verification[-1].joined) if verification else None
+            found = answer_defects(rel, answer, counts)
             if found and answer and "--write" in sys.argv:
                 rewrite_answer(path, answer[0], counts)
                 found = []
@@ -1831,7 +1793,7 @@ def main() -> int:
 
     errors += review_table_defects(reviewed)
     errors += audit_coverage_defects(findings, cited_audit)
-    errors += orphan_obstacles(obstacles, cited_obstacles, schedule, closed)
+    errors += orphan_obstacles(obstacles, cited_obstacles, schedule, closed_stories)
     for where, sources in cited_sources:
         errors += source_defects(where, sources, seen)
     errors += twin_defects(statements)

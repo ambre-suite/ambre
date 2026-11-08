@@ -57,6 +57,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import contracts  # noqa: E402  -- the row grammar, read once and never copied
+import corpus  # noqa: E402  -- the one reader of the Markdown
 import spec_refs  # noqa: E402  -- the document and section namespaces
 from template_vocabulary import (  # noqa: E402
     GAP,
@@ -82,29 +83,17 @@ FINDING = re.compile(r"`([A-Z]\d{1,3})`")
 def read_rows():
     """Yield `(document, id, status, cells)` for every contract row of the corpus.
 
-    The walk is the gate's own, held to it by one test: a table is opened by a
-    header declaring `ID` and `Kind`, and closed by the first line that is not a
-    table row. A reader that closed a table on a blank line would split an
-    operation in two, and the half it kept would index against the wrong header.
+    The rows are the corpus's, read by the parser every gate shares, so the
+    index holds the rows the contract gate checks: a table is opened by a header
+    declaring `ID` and `Kind`, and a blank line inside it closes nothing.
     """
-    for path in sorted(contracts.SPECS.rglob("*.md")):
+    for path in corpus.markdown(contracts.SPECS):
         if path.name == contracts.TEMPLATE:
             continue  # example rows, not contracts
         rel = str(path.relative_to(contracts.SPECS))
-        columns: list[str] | None = None
-        for line in path.read_text().splitlines():
-            stripped = line.lstrip()
-            head = contracts.TABLE_HEAD.match(line)
-            if head or (stripped and not stripped.startswith("|")):
-                columns = contracts.header_cells(line) if head else None
-                if columns is not None and KIND not in columns:
-                    columns = None  # a table keyed by `ID` that is not a contract
-            match = contracts.ROW.match(line)
-            if match is None or columns is None:
-                continue
-            yield rel, match["id"], match["status"], contracts.row_cells(
-                columns, match["rest"]
-            )
+        for row in corpus.read(path).contract_rows:
+            if row.table.contract:
+                yield rel, row.id, row.status, row.cells
 
 
 def record(document: str, rid: str, status: str, cells: dict[str, str]) -> dict:
@@ -190,9 +179,9 @@ def declared_pillars() -> set[str]:
     that name is minted, so a renamed pillar leaves every citation of it pointing
     at a row that no longer exists.
     """
-    text = (contracts.ROOT / "README.md").read_text()
-    return {match.group(1).strip() for line in text.splitlines()
-            if (match := PILLAR_ROW.match(line))}
+    readme = corpus.read(contracts.ROOT / "README.md")
+    return {match.group(1).strip() for table in readme.tables for row in table.rows
+            if (match := PILLAR_ROW.match(row.text))}
 
 
 def edge_defects(records: list[dict], found: list[dict]) -> list[str]:

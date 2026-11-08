@@ -41,6 +41,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
+
 # What "loose" means is a rule about statuses, and `contracts.py` is where the
 # gates state it.
 from contracts import LOOSE
@@ -80,8 +83,6 @@ UNBUILT = "unimplemented"
 # generated file shows the feature that moved and nothing else.
 STATES = IMPLEMENTATION_VALUES
 
-# Same row grammar as `contracts.py`: an id, then cells, then the status last.
-ROW = re.compile(r"^\|\s*`(?P<id>[A-Z][A-Z0-9-]*-\d{3})`\s*\|.*\|\s*(?P<status>[a-z-]+)\s*\|\s*$")
 IMPLEMENTATION = re.compile(r"^\*\*Implementation:\*\* ([a-z-]+)")
 
 
@@ -93,12 +94,8 @@ def scope(text: str) -> str:
     without a container or a type. Nothing is written here that a document does
     not already say about itself.
     """
-    lines = []
-    for line in text.splitlines()[:20]:
-        if line.startswith(">"):
-            lines.append(line[1:].strip())
-        elif lines:
-            break
+    quotes = [run for run in corpus.parse(text).quotes if run[0].no <= 20]
+    lines = [line.text[1:].strip() for line in quotes[0] if line.no <= 20] if quotes else []
     summary = " ".join(lines)
     return re.split(r"(?<=\.)\s", summary)[0] if summary else ""
 
@@ -106,10 +103,9 @@ def scope(text: str) -> str:
 def counts(text: str) -> dict[str, int]:
     """One count per status, over every contract row of the document."""
     tally = dict.fromkeys(STATUSES, 0)
-    for line in text.splitlines():
-        match = ROW.match(line)
-        if match and match["status"] in tally:
-            tally[match["status"]] += 1
+    for row in corpus.parse(text).contract_rows:
+        if row.status in tally:
+            tally[row.status] += 1
     return tally
 
 
@@ -121,8 +117,8 @@ def read(path: Path) -> dict:
     built = total - tally[UNBUILT]
     # The header field, from the first eight lines: the same window
     # `spec_shape.py` reads, which is where the contract puts it.
-    header = next((l for l in text.splitlines()[:8] if l.startswith("**Implementation:**")), "")
-    match = IMPLEMENTATION.match(header)
+    header = corpus.parse(text).field("Implementation", within=8)
+    match = IMPLEMENTATION.match(header.text) if header else None
     return {
         "cite": path.stem.replace("ambre-spec-", ""),
         "scope": scope(text),

@@ -42,10 +42,14 @@ def kinds(issues) -> list[str]:
     return [kind for kind, _ in issues]
 
 
-# A contract row in the seven columns the template declares. `CONTRACT_ROW`
-# matches on the ID cell alone -- this script only needs to know the table is
-# there -- but the `Statement` checks read the third cell, so the shape counts.
+# A contract row in the seven columns the template declares, and the header that
+# names them. The `Statement` checks read the cell by the name its header
+# declares, so a row under no contract header carries no statement to read.
 ROW = "| `MB-001` | `INV` | The bus MUST drop the frame. | derived | none | none | verified |"
+HEADER = (
+    "| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |\n"
+    "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
+)
 
 
 class Classify(unittest.TestCase):
@@ -234,10 +238,15 @@ class Answers(unittest.TestCase):
 class LowerCaseKeyword(unittest.TestCase):
     def test_a_lower_case_modality_in_a_rule_is_refused(self):
         row = "| `MB-001` | `INV` | The bus may drop the frame. | derived | none | none | verified |"
-        self.assertIn('"may"', reasons(spec_shape.keyword_issues(doc(row)))[0])
+        self.assertIn('"may"', reasons(spec_shape.keyword_issues(doc(HEADER, row)))[0])
 
     def test_a_code_span_quotes_the_word_rather_than_using_it(self):
         row = "| `MB-001` | `INV` | A `may` is not a modality here. | derived | none | none | verified |"
+        self.assertEqual([], list(spec_shape.keyword_issues(doc(HEADER, row))))
+
+    def test_a_row_under_no_contract_header_states_no_rule(self):
+        """The contract gate refuses that row; this one reads no statement there."""
+        row = "| `MB-001` | `INV` | The bus may drop the frame. | derived | none | none | verified |"
         self.assertEqual([], list(spec_shape.keyword_issues(doc(row))))
 
     def test_prose_outside_a_row_uses_may_correctly(self):
@@ -249,7 +258,7 @@ class LowerCaseKeyword(unittest.TestCase):
         """A `Gap` cell writes English about what nothing holds, and `may`
         there is the word, not a modality."""
         row = "| `MB-001` | `INV` | The bus MUST drop it. | derived | none | a reader may miss it | verified |"
-        self.assertEqual([], list(spec_shape.keyword_issues(doc(row))))
+        self.assertEqual([], list(spec_shape.keyword_issues(doc(HEADER, row))))
 
 
 class Schedule(unittest.TestCase):

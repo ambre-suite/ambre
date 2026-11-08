@@ -42,6 +42,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
 import glossary  # noqa: E402  -- the vocabulary, read from the corpus
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -104,17 +105,9 @@ URL = re.compile(r"https?://\S+")
 DIAGRAM = re.compile(r"^\s*[|+`\\/*-]{2,}")
 
 SENTENCE_SPLIT = re.compile(r"(?<=[.!?])[\s]+")
-# A Markdown bullet or numbered item, with its indent.
-BULLET = re.compile(r"^\s*(?:[*\-+]|\d+\.)\s+")
-# A block quote marker. The line under it is prose; the marker is not, and left
-# in place it lands mid-sentence once the lines are joined.
-QUOTE = re.compile(r"^\s*>\s?")
-# A line that is one bold run and nothing else. The spec template writes a
-# section heading that way, and a heading is not a sentence of the paragraph
-# below it.
-BOLD_HEADING = re.compile(r"^\*\*[^*]+\*\*$")
-# A horizontal rule: a block separator, never a sentence.
-RULE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
+# A Markdown bullet or numbered item, with its indent: a doc comment is
+# Markdown, so it opens a paragraph the way `corpus.py` opens one in a document.
+BULLET = corpus.BULLET
 
 
 def printable_breaches(text: str) -> list[tuple[int, str]]:
@@ -209,7 +202,7 @@ def line_comment(line: str) -> str | None:
     return None
 
 
-def markdown_prose(text: str) -> list[tuple[int, str, bool, bool]]:
+def markdown_prose(text) -> list[tuple[int, str, bool, bool]]:
     """The prose lines of a Markdown file: no fence, no table, no heading.
 
     The third field says the line opens a paragraph. A bullet opens one, and so
@@ -222,30 +215,10 @@ def markdown_prose(text: str) -> list[tuple[int, str, bool, bool]]:
     A boundary line stays in the result rather than leaving it, because the hard
     rules read every line. A heading that carries a forbidden synonym is still a
     breach; it is simply not a sentence of the paragraph under it. A table row
-    is the same, and a corpus written in tables would otherwise go unread.
+    is the same, and a corpus written in tables would otherwise go unread. The
+    cut is `corpus.py`'s, so every gate reads one document the same way.
     """
-    out: list[tuple[int, str, bool, bool]] = []
-    fenced = False
-    quoted = False
-    for lineno, line in enumerate(text.splitlines(), 1):
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced or not line.strip():
-            continue
-        if line.lstrip().startswith("#"):
-            continue
-        if line.lstrip().startswith("|"):
-            out.append((lineno, line.strip(), True, False))
-            continue
-        was_quoted, quoted = quoted, bool(QUOTE.match(line))
-        body = BULLET.sub("", QUOTE.sub("", line)).strip()
-        if not body:
-            continue
-        opens = bool(BULLET.match(line)) or quoted != was_quoted
-        opens = opens or bool(BOLD_HEADING.match(body)) or bool(RULE.match(body))
-        out.append((lineno, body, opens, True))
-    return out
+    return list(corpus.as_document(text).prose)
 
 
 def clean(text: str) -> str:
@@ -325,40 +298,14 @@ def glossary_breaches() -> list[str]:
         path = ROOT / "specs" / entry.ref if not entry.ref.startswith("ai/") else ROOT / entry.ref
         if not path.exists():
             out.append(f"glossary: {entry.term!r}: reference {entry.ref} does not exist")
-        elif not re.search(re.escape(entry.term), path.read_text(), re.I):
+        elif not re.search(re.escape(entry.term), corpus.read(path).text, re.I):
             out.append(f"glossary: {entry.term!r} is absent from {entry.ref}")
     return out
 
 
-def paragraphs(lines: list[tuple[int, str, bool, bool]]) -> list[tuple[int, str]]:
-    """Group consecutive prose lines into paragraphs, keyed by first line.
-
-    A blank line, a fence and a bullet each open a new one. A line the reader
-    marked as structure closes the paragraph above it and joins none: a table
-    row is not a sentence, and joining a column of cells into one made a
-    31-word "sentence" nobody wrote.
-    """
-    out: list[tuple[int, str]] = []
-    start: int | None = None
-    buffer: list[str] = []
-    previous: int | None = None
-    for lineno, text, opens, is_prose in lines:
-        if not is_prose:
-            if start is not None:
-                out.append((start, " ".join(buffer)))
-                start, buffer = None, []
-            previous = lineno
-            continue
-        if start is not None and (opens or lineno != previous + 1):
-            out.append((start, " ".join(buffer)))
-            start, buffer = None, []
-        if start is None:
-            start = lineno
-        buffer.append(text)
-        previous = lineno
-    if start is not None:
-        out.append((start, " ".join(buffer)))
-    return out
+# Group the prose lines into paragraphs: a Rust comment and a Markdown document
+# are cut by the one rule `corpus.py` states.
+paragraphs = corpus.paragraphs
 
 
 def sentences(text: str) -> list[str]:
@@ -440,7 +387,7 @@ def rust_files() -> list[Path]:
 
 
 def markdown_files() -> list[Path]:
-    found = [p for root in MARKDOWN_ROOTS for p in root.rglob("*.md") if tracked(p)]
+    found = [p for root in MARKDOWN_ROOTS for p in corpus.markdown(root) if tracked(p)]
     # A glob, never a list of names: a named list measures the documents someone
     # remembered, and a document added later escapes the gate in silence.
     found += sorted(ROOT.glob("*.md"))
@@ -454,8 +401,12 @@ def main() -> int:
 
     for path in rust + documents:
         rel = str(path.relative_to(ROOT))
-        text = path.read_text()
-        lines = rust_comments(text) if path.suffix == ".rs" else markdown_prose(text)
+        if path.suffix == ".rs":
+            text = path.read_text()
+            lines = rust_comments(text)
+        else:
+            document = corpus.read(path)
+            text, lines = document.text, markdown_prose(document)
         if rel not in OPENER_EXEMPT:
             for lineno, reason in opener_breaches(lines):
                 errors.append(f"{rel}:{lineno}: {reason}")

@@ -55,6 +55,7 @@ SCRIPTS = {
     "commit_msg": GATE,
     "contract_index": GATE,
     "contracts": GENERATOR,
+    "corpus": TOOL,
     "crate_boundaries": GATE,
     "feature_inventory": GENERATOR,
     "freeze_provenance": GATE,
