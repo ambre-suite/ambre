@@ -206,7 +206,9 @@ test-db:
 # relay and driven through WebDriver (`crates/ambre-belt`). It needs the db-tier
 # services, a Chrome and its chromedriver (`CHROMEDRIVER`, `BELT_CHROME`). One
 # test at a time: each starts a relay and a browser of its own. The call test
-# starts the SFU binary instead, and two browsers on fake capture devices.
+# starts the SFU binary instead, and two browsers on fake capture devices. The
+# TURN test also starts coturn (`BELT_TURNSERVER`) behind a TCP front on port
+# 443 (`BELT_TURN_PORT`).
 test-browser:
     trunk build
     cargo build -p ambre-server

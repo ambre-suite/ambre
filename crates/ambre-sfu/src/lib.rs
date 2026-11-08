@@ -8,8 +8,12 @@ use std::sync::Arc;
 use str0m::RtcConfig;
 
 pub mod forward;
+pub mod layer;
+pub mod rewrite;
 pub mod serve;
 
+#[cfg(test)]
+mod sim;
 #[cfg(test)]
 mod tests;
 
@@ -19,4 +23,6 @@ pub fn participant_config() -> RtcConfig {
         // The SFU listens on a public address: it answers connectivity checks and sends none.
         .set_ice_lite(true)
         .set_crypto_provider(Arc::new(str0m::crypto::from_feature_flags()))
+        // The estimate of each downlink drives the layer choice (`CALL-038`).
+        .enable_bwe(Some(forward::INITIAL_ESTIMATE))
 }

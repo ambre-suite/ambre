@@ -77,6 +77,8 @@ fn chrome_capabilities(downloads: &Path) -> Value {
             // A call test captures the fake camera and microphone, with no prompt.
             "--use-fake-device-for-media-stream",
             "--use-fake-ui-for-media-stream",
+            // A call test plays a tone through an audio context, with no gesture.
+            "--autoplay-policy=no-user-gesture-required",
         ],
         "prefs": {
             "download.default_directory": downloads.display().to_string(),
@@ -131,6 +133,9 @@ fn firefox_capabilities(downloads: &Path) -> Value {
             "permissions.default.microphone": 1,
             // Firefox gathers no loopback candidate by default.
             "media.peerconnection.ice.loopback": true,
+            // A call test plays a tone through an audio context, with no gesture.
+            "media.autoplay.default": 0,
+            "media.autoplay.block-webaudio": false,
         },
     });
     if let Ok(binary) = std::env::var("BELT_FIREFOX") {

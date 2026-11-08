@@ -43,8 +43,8 @@ apply on top of the renderer's. So no Rust line outside `density.rs` names it.
 **The network leaves from the Sync worker** (`ARCH-005`). The workspace hands
 every crate the browser's request and socket types, so the manifests prove
 nothing on their own. Two lines are read instead: a manifest naming a
-transport crate outside the worker and the relay, and a Rust line naming a
-network call outside them. The two reads `UI-THREAD-004` names, the font fetch
+transport crate outside the worker, the relay and the SFU, and a Rust line
+naming a network call outside them. The two reads `UI-THREAD-004` names, the font fetch
 and the sign-in configuration, are the stated exception, file by file.
 
 **The worker writes nothing to the browser's storage** (`SYNC-054`,
@@ -223,11 +223,16 @@ CRATES = "crates"
 DENSITY = "crates/ambre-canvas/src/density.rs"
 DENSITY_READ = re.compile(r"\bdevice_pixel_ratio\b|\bdevicePixelRatio\b")
 
-# The crates a network call may leave from: the Sync worker, and the relay,
-# which is a server and not one of the two client instances. The browser belt
-# is neither instance either: it is a test harness that serves the build and
-# speaks WebDriver, and it ships nothing.
-NETWORK_CRATES = ("crates/ambre-sync/", "crates/ambre-server/", "crates/ambre-belt/")
+# The crates a network call may leave from: the Sync worker, the relay and the
+# SFU, which are servers and not one of the two client instances. The browser
+# belt is neither instance either: it is a test harness that serves the build
+# and speaks WebDriver, and it ships nothing.
+NETWORK_CRATES = (
+    "crates/ambre-sync/",
+    "crates/ambre-server/",
+    "crates/ambre-sfu/",
+    "crates/ambre-belt/",
+)
 # The two reads `UI-THREAD-004` names as its exception: the same-origin font
 # fetch and the pre-session sign-in configuration.
 NETWORK_EXCEPTIONS = ("crates/ambre-canvas/src/host.rs", "crates/ambre-app/src/platform.rs")

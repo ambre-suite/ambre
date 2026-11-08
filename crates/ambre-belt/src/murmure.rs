@@ -78,20 +78,10 @@ mod tests {
     /// opens, then invites `invitee` into the space and confirms their key.
     async fn space_with_channel(page: &Page, space: &str, channel: &str, invitee: &str) {
         prompt(page, ".murmure-spaces", "murmure-new-space", space).await;
-        // A channel asked for before the space's document reached the relay
-        // fails, and the client tells the user nothing. So the creation is
-        // asked again until the channel opens.
-        let deadline = std::time::Instant::now() + STEP;
-        loop {
-            prompt(page, ".murmure-space", "murmure-new-channel", channel).await;
-            if shown(page, channel).await {
-                break;
-            }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "the channel {channel} never opened"
-            );
-        }
+        // A channel asked for at once waits for its space to reach the relay
+        // (`SYNC-189`), so one request opens it.
+        prompt(page, ".murmure-space", "murmure-new-channel", channel).await;
+        open(page, channel).await;
         prompt(
             page,
             ".murmure-space",
@@ -120,23 +110,6 @@ mod tests {
             )
             .await;
         page.wait_canvas().await;
-    }
-
-    /// Whether the content shows the channel `name` within two seconds.
-    async fn shown(page: &Page, name: &str) -> bool {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        let script = format!(
-            "const n = document.querySelector('.murmure-channel-name'); \
-             return !!n && n.textContent === {};",
-            Value::String(name.to_owned())
-        );
-        while std::time::Instant::now() < deadline {
-            if page.browser.script(&script, json!([])).await == json!(true) {
-                return true;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        false
     }
 
     /// Presses and releases each of `keys` in turn: a character or a key code.

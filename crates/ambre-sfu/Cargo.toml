@@ -16,5 +16,10 @@ tokio      = { workspace = true }
 # (`ambre-spec-call-media.md`, `CALL-013`).
 str0m = { version = "0.25.0", default-features = false, features = ["rust-crypto"] }
 
+[dev-dependencies]
+# The load run drives the signalling socket as a browser does (`src/sim/load.rs`).
+futures-util      = { workspace = true }
+tokio-tungstenite = "0.29"
+
 [lints]
 workspace = true

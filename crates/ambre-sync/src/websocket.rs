@@ -910,6 +910,14 @@ impl SyncState {
                 self.member_channels_listed(asked, result);
             }
             SyncEvent::ChannelCreated { channel_id, result } => {
+                // The creator lists a public channel in its catalogue. So its
+                // log admits a self-join from the start, as on any later open
+                // (`SYNC-106`, `SYNC-190`).
+                if let Some((meta, space_id)) = self.creating_public.remove(&channel_id)
+                    && result.is_ok()
+                {
+                    self.self_join_logs.insert(meta, space_id);
+                }
                 self.channel_answered(
                     channel_id,
                     result.map(|key| LogicEvent::ChannelCreated { channel_id, key }),
@@ -1100,6 +1108,7 @@ impl SyncState {
                     self.send_body(document_id, body);
                 }
                 self.flush_pending_uploads(document_id, None);
+                self.release_creations(document_id);
             }
             SyncEvent::DocumentCreateFailed {
                 document_id,
@@ -1110,6 +1119,7 @@ impl SyncState {
                 }
                 tracing::error!("Sync: lazy create failed for {document_id:?}: {failure}");
                 self.flush_pending_uploads(document_id, Some(&failure));
+                self.refuse_creations(document_id);
             }
             SyncEvent::HttpError {
                 id: _id,
