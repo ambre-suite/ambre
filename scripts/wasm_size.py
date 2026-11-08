@@ -29,7 +29,7 @@ BUDGET = 4_000_000
 # shrinks a download. Raised only when `ambre-spec-budgets.md section 5` names
 # the crate that grew and why.
 CEILINGS = {
-    "Main": 3_100_000,
+    "Main": 3_110_000,
     "Sync": 360_000,
 }
 

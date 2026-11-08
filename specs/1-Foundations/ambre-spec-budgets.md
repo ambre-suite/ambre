@@ -257,6 +257,10 @@
 * **The cut costs one change of layout.** Parley 0.10 breaks a CR LF twice, so a CR LF that
   reaches the canvas draws one empty line more (`CANVAS-084`). Prose, Trame and the browser
   input turn a CR LF into an LF first, so only a peer or an imported file can bring one.
+* **The ceiling of Main went up to 3.11 MB later on 2026-11-08.** Trame's own undo history took
+  Main to 3 102 694 bytes, 2 694 over the ceiling of the cut. Each edit now records its inverse
+  (`TRAME-286`). The growth is the feature itself, so the ceiling keeps about 7 KB of
+  room above it instead of a few hundred bytes.
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
