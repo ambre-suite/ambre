@@ -217,15 +217,41 @@ pub(crate) fn async_write_clipboard(
         return;
     };
     wasm_bindgen_futures::spawn_local(async move {
-        let Some(Published { item, web }) = publish_item(&blob, &token, clipboard_item) else {
-            return;
+        let write = |item: web_sys::ClipboardItem| {
+            wasm_bindgen_futures::JsFuture::from(clipboard.write(&js_sys::Array::of1(&item)))
         };
-        let items = js_sys::Array::of1(&item);
-        let written = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
+        let landed = publish(&blob, &token, clipboard_item, write).await;
         // Only a landed write of the `web ` types moves the token out of the
         // paste event's reach (`UI-THREAD-054`).
-        published.set(web == WebTypes::Carried && written.is_ok());
+        published.set(landed == Some(WebTypes::Carried));
     });
+}
+
+/// Writes the item of [`publish_item`] through `write`, and answers which item
+/// landed, or `None` when no write landed.
+///
+/// Firefox 156 refuses the `web ` types in the item constructor. Firefox 153
+/// ESR builds the item, and refuses those types at the write. So a refused
+/// write of the `web ` types writes the item without them once more. The
+/// second write runs inside the same user activation (`UI-THREAD-055`).
+async fn publish<T, W>(
+    blob: &ambre_bus::ClipboardBlob,
+    token: &ambre_bus::ClipToken,
+    build: impl Fn(&[(ClipboardFormat, Option<&str>)]) -> Option<T>,
+    write: impl Fn(T) -> W,
+) -> Option<WebTypes>
+where
+    W: std::future::Future<Output = Result<JsValue, JsValue>>,
+{
+    let Published { item, web } = publish_item(blob, token, &build)?;
+    if write(item).await.is_ok() {
+        return Some(web);
+    }
+    if web == WebTypes::Dropped {
+        return None;
+    }
+    let item = dropped_item(blob, token, &build)?;
+    write(item).await.ok().map(|_| WebTypes::Dropped)
 }
 
 /// Whether a published clipboard item carries the `web ` types.
@@ -274,11 +300,27 @@ fn publish_item<T>(
             web: WebTypes::Carried,
         });
     }
-    let marked = html.map(|h| ambre_bus::ClipboardBlob::mark_html(h, token));
-    build(&[text, (ClipboardFormat::Html, marked.as_deref())]).map(|item| Published {
+    dropped_item(blob, token, build).map(|item| Published {
         item,
         web: WebTypes::Dropped,
     })
+}
+
+/// The item without the `web ` types: the mirror, and the HTML the view wrote
+/// with the token in a comment (`UI-THREAD-055`, `UI-THREAD-057`).
+fn dropped_item<T>(
+    blob: &ambre_bus::ClipboardBlob,
+    token: &ambre_bus::ClipToken,
+    build: impl Fn(&[(ClipboardFormat, Option<&str>)]) -> Option<T>,
+) -> Option<T> {
+    let marked = blob
+        .html
+        .as_deref()
+        .map(|h| ambre_bus::ClipboardBlob::mark_html(h, token));
+    build(&[
+        (ClipboardFormat::PlainText, Some(blob.text.as_str())),
+        (ClipboardFormat::Html, marked.as_deref()),
+    ])
 }
 
 /// Build a ClipboardItem from `(type, value)` pairs, skipping absent values.
@@ -666,10 +708,12 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
 mod tests {
     use super::{
         ClipboardFormat, FrameHost, Published, WebTypes, base64_decode, base64_encode,
-        clipboard_item, publish_item,
+        clipboard_item, publish, publish_item,
     };
     use ambre_core::{ClipboardBytes, Instant, PageLoad, Payload};
+    use std::cell::RefCell;
     use std::collections::VecDeque;
+    use wasm_bindgen::JsValue;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// `CANVAS-011`: the loop keeps ticking while the frame draws nothing, so an
@@ -901,6 +945,51 @@ mod tests {
         assert_eq!(
             token.as_ref().map(ambre_bus::ClipToken::as_str),
             Some("ambre-2"),
+            "the token rides in the HTML"
+        );
+    }
+
+    /// `UI-THREAD-055`: Firefox 153 ESR builds an item with the `web ` types and
+    /// refuses them at the write. The copy then writes the mirror and the HTML,
+    /// the token in the HTML.
+    #[wasm_bindgen_test]
+    async fn a_write_refusing_the_web_types_still_publishes_the_mirror_and_the_html() {
+        let attempts = RefCell::new(Vec::new());
+        let write = |item: web_sys::ClipboardItem| {
+            let web = types(&item).iter().any(|kind| kind.starts_with("web "));
+            attempts.borrow_mut().push(item);
+            let answer = if web {
+                js_sys::Promise::reject(&"NotAllowedError".into())
+            } else {
+                js_sys::Promise::resolve(&JsValue::UNDEFINED)
+            };
+            wasm_bindgen_futures::JsFuture::from(answer)
+        };
+        let blob = ambre_bus::ClipboardBlob {
+            text: "a".to_owned(),
+            html: Some("<p>a</p>".to_owned()),
+            ambre: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
+                vec![1, 2, 3],
+            )),
+            ..ambre_bus::ClipboardBlob::default()
+        };
+        let token = ambre_bus::ClipToken::new("ambre-3".to_owned()).unwrap();
+        let landed = publish(&blob, &token, clipboard_item, write).await;
+        assert_eq!(landed, Some(WebTypes::Dropped));
+        let attempts = attempts.into_inner();
+        assert_eq!(attempts.len(), 2, "one refused write, then one more");
+        assert_eq!(
+            types(&attempts[1]),
+            vec![
+                ClipboardFormat::Html.mime(),
+                ClipboardFormat::PlainText.mime()
+            ]
+        );
+        let (blob, token) = read_back(&attempts[1]).await;
+        assert_eq!(blob.text, "a");
+        assert_eq!(
+            token.as_ref().map(ambre_bus::ClipToken::as_str),
+            Some("ambre-3"),
             "the token rides in the HTML"
         );
     }

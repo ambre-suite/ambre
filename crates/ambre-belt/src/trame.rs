@@ -104,6 +104,22 @@ mod tests {
         )
     }
 
+    /// Whether the activation was live where the page called the write that
+    /// landed. Firefox 153 refuses the first write of a Trame copy, and the
+    /// second write lands (`UI-THREAD-055`). The wait reads the landed write, so
+    /// it never reads the gap between the two.
+    async fn landed_write_was_active(page: &Page) -> bool {
+        let record = page
+            .browser
+            .wait_for(
+                "a landed asynchronous clipboard write",
+                "return window.beltWrites.find(w => w.ended === 'landed') || null;",
+                STEP,
+            )
+            .await;
+        record["active"] == Value::Bool(true)
+    }
+
     /// The types the clipboard holds, read back through the asynchronous API.
     async fn clipboard_types(page: &Page) -> Value {
         page.browser
@@ -126,7 +142,7 @@ mod tests {
     /// while the activation the key press opened is live. It lands, and the
     /// clipboard holds what only that write publishes. On Chrome that is the
     /// private bytes and the token. Firefox refuses the `web ` types. So
-    /// for a Trame copy, the write publishes the mirror alone
+    /// for a Trame copy, the write publishes the mirror and the HTML table
     /// (`UI-THREAD-055`).
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
@@ -137,11 +153,14 @@ mod tests {
         let page = Page::new_document("trame").await;
         select_and_record(&page).await;
         copy(&page).await;
-        assert_eq!(first_write(&page).await, (true, "landed".to_owned()));
+        assert!(
+            landed_write_was_active(&page).await,
+            "the write landed outside the window"
+        );
         let types = clipboard_types(&page).await;
         let published: &[&str] = match page.browser.engine() {
             Engine::Chrome => &["web application/x-ambre", "web application/x-ambre-token"],
-            Engine::Firefox => &["text/plain"],
+            Engine::Firefox => &["text/plain", "text/html"],
         };
         for kind in published {
             assert!(holds(&types, kind), "{kind} in {types}");

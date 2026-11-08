@@ -190,10 +190,10 @@ mod tests {
     }
 
     /// Records, in `window.beltClip`, the token the next copy event writes,
-    /// how the asynchronous clipboard write ends, and the HTML the next paste
+    /// how each asynchronous clipboard write ends, and the HTML the next paste
     /// event carries. Each listener runs in the capture phase of the window,
     /// before the page's own, and changes nothing the browser does.
-    const RECORD_CLIPBOARD: &str = "window.beltClip = { token: null, ended: null, html: null }; \
+    const RECORD_CLIPBOARD: &str = "window.beltClip = { token: null, writes: [], html: null }; \
         addEventListener('copy', e => { \
           const data = e.clipboardData; const set = data.setData.bind(data); \
           data.setData = (kind, value) => { \
@@ -201,8 +201,9 @@ mod tests {
             return set(kind, value); }; }, true); \
         const write = navigator.clipboard.write.bind(navigator.clipboard); \
         navigator.clipboard.write = items => { \
+          const record = { ended: null }; beltClip.writes.push(record); \
           const written = write(items); \
-          written.then(() => beltClip.ended = 'landed', e => beltClip.ended = e.name); \
+          written.then(() => record.ended = 'landed', e => record.ended = e.name); \
           return written; }; \
         addEventListener('paste', e => { \
           beltClip.html = e.clipboardData.getData('text/html'); }, true);";
@@ -224,15 +225,15 @@ mod tests {
 
         chord(&page, &[CONTROL], "a").await;
         chord(&page, &[CONTROL], "c").await;
-        let ended = page
-            .browser
+        // Firefox 153 refuses the first write, which carries the `web ` types,
+        // and the second write lands.
+        page.browser
             .wait_for(
-                "the asynchronous clipboard write",
-                "return beltClip.ended;",
+                "a landed asynchronous clipboard write",
+                "return beltClip.writes.some(w => w.ended === 'landed');",
                 STEP,
             )
             .await;
-        assert_eq!(ended, json!("landed"));
         let token = page
             .browser
             .script("return beltClip.token;", json!([]))
