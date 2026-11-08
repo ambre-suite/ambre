@@ -27,7 +27,8 @@
 //!       stray workspace (`features.rs`, `files.rs`);
 //!     * the crate boundaries (`boundaries.rs`). The driver refuses a
 //!       resolved path, the judge reads the manifests from `cargo metadata`,
-//!       and refuses a wire type the worker or the relay redeclares;
+//!       and refuses a wire type the worker or the relay redeclares. It also
+//!       counts the facts of the launcher's wiring over every unit;
 //!   * `check --unwrap-strict` also runs the strict unwrap report on the same
 //!     records, and prints both verdicts. It fails when either fails;
 //!   * `--prune` removes the lines that name no site, and the exception lines
@@ -321,6 +322,10 @@ fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Ver
     report(
         "the one wire definition (ARCH-006)",
         boundaries::wire(records),
+    );
+    report(
+        "the launcher's wiring (ambre-spec-architecture.md section 2)",
+        boundaries::wiring(records),
     );
     for (check, message) in &records.refusals {
         eprintln!("primitives: {check}: {message}");

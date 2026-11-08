@@ -372,6 +372,9 @@ index-write:
 # section 2). The driver refuses a resolved path that reaches what its part of
 # the workspace must not, and the judge reads the graph `cargo metadata`
 # resolves: two instances, the network from the worker, one wire definition.
+# The driver also reads types and bodies: a generator's reads, a request id, a
+# payload in a relay log. The judge counts the launcher's wiring over every
+# unit: one engine start, a relay that drains, a fatal latch per failure.
 primitives:
     cargo run -q -p ambre-primitives -- check --unwrap-strict
 

@@ -3809,6 +3809,7 @@ ambre-murmure | src/view.rs | crate::view | Reveal::from_bool(value) | param | b
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_field() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_literal() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | claim() | ret | Result<(),String>	free-text	the refusal a reviewer reads beside the key
+ambre-primitives | src/boundaries.rs | crate::boundaries | ANCHORS | const | &[(&str,&str)]	generic	each file a boundary of the driver closes, matched against the files the compiles read, and the rows it holds, printed in a refusal
 ambre-primitives | src/boundaries.rs | crate::boundaries | APP_CRATES | const | &[&str]	generic	the package names a shared control's style type could come from, matched against the graph cargo metadata resolves
 ambre-primitives | src/boundaries.rs | crate::boundaries | CLIENT | const | &str	generic	the package name of the launcher, matched against the graph cargo metadata resolves
 ambre-primitives | src/boundaries.rs | crate::boundaries | C_CRYPTO | const | &[&str]	generic	the package names of the C cryptography libraries, matched against the graph cargo metadata resolves
@@ -3833,6 +3834,7 @@ ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::parse(text) | 
 ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached() | ret | Vec<(&'a str,&'a str)>	generic	the package names of each edge into a refused package, printed in a refusal
 ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached(closure) | param | &'a BTreeSet<String>	generic	the package ids a walk of the graph reached
 ambre-primitives | src/boundaries.rs | crate::boundaries | Graph::reached(names) | param | &[&str]	generic	the package names a walk must not reach
+ambre-primitives | src/boundaries.rs | crate::boundaries | LAUNCHER_LIB | const | &str	generic	the path of the launcher's relay file, matched against the position a fact record carries
 ambre-primitives | src/boundaries.rs | crate::boundaries | NETWORK_CRATES | const | &[&str]	generic	the package names a network call may leave from, matched against the graph cargo metadata resolves
 ambre-primitives | src/boundaries.rs | crate::boundaries | Package.crate_types | field | Vec<String>	generic	the crate types of each target, as cargo metadata writes them
 ambre-primitives | src/boundaries.rs | crate::boundaries | Package.features | field | BTreeMap<String,Vec<String>>	generic	the feature table of a package, as cargo metadata writes it
@@ -3850,6 +3852,7 @@ ambre-primitives | src/boundaries.rs | crate::boundaries | manifests() | ret | V
 ambre-primitives | src/boundaries.rs | crate::boundaries | manifests(read) | param | &dyn Fn(&str)->Option<String>	generic	reads a manifest by its path, and hands back its text
 ambre-primitives | src/boundaries.rs | crate::boundaries | metadata() | ret | Result<String,String>	generic	the JSON text cargo metadata prints, or the error message printed to the terminal
 ambre-primitives | src/boundaries.rs | crate::boundaries | wire() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/boundaries.rs | crate::boundaries | wiring() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/files.rs | crate::files | NESTED_WORKSPACES | const | &[&str]	generic	the directories of the workspace root that hold a workspace of their own
 ambre-primitives | src/files.rs | crate::files | SKIPPED | const | &[&str]	generic	the directories of the workspace root that a listing leaves out
 ambre-primitives | src/files.rs | crate::files | VENDORED | const | &[&str]	generic	the directories of the workspace root that hold a patched third-party crate
@@ -3868,6 +3871,7 @@ ambre-primitives | src/records.rs | crate::records | Privacy::parse(word) | para
 ambre-primitives | src/records.rs | crate::records | Records.aliases | field | BTreeSet<(String,String,String)>	generic	the family, the alias and the position of each alias record, as the driver writes them
 ambre-primitives | src/records.rs | crate::records | Records.decls | field | BTreeSet<(String,String,String,String)>	generic	the package, the name, the visibility word and the position of each declaration record, as the driver writes them
 ambre-primitives | src/records.rs | crate::records | Records.errors | field | Vec<String>	free-text	each record the judge cannot read, as a message
+ambre-primitives | src/records.rs | crate::records | Records.facts | field | BTreeSet<(String,String,String)>	generic	the name, the value and the position of each fact record, as the driver writes them
 ambre-primitives | src/records.rs | crate::records | Records.generics | field | BTreeSet<String>	generic	the names of the generic structs of ambre-core, compared with the families table
 ambre-primitives | src/records.rs | crate::records | Records.literals | field | Vec<(String,String)>	generic	the slot and the position of each literal, as the driver writes them
 ambre-primitives | src/records.rs | crate::records | Records.newtypes | field | BTreeMap<String,String>	generic	the census key and the position of each newtype, as the driver writes them

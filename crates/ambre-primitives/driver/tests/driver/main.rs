@@ -17,3 +17,5 @@ mod secrets;
 mod sites;
 #[cfg(test)]
 mod unwrap;
+#[cfg(test)]
+mod wiring;
