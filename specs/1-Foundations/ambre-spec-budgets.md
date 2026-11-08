@@ -100,6 +100,9 @@
 | Call worker load: three VP8 sizes and Opus sent, nine videos and the loudest audio received, about 1 500 chunks per second | < 25 % of one core | -- | Call worker | measured while the Sync worker seals a file -- **none exists**, and no code either |
 | Call sender key switch, from a leave or a removal to the fresh key in use | 5 s | 12 s | Sync -> Call worker | the delay lets late wraps arrive, and a member who left opens chunks until it ends (`CALL-027`) -- **none exists**, and no code either |
 | Call participants | 50 | 50 | -- | a cap: a join beyond it is refused (`CALL-021`). A broadcast to hundreds is another product |
+| Call videos forwarded to one receiver | 9: one at the top layer its estimate allows, eight at the lowest | 9 | SFU | a cap: the SFU forwards the video of the most recent speakers alone (`CALL-041`) -- **none exists** |
+| Call video stall, per 10 minutes of one received video: 50 participants at 150 ms of round trip and 2 % loss | < 1 s | -- | Browser | a stall is a gap between two pictures longer than three times the mean gap and longer than the mean plus 150 ms, as the WebRTC statistics count a freeze; a gap of 5 s or more is a pause -- **none exists** |
+| Call first media through TURN on TCP 443, from the join to the first decoded picture | < 5 s | -- | Browser | a network that opens TCP on port 443 alone (`CALL-042`) -- **none exists** |
 | Call mouth to ear, two phones on 4G | < 300 ms | < 400 ms through TURN | Browser | the inter-user budget of the README, applied to sound -- **none exists**, and no code either |
 
 * **The transport is not the cost.** UI <-> Logic stays zero-cost (`ambre_bus::conduit` by move,
@@ -174,6 +177,7 @@
 | Global S3 flush batch, 15 s cycle | < 2 s for 1000 deltas | Parallel S3 upload | **none exists** |
 | Presence write, per heartbeat | < 2 ms | Two Redis round trips: the entry, then its own expiry | **none exists** |
 | SFU load, one call of 50 participants | < 2 vCPU | packet forwarding and the layer choice per receiver | **none exists**, and no code either |
+| SFU layer drop, from a cap on the downlink of a receiver to a lower layer at that receiver | < 3 s | the estimate of the downlink, from the transport-wide feedback of the receiver | **none exists** (`CALL-038`) |
 
 ---
 

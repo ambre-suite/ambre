@@ -43,6 +43,10 @@ this document alone.
 | `CALL-032` | `INV` | The SFU MUST forward each RTP packet of a participant to every other participant of its room, its payload unchanged. | this spec section 3, the SFU | `ambre_sfu::forward::tests::each_packet_reaches_every_other_participant_of_the_room_unchanged` | none | verified |
 | `CALL-036` | `INV` | The SFU MUST serve its signalling on a port of its own, apart from the relay. | `ambre-spec-broadcast.md`, `SRV-049`; this spec section 3, signalling | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier | none | verified |
 | `CALL-037` | `OBS` | Two browsers in one room MUST each decode the audio and the video of the other through the SFU. | this spec section 3, the stack | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier, under Chrome and under Firefox | none | verified |
+| `CALL-039` | `INV` | The SFU MUST switch a receiver to another layer of a track only on a keyframe of that layer. | this spec section 3, the SFU | not built | unbuilt -- lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-040` | `INV` | The sequence numbers of a video track forwarded to one receiver MUST stay continuous across a layer switch. | this spec section 3, the SFU; `CALL-032` | not built | unbuilt -- lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-041` | `INV` | The SFU MUST forward a receiver the video of the most recent speakers alone, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | not built | unbuilt -- lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-042` | `OBS` | A browser whose network opens TCP on port 443 alone MUST decode the audio and the video of the call through the TURN relay within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the stack | not built | unbuilt -- lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Join a call
 
@@ -86,13 +90,23 @@ A participant sends a packet to the SFU, and the SFU forwards it within the room
 | `CALL-034` | `POST` | A participant who joins a room MUST receive each track the room already carries. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_late_joiner_receives_the_tracks_already_in_the_room` | none | verified |
 | `CALL-035` | `POST` | A keyframe request from a receiver MUST reach the sender of its track. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_keyframe_request_reaches_the_sender_of_the_track` | none | verified |
 
+### 1.6 Lower a layer
+
+The downlink estimate of a receiver falls below what the SFU forwards it.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CALL-038` | `POST` | Given a receiver whose downlink estimate falls below what it receives, the SFU MUST forward it a lower layer within the delay of `ambre-spec-budgets.md section 3`. | this spec section 3, the SFU | not built | unbuilt -- lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-043` | `FRAME` | A layer drop for one receiver MUST NOT change the layer another receiver gets. | this spec section 3, the SFU | not built | unbuilt -- lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 8 `verified`, 29 `unimplemented`. The SFU links no C cryptography, completes DTLS,
-  and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-037`). No call code exists beyond it.
+* **Verification.** 8 `verified`, 35 `unimplemented`. The SFU links no C cryptography, completes
+  DTLS, and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-037`). No call code exists
+  beyond it.
 
 ---
 
