@@ -4217,10 +4217,13 @@ ambre-trame | src/logic/sheets.rs | crate::logic::sheets | is_formula() | ret | 
 ambre-sfu | src/congestion.rs | crate::congestion | <Packets as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sfu | src/congestion.rs | crate::congestion | <Packets as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::congested() | ret | bool	generic	predicate result
+ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_CONFIDENCE | const | f64	math	scalar multiplier of the standard error of the loss reading
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_GROWTH | const | f64	math	growth factor per second of the loss bound
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_HIGH | const | f64	math	ratio of lost packets above which the loss bound falls
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_LOW | const | f64	math	ratio of lost packets under which the loss bound rises
+ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
+ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding
 ambre-sfu | src/congestion.rs | crate::congestion | RTT_WEIGHT | const | f64	math	smoothing weight of a round-trip sample
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | <Samples as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | <Samples as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
