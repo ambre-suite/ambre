@@ -25,7 +25,8 @@
 // each formula a cycle refused.
 // ============================================================================
 
-use std::collections::{HashMap, VecDeque};
+use crate::hash::HashMap;
+use std::collections::VecDeque;
 
 use ambre_core::index::{Len, Pos};
 use proptest::prelude::*;
@@ -298,7 +299,7 @@ fn engine_by_lines(st: &TrameState) -> Engine {
         CellId::new(cell.sheet, row, col)
     };
     let mut held = engine(st);
-    let mut edges = HashMap::new();
+    let mut edges = HashMap::default();
     for ((from, to), n) in held.edges.drain() {
         *edges.entry((by_line(from), by_line(to))).or_insert(0) += n;
     }

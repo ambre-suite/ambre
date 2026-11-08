@@ -4,9 +4,9 @@
 //! is the grid position, so `row_id(p)`/`col_id(p)` are stable and distinct.
 
 use crate::formula::EngineSheet;
+use crate::hash::HashMap;
 use crate::model::{SheetIndex, Uid};
 use ambre_core::index::Pos;
-use std::collections::HashMap;
 
 /// A `SheetIndex` with `rows` materialized rows and `cols` materialized columns.
 pub fn index_with(rows: usize, cols: usize) -> SheetIndex {
@@ -28,7 +28,7 @@ pub fn index_with(rows: usize, cols: usize) -> SheetIndex {
 
 /// A single-sheet index map (sheet 0) sized `rows` x `cols`.
 pub fn indices_with(rows: usize, cols: usize) -> HashMap<Pos<EngineSheet>, SheetIndex> {
-    let mut m = HashMap::new();
+    let mut m = HashMap::default();
     m.insert(super::ACTIVE_SHEET, index_with(rows, cols));
     m
 }

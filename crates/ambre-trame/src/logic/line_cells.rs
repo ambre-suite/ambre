@@ -8,7 +8,7 @@
 // import, an undo and a checkout alike. No write path updates it by hand, so
 // none can forget to.
 
-use std::collections::{HashMap, HashSet};
+use crate::hash::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ambre_core::id::{Id, Sheet};

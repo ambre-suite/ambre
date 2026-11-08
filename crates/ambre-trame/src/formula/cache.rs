@@ -6,7 +6,7 @@
 //! current per-sheet indices (so `=A1` binds to the row/column `Uid`).
 
 use crate::formula::text::CellText;
-use std::collections::{HashMap, HashSet};
+use crate::hash::{HashMap, HashSet};
 
 use super::compile::compile;
 use super::dag::DependencyGraph;
@@ -46,13 +46,13 @@ pub struct BytecodeCache {
 impl BytecodeCache {
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
-            stale: HashSet::new(),
-            sources: HashMap::new(),
+            entries: HashMap::default(),
+            stale: HashSet::default(),
+            sources: HashMap::default(),
             compiles: 0,
-            positional: HashSet::new(),
-            cyclic: HashSet::new(),
-            unbound: HashSet::new(),
+            positional: HashSet::default(),
+            cyclic: HashSet::default(),
+            unbound: HashSet::default(),
         }
     }
 

@@ -33,6 +33,13 @@ loro      = { workspace = true }
 blake2    = { workspace = true }
 # The map handles typed by the schema keys.
 ambre-crdt = { path = "../ambre-crdt" }
+# The hash tables (`src/hash.rs`, `TRAME-292`): foldhash under a key drawn
+# once per process from the platform entropy source. A peer chooses the cell
+# keys and the line ids, so a key it can learn lets it force collisions.
+# SipHash, the std default, cost about a sixth of the undo of a block delete.
+# Both are pure Rust and already in the lock.
+foldhash  = { workspace = true }
+getrandom = { workspace = true }
 petgraph  = { workspace = true }
 nom       = { workspace = true }
 # CSV import/export (`trame-import-export`).

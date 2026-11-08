@@ -86,6 +86,10 @@ data-encoding = "2.11"
 # CSPRNG for nonces and key material. `wasm_js` selects the browser entropy
 # backend (crypto.getRandomValues) on wasm32-unknown-unknown.
 getrandom = { version = "0.3", features = ["wasm_js"] }
+# The hasher of the Trame tables (`TRAME-292`). Pure Rust, no dependency, and
+# already in the lock under hashbrown. Keyed by `getrandom`, never by its own
+# address-based key, which is fixed on wasm32-unknown-unknown.
+foldhash = { version = "0.2", default-features = false, features = ["std"] }
 
 # The primitive gate (`crates/ambre-primitives`, `ambre-spec-testing.md`
 # section 2): a Rust parser, so the gate reads the items rustc reads. Host only.

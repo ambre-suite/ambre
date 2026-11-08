@@ -10,7 +10,7 @@
 // through the carried structural step. Whatever the note cannot place falls
 // back to the full reseed (`ambre-spec-trame-engine.md section 3.F`).
 
-use std::collections::{HashMap, HashSet};
+use crate::hash::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ambre_core::crdt::FoundationRoot;
@@ -74,16 +74,16 @@ pub(super) struct Imported {
 impl Default for Imported {
     fn default() -> Self {
         Self {
-            cells: HashMap::new(),
-            axes: HashSet::new(),
-            rows: HashMap::new(),
-            cols: HashMap::new(),
+            cells: HashMap::default(),
+            axes: HashSet::default(),
+            rows: HashMap::default(),
+            cols: HashMap::default(),
             lines: LineRead::Clean,
-            merges: HashSet::new(),
-            styles: HashSet::new(),
-            styled: HashMap::new(),
-            sizes: HashSet::new(),
-            filters: HashSet::new(),
+            merges: HashSet::default(),
+            styles: HashSet::default(),
+            styled: HashMap::default(),
+            sizes: HashSet::default(),
+            filters: HashSet::default(),
             keys: LineRead::Clean,
             reach: Reach::Placed,
         }
@@ -451,8 +451,9 @@ impl TrameState {
                 others.get(&sheet)
             }
         };
-        let removed = change.map_or_else(HashSet::new, |change| gone_cells(change, &self.index));
-        let mut written: HashMap<CellId, CellText<StoredForm>> = HashMap::new();
+        let removed =
+            change.map_or_else(HashSet::default, |change| gone_cells(change, &self.index));
+        let mut written: HashMap<CellId, CellText<StoredForm>> = HashMap::default();
         let mut orphaned = Vec::new();
         let mut placed = Vec::new();
         for (sheet, keys) in &imported.cells {
@@ -678,7 +679,7 @@ fn gone_cells(change: &LayoutChange, index: &SheetIndex) -> HashSet<CellId> {
             .copied()
             .collect()
     }
-    let mut cells = HashSet::new();
+    let mut cells = HashSet::default();
     if !change.rows.gone.is_empty() {
         let cols = before(index.cols().lines().as_slice(), &change.cols);
         for &row in &change.rows.gone {

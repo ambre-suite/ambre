@@ -9,8 +9,8 @@
 //! references resolve against live positions.
 
 use crate::formula::text::CellText;
+use crate::hash::{HashMap, HashSet};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 
 use petgraph::visit::Topo;
 
@@ -54,9 +54,9 @@ impl FormulaEngine {
         Self {
             deps: DependencyGraph::new(),
             bytecode: BytecodeCache::new(),
-            formula_cache: RefCell::new(HashMap::new()),
-            dirty: HashSet::new(),
-            changed: HashSet::new(),
+            formula_cache: RefCell::new(HashMap::default()),
+            dirty: HashSet::default(),
+            changed: HashSet::default(),
         }
     }
 
@@ -130,7 +130,7 @@ impl FormulaEngine {
     /// edges out of the removed cells and the positional formulas, never the
     /// whole graph (`TRAME-280`).
     pub fn structural_reach(&self, removed: &HashSet<CellId>) -> Vec<CellId> {
-        let mut reach: HashSet<CellId> = HashSet::new();
+        let mut reach: HashSet<CellId> = HashSet::default();
         for cell in removed {
             let Some(&node) = self.deps.cell_to_node.get(cell) else {
                 continue;
@@ -694,7 +694,7 @@ mod tests {
         // re-parse against the new order would produce.
         let mut moved = index_with(10, 10);
         moved.apply_move_row(Pos::<Row>::new(0), Pos::<Row>::new(1));
-        let mut indices = HashMap::new();
+        let mut indices = HashMap::default();
         indices.insert(ACTIVE_SHEET, moved);
         engine.mark_all_dirty();
         engine.compute_all_dirty(&indices);

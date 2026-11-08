@@ -204,7 +204,7 @@ fn a_text_typed_before_the_commit_frame_reaches_the_next_cell() {
     rig.frame();
     let commits: Vec<(i64, i64, String)> = {
         let sent = rig.sent();
-        let mut opened = std::collections::HashMap::new();
+        let mut opened = crate::hash::HashMap::default();
         sent.iter()
             .filter_map(|c| match c {
                 TrameCommand::BeginCellEdit { session, row, col } => {

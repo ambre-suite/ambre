@@ -1,7 +1,7 @@
 // ambre-trame/src/ui/renderer/cells.rs
 // Cell-layer rendering: full/scroll/reuse repaint of the persistent grid.
 
-use std::collections::HashMap;
+use crate::hash::HashMap;
 
 use ambre_draw::{Affine, DocumentWalk};
 

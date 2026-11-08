@@ -12,9 +12,9 @@
 //! position beyond it stays a [`AxisId::Virtual`] grid coordinate
 //! (`trame-formula-engine`).
 
+use crate::hash::HashMap;
 use ambre_core::index::Len;
 use ambre_core::index::Pos;
-use std::collections::HashMap;
 
 use crate::model::{Line, SheetIndex};
 
@@ -193,7 +193,7 @@ mod tests {
 
     fn compile_str(input: &str) -> CellBytecode {
         let ast = parse_formula(input).unwrap();
-        let mut indices = HashMap::new();
+        let mut indices = HashMap::default();
         indices.insert(ACTIVE_SHEET, index_with(20, 10));
         compile(&ast, &indices)
     }

@@ -101,7 +101,7 @@ impl TrameState {
         // A cell with no line to key its style by is refused whole, never
         // drawn with a style the document does not hold (`TRAME-193`). It lies
         // past the materialization cap, or the session is out of fresh uids.
-        let mut refused: HashMap<CellPos, Unmaterialized> = HashMap::new();
+        let mut refused: HashMap<CellPos, Unmaterialized> = HashMap::default();
         for &cell in &cells {
             if self.covered.contains(&cell) {
                 continue;

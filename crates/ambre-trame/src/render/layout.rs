@@ -4,8 +4,8 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
+use crate::hash::HashMap;
 use ambre_core::index::{Delta, Len, Pos, Span};
-use std::collections::HashMap;
 
 use ambre_core::{Doc, Px, Surface};
 

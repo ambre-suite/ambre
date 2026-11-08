@@ -23,7 +23,7 @@
 // function, and no function that hides an error, such as `COUNT` or `IFERROR`.
 // ============================================================================
 
-use std::collections::{HashMap, HashSet};
+use crate::hash::{HashMap, HashSet};
 
 use ambre_core::index::{Len, Pos};
 use loro::LoroValue;
@@ -281,7 +281,7 @@ pub(super) struct Engine {
 
 pub(super) fn engine(st: &TrameState) -> Engine {
     let e = &st.engine;
-    let mut edges = HashMap::new();
+    let mut edges = HashMap::default();
     for edge in e.deps.cell_dag.edge_indices() {
         if let Some((a, b)) = e.deps.cell_dag.edge_endpoints(edge) {
             *edges

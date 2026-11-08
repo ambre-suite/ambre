@@ -330,7 +330,7 @@ impl TrameState {
         };
         let carried = self
             .engine
-            .apply_structural(&HashSet::new(), &reread, &indices, &ctx);
+            .apply_structural(&HashSet::default(), &reread, &indices, &ctx);
         if let Some(index) = indices.remove(&ACTIVE_SHEET) {
             self.index = index;
         }
@@ -352,7 +352,7 @@ impl TrameState {
     /// maintained [`Self::index`]); other sheets are rebuilt on demand. Local
     /// indices match [`Self::sheets_by_idx`] (active pinned first).
     pub(super) fn engine_indices(&self) -> HashMap<Pos<EngineSheet>, SheetIndex> {
-        let mut m = HashMap::new();
+        let mut m = HashMap::default();
         for (idx, id) in self.sheets_by_idx.iter().enumerate() {
             let index = if idx == ACTIVE_SHEET.to_usize() {
                 self.index.clone()
@@ -684,7 +684,7 @@ pub(super) fn shown_cells<'a>(
     entries: impl IntoIterator<Item = (&'a String, &'a LoroValue)>,
 ) -> (Vec<(CellPos, &'a String, &'a LoroValue)>, LineRead) {
     let mut read = LineRead::Clean;
-    let mut best: HashMap<CellPos, (CellRank, &'a String, &'a LoroValue)> = HashMap::new();
+    let mut best: HashMap<CellPos, (CellRank, &'a String, &'a LoroValue)> = HashMap::default();
     for (key, value) in entries {
         if parse_cell_key(key).is_none() {
             read = LineRead::Skipped;

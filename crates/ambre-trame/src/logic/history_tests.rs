@@ -11,7 +11,8 @@
 // every delta the first sends, and must store what the first stores.
 // ============================================================================
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use crate::hash::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ambre_core::crdt::FoundationRoot;
 use ambre_core::index::Pos;
@@ -41,8 +42,7 @@ fn content_but(st: &TrameState, contested: &BTreeSet<String>) -> BTreeMap<String
                     map.iter()
                         .filter(|(key, _)| !contested.contains(key.as_str()))
                         .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect::<HashMap<_, _>>()
-                        .into(),
+                        .collect::<loro::LoroMapValue>(),
                 ),
                 other => other.clone(),
             };
@@ -70,7 +70,7 @@ fn changed(
     let keys = |side: &BTreeMap<String, LoroValue>, root: &str| -> HashMap<String, LoroValue> {
         match side.get(root) {
             Some(LoroValue::Map(map)) => map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-            _ => HashMap::new(),
+            _ => HashMap::default(),
         }
     };
     let roots: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
