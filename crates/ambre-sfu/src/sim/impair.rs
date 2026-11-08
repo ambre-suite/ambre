@@ -41,6 +41,8 @@ pub struct Profile {
     pub cap: Option<u64>,
     /// The longest a datagram may wait behind the cap.
     pub queue: Duration,
+    /// The most extra delay a datagram draws, at random and without reordering.
+    pub jitter: Duration,
 }
 
 impl Profile {
@@ -50,6 +52,7 @@ impl Profile {
         loss: 0.0,
         cap: None,
         queue: Duration::from_millis(300),
+        jitter: Duration::ZERO,
     };
 
     /// Half of `rtt` of delay, and `loss`.
@@ -67,6 +70,11 @@ impl Profile {
 pub struct Impairment {
     pub profile: Profile,
     rng: Seeded,
+    /// The draws of the jitter, apart from those of the loss, so a jitter leaves the loss
+    /// pattern of a seed as it was.
+    jitter_rng: Seeded,
+    /// When the last datagram leaves the link, so a jitter never reorders two datagrams.
+    last_out: Option<Instant>,
     /// When the cap has sent the last queued datagram.
     busy_until: Option<Instant>,
     /// Counts, for a report.
@@ -80,6 +88,8 @@ impl Impairment {
         Self {
             profile,
             rng: Seeded::new(seed),
+            jitter_rng: Seeded::new(seed ^ 0x6a17_7e55),
+            last_out: None,
             busy_until: None,
             sent: 0,
             lost: 0,
@@ -111,7 +121,13 @@ impl Impairment {
             }
         };
         self.sent += 1;
-        Some(departs + self.profile.delay)
+        let mut out = departs + self.profile.delay;
+        if !self.profile.jitter.is_zero() {
+            out += self.profile.jitter.mul_f64(self.jitter_rng.unit());
+            out = self.last_out.map_or(out, |last| out.max(last));
+            self.last_out = Some(out);
+        }
+        Some(out)
     }
 }
 

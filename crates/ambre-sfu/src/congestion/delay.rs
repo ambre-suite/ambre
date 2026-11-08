@@ -520,6 +520,11 @@ impl DelayControl {
         self.rate.update(self.trendline.usage, acked, rtt, now);
     }
 
+    /// Whether the trend of the queue delay reads overuse now.
+    pub fn overusing(&self) -> bool {
+        self.trendline.usage == Usage::Overuse
+    }
+
     /// The delay-based target.
     pub fn target(&self) -> Bitrate {
         self.rate.target

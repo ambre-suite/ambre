@@ -269,6 +269,9 @@ struct Member {
     spoke: Option<Instant>,
     /// Whether a track of this participant showed a layer the last choice did not know.
     new_layer: bool,
+    /// Whether the congestion control of this participant lowered its target, or entered or
+    /// left overuse, since the last choice.
+    rechoose: bool,
     /// Whether the SFU wrote to this connection since its last drain: a packet, an answer, a
     /// new track to offer, or new rates.
     touched: bool,
@@ -381,6 +384,7 @@ impl Sfu {
             congestion: Congestion::new(INITIAL_ESTIMATE),
             spoke: None,
             new_layer: false,
+            rechoose: false,
             touched: true,
             inbox: Vec::new(),
             due: None,
@@ -481,7 +485,7 @@ impl Sfu {
         let fresh = self
             .members
             .iter_mut()
-            .map(|m| std::mem::take(&mut m.new_layer))
+            .map(|m| std::mem::take(&mut m.new_layer) | std::mem::take(&mut m.rechoose))
             .filter(|seen| *seen)
             .count()
             > 0;
@@ -676,6 +680,13 @@ impl Sfu {
                     asks.push(target);
                 }
             }
+            // Under overuse, the padding would hold the queue of the bottleneck full, and the
+            // keyframe of the lower layer would wait behind it.
+            let minimum = if member.congestion.congested() {
+                Bitrate::bps(0)
+            } else {
+                minimum
+            };
             member.rtc.bwe().set_bitrate(minimum, desired);
             member.touched = true;
         }
@@ -839,8 +850,15 @@ impl Member {
                 Some(Propagated::TrackOpen(self.id))
             }
             Event::EgressTwccFeedback(acks) => {
+                let before = (self.congestion.target(), self.congestion.congested());
                 if let Some(target) = self.congestion.on_feedback(&acks) {
                     self.rtc.bwe().set_estimate(Some(target));
+                }
+                // A lower target or a change of overuse takes effect at once. A congested
+                // receiver then drops its layer and its padding before the next period.
+                let (target, congested) = (self.congestion.target(), self.congestion.congested());
+                if target.as_f64() < before.0.as_f64() || congested != before.1 {
+                    self.rechoose = true;
                 }
                 None
             }
