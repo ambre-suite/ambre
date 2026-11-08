@@ -115,12 +115,14 @@ CEILINGS = [
     # The undo of that delete, and its redo, each held whole to the same
     # budget: a history step of a structural edit is one more structural
     # edit. The delete records its own inverse, so neither step goes through
-    # the checkout of Loro's undo manager (`TRAME-286`).
+    # the checkout of Loro's undo manager (`TRAME-286`). Every undo the bench
+    # counts runs in one function, and every redo in another: two functions
+    # of one body fold into one symbol in the build.
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="line_delete_undo",
-        symbol="ambre_budget_trame_line_delete_undo",
+        symbol="ambre_budget_trame_undo",
         row="Trame whole line delete, 10k formula cells, its whole undo (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
@@ -128,8 +130,26 @@ CEILINGS = [
         crate="ambre-trame",
         bench="instructions",
         operation="line_delete_redo",
-        symbol="ambre_budget_trame_line_delete_redo",
+        symbol="ambre_budget_trame_redo",
         row="Trame whole line delete, 10k formula cells, its whole redo (< 10 ms)",
+        ceiling=10 * PER_MS,
+    ),
+    # The undo and the redo of a row insert, held to the same budget. The
+    # insert records its own inverse too (`TRAME-289`).
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="line_insert_undo",
+        symbol="ambre_budget_trame_undo",
+        row="Trame whole line delete, 10k formula cells, the whole undo of a row insert (< 10 ms)",
+        ceiling=10 * PER_MS,
+    ),
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="line_insert_redo",
+        symbol="ambre_budget_trame_redo",
+        row="Trame whole line delete, 10k formula cells, the whole redo of a row insert (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
     # One remote batch from its import to its events: every cache, the

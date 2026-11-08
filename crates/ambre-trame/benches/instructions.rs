@@ -9,8 +9,8 @@
 //! its own name. They are the re-anchor walk and the engine step after the
 //! commit. A line delete is the same command counted whole: the purge, the
 //! commit and every cache too. Its undo and its redo are each counted whole
-//! in the same way. A remote batch is counted whole, from the import to the
-//! events. Run with no operation named, as `cargo bench` does, every
+//! in the same way, and so are those of a row insert. A remote batch is
+//! counted whole, from the import to the events. Run with no operation named, as `cargo bench` does, every
 //! operation runs once: a smoke test.
 
 use ambre_core::index::{Len, Pos};
@@ -68,17 +68,34 @@ fn ambre_budget_trame_structural_edit(st: &mut TrameState) {
     }));
 }
 
-/// Undo the delete of the middle row: the row, its two cells and their
-/// formula come back.
+/// Undo the last edit. Every operation that counts an undo counts it here:
+/// two functions of the same body would fold into one symbol in the build.
 #[inline(never)]
-fn ambre_budget_trame_line_delete_undo(st: &mut TrameState) {
+fn ambre_budget_trame_undo(st: &mut TrameState) {
     black_box(st.handle_command(TrameCommand::Undo));
 }
 
-/// Redo the delete of the middle row.
+/// Redo the last undone edit, counted for every operation as the undo is.
 #[inline(never)]
-fn ambre_budget_trame_line_delete_redo(st: &mut TrameState) {
+fn ambre_budget_trame_redo(st: &mut TrameState) {
     black_box(st.handle_command(TrameCommand::Redo));
+}
+
+/// Insert a row in the middle of the sheet: the edit the next two undo.
+fn insert_middle_row(st: &mut TrameState) {
+    st.handle_command(TrameCommand::InsertRow {
+        at: Pos::<Row>::new(FORMULAS / 2),
+    });
+}
+
+/// The rows below the inserted one moved down one, each formula with its row.
+fn checked_after_insert(st: &mut TrameState) {
+    assert!(shows(st, FORMULAS / 2, ""), "the inserted row is blank");
+    let middle = (2 * (FORMULAS / 2)).to_string();
+    assert!(
+        shows(st, FORMULAS / 2 + 1, &middle),
+        "the next row moved down"
+    );
 }
 
 /// The sheet holds every formula the paste wrote, so the edit meets them.
@@ -176,16 +193,32 @@ const OPERATIONS: &[(&str, fn())] = &[
         let mut st = sheet();
         checked(&mut st);
         ambre_budget_trame_structural_edit(&mut st);
-        ambre_budget_trame_line_delete_undo(&mut st);
+        ambre_budget_trame_undo(&mut st);
         checked_after_undo(&mut st);
     }),
     ("line_delete_redo", || {
         let mut st = sheet();
         checked(&mut st);
         ambre_budget_trame_structural_edit(&mut st);
-        ambre_budget_trame_line_delete_undo(&mut st);
-        ambre_budget_trame_line_delete_redo(&mut st);
+        ambre_budget_trame_undo(&mut st);
+        ambre_budget_trame_redo(&mut st);
         checked_after_delete(&mut st);
+    }),
+    ("line_insert_undo", || {
+        let mut st = sheet();
+        checked(&mut st);
+        insert_middle_row(&mut st);
+        checked_after_insert(&mut st);
+        ambre_budget_trame_undo(&mut st);
+        checked_after_undo(&mut st);
+    }),
+    ("line_insert_redo", || {
+        let mut st = sheet();
+        checked(&mut st);
+        insert_middle_row(&mut st);
+        ambre_budget_trame_undo(&mut st);
+        ambre_budget_trame_redo(&mut st);
+        checked_after_insert(&mut st);
     }),
     ("remote_batch", || {
         let mut author = sheet();

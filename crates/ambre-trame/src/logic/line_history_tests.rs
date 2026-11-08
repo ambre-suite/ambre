@@ -1,12 +1,14 @@
 // ambre-trame/src/logic/line_history_tests.rs
 // ============================================================================
-// A recorded line delete against the undo manager (`TRAME-286`), the
-// reference-model regime of `ambre-spec-testing.md` section 3.
+// A recorded line insert or delete against the undo manager (`TRAME-286`,
+// `TRAME-289`), the reference-model regime of `ambre-spec-testing.md`
+// section 3.
 //
 // Two states run one generated program in lockstep, under one peer id, so each
-// mints the same uids. The first records each line delete and replays it on an
-// undo or a redo. The second is the reference model: the undo manager holds
-// every delete, as the code did before the recorded step existed. After every
+// mints the same uids. The first records each line insert and delete, and
+// replays it on an undo or a redo. The second is the reference model: the undo
+// manager holds every insert and delete, as the code did before the recorded
+// step existed. After every
 // step the two must store the same document and offer the same undo and redo.
 // A third state receives every delta the first sends, and must store what the
 // first stores.
@@ -49,57 +51,125 @@ fn offered(st: &TrameState) -> (ambre_core::Availability, ambre_core::Availabili
     (st.can_undo(), st.can_redo())
 }
 
-/// Whether `step` deletes lines.
-fn deletes(step: &Step) -> bool {
+/// Whether `step` inserts or deletes lines.
+fn inserts_or_deletes(step: &Step) -> bool {
     matches!(
         step,
-        Step::DeleteRow { .. } | Step::DeleteColumn { .. } | Step::DeleteRows { .. }
+        Step::InsertRow { .. }
+            | Step::InsertColumn { .. }
+            | Step::DeleteRow { .. }
+            | Step::DeleteColumn { .. }
+            | Step::DeleteRows { .. }
     )
+}
+
+/// Run `program` on a state that records each line insert and delete, beside
+/// the reference model and a peer that receives each delta. After each step
+/// the three must store the same document, and the two histories must offer
+/// the same undo and redo.
+fn lockstep(program: &[Step]) -> Result<(), TestCaseError> {
+    let mut recorded = seeded(StructuralPath::Carry);
+    let mut managed = seeded(StructuralPath::Carry);
+    managed.history_path = HistoryPath::Managed;
+    let mut observer = TrameState::with_peer(ambre_core::PeerId::new(PEER + 2));
+    observer
+        .import_snapshot(&recorded.export_snapshot())
+        .expect("a snapshot this build wrote reads back");
+    let mut peer = TrameState::with_peer(ambre_core::PeerId::new(PEER + 1));
+    for step in program {
+        if let Step::Remote { row, col, text } = step {
+            peer.import_snapshot(&recorded.export_snapshot())
+                .expect("a snapshot this build wrote reads back");
+            if let Some(delta) = peer.handle_command(write(*row, *col, text)).update {
+                recorded.apply_remote(&delta);
+                managed.apply_remote(&delta);
+                observer.apply_remote(&delta);
+            }
+        }
+        for command in commands(step) {
+            let out = recorded.handle_command(command.clone());
+            managed.handle_command(command);
+            if let Some(delta) = out.update {
+                observer.apply_remote(&delta);
+                if inserts_or_deletes(step) {
+                    prop_assert!(
+                        recorded.last_step_is_recorded(),
+                        "{:?} went to the manager",
+                        step
+                    );
+                }
+            }
+        }
+        prop_assert_eq!(
+            content(&recorded),
+            content(&managed),
+            "the document differs after {:?}",
+            step
+        );
+        prop_assert_eq!(
+            offered(&recorded),
+            offered(&managed),
+            "the history differs after {:?}",
+            step
+        );
+        prop_assert_eq!(
+            content(&observer),
+            content(&recorded),
+            "the peer differs after {:?}",
+            step
+        );
+    }
+    Ok(())
 }
 
 proptest! {
     #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
 
-    /// Each line delete records its own step, and each undo and redo of it
-    /// leaves the document the undo manager would leave (`TRAME-286`). The
-    /// two histories offer the same steps in the same order, line deletes
-    /// mixed with every other edit (`TRAME-288`). A peer that receives each
-    /// delta stores the same document.
+    /// Each line insert and delete records its own step. Each undo and redo
+    /// of it leaves the document the undo manager would leave (`TRAME-286`,
+    /// `TRAME-289`). The two histories offer the same steps in
+    /// the same order, line edits mixed with every other edit (`TRAME-288`).
+    /// A peer that receives each delta stores the same document.
     #[test]
     fn a_recorded_line_delete_undoes_as_the_undo_manager(
         program in proptest::collection::vec(step(), 1..16),
     ) {
-        let mut recorded = seeded(StructuralPath::Carry);
-        let mut managed = seeded(StructuralPath::Carry);
-        managed.history_path = HistoryPath::Managed;
-        let mut observer = TrameState::with_peer(ambre_core::PeerId::new(PEER + 2));
-        observer.import_snapshot(&recorded.export_snapshot())
-            .expect("a snapshot this build wrote reads back");
-        let mut peer = TrameState::with_peer(ambre_core::PeerId::new(PEER + 1));
-        for step in &program {
-            if let Step::Remote { row, col, text } = step {
-                peer.import_snapshot(&recorded.export_snapshot())
-                    .expect("a snapshot this build wrote reads back");
-                if let Some(delta) = peer.handle_command(write(*row, *col, text)).update {
-                    recorded.apply_remote(&delta);
-                    managed.apply_remote(&delta);
-                    observer.apply_remote(&delta);
-                }
-            }
-            for command in commands(step) {
-                let out = recorded.handle_command(command.clone());
-                managed.handle_command(command);
-                if let Some(delta) = out.update {
-                    observer.apply_remote(&delta);
-                    if deletes(step) {
-                        prop_assert!(recorded.last_step_is_recorded(), "{:?} went to the manager", step);
-                    }
-                }
-            }
-            prop_assert_eq!(content(&recorded), content(&managed), "the document differs after {:?}", step);
-            prop_assert_eq!(offered(&recorded), offered(&managed), "the history differs after {:?}", step);
-            prop_assert_eq!(content(&observer), content(&recorded), "the peer differs after {:?}", step);
-        }
+        lockstep(&program)?;
+    }
+}
+
+/// Each insert, of a row and of a column, before and inside the formulas,
+/// undone and redone twice. The generated programs rarely put an undo and a
+/// redo right after an insert, so this program holds `TRAME-289` on its own.
+#[test]
+fn a_recorded_line_insert_undoes_as_the_undo_manager() {
+    let program = [
+        Step::InsertRow { at: 1 },
+        Step::Undo,
+        Step::Redo,
+        Step::Undo,
+        Step::Redo,
+        Step::InsertColumn { at: 0 },
+        Step::Write {
+            row: 0,
+            col: 0,
+            text: "=B3+1".to_owned(),
+        },
+        Step::Undo,
+        Step::Undo,
+        Step::Redo,
+        Step::Redo,
+        Step::InsertRow { at: 0 },
+        Step::Remote {
+            row: 2,
+            col: 1,
+            text: "5".to_owned(),
+        },
+        Step::Undo,
+        Step::Redo,
+    ];
+    if let Err(failure) = lockstep(&program) {
+        panic!("{failure}");
     }
 }
 

@@ -39,6 +39,6 @@
 | `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and the pagination that cuts a grid into pages. | partial | 4 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 12 |  |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
-| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 9 |  |
+| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 10 |  |
 
-**25 features: 13 implemented, 12 partial, 0 design-only. 532 contract rows, 0 loose.**
+**25 features: 13 implemented, 12 partial, 0 design-only. 533 contract rows, 0 loose.**

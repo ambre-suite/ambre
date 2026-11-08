@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::line_cells;
+use super::line_history::ListEdit;
 use super::*;
 use crate::formula::ACTIVE_SHEET;
 use crate::formula::SheetQualifier;
@@ -340,12 +341,16 @@ impl TrameState {
         let Some(uid) = self.mint_uid() else {
             return TrameOutcome::display_only(vec![super::cells::ids_exhausted()]);
         };
-        if self.axes().insert(at, uid).is_none() {
+        // The insert records its own inverse, as a delete does (`TRAME-289`).
+        self.open_journal();
+        let Some(spot) = self.axes().insert(at, uid) else {
+            self.drop_journal();
             return TrameOutcome::display_only(vec![]);
-        }
+        };
+        self.note_list(self.axes().list_id::<L>(), ListEdit::Inserted, &[spot]);
         let edit = L::edit(LineEdit::Insert { at, n: Len::ONE });
         let walk = self.reanchor_formulas(edit, &[], self.next_index(edit, Some(uid)));
-        self.doc.commit();
+        self.commit_recorded();
         self.after_structural(Some(walk))
     }
 
@@ -369,7 +374,7 @@ impl TrameState {
             &[removal.uid],
             new,
         );
-        self.commit_line_delete();
+        self.commit_recorded();
         self.after_line_removal(walk, removal.filter_dropped)
     }
 
@@ -406,7 +411,11 @@ impl TrameState {
         // A virtual line has nothing materialized to remove. Every element of
         // the line goes, the hidden ones too (`TRAME-269`).
         let removed = self.axes().delete(layout, at)?;
-        self.note_list(self.axes().list_id::<L>(), &removed.spots);
+        self.note_list(
+            self.axes().list_id::<L>(),
+            ListEdit::Removed,
+            &removed.spots,
+        );
         let filter_dropped = self.purge_axis(&removed, L::AXIS);
         Some(Removal {
             uid: removed.uid,
@@ -468,7 +477,7 @@ impl TrameState {
         let gone: Vec<Uid> = removals.iter().map(|r| r.uid).collect();
         let new = self.layout_after(layout);
         let walk = self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }), &gone, new);
-        self.commit_line_delete();
+        self.commit_recorded();
         self.after_line_removal(walk, removals.iter().any(|r| r.filter_dropped))
     }
 

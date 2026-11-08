@@ -1,17 +1,20 @@
 // ambre-trame/src/logic/line_history.rs
-// The history of a line delete, kept beside the undo manager's (`TRAME-286`)
+// The history of a line insert or delete, kept beside the undo manager's
+// (`TRAME-286`, `TRAME-289`)
 //
 // Part of the `TrameState` impl. Submodule of `logic`, so it reaches the
 // private fields and helpers of the parent module through `use super::*`.
 //
 // Loro's undo manager answers an undo by a checkout. A checkout rebuilds the
 // state of every map the item wrote. An undo of a line delete therefore walks
-// the whole cell map and the whole generation record.
+// the whole cell map and the whole generation record. A first undo also builds
+// a cache of the whole history.
 //
-// So a line delete records its own inverse as it writes. It notes each key it touched, with the value
-// on each side. It notes each list element it removed, with the element
-// before it. Its commit carries an origin the manager excludes, and one stack
-// orders these steps with the items of the manager.
+// So a line insert or delete records its own inverse as it writes. It notes
+// each key it touched, with the value on each side. It notes each list
+// element it put in or took out, with the element before it. Its commit
+// carries an origin the manager excludes, and one stack orders these steps
+// with the items of the manager.
 
 use std::collections::HashSet;
 
@@ -25,37 +28,47 @@ use super::remote::LocalNote;
 use super::*;
 use crate::model::Spot;
 
-/// One key a line delete wrote, with its value on each side of the delete.
+/// One key a line edit wrote, with its value on each side of the edit.
 #[derive(Debug, Clone)]
 struct MapWrite {
     map: ContainerID,
     key: InternalString,
-    /// The value before the delete, `None` for an absent key.
+    /// The value before the edit, `None` for an absent key.
     before: Option<LoroValue>,
-    /// The value after the delete, `None` for an absent key.
+    /// The value after the edit, `None` for an absent key.
     after: Option<LoroValue>,
 }
 
-/// One element a line delete took out of a list.
+/// What a structural edit did to one element of a list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ListEdit {
+    /// An insert put the element in.
+    Inserted,
+    /// A delete took the element out.
+    Removed,
+}
+
+/// One element a line insert put into a list, or a line delete took out.
 #[derive(Debug, Clone)]
-struct ListDelete {
+struct ListWrite {
     list: ContainerID,
+    edit: ListEdit,
     spot: Spot,
 }
 
-/// What a line delete writes, noted as it writes it.
+/// What a line insert or delete writes, noted as it writes it.
 #[derive(Debug, Default)]
 pub(super) struct Journal {
     writes: Vec<MapWrite>,
     seen: HashSet<(ContainerID, InternalString)>,
-    deletes: Vec<ListDelete>,
-    /// Set when a write lands where the journal cannot replay it. The delete
+    lists: Vec<ListWrite>,
+    /// Set when a write lands where the journal cannot replay it. The edit
     /// then goes to the undo manager as before.
     partial: Partial,
 }
 
 ambre_core::define_flag! {
-    /// Whether the journal holds every write of the delete.
+    /// Whether the journal holds every write of the edit.
     enum Partial {
         /// Every write is held.
         Whole,
@@ -88,16 +101,17 @@ impl Journal {
         });
     }
 
-    /// Note the elements a delete took out of `list`, in the order it took
-    /// them.
-    pub(super) fn note_list(&mut self, list: ContainerID, spots: &[Spot]) {
-        self.deletes.extend(spots.iter().map(|spot| ListDelete {
+    /// Note the elements an edit put into `list` or took out of it, in the
+    /// order it wrote them.
+    pub(super) fn note_list(&mut self, list: ContainerID, edit: ListEdit, spots: &[Spot]) {
+        self.lists.extend(spots.iter().map(|spot| ListWrite {
             list: list.clone(),
+            edit,
             spot: spot.clone(),
         }));
     }
 
-    /// The step the journal holds, each value after the delete read from
+    /// The step the journal holds, each value after the edit read from
     /// `doc`. `None` when a write escaped the journal.
     fn finish(mut self, doc: &LoroDoc) -> Option<LineStep> {
         if self.partial == Partial::Lost {
@@ -108,7 +122,7 @@ impl Journal {
         }
         Some(LineStep {
             writes: self.writes,
-            deletes: self.deletes,
+            lists: self.lists,
         })
     }
 }
@@ -134,30 +148,36 @@ fn map_of(doc: &LoroDoc, id: &ContainerID) -> Option<LoroMap> {
     }
 }
 
-/// The inverse of one line delete, and the delete again.
+/// The inverse of one line insert or delete, and the edit again.
 #[derive(Debug, Clone)]
 pub(super) struct LineStep {
     writes: Vec<MapWrite>,
-    deletes: Vec<ListDelete>,
+    lists: Vec<ListWrite>,
 }
 
 impl LineStep {
-    /// Write the step into `doc`: `Undo` takes the delete back, `Redo` does it
+    /// Write the step into `doc`: `Undo` takes the edit back, `Redo` does it
     /// again. A key a later write changed keeps that write, and an element
     /// already where the step would put it is left alone. The step reverts
     /// this peer's work and never a peer's (`UNDO-007`).
     fn write(&self, doc: &LoroDoc, step: HistoryStep) {
-        // The elements come back in the reverse order of their deletes, so
-        // the element before each one stands again when it lands.
+        // An undo walks the list writes back in reverse, so the element before
+        // each one stands again when it lands. A redo walks them forward.
         match step {
             HistoryStep::Undo => {
-                for delete in self.deletes.iter().rev() {
-                    restore(doc, delete);
+                for write in self.lists.iter().rev() {
+                    match write.edit {
+                        ListEdit::Removed => restore(doc, write),
+                        ListEdit::Inserted => remove(doc, write),
+                    }
                 }
             }
             HistoryStep::Redo => {
-                for delete in &self.deletes {
-                    remove(doc, delete);
+                for write in &self.lists {
+                    match write.edit {
+                        ListEdit::Removed => remove(doc, write),
+                        ListEdit::Inserted => restore(doc, write),
+                    }
                 }
             }
         }
@@ -180,23 +200,23 @@ impl LineStep {
     }
 }
 
-/// Put the element of `delete` back after the element that stood before it.
-fn restore(doc: &LoroDoc, delete: &ListDelete) {
-    crate::model::restore_spot(doc, &delete.list, &delete.spot);
+/// Put the element of `write` back after the element that stood before it.
+fn restore(doc: &LoroDoc, write: &ListWrite) {
+    crate::model::restore_spot(doc, &write.list, &write.spot);
 }
 
-/// Take the element of `delete` out of its list again, wherever it stands.
-fn remove(doc: &LoroDoc, delete: &ListDelete) {
-    crate::model::remove_spot(doc, &delete.list, &delete.spot);
+/// Take the element of `write` out of its list, wherever it stands.
+fn remove(doc: &LoroDoc, write: &ListWrite) {
+    crate::model::remove_spot(doc, &write.list, &write.spot);
 }
 
-/// One step of the history: an item of the undo manager, or a line delete
-/// this module holds.
+/// One step of the history: an item of the undo manager, or a line insert or
+/// delete this module holds.
 #[derive(Debug)]
 pub(super) enum Step {
     /// An item the undo manager holds. The manager replays it.
     Managed,
-    /// A line delete, replayed from its journal.
+    /// A line insert or delete, replayed from its journal.
     Line(Box<LineStep>),
 }
 
@@ -242,20 +262,20 @@ impl History {
     }
 }
 
-/// The path a line delete takes, for the test that holds the recorded step
-/// against the undo manager (`TRAME-286`).
+/// The path a line insert or delete takes, for the test that holds the
+/// recorded step against the undo manager (`TRAME-286`, `TRAME-289`).
 #[cfg(all(test, not(target_arch = "wasm32")))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum HistoryPath {
-    /// The delete records its own inverse.
+    /// The edit records its own inverse.
     Recorded,
-    /// The reference model: the undo manager holds every delete.
+    /// The reference model: the undo manager holds every insert and delete.
     Managed,
 }
 
 impl TrameState {
     /// Whether the last step an undo would take back is a recorded line
-    /// delete.
+    /// insert or delete.
     #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(super) fn last_step_is_recorded(&self) -> bool {
         matches!(self.history.past.last(), Some(Step::Line(_)))
@@ -287,7 +307,7 @@ impl TrameState {
         History::trim_bottom(&mut self.history.future, self.undo_manager.redo_count());
     }
 
-    /// Open a journal for the line delete that starts.
+    /// Open a journal for the line insert or delete that starts.
     pub(super) fn open_journal(&self) {
         *self.journal.borrow_mut() = Some(Journal::default());
     }
@@ -299,22 +319,24 @@ impl TrameState {
         }
     }
 
-    /// Note the elements a delete took out of `list`, when a journal is open.
-    pub(super) fn note_list(&self, list: ContainerID, spots: &[Spot]) {
+    /// Note the elements an edit put into `list` or took out of it, when a
+    /// journal is open.
+    pub(super) fn note_list(&self, list: ContainerID, edit: ListEdit, spots: &[Spot]) {
         if let Some(journal) = self.journal.borrow_mut().as_mut() {
-            journal.note_list(list, spots);
+            journal.note_list(list, edit, spots);
         }
     }
 
-    /// Drop the open journal, for a delete that removed nothing.
+    /// Drop the open journal, for an edit that wrote nothing.
     pub(super) fn drop_journal(&self) {
         self.journal.borrow_mut().take();
     }
 
-    /// Commit the line delete the open journal noted. A whole journal becomes
-    /// a step of this history, and its commit carries the origin the undo
-    /// manager excludes. Any other delete commits as before, for the manager.
-    pub(super) fn commit_line_delete(&mut self) {
+    /// Commit the line insert or delete the open journal noted. A whole
+    /// journal becomes a step of this history, and its commit carries the
+    /// origin the undo manager excludes. Any other edit commits as before,
+    /// for the manager.
+    pub(super) fn commit_recorded(&mut self) {
         let journal = self.journal.borrow_mut().take();
         #[cfg(all(test, not(target_arch = "wasm32")))]
         let journal = journal.filter(|_| self.history_path == HistoryPath::Recorded);
@@ -335,7 +357,7 @@ impl TrameState {
     }
 
     /// Take one step of the history back or forward. A managed step goes to
-    /// the undo manager. A line delete replays its journal. The tail carries
+    /// the undo manager. A line insert or delete replays its journal. The tail carries
     /// every cache either way (`after_history`).
     pub(super) fn step_history(&mut self, step: HistoryStep) -> TrameOutcome {
         let from = match step {

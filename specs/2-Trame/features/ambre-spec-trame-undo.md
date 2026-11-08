@@ -30,19 +30,20 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 |---|---|---|---|---|---|---|
 | `TRAME-124` | `POST` | Restoring a snapshot MUST be undoable, like any other change to the document. | this spec section 6 | not built | unbuilt -- lands with the `Version history` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-154` | `FRAME` | Restoring a snapshot MUST NOT remove a snapshot from the list, the restored one included. | derived | not built | unbuilt -- lands with the `Version history` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-### 1.3 Undo a line delete
+### 1.3 Undo a line insert or delete
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-286` | `POST` | An undo of a line delete MUST leave the document the undo manager would leave, and so MUST its redo. | this spec section 3; `ambre-spec-undo.md` (`UNDO-001`, `UNDO-002`) | `ambre_trame::logic::line_history_tests::a_recorded_line_delete_undoes_as_the_undo_manager` -- a proptest, 256 cases over two sheets: a state that records each delete runs beside a reference model whose undo manager holds every delete, and after each step both store the same document. A third peer receives each delta and stores it too | none | verified |
+| `TRAME-289` | `POST` | An undo of a line insert MUST leave the document the undo manager would leave, and so MUST its redo. | this spec section 3; `ambre-spec-undo.md` (`UNDO-001`, `UNDO-002`) | `ambre_trame::logic::line_history_tests::a_recorded_line_insert_undoes_as_the_undo_manager` -- a row and a column inserted, each undone and redone beside the reference model, a formula and a remote write between them; `::a_recorded_line_delete_undoes_as_the_undo_manager` -- the same proptest as `TRAME-286`, whose programs insert lines too | none | verified |
 | `TRAME-287` | `FRAME` | An undo or a redo of a line delete MUST NOT overwrite a value a peer wrote after the delete. | this spec section 2, row 2; `ambre-spec-undo.md` (`UNDO-007`) | `ambre_trame::logic::line_history_tests::an_undone_line_delete_keeps_a_later_write_of_a_peer` -- the peer types over a formula the delete rewrote, and the value stands through the undo and the redo, on both peers | none | verified |
 
-* **Budget.** an undo and a redo of a line delete each hold the Trame whole line delete row of
+* **Budget.** an undo and a redo of a line insert or delete each hold the Trame whole line delete row of
   `ambre-spec-budgets.md section 1`. Any other undo runs under the command rows there. The stack
   sits inside the `LoroDoc` holder of section 6, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 5 `verified`, 4 `unimplemented`. What holds is the granularity rule, four ways,
+* **Verification.** 6 `verified`, 4 `unimplemented`. What holds is the granularity rule, four ways,
   and the multi-line delete keeps it (`TRAME-088`). The three chords are read back off the seeded
   keymap, and version history is unbuilt on both sides of the grammar. What a restore owes the
   snapshot list is open, and so is what two peers reach when one restores while the other edits. The
@@ -67,20 +68,22 @@ revert travels as a delta, two peers undo into each other. Trame's own:
 
 **Containers.** None of its own: an undo item is one commit, not one container write.
 
-**A line delete records its own step** (`TRAME-286`). The undo manager answers an undo by a
-checkout, and a checkout rebuilds the state of every map the item wrote. On a sheet of 10k formulas
-that is the whole cell map and the whole generation record, far over the budget.
+**A line insert or delete records its own step** (`TRAME-286`, `TRAME-289`). The undo manager
+answers an undo by a checkout, and a checkout rebuilds the state of every map the item wrote. On a
+sheet of 10k formulas that is the whole cell map and the whole generation record, far over the
+budget. A first checkout also builds a cache of the whole history.
 
-So a line delete notes each key it writes, with the value on each side. It also notes each list
-element it removes, with the element before it. Its commit carries an origin the undo manager
-excludes. An undo writes each value back, and puts each element back after its neighbour. A redo
-writes the delete again. A key a later write changed keeps that write (`TRAME-287`).
+So a line edit notes each key it writes, with the value on each side. It also notes each list
+element it inserts or removes, with the element before it. Its commit carries an origin the undo
+manager excludes. An undo writes each value back, takes each inserted element out, and puts each
+removed element back after its neighbour. A redo writes the edit again. A key a later write changed
+keeps that write (`TRAME-287`).
 
 **One history orders the two kinds of step** (`TRAME-288`). It holds an entry for each item of the
-undo manager and each recorded line delete, in the order they were made. An undo takes the top
-entry: an item goes to the manager, a line delete replays its notes. A new edit clears the redo
-side, as the manager clears its own. A delete whose notes cannot hold a write commits for the
-manager, as every delete did before.
+undo manager and each recorded line edit, in the order they were made. An undo takes the top
+entry: an item goes to the manager, a line edit replays its notes. A new edit clears the redo
+side, as the manager clears its own. A line edit whose notes cannot hold a write commits for the
+manager, as every line edit did before.
 
 **Commands and events** (`ambre-bus`), the shared shape of `ambre-spec-undo.md section 3`:
 
@@ -118,7 +121,7 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 
 * `crates/ambre-trame/src/logic/commands.rs` -- `apply_history`, `undo_state_event`, and the group
   seal at the head of the dispatcher;
-* `crates/ambre-trame/src/logic/line_history.rs` -- the notes of a line delete, their replay, and
+* `crates/ambre-trame/src/logic/line_history.rs` -- the notes of a line edit, their replay, and
   the history that orders them with the items of the undo manager;
 * `chrome/commands.rs` -- the two command identifiers, the three chords, the enabled state.
 
@@ -147,7 +150,7 @@ inverse, the whole reseed, the stack that dies with the document. Trame's own:
 | One value or one style over a whole selection is one item | one item per cell written | a user who styles a thousand cells means one gesture, and pressing `Ctrl+Z` a thousand times to take it back is not an undo. The selection is what the user acted on, so the selection is what the item holds |
 | A validation and a protection stay outside the history | recording them like any other write | a rule over the cells is configuration, not data. An undo that removes the protection a user just set takes back a decision rather than a change, and the two live at different speeds |
 | A personal filter view enters no history | recording the activation | it writes no document, so there is nothing to revert and nothing a peer would receive. What it changes is what this user looks at, and `TRAME-FEAT-016` keeps that local |
-| A line delete records its own step | the undo manager's item, as for every other edit | on a sheet of 10k formulas, the manager spends about 336 million instructions undoing one line delete and 288 million redoing it, measured on 2026-11-07 under `callgrind`. A first undo also builds a cache of the whole history. That is about 420 ms on a phone, against a budget of 10 ms. The cost grows with the maps the item wrote, not with what it changed |
+| A line insert or delete records its own step | the undo manager's item, as for every other edit | on a sheet of 10k formulas, the manager spends about 336 million instructions undoing one line delete and 288 million redoing it, measured on 2026-11-07 under `callgrind`. A first undo also builds a cache of the whole history. That is about 420 ms on a phone, against a budget of 10 ms. The cost grows with the maps the item wrote, not with what it changed. An undo of a row insert cost 49 962 823 on 2026-11-08, 95 % of it that cache |
 | The inverse is recorded by Trame | a fix of the checkout inside Loro, on a fork | a fork of the CRDT engine is a second engine to keep, and every upstream release must be merged into it. The checkout rebuilds a map at a version by design, and the notes of a line delete are a few keys |
 | A deleted line loses its cells at once | cells kept under the deleted line, hidden, and removed by a later pass | the document keeps every cell of every deleted line until the pass runs. The pass needs its own rule on when a peer may still undo, as Prose needed one for a hidden block (`PROSE-121`) |
 | Version history is a named snapshot the user asks for | a longer stack, or one persisted across sessions | a stack deeper than the session offers to revert operations the user cannot see, and no depth is the right one. A name is what a user recognizes a month later, and the roadmap schedules it as such (`ambre-roadmap.md` post-V1) |
