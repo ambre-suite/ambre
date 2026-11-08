@@ -13,7 +13,6 @@ mod html_write;
 mod sink;
 
 use ambre_core::Validated;
-use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
@@ -146,7 +145,9 @@ impl ClipValue {
     /// bytes a paste reads may come from a crafted page, so the copy that
     /// wrote them proves nothing.
     fn checked(&self, key: &MarkKey) -> Option<LoroValue> {
-        let root = MarkRoot::parse(key.as_str()).filter(|root| FORMATTING_KEYS.contains(root))?;
+        let root = key
+            .as_root()
+            .filter(|root| FORMATTING_KEYS.contains(root))?;
         let raw = match self {
             Self::Bool(true) => None,
             Self::Text(raw) => Some(raw.as_str()),
@@ -225,7 +226,8 @@ impl ClipRun {
             .marks
             .iter()
             .filter(|(key, _)| {
-                MarkRoot::parse(key.as_str()).is_some_and(|root| FORMATTING_KEYS.contains(&root))
+                key.as_root()
+                    .is_some_and(|root| FORMATTING_KEYS.contains(&root))
             })
             .filter_map(|(key, value)| Some((key.clone(), ClipValue::of(value)?)))
             .collect();

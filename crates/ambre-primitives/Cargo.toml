@@ -6,20 +6,17 @@ license.workspace = true
 publish = false
 description = "The primitive gate: every site whose type holds a primitive is typed, or named by the allowlist (ambre-spec-testing.md section 2)."
 
-# Host only, like the relay and the browser belt: the gate reads the source
-# tree, and no client build reaches it. `just primitives` runs it.
+# Host only, like the relay and the browser belt: the gate compiles the
+# workspace through its rustc driver, and no client build reaches it.
+# `just primitives` runs it. The driver itself, `driver/`, is a workspace of
+# its own: it links the private crates of rustc.
 
 [dependencies]
-proc-macro2 = { workspace = true }
-quote       = { workspace = true }
 # The messages of each lint line run with `--message-format=json`, which name
-# the dep-info file of each unit rustc compiled and the features cargo turned
-# on for it (`ARCH-033`).
+# each unit cargo built and the features cargo turned on for it (`ARCH-033`).
 serde_json  = { workspace = true }
-syn         = { workspace = true }
-# Each manifest and each cargo config, parsed as cargo reads them: the
-# workspace and the features a manifest declares, and the flags a build takes
-# (`ARCH-033`).
+# Each manifest, parsed as cargo reads it: the features a manifest declares,
+# a nested workspace, a renamed crate (`ARCH-033`, `ARCH-046`).
 toml        = { workspace = true }
 
 [lints]

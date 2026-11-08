@@ -47,8 +47,12 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: just
-      - name: Toolchain (rustfmt + clippy)
-        run: rustup component add rustfmt clippy
+      # `rustc-dev` holds the private crates of rustc that the driver of the
+      # primitive gate links. This job alone installs it: the pinned
+      # toolchain of `rust-toolchain.toml` leaves it out, so no other job and
+      # no contributor downloads it.
+      - name: Toolchain (rustfmt + clippy + rustc-dev)
+        run: rustup component add rustfmt clippy rustc-dev
       - uses: Swatinem/rust-cache@v2
         with:
           key: lint
@@ -62,17 +66,20 @@ jobs:
       # The parsed corpus: one record per row and the edges it asserts, both
       # generated, plus every edge resolved (`ambre-spec-template.md` §1.D).
       - run: just index
+      # The driver of the primitive gate, a workspace of its own: its format,
+      # its clippy, and the fixture tests that compile fixture crates through
+      # it. No line of `just lint` reads it.
+      - run: just primitives-driver
       # The primitive gate: every bare primitive outside a test is typed or named
       # by the allowlist, and no line names a site that is gone (`ARCH-033`).
-      # It first holds the files it reads to the files rustc compiles: it runs
-      # the compile lines of `lint` and `lint-wasm` as written, so the host
-      # line finds fresh each unit `just lint` built above. It reads their
-      # dep-info (`ARCH-033`, `ARCH-045`), and prints that half's count before
-      # the allowlist half.
-      # Then, on the same scan, the strict unwrap report: no newtype unwrapped
-      # early inside a body unless `ambre-unwrap.tsv` names its key with a
-      # count and a reason (`ARCH-073`). The step prints both verdicts on its
-      # last line, and fails on either.
+      # It runs the compile lines of `lint` and `lint-wasm` through its rustc
+      # driver, so it reads each unit clippy linted above with types: the
+      # sites, the secret names, the census and the files rustc read. Each
+      # workspace unit compiles again; the dependencies stay fresh.
+      # Then, on the same records, the strict unwrap report: no newtype
+      # unwrapped early inside a body unless `ambre-unwrap.tsv` names its key
+      # with a count and a reason (`ARCH-073`). The step prints both verdicts
+      # on its last line, and fails on either.
       - run: just primitives
       # What a spec quotes: no function body in a spec (template §0).
       - run: just spec-code

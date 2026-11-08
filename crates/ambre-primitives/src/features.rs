@@ -8,7 +8,7 @@
 //! file.
 //!
 //! The check reads what cargo turned on, never a model of it. cargo names the
-//! features of each unit in its artifact message, and `depinfo::collect`
+//! features of each unit in its artifact message, and `the gate's compiles`
 //! gathers them for the shipped builds of each package. So a feature counts
 //! when a line names it, and when a feature or a dev-dependency the lines
 //! reach turns it on. A weak `dep?/feature` counts only when another edge
@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::allowlist::LineNo;
-use crate::scan::{NESTED_WORKSPACES, Tree};
+use crate::files::{NESTED_WORKSPACES, listing};
 
 /// The exclusions file, relative to the workspace root.
 pub(crate) const EXCLUSIONS: &str = "specs/1-Foundations/ambre-features.tsv";
@@ -33,21 +33,17 @@ const HEADER: &str = "feature\treason";
 
 /// Each refusal of the feature check. `turned_on` maps each canonical
 /// manifest to the features cargo turned on for a shipped build of its
-/// package. `tree` reads the manifests under `root`, and the exclusions
+/// package. The check reads the manifests under `root`, and the exclusions
 /// file.
 ///
-/// A manifest that does not parse as TOML is `depinfo::levers`'s to refuse,
-/// so this check skips it. A manifest under a nested workspace builds apart,
-/// and is left out.
-pub(crate) fn check(
-    tree: &impl Tree,
-    root: &Path,
-    turned_on: &BTreeMap<PathBuf, BTreeSet<String>>,
-) -> Vec<String> {
+/// A manifest that does not parse as TOML is the file check's to refuse, so
+/// this check skips it. A manifest under a nested workspace builds apart, and
+/// is left out.
+pub(crate) fn check(root: &Path, turned_on: &BTreeMap<PathBuf, BTreeSet<String>>) -> Vec<String> {
     let none = BTreeSet::new();
-    let declared = declared(tree, root);
+    let declared = declared(root);
     let mut refusals = Vec::new();
-    let text = tree.read(&root.join(EXCLUSIONS));
+    let text = std::fs::read_to_string(root.join(EXCLUSIONS)).ok();
     let excluded = match text.as_deref().map(parse) {
         Some(Ok(excluded)) => excluded,
         Some(Err(mut errors)) => {
@@ -97,14 +93,17 @@ pub(crate) fn check(
 /// The package name and the declared features of each manifest under
 /// `root`, by its canonical path. A manifest with no `[package]` name, one
 /// that does not parse, and one under a nested workspace are left out.
-fn declared(tree: &impl Tree, root: &Path) -> BTreeMap<PathBuf, (String, BTreeSet<String>)> {
+fn declared(root: &Path) -> BTreeMap<PathBuf, (String, BTreeSet<String>)> {
     let nested: Vec<PathBuf> = NESTED_WORKSPACES.iter().map(|dir| root.join(dir)).collect();
-    tree.files(root)
+    listing(root)
         .into_iter()
         .filter(|path| path.file_name().is_some_and(|name| name == "Cargo.toml"))
         .filter(|path| !nested.iter().any(|dir| path.starts_with(dir)))
         .filter_map(|path| {
-            let table = tree.read(&path)?.parse::<toml::Table>().ok()?;
+            let table = std::fs::read_to_string(&path)
+                .ok()?
+                .parse::<toml::Table>()
+                .ok()?;
             let package = table
                 .get("package")
                 .and_then(|package| package.get("name"))
@@ -115,7 +114,8 @@ fn declared(tree: &impl Tree, root: &Path) -> BTreeMap<PathBuf, (String, BTreeSe
                 .and_then(toml::Value::as_table)
                 .map(|features| features.keys().cloned().collect())
                 .unwrap_or_default();
-            Some((tree.canonical(&path), (package, features)))
+            let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+            Some((canonical, (package, features)))
         })
         .collect()
 }

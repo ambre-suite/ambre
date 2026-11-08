@@ -1190,6 +1190,14 @@ impl MarkKey {
         use ambre_core::crdt::CrdtName;
         mark::MarkRoot::parse(self.root())
     }
+
+    /// The registry root the whole key names. `None` for a key that carries
+    /// an id after its root, or for a root this build does not declare.
+    #[must_use]
+    pub fn as_root(&self) -> Option<mark::MarkRoot> {
+        use ambre_core::crdt::CrdtName;
+        mark::MarkRoot::parse(self.as_str())
+    }
 }
 
 impl From<&str> for MarkKey {

@@ -9,7 +9,6 @@
 
 use crate::message::{DocChar, MarkKey};
 use ambre_core::Opaque;
-use ambre_core::crdt::CrdtName;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::BTreeMap;
 
@@ -222,7 +221,7 @@ impl ProseState {
         action: crate::message::MarkAction,
     ) -> ProseOutcome {
         // The whole key, not its root: `b:x` names no control of the bar.
-        if !MarkRoot::parse(key.as_str()).is_some_and(|root| BAR_KEYS.contains(&root)) {
+        if !key.as_root().is_some_and(|root| BAR_KEYS.contains(&root)) {
             return ProseOutcome::refused(ProseRefusal::UnknownMark(key.clone()));
         }
         let spans: Vec<_> = self

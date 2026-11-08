@@ -4,13 +4,6 @@
 key	reason
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji | std::borrow::Cow<'static,str>	one emoji as the view picked it, borrowed from a 'static table with no allocation, or owned off the wire. Every text family of core owns a String, and the engine rules on the value
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey | Vec<u8>	a sealed segment with a layout of its own: key_id, split and from_parts read and build it, and they would have to move into core. Its serde is the derived Vec<u8>, which the base64 of Encoded would change
-ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple | f32	a ratio that is finite and above zero. Bounded holds it with the least positive f32 as MIN, but a crate outside core names no float constant of Bounded, and SINGLE and ONE_AND_HALF are const
-ambre-prose | src/message/mod.rs | crate::message | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
-ambre-toile | src/message/mod.rs | crate::message | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
-ambre-toile | src/message/mod.rs | crate::message | VoteWeight | i32	the signed weight of one vote, any i32, which travels and is stored as the bare i32. No family holds a signed i32 that a sum reads
-ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
-ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
-ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for. It moves a Bounded<Decimals> held at its bounds, an operation no family carries
 ambre-bus | src/lib.rs | crate | ClipToken | String	a tab's clipboard token, never empty. draw mints one from a random draw infallibly, which the public door of Validated cannot do
 ambre-bus | src/rest.rs | crate::rest | DraftKey | String	a store key that orders as its text, the order the store ranges keys in, and every names the bounds of the whole store
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId | u64	the id peniko gives a registered font blob, a u64 that crate defines, private to the glyph atlas. Id holds a Uuid or a minted text alone
@@ -45,31 +38,30 @@ ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller ch
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports: a pixel, a line or a page, known at run time. It is a length only once WheelDelta::to_px reads it, so no Px space fits
 ambre-logic | src/persistence.rs | crate::persistence | DbName | &'a str	the name of an IndexedDB database, a literal a const holds. Every text family of core owns a String, which no const can build
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to, one per kind, which Opaque::new would open
+ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
 ambre-murmure | src/sequence.rs | crate::sequence | LoroBytes | &'a[u8]	the bytes Loro reads past the frame of one snapshot, borrowed for one parse with no copy. Every byte family of core owns its bytes
 ambre-murmure | src/sequence.rs | crate::sequence | RowTable | &'a[u8]	the raw sequence table of one framed snapshot, borrowed for one parse with no copy. Every byte family of core owns its bytes
-ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo | usize	the gate depends on no workspace crate: a 1-based line number of the allowlist, for its messages
-ambre-primitives | src/scan.rs | crate::scan | AliasCount | usize	the gate depends on no workspace crate: the aliases one type has opened, held to a bound
-ambre-primitives | src/scan.rs | crate::scan | ArgPosition | usize	the gate depends on no workspace crate: the position of an argument in a call, from zero
-ambre-primitives | src/scan.rs | crate::scan | Hops | usize	the gate depends on no workspace crate: the steps one lookup has led through, held to a bound
-ambre-primitives | src/scan.rs | crate::scan | SiteKey | String	the gate depends on no workspace crate: one site as one line of six fields
-ambre-primitives | src/unwrap.rs | crate::unwrap | SiteCount | usize	the gate depends on no workspace crate: a number of sites the report counts
+ambre-primitives | src/records.rs | crate::records | SiteKey | String	the gate depends on no workspace crate: one site as one line of six fields
+ambre-primitives | src/unwraps.rs | crate::unwraps | SiteCount | usize	the gate depends on no workspace crate: a number of sites the report counts
 ambre-prose | src/doc.rs | crate::doc | BodyKey | String	a container name, a tag and a tree id joined by a colon, built from the tree id alone
 ambre-prose | src/doc.rs | crate::doc | StoredLevel | u8	a heading level as the document holds it, raw on purpose: an import may store one outside one to six
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Indent | String	the leading spaces of a nested Markdown block, private to the writer
 ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSequence | u64	the 62 bits of a pinned id, a sequence that ends rather than wraps, private to the fixture ids
+ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple | f32	a ratio that is finite and above zero. Bounded holds it with the least positive f32 as MIN, but a crate outside core names no float constant of Bounded, and SINGLE and ONE_AND_HALF are const
+ambre-prose | src/message/mod.rs | crate::message | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark | String	the hex of a cross-reference record, with no Debug since it spells a label of the document
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript | Vec<u8>	the bytes one signature covers, built in its own crate alone, while Payload has a public constructor
-ambre-server | src/db/mod.rs | crate::db | PgKey | Vec<u8>	a stored public key as sqlx reads it, decoded through try_from
 ambre-server | src/db/mod.rs | crate::db | PgId | uuid::Uuid	an identifier column as sqlx reads it, decoded through try_from into an Id. The orphan rule bars an impl of sqlx::Type on a core type
+ambre-server | src/db/mod.rs | crate::db | PgKey | Vec<u8>	a stored public key as sqlx reads it, decoded through try_from
 ambre-server | src/db/mod.rs | crate::db | PgOptBytes | Option<Vec<u8>>	a nullable sealed column as sqlx reads it, decoded through try_from into its role type. The orphan rule bars an impl of sqlx::Type on a core type
 ambre-server | src/db/mod.rs | crate::db | PgOptId | Option<uuid::Uuid>	a nullable identifier column as sqlx reads it, decoded through try_from into an Option of an Id. The orphan rule bars an impl of sqlx::Type on a core type
 ambre-server | src/db/mod.rs | crate::db | PgOptSeq | Option<i64>	a nullable sequence column as sqlx reads it, decoded through try_from into an Option of a Seq, which refuses a negative value. The orphan rule bars an impl of sqlx::Type on a core type
 ambre-server | src/db/mod.rs | crate::db | PgOptState | Option<String>	a nullable segment state column as sqlx reads it, decoded through try_from into an Option of a SegmentState. The orphan rule bars an impl of sqlx::Type on a core type
 ambre-server | src/db/mod.rs | crate::db | PgTimeLeft | Option<i64>	the milliseconds left to a deadline as sqlx reads them, decoded into an Option of a Duration. The orphan rule bars an impl of sqlx::Type on a foreign type
 ambre-server | src/payload.rs | crate::payload | StoredPayload | Vec<u8>	payload bytes with a sqlx::Type impl, which the orphan rule bars on ambre_core::Payload
-ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken | String	the value a lock holder writes, which a release compares. Its one door is fresh, which Opaque::new would open
 ambre-server | src/redis_keys.rs | crate::redis_keys | DocKey | String	a generic family over a sealed slot marker, the Redis key doc:{id}:{slot}, with one door that builds it from a document id. Opaque::new would open any text, and Opaque prints the length alone where a log reads the key
+ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken | String	the value a lock holder writes, which a release compares. Its one door is fresh, which Opaque::new would open
 ambre-server | src/s3.rs | crate::s3 | StoreText | String	a generic family over a sealed kind, the bucket or a key prefix the relay reads from its settings. OpaqueKind is open, and Opaque prints the length alone where Debug prints the setting
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId | String	one socket's key in the routing table of the hub. Its doors are new and the test door named, which Opaque::new would open
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic | String	a Redis PubSub topic, one constructor per kind, which Opaque::new would open
@@ -83,8 +75,13 @@ ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKe
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Depth | isize	the edit steps of a Myers path, signed for the diagonal arithmetic, private to the search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Diagonal | isize	a signed diagonal of the Myers graph, private to the search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | GraphOffset | isize	a signed offset into one text of the Myers graph, private to the search
+ambre-toile | src/message/mod.rs | crate::message | VoteTotal | i64	a signed sum that moves by a VoteWeight and is read or printed, an arithmetic no family carries
+ambre-toile | src/message/mod.rs | crate::message | VoteWeight | i32	the signed weight of one vote, any i32, which travels and is stored as the bare i32. No family holds a signed i32 that a sum reads
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor | Cow<'static,str>	a CSS cursor value, a 'static keyword or inlined SVG borrowed with no allocation, or a value built at run time. Every text family of core owns a String
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate | f64	a log-zoom rate per pixel of wheel, private to the view
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term | i64	a signed place in a fill series, from a Delta of either axis: a fill line runs down rows or across columns, and Delta keeps the two axes apart
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer | String	the root name of one sheet's container, joined in one place
+ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
+ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
+ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for. It moves a Bounded<Decimals> held at its bounds, an operation no family carries
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey | String	the 51-character key of the cell maps, a row and a column joined in one place (trame-schema)

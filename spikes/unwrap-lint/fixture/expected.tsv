@@ -1,3 +1,0 @@
-ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:34	Name::as_str -> names::Root::<K>::parse	source
-ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:42	Key::.0 -> a::store	source
-ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:54	Name::as_str -> a::store	source
