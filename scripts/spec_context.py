@@ -7,9 +7,9 @@ is a read of the whole document, plus every document it cites, and a reader
 cannot tell which paragraph mattered. `ambre-spec-trame-cell-merges.md` is 5 700
 words; one of its rows needs a few hundred of them.
 
-So the closure is compiled, from the two artefacts of `contract_index.py`. The
-index says where the row is and what it says; the graph says what else it
-reaches. Only then is any Markdown opened, and only the documents those two
+So the closure is compiled, from the index and the graph of `contract_index.py`,
+built in memory at each run. The index says where the row is and what it says;
+the graph says what else it reaches. Only then is any Markdown opened, and only the documents those two
 named. Nothing here re-walks the corpus.
 
 **Seven blocks, one per question a builder has**, in the order they are asked.
@@ -53,7 +53,6 @@ Run: `just spec-context <ID>`, or `just spec-context-story "<NAME>"`.
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from functools import lru_cache
@@ -61,7 +60,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import contract_index  # noqa: E402  -- the two artefacts, and where they live
+import contract_index  # noqa: E402  -- the index and the graph, built in memory
 import contracts  # noqa: E402  -- the corpus has one contract parser
 import spec_answers  # noqa: E402  -- the answer budget, as the gate counts it
 import spec_refs  # noqa: E402  -- the document and section namespaces
@@ -128,17 +127,12 @@ def schedule() -> dict[str, tuple[str, bool, int, str]]:
 def load() -> tuple[dict[str, dict], list[dict]]:
     """The index by id, and the graph whole.
 
-    A stale artefact is a wrong closure, silently: the row would be compiled
-    from what the corpus said at the last write. `just index` holds the two
-    files, and this refuses to run when it has not been run.
+    Built from the corpus at each run, never read from `just index-write`'s
+    files: a stale artefact would compile the row from what the corpus said at
+    the last write, silently.
     """
-    for path in (contract_index.INDEX, contract_index.GRAPH):
-        if not path.exists():
-            raise Missing(f"`{path.name}` is not generated. Run `just index-write`")
-    records = json.loads(contract_index.INDEX.read_text())
-    return {row["id"]: row for row in records}, json.loads(
-        contract_index.GRAPH.read_text()
-    )
+    records, graph = contract_index.build()
+    return {row["id"]: row for row in records}, graph
 
 
 def document(target: str, shorts: dict[str, str], known: dict[str, Path]) -> Path:

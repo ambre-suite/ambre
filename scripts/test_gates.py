@@ -52,7 +52,7 @@ TOOL = "tool"
 # prints or serves a build, and holds no rule.
 SCRIPTS = {
     "commit_msg": GATE,
-    "contract_index": GENERATOR,
+    "contract_index": GATE,
     "contracts": GENERATOR,
     "crate_boundaries": GATE,
     "feature_inventory": GENERATOR,
@@ -115,6 +115,19 @@ class GatesFailWithNoFlag(unittest.TestCase):
                 stack.enter_context(patch)
             code = quiet(run or sys.modules[script].main)
         self.assertNotEqual(code, 0, f"{script} passed a breach with no flag")
+
+    def test_contract_index(self) -> None:
+        # The index and the graph are built on demand, so the gate holds the
+        # edges and writes nothing: a run with no flag leaves no file behind.
+        out = self.dir / "out"
+        self.fails("contract_index", [
+            mock.patch.object(contract_index, "INDEX", out / "index.json"),
+            mock.patch.object(contract_index, "GRAPH", out / "graph.json"),
+            mock.patch.object(contract_index, "build", lambda: ([], [])),
+            mock.patch.object(contract_index, "edge_defects",
+                              lambda records, found: ["an edge to nothing"]),
+        ])
+        self.assertFalse(out.exists(), "contract_index wrote with no flag")
 
     def test_prose(self) -> None:
         self.fails("prose", [
@@ -227,17 +240,6 @@ class GeneratorsWriteOnlyWithWrite(unittest.TestCase):
     def test_contracts(self) -> None:
         ledger = self.stale("ledger.md")
         self.holds("contracts", [ledger], [mock.patch.object(contracts, "LEDGER", str(ledger))])
-
-    def test_contract_index(self) -> None:
-        index, graph = self.stale("index.json"), self.stale("graph.json")
-        self.holds("contract_index", [index, graph], [
-            mock.patch.object(contract_index, "INDEX", index),
-            mock.patch.object(contract_index, "GRAPH", graph),
-            mock.patch.object(contract_index, "index", lambda: []),
-            mock.patch.object(contract_index, "edges", lambda records: []),
-            mock.patch.object(contract_index, "edge_defects", lambda records, found: []),
-            mock.patch.object(contracts, "SPECS", self.dir),
-        ])
 
     def inventory(self) -> list:
         app = self.dir / "app"
