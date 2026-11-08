@@ -17,9 +17,7 @@ mod sheet_index;
 
 #[cfg(test)]
 pub(crate) use axis::generation_owner;
-pub(crate) use axis::{
-    Axes, AxisOrder, ListAxis, Removed, Spot, axis_list, remove_spots, restore_spots,
-};
+pub(crate) use axis::{Axes, AxisOrder, ListAxis, Removed, RootList, axis_list, root_list};
 pub use axis::{
     AxisChange, AxisView, CellRank, Element, ElementId, Kept, LayoutChange, LineGeneration,
     SheetIndex, Slot, SlotEdit, slot_edits,

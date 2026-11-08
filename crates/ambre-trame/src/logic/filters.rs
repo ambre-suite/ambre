@@ -216,11 +216,6 @@ impl TrameState {
             let map = self
                 .doc
                 .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
-            if let LoroValue::Map(entries) = map.get_value() {
-                for key in entries.keys() {
-                    self.note_write(&map, key);
-                }
-            }
             clear_loro_map(&map);
         }
     }

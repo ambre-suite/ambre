@@ -128,11 +128,11 @@ fn a_fill_is_one_undo_item() {
     let mut state = TrameState::new();
     set(&mut state, 0, 0, "1");
     set(&mut state, 1, 0, "2");
-    let before = state.undo_manager.undo_count();
+    let before = state.undo_depth();
     fill(&mut state, range(0, 0, 1, 0), range(0, 0, 5, 0));
     state.handle_command(TrameCommand::CommitEdit);
     assert_eq!(read_cell(&mut state, 5, 0), "6");
-    assert_eq!(state.undo_manager.undo_count(), before + 1);
+    assert_eq!(state.undo_depth(), before + 1);
 
     state.handle_command(TrameCommand::Undo);
     let column: Vec<String> = (0..6).map(|r| read_cell(&mut state, r, 0)).collect();
@@ -165,10 +165,10 @@ fn a_drag_back_to_its_start_writes_nothing() {
     let mut state = TrameState::new();
     set(&mut state, 0, 0, "1");
     set(&mut state, 1, 0, "2");
-    let before = state.undo_manager.undo_count();
+    let before = state.undo_depth();
     let out = fill(&mut state, range(0, 0, 1, 0), range(0, 0, 1, 0));
     assert!(out.update.is_none());
-    assert_eq!(state.undo_manager.undo_count(), before);
+    assert_eq!(state.undo_depth(), before);
 }
 
 /// A fill that names a sheet other than the active one touches nothing
@@ -204,7 +204,7 @@ fn a_paste_is_one_undo_item() {
     }
     select(&mut state, 0, 0, 2, 2);
     let payload = copied(&mut state);
-    let before = state.undo_manager.undo_count();
+    let before = state.undo_depth();
     state.handle_command(TrameCommand::PasteRange {
         target_row: Pos::<Row>::new(10),
         target_col: Pos::<Col>::new(0),
@@ -212,7 +212,7 @@ fn a_paste_is_one_undo_item() {
     });
     state.handle_command(TrameCommand::CommitEdit);
     assert_eq!(read_cell(&mut state, 12, 2), "22");
-    assert_eq!(state.undo_manager.undo_count(), before + 1);
+    assert_eq!(state.undo_depth(), before + 1);
     state.handle_command(TrameCommand::Undo);
     for r in 10..13 {
         for c in 0..3 {

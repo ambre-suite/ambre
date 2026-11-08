@@ -98,15 +98,6 @@ impl TrameState {
         // the writes (`TRAME-UI-129`): every rectangle the user selected.
         let bounds = self.selection_bounds();
         let cells = self.selected_cells();
-        // One undo group + one commit for the whole selection. The restyle is then
-        // a single undo step and a single broadcast delta (mirrors `fill_range` /
-        // `SetCellsBatch`). Pre-materialize every targeted cell up front so the
-        // excluded-origin `materialize` commits happen first. Interleaving them
-        // between the style writes would split the batch into one undo item per
-        // cell. The style writes below never commit (`write_cell_style`), so they
-        // collapse into the single trailing commit. The group is sealed by the
-        // next command's fallback `group_end`.
-        let _ = self.undo_manager.group_start();
         // A cell with no line to key its style by is refused whole, never
         // drawn with a style the document does not hold (`TRAME-193`). It lies
         // past the materialization cap, or the session is out of fresh uids.

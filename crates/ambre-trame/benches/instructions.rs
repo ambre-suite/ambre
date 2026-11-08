@@ -9,8 +9,8 @@
 //! its own name. They are the re-anchor walk and the engine step after the
 //! commit. A line delete is the same command counted whole: the purge, the
 //! commit and every cache too. Its undo and its redo are each counted whole
-//! in the same way. So are those of a row insert and of a delete of `MANY`
-//! rows. A remote batch is counted whole, from the import to the events.
+//! in the same way. So are those of a row insert, of a delete of `MANY` rows
+//! and of one cell write. A remote batch is counted whole, from the import to the events.
 //!
 //! Run with no operation named, as `cargo bench` does, every operation runs
 //! once: a smoke test.
@@ -70,17 +70,62 @@ fn ambre_budget_trame_structural_edit(st: &mut TrameState) {
     }));
 }
 
-/// Undo the last edit. Every operation that counts an undo counts it here:
-/// two functions of the same body would fold into one symbol in the build.
-#[inline(never)]
-fn ambre_budget_trame_undo(st: &mut TrameState) {
-    black_box(st.handle_command(TrameCommand::Undo));
+/// One step of the history, tagged. Each operation counts its step in a
+/// function of its own, and the tag tells their bodies apart. Two functions of
+/// one body fold into one symbol in the build, and the count goes to neither.
+#[inline(always)]
+fn step(st: &mut TrameState, command: TrameCommand, tag: u8) {
+    black_box(tag);
+    black_box(st.handle_command(command));
 }
 
-/// Redo the last undone edit, counted for every operation as the undo is.
+/// Undo the delete of the middle row: the row, its two cells and their
+/// formula come back.
 #[inline(never)]
-fn ambre_budget_trame_redo(st: &mut TrameState) {
-    black_box(st.handle_command(TrameCommand::Redo));
+fn ambre_budget_trame_line_delete_undo(st: &mut TrameState) {
+    step(st, TrameCommand::Undo, 1);
+}
+
+/// Redo the delete of the middle row.
+#[inline(never)]
+fn ambre_budget_trame_line_delete_redo(st: &mut TrameState) {
+    step(st, TrameCommand::Redo, 2);
+}
+
+/// Undo the insert of the middle row.
+#[inline(never)]
+fn ambre_budget_trame_line_insert_undo(st: &mut TrameState) {
+    step(st, TrameCommand::Undo, 3);
+}
+
+/// Redo the insert of the middle row.
+#[inline(never)]
+fn ambre_budget_trame_line_insert_redo(st: &mut TrameState) {
+    step(st, TrameCommand::Redo, 4);
+}
+
+/// Undo the delete of `MANY` rows.
+#[inline(never)]
+fn ambre_budget_trame_many_line_delete_undo(st: &mut TrameState) {
+    step(st, TrameCommand::Undo, 5);
+}
+
+/// Redo the delete of `MANY` rows.
+#[inline(never)]
+fn ambre_budget_trame_many_line_delete_redo(st: &mut TrameState) {
+    step(st, TrameCommand::Redo, 6);
+}
+
+/// Undo the write of the middle cell.
+#[inline(never)]
+fn ambre_budget_trame_cell_write_undo(st: &mut TrameState) {
+    step(st, TrameCommand::Undo, 7);
+}
+
+/// Redo the write of the middle cell.
+#[inline(never)]
+fn ambre_budget_trame_cell_write_redo(st: &mut TrameState) {
+    step(st, TrameCommand::Redo, 8);
 }
 
 /// Insert a row in the middle of the sheet: the edit the next two undo.
@@ -88,6 +133,31 @@ fn insert_middle_row(st: &mut TrameState) {
     st.handle_command(TrameCommand::InsertRow {
         at: Pos::<Row>::new(FORMULAS / 2),
     });
+}
+
+/// Write a number into column A of the middle row, as one edit.
+fn write_middle_cell(st: &mut TrameState) {
+    st.handle_command(TrameCommand::SetCellText {
+        row: Pos::<Row>::new(FORMULAS / 2),
+        col: Pos::<Col>::new(0),
+        text: "7".to_owned(),
+    });
+    st.handle_command(TrameCommand::CommitEdit);
+}
+
+/// Whether the cell of column A on `row` shows `want`.
+fn shows_a(st: &mut TrameState, row: u32, want: &str) -> bool {
+    let out = st.handle_command(TrameCommand::ScrollViewport {
+        version: ambre_core::Seq::nth(u64::MAX),
+        row_start: Pos::<Row>::new(row),
+        row_end: Pos::<Row>::new(row),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(0),
+    });
+    out.display.iter().any(|e| match e {
+        TrameEvent::ViewportData { cells, .. } => cells.iter().any(|c| c.text == want),
+        _ => false,
+    })
 }
 
 /// Rows the many-line delete takes out, from the middle of the sheet.
@@ -222,15 +292,15 @@ const OPERATIONS: &[(&str, fn())] = &[
         let mut st = sheet();
         checked(&mut st);
         ambre_budget_trame_structural_edit(&mut st);
-        ambre_budget_trame_undo(&mut st);
+        ambre_budget_trame_line_delete_undo(&mut st);
         checked_after_undo(&mut st);
     }),
     ("line_delete_redo", || {
         let mut st = sheet();
         checked(&mut st);
         ambre_budget_trame_structural_edit(&mut st);
-        ambre_budget_trame_undo(&mut st);
-        ambre_budget_trame_redo(&mut st);
+        ambre_budget_trame_line_delete_undo(&mut st);
+        ambre_budget_trame_line_delete_redo(&mut st);
         checked_after_delete(&mut st);
     }),
     ("line_insert_undo", || {
@@ -238,15 +308,15 @@ const OPERATIONS: &[(&str, fn())] = &[
         checked(&mut st);
         insert_middle_row(&mut st);
         checked_after_insert(&mut st);
-        ambre_budget_trame_undo(&mut st);
+        ambre_budget_trame_line_insert_undo(&mut st);
         checked_after_undo(&mut st);
     }),
     ("line_insert_redo", || {
         let mut st = sheet();
         checked(&mut st);
         insert_middle_row(&mut st);
-        ambre_budget_trame_undo(&mut st);
-        ambre_budget_trame_redo(&mut st);
+        ambre_budget_trame_line_insert_undo(&mut st);
+        ambre_budget_trame_line_insert_redo(&mut st);
         checked_after_insert(&mut st);
     }),
     ("many_line_delete_undo", || {
@@ -254,16 +324,34 @@ const OPERATIONS: &[(&str, fn())] = &[
         checked(&mut st);
         delete_many_rows(&mut st);
         checked_after_many_delete(&mut st);
-        ambre_budget_trame_undo(&mut st);
+        ambre_budget_trame_many_line_delete_undo(&mut st);
         checked_after_undo(&mut st);
     }),
     ("many_line_delete_redo", || {
         let mut st = sheet();
         checked(&mut st);
         delete_many_rows(&mut st);
-        ambre_budget_trame_undo(&mut st);
-        ambre_budget_trame_redo(&mut st);
+        ambre_budget_trame_many_line_delete_undo(&mut st);
+        ambre_budget_trame_many_line_delete_redo(&mut st);
         checked_after_many_delete(&mut st);
+    }),
+    ("cell_write_undo", || {
+        let mut st = sheet();
+        checked(&mut st);
+        write_middle_cell(&mut st);
+        ambre_budget_trame_cell_write_undo(&mut st);
+        assert!(
+            shows_a(&mut st, FORMULAS / 2, &(FORMULAS / 2).to_string()),
+            "the old value is back"
+        );
+    }),
+    ("cell_write_redo", || {
+        let mut st = sheet();
+        checked(&mut st);
+        write_middle_cell(&mut st);
+        ambre_budget_trame_cell_write_undo(&mut st);
+        ambre_budget_trame_cell_write_redo(&mut st);
+        assert!(shows_a(&mut st, FORMULAS / 2, "7"), "the write is back");
     }),
     ("remote_batch", || {
         let mut author = sheet();

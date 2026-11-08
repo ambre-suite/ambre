@@ -19,7 +19,9 @@ use ambre_core::index::Pos;
 use ambre_core::{Bounded, Doc, Px};
 use std::collections::{HashMap, HashSet};
 
-use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
+#[cfg(all(test, not(target_arch = "wasm32")))]
+use loro::UndoManager;
+use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::formula::text::{DisplayForm, SourceForm, StoredForm};
@@ -215,10 +217,10 @@ pub struct TrameState {
     /// reference model, which walks every formula and reseeds.
     #[cfg(test)]
     structural_path: structural::StructuralPath,
-    /// The path a line delete takes. Only the test of `TRAME-286` sets the
-    /// reference model, which leaves every delete to the undo manager.
+    /// The path an undo takes. Only the test of `TRAME-286` sets the
+    /// reference model, which leaves every edit to the undo manager.
     #[cfg(all(test, not(target_arch = "wasm32")))]
-    history_path: line_history::HistoryPath,
+    history_path: history::HistoryPath,
     /// How many full engine reseeds ran, for the tests that hold a remote
     /// batch to its carried path (`TRAME-282`).
     #[cfg(test)]
@@ -256,20 +258,16 @@ pub struct TrameState {
     /// The open edit session's cell, held by identity so a peer's structural
     /// change cannot move its commit (`TRAME-UI-160`). `None` with no session.
     edit_anchor: Option<edit_anchor::EditAnchor>,
-    /// Local undo/redo history (`trame-undo`). Subscribes to [`Self::doc`] and
-    /// records one
-    /// item per commit; each `TrameCommand` handler commits exactly once, so one
-    /// command maps to one undo step. Scope is the open-document session: it only
-    /// knows this peer's commits, not imported remote ops. `undo`/`redo` mutate
-    /// it, hence it is created after the constructor's initial commit so that the
-    /// implicit-sheet registration is never undoable.
-    undo_manager: UndoManager,
-    /// The steps an undo walks back and a redo walks forward: the items of
-    /// [`undo_manager`](Self::undo_manager), and the line deletes Trame
-    /// replays itself (`TRAME-286`).
-    history: line_history::History,
-    /// What the line delete under way wrote so far, `None` outside one.
-    journal: std::cell::RefCell<Option<line_history::Journal>>,
+    /// The reference model of the history test: the undo manager, holding
+    /// every edit as one item per command (`TRAME-286`). No build but a test
+    /// runs one.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    oracle: UndoManager,
+    /// The history and the mirror it reads each commit against, shared with
+    /// the subscription that records them (`TRAME-288`).
+    recorder: history::RecorderSink,
+    /// Keeps the recorder subscribed for the life of the state.
+    _recorder: loro::Subscription,
     /// Per-session monotonic counter for minting explicit `sheet_id`s. Combined
     /// with the document `PeerID` so two peers that concurrently add a sheet mint
     /// distinct ids that both survive (`trame-sheets`). Not persisted: ids, once
@@ -427,19 +425,22 @@ impl TrameState {
         doc.commit();
         doc.set_peer_id(peer)
             .expect("a document outside a transaction takes a peer id");
-        // Create the undo manager AFTER the initial commit. The implicit-sheet
-        // registration is document scaffolding, not a user edit, so it must not
-        // sit on the undo stack.
-        let mut undo_manager = UndoManager::new(&doc);
-        // Keep implicit row/column materialization off the undo stack (see
-        // `CommitOrigin::Materialize`); only user-intended edits are undoable.
-        undo_manager
-            .add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Materialize.as_str());
-        // The registry entry is bookkeeping, not an edit: an undo never
-        // retracts it (`AUTHOR-009`).
-        undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
-        // A line delete is a step of Trame's own history (`TRAME-286`).
-        undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Recorded.as_str());
+        // The history starts after the initial commit. The implicit-sheet
+        // registration is document scaffolding, not a user edit, so no undo
+        // takes it back.
+        let (recorder, recorder_watch) = history::watch(&doc);
+        #[cfg(all(test, not(target_arch = "wasm32")))]
+        let oracle = {
+            let mut oracle = UndoManager::new(&doc);
+            for origin in [
+                ambre_core::crdt::CommitOrigin::Materialize,
+                ambre_core::crdt::CommitOrigin::Peers,
+                ambre_core::crdt::CommitOrigin::Recorded,
+            ] {
+                oracle.add_exclude_origin_prefix(origin.as_str());
+            }
+            oracle
+        };
         let (imported, imports) = remote::watch(&doc);
         let (lines, lines_watch) = line_cells::watch(&doc);
         let mut state = Self {
@@ -468,7 +469,7 @@ impl TrameState {
             #[cfg(test)]
             structural_path: structural::StructuralPath::Carry,
             #[cfg(all(test, not(target_arch = "wasm32")))]
-            history_path: line_history::HistoryPath::Recorded,
+            history_path: history::HistoryPath::Recorded,
             #[cfg(test)]
             reseeds: 0,
             #[cfg(test)]
@@ -480,9 +481,10 @@ impl TrameState {
             named: HashMap::new(),
             write_refusals: Vec::new(),
             edit_anchor: None,
-            undo_manager,
-            history: line_history::History::default(),
-            journal: std::cell::RefCell::new(None),
+            #[cfg(all(test, not(target_arch = "wasm32")))]
+            oracle,
+            recorder,
+            _recorder: recorder_watch,
             sheet_counter: Some(ambre_core::IdCounter::ZERO),
             uid_counter: Some(ambre_core::IdCounter::ZERO),
             sheet_list_sent: false,
@@ -620,9 +622,9 @@ mod find;
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
 mod helpers;
+mod history;
 mod interop;
 mod line_cells;
-mod line_history;
 mod locale;
 mod merges;
 mod metrics;
@@ -658,7 +660,7 @@ mod convergence_tests;
 // against the undo manager (`TRAME-286`).
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
-mod line_history_tests;
+mod history_tests;
 
 // Host-only, on `proptest` like the convergence tests: the incremental
 // structural path against a full rebuild (`TRAME-280`).

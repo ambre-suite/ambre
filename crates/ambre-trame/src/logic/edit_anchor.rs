@@ -140,9 +140,6 @@ impl TrameState {
             let session = anchor.session;
             return TrameOutcome::display_only(vec![TrameEvent::EditTargetGone { session }]);
         };
-        // The cell write and its derived commits are one undo item, which the
-        // next `CommitEdit` seals.
-        let _ = self.undo_manager.group_start();
         if typed.kind == super::locale::TypedKind::Date {
             self.format_typed_date(at);
         }

@@ -124,6 +124,9 @@ impl TrameState {
             tracing::error!("[Logic] the session identity was refused: {e:?}");
             return false;
         }
+        // A step names the work of the identity before: the undo manager
+        // forgot its stacks on a new identity too.
+        self.clear_history();
         self.last_exported_vv = self.doc.oplog_vv();
         self.entry_end = write_entry(&self.doc, peer, &entry);
         true

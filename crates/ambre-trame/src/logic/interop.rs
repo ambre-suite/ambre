@@ -106,10 +106,6 @@ impl TrameState {
             }
         };
 
-        // Open the undo group before the first write. A freshly created sheet
-        // and every cell write then collapse into a single undo item, sealed
-        // by the next command's fallback `group_end` (like `SetCellText`).
-        let _ = self.undo_manager.group_start();
         if created {
             self.hold_default_sheet();
         }
