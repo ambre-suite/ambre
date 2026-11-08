@@ -32,7 +32,7 @@
 //! **Why a comment leaves no undo item.** `Ctrl+Z` reverts what the user drew.
 //! A teammate has already read the message, so a withdrawal is a deletion
 //! nobody asked for. Every write here commits under
-//! [`CommitOrigin::Comment`](ambre_core::crdt::CommitOrigin::Comment), which the `UndoManager` excludes
+//! [`CommitOrigin::Comment`](ambre_core::crdt::CommitOrigin::Comment), which the undo history excludes
 //! (`TOILE-FEAT-017`).
 
 use ambre_core::StoredAsI64;

@@ -636,6 +636,18 @@ pub(crate) fn hide_block(doc: &LoroDoc, tree: &LoroTree, id: &TreeID) -> Result<
     Ok(())
 }
 
+/// The marker an undo of a block's creation hides the block under: the same
+/// one a deletion writes, naming the session that hid it (`PROSE-134`). The
+/// node keeps its identity, so the redo shows the same block, its body still
+/// keyed by it.
+#[must_use]
+pub(crate) fn hiding() -> ambre_crdt::history::Hide {
+    ambre_crdt::history::Hide {
+        key: loro::InternalString::from(NodeKey::Hidden.as_str()),
+        value: |doc| loro::LoroValue::from(doc.peer_id().to_string()),
+    }
+}
+
 /// The type a live block carries, or `None` when the id names no live block or
 /// the discriminant is one this build does not know.
 #[must_use]

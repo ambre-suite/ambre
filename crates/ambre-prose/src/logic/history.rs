@@ -8,7 +8,7 @@
 use crate::message::DocChar;
 use ambre_core::index::Pos;
 use loro::event::Diff;
-use loro::{ContainerID, Frontiers, LoroDoc, TextDelta, TreeExternalDiff};
+use loro::{ContainerID, Frontiers, LoroDoc, TextDelta, TreeExternalDiff, TreeID};
 
 use crate::doc;
 use crate::events::{BlockId, block_id};
@@ -18,7 +18,8 @@ use crate::events::{BlockId, block_id};
 ///
 /// A text edit wins over a structural one. The caret goes to the end of what
 /// was put back, or to where text was taken out. A step that only created a
-/// block puts the caret at that block's start. `None` when the step touched no
+/// block, or showed again a block it had hidden, puts the caret at that
+/// block's start. `None` when the step touched no
 /// live block, which leaves the caret where it was.
 pub(super) fn edit_point(
     document: &LoroDoc,
@@ -42,6 +43,20 @@ pub(super) fn edit_point(
                 }
                 if let Some(offset) = text_point(deltas) {
                     return Some((block_id(id), offset));
+                }
+            }
+            // A redo of an insertion takes the hiding marker off the node the
+            // insertion created (`PROSE-134`): the block shows again.
+            Diff::Map(delta) if created.is_none() => {
+                let ContainerID::Normal { peer, counter, .. } = container else {
+                    continue;
+                };
+                let shown = delta.updated.iter().any(|(key, value)| {
+                    AsRef::<str>::as_ref(key) == doc::NodeKey::Hidden.as_str() && value.is_none()
+                });
+                let id = TreeID::new(*peer, *counter);
+                if shown && id.associated_meta_container() == *container {
+                    created = doc::node_of(&tree, &id).map(|_| id);
                 }
             }
             Diff::Tree(tree_diff) if created.is_none() => {

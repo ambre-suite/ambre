@@ -146,8 +146,84 @@ fn paragraph_shape() {
     }
 }
 
+/// The blocks of the document the undo rows type into: about a hundred pages
+/// of paragraphs of `PARAGRAPH_CHARS` characters each.
+const PAGE_BLOCKS: usize = 300;
+
+/// A document of `PAGE_BLOCKS` paragraphs, each inserted and typed by its own
+/// commands, and one key typed into the middle one: the edit an undo takes
+/// back.
+fn typed_document() -> ambre_prose::logic::ProseState {
+    use ambre_core::index::Pos;
+    use ambre_prose::message::{BlockInit, DocChar, ProseCommand};
+    let mut state =
+        ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
+    let mut last = state.root_blocks().first().copied();
+    for i in 0..PAGE_BLOCKS {
+        let before = state.root_blocks();
+        state.handle_command(ProseCommand::InsertBlock {
+            parent_id: None,
+            after_id: last,
+            init: BlockInit::Paragraph,
+            style_id: None,
+        });
+        let block = state
+            .root_blocks()
+            .into_iter()
+            .find(|id| !before.contains(id))
+            .expect("an insert adds a block");
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: Pos::<DocChar>::ZERO,
+            text: paragraph(WORDS[i % WORDS.len()]),
+        });
+        last = Some(block);
+    }
+    let middle = state.root_blocks()[PAGE_BLOCKS / 2];
+    state.handle_command(ProseCommand::InsertText {
+        block_id: middle,
+        pos: Pos::<DocChar>::new(250),
+        text: "k".to_owned(),
+    });
+    state
+}
+
+/// One `Undo` of a typed key, from the command to its outcome: the replay,
+/// the commit, the caret and the delta. Counted alone by `callgrind`.
+#[inline(never)]
+fn ambre_budget_prose_key_undo(state: &mut ambre_prose::logic::ProseState) {
+    let out = state.handle_command(black_box(ambre_prose::message::ProseCommand::Undo));
+    assert!(out.update.is_some(), "the undo takes the key out");
+}
+
+/// One `Redo` of that key, counted the same way.
+#[inline(never)]
+fn ambre_budget_prose_key_redo(state: &mut ambre_prose::logic::ProseState) {
+    let out = state.handle_command(black_box(ambre_prose::message::ProseCommand::Redo));
+    assert!(out.update.is_some(), "the redo types the key again");
+}
+
+/// The undo of one key on a document of about a hundred pages, the "Prose
+/// local text insert" row of `ambre-spec-budgets.md section 1`.
+fn key_undo() {
+    let mut state = typed_document();
+    ambre_budget_prose_key_undo(&mut state);
+}
+
+/// The redo of that key, after its undo outside the count.
+fn key_redo() {
+    let mut state = typed_document();
+    let out = state.handle_command(ambre_prose::message::ProseCommand::Undo);
+    assert!(out.update.is_some(), "the undo takes the key out");
+    ambre_budget_prose_key_redo(&mut state);
+}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 1] = [("paragraph_shape", paragraph_shape)];
+const OPERATIONS: [(&str, fn()); 3] = [
+    ("paragraph_shape", paragraph_shape),
+    ("key_undo", key_undo),
+    ("key_redo", key_redo),
+];
 
 fn main() {
     // `cargo bench` passes flags such as `--bench`; only a bare word names an

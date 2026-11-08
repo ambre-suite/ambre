@@ -169,7 +169,7 @@ thread leaves as a return value (`TOILE-089`).
 | the view mirror | the last viewport the UI reported, which is what the cull is run against | on every viewport command. Never persisted, never synchronized |
 | the presence map | each remote peer's latest cursor, stroke, laser and selection, keyed by user id (`features/ambre-spec-toile-presence.md`) | from the samples that arrive; never persisted |
 | the playback state | the presentation flag, the active slide, the broadcast toggle and the presenter this viewer follows (`features/ambre-spec-toile-presentation.md`) | per viewer, never shared |
-| the local history | the undo manager, opened with the board (`features/ambre-spec-toile-undo.md`) | never: it dies with the session |
+| the local history | the one undo history, opened with the board (`features/ambre-spec-toile-undo.md`) | never: it dies with the session |
 | the sync cursor | the last version vector exported to Sync | advanced by a successful export, by an import minus our own counter, and by nothing else (`TOILE-090`, `TOILE-236`) |
 | the pending imports | the imports waiting for a media hash before they touch the board (`features/ambre-spec-toile-media.md`) | never: it dies with the session |
 

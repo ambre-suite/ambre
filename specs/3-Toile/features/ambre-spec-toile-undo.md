@@ -46,8 +46,8 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `ToileCommand::Undo` / `Redo` | UI to Logic | nothing: the history is the Logic thread's |
 | `ToileEvent::UndoState { undo, redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
 
-The engine field is still the Loro undo manager, not the one history of `ambre-spec-undo.md section
-3`: the `Toile and Prose on the one undo history` Story (`ambre-roadmap.md` E8).
+The engine field is the one history of `ambre-spec-undo.md section 3`. A comment write is no step
+(`features/ambre-spec-toile-comments.md`, `TOILE-FEAT-017`).
 
 **Which caches an undo reseeds** (`UNDO-005`), whole and from the document:
 
@@ -56,9 +56,11 @@ The engine field is still the Loro undo manager, not the one history of `ambre-s
 * the paint order;
 * the group boxes.
 
-**The element an undo puts back** (`TOILE-290`). An undo of a delete writes a new element record
-and a new entry of the paint order. The element keeps its id, since the id is the key of its record.
-The undo manager remaps the record it wrote, so a later step of the stack still reaches the element.
+**The element an undo puts back** (`TOILE-290`). An undo of a delete writes the element record again
+by value, its body text with it, and a new entry of the paint order. The element keeps its id, since
+the id is the key of its record. The history notes the record's new Loro identity against the old
+one, so a later step of the stack still reaches the element. A record a peer deleted takes no write
+(`ambre-spec-undo.md`, `UNDO-012`).
 
 **What one undo item is** (`TOILE-014`):
 

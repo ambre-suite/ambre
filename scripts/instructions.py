@@ -178,6 +178,43 @@ CEILINGS = [
         row="Trame remote batch, 10k formula cells, a cell write and a row delete (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
+    # The undo and the redo of one move on a board of 2 000 stickies, each
+    # from its command to its outcome: the replay, the commit, the reseed of
+    # every cache and the delta (`TOILE-291`).
+    Ceiling(
+        crate="ambre-toile",
+        bench="instructions",
+        operation="move_undo",
+        symbol="ambre_budget_toile_move_undo",
+        row="Toile transform command (move, restyle), the whole undo of a move on 2 000 elements (< 1 ms)",
+        ceiling=1 * PER_MS,
+    ),
+    Ceiling(
+        crate="ambre-toile",
+        bench="instructions",
+        operation="move_redo",
+        symbol="ambre_budget_toile_move_redo",
+        row="Toile transform command (move, restyle), the whole redo of a move on 2 000 elements (< 1 ms)",
+        ceiling=1 * PER_MS,
+    ),
+    # The undo and the redo of one typed key in a document of about a hundred
+    # pages, each from its command to its outcome (`PROSE-135`).
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="key_undo",
+        symbol="ambre_budget_prose_key_undo",
+        row="Prose local text insert, the whole undo of a key on 100 pages (< 2 ms)",
+        ceiling=2 * PER_MS,
+    ),
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="key_redo",
+        symbol="ambre_budget_prose_key_redo",
+        row="Prose local text insert, the whole redo of a key on 100 pages (< 2 ms)",
+        ceiling=2 * PER_MS,
+    ),
     Ceiling(
         crate="ambre-prose",
         bench="instructions",

@@ -285,9 +285,8 @@ impl ToileState {
     /// Open the import's undo group and apply its first `pace`.
     fn start_import(&mut self, batch: ImportBatch, pace: ImportPace) -> ToileOutcome {
         let mut display = self.finish_running_import();
-        if let Err(e) = self.undo.group_start() {
-            tracing::warn!("[Toile] the import could not open its undo group: {e:?}");
-        }
+        self.doc.commit();
+        self.history.seal();
         self.import_job = Some(Box::new(ImportJob::new(batch)));
         display.extend(self.run_import(pace));
         self.emit_with_update(display)
@@ -380,7 +379,7 @@ impl ToileState {
         } = job;
         self.seed_media(&media);
         self.doc.commit();
-        self.undo.group_end();
+        self.history.close();
         self.rebuild_caches();
         report.imported = Count::<Elements>::of(slot_ids.iter().filter(|s| s.is_some()).count());
         vec![

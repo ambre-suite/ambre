@@ -2,9 +2,8 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
-**Implementation:** partial -- the three applications ship an undo stack. Trame undoes through the
-one history; Toile and Prose still through the Loro undo manager. The depth is unbounded in all
-three.
+**Implementation:** partial -- the three applications undo through the one history. The depth is
+unbounded in all three.
 
 > A user presses `Ctrl+Z` and their last action comes back. A collaborator's action never does, and
 > never disappears from under them.
@@ -38,7 +37,8 @@ history moves, so the two share a table rather than repeating one.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UNDO-001` | `POST` | An undo MUST revert this peer's own last operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the peer's own edit back as reverted; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; Prose `ambre_prose::logic::blocks::tests::an_undone_deletion_brings_the_block_back_whole` | none | verified |
-| `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged; `ambre_trame::logic::history_tests::an_undone_write_keeps_a_later_write_of_a_peer` -- the peer types over the cell the undone write wrote; `ambre_crdt::history::tests::an_undo_keeps_a_later_write_of_a_peer` -- a key a peer wrote after the edit keeps its value; Toile `ambre_toile::logic::convergence_tests::an_undo_leaves_a_remote_move_alone`; Prose `ambre_prose::logic::tests::an_undo_leaves_a_remote_edit_alone` | none | verified |
+| `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged; `ambre_trame::logic::history_tests::an_undone_write_keeps_a_later_write_of_a_peer` -- the peer types over the cell the undone write wrote; `ambre_crdt::history::tests::an_undo_keeps_a_later_write_of_a_peer` -- a key a peer wrote after the edit keeps its value; `ambre_crdt::history::tests::an_undo_of_typing_keeps_a_peer_s_characters` -- a peer types on each side of the typing the undo takes out; Toile `ambre_toile::logic::convergence_tests::an_undo_leaves_a_remote_move_alone`; Prose `ambre_prose::logic::tests::an_undo_leaves_a_remote_edit_alone` | none | verified |
+| `UNDO-012` | `FRAME` | An undo MUST NOT bring back a container that a peer deleted. | this spec section 3 | `ambre_crdt::history::tests::an_undo_leaves_a_map_a_peer_deleted_deleted` -- a peer deletes the nested map a move wrote into, and the undo of the move writes nothing; Toile `ambre_toile::logic::convergence_tests::an_undo_leaves_an_element_a_peer_deleted_deleted` | none | verified |
 | `UNDO-002` | `POST` | An undo MUST broadcast its inverse operations as an ordinary CRDT delta, like any other change. | this spec section 2, row 2 | Trame `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the undo's delta applied on a second peer; Toile `ambre_toile::logic::convergence_tests::a_history_step_reaches_the_other_peer_as_a_delta` -- the undo and the redo deltas applied on a second board | none | verified |
 | `UNDO-005` | `POST` | An undo MUST rebuild every derived cache whole, so nothing derived is stale afterwards. | this spec section 3; `4-Prose/features/ambre-spec-prose-undo.md` (`PROSE-UI-045`), the caret that stands in for a derived cache Prose has not got | Trame `ambre_trame::logic::tests::group2::undo_insert_row_rebuilds_sheet_index`; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; `::undo_reverts_group_as_one_item`; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the cross-reference numbering resolves again | none | verified |
 | `UNDO-006` | `POST` | The undo and redo affordances MUST report what the engine holds. | this spec section 4 | Trame `ambre_trame::logic::tests::group2::mutating_command_reports_undo_state`; chrome `ambre_trame::tests::chrome_ui::undo_state_mirrors_into_command_store`; Toile `ambre_toile::logic::state::undo_state_tests::mutating_command_reports_undo_state`; chrome `ambre_toile::tests::chrome_ui::undo_state_mirrors_into_command_store`; Prose `ambre_prose::logic::tests::a_write_reports_the_history_and_a_no_op_reports_none`; chrome `ambre_prose::tests::chrome_panel::the_history_rows_follow_the_reported_state` -- the context menu's two rows follow each reported state, and another event leaves them | none | verified |
@@ -51,10 +51,11 @@ history moves, so the two share a table rather than repeating one.
   `UI-THREAD-016`, one number for every application.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 11 `verified`. In all three applications, an undo reverts the peer's own edit,
+* **Verification.** 12 `verified`. In all three applications, an undo reverts the peer's own edit,
   reaches the other peers as a delta, and reports the availability the affordances show. The
   history dies with the document, and the reseed is clean. An undo leaves a remote peer's
-  operation alone, and an undo on an empty stack writes and emits nothing.
+  operation alone, raises no container a peer deleted, and an undo on an empty stack writes and
+  emits nothing.
 
 ---
 
@@ -88,13 +89,22 @@ which is why one undo item is one commit rather than one container write.
 
 **One model: each edit records its own inverse.**
 
-* A subscription keeps a plain copy of every root container, the mirror.
-* Each local commit reads from the mirror what it overwrites: the value of each key, and the
-  place and neighbour of each list element. That is the step.
-* An undo writes each value back and puts each element back after its old neighbour. A redo
-  writes the edit again.
-* A key a later write changed keeps that write (`UNDO-007`).
-* A commit that writes a nested container ends the history: no step can replay it.
+* A subscription keeps a plain copy of every container, nested ones included: the mirror.
+* Each local commit reads from the mirror what it overwrites. That is the step:
+  * the value of each key; a nested container a commit deletes is kept by value;
+  * the place and neighbour of each list element;
+  * the characters each text edit put in or took out, placed by Loro cursors;
+  * the parent and sibling of each tree node a commit moved, and each node it created.
+* An undo writes each value back, puts each element back after its old neighbour, and takes out
+  the characters this peer put in. A redo writes the edit again.
+* A nested container comes back by value, under a new Loro identity. The history notes the old
+  identity against the new one, so a later step reaches it.
+* An undo of a tree node's creation hides the node under the application's marker. Loro raises no
+  deleted node, so the redo shows the same node.
+* A key a later write changed keeps that write, and a character a peer typed stays (`UNDO-007`).
+* A container a peer deleted or replaced takes no write: an undo never raises it (`UNDO-012`).
+* A commit that deletes a tree node, or puts a container into a list, ends the history: no step
+  can replay it.
 * The registry entry and a replay are no step.
 
 **Engine state.** One field of each application's engine, the same type everywhere:
@@ -107,9 +117,11 @@ history: ambre_crdt::history::UndoHistory,
 
 The Loro undo manager is rejected (section 5).
 
-* Trame holds the history (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-288`).
-* Toile and Prose still hold the manager: each of their edits writes a nested container or a
-  text. It is the `Toile and Prose on the one undo history` Story (`ambre-roadmap.md` E8).
+* Trame holds it over its root maps and lists alone: a write into a nested container ends its
+  history (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-288`, `TRAME-290`).
+* Toile holds it (`3-Toile/features/ambre-spec-toile-undo.md`, `TOILE-290`).
+* Prose holds it, with the hiding marker of a deleted block (`4-Prose/features/ambre-spec-prose-undo.md`,
+  `PROSE-134`).
 
 **Steps, when a user undoes or redoes.** The same five everywhere; step 3 is the application's own.
 

@@ -1,7 +1,7 @@
 //! `ProseState` -- the per-document Prose engine, Logic thread side
 //! (`features/ambre-spec-prose-engine.md`).
 //!
-//! It owns the single-document `LoroDoc`, the local undo manager, the decrypted
+//! It owns the single-document `LoroDoc`, the local undo history, the decrypted
 //! picture cache and the export cursor. It turns a typed [`ProseCommand`] into a
 //! [`ProseOutcome`], that is display events plus CRDT and ephemeral bytes. The
 //! `LoroDoc` never leaves this thread; it exits only as bytes (`PROSE-001`).
@@ -80,7 +80,7 @@ use ambre_core::Count;
 use ambre_core::index::{Len, Pos, Span};
 use std::collections::HashMap;
 
-use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};
+use loro::{ExportMode, LoroDoc, TreeID, VersionVector};
 
 use ambre_core::id::{Id, User};
 use ambre_core::schema::SchemaError;
@@ -140,8 +140,9 @@ pub struct ProseState {
     /// The CRDT, private and named by no public signature (`PROSE-001`).
     doc: LoroDoc,
     /// Local-only undo and redo: it retracts this peer's operations alone, one
-    /// item per atomic user action.
-    undo: UndoManager,
+    /// item per atomic user action. Each commit records its own inverse
+    /// (`ambre-spec-undo.md section 3`).
+    history: ambre_crdt::history::UndoHistory,
     /// Decrypted picture bytes, by content hash. Session state: it never enters
     /// the document (`PROSE-044`) and it dies with the tab.
     media_cache: HashMap<
@@ -307,28 +308,33 @@ impl ProseState {
         write_scaffold(&doc)?;
         doc.commit();
         doc.set_peer_id(peer).ok()?;
-        // The undo manager opens after the scaffolding commit: seeding a
-        // document is not a user edit and must not sit on the stack.
-        let mut undo = UndoManager::new(&doc);
-        // Neither is loading one. A full-state read drops the paragraph this
-        // peer grew on opening, and that write lands after this manager exists.
-        // Excluded by origin, an undo on a restored document retracts the
-        // author's own edits and never the load (`UNDO-001`).
-        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Load.as_str());
-        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Stamp.as_str());
-        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Comment.as_str());
-        // A removal for good is no gesture either (`PROSE-121`).
-        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Sweep.as_str());
-        // The registry entry is bookkeeping, not prose: an undo never
-        // retracts it (`AUTHOR-009`).
-        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
+        // The history opens after the scaffolding commit: seeding a document
+        // is not a user edit and must not sit on the stack. Neither is loading
+        // one. A full-state read drops the paragraph this peer grew on
+        // opening, and that write lands after this history exists. Excluded by
+        // origin, an undo on a restored document retracts the author's own
+        // edits and never the load (`UNDO-001`). A removal for good is no
+        // gesture either (`PROSE-121`), and the registry entry stays off the
+        // stack as for every application (`AUTHOR-009`). An undo of a block's
+        // creation hides the block, so its redo shows the same one
+        // (`PROSE-134`).
+        let history = ambre_crdt::history::UndoHistory::watch_nested(
+            &doc,
+            &[
+                ambre_core::crdt::CommitOrigin::Load,
+                ambre_core::crdt::CommitOrigin::Stamp,
+                ambre_core::crdt::CommitOrigin::Comment,
+                ambre_core::crdt::CommitOrigin::Sweep,
+            ],
+            Some(doc::hiding()),
+        );
         let stamped_counter =
             ambre_core::OpCounter::new(doc.oplog_vv().get(&peer).copied().unwrap_or(0));
         // After the scaffolding: a document never laid out measures whole.
         let touched = touched::Touched::watch(&doc);
         Some(Self {
             doc,
-            undo,
+            history,
             media_cache: HashMap::new(),
             last_exported_vv: VersionVector::default(),
             peer: ambre_core::PeerId::new(peer),
@@ -601,8 +607,8 @@ impl ProseState {
     fn report_history(&self, outcome: &mut ProseOutcome) {
         if outcome.update.is_some() {
             outcome.display.push(ProseEvent::UndoState {
-                undo: ambre_core::Availability::from_bool(self.undo.can_undo()),
-                redo: ambre_core::Availability::from_bool(self.undo.can_redo()),
+                undo: self.history.can_undo(),
+                redo: self.history.can_redo(),
             });
         }
     }
@@ -1142,22 +1148,22 @@ impl ProseState {
 
     // -- undo and redo -----------------------------------------------------
 
-    /// One undo or one redo step. It commits the inverse operations, and the
-    /// delta they produce is broadcast like any other mutation.
+    /// One undo or one redo step. It commits the inverse operations under the
+    /// replay origin, so they record no step, and the delta they produce is
+    /// broadcast like any other mutation.
     fn apply_history(&mut self, step: HistoryStep) -> ProseOutcome {
+        self.doc.commit();
         let before = self.doc.state_frontiers();
-        let changed = match step {
-            HistoryStep::Undo => self.undo.undo(),
-            HistoryStep::Redo => self.undo.redo(),
-        }
-        .unwrap_or(false);
-        if !changed {
+        if self.history.write(&self.doc, step) == ambre_crdt::history::Replayed::Nothing {
             return ProseOutcome::nothing();
         }
-        let mut events = self.regrow_root();
         // `regrow_root` leaves its writes to the caller, and the export cursor
         // is about to move past them: an uncommitted repair would never reach a
-        // peer.
+        // peer. The repair rides the replay's commit, so it records no step
+        // and leaves the redo side whole.
+        let mut events = self.regrow_root();
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Recorded.as_str());
         self.doc.commit();
         if let Some((block, offset)) = history::edit_point(&self.doc, &before) {
             events.push(ProseEvent::CaretPlaced { block, offset });
