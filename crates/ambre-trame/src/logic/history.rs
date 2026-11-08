@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use ambre_core::HistoryStep;
 use ambre_core::crdt::{CommitOrigin, FoundationRoot};
-use ambre_core::index::Pos;
+use ambre_core::index::{Len, Pos};
 use loro::event::{ContainerDiff, Diff, DiffEvent, ListDiffItem};
 use loro::{
     ContainerID, ContainerTrait, ContainerType, EventTriggerKind, InternalString, LoroDoc, LoroMap,
@@ -545,35 +545,70 @@ impl ListWrite {
                     .collect(),
             ),
         };
-        // The last first, so each place the write noted still holds.
-        for placed in out.iter().rev() {
-            if let Some(at) = find(cur, &placed.value, placed.at) {
-                list.take(at);
-                cur.remove(at.to_usize());
+        // Every element to take out is found before any goes, so each place
+        // the write noted still holds. Each run of adjacent places then goes
+        // in one delete, the last run first.
+        let mut gone: Vec<Pos<Slot>> = out
+            .iter()
+            .filter_map(|placed| find(cur, &placed.value, placed.at))
+            .collect();
+        gone.sort_unstable();
+        gone.dedup();
+        for run in gone.chunk_by(|a, b| b.prev() == Some(*a)).rev() {
+            if let Some(first) = run.first() {
+                list.take(*first, Len::of(run.len()));
             }
         }
+        if !gone.is_empty() {
+            let mut next = gone.iter().peekable();
+            let mut at = Pos::<Slot>::ZERO;
+            cur.retain(|_| {
+                let kept = next.peek().is_none_or(|g| **g != at);
+                if !kept {
+                    next.next();
+                }
+                at += Len::ONE;
+                kept
+            });
+        }
         // In their order on the side the step leaves, so the neighbour of each
-        // one stands already when it lands.
+        // one stands already when it lands. A run of elements, each after the
+        // one before it, lands in one place.
         let mut back = back;
         back.sort_by_key(|(_, placed)| placed.at);
         let moves: HashSet<&LoroValue> = self.moved.iter().map(|m| &m.value).collect();
-        for (value, placed) in back {
+        let mut rest = back.as_slice();
+        while let Some(((value, placed), tail)) = rest.split_first() {
             if moves.contains(value) {
+                rest = tail;
                 let Some(from) = find(cur, value, placed.at) else {
                     continue;
                 };
                 cur.remove(from.to_usize());
                 let to = place_after(cur, placed.pred.as_ref(), placed.at);
                 list.shift(from, to, value);
-                cur.insert(to.to_usize(), value.clone());
-            } else {
-                let to = place_after(cur, placed.pred.as_ref(), placed.at);
-                if cur.get(to.to_usize()) == Some(value) {
-                    continue;
-                }
-                list.put(to, value);
-                cur.insert(to.to_usize(), value.clone());
+                cur.insert(to.to_usize(), (*value).clone());
+                continue;
             }
+            let length = 1 + tail
+                .iter()
+                .zip(rest.iter())
+                .take_while(|((next, at), (prev, _))| {
+                    !moves.contains(next) && at.pred.as_ref() == Some(*prev)
+                })
+                .count();
+            let (run, after) = rest.split_at(length.min(rest.len()));
+            rest = after;
+            let to = place_after(cur, placed.pred.as_ref(), placed.at);
+            if cur.get(to.to_usize()) == Some(*value) {
+                continue;
+            }
+            let values: Vec<LoroValue> = run.iter().map(|(v, _)| (*v).clone()).collect();
+            for (offset, value) in values.iter().enumerate() {
+                list.put(Pos::from_usize(to.to_usize() + offset), value);
+            }
+            let at = to.to_usize().min(cur.len());
+            cur.splice(at..at, values);
         }
     }
 }

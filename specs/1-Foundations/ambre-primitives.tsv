@@ -2918,11 +2918,15 @@ ambre-trame | src/model/axis.rs | crate::model::axis | DERIVATION_DOMAIN | const
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::place(key) | param | &str	generic	the key a cell map stores, read back into its element pair: the codec of a struct of two fields
 ambre-trame | src/model/axis.rs | crate::model::axis | generation_key() | ret | String	generic	the key a generation record stores: the codec of a line before and a generation
 ambre-trame | src/model/axis.rs | crate::model::axis | parse_generation_key(key) | param | &str	generic	the key a generation record stores, read back into a line before and a generation
+ambre-trame | src/model/axis.rs | crate::model::axis | GENERATION_DIGITS | const | usize	generic	the width of the generation half of a generation key: the codec of a line before and a generation
+ambre-trame | src/model/axis.rs | crate::model::axis | line_of_generation_key() | ret | Option<&str>	generic	the line half of a generation key, cut at its fixed width: the codec of a line before and a generation
+ambre-trame | src/model/axis.rs | crate::model::axis | line_of_generation_key(key) | param | &str	generic	the key a generation record stores, read for its line half alone: the codec of a line before and a generation
 ambre-trame | src/model/axis.rs | crate::model::axis | <Slot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/model/axis.rs | crate::model::axis | AxisView<L>::is_empty() | ret | bool	generic	predicate
 ambre-trame | src/model/axis.rs | crate::model::axis | Element::is_minted() | ret | bool	generic	predicate
 ambre-trame | src/model/axis.rs | crate::model::axis | Element::parse(value) | param | &str	generic	the value a line element stores, read back into a uid and an element id from its canonical spelling alone: the codec of a struct of two fields
 ambre-trame | src/model/axis.rs | crate::model::axis | Element::spell() | ret | String	generic	the value a line element stores for a uid and an element id: the codec of a struct of two fields
+ambre-trame | src/model/axis.rs | crate::model::axis | Element::push_spelling(out) | param | &mut String	generic	the buffer the value a line element stores is spelled into: the codec of a struct of two fields
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 | field | String	newtype-inner	the stored cell key CellKey types
@@ -2930,6 +2934,8 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element or a cell key stores, read back into a uid from its canonical spelling alone: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse_hex(s) | param | &str	generic	the compact uid a stored formula writes, read back into a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	generic	the key part a list element stores for a uid: the codec of a struct of two fields
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | KEY_PART_LEN | const | usize	generic	the length of the key part a list element stores for a uid: the codec of a struct of two fields
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::push_key_part(out) | param | &mut String	generic	the buffer the key part of a uid is spelled into: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string

@@ -106,13 +106,13 @@ fn ambre_budget_trame_line_insert_redo(st: &mut TrameState) {
 
 /// Undo the delete of `MANY` rows.
 #[inline(never)]
-fn ambre_budget_trame_many_line_delete_undo(st: &mut TrameState) {
+fn ambre_budget_trame_block_undo(st: &mut TrameState) {
     step(st, TrameCommand::Undo, 5);
 }
 
 /// Redo the delete of `MANY` rows.
 #[inline(never)]
-fn ambre_budget_trame_many_line_delete_redo(st: &mut TrameState) {
+fn ambre_budget_trame_block_redo(st: &mut TrameState) {
     step(st, TrameCommand::Redo, 6);
 }
 
@@ -163,8 +163,21 @@ fn shows_a(st: &mut TrameState, row: u32, want: &str) -> bool {
 /// Rows the many-line delete takes out, from the middle of the sheet.
 const MANY: u32 = 500;
 
-/// Delete `MANY` rows from the middle of the sheet as one selection.
+/// Delete `MANY` rows from the middle of the sheet as one selection: the
+/// selection, then the delete, counted alone.
 fn delete_many_rows(st: &mut TrameState) {
+    select_many_rows(st);
+    ambre_budget_trame_block_remove(st);
+}
+
+/// The delete of the `MANY` rows the selection holds, counted whole.
+#[inline(never)]
+fn ambre_budget_trame_block_remove(st: &mut TrameState) {
+    black_box(st.handle_command(TrameCommand::DeleteSelectedRows));
+}
+
+/// Select `MANY` rows from the middle of the sheet.
+fn select_many_rows(st: &mut TrameState) {
     st.handle_command(TrameCommand::SetActiveCell {
         row: Pos::<Row>::new(FORMULAS / 2 + MANY - 1),
         col: Pos::<Col>::new(0),
@@ -173,7 +186,6 @@ fn delete_many_rows(st: &mut TrameState) {
         extra: Vec::new(),
         kind: ambre_trame::SelectionKind::Cells,
     });
-    st.handle_command(TrameCommand::DeleteSelectedRows);
 }
 
 /// The rows below the inserted one moved down one, each formula with its row.
@@ -319,20 +331,26 @@ const OPERATIONS: &[(&str, fn())] = &[
         ambre_budget_trame_line_insert_redo(&mut st);
         checked_after_insert(&mut st);
     }),
+    ("many_line_delete", || {
+        let mut st = sheet();
+        checked(&mut st);
+        delete_many_rows(&mut st);
+        checked_after_many_delete(&mut st);
+    }),
     ("many_line_delete_undo", || {
         let mut st = sheet();
         checked(&mut st);
         delete_many_rows(&mut st);
         checked_after_many_delete(&mut st);
-        ambre_budget_trame_many_line_delete_undo(&mut st);
+        ambre_budget_trame_block_undo(&mut st);
         checked_after_undo(&mut st);
     }),
     ("many_line_delete_redo", || {
         let mut st = sheet();
         checked(&mut st);
         delete_many_rows(&mut st);
-        ambre_budget_trame_many_line_delete_undo(&mut st);
-        ambre_budget_trame_many_line_delete_redo(&mut st);
+        ambre_budget_trame_block_undo(&mut st);
+        ambre_budget_trame_block_redo(&mut st);
         checked_after_many_delete(&mut st);
     }),
     ("cell_write_undo", || {

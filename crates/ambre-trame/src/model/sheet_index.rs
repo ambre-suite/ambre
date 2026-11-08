@@ -31,7 +31,25 @@ impl Uid {
     /// Render the 25-char half used in cell keys and as the list element value:
     /// `"{peer:016x}_{counter:08x}"`.
     pub fn to_key_part(&self) -> String {
-        format!("{:016x}_{:08x}", self.peer, self.counter.get())
+        let mut out = String::with_capacity(KEY_PART_LEN);
+        self.push_key_part(&mut out);
+        out
+    }
+
+    /// Append the key part to `out`, with no format machinery: every cell key
+    /// a purge or a replay writes spells two or four of them.
+    pub(crate) fn push_key_part(&self, out: &mut String) {
+        // Each half zero padded and lower case, as `{:016x}` and `{:08x}`
+        // write them.
+        let push = |out: &mut String, value: u64, digits: u32| {
+            for shift in (0..digits).rev() {
+                let nibble = u32::try_from((value >> (shift * 4)) & 0xf).unwrap_or(0);
+                out.push(char::from_digit(nibble, 16).unwrap_or('0'));
+            }
+        };
+        push(out, self.peer.get(), 16);
+        out.push('_');
+        push(out, u64::from(self.counter.get()), 8);
     }
 
     /// Parse one `"{peer:016x}_{counter:08x}"` half. `None` on any malformed
@@ -42,14 +60,30 @@ impl Uid {
     /// uid under a second key. A crafted peer could shadow a cell with it, so
     /// it is refused.
     pub fn parse(s: &str) -> Option<Self> {
-        // The canonical spelling is 16 lowercase hex digits, `_`, then 8. The
-        // check reads the bytes and allocates nothing: an index build reads
-        // every line element through it.
-        let lower_hex = |part: &str| part.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f'));
-        let (peer, counter) = s.split_once('_')?;
-        (peer.len() == 16 && counter.len() == 8 && lower_hex(peer) && lower_hex(counter))
-            .then(|| Self::parse_hex(s))
-            .flatten()
+        // The canonical spelling is 16 lowercase hex digits, `_`, then 8. One
+        // walk of the bytes at their fixed places checks and reads them. It
+        // allocates nothing: an index build and every replayed cell key read
+        // each line element through it.
+        let bytes = s.as_bytes();
+        if bytes.len() != KEY_PART_LEN || bytes.get(16) != Some(&b'_') {
+            return None;
+        }
+        let value = |digits: &[u8]| {
+            digits.iter().try_fold(0u64, |value, digit| {
+                let nibble = match digit {
+                    b'0'..=b'9' => digit - b'0',
+                    b'a'..=b'f' => digit - b'a' + 10,
+                    _ => return None,
+                };
+                Some((value << 4) | u64::from(nibble))
+            })
+        };
+        let peer = value(bytes.get(..16)?)?;
+        let counter = u32::try_from(value(bytes.get(17..)?)?).ok()?;
+        Some(Uid {
+            peer: ambre_core::PeerId::new(peer),
+            counter: ambre_core::IdCounter::new(counter),
+        })
     }
 
     /// Parse the compact `"{peer:x}_{counter:x}"` a stored formula writes,
@@ -63,6 +97,9 @@ impl Uid {
         })
     }
 }
+
+/// The length of a key part: 16 hex digits, `_`, then 8.
+const KEY_PART_LEN: usize = 25;
 
 /// A uid serialises as its key part, the string the document stores. A record
 /// that carries one thus keeps the bytes of the string it held before.
@@ -93,7 +130,11 @@ impl CellKey {
     /// The key of the cell at the `(row, col)` element pair.
     #[must_use]
     pub fn of(row: Element, col: Element) -> Self {
-        Self(format!("{}:{}", row.spell(), col.spell()))
+        let mut key = String::with_capacity(4 * KEY_PART_LEN + 3);
+        row.push_spelling(&mut key);
+        key.push(':');
+        col.push_spelling(&mut key);
+        Self(key)
     }
 
     /// The key, for the Loro call into the map.
@@ -122,6 +163,36 @@ ambre_core::define_flag! {
 
 #[cfg(test)]
 mod tests {
+
+    /// The key part spelled by hand is the one `format!` wrote before, on
+    /// the edges of both halves and between them.
+    #[test]
+    fn a_key_part_spells_as_the_format_did() {
+        for (peer, counter) in [
+            (0, 0),
+            (1, 1),
+            (u64::MAX, u32::MAX),
+            (0x6f22_48d2_c4d5_d214, 0x4e0f_3172),
+        ] {
+            let uid = Uid {
+                peer: ambre_core::PeerId::new(peer),
+                counter: ambre_core::IdCounter::new(counter),
+            };
+            assert_eq!(uid.to_key_part(), format!("{peer:016x}_{counter:08x}"));
+            assert_eq!(Uid::parse(&uid.to_key_part()), Some(uid));
+        }
+        for refused in [
+            "",
+            "0000000000000001_0000000",
+            "0000000000000001-00000001",
+            "000000000000000A_00000001",
+            "000000000000001_000000001",
+            "+000000000000001_00000001",
+        ] {
+            assert_eq!(Uid::parse(refused), None, "{refused:?} is no key part");
+        }
+    }
+
     use super::*;
     use crate::logic::{SheetContainer, SheetRoot, default_sheet};
     use crate::model::SheetIndex;
