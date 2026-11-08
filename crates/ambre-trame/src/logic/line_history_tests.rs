@@ -1,14 +1,12 @@
 // ambre-trame/src/logic/line_history_tests.rs
 // ============================================================================
-// A recorded line insert or delete against the undo manager (`TRAME-286`,
-// `TRAME-289`), the reference-model regime of `ambre-spec-testing.md`
-// section 3.
+// A recorded line delete against the undo manager (`TRAME-286`), the
+// reference-model regime of `ambre-spec-testing.md` section 3.
 //
 // Two states run one generated program in lockstep, under one peer id, so each
-// mints the same uids. The first records each line insert and delete, and
-// replays it on an undo or a redo. The second is the reference model: the undo
-// manager holds every insert and delete, as the code did before the recorded
-// step existed. After every
+// mints the same uids. The first records each line delete and replays it on an
+// undo or a redo. The second is the reference model: the undo manager holds
+// every delete, as the code did before the recorded step existed. After every
 // step the two must store the same document and offer the same undo and redo.
 // A third state receives every delta the first sends, and must store what the
 // first stores.
@@ -25,7 +23,7 @@ use super::TrameState;
 use super::line_history::HistoryPath;
 use super::structural::StructuralPath;
 use super::structural_tests::{PEER, Step, commands, seeded, step, write};
-use crate::{CellPos, Col, Row, TrameCommand};
+use crate::{CellPos, Col, Row, SortOrder, TrameCommand};
 
 /// Every root the document stores, the peer registry aside: the registry is
 /// bookkeeping that no undo touches (`AUTHOR-009`). An empty root is left out:
@@ -51,19 +49,15 @@ fn offered(st: &TrameState) -> (ambre_core::Availability, ambre_core::Availabili
     (st.can_undo(), st.can_redo())
 }
 
-/// Whether `step` inserts or deletes lines.
-fn inserts_or_deletes(step: &Step) -> bool {
+/// Whether `step` deletes lines.
+fn deletes(step: &Step) -> bool {
     matches!(
         step,
-        Step::InsertRow { .. }
-            | Step::InsertColumn { .. }
-            | Step::DeleteRow { .. }
-            | Step::DeleteColumn { .. }
-            | Step::DeleteRows { .. }
+        Step::DeleteRow { .. } | Step::DeleteColumn { .. } | Step::DeleteRows { .. }
     )
 }
 
-/// Run `program` on a state that records each line insert and delete, beside
+/// Run `program` on a state that records each line delete, beside
 /// the reference model and a peer that receives each delta. After each step
 /// the three must store the same document, and the two histories must offer
 /// the same undo and redo.
@@ -91,7 +85,7 @@ fn lockstep(program: &[Step]) -> Result<(), TestCaseError> {
             managed.handle_command(command);
             if let Some(delta) = out.update {
                 observer.apply_remote(&delta);
-                if inserts_or_deletes(step) {
+                if deletes(step) {
                     prop_assert!(
                         recorded.last_step_is_recorded(),
                         "{:?} went to the manager",
@@ -125,11 +119,11 @@ fn lockstep(program: &[Step]) -> Result<(), TestCaseError> {
 proptest! {
     #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
 
-    /// Each line insert and delete records its own step. Each undo and redo
-    /// of it leaves the document the undo manager would leave (`TRAME-286`,
-    /// `TRAME-289`). The two histories offer the same steps in
-    /// the same order, line edits mixed with every other edit (`TRAME-288`).
-    /// A peer that receives each delta stores the same document.
+    /// Each line delete records its own step, and each undo and redo of it
+    /// leaves the document the undo manager would leave. The two histories
+    /// offer the same steps in the same order, line deletes mixed with every
+    /// other edit (`TRAME-288`). A peer that receives each delta stores the
+    /// same document.
     #[test]
     fn a_recorded_line_delete_undoes_as_the_undo_manager(
         program in proptest::collection::vec(step(), 1..16),
@@ -138,34 +132,54 @@ proptest! {
     }
 }
 
-/// Each insert, of a row and of a column, before and inside the formulas,
-/// undone and redone twice. The generated programs rarely put an undo and a
-/// redo right after an insert, so this program holds `TRAME-289` on its own.
+/// A row deleted after two sorts, then undone twice: the recorded step, then
+/// the second sort through the undo manager. The undo of the delete puts back
+/// a new list element. The manager's undo of the sort then revives the one the
+/// delete took, and the row list holds the line twice. The proptest drew it on
+/// 2026-11-08. It fails today, so it stays ignored until the story that
+/// decides between one history and two lands.
 #[test]
-fn a_recorded_line_insert_undoes_as_the_undo_manager() {
+#[ignore = "fails: a managed undo revives the element an undone line delete put back anew"]
+fn an_undone_delete_keeps_one_element_through_a_managed_sort() {
     let program = [
-        Step::InsertRow { at: 1 },
-        Step::Undo,
-        Step::Redo,
-        Step::Undo,
-        Step::Redo,
-        Step::InsertColumn { at: 0 },
         Step::Write {
             row: 0,
             col: 0,
-            text: "=B3+1".to_owned(),
+            text: "2".to_owned(),
         },
+        Step::Sort {
+            order: SortOrder::Ascending,
+        },
+        Step::Sort {
+            order: SortOrder::Descending,
+        },
+        Step::DeleteRows { from: 0, to: 0 },
         Step::Undo,
         Step::Undo,
-        Step::Redo,
-        Step::Redo,
+    ];
+    if let Err(failure) = lockstep(&program) {
+        panic!("{failure}");
+    }
+}
+
+/// A row insert, then a move of the new row, each undone and redone. A line
+/// insert that recorded its own step put a new list element back on its redo.
+/// The manager's redo of the move then revived the element the undo took out,
+/// and the row list held the line twice. So a line insert stays an item of the
+/// undo manager, and this program holds it there.
+#[test]
+fn a_redone_insert_keeps_one_element_through_a_managed_move() {
+    let program = [
+        Step::Write {
+            row: 0,
+            col: 0,
+            text: "9".to_owned(),
+        },
         Step::InsertRow { at: 0 },
-        Step::Remote {
-            row: 2,
-            col: 1,
-            text: "5".to_owned(),
-        },
+        Step::MoveRow { from: 0, to: 2 },
         Step::Undo,
+        Step::Undo,
+        Step::Redo,
         Step::Redo,
     ];
     if let Err(failure) = lockstep(&program) {

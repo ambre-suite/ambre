@@ -134,24 +134,6 @@ CEILINGS = [
         row="Trame whole line delete, 10k formula cells, its whole redo (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
-    # The undo and the redo of a row insert, held to the same budget. The
-    # insert records its own inverse too (`TRAME-289`).
-    Ceiling(
-        crate="ambre-trame",
-        bench="instructions",
-        operation="line_insert_undo",
-        symbol="ambre_budget_trame_undo",
-        row="Trame whole line delete, 10k formula cells, the whole undo of a row insert (< 10 ms)",
-        ceiling=10 * PER_MS,
-    ),
-    Ceiling(
-        crate="ambre-trame",
-        bench="instructions",
-        operation="line_insert_redo",
-        symbol="ambre_budget_trame_redo",
-        row="Trame whole line delete, 10k formula cells, the whole redo of a row insert (< 10 ms)",
-        ceiling=10 * PER_MS,
-    ),
     # One remote batch from its import to its events: every cache, the
     # engine step and the layout derived from the list diffs.
     Ceiling(

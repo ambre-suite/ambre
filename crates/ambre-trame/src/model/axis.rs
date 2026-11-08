@@ -1238,11 +1238,10 @@ pub(crate) struct Removed {
     pub(crate) spots: Vec<Spot>,
 }
 
-/// One element an insert put into a list or a delete took out of it, and
-/// where it stood.
+/// One element a delete took out of a list, and where it stood.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Spot {
-    /// The slot the element held when the insert put it or the delete took it.
+    /// The slot the element held when the delete took it.
     pub(crate) slot: Pos<Slot>,
     /// The element.
     pub(crate) element: Element,
@@ -1347,21 +1346,13 @@ impl<'a> Axes<'a> {
     }
 
     /// Insert the minted line `uid` before the line at `at`, or after the last
-    /// line when `at` is the end. Returns where the new element stands, for a
-    /// journal that takes it out again. `None` when `at` lies further, or the
-    /// list refuses the write.
-    pub(crate) fn insert<L: AxisOrder>(&self, at: Pos<L>, uid: Uid) -> Option<Spot> {
+    /// line when `at` is the end. `None` when `at` lies further, or the list
+    /// refuses the write.
+    pub(crate) fn insert<L: AxisOrder>(&self, at: Pos<L>, uid: Uid) -> Option<()> {
         let list = self.list::<L>();
-        let view = AxisView::<L>::read(&list);
-        let slot = view.insert_slot(at)?;
-        let element = Element::minted(uid);
-        list.insert(slot.to_index()?, element.spell().as_str())
-            .ok()?;
-        Some(Spot {
-            slot,
-            element,
-            after: slot.prev().and_then(|b| view.elements.get(b).copied()),
-        })
+        let slot = AxisView::<L>::read(&list).insert_slot(at)?;
+        list.insert(slot.to_index()?, Element::minted(uid).spell().as_str())
+            .ok()
     }
 
     /// Delete the line at `at`: every element of its uid this peer holds, the
