@@ -60,6 +60,19 @@ adoption, not an imposition:
 git config core.hooksPath .githooks
 ```
 
+Install the merge driver of the generated spec files once per clone, for the same reason:
+
+```bash
+git config merge.ambre-generated.driver "python3 scripts/merge_generated.py %O %A %B %P"
+```
+
+`.gitattributes` names the contract ledger, the contract index, the contract graph and the
+inventories. On a merge or a rebase, the driver writes each one from the merged sources. Two
+branches that each add a row then conflict on no generated file. Without it, git merges them as text:
+the merge conflicts, or it writes counts that no generator writes. A lone cherry-pick names no
+other commit, so the driver keeps your side and prints the three commands that regenerate the files.
+`scripts/merge_generated.py` states each case.
+
 `just primitives` refuses a `RUSTC_WRAPPER` such as sccache. It also refuses a lever, an
 `[unstable]` key, an `[env]` entry or a wrapper in `~/.cargo/config.toml`. To run it, unset the
 variable, or move that config away for the run.
