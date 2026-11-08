@@ -36,10 +36,13 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
+
 # The fence tags are the template's vocabulary, read from it. What each one
 # holds is stated there, beside the table it is read from, and is not repeated
 # here (`ambre-spec-template.md section 0`).
-from template_vocabulary import FENCE_TAGS
+from template_vocabulary import FENCE_TAGS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
@@ -57,13 +60,6 @@ AUDITS = "audits/"
 # `fn name(...) ... {` on one line, or a signature whose brace lands on the next.
 # A trailing `;` is a declaration, not a body.
 SIGNATURE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+\w+")
-
-# A fence is any line that starts with ``` -- the info string (its tag) may be
-# anything. Tracking every fence, whatever its tag, is what keeps the open/close
-# pairing correct: a tag we do not scan (`text`, `sql`, ...) still toggles the
-# fence, so code that follows it is not mistaken for prose (the bug this file
-# once had -- a single ```text desynchronised every fence after it).
-FENCE = re.compile(r"^```(.*)$")
 
 # Fence tags allowed in the spec corpus, read from the table that states them.
 # `rust` carries Rust shapes (checked for bodies below); `text` and the untagged
@@ -85,30 +81,19 @@ RUST_HINT = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:fn|struct|
 STMT_HINT = re.compile(r"^\s*(?:let|match|for|while|loop|return|if|self)\b")
 
 
-def fence_tag(line: str) -> str:
-    """The base language token of a fence open line (`” ```rust,ignore ”` -> `rust`)."""
-    info = FENCE.match(line).group(1).strip()
-    return re.split(r"[,\s]", info)[0] if info else ""
+# A fence is any line that starts with ``` -- the info string (its tag) may be
+# anything. `corpus.py` pairs every fence, whatever its tag, which is what keeps
+# the open/close pairing correct: a tag we do not scan (`text`, `sql`, ...) still
+# toggles the fence, so code that follows it is not mistaken for prose (the bug
+# this file once had -- a single ```text desynchronised every fence after it).
+fence_tag = corpus.fence_tag
 
 
-def bodies(text: str):
+def bodies(text):
     """Yield (line_no, size, first_line) for every fn body inside a rust fence."""
-    lines = text.splitlines()
-    in_fence = False
-    scan_this = False
-    start = 0
-    buf: list[str] = []
-    for i, line in enumerate(lines, 1):
-        if FENCE.match(line):
-            if not in_fence:
-                in_fence, scan_this, start, buf = True, fence_tag(line) in ("rust", ""), i, []
-            else:
-                if scan_this:
-                    yield from scan(buf, start)
-                in_fence = scan_this = False
-            continue
-        if in_fence and scan_this:
-            buf.append(line)
+    for fence in corpus.as_document(text).fences:
+        if fence.end is not None and fence.tag in ("rust", ""):
+            yield from scan([line.text for line in fence.body], fence.start)
 
 
 def is_empty_body(text: str) -> bool:
@@ -165,29 +150,24 @@ def scan(block: list[str], start: int):
         i = k + 1
 
 
-def loose_impl(text: str):
+def loose_impl(text):
     """Yield (line_no, first_line) for a running statement at depth 0 of a rust fence.
 
     Tracks brace depth inside each ```rust fence; a statement keyword seen while
     depth is 0 is code that belongs to no declaration -- the free-floating snippet
     (`match ... { }`, `let x = ...`) that `bodies()`, keyed on `fn`, cannot catch.
     """
-    lines = text.splitlines()
-    in_fence = scan_this = False
-    depth = 0
-    for i, line in enumerate(lines, 1):
-        if FENCE.match(line):
-            in_fence, scan_this, depth = (not in_fence), (not in_fence and fence_tag(line) == "rust"), 0
+    for fence in corpus.as_document(text).fences:
+        if fence.tag != "rust":
             continue
-        if in_fence and scan_this:
-            if depth == 0 and STMT_HINT.match(line):
-                yield i, line.strip()[:70]
-            depth += line.count("{") - line.count("}")
-            if depth < 0:
-                depth = 0
+        depth = 0
+        for line in fence.body:
+            if depth == 0 and STMT_HINT.match(line.text):
+                yield line.no, line.text.strip()[:70]
+            depth = max(0, depth + line.text.count("{") - line.text.count("}"))
 
 
-def fence_issues(text: str):
+def fence_issues(text):
     """Yield (line_no, kind, detail) for every fence defect in one spec.
 
     Three kinds, all of which would let Rust hide from `bodies()`:
@@ -195,25 +175,17 @@ def fence_issues(text: str):
       - `bad-tag`      : the fence tag is not in `ALLOWED_TAGS` (e.g. `lua`).
       - `rust-untagged`: a Rust shape sits in a non-`rust` fence -- wrong tag.
     """
-    lines = text.splitlines()
-    in_fence = False
-    open_line = 0
-    tag = ""
-    for i, line in enumerate(lines, 1):
-        if FENCE.match(line):
-            if not in_fence:
-                in_fence, open_line, tag = True, i, fence_tag(line)
-                if tag not in ALLOWED_TAGS:
-                    yield i, "bad-tag", tag
-            else:
-                in_fence = False
-            continue
+    for fence in corpus.as_document(text).fences:
+        tag = fence.tag
+        if tag not in ALLOWED_TAGS:
+            yield fence.start, "bad-tag", tag
         # Real Rust opens a block with `{`; pseudo-code (`fn page() -> f32:`) does
         # not, so a trailing `{` is what tells a mis-tagged shape from prose.
-        if in_fence and tag != "rust" and RUST_HINT.match(line) and line.rstrip().endswith("{"):
-            yield i, "rust-untagged", f"in ```{tag or '(none)'} fence: {line.strip()[:60]}"
-    if in_fence:
-        yield open_line, "unterminated", f"```{tag or '(none)'}"
+        for line in fence.body if tag != "rust" else ():
+            if RUST_HINT.match(line.text) and line.text.rstrip().endswith("{"):
+                yield line.no, "rust-untagged", f"in ```{tag or '(none)'} fence: {line.text.strip()[:60]}"
+        if fence.end is None:
+            yield fence.start, "unterminated", f"```{tag or '(none)'}"
 
 
 # A rule ID as the corpus mints them: `KINETIC-002`, `PROSE-UI-137`. Only an ID
@@ -333,14 +305,14 @@ def main() -> int:
     total = 0
     files = 0
     fence_defects = 0
-    for path in sorted(SPECS.rglob("*.md")):
+    for path in corpus.markdown(SPECS):
         rel_str = str(path.relative_to(SPECS))
         # Analysis artefacts, not normative specs: they quote real source (an audit
         # cites the vulnerable line as its evidence; a review logs a code smell), so
         # the "no implementation" rule does not apply.
         if "reviews/" in rel_str or AUDITS in rel_str:
             continue
-        text = path.read_text()
+        text = corpus.read(path)
         rel = path.relative_to(SPECS)
         found = list(bodies(text))
         fences = list(fence_issues(text))

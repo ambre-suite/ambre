@@ -67,9 +67,16 @@ import sys
 from collections import namedtuple
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
+
 # Both vocabularies are the template's, read from it, and the other gates read
 # them from the same place (`scripts/template_vocabulary.py`).
-from template_vocabulary import ANSWER_LABELS, IMPLEMENTATION_VALUES
+from template_vocabulary import (  # noqa: E402
+    ANSWER_LABELS,
+    IMPLEMENTATION_VALUES,
+    STATEMENT,
+)
 
 
 # What `classify` returns: the same partition counted twice, in lines and in
@@ -190,11 +197,6 @@ METHOD_MARKERS = [
     ),
 ]
 
-# A declared contract row, matched on its ID cell alone. `contracts.py` parses
-# the whole row because it counts a status; this script only needs to know the
-# table is there, so it reads the one cell that says so.
-CONTRACT_ROW = re.compile(r"^\|\s*`[A-Z][A-Z0-9-]*-\d{3}`\s*\|")
-
 # A code span inside a cell is a token, not English: a row quoting `may` names
 # the word rather than using it.
 CODE_SPAN = re.compile(r"`[^`]*`")
@@ -208,17 +210,11 @@ CODE_SPAN = re.compile(r"`[^`]*`")
 RFC2119_LOWER = re.compile(
     r"(?<![\w`-])(must not|shall not|should not|may not|must|shall|should|may)(?![\w`-])"
 )
-# The `Statement (RFC 2119)` column, third in every contract table.
-STATEMENT_CELL = 3
-
 # The three answers a contract table owes, directly under it, read from the
-# template that names them. Matched as a **bullet**, so naming a label inside a
+# template that names them. Read as a **bullet**, so naming a label inside a
 # table cell is not an answer -- `ambre-spec-template.md` names all three to
 # define them.
-ANSWERS = {
-    label: re.compile(rf"^\*\s+\*\*{label}\.\*\*(?P<body>.*)$")
-    for label in ANSWER_LABELS
-}
+ANSWERS = ANSWER_LABELS
 
 # A numbered section heading, `## 11 bis.` and `## 4bis.` included. This is the
 # one script that reads the Latin ordinal, and it reads it to refuse it: nothing
@@ -246,7 +242,6 @@ HEADER_FIELDS = ("Type", "Implementation")
 # obvious names -- `UNDO AND REDO`, `PDF EXPORT`, `IMPORT AND EXPORT` -- are the
 # ones several documents reach for. The search is bounded to the opening lines,
 # so a `#` inside a later fence is never read as a heading.
-TITLE = re.compile(r"^#\s+(\S.*?)\s*$", re.M)
 IMPLEMENTATION = re.compile(
     r"^\*\*Implementation:\*\* ("
     + "|".join(re.escape(v) for v in IMPLEMENTATION_VALUES)
@@ -304,8 +299,6 @@ CONTAINER_ENUM = re.compile(
     r"enum\s+\w+\s*:\s*Container(?:Name|Family)\s*\{(.*?)^\s*\}", re.S | re.M)
 CONTAINER_SPELLING = re.compile(r'=\s*"([a-z_]+)"')
 
-LIST = re.compile(r"^(?:[-*+]\s|\d+\.\s)")
-
 
 def count_words(stripped: str) -> int:
     """Words in one line, markup removed.
@@ -316,7 +309,7 @@ def count_words(stripped: str) -> int:
     return len(WORD_NOISE.sub("", WORD_SEPARATOR.sub(" ", stripped)).split())
 
 
-def classify(text: str) -> "Shape":
+def classify(text) -> "Shape":
     """Lines and words, per class.
 
     Structure is everything a reader scans rather than reads: a table row, a
@@ -335,43 +328,21 @@ def classify(text: str) -> "Shape":
     lines = [0, 0, 0]
     words = [0, 0, 0]
     PROSE, STRUCTURE, FENCED = 0, 1, 2
-    in_fence = in_list = False
-
-    def add(kind: int, stripped: str) -> None:
+    for line in corpus.as_document(text).lines:
+        if line.kind in (corpus.FENCE, corpus.CODE):
+            kind = FENCED
+        elif line.kind == corpus.TABLE or line.listed:
+            kind = STRUCTURE
+        elif line.kind == corpus.TEXT:
+            kind = PROSE
+        else:
+            continue  # a blank line, a heading, a rule
         lines[kind] += 1
-        words[kind] += count_words(stripped)
-
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
-            add(FENCED, stripped)
-            continue
-        if in_fence:
-            add(FENCED, stripped)
-            continue
-        if not stripped:
-            in_list = False
-            continue
-        if stripped.startswith("#") or set(stripped) <= set("-=*") and len(stripped) >= 3:
-            in_list = False
-            continue
-        if stripped.startswith("|"):
-            in_list = False
-            add(STRUCTURE, stripped)
-            continue
-        if LIST.match(stripped):
-            in_list = True
-            add(STRUCTURE, stripped)
-            continue
-        if in_list:
-            add(STRUCTURE, stripped)
-            continue
-        add(PROSE, stripped)
+        words[kind] += count_words(line.text.strip())
     return Shape(*lines, *words)
 
 
-def long_lines(text: str) -> int:
+def long_lines(text) -> int:
     """Count the lines a reader meets as a wall: over `LONG_LINE_COLS` columns.
 
     Everything that wraps is counted -- prose, a heading, a list item and its
@@ -380,21 +351,14 @@ def long_lines(text: str) -> int:
     GFM. That is also why a corpus-wide reflow pass was struck: 962 of the
     3 658 long lines it would have had to read could not be wrapped at all.
     """
-    count = 0
-    in_fence = False
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
-            continue
-        if in_fence or stripped.startswith("|"):
-            continue
-        if len(line) > LONG_LINE_COLS:
-            count += 1
-    return count
+    return sum(
+        1 for line in corpus.as_document(text).lines
+        if line.kind not in (corpus.FENCE, corpus.CODE, corpus.TABLE)
+        and len(line.text) > LONG_LINE_COLS
+    )
 
 
-def prose_share(text: str) -> float:
+def prose_share(text) -> float:
     """Prose as a share of every content **word**.
 
     Words, not lines, for the reason the ceiling counts words: a share built on
@@ -408,26 +372,32 @@ def prose_share(text: str) -> float:
     return 100.0 * shape.prose_words / total if total else 0.0
 
 
-def feature_issues(text: str):
+def unstructured(text):
+    """Every line a table does not hold, in order.
+
+    A table row carries the contract grammar, which names the Story an
+    `unimplemented` row is bound to, quotes a checkbox, or names a ban. Naming a
+    rule there is not breaking it, so the marker checks below skip the table.
+    """
+    return (line for line in corpus.as_document(text).lines if line.kind != corpus.TABLE)
+
+
+def feature_issues(text):
     """Yield (line_no, reason) for every production marker in a feature document."""
-    for i, line in enumerate(text.splitlines(), 1):
-        # A table row carries the contract grammar, which names the Story an
-        # `unimplemented` row is bound to. That is required, not history.
-        if line.lstrip().startswith("|"):
-            continue
+    for line in unstructured(text):
         for pattern, reason in FEATURE_MARKERS:
-            if pattern.search(line):
-                yield i, f"{reason}: {line.strip()[:70]}"
+            if pattern.search(line.text):
+                yield line.no, f"{reason}: {line.text.strip()[:70]}"
                 break
 
 
-def title_of(text: str) -> str | None:
-    """The document's title, or `None` when it opens without a heading."""
-    match = TITLE.search("\n".join(text.splitlines()[:8]))
-    return match.group(1) if match else None
+def title_of(text) -> str | None:
+    """The document's title, or `None` when the first 8 lines carry no heading."""
+    title = corpus.as_document(text).title
+    return title.title if title and title.no <= 8 and title.title else None
 
 
-def header_issues(text: str):
+def header_issues(text):
     """Yield (kind, detail) for a header a reader cannot place in four lines.
 
     `Type` says what kind of document this is, `Implementation` how much of the
@@ -435,43 +405,45 @@ def header_issues(text: str):
     stub read like a shipped subsystem, which is the most expensive lie the
     corpus can tell.
     """
-    head = text.splitlines()[:8]
+    doc = corpus.as_document(text)
     # Each field opens its own line. A substring test let one document spell the
     # two on one line, where a reader scanning the left margin finds one field
     # and a gate anchored on the line finds none.
-    for field in HEADER_FIELDS:
-        if not any(line.startswith(f"**{field}:**") for line in head):
+    for name in HEADER_FIELDS:
+        if doc.field(name, within=8) is None:
             yield "header", (
-                f"no `{field}` opening a line of the first 8"
+                f"no `{name}` opening a line of the first 8"
                 " -- a missing field, or two fields sharing a line"
             )
-    for line in text.splitlines()[:8]:
-        if line.startswith("**Implementation:**") and not IMPLEMENTATION.match(line):
+    for found in doc.fields:
+        if found.no > 8 or found.name != "Implementation":
+            continue
+        if not IMPLEMENTATION.match(found.text):
             yield "header", (
-                f"`Implementation` is `{line[19:].strip()[:40]}` -- "
+                f"`Implementation` is `{found.text[19:].strip()[:40]}` -- "
                 "expected implemented | partial | design-only"
             )
 
 
-def answer_issues(text: str):
+def answer_issues(text):
     """Yield (kind, detail) for an answer a document with a contract table owes.
 
     A document with no row owes nothing: the three bullets answer **for a
     table**, and a document that declares none has no cost, no boundary and no
     coverage to report.
     """
-    lines = text.splitlines()
-    if not any(CONTRACT_ROW.match(line) for line in lines):
+    doc = corpus.as_document(text)
+    if not doc.contract_rows:
         return
-    for label, pattern in ANSWERS.items():
-        bodies = [m.group("body").strip() for line in lines if (m := pattern.match(line))]
+    for label in ANSWERS:
+        bodies = [b.body.strip() for b in doc.bullets if b.label == label]
         if not bodies:
             yield "answer", f"no `**{label}.**` bullet under the contract table"
         elif not any(bodies):
             yield "answer", f"`**{label}.**` is empty -- `none`, and why, is an answer"
 
 
-def keyword_issues(text: str):
+def keyword_issues(text):
     """Yield (line_no, reason) for a lower-case RFC 2119 keyword in a rule.
 
     A hard error at zero. The corpus held thirteen when the rule was written,
@@ -479,55 +451,49 @@ def keyword_issues(text: str):
     is a description and takes a plain verb, and a negative permission takes the
     `MUST NOT` the RFC writes it with, not a lower-case `may` under a negation.
     """
-    for i, line in enumerate(text.splitlines(), 1):
-        if not CONTRACT_ROW.match(line):
-            continue
-        cells = line.split("|")
-        if len(cells) <= STATEMENT_CELL:
-            continue
-        for match in RFC2119_LOWER.finditer(CODE_SPAN.sub("CODE", cells[STATEMENT_CELL])):
+    for row in corpus.as_document(text).contract_rows:
+        statement = row.cells.get(STATEMENT, "")
+        for match in RFC2119_LOWER.finditer(CODE_SPAN.sub("CODE", statement)):
             word = match.group(0)
-            yield i, (
+            yield row.no, (
                 f'"{word}" in a rule: the modality is "{word.upper()}", '
                 "and a description takes a verb that is not a keyword"
             )
 
 
-def schedule_issues(text: str):
-    """Yield (line_no, reason) for every backlog shape in a spec."""
-    for i, line in enumerate(text.splitlines(), 1):
-        # A table cell may quote a checkbox: the roadmap's own rule is quoted in
-        # a Definition-of-Done row, and Prose's Markdown mapping names the GFM
-        # syntax. Neither is a backlog.
-        if line.lstrip().startswith("|"):
-            continue
+def schedule_issues(text):
+    """Yield (line_no, reason) for every backlog shape in a spec.
+
+    A table cell may quote a checkbox: the roadmap's own rule is quoted in a
+    Definition-of-Done row, and Prose's Markdown mapping names the GFM syntax.
+    Neither is a backlog.
+    """
+    for line in unstructured(text):
         for pattern, reason in SCHEDULE_MARKERS:
-            if pattern.search(line):
-                yield i, f"{reason}: {line.strip()[:70]}"
+            if pattern.search(line.text):
+                yield line.no, f"{reason}: {line.text.strip()[:70]}"
                 break
 
 
-def method_issues(text: str, rel: str):
+def method_issues(text, rel: str):
     """Yield (line_no, reason) for every shared fact restated in a spec.
 
     `rel` is the document's path relative to `SPECS`, because a marker is a
-    defect everywhere except in the one document that owns the fact.
+    defect everywhere except in the one document that owns the fact. A table
+    cell may name the ban: `ambre-spec-template.md` section 1.F lists what no
+    document carries, and `ambre-spec-testing.md` section 10 records why the
+    section was dropped.
     """
-    for i, line in enumerate(text.splitlines(), 1):
-        # A table cell may name the ban: `ambre-spec-template.md` section 1.F
-        # lists what no document carries, and `ambre-spec-testing.md` section 10
-        # records why the section was dropped. Naming a rule is not breaking it.
-        if line.lstrip().startswith("|"):
-            continue
+    for line in unstructured(text):
         for pattern, reason, owners in METHOD_MARKERS:
             if rel in owners:
                 continue
-            if pattern.search(line):
-                yield i, f"{reason}: {line.strip()[:70]}"
+            if pattern.search(line.text):
+                yield line.no, f"{reason}: {line.text.strip()[:70]}"
                 break
 
 
-def numbering_issues(text: str):
+def numbering_issues(text):
     """Yield (line_no, reason) for a section number that breaks the sequence.
 
     A hole is what a deletion leaves and what an insertion refuses to pay for:
@@ -538,7 +504,8 @@ def numbering_issues(text: str):
     a time, and `bis` is not a number.
     """
     seen, expected = [], None
-    for i, line in enumerate(text.splitlines(), 1):
+    for heading in corpus.as_document(text).headings:
+        i, line = heading.no, heading.text
         match = SECTION_HEADING.match(line)
         if not match:
             continue
@@ -555,7 +522,7 @@ def numbering_issues(text: str):
         expected = number + 1
 
 
-def declared_containers(text: str) -> set[str]:
+def declared_containers(text) -> set[str]:
     """The container names a schema's table declares, as their leaves.
 
     Only the container table counts. A mention in the hierarchy or in a note is
@@ -571,38 +538,36 @@ def declared_containers(text: str) -> set[str]:
     one backticked name and nothing else.
     """
     declared = set()
-    column = None
-    for line in text.splitlines():
-        if not line.startswith("|"):
-            column = None
+    for table in corpus.as_document(text).tables:
+        if "Container" not in table.header:
             continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if column is None:
-            column = cells.index("Container") if "Container" in cells else -1
-            continue
-        if column < 0 or column >= len(cells):
-            continue
-        match = re.fullmatch(r"`[a-z_{}/]*?([a-z_]+)(?:_\{sheet\})?`", cells[column])
-        if match:
-            declared.add(match.group(1))
+        column = table.header.index("Container")
+        for row in table.rows:
+            if column >= len(row.cells):
+                continue
+            match = re.fullmatch(r"`[a-z_{}/]*?([a-z_]+)(?:_\{sheet\})?`", row.cells[column])
+            if match:
+                declared.add(match.group(1))
     return declared
 
 
 def schema_issues(text: str, source: Path):
     """Yield (kind, detail) for every schema-document defect."""
-    words = classify(text).prose_words
+    doc = corpus.as_document(text)
+    words = classify(doc).prose_words
     if words > SCHEMA_PROSE_WORDS_MAX:
         yield "prose-budget", f"{words} prose words, budget {SCHEMA_PROSE_WORDS_MAX}"
 
-    # Container notes: the bullet list under the notes heading, one bullet each.
-    section = re.split(r"^## \d+\. CONTAINER NOTES\s*$", text, flags=re.M)
-    if len(section) > 1:
-        body = re.split(r"^## ", section[1], flags=re.M)[0]
-        for bullet in re.findall(r"^\* \*\*(.+?)\*\*\.?\s*(.*?)(?=^\* \*\*|\Z)", body, flags=re.M | re.S):
-            name, note = bullet[0].rstrip("."), bullet[1]
-            count = len(re.sub(r"[`*]", "", note).split())
-            if count > SCHEMA_NOTE_WORDS_MAX:
-                yield "note-budget", f"{name}: {count} words, budget {SCHEMA_NOTE_WORDS_MAX}"
+    # Container notes: the bullets of the notes section, one bullet each.
+    notes = next((s for s in doc.sections
+                  if doc.line(s.start).text.rstrip().endswith(". CONTAINER NOTES")), None)
+    for bullet in doc.bullets if notes else ():
+        if not notes.start < bullet.no <= notes.end:
+            continue
+        note = " ".join([bullet.body] + list(bullet.lines[1:]))
+        count = len(re.sub(r"[`*]", "", note).split())
+        if count > SCHEMA_NOTE_WORDS_MAX:
+            yield "note-budget", f"{bullet.label}: {count} words, budget {SCHEMA_NOTE_WORDS_MAX}"
 
     if not source.exists():
         yield "source-missing", str(source)
@@ -630,7 +595,7 @@ def main() -> int:
     errors: list[str] = []
     titles: dict[str, list[str]] = {}
 
-    for path in sorted(SPECS.rglob("*.md")):
+    for path in corpus.markdown(SPECS):
         rel = str(path.relative_to(SPECS))
         # `Todo/` holds scoping notes for applications with no crate and no
         # contract table: not specs under the corpus's own grammar, and their
@@ -643,7 +608,7 @@ def main() -> int:
             or GENERATED.search(path.name)
         ):
             continue
-        text = path.read_text()
+        text = corpus.read(path)
         title = title_of(text)
         if title is None:
             errors.append(f"{rel}: header: no title in the first 8 lines")

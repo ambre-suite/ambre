@@ -95,6 +95,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
+
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 CRATES = ROOT / "crates"
@@ -157,10 +160,6 @@ CHAIN = re.compile(r"[`'\"]*\s*(?:[/,;-]|and|to|or)\s*[`'\"]*")
 # What opens the continuation line of a wrapped citation, and counts for nothing
 # in the glue: a doc comment, a comment, a blockquote, a list bullet.
 MARKER = re.compile(r"^\s*(?://[/!]?|[*>|-]+|#+)?\s*")
-
-# A heading that opens a numbered section. It must read every number the
-# coordinate reads, or a citation of a section that exists is reported dead.
-HEADING = re.compile(r"^##\s+(\d+)\s*[.:]")
 
 # Dated records. Their coordinates are quotations of a past state, so they are
 # not resolved; their document names are, except for the names below. Everything
@@ -276,7 +275,7 @@ def corpus_files() -> list[Path]:
     targets. They are not `sources()`: nothing checks a citation they carry.
     """
     return (
-        sorted(SPECS.rglob("*.md"))
+        corpus.markdown(SPECS)
         + sorted(RULES.glob("*.md"))
         + sorted(RESEARCH.glob("*.md"))
     )
@@ -327,19 +326,18 @@ def short_names(known: dict[str, Path]) -> dict[str, str]:
 
 
 def sections(path: Path) -> set[str]:
-    """The coordinates one document actually has, from its `## N.` headings."""
-    found = set()
-    for line in path.read_text().splitlines():
-        match = HEADING.match(line)
-        if match:
-            found.add(match.group(1))
-    return found
+    """The coordinates one document actually has, from its `## N.` headings.
+
+    A section is `corpus.py`'s: it must read every number the coordinate reads,
+    or a citation of a section that exists is reported dead.
+    """
+    return {section.number for section in corpus.read(path).sections}
 
 
 def sources():
     """Yield every file that may carry a citation: the code and the corpus."""
     yield from sorted(CRATES.rglob("*.rs"))
-    for path in sorted(SPECS.rglob("*.md")):
+    for path in corpus.markdown(SPECS):
         # A past review is an archive, not corpus content. Same exclusion as
         # `spec_code.py`: it cites what the corpus held on the day it was written.
         if "reviews/" not in str(path.relative_to(SPECS)):

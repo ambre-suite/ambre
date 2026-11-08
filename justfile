@@ -403,8 +403,8 @@ spec-shape:
 # a reader: where the rule comes from, which mechanism holds it, what that leaves
 # open, and where it stands. They are why the table is trustworthy, and why one
 # row wraps over four screen widths. This prints the same rows reduced to the
-# three a reader asks for, from the same parser `contracts.py` uses, so the view
-# can never state a rule the ledger does not. It writes nothing: a reading view
+# three a reader asks for, from the parser every gate shares (`scripts/corpus.py`),
+# so the view can never state a rule the ledger does not. It writes nothing: a reading view
 # on disk is a second copy of every rule, free to go stale.
 
 # reading view of one spec's contract: the id, the kind, the rule.
@@ -500,7 +500,8 @@ crate-boundaries:
 # prose one, and the worst produced no symptom: a table row left the reader's
 # result, so the hard rules never read it. A check that reads nothing and a
 # check that is satisfied look alike from outside, which is what these hold,
-# one test file per script.
+# one test file per script. `test_corpus.py` holds one fixture document that
+# every gate reads through `scripts/corpus.py`, the same way.
 
 # what each check in `scripts/` reads, and what it refuses.
 test-scripts:

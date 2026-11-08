@@ -67,7 +67,7 @@ class AnswerWords(unittest.TestCase):
         """A second list here is a list that drifts: the table states them."""
         for label in template_vocabulary.ANSWER_LABELS:
             with self.subTest(label=label):
-                self.assertTrue(spec_answers.ANSWER.match(f"* **{label}.** none"))
+                self.assertEqual(3, spec_answers.answer_words(f"* **{label}.** none\n"))
 
     def test_the_cap_is_a_refusal_not_a_target(self):
         """`ANSWER_WORDS_TARGET` is what the template states and what the gate

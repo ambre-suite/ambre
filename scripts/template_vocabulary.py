@@ -16,7 +16,11 @@ not.
 """
 
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "specs" / "ambre-spec-template.md"
 
@@ -36,8 +40,12 @@ class TemplateDrift(RuntimeError):
     """
 
 
+def _document() -> corpus.Document:
+    return corpus.read(TEMPLATE)
+
+
 def _lines() -> list[str]:
-    return TEMPLATE.read_text().splitlines()
+    return [line.text for line in _document().lines]
 
 
 def _anchored(anchor: str) -> int:
@@ -55,23 +63,13 @@ def _table_after(anchor: str) -> list[list[str]]:
     """The body rows of the first table under the line carrying `anchor`.
 
     The header row and the `|---|` separator are dropped, so what comes back is
-    the vocabulary itself. A blank line before the table is prose the anchor
-    leads with; the first one after it closes the table.
+    the vocabulary itself.
     """
-    rows: list[list[str]] = []
-    for line in _lines()[_anchored(anchor) + 1 :]:
-        stripped = line.strip()
-        if not stripped.startswith("|"):
-            if rows:
-                break
-            continue
-        cells = [c.strip() for c in stripped.strip("|").split("|")]
-        if set("".join(cells)) <= set("-: "):
-            continue
-        rows.append(cells)
-    if len(rows) < 2:
+    table = _document().table_after(_anchored(anchor) + 1)
+    rows = [list(row.cells) for row in table.rows] if table else []
+    if not table or not rows:
         raise TemplateDrift(f"no table under {anchor!r} in {TEMPLATE.name}")
-    return rows[1:]
+    return rows
 
 
 def _counted(anchor: str) -> list[list[str]]:
@@ -126,9 +124,9 @@ def _columns() -> tuple[str, ...]:
     that cannot be wrong, and unpacking it is what fails the day a column is
     added without a reader for it.
     """
-    for line in _lines():
-        if re.match(r"^\|\s*ID\s*\|", line):
-            return tuple(c.strip() for c in line.strip().strip("|").split("|"))
+    for table in _document().tables:
+        if table.header[:1] == ("ID",):
+            return table.header
     raise TemplateDrift(f"{TEMPLATE.name} declares no contract table header")
 
 
