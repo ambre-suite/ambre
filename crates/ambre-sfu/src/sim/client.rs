@@ -215,10 +215,12 @@ pub struct Synth {
     layer_seq: [u64; 3],
     picture: [u32; 3],
     keyframe_due: [bool; 3],
-    receiving: Vec<(Mid, MediaKind)>,
+    pub receiving: Vec<(Mid, MediaKind)>,
     pub video: BTreeMap<Mid, VideoRx>,
     /// The mouth-to-ear transit of every speech packet received.
     pub audio_latency: Vec<Duration>,
+    /// The sender of every audio packet received, with its arrival time.
+    pub audio_from: Vec<(Instant, u16)>,
     pub outbox: Vec<Transmit>,
     pub wake: Instant,
     pub keyframes_asked: usize,
@@ -268,6 +270,7 @@ impl Synth {
             receiving: Vec::new(),
             video: BTreeMap::new(),
             audio_latency: Vec::new(),
+            audio_from: Vec::new(),
             outbox: Vec::new(),
             wake: now,
             keyframes_asked: 0,
@@ -512,6 +515,13 @@ impl Synth {
                 match payload.first() {
                     Some(&AUDIO_TAG) => {
                         let speech = payload.get(1) == Some(&1);
+                        if let Some(sender) = payload
+                            .get(2..4)
+                            .and_then(|b| b.try_into().ok())
+                            .map(u16::from_le_bytes)
+                        {
+                            self.audio_from.push((now, sender));
+                        }
                         let sent = payload
                             .get(4..12)
                             .and_then(|b| b.try_into().ok())

@@ -1,16 +1,34 @@
-//! The header fields of a video track forwarded to one receiver, across layer switches.
+//! The header fields of one slot of a receiver, across switches of layer and of sender.
 //!
-//! Each layer of a simulcast track numbers its packets and its pictures on its own. The
-//! receiver sees one track, so the SFU shifts the fields of each layer to continue where the
-//! last layer stopped (`CALL-040`). It reads the VP8 payload descriptor alone, which the seal of
-//! a chunk leaves in clear. str0m copies the rest of the payload unchanged (`CALL-032`).
+//! Each layer of a simulcast track, and each sender, numbers its packets and its pictures on its
+//! own. The receiver sees one track per slot. So the SFU shifts the fields of each new feed to
+//! continue where the last one stopped (`CALL-040`, `CALL-048`). It reads the VP8 payload
+//! descriptor alone, which the seal of a chunk leaves in clear. str0m copies the rest of the
+//! payload unchanged (`CALL-032`).
 
 use std::time::Instant;
 
 use str0m::rtp::{RtpPacket, SeqNo, Vp8Descriptor, Vp8Patch};
 
-/// The 90 kHz clock of a video RTP timestamp, in ticks per millisecond.
-const TICKS_PER_MS: u128 = 90;
+/// The clock of the RTP timestamps of a slot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Clock {
+    /// The 48 kHz clock of Opus.
+    Audio,
+    /// The 90 kHz clock of video.
+    #[default]
+    Video,
+}
+
+impl Clock {
+    /// The ticks of the clock in one millisecond.
+    fn ticks_per_ms(self) -> u128 {
+        match self {
+            Self::Audio => 48,
+            Self::Video => 90,
+        }
+    }
+}
 
 /// The width of a 15-bit VP8 picture id.
 const PICTURE_ID_MASK: u16 = 0x7fff;
@@ -48,15 +66,25 @@ struct Shift {
     tl0: u8,
 }
 
-/// The rewrite state of one video track forwarded to one receiver.
+/// The rewrite state of one slot of one receiver.
 #[derive(Debug, Default)]
 pub struct Rewrite {
+    clock: Clock,
     last: Option<Last>,
     shift: Option<Shift>,
 }
 
 impl Rewrite {
-    /// Starts a new layer at `packet`, the first packet of one of its keyframes.
+    /// The rewrite state of a slot whose timestamps count on `clock`, before its first packet.
+    pub fn new(clock: Clock) -> Self {
+        Self {
+            clock,
+            last: None,
+            shift: None,
+        }
+    }
+
+    /// Starts a new feed at `packet`: for video, the first packet of one of its keyframes.
     pub fn switch(&mut self, now: Instant, packet: &RtpPacket) {
         let descriptor = Vp8Descriptor::parse(&packet.payload).ok();
         let shift = match self.last {
@@ -70,7 +98,8 @@ impl Rewrite {
                 tl0: 0,
             },
             Some(last) => {
-                let ticks = now.saturating_duration_since(last.at).as_millis() * TICKS_PER_MS;
+                let ticks =
+                    now.saturating_duration_since(last.at).as_millis() * self.clock.ticks_per_ms();
                 let step = u32::try_from(ticks).unwrap_or(u32::MAX).max(1);
                 let picture = descriptor.as_ref().and_then(Vp8Descriptor::picture_id);
                 let tl0 = descriptor.as_ref().and_then(Vp8Descriptor::tl0_pic_idx);

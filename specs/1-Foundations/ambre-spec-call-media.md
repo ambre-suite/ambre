@@ -40,13 +40,17 @@ this document alone.
 | `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | not built | unbuilt -- lands with the `Audio calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3; `CANVAS-001` | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-031` | `INV` | A participant MUST complete the DTLS handshake with the SFU through the RustCrypto backend alone. | this spec section 3; `CALL-013` | `ambre_sfu::tests::a_participant_completes_dtls_with_the_sfu_over_rust_crypto` -- an in-memory link between a browser connection and the SFU reaches the connected state, and a wrong fingerprint fails it | none | verified |
-| `CALL-032` | `INV` | The SFU MUST forward each RTP packet of a participant to every other participant of its room, its payload unchanged. | this spec section 3, the SFU | `ambre_sfu::forward::tests::each_packet_reaches_every_other_participant_of_the_room_unchanged` | none | verified |
+| `CALL-032` | `INV` | The SFU MUST forward each RTP packet of a participant to every other participant of its room whose slots carry its track, its payload unchanged. | this spec section 3, the SFU | `ambre_sfu::forward::tests::each_packet_reaches_every_other_participant_of_the_room_unchanged` | none | verified |
 | `CALL-036` | `INV` | The SFU MUST serve its signalling on a port of its own, apart from the relay. | `ambre-spec-broadcast.md`, `SRV-049`; this spec section 3, signalling | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier | none | verified |
 | `CALL-037` | `OBS` | Two browsers in one room MUST each decode the audio and the video of the other through the SFU. | this spec section 3, the stack | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier, under Chrome and under Firefox | none | verified |
 | `CALL-039` | `INV` | The SFU MUST switch a receiver to another layer of a track only on a keyframe of that layer. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_switches_layer_only_on_a_keyframe_of_the_new_layer` | none | verified |
 | `CALL-040` | `INV` | The sequence numbers of a video track forwarded to one receiver MUST stay continuous across a layer switch. | this spec section 3, the SFU; `CALL-032` | `ambre_sfu::sim::tests::the_sequence_numbers_stay_continuous_across_a_layer_switch` | none | verified |
 | `CALL-041` | `INV` | The SFU MUST forward a receiver the video of the most recent speakers alone, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_gets_the_video_of_the_most_recent_speakers_alone` | none | verified |
 | `CALL-042` | `OBS` | A browser whose network opens TCP on port 443 alone MUST decode the audio and the video of the call through the TURN relay within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the stack | `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier, coturn over TCP behind port 443 at 150 ms of round trip | none | verified |
+| `CALL-045` | `INV` | The SFU MUST send each receiver the media of a call over the fixed count of audio and video slots of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_holds_a_fixed_count_of_slots` -- a call of twelve | none | verified |
+| `CALL-047` | `INV` | The SFU MUST forward a receiver the audio of the most recent speakers alone, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_gets_the_audio_of_the_three_most_recent_speakers_alone` | none | verified |
+| `CALL-048` | `INV` | The sequence numbers of a slot MUST stay continuous when the slot moves to another sender. | this spec section 3, the SFU; `CALL-040` | `ambre_sfu::sim::tests::the_sequence_numbers_of_a_slot_stay_continuous_across_a_change_of_sender` | none | verified |
+| `CALL-049` | `INV` | The SFU MUST move a video slot to another sender only on a keyframe of that sender. | this spec section 3, the SFU; `CALL-039` | `ambre_sfu::sim::tests::a_slot_moves_to_another_sender_only_on_a_keyframe` -- 150 ms of round trip | none | verified |
 
 ### 1.2 Join a call
 
@@ -89,6 +93,7 @@ A participant sends a packet to the SFU, and the SFU forwards it within the room
 | `CALL-033` | `FRAME` | The SFU MUST NOT send a packet to its own sender, or to a participant of another room. | this spec section 3, the SFU; `CALL-009` | `ambre_sfu::forward::tests::no_packet_goes_back_to_its_sender_or_into_another_room` | none | verified |
 | `CALL-034` | `POST` | A participant who joins a room MUST receive each track the room already carries. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_late_joiner_receives_the_tracks_already_in_the_room` | none | verified |
 | `CALL-035` | `POST` | A keyframe request from a receiver MUST reach the sender of its track. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_keyframe_request_reaches_the_sender_of_the_track` | none | verified |
+| `CALL-046` | `FRAME` | A change of speaker MUST NOT renegotiate the session of any participant. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_change_of_speaker_renegotiates_nothing` -- a call of twelve | none | verified |
 
 ### 1.6 Lower a layer
 
@@ -96,18 +101,20 @@ The downlink estimate of a receiver falls below what the SFU forwards it.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-038` | `POST` | Given a receiver whose downlink estimate falls below what it receives, the SFU MUST forward it a lower layer within the delay of `ambre-spec-budgets.md section 3`. | this spec section 3, the SFU | none | unheld -- the simulated run reads the wall clock through str0m, so it moves with the load of the machine: on 2026-11-08, 4 of 21 runs beside three others dropped after 3 s, the slowest at 4.0 s, and 3 never reached the top layer; a mechanism needs a run that holds the budget on any load. `ambre_sfu::sim::tests::a_capped_receiver_drops_a_layer_within_the_budget` stays, ignored; lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | untested |
-| `CALL-043` | `FRAME` | A layer drop for one receiver MUST NOT change the layer another receiver gets. | this spec section 3, the SFU | none | unheld -- the same run as `CALL-038` holds it, and the same load moves it: 1 of 20 runs beside three others failed on 2026-11-08, so `ambre_sfu::sim::tests::a_layer_drop_for_one_receiver_leaves_another_receiver_on_its_layer` stays ignored; lands with the `Call SFU proofs` Story (`ambre-roadmap.md` E5) | untested |
+| `CALL-038` | `POST` | Given a receiver whose downlink estimate falls below what it receives, the SFU MUST forward it a lower layer within the delay of `ambre-spec-budgets.md section 3`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_capped_receiver_drops_a_layer_within_the_budget` -- eight seeded runs at 150 ms of round trip and 2 % loss; `ambre_sfu::congestion::tests::the_target_falls_under_a_new_cap_within_a_second` -- the controller alone | none | verified |
+| `CALL-043` | `FRAME` | A layer drop for one receiver MUST NOT change the layer another receiver gets. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_layer_drop_for_one_receiver_leaves_another_receiver_on_its_layer` -- eight seeded runs | none | verified |
+| `CALL-044` | `FRAME` | A random loss of 10 % or less on the downlink of a receiver MUST NOT lower the layer it gets. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_of_twenty_keeps_the_top_layer_up_to_ten_percent_loss` -- a call of twenty at 150 ms of round trip, 2 % and 10 % of loss; `ambre_sfu::congestion::tests::the_target_holds_under_random_loss_up_to_ten_percent` -- a modelled link at 2 %, 5 % and 10 % | none | verified |
 
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 12 `verified`, 2 `untested`, 29 `unimplemented`. The SFU links no C
-  cryptography, completes DTLS, and forwards RTP within a room (`CALL-013`, `CALL-031` to
-  `CALL-037`). It chooses the layer of each receiver, and a browser on TCP 443 alone reaches it
-  through TURN (`CALL-038` to `CALL-043`). No call code exists beyond it.
+* **Verification.** 20 `verified`, 29 `unimplemented`. The SFU links no C cryptography,
+  completes DTLS, and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-037`). It
+  chooses the layer of each receiver, and a browser on TCP 443 alone reaches it through TURN
+  (`CALL-038` to `CALL-043`). Its congestion control holds under random loss (`CALL-044`), and
+  each receiver holds fixed slots (`CALL-045` to `CALL-049`). No call code exists beyond it.
 
 ---
 
@@ -195,18 +202,37 @@ admits under a pseudonymous identifier per call. The SFU mints the TURN credenti
 
 * str0m drives it, with its DTLS on RustCrypto. A patched copy of its RustCrypto backend builds
   the DTLS certificate from RustCrypto too, so no C library generates one (`CALL-013`).
-* str0m estimates the downlink of each receiver from its transport-wide feedback, and probes it
-  with padding. The SFU tells the estimator the rate it would send on an open link.
-* Each receiver gets the video of the nine most recent speakers (`CALL-041`). The audio level of
-  each packet, which the seal leaves in clear, names who speaks.
+* A congestion control of Ambre's own runs on the downlink of each receiver (`CALL-044`). Its
+  delay half is the GCC design of libwebrtc, ported from the estimator of str0m.
+* A patched str0m hands it the transport-wide feedback of the receiver, and paces and pads at its
+  target (`vendor/str0m/PATCH.md`). str0m starts no probe cluster of its own.
+* The target is the lower of two bounds. A growing queue delay lowers the delay bound. A loss
+  above 10 % lowers the loss bound, as the GCC draft states, and 10 % or less holds it.
+* The loss bound falls only when the loss of the last second is above 10 % by two standard
+  errors. A random loss of exactly 10 % reads above 10 % in half of its windows.
+* The SFU pads up to the rate of the next layer step. The target grows by 8 % per second, and by
+  100 % per second before its first decrease, never above 1.5 times the acknowledged rate.
+* Each receiver holds three audio slots and nine video slots (`CALL-045`). The SFU offers them
+  once, when the room first carries a track of another participant.
+* A change of speaker moves a slot to another sender, and renegotiates nothing (`CALL-046`). The
+  pacer of str0m reads every send stream at each packet, so the slots also bound its cost.
+* Each receiver gets the video of the nine most recent speakers (`CALL-041`), and the audio of the
+  three most recent speakers (`CALL-047`). The audio level of each packet, which the seal leaves
+  in clear, names who speaks.
 * The layer choice runs per receiver, every 100 ms. Each of the nine gets its lowest layer while
   the estimate holds it. Then the most recent speaker moves up to the highest layer the rest
   holds. A move up needs a margin, so a receiver near a boundary stays on its layer.
 * A switch to another layer waits for a keyframe of that layer (`CALL-039`). The SFU shifts the
   sequence numbers, the timestamps and the VP8 picture numbers of the new layer to continue the
   old one (`CALL-040`). The VP8 payload descriptor stays in clear, so the SFU reads it.
-* It forwards every audio track of the room. Opus stops sending in silence, so a silent member
-  costs little.
+* A move of a video slot to another sender waits for a keyframe of that sender (`CALL-049`). An
+  audio slot moves at the next packet. The SFU shifts the fields the same way (`CALL-048`).
+* The receiver reads the sender of each chunk from its key identifier. So no signal names the
+  sender of a slot.
+* A switch to a lower layer of the same track stops the current layer at once. Its packets would
+  queue in the pacer of the congested downlink, ahead of the lower layer, for seconds.
+* The receiver sees a freeze until the keyframe of the lower layer arrives. The SFU asks for that
+  keyframe again every 300 ms, the shortest interval libwebrtc keeps between two keyframes.
 * It writes nothing to a receiver before its connection is up. str0m would hold the packets and
   send them in one burst at connect, and the jitter buffer of the receiver would hold seconds.
 * Its signalling is a WebSocket on a port of its own (`CALL-036`). axum and tokio serve it, the
@@ -233,9 +259,22 @@ assumes them away.
 | `src/lib.rs` | the connection settings of a participant |
 | `src/forward.rs` | the forwarding core, without I/O |
 | `src/layer.rs` | the layer choice |
-| `src/rewrite.rs` | the header fields across a layer switch |
+| `src/congestion.rs` | the congestion control of each receiver: the loss bound and the acknowledged rate |
+| `src/congestion/delay.rs` | its delay bound, ported from str0m under the MIT license, with its notice |
+| `src/rewrite.rs` | the header fields of a slot across a switch of layer or of sender |
 | `src/serve.rs` | the UDP socket and the signalling WebSocket |
 | `src/sim/` | tests alone: the impairment relay, the synthetic participants, the load run |
+
+**A simulated run is seeded.** The seed sets the losses of each link and the random numbers str0m
+draws on its thread. The patched str0m keeps its streams in a sorted map, and the simulated SFU
+runs its connections on one thread. So a seed gives one path, on any machine and under any load.
+
+**Dependencies.** Each one the SFU adds, and why:
+
+| Crate | Why |
+|---|---|
+| `str0m`, vendored | the seam of the feedback and the estimate, which str0m 0.25 lacks |
+| `fastrand`, tests alone | the generator str0m draws from; a test seeds it, and adds no crate to the lockfile |
 
 Nothing seals a chunk yet. `crates/ambre-protocol/src/signaling.rs` carries a shape
 for a mesh, with plaintext session descriptions sent to a named user: it is replaced, not
@@ -271,7 +310,13 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | ChaCha20-Poly1305 | the AES-GCM of the browser crypto API | one asynchronous call per chunk, and the key leaves Rust |
 | str0m drives the SFU | mediasoup | its worker is C++ over OpenSSL. It stays the fallback if the SFU proof fails |
 | str0m drives the SFU | Signal-Calling-Service as it ships | it has no DTLS |
-| str0m estimates each downlink | a port of the congestion control of Signal-Calling-Service | str0m 0.25 ships a transport-wide estimator with probing and padding. A port would run a second estimator beside it, and str0m paces by its own |
+| A congestion control of Ambre's own controls each downlink | the estimate of str0m 0.25 | under 2 % of random loss it fell: on 2026-11-08 a simulated call of twenty held its receiver on the middle layer, and the load run of fifty held every receiver on the lowest. The patched str0m paces at the SFU's target, so no second estimator runs |
+| A congestion control of Ambre's own controls each downlink | the loss-based controller of str0m 0.25 | the estimate of str0m fell under 2 % of random loss, as the row above states, which `CALL-044` forbids |
+| A congestion control of Ambre's own controls each downlink | a congestion control under a license Ambre does not hold | Ambre keeps the option of a second license, so no code under a copyleft license of another owner enters the tree |
+| Fixed slots per receiver | a media section per track of the room | each join renegotiated every receiver, and the pacer of str0m read 98 send streams at each packet of a call of fifty |
+| The audio of the three most recent speakers | every audio track of the room | a slot count bounds the pacer and the downlink; a listener follows no fourth voice at once |
+| A seeded simulation | a run isolated from the load of the machine | the spread came from the random numbers of str0m, not from the load: on 2026-11-08, seven runs alone on the machine dropped a layer from 0.87 s to 3.42 s |
+| A drop to a lower layer stops the current layer | the current layer flows until the lower keyframe | its packets queue in the pacer of the congested downlink. Over 40 seeds on 2026-11-08, the worst drop took 2.52 s, against 0.85 s |
 | The video of the nine most recent speakers | every video of the room to every receiver | 49 videos at the lowest layer exceed the downlink of a phone, and the SFU cost grows with the count |
 | str0m drives the SFU | the `rtc` crate of webrtc-rs | ring or aws-lc-rs seal its DTLS records, not only its certificate |
 | str0m drives the SFU | LiveKit | a Go server with a frame format of its own |
@@ -285,16 +330,17 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 
 * **Nothing seals a chunk.** No call worker and no relay route exist. The SFU forwards with no
   admission token, and it mints no TURN credential yet (`CALL-014`).
-* **The SFU forwards every audio track.** The few loudest alone would cut its load. No rule
-  picks them.
-* **Each forwarded track is a media section of its own.** A receiver negotiates one per track of
-  the room, and the pacer of str0m pays per section on every packet it sends.
+* **The browser syncs no audio slot to a video slot.** Each slot is a stream of its own, and a
+  slot changes sender. The audio and the video of one sender drift by the difference of their
+  jitter buffers.
+* **Above 10 % of random loss, the loss bound lowers the target.** No rule binds the SFU there.
 * **The receive sizes rest on no measurement.** One 720p and eight 180p videos on a phone, and the
   software VP8 decoder of an iPhone, are untested. H.264 for every sender is the fallback.
 * **iOS audio may crackle with the echo canceller on.** WebKit bug 326286 reports it on iOS 26.2 to
   27, and Ambre has no fix of its own.
-* **The SFU builds on a patched str0m backend.** The upstream backend builds its certificate
-  through rcgen, which links aws-lc-sys. The workspace patches it until str0m ships the change.
+* **The SFU builds on two patched str0m crates.** The upstream backend builds its certificate
+  through rcgen, which links aws-lc-sys. Upstream str0m offers no seam for an external congestion
+  control. The workspace patches both until str0m ships the changes.
 * **No rule caps the calls of one channel.** Whether a channel holds one live call or several is
   not ruled.
 * **A network that allows only TCP on port 443** reaches the SFU through TURN alone. coturn serves

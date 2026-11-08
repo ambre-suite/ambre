@@ -360,5 +360,10 @@ strip = "symbols"
 # links aws-lc-sys, a C library. The vendored copy builds it from RustCrypto
 # alone, so the SFU links no C cryptography (`CALL-013`). Drop it once
 # str0m ships the same change.
+#
+# str0m keeps its estimate of each downlink to itself. The vendored copy hands the
+# transport-wide feedback to the SFU and takes the SFU's estimate back, so the SFU
+# runs its own congestion control (`vendor/str0m/PATCH.md`).
 [patch.crates-io]
 str0m-rust-crypto = { path = "vendor/str0m-rust-crypto" }
+str0m = { path = "vendor/str0m" }
