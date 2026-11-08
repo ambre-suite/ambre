@@ -9,19 +9,21 @@ use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 use ambre_core::{Issuer, Rule, Seq, SeqKind, Validated};
-use str0m::bwe::{Bitrate, BweKind};
+use str0m::bwe::Bitrate;
 use str0m::change::{SdpAnswer, SdpOffer, SdpPendingOffer};
 use str0m::error::IceError;
 use str0m::format::{Codec, PayloadParams};
 use str0m::media::Rid;
 use str0m::media::{Direction, KeyframeRequestKind, MediaKind, Mid};
 use str0m::net::{DatagramRecv, Protocol, Receive, Transmit};
-use str0m::rtp::{RtpPacket, RtpWrite, SeqNo, Vp8Descriptor};
+use str0m::rtp::{RtpPacket, RtpWrite, Vp8Descriptor};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc, RtcError};
 
-use crate::layer::{Candidate as Choice, Layer, Meter, Offered, choose, rates};
+use crate::congestion::Congestion;
+use crate::layer::VIDEOS_PER_RECEIVER;
+use crate::layer::{AUDIO_SLOTS, Candidate as Choice, Layer, Meter, Offered, choose, rates};
 use crate::participant_config;
-use crate::rewrite::Rewrite;
+use crate::rewrite::{Clock, Rewrite};
 
 /// The most threads that run the connections of one poll.
 const WORKERS: usize = 4;
@@ -34,7 +36,7 @@ const PARALLEL_FROM: usize = 8;
 const CHOICE_PERIOD: Duration = Duration::from_millis(100);
 
 /// How long the SFU waits for a keyframe of a layer before it asks the sender again.
-const KEYFRAME_RETRY: Duration = Duration::from_millis(1000);
+const KEYFRAME_RETRY: Duration = Duration::from_millis(300);
 
 /// The audio level of RFC 6464, in -dBov, above which a packet counts as speech.
 const SPEECH_LEVEL: i8 = -50;
@@ -88,56 +90,136 @@ pub enum Signal {
     Offer(SdpOffer),
 }
 
-/// What one track forwarded to a participant has reached.
+/// What one slot of a receiver has reached.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum OutState {
     /// No offer names it yet.
     ToOpen,
     /// An offer names it under this mid, and the answer has not come back.
     Negotiating(Mid),
-    /// The answer came back: the track flows under this mid.
+    /// The answer came back: the slot flows under this mid.
     Open(Mid),
 }
 
-/// One track of another participant, forwarded to this one.
-#[derive(Debug)]
-struct TrackOut {
+/// One track of another participant, at one layer: what a slot carries. An audio track has
+/// one layer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Feed {
     source: Seq<Participant>,
-    source_mid: Mid,
-    kind: MediaKind,
-    state: OutState,
-    /// The rollover part of the first sequence number forwarded, for an audio track. The
-    /// receiver starts its SRTP rollover counter at zero. So the SFU subtracts that part, and
-    /// the 16 bits of the header stay as the sender wrote them.
-    rollover: Option<SeqNo>,
-    /// For a video track: the layer the receiver gets, the one it should get, and the
-    /// header fields across a switch.
-    video: VideoOut,
+    mid: Mid,
+    layer: Layer,
 }
 
-/// The layer state of one video track forwarded to one receiver.
-#[derive(Debug, Default)]
-struct VideoOut {
-    /// The layer whose packets flow to the receiver.
-    current: Option<Layer>,
-    /// The layer the choice wants. A switch to it waits for one of its keyframes (`CALL-039`).
-    target: Option<Layer>,
-    /// When the SFU last asked the sender for a keyframe of the target.
+impl Feed {
+    /// Whether this feed comes from the track `mid` of `source`, at any layer.
+    fn is_track(&self, source: Seq<Participant>, mid: Mid) -> bool {
+        self.source == source && self.mid == mid
+    }
+}
+
+/// Whether the current feeds of a receiver take more than the target of its congestion control.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Congested {
+    No,
+    Yes,
+}
+
+/// Whether a slot holds back its current feed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Hold {
+    /// The current feed flows.
+    #[default]
+    Flowing,
+    /// The target is a lower layer of the same track, and the downlink is congested. The current
+    /// layer stops: its packets would queue in the pacer, ahead of the lower layer.
+    Lowering,
+}
+
+/// One outgoing track of a receiver, which carries the track of one other participant at a
+/// time (`CALL-045`). A change of speaker remaps a slot, and never renegotiates (`CALL-046`).
+#[derive(Debug)]
+struct Slot {
+    kind: MediaKind,
+    state: OutState,
+    /// The feed whose packets flow to the receiver.
+    current: Option<Feed>,
+    /// The feed the choice wants. A video slot switches to it on one of its keyframes
+    /// (`CALL-039`, `CALL-049`), an audio slot at its next packet.
+    target: Option<Feed>,
+    /// When the SFU last asked the sender of the target for a keyframe.
     asked: Option<Instant>,
+    hold: Hold,
     rewrite: Rewrite,
 }
 
-impl TrackOut {
-    fn new(source: Seq<Participant>, source_mid: Mid, kind: MediaKind) -> Self {
+impl Slot {
+    fn new(kind: MediaKind) -> Self {
+        let clock = if kind == MediaKind::Audio {
+            Clock::Audio
+        } else {
+            Clock::Video
+        };
         Self {
-            source,
-            source_mid,
             kind,
             state: OutState::ToOpen,
-            rollover: None,
-            video: VideoOut::default(),
+            current: None,
+            target: None,
+            asked: None,
+            hold: Hold::Flowing,
+            rewrite: Rewrite::new(clock),
         }
     }
+
+    /// Whether the slot carries, or waits for, the track `mid` of `source`.
+    fn carries(&self, source: Seq<Participant>, mid: Mid) -> bool {
+        self.current.is_some_and(|f| f.is_track(source, mid))
+            || self.target.is_some_and(|f| f.is_track(source, mid))
+    }
+}
+
+/// Places the feeds `wanted` into the slots `slots` of one kind. A feed whose track a slot
+/// carries already stays in that slot, so its picture or its voice does not move. A new feed
+/// takes a slot whose track nobody wants. A slot left without a feed stops.
+fn assign(slots: &mut [&mut Slot], wanted: &[Feed]) {
+    let mut placed = vec![false; wanted.len()];
+    let mut kept = vec![false; slots.len()];
+    for (slot, keep) in slots.iter_mut().zip(kept.iter_mut()) {
+        let found = wanted
+            .iter()
+            .zip(placed.iter_mut())
+            .find(|(feed, done)| !**done && slot.carries(feed.source, feed.mid));
+        if let Some((feed, done)) = found {
+            *done = true;
+            *keep = true;
+            slot.target = Some(*feed);
+        }
+    }
+    let mut free = slots
+        .iter_mut()
+        .zip(kept)
+        .filter(|(_, keep)| !keep)
+        .map(|(slot, _)| slot);
+    for (feed, _) in wanted.iter().zip(placed).filter(|(_, done)| !done) {
+        if let Some(slot) = free.next() {
+            slot.target = Some(*feed);
+        }
+    }
+    for slot in free {
+        slot.target = None;
+        slot.current = None;
+    }
+}
+
+/// One track of the call, as one layer choice reads it.
+struct Track {
+    source: Seq<Participant>,
+    room: Validated<Room>,
+    /// When its sender last spoke.
+    spoke: Option<Instant>,
+    mid: Mid,
+    kind: MediaKind,
+    /// Its layers, from the lowest measured bitrate up.
+    offered: Vec<Offered>,
 }
 
 /// One track a participant sends.
@@ -172,13 +254,17 @@ struct Member {
     rtc: Rtc,
     pending: Option<SdpPendingOffer>,
     tracks_in: Vec<TrackIn>,
-    tracks_out: Vec<TrackOut>,
+    /// The fixed audio and video slots of this receiver, empty until its room carries a track
+    /// of another participant.
+    slots: Vec<Slot>,
+    /// Whether the room carries a track of another participant, so the slots should open.
+    wants_slots: bool,
     /// When the connection asks to be woken.
     wake: Instant,
     /// The clock of the last input, which stamps what the events of that input start.
     now: Instant,
-    /// The last estimate of the downlink of this participant.
-    estimate: Option<Bitrate>,
+    /// The congestion control of the downlink of this participant (`CALL-044`).
+    congestion: Congestion,
     /// When this participant last spoke, from the audio level of its packets.
     spoke: Option<Instant>,
     /// Whether a track of this participant showed a layer the last choice did not know.
@@ -205,7 +291,7 @@ struct Member {
 )]
 enum Propagated {
     /// A track this participant sends opened.
-    TrackOpen(Seq<Participant>, Mid, MediaKind),
+    TrackOpen(Seq<Participant>),
     /// A packet of this participant, on the layer of the track of this mid.
     Packet(Seq<Participant>, Mid, Layer, PayloadParams, RtpPacket),
     /// A receiver asked the sender of this track for a keyframe: of one layer, or of every
@@ -224,6 +310,8 @@ pub struct Sfu {
     next_choice: Option<Instant>,
     /// The participant each source address reached last, so a datagram skips the search.
     routes: HashMap<SocketAddr, Seq<Participant>>,
+    /// The most threads that run the connections of one poll.
+    workers: usize,
 }
 
 impl Sfu {
@@ -237,6 +325,17 @@ impl Sfu {
             propagated: VecDeque::new(),
             next_choice: None,
             routes: HashMap::new(),
+            workers: WORKERS,
+        }
+    }
+
+    /// An SFU that runs every connection on the thread of its poll. str0m draws its random
+    /// numbers from a generator per thread, and the simulation seeds the one of its thread.
+    #[cfg(test)]
+    pub fn serial(local: SocketAddr) -> Self {
+        Self {
+            workers: 1,
+            ..Self::new(local)
         }
     }
 
@@ -255,22 +354,19 @@ impl Sfu {
         offer: SdpOffer,
     ) -> Result<(Seq<Participant>, SdpAnswer), JoinError> {
         let mut rtc = participant_config().set_rtp_mode(true).build(now);
+        // The congestion control of the SFU drives the pacer and the padding of the connection,
+        // never str0m's estimate.
+        rtc.bwe().set_estimate(Some(INITIAL_ESTIMATE));
         let host = Candidate::host(self.local, "udp").map_err(JoinError::Candidate)?;
         rtc.add_local_candidate(host);
         let answer = rtc
             .sdp_api()
             .accept_offer(offer)
             .map_err(JoinError::Offer)?;
-        let tracks_out = self
+        let wants_slots = self
             .members
             .iter()
-            .filter(|m| m.room == room)
-            .flat_map(|m| {
-                m.tracks_in
-                    .iter()
-                    .map(|t| TrackOut::new(m.id, t.mid, t.kind))
-            })
-            .collect();
+            .any(|m| m.room == room && !m.tracks_in.is_empty());
         let id = self.issuer.issue();
         self.members.push(Member {
             id,
@@ -278,10 +374,11 @@ impl Sfu {
             rtc,
             pending: None,
             tracks_in: Vec::new(),
-            tracks_out,
+            slots: Vec::new(),
+            wants_slots,
             wake: now,
             now,
-            estimate: None,
+            congestion: Congestion::new(INITIAL_ESTIMATE),
             spoke: None,
             new_layer: false,
             touched: true,
@@ -296,8 +393,8 @@ impl Sfu {
 
     /// Applies the answer of participant `id` to the last offer the SFU sent it.
     ///
-    /// Each video track the answer opens asks its sender for a keyframe, so that the receiver
-    /// decodes from its first picture.
+    /// The layer choice then fills the slots the answer opens. It asks the sender of each video
+    /// for a keyframe, so that the receiver decodes from its first picture.
     pub fn accept_answer(&mut self, id: Seq<Participant>, answer: SdpAnswer) {
         let Some(member) = self.members.iter_mut().find(|m| m.id == id) else {
             return;
@@ -310,19 +407,13 @@ impl Sfu {
             member.rtc.disconnect();
             return;
         }
-        for track in &mut member.tracks_out {
-            if let OutState::Negotiating(mid) = track.state {
-                track.state = OutState::Open(mid);
-                if track.kind == MediaKind::Video {
-                    self.propagated.push_back(Propagated::Keyframe(
-                        track.source,
-                        track.source_mid,
-                        None,
-                        KeyframeRequestKind::Pli,
-                    ));
-                }
+        for slot in &mut member.slots {
+            if let OutState::Negotiating(mid) = slot.state {
+                slot.state = OutState::Open(mid);
             }
         }
+        // The slots fill at the next poll, not 100 ms later.
+        self.next_choice = None;
     }
 
     /// Ends the session of participant `id`.
@@ -373,8 +464,14 @@ impl Sfu {
         if self.members.iter().any(|m| !m.rtc.is_alive()) {
             self.members.retain(|m| m.rtc.is_alive());
             let live: Vec<Seq<Participant>> = self.members.iter().map(|m| m.id).collect();
-            for member in &mut self.members {
-                member.tracks_out.retain(|t| live.contains(&t.source));
+            let gone = |f: &Option<Feed>| f.is_some_and(|f| !live.contains(&f.source));
+            for slot in self.members.iter_mut().flat_map(|m| m.slots.iter_mut()) {
+                if gone(&slot.current) {
+                    slot.current = None;
+                }
+                if gone(&slot.target) {
+                    slot.target = None;
+                }
             }
             self.routes.retain(|_, id| live.contains(id));
         }
@@ -414,7 +511,7 @@ impl Sfu {
         let busy: Vec<&mut Member> = self.members.iter_mut().filter(|m| m.has_work()).collect();
         let threads = std::thread::available_parallelism()
             .map_or(1, std::num::NonZero::get)
-            .min(WORKERS);
+            .min(self.workers);
         if busy.len() < PARALLEL_FROM || threads < 2 {
             busy.into_iter().for_each(|m| m.work(local));
         } else {
@@ -436,83 +533,157 @@ impl Sfu {
         }
     }
 
+    #[cfg(test)]
+    pub fn estimate_of(&self, id: Seq<Participant>) -> Option<Bitrate> {
+        self.members
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.congestion.target())
+    }
+
     /// The next session description to send, and the participant it goes to.
     pub fn poll_signal(&mut self) -> Option<(Seq<Participant>, Signal)> {
         self.signals.pop_front()
     }
 
-    /// Chooses again the layer of each video track each receiver gets, from its estimate and
-    /// the last speech of each sender (`CALL-038`, `CALL-041`).
+    /// Chooses again what each slot of each receiver carries: the most recent speakers. The
+    /// target of the congestion control of the receiver sets the layer of each video
+    /// (`CALL-038`, `CALL-041`, `CALL-047`).
     fn choose_layers(&mut self, now: Instant) {
-        let spoke: Vec<(Seq<Participant>, Option<Instant>)> =
-            self.members.iter().map(|m| (m.id, m.spoke)).collect();
-        let offered: Vec<(Seq<Participant>, Mid, Vec<Offered>)> = self
+        // Each track of the call, with its sender's room and last speech.
+        let tracks: Vec<Track> = self
             .members
             .iter()
             .flat_map(|m| {
-                m.tracks_in
-                    .iter()
-                    .filter(|t| t.kind == MediaKind::Video)
-                    .map(|t| (m.id, t.mid, t.offered()))
+                m.tracks_in.iter().map(|t| Track {
+                    source: m.id,
+                    room: m.room.clone(),
+                    spoke: m.spoke,
+                    mid: t.mid,
+                    kind: t.kind,
+                    offered: t.offered(),
+                })
             })
             .collect();
-        let last_spoke =
-            |id: Seq<Participant>| spoke.iter().find(|(s, _)| *s == id).and_then(|(_, at)| *at);
         let mut asks = Vec::new();
         for member in &mut self.members {
-            let mut ranked: Vec<usize> = member
-                .tracks_out
+            if member.slots.is_empty() {
+                continue;
+            }
+            // The tracks of the others of the room, the most recent speaker first. A sender who
+            // never spoke comes after every speaker, in the order of the joins.
+            let mut ranked: Vec<&Track> = tracks
                 .iter()
-                .enumerate()
-                .filter(|(_, t)| t.kind == MediaKind::Video && matches!(t.state, OutState::Open(_)))
-                .map(|(index, _)| index)
+                .filter(|t| t.source != member.id && t.room == member.room)
                 .collect();
-            // The most recent speaker first; a sender who never spoke after every speaker, in
-            // the order of the joins.
-            ranked.sort_by_key(|index| {
-                member
-                    .tracks_out
-                    .get(*index)
-                    .map(|t| (std::cmp::Reverse(last_spoke(t.source)), t.source))
-            });
-            let choices: Vec<Choice> = ranked
+            ranked.sort_by_key(|t| (std::cmp::Reverse(t.spoke), t.source));
+            let audio: Vec<Feed> = ranked
                 .iter()
-                .filter_map(|index| member.tracks_out.get(*index))
-                .map(|t| Choice {
-                    layers: offered
-                        .iter()
-                        .find(|(s, m, _)| *s == t.source && *m == t.source_mid)
-                        .map(|(_, _, o)| o.clone())
-                        .unwrap_or_default(),
-                    current: t.video.current,
+                .filter(|t| t.kind == MediaKind::Audio)
+                .take(AUDIO_SLOTS)
+                .map(|t| Feed {
+                    source: t.source,
+                    mid: t.mid,
+                    layer: Layer(None),
                 })
                 .collect();
-            let estimate = member.estimate.unwrap_or(INITIAL_ESTIMATE);
-            let chosen = choose(estimate, &choices);
+            let videos: Vec<&Track> = ranked
+                .iter()
+                .copied()
+                .filter(|t| t.kind == MediaKind::Video)
+                .collect();
+            let choices: Vec<Choice> = videos
+                .iter()
+                .map(|t| Choice {
+                    layers: t.offered.clone(),
+                    current: member
+                        .slots
+                        .iter()
+                        .filter_map(|s| s.current)
+                        .find(|f| f.is_track(t.source, t.mid))
+                        .map(|f| f.layer),
+                })
+                .collect();
+            let chosen = choose(member.congestion.target(), &choices);
             let (minimum, desired) = rates(&choices, &chosen);
-            for (index, layer) in ranked.iter().zip(chosen) {
-                let Some(track) = member.tracks_out.get_mut(*index) else {
+            let video: Vec<Feed> = videos
+                .iter()
+                .zip(&chosen)
+                .filter_map(|(t, layer)| {
+                    layer.map(|layer| Feed {
+                        source: t.source,
+                        mid: t.mid,
+                        layer,
+                    })
+                })
+                .take(VIDEOS_PER_RECEIVER)
+                .collect();
+            for (kind, wanted) in [(MediaKind::Audio, &audio), (MediaKind::Video, &video)] {
+                let mut slots: Vec<&mut Slot> = member
+                    .slots
+                    .iter_mut()
+                    .filter(|s| s.kind == kind && matches!(s.state, OutState::Open(_)))
+                    .collect();
+                assign(&mut slots, wanted);
+            }
+            // The rate the current feeds take. Above the target, the downlink is congested, and a
+            // lower layer holds the current one back. A drop that only follows a change of
+            // speaker keeps the current layer flowing until the lower keyframe.
+            let current_rate: f64 = member
+                .slots
+                .iter()
+                .filter_map(|s| s.current)
+                .filter_map(|f| {
+                    videos
+                        .iter()
+                        .find(|t| t.source == f.source && t.mid == f.mid)
+                        .and_then(|t| t.offered.iter().find(|o| o.layer == f.layer))
+                        .map(|o| o.rate.as_f64())
+                })
+                .sum();
+            let congested = if current_rate > member.congestion.target().as_f64() {
+                Congested::Yes
+            } else {
+                Congested::No
+            };
+            for slot in member
+                .slots
+                .iter_mut()
+                .filter(|s| s.kind == MediaKind::Video)
+            {
+                let Some(target) = slot.target else {
+                    slot.hold = Hold::Flowing;
                     continue;
                 };
-                let video = &mut track.video;
-                video.target = layer;
-                if layer.is_none() {
-                    video.current = None;
-                }
-                let waiting = layer.is_some() && video.current != layer;
-                if waiting && video.asked.is_none_or(|at| now >= at + KEYFRAME_RETRY) {
-                    video.asked = Some(now);
-                    asks.push((track.source, track.source_mid, layer));
+                // A lower layer of the same track holds the current layer back.
+                let offered = videos
+                    .iter()
+                    .find(|t| t.source == target.source && t.mid == target.mid)
+                    .map(|t| t.offered.as_slice())
+                    .unwrap_or_default();
+                let rank = |feed: Option<Feed>| {
+                    let feed = feed.filter(|f| f.is_track(target.source, target.mid))?;
+                    offered.iter().position(|o| o.layer == feed.layer)
+                };
+                slot.hold = match (rank(Some(target)), rank(slot.current), congested) {
+                    (Some(to), Some(from), Congested::Yes) if to < from => Hold::Lowering,
+                    _ => Hold::Flowing,
+                };
+                if slot.current != Some(target)
+                    && slot.asked.is_none_or(|at| now >= at + KEYFRAME_RETRY)
+                {
+                    slot.asked = Some(now);
+                    asks.push(target);
                 }
             }
             member.rtc.bwe().set_bitrate(minimum, desired);
             member.touched = true;
         }
-        for (source, mid, layer) in asks {
+        for feed in asks {
             self.propagated.push_back(Propagated::Keyframe(
-                source,
-                mid,
-                layer,
+                feed.source,
+                feed.mid,
+                Some(feed.layer),
                 KeyframeRequestKind::Pli,
             ));
         }
@@ -545,9 +716,11 @@ impl Sfu {
             .filter(|m| m.id != origin && m.room == room)
         {
             match &p {
-                Propagated::TrackOpen(_, mid, kind) => {
-                    member.tracks_out.push(TrackOut::new(origin, *mid, *kind));
-                    member.touched = true;
+                Propagated::TrackOpen(..) => {
+                    if !member.wants_slots {
+                        member.wants_slots = true;
+                        member.touched = true;
+                    }
                 }
                 Propagated::Packet(_, mid, layer, params, packet) => {
                     member.forward(origin, *mid, *layer, *params, packet);
@@ -627,32 +800,25 @@ impl Member {
         }
     }
 
-    /// An offer for the tracks this participant does not receive yet, when no other offer
-    /// waits for its answer.
+    /// The one offer of the slots of this participant, once its room carries a track of
+    /// another participant (`CALL-045`). A later change of speaker remaps the slots and
+    /// renegotiates nothing (`CALL-046`).
     fn negotiate(&mut self) -> Option<SdpOffer> {
-        if self.pending.is_some() || !self.tracks_out.iter().any(|t| t.state == OutState::ToOpen) {
+        if self.pending.is_some() || !self.wants_slots || !self.slots.is_empty() {
             return None;
         }
         let mut change = self.rtc.sdp_api();
-        let mut opened = Vec::new();
-        for (index, track) in self.tracks_out.iter().enumerate() {
-            if track.state == OutState::ToOpen {
-                // The tracks of one sender share a stream, so the browser syncs their playout.
-                // An SDP token holds no parenthesis, so the name keeps the alphanumerics alone.
-                let name = format!("{:?}", track.source);
-                let stream = Some(name.chars().filter(char::is_ascii_alphanumeric).collect());
-                opened.push((
-                    index,
-                    change.add_media(track.kind, Direction::SendOnly, stream, None, None),
-                ));
-            }
+        let kinds = std::iter::repeat_n(MediaKind::Audio, AUDIO_SLOTS)
+            .chain(std::iter::repeat_n(MediaKind::Video, VIDEOS_PER_RECEIVER));
+        let mut slots = Vec::new();
+        for kind in kinds {
+            let mut slot = Slot::new(kind);
+            let mid = change.add_media(kind, Direction::SendOnly, None, None, None);
+            slot.state = OutState::Negotiating(mid);
+            slots.push(slot);
         }
         let (offer, pending) = change.apply()?;
-        for (index, mid) in opened {
-            if let Some(track) = self.tracks_out.get_mut(index) {
-                track.state = OutState::Negotiating(mid);
-            }
-        }
+        self.slots = slots;
         self.pending = Some(pending);
         Some(offer)
     }
@@ -670,12 +836,12 @@ impl Member {
                     kind: added.kind,
                     layers: Vec::new(),
                 });
-                Some(Propagated::TrackOpen(self.id, added.mid, added.kind))
+                Some(Propagated::TrackOpen(self.id))
             }
-            Event::EgressBitrateEstimate(
-                BweKind::Twcc { estimate, .. } | BweKind::Remb { estimate, .. },
-            ) => {
-                self.estimate = Some(estimate);
+            Event::EgressTwccFeedback(acks) => {
+                if let Some(target) = self.congestion.on_feedback(&acks) {
+                    self.rtc.bwe().set_estimate(Some(target));
+                }
                 None
             }
             Event::RtpPacket(packet) => {
@@ -710,14 +876,15 @@ impl Member {
                 Some(Propagated::Packet(self.id, mid, layer, params, packet))
             }
             Event::KeyframeRequest(request) => {
-                let track = self
-                    .tracks_out
+                let feed = self
+                    .slots
                     .iter()
-                    .find(|t| t.state == OutState::Open(request.mid))?;
+                    .find(|s| s.state == OutState::Open(request.mid))?
+                    .current?;
                 Some(Propagated::Keyframe(
-                    track.source,
-                    track.source_mid,
-                    track.video.current,
+                    feed.source,
+                    feed.mid,
+                    Some(feed.layer),
                     request.kind,
                 ))
             }
@@ -746,10 +913,10 @@ impl Member {
         }
     }
 
-    /// Writes `packet`, sent by `source` on the layer `layer` of its track `mid`, to this
-    /// participant (`CALL-032`). The payload and the marker stay as the sender wrote them. An
-    /// audio track keeps the 16 bits of each sequence number and each timestamp. A video track
-    /// shifts them across a layer switch (`CALL-040`).
+    /// Writes `packet`, sent by `source` on the layer `layer` of its track `mid`, to the slot
+    /// of this participant that carries it, if any (`CALL-032`). The payload and the marker
+    /// stay as the sender wrote them. The sequence numbers and the timestamps of a slot
+    /// continue across each switch of layer or of sender (`CALL-040`, `CALL-048`).
     fn forward(
         &mut self,
         source: Seq<Participant>,
@@ -764,68 +931,58 @@ impl Member {
         if !self.rtc.is_connected() {
             return;
         }
-        let Some(track) = self
-            .tracks_out
-            .iter_mut()
-            .find(|t| t.source == source && t.source_mid == mid)
+        let feed = Feed { source, mid, layer };
+        // Most packets belong to a feed no slot of this receiver carries: they stop here.
+        let Some(index) = self
+            .slots
+            .iter()
+            .position(|s| s.current == Some(feed) || s.target == Some(feed))
         else {
             return;
         };
-        let OutState::Open(out_mid) = track.state else {
-            return;
-        };
-        // Most packets belong to a layer this receiver does not get: they stop here.
-        if track.kind == MediaKind::Video
-            && track.video.current != Some(layer)
-            && track.video.target != Some(layer)
-        {
-            return;
-        }
         let Some(pt) = self.rtc.codec_config().match_params(params).map(|p| p.pt()) else {
             return;
         };
-        let (seq, time, patch) = if track.kind == MediaKind::Video {
-            let video = &mut track.video;
-            if video.target == Some(layer) && video.current != Some(layer) {
-                // A layer starts on one of its keyframes, so the receiver decodes on from it
-                // (`CALL-039`). A codec whose keyframe the SFU cannot read starts anywhere.
-                let starts = params.spec().codec != Codec::Vp8
-                    || Vp8Descriptor::parse(&packet.payload)
-                        .is_ok_and(|d| d.starts_keyframe(&packet.payload));
-                if starts {
-                    video.current = Some(layer);
-                    video.asked = None;
-                    video.rewrite.switch(now, packet);
-                }
-            }
-            if video.current != Some(layer) {
-                return;
-            }
-            let Some(out) = video.rewrite.apply(now, packet) else {
-                return;
-            };
-            (out.seq, out.time, out.patch)
-        } else {
-            let rollover = *track
-                .rollover
-                .get_or_insert(SeqNo::from(*packet.seq_no & !0xffff));
-            (
-                SeqNo::from(packet.seq_no.saturating_sub(*rollover)),
-                packet.header.timestamp,
-                None,
-            )
+        let Some(slot) = self.slots.get_mut(index) else {
+            return;
         };
+        let OutState::Open(out_mid) = slot.state else {
+            return;
+        };
+        if slot.target == Some(feed) && slot.current != Some(feed) {
+            // A video feed starts on one of its keyframes, so the receiver decodes on from it
+            // (`CALL-039`, `CALL-049`). A codec whose keyframe the SFU cannot read starts
+            // anywhere, and so does audio.
+            let starts = slot.kind == MediaKind::Audio
+                || params.spec().codec != Codec::Vp8
+                || Vp8Descriptor::parse(&packet.payload)
+                    .is_ok_and(|d| d.starts_keyframe(&packet.payload));
+            if starts {
+                slot.current = Some(feed);
+                slot.asked = None;
+                slot.hold = Hold::Flowing;
+                slot.rewrite.switch(now, packet);
+            }
+        }
+        if slot.current != Some(feed) || slot.hold == Hold::Lowering {
+            return;
+        }
+        let Some(out) = slot.rewrite.apply(now, packet) else {
+            return;
+        };
+        let nackable = slot.kind == MediaKind::Video;
         let mut api = self.rtc.direct_api();
         let Some(stream) = api.stream_tx_by_mid(out_mid, None) else {
             return;
         };
-        let mut write = RtpWrite::new(pt, seq, time, packet.timestamp, packet.payload.clone())
+        let payload = packet.payload.clone();
+        let mut write = RtpWrite::new(pt, out.seq, out.time, packet.timestamp, payload)
             .marker(packet.header.marker)
             .ext_vals(packet.header.ext_vals.clone())
             // The SFU answers a receiver's NACK from its own cache, so a loss on one downlink
             // costs the sender nothing.
-            .nackable(track.kind == MediaKind::Video);
-        if let Some(patch) = patch {
+            .nackable(nackable);
+        if let Some(patch) = out.patch {
             write = write.vp8_patch(patch);
         }
         stream.write_rtp(write);

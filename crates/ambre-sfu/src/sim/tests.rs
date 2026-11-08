@@ -1,8 +1,11 @@
 //! The layer choice of the SFU, between synthetic participants in simulated time.
 //!
-//! Each run is seeded, so its losses and its figures are the same on every machine.
+//! Each run is seeded: the losses of its links and the random numbers str0m draws. So a run
+//! follows one path, and its figures are the same on every machine and under any load.
 
 use std::time::{Duration, Instant};
+
+use str0m::media::MediaKind;
 
 use super::client::{Arrival, VideoRx};
 use super::impair::Profile;
@@ -30,58 +33,105 @@ fn since(rx: &VideoRx, from: Instant) -> impl Iterator<Item = &Arrival> {
     rx.arrivals.iter().filter(move |a| a.at >= from)
 }
 
+/// The seeds of the runs one proof spans. Each seed is one path, so several seeds keep a
+/// proof from resting on one path that happens to pass.
+const SEEDS: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+
 /// Joins `count` participants to one room over `profile`, the first one speaking.
 fn call(count: u64, profile: Profile) -> Net {
-    let mut net = Net::new();
-    for seed in 0..count {
-        net.join("r", profile, seed + 1);
+    seeded_call(count, profile, 1)
+}
+
+/// The same call as [`call`], on the path of `seed`.
+fn seeded_call(count: u64, profile: Profile, seed: u64) -> Net {
+    let mut net = Net::new(seed);
+    for index in 0..count {
+        net.join("r", profile, seed * 1000 + index + 1);
         net.run(Duration::from_millis(200));
     }
     net.member(0).synth.speaking = true;
     net
 }
 
-/// The layer drop, at 150 ms of round trip and 2 % loss. The downlink of a receiver falls
-/// below the top layer of the speaker, and the receiver gets a lower layer within 3 s.
-#[test]
-#[ignore = "moves with the load of the machine through the wall clock str0m reads"]
-fn a_capped_receiver_drops_a_layer_within_the_budget() {
-    let mut net = call(3, proof_link());
+/// The cap of the layer-drop runs: above the middle layer of the speaker and the lowest layer
+/// of the other sender, below its top layer.
+const CAP: u64 = 800_000;
+
+/// Runs a call of three on the path of `seed`, until the receivers hold the top layer of the
+/// speaker. Then it caps the downlink of participant 1 for 5 s. Answers the network and the
+/// instant of the cap.
+fn capped_run(seed: u64) -> (Net, Instant) {
+    let mut net = seeded_call(3, proof_link(), seed);
     net.run(Duration::from_secs(15));
     let before = net.now - Duration::from_secs(1);
     assert!(
         since(track(&net, 1, 0), before).all(|a| a.layer == 2),
-        "before the cap, the receiver gets the top layer of the speaker"
+        "seed {seed}: before the cap, the receiver gets the top layer of the speaker"
     );
     let capped = net.now;
-    net.member(1).down.profile.cap = Some(800_000);
+    net.member(1).down.profile.cap = Some(CAP);
     net.run(Duration::from_secs(5));
-    let dropped = since(track(&net, 1, 0), capped)
-        .find(|a| a.layer < 2)
-        .map(|a| a.at - capped);
-    assert!(
-        dropped.is_some_and(|d| d <= Duration::from_secs(3)),
-        "the capped receiver dropped a layer after {dropped:?}"
-    );
+    (net, capped)
 }
 
-/// The drop for the capped receiver leaves the layer of another receiver.
+/// `CALL-038`: the layer drop, at 150 ms of round trip and 2 % loss. The downlink of a
+/// receiver falls below the top layer of the speaker. The first packet of a lower layer then
+/// reaches the receiver within 3 s, on each path of [`SEEDS`].
 #[test]
-#[ignore = "moves with the load of the machine through the wall clock str0m reads"]
+fn a_capped_receiver_drops_a_layer_within_the_budget() {
+    for seed in SEEDS {
+        let (net, capped) = capped_run(seed);
+        let dropped = since(track(&net, 1, 0), capped)
+            .find(|a| a.layer < 2)
+            .map(|a| a.at - capped);
+        // The budget row of the layer drop reads these figures.
+        eprintln!("seed {seed}: the capped receiver dropped a layer after {dropped:?}");
+        assert!(
+            dropped.is_some_and(|d| d <= Duration::from_secs(3)),
+            "seed {seed}: the capped receiver dropped a layer after {dropped:?}"
+        );
+    }
+}
+
+/// `CALL-043`: the drop for the capped receiver leaves the layer of the other receiver, on
+/// each path of [`SEEDS`].
+#[test]
 fn a_layer_drop_for_one_receiver_leaves_another_receiver_on_its_layer() {
-    let mut net = call(3, proof_link());
-    net.run(Duration::from_secs(15));
-    let capped = net.now;
-    net.member(1).down.profile.cap = Some(800_000);
-    net.run(Duration::from_secs(5));
-    assert!(
-        since(track(&net, 1, 0), capped).any(|a| a.layer < 2),
-        "the capped receiver dropped no layer"
-    );
-    assert!(
-        since(track(&net, 2, 0), capped).all(|a| a.layer == 2),
-        "the other receiver lost the top layer of the speaker"
-    );
+    for seed in SEEDS {
+        let (net, capped) = capped_run(seed);
+        assert!(
+            since(track(&net, 1, 0), capped).any(|a| a.layer < 2),
+            "seed {seed}: the capped receiver dropped no layer"
+        );
+        assert!(
+            since(track(&net, 2, 0), capped).all(|a| a.layer == 2),
+            "seed {seed}: the other receiver lost the top layer of the speaker"
+        );
+    }
+}
+
+/// `CALL-044`: a receiver in a call of twenty keeps the top layer of the speaker. The links
+/// carry 150 ms of round trip and a random loss of 2 % or of 10 %. str0m's estimate held it on the middle
+/// layer at 2 %.
+#[test]
+fn a_receiver_of_twenty_keeps_the_top_layer_up_to_ten_percent_loss() {
+    for loss in [0.02, 0.10] {
+        let mut net = call(20, Profile::half(Duration::from_millis(150), loss));
+        net.run(Duration::from_secs(20));
+        let from = net.now;
+        net.run(Duration::from_secs(10));
+        let layers: Vec<u8> = since(track(&net, 1, 0), from).map(|a| a.layer).collect();
+        assert!(
+            !layers.is_empty(),
+            "at a loss of {loss}, the receiver got no video of the speaker"
+        );
+        assert!(
+            layers.iter().all(|l| *l == 2),
+            "at a loss of {loss}, the receiver left the top layer: {} of {} packets below it",
+            layers.iter().filter(|l| **l < 2).count(),
+            layers.len()
+        );
+    }
 }
 
 /// Runs a call of three where the speaker moves from participant 0 to participant 1.
@@ -178,35 +228,108 @@ fn a_receiver_gets_the_video_of_the_most_recent_speakers_alone() {
     );
 }
 
+/// A call of twelve where the speaker moves from participant 0 to participant 11, who joined
+/// last. Answers the network and the offers each participant had before the move. The links
+/// lose nothing, and their 150 ms of round trip let several pictures pass before a keyframe.
+fn speaker_joins_the_nine() -> (Net, Vec<usize>) {
+    let mut net = call(12, Profile::half(Duration::from_millis(150), 0.0));
+    net.run(Duration::from_secs(4));
+    let offers = net.members.iter().map(|m| m.offers).collect();
+    net.member(0).synth.speaking = false;
+    net.member(11).synth.speaking = true;
+    net.run(Duration::from_secs(4));
+    (net, offers)
+}
+
+/// `CALL-045`: in a call of twelve, a receiver gets three audio tracks and nine video tracks
+/// from the SFU, whatever the count of senders.
 #[test]
-fn explore_stalls() {
-    let mut net = call(4, proof_link());
-    net.run(Duration::from_secs(5));
-    let from = net.now;
-    net.run(Duration::from_secs(30));
-    for m in &net.members {
-        for rx in m.synth.video.values() {
-            let (st, wa) = rx.stalls(from);
-            let gaps: Vec<u128> = rx
-                .rendered
-                .windows(2)
-                .filter_map(|w| match w {
-                    [a, b] if b.0 >= from && (b.0 - a.0) > Duration::from_millis(150) => {
-                        Some((b.0 - a.0).as_millis())
-                    }
-                    _ => None,
-                })
-                .collect();
-            eprintln!(
-                "member {} from {:?}: stalled {st:?} of {wa:?}, rendered {} gaps {:?} kf {}",
-                m.synth.index,
-                rx.arrivals.first().map(|a| a.sender),
-                rx.rendered.len(),
-                gaps,
-                m.synth.keyframes_asked
-            );
+fn a_receiver_holds_a_fixed_count_of_slots() {
+    let (net, _) = speaker_joins_the_nine();
+    let receiving = &net.members.get(1).expect("a receiver").synth.receiving;
+    let count = |kind| receiving.iter().filter(|(_, k)| *k == kind).count();
+    assert_eq!(count(MediaKind::Audio), 3, "audio slots: {receiving:?}");
+    assert_eq!(count(MediaKind::Video), 9, "video slots: {receiving:?}");
+}
+
+/// `CALL-046`: a change of speaker sends no participant a new offer.
+#[test]
+fn a_change_of_speaker_renegotiates_nothing() {
+    let (net, before) = speaker_joins_the_nine();
+    let after: Vec<usize> = net.members.iter().map(|m| m.offers).collect();
+    assert_eq!(after, before, "offers before and after the move");
+    assert!(before.iter().all(|o| *o == 1), "offers: {before:?}");
+}
+
+/// The video slot of receiver 1 that moved from one sender to another.
+fn moved_slot(net: &Net) -> &VideoRx {
+    net.members
+        .get(1)
+        .expect("a receiver")
+        .synth
+        .video
+        .values()
+        .find(|rx| {
+            rx.arrivals.iter().any(|a| a.sender == 11) && rx.arrivals.iter().any(|a| a.sender != 11)
+        })
+        .expect("a slot that moved to the new speaker")
+}
+
+/// `CALL-048`: the sequence numbers of a slot stay continuous when it moves to another sender.
+#[test]
+fn the_sequence_numbers_of_a_slot_stay_continuous_across_a_change_of_sender() {
+    let (net, _) = speaker_joins_the_nine();
+    let rx = moved_slot(&net);
+    for pair in rx.arrivals.windows(2) {
+        if let [a, b] = pair {
+            assert_eq!(b.seq, a.seq.wrapping_add(1), "a gap from {a:?} to {b:?}");
         }
     }
+}
+
+/// `CALL-049`: a slot moves to another sender on the first packet of one of its keyframes.
+#[test]
+fn a_slot_moves_to_another_sender_only_on_a_keyframe() {
+    let (net, _) = speaker_joins_the_nine();
+    let rx = moved_slot(&net);
+    let first = rx
+        .arrivals
+        .iter()
+        .find(|a| a.sender == 11)
+        .expect("a packet of the new speaker");
+    assert!(
+        first.keyframe_start && first.index == 0,
+        "the slot moved on {first:?}"
+    );
+}
+
+/// `CALL-047`: of five other participants, a receiver gets the audio of the three who spoke
+/// last, and nothing of the two others.
+#[test]
+fn a_receiver_gets_the_audio_of_the_three_most_recent_speakers_alone() {
+    let mut net = call(6, Profile::CLEAN);
+    net.run(Duration::from_secs(3));
+    for speaker in [1, 2, 3] {
+        for m in &mut net.members {
+            m.synth.speaking = false;
+        }
+        net.member(speaker).synth.speaking = true;
+        net.run(Duration::from_secs(2));
+    }
+    let from = net.now - Duration::from_secs(1);
+    let mut senders: Vec<u16> = net
+        .members
+        .get(5)
+        .expect("a receiver")
+        .synth
+        .audio_from
+        .iter()
+        .filter(|(at, _)| *at >= from)
+        .map(|(_, sender)| *sender)
+        .collect();
+    senders.sort_unstable();
+    senders.dedup();
+    assert_eq!(senders, vec![1, 2, 3], "the receiver heard {senders:?}");
 }
 
 /// A regression, found through TURN on TCP 443. The SFU wrote the audio of the room to a

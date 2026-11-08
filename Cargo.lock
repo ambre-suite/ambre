@@ -408,6 +408,7 @@ version = "0.1.0"
 dependencies = [
  "ambre-core",
  "axum",
+ "fastrand",
  "futures-util",
  "serde",
  "serde_json",
@@ -7487,8 +7488,6 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "str0m"
 version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "357c7e453c033c8bb59e912312f9f9ff07c2a9ce7268bcb94f0c828a5b47e58f"
 dependencies = [
  "arrayvec",
  "base64ct",

@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use str0m::RtcConfig;
 
+pub mod congestion;
 pub mod forward;
 pub mod layer;
 pub mod rewrite;
@@ -23,6 +24,8 @@ pub fn participant_config() -> RtcConfig {
         // The SFU listens on a public address: it answers connectivity checks and sends none.
         .set_ice_lite(true)
         .set_crypto_provider(Arc::new(str0m::crypto::from_feature_flags()))
-        // The estimate of each downlink drives the layer choice (`CALL-038`).
+        // The pacer and the padding of each downlink follow its congestion control, which
+        // reads the transport-wide feedback str0m hands over (`CALL-038`, `CALL-044`).
         .enable_bwe(Some(forward::INITIAL_ESTIMATE))
+        .enable_twcc_acks(true)
 }

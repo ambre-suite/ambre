@@ -13,6 +13,7 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -65,9 +66,29 @@ HERMETIC = {
 }
 
 
+def next_free(text: str, row: str) -> str:
+    """`row` under the next free id of its prefix in `text`.
+
+    A branch of the corpus may take the id a row of `ROWS` names, so the fixture
+    numbers each row after the highest id of its prefix in the corpus `text`, as
+    a new row would. One prefix may span several documents.
+    """
+    prefix = re.match(r"\| `([A-Z][A-Z-]*)-\d+` \|", row)
+    if prefix is None:
+        return row
+    taken = [int(n) for n in re.findall(rf"\| `{prefix.group(1)}-(\d+)` \|", text)]
+    width = len(re.search(r"-(\d+)`", row).group(1))
+    fresh = f"{prefix.group(1)}-{max(taken, default=0) + 1:0{width}d}"
+    return re.sub(r"`[A-Z][A-Z-]*-\d+`", f"`{fresh}`", row, count=1)
+
+
 def append_row(path: Path, anchor: str, row: str) -> None:
     """Append `row` after the last row of the table that holds `anchor`."""
-    lines = path.read_text().split("\n")
+    text = path.read_text()
+    specs = next(p for p in path.parents if p.name == "specs")
+    corpus = "\n".join(doc.read_text() for doc in sorted(specs.rglob("*.md")))
+    row = next_free(corpus, row)
+    lines = text.split("\n")
     at = next(i for i, line in enumerate(lines) if line.startswith(f"| {anchor} |"))
     while at + 1 < len(lines) and lines[at + 1].startswith("| `"):
         at += 1

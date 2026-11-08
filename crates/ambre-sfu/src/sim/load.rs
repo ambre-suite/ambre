@@ -12,6 +12,10 @@
 //! `LOAD_PARTICIPANTS`, `LOAD_SECONDS` and `LOAD_SEED` change the run. `LOAD_SFU_CPUS` pins
 //! the SFU to a set of cores, `0,1` for the 2 vCPU of the budget; run the test itself under
 //! `taskset -c 2,3` then.
+//!
+//! `LOAD_BROWSERS`, for example `chrome,chrome,firefox,firefox`, puts that many headless
+//! browsers among the participants (`sim/browsers.rs`). They join first, and the run prints the
+//! freezes their decoders count beside the stall of the synthetic model.
 
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
@@ -22,6 +26,7 @@ use str0m::change::{SdpAnswer, SdpOffer};
 use tokio::net::UdpSocket;
 use tokio_tungstenite::tungstenite::Message;
 
+use super::browsers::{Browser, Engine, PAGE, Watched, watched};
 use super::client::Synth;
 use super::impair::{Impairment, Profile};
 use super::udp::{Link, link};
@@ -186,7 +191,9 @@ fn percentile(sorted: &[Duration], p: f64) -> Duration {
 #[test]
 #[ignore = "a real-time load run of minutes; run it by hand, in release, as its rustdoc says"]
 fn load_of_one_call() {
-    let count = setting("LOAD_PARTICIPANTS", 50);
+    let engines = Engine::listed();
+    let total = setting("LOAD_PARTICIPANTS", 50);
+    let count = total.saturating_sub(engines.len() as u64);
     let seconds = setting("LOAD_SECONDS", 120);
     let seed = setting("LOAD_SEED", 1);
     let capped_index = u16::try_from(count.saturating_sub(1).min(10)).expect("a small index");
@@ -198,15 +205,47 @@ fn load_of_one_call() {
         .enable_all()
         .build()
         .expect("a runtime");
+    let profile = Profile::half(Duration::from_millis(150), 0.02);
+    let signal = format!("ws://{}", addresses.signal);
+    let browsers: Vec<Browser> = runtime.block_on(async {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("a page port");
+        let page = format!("http://{}/", listener.local_addr().expect("a page address"));
+        let app = axum::Router::new().route(
+            "/",
+            axum::routing::get(|| async { axum::response::Html(PAGE) }),
+        );
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let mut browsers = Vec::new();
+        for (i, engine) in engines.iter().enumerate() {
+            let i = i as u64;
+            let link = link(
+                addresses.media,
+                Impairment::new(profile, seed * 1000 + 900 + i * 2),
+                Impairment::new(profile, seed * 1000 + 901 + i * 2),
+            )
+            .await
+            .expect("a link");
+            eprintln!("load: starting {engine:?}");
+            let browser = Browser::start(*engine).await;
+            eprintln!("load: {engine:?} started");
+            let url = format!("{page}?sfu={signal}/room/load&relay={}", link.front);
+            browser.goto(&url).await;
+            eprintln!("load: {engine:?} opened {url}");
+            // The link runs on the runtime as long as the run, through its tasks.
+            std::mem::forget(link);
+            browsers.push(browser);
+        }
+        browsers
+    });
     let epoch = Instant::now();
     let joined = epoch + Duration::from_millis(200 * count);
     let warm = joined + Duration::from_secs(10);
     let end = warm + Duration::from_secs(seconds);
     let turn = Duration::from_secs(20);
     let cap_at = warm + Duration::from_secs(25);
-    let profile = Profile::half(Duration::from_millis(150), 0.02);
-    let signal = format!("ws://{}", addresses.signal);
-    let (synths, cpu, capped) = runtime.block_on(async {
+    let (synths, cpu, capped, seen) = runtime.block_on(async {
         let mut handles = Vec::new();
         let mut capped = None;
         for i in 0..count {
@@ -235,6 +274,10 @@ fn load_of_one_call() {
             handles.push(tokio::spawn(participant(plan, link)));
         }
         tokio::time::sleep_until(warm.into()).await;
+        let mut first = Vec::new();
+        for b in &browsers {
+            first.push(b.video_stats().await);
+        }
         let cpu_start = (
             Instant::now(),
             cpu_ticks(pid),
@@ -247,6 +290,12 @@ fn load_of_one_call() {
             d.profile.cap = Some(800_000);
         }
         tokio::time::sleep_until(end.into()).await;
+        let mut seen: Vec<Watched> = Vec::new();
+        for (b, before) in browsers.iter().zip(&first) {
+            let after = b.video_stats().await;
+            println!("browser {:?}: {after}", b.engine);
+            seen.extend(watched(b.engine, before, &after));
+        }
         let cpu_end = (
             Instant::now(),
             cpu_ticks(pid),
@@ -260,7 +309,7 @@ fn load_of_one_call() {
         let cpu = (cpu_end.1 - cpu_start.1) as f64 / 100.0 / wall.as_secs_f64();
         let clients = (cpu_end.2 - cpu_start.2) as f64 / 100.0 / wall.as_secs_f64();
         println!("participants and relay CPU: {clients:.3} vCPU, on the same machine");
-        (synths, cpu, capped.is_some())
+        (synths, cpu, capped.is_some(), seen)
     });
     assert!(capped, "the capped participant exists");
 
@@ -347,4 +396,28 @@ fn load_of_one_call() {
         worst.1
     );
     println!("capped receiver: videos before the cap {before:?}, first drop after {drop:?}");
+    // A browser video counts once it decoded a second of pictures in the window.
+    for engine in [Engine::Chrome, Engine::Firefox] {
+        let videos: Vec<&Watched> = seen
+            .iter()
+            .filter(|w| w.engine == engine && w.decoded >= 30.0)
+            .collect();
+        if videos.is_empty() {
+            continue;
+        }
+        let span = (end - warm).as_secs_f64();
+        let frozen: Option<f64> = videos
+            .iter()
+            .map(|w| w.frozen.map(|d| d.as_secs_f64()))
+            .sum();
+        let freezes: Option<f64> = videos.iter().map(|w| w.freezes).sum();
+        let decoded: f64 = videos.iter().map(|w| w.decoded).sum();
+        let dropped: f64 = videos.iter().map(|w| w.dropped).sum();
+        println!(
+            "browser video stall, {engine:?}: {:?} s frozen per 10 minutes of one video over {} videos, {freezes:?} freezes, {decoded} pictures decoded, {dropped} dropped",
+            frozen.map(|f| f / (span * videos.len() as f64) * 600.0),
+            videos.len()
+        );
+    }
+    std::mem::drop(browsers);
 }
