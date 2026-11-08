@@ -67,3 +67,9 @@ mod convergence_tests;
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod structure_tests;
+
+/// An undo that puts a deleted element back, against a board rebuilt by
+/// hand (`TOILE-290`). Host-only.
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod undo_identity_tests;

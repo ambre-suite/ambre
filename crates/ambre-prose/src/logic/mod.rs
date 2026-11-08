@@ -60,6 +60,11 @@ pub mod fixtures;
 #[cfg(test)]
 mod convergence_tests;
 
+/// An undo that puts a deleted block back, against a page rebuilt by hand
+/// (`PROSE-133`).
+#[cfg(test)]
+mod undo_identity_tests;
+
 /// The schema shape belt (`SCHEMA-018`): the key set and the value types a
 /// build writes, frozen per `SCHEMA_VERSION`. Test-only, so no client build
 /// carries it.
