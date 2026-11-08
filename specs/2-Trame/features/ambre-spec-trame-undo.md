@@ -30,11 +30,12 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 |---|---|---|---|---|---|---|
 | `TRAME-124` | `POST` | Restoring a snapshot MUST be undoable, like any other change to the document. | this spec section 6 | not built | unbuilt -- lands with the `Version history` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-154` | `FRAME` | Restoring a snapshot MUST NOT remove a snapshot from the list, the restored one included. | derived | not built | unbuilt -- lands with the `Version history` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-### 1.3 Undo a line delete
+### 1.3 Undo a line insert or delete
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-286` | `POST` | An undo of a line delete MUST leave the document the undo manager would leave, and so MUST its redo. | this spec section 3; `ambre-spec-undo.md` (`UNDO-001`, `UNDO-002`) | none | fails -- an undo of a recorded line delete puts back a new list element, and a later undo of an older move or sort, through the undo manager, revives the element the delete took: the row list then holds the line twice. `ambre_trame::logic::line_history_tests::an_undone_delete_keeps_one_element_through_a_managed_sort` reproduces it and stays, ignored. The proptest that held this row, `ambre_trame::logic::line_history_tests::a_recorded_line_delete_undoes_as_the_undo_manager`, draws it in some runs; lands with the `One undo history for Trame, or two by decision` Story (`ambre-roadmap.md` E6) | failing |
+| `TRAME-289` | `POST` | An undo and a redo of a line insert MUST each hold the Trame whole line delete row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 6 | not built | unbuilt -- lands with the `An undo of a line insert within its budget on a large sheet` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-287` | `FRAME` | An undo or a redo of a line delete MUST NOT overwrite a value a peer wrote after the delete. | this spec section 2, row 2; `ambre-spec-undo.md` (`UNDO-007`) | `ambre_trame::logic::line_history_tests::an_undone_line_delete_keeps_a_later_write_of_a_peer` -- the peer types over a formula the delete rewrote, and the value stands through the undo and the redo, on both peers | none | verified |
 
 * **Budget.** an undo and a redo of a line delete each hold the Trame whole line delete row of
@@ -42,7 +43,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   sits inside the `LoroDoc` holder of section 6, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 4 `verified`, 1 `failing`, 4 `unimplemented`. What holds is the granularity
+* **Verification.** 4 `verified`, 1 `failing`, 5 `unimplemented`. What holds is the granularity
   rule, four ways, and the multi-line delete keeps it (`TRAME-088`). The three chords are read back
   off the seeded keymap, and version history is unbuilt on both sides of the grammar. What a restore
   owes the snapshot list is open, and so is what two peers reach when one restores while the other
