@@ -123,10 +123,9 @@ The downlink of a receiver carries more than its target, after a drop with no la
 * **Verification.** 23 `verified`, 29 `unimplemented`. The SFU links no C cryptography,
   completes DTLS, and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-037`). It
   chooses the layer of each receiver, and a browser on TCP 443 alone reaches it through TURN
-  (`CALL-038` to `CALL-043`). Its congestion control holds under random loss (`CALL-044`), and
-  each receiver holds fixed slots (`CALL-045` to `CALL-049`). A receiver climbs back after a
-  false drop, and a probe lifts no capped receiver (`CALL-050` to `CALL-052`). No call code
-  exists beyond it.
+  (`CALL-038` to `CALL-043`). Its congestion control holds under random loss and climbs back
+  after a false drop (`CALL-044`, `CALL-050` to `CALL-052`). Each receiver holds fixed slots
+  (`CALL-045` to `CALL-049`), and no call code exists beyond the SFU.
 
 ---
 
@@ -300,8 +299,9 @@ assumes them away.
 **A simulated run is seeded.** The seed sets the losses of each link and the random numbers str0m
 draws on its thread. The patched str0m keeps its streams in a sorted map, and the simulated SFU
 runs its connections on one thread. So a seed gives one path, on any machine and under any load.
-The simulated clock steps by 1 ms. The SFU wakes str0m at the timeout it asks, which tokio
-rounds to 1 ms, and the pacer of str0m sends one padding packet per wake. A coarser step would
+
+The simulated clock steps by 1 ms. The SFU wakes str0m at the timeout it asks, and tokio rounds
+that timeout to 1 ms. The pacer of str0m sends one padding packet per wake. A coarser step would
 starve a probe of padding that the SFU sends.
 
 **Dependencies.** Each one the SFU adds, and why:

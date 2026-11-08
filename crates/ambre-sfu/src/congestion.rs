@@ -12,8 +12,8 @@
 //!
 //! A decrease sets the target under the acknowledged rate, and the target then grows back by
 //! about one packet per round trip. A drop on a delay step with no lasting congestion would
-//! hold for many seconds. So while the delay bound reads no overuse and a higher layer exists,
-//! the controller probes: it paces at the next layer step for a short span. The target takes
+//! hold for many seconds. So the controller probes while the delay bound reads no overuse and a
+//! higher layer exists. It paces above the next layer step for a short span. The target takes
 //! that step when the link carries it with no overuse (`CALL-050`).
 
 mod delay;

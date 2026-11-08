@@ -392,8 +392,8 @@ const DELAY_STEP: Duration = Duration::from_millis(40);
 
 /// `CALL-050`: a false drop recovers. A call of three runs at 150 ms of round trip and 2 %
 /// loss. The one-way delay of the downlink of a receiver then grows once by 40 ms, with no
-/// cap. The receiver gets the top layer of the speaker again within 2 s of the step, and keeps
-/// it for the rest of the run, on each path of [`SEEDS`].
+/// cap. The receiver gets the top layer of the speaker again within 2 s of the step. It keeps
+/// that layer for the rest of the run, on each path of [`SEEDS`].
 #[test]
 fn a_receiver_climbs_back_to_the_top_layer_after_a_delay_step() {
     for seed in SEEDS {
@@ -434,18 +434,19 @@ fn a_receiver_climbs_back_to_the_top_layer_after_a_delay_step() {
     }
 }
 
-/// A cap that holds the middle layer of the speaker and the lowest layer of the other sender,
-/// with the margin of a move up, and not the top layer of the speaker.
+/// A cap above the middle layer of the speaker and the lowest layer of the other sender, with
+/// the margin of a move up. It holds no top layer of the speaker.
 const MIDDLE_CAP: u64 = 1_200_000;
 
-/// The target the top layer of the speaker needs, beside the lowest layer of the other sender:
-/// their sum under the share and the margin of the layer choice, about 2.43 Mbit/s.
+/// The target the top layer of the speaker needs, beside the lowest layer of the other sender.
+/// It is their sum under the share and the margin of the layer choice: about 2.43 Mbit/s.
 const TOP_NEEDS: f64 = (1_500_000.0 + 150_000.0) * 1.25 / 0.85;
 
 /// `CALL-051`: a probe never lifts a capped receiver to a layer its downlink cannot carry. A
 /// call of three runs at 150 ms of round trip and 2 % loss. The downlink of a receiver is then
 /// capped below the top layer of the speaker for 20 s. After its drop, the receiver gets no
-/// packet of the top layer, and its target stays under what the top layer needs, on each path of [`SEEDS`].
+/// packet of the top layer. Its target stays under what the top layer needs, on each path of
+/// [`SEEDS`].
 #[test]
 fn a_receiver_capped_below_the_top_layer_never_climbs_to_it() {
     for seed in SEEDS {
