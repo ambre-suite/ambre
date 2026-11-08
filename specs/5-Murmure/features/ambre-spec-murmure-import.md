@@ -37,8 +37,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-438` | `POST` | An export MUST write every document of a channel the member reads into one `.ambre` file. | this spec section 3; `ambre-spec-docfile.md` | not built | unbuilt -- lands with the `Murmure export` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MURMURE-439` | `FRAME` | An export MUST NOT change a document of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Murmure export` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MURMURE-438` | `POST` | An export MUST write every document of a channel the member reads into one `.ambre` file. | this spec section 3; `ambre-spec-docfile.md` | not built | unbuilt -- lands with the `Murmure export` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-439` | `FRAME` | An export MUST NOT change a document of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Murmure export` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** an import writes final segments of the segment size of `ambre-spec-budgets.md
   section 6`, so a long history lands as whole segments, never as a tail of deltas.
@@ -75,7 +75,7 @@ so it confirms them itself (`AUTHOR-021`).
 of the `One interop vocabulary` Story (`ambre-roadmap.md` E8).
 
 **The way out.** The container of `ambre-spec-docfile.md` holds one document, and a channel is
-several. The `Murmure export` Story (`ambre-roadmap.md` post-V1) adds a container version that holds
+several. The `Murmure export` Story (`ambre-roadmap.md` E5) adds a container version that holds
 a list. A segment the member cannot open stays out of the file.
 
 **Code.** not built.

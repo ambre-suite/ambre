@@ -126,10 +126,10 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` A Prose fixture corpus | MVP | Trame and Toile each carry a fixture generator and Prose carries none, so `fixtures/` holds no Prose document and the schema has reached version 9 with no artifact frozen at any version. Each migration is held by one hand-built document in a unit test, never by a real file. A seeded generator writing a document with styled text, a table, a band, a footnote and a comment gives the current corpus, and the next schema bump its first frozen artifact (`ambre-spec-fixtures.md`) |
 | `[x]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |
 | `[x]` An import lands whole or not at all | MVP | an import writes block by block into one pending transaction, and a write the engine refuses midway leaves the earlier ones pending for the next commit to take (`PROSE-IO-011`). Apply on a fork and merge on success, or validate every operation before the first write |
-| `[ ]` HTML interop | V1 | HTML import and export of whole documents, beside the clipboard reader |
-| `[ ]` DOCX interop | V1 | Word import and export, comments and track changes included |
-| `[ ]` PDF export | V1 | a paginated PDF with working links and metadata. Holds `PDF-009`, `PDF-011`, `PDF-013`, `PDF-015` and `PDF-017` for Prose |
-| `[ ]` Images | V1 | images in the document, resolved through the shared media flow and embedded on export |
+| `[ ]` HTML interop | MVP | HTML import and export of whole documents, beside the clipboard reader |
+| `[ ]` DOCX interop | MVP | Word import and export, comments and track changes included |
+| `[ ]` PDF export | MVP | a paginated PDF with working links and metadata. Holds `PDF-009`, `PDF-011`, `PDF-013`, `PDF-015` and `PDF-017` for Prose |
+| `[ ]` Images | MVP | images in the document, resolved through the shared media flow and embedded on export |
 | `[x]` Operations bound to their signer | MVP | every Loro operation of every application traced to the key that signed its delta |
 | `[x]` The operations no session signs | MVP | the scaffolding of a new document and each schema migration write under fixed PeerIDs that no delta carries, so a delta built on another build's scaffolding or on a migration this client never ran waits for ever. Every build writes them alike, and a delta that waits on them reports the document unreadable (`AUTHOR-024`, `AUTHOR-025`) |
 | `[x]` Each migration frozen with its version | MVP | the scaffolding's identity is frozen per schema version, and what each migration step writes is not. A belt runs every step on a canonical document of the version it leaves and freezes what it writes, so a step edited after its version shipped turns red (`AUTHOR-024`) |
@@ -288,7 +288,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Space retention | V1 | one retention duration per space, applied by the relay |
 | `[ ]` Direct message conversion | V1 | a direct message becomes a private channel of a space, with its history or from a fresh start. A fresh start is a history boundary, which the message list shows as the start of the channel |
 | `[ ]` Forum channels | V1 | posts with a title and tags, each opening its own thread |
-| `[ ]` Chat import | V1 | an archive of Slack or Discord imported into a space |
+| `[ ]` Chat import | MVP | an archive of Slack or Discord imported into a space |
+| `[ ]` Murmure export | MVP | a channel written to one `.ambre` file, through a container version that holds several documents |
 | `[ ]` Two channels side by side | V1 | a split view that pins and shows two channels at once, each with its own list and composer |
 | `[ ]` Pinned messages | V1 | messages pinned to a channel for every member, in a `pinned` list of the channel `meta` document |
 | `[ ]` A link to a message | V1 | a link that opens a channel at one message, for a member of the channel |
@@ -313,7 +314,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[ ]` The collation a locale selects for find | V1 | `ambre-spec-find.md` and `ambre-spec-locale.md` record that a byte comparison and a locale-aware one disagree, and leave open which collation a document's locale selects and for which operation. A find in a document tagged in one locale then matches as a find in any other. Done when a row of `ambre-spec-find.md` states the collation a find uses under a locale and reads `verified`, and `ambre-spec-locale.md` no longer names collation as open |
-| `[ ]` Large-file import | V1 | a very large import or export stays responsive and reports its progress, in Prose: the conversion is sliced so the Logic thread keeps serving edits between slices. Until then a Prose import past 16 MiB is refused |
+| `[ ]` Large-file import | MVP | a very large import or export stays responsive and reports its progress, in Prose: the conversion is sliced so the Logic thread keeps serving edits between slices. Until then a Prose import past 16 MiB is refused |
 | `[ ]` `ARCH P4` -- offline durability | -- | edit while offline and lose nothing on reconnect |
 | `[x]` `ARCH P9` -- the Logic thread drains before it answers | MVP | the Logic loop takes one message, applies it and answers the view, so a burst of ten keystrokes costs ten layouts or ten derivations, nine of them stale before they are drawn. On a slow device the answer falls further behind with each keystroke. Every queued command applied first, then one answer per document written, bounds the lag to one pass whatever the typing rate |
 | `[x]` Keystroke latency probes | MVP | three budgets govern typing -- the local echo, the confirmation and the moved caret -- and nothing measures any of them. Marks on both threads, run on a slow phone and a slow laptop, over a long document, a burst and a large paste (`ambre-spec-budgets.md`) |
@@ -334,7 +335,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` A provider account is unlocked or set up | V1 | the home screen has no passphrase field and no setup, so an account that holds its keys cannot open them and one that owes them is never asked. The setup refusal reaches a screen that ignores it. Needs `The provider sign-in reaches the client` first. Done when `CHROME-097` to `CHROME-100` read `verified` |
 | `[ ]` User settings | V1 | a sealed store of one user's settings that follows them across devices: Murmure mute and layout first, then macro approvals and secret values |
 | `[ ]` Avatars | V1 | a picture per user, drawn in every application, held in the clear by the relay and served only to the users who share a document with its owner. Done when `PROFILE-001` and `PROFILE-003` to `PROFILE-009` read `verified` |
-| `[ ]` The PDF writer is fetched on demand | V1 | `krilla` sits behind a Cargo feature the launcher enables, so every user downloads the writer whether or not they ever export. A feature cannot defer it: the build emits one wasm artifact per instance, so the writer needs a second artifact fetched on the first export, as the budget already prescribes for Prose's interop |
+| `[ ]` The converters fetched on demand | MVP | Main sits a few KB under its ceiling (`ambre-spec-budgets.md section 5`), and each DOCX, xlsx, HTML or PNG converter costs hundreds of KB of brotli. A Cargo feature cannot defer them, since the build emits one wasm artifact per instance. The converters live in a module fetched on the first import or export, then cached, so a user who never converts never downloads them. Done when Main links no format converter and the browser tier runs an import and an export through the fetched module |
+| `[ ]` The PDF writer is fetched on demand | MVP | `krilla` sits behind a Cargo feature the launcher enables, so every user downloads the writer whether or not they ever export. A feature cannot defer it: the build emits one wasm artifact per instance, so the writer needs a second artifact fetched on the first export, as the budget already prescribes for Prose's interop |
 | `[x]` One wasm for the whole suite, within a 4 MB first download | MVP | a release build weighs 3.14 MB brotli for Main and 0.36 MB for Sync. Splitting the applications out would cost a download per application and still leave the shared part over 2 MB, so the budget of the first download is 4 MB and the suite stays one binary. It is built for size, served precompressed and cached by content hash. The `size` CI job holds the budget and a tight ceiling per instance, raised only when the budget spec names the growth. Done when a first download under 4 MB brotli is a CI check |
 | `[x]` One copy of the font readers in Main | MVP | the PDF writer `krilla` links an older `skrifa` and `read-fonts` than `parley` does, so Main carries both copies, inside the PDF part of about 221 KB of brotli (`ambre-spec-budgets.md section 5`). Done when one version of each links into Main, `just size` lowers the ceiling of Main by the bytes saved, and the PDF and text belts stay green |
 
@@ -357,11 +359,12 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Dynamic arrays and spill | V1 | a formula answering many values fills the cells beside it, refuses a blocked cell and clears what it no longer covers. Done when `TRAME-060`, `TRAME-206` and `TRAME-207` read `verified` |
 | `[ ]` Data tools | V1 | personal filter views, conditional formatting, data validation, and a total that skips filtered rows |
 | `[ ]` Grid surface | V1 | frozen rows and columns, function autocompletion, live peer cursors, an auto-fit that measures the whole column instead of the viewport cache |
-| `[ ]` xlsx interop | V1 | Excel import and export: values, formulas, styles, merges, column widths |
+| `[ ]` xlsx interop | MVP | Excel import and export: values, formulas, styles, merges, column widths |
+| `[ ]` OpenDocument interop | MVP | OpenDocument spreadsheet import (`.ods`): values, formulas, styles, merges, column widths, with a report of what was lost |
 | `[ ]` Cell comments | V1 | a note anchored to a cell, surviving a sort and a reorder |
 | `[ ]` Media in a sheet | V1 | Trame declares images and resolves none. Wire it to the shared media flow |
-| `[ ]` Sheet PDF export | V1 | the grid draws on a canvas, so a browser print shows the viewport at best, and a sheet cannot be printed at all. Drive the surface-generic render walk onto krilla pages: one sheet, its used range or the selection, page breaks at row and column edges, fit to width, and an optional repeated first row. A page setup dialog, manual breaks, headers and footers stay out. Holds `PDF-001` to `PDF-006` for Trame |
-| `[ ]` Persisted page setup | V1 | paper size, margins and orientation stored with the document instead of asked at export |
+| `[ ]` Sheet PDF export | MVP | the grid draws on a canvas, so a browser print shows the viewport at best, and a sheet cannot be printed at all. Drive the surface-generic render walk onto krilla pages: one sheet, its used range or the selection, page breaks at row and column edges, fit to width, and an optional repeated first row. A page setup dialog, manual breaks, headers and footers stay out. Holds `PDF-001` to `PDF-006` for Trame |
+| `[ ]` Persisted page setup | MVP | paper size, margins and orientation stored with the document instead of asked at export |
 | `[ ]` A machine-readable error | V1 | an error carries a code a host can branch on, not only a sentence |
 | `[ ]` Bounded float objects | V1 | an absurd image or chart size cannot make layout cost unbounded |
 | `[ ]` A fill extrapolates a date series | V1 | a drag over two dates repeats them: the fill extrapolates numbers alone, and a date pattern the corpus promises is detected nowhere |
@@ -388,11 +391,11 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Snap to the board grid | V1 | a drag, a resize and a nudge quantize to the grid step the board asks for, which is drawn today and magnetic nowhere |
 | `[ ]` Rich text on the board | V1 | a note body carries per-run formatting, on the shared text substrate Prose unblocks. Today it carries one style per element |
 | `[ ]` Engine and render optimization | -- | a large board stays fluid: bulk index updates, cheaper layer diffs, memoized routing, atlas eviction |
-| `[ ]` Figma and Miro import | V1 | open a board exported from either, reporting every construct it had to drop |
-| `[ ]` PNG export | V1 | a board or a frame rendered back to a raster image, without blocking the visible frame |
-| `[ ]` An export does not freeze the board | V1 | the deck's PDF export runs to completion inside the Logic thread's command loop, so a large deck stops every local edit and every remote apply for as long as it takes -- the budget says 3 s at 50 slides, and no benchmark has ever measured it. Take the walk off the loop, and measure it |
-| `[ ]` A deck exports at full resolution | V1 | a picture reaches the page from its inline thumbnail, capped at a 256 px edge, so a deck prints at screen quality. The full blob is ciphertext on the relay and the Logic thread has no path that fetches and opens one; give it that path, which the export must then be able to await. The screen then shows the thumbnail while the full blob loads (`TOILE-IO-035`) |
-| `[ ]` The standalone showcase bundle | V1 | a board exported as a self-contained page that renders without the relay. It leaves the zero-knowledge boundary, and says so |
+| `[ ]` Figma and Miro import | MVP | open a board exported from either, reporting every construct it had to drop |
+| `[ ]` PNG export | MVP | a board or a frame rendered back to a raster image, without blocking the visible frame |
+| `[ ]` An export does not freeze the board | MVP | the deck's PDF export runs to completion inside the Logic thread's command loop, so a large deck stops every local edit and every remote apply for as long as it takes -- the budget says 3 s at 50 slides, and no benchmark has ever measured it. Take the walk off the loop, and measure it |
+| `[ ]` A deck exports at full resolution | MVP | a picture reaches the page from its inline thumbnail, capped at a 256 px edge, so a deck prints at screen quality. The full blob is ciphertext on the relay and the Logic thread has no path that fetches and opens one; give it that path, which the export must then be able to await. The screen then shows the thumbnail while the full blob loads (`TOILE-IO-035`) |
+| `[ ]` The standalone showcase bundle | MVP | a board exported as a self-contained page that renders without the relay. It leaves the zero-knowledge boundary, and says so |
 | `[x]` A frame carries a title | MVP | the title is designed and written by no command, so find can never match a frame and the link chooser lists every one of them as "Untitled frame" |
 | `[ ]` Auto-layout reaches a frame | V1 | the solver has no caller outside its own tests and the command has no menu entry, no inspector row and no chord: a layout rule is stored, converges, and moves nothing on screen |
 | `[ ]` Boolean operations reach a surface | V1 | union, intersection and difference are built and tested behind a command no menu entry, no button and no chord invokes |
@@ -541,14 +544,14 @@ owns the subsystem.
 | `[ ]` One find and replace | V1 | one match session with a live cursor, in every app, instead of Trame's whole-grid re-scan |
 | `[ ]` One zoom model | V1 | one zoom engine behind the shared widget: Trame gains keyboard and pinch zoom and zoom-to-selection, Prose gains zoom. Pinch belongs here, in every app, and a finger's pan and flick to the "One kinetic scroll" row |
 | `[ ]` One text-editing substrate | V1 | one editing core under both layout drivers: the input pipe, composition, the caret and selection model |
-| `[ ]` One interop vocabulary | V1 | the same import and export events, the same conversion report, the same progress model, in every app |
+| `[ ]` One interop vocabulary | MVP | the same import and export events, the same conversion report, the same progress model, in every app |
 | `[x]` One document locale | MVP | the document carries its locale, so collaborators on differently configured machines read identical numbers and dates: the display and the typed input of numbers, dates and separators, the reader's convention, a new document seeded with its creator's default locale, and exports in the document's locale. Done when `LOCALE-001` to `LOCALE-023`, `TRAME-110`, `TRAME-237` and `TRAME-238` read `verified` |
 | `[ ]` One resize command | V1 | one row and column resize primitive for both table models. No shared table object |
 | `[ ]` One media cache | V1 | every decoded image goes through one bounded cache, Toile and Trame included |
 | `[ ]` One repaint contract | V1 | Prose and Toile honour the shared partial-repaint modes instead of a parallel mechanism |
 | `[x]` One high-density rule | MVP | the shared surface scales for a high-density display once, so no app spec restates it |
 | `[x]` The export measures on the shipped faces | V1 | the PDF-export `FontContext` is a `parley::FontContext::new()`, which discovers the faces of the machine. Parley then falls back to one of them for any codepoint the asked family misses. It is the hole `PROSE-114` closed for pagination, still open for export. `PDF-004` pins two exports on one peer, and section 5 of `ambre-spec-pdf-export.md` wants one file out of two peers with no row holding it. Seal the export context the way `ambre_prose::layout::fonts::sealed_context` seals the measuring one, and write the row that says so. The same question is open for the UI context `ambre_canvas::fonts::font_context_from` builds |
-| `[ ]` One selectable PDF | V1 | one glyph-to-character mapping in the shared surface, so exported text is selectable and searchable in every app instead of drawn shapes alone |
+| `[ ]` One selectable PDF | MVP | one glyph-to-character mapping in the shared surface, so exported text is selectable and searchable in every app instead of drawn shapes alone |
 | `[ ]` One undo bound | V1 | a bounded undo depth in every app. What merges into one step stays per app |
 | `[x]` One keymap | MVP | the `Ctrl` and `Cmd` fold, both redo chords, and the legacy copy and paste chords, decided once |
 | `[x]` One kinetic scroll | MVP | one momentum model under every app: a flick's release speed, its slowdown and its stop, the slop that tells a tap from a pan, and the speed a drag held near an edge scrolls at. Prose moves onto it. Trame coasts on a trackpad glide where Prose leaves it to the platform, with a different curve: which one holds is decided here, once. Trame and Toile adopt it in their own rows |
@@ -725,7 +728,6 @@ owns the subsystem.
 | `[ ]` Split-secret organization recovery | the escrow has a release path and no deposit path, and the quorum is clamped to one so the register advertises no guarantee the relay cannot keep. Threshold reconstruction, and a deposit, are what make the clamp liftable |
 | `[ ]` Murmure bots and webhooks | bots holding their own keys, slash commands, interactive messages, and inbound webhooks through an encrypting bridge |
 | `[ ]` Link previews | a preview of a web page fetched once by the sender and sealed in the message, and the name of a linked Ambre document for its members |
-| `[ ]` Murmure export | a channel written to one `.ambre` file, through a container version that holds several documents |
 | `[ ]` Cross-app rich paste | a paste from one app into another keeps its structure instead of falling back to plain text |
 | `[ ]` Machine members | a program joins a document as a member, marked as a machine, with its declared host, and its removal rotates the key |
 | `[ ]` Write-only inboxes | a program posts into a document through an asymmetric inbox it cannot read, and a member client merges each post once |
@@ -752,7 +754,7 @@ owns the subsystem.
 | `[ ]` Range protection | a range only its owner may edit, and the refusal the others see |
 | `[ ]` Data tools, second pass | colour scales, data bars, top-N formats, and validation by range, date or pattern |
 | `[ ]` Post-V1 surface | sparklines, charts, reference autocompletion, smooth scroll |
-| `[ ]` Post-V1 interop | OpenDocument import, and the Google Sheets bridge |
+| `[ ]` The Google Sheets bridge | a workbook kept in step with Google Sheets. The bridge takes the workbook outside the zero-knowledge boundary, so it waits past V1 |
 | `[ ]` Version history | named snapshots a user can return to, in place of an undo stack lost on close |
 | `[ ]` Engine optimization | the indexes and parallelism a million-cell sheet needs, measured against benchmarks |
 | `[ ]` Recompute on mobile hardware | measure the recompute on a target device. Past 50 ms at P95 it must yield instead of blocking |
