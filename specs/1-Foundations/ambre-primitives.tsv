@@ -4216,6 +4216,7 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::parse
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | is_formula() | ret | bool	generic	predicate: whether a stored cell value is a formula
 ambre-sfu | src/congestion.rs | crate::congestion | <Packets as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sfu | src/congestion.rs | crate::congestion | <Packets as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-sfu | src/congestion.rs | crate::congestion | Congestion::congested() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_CONFIDENCE | const | f64	math	scalar multiplier of the standard error of the loss reading
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_GROWTH | const | f64	math	growth factor per second of the loss bound
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_HIGH | const | f64	math	ratio of lost packets above which the loss bound falls
@@ -4233,6 +4234,7 @@ ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity.varian
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::above() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::below() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::holds() | ret | bool	generic	predicate result
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | DelayControl::overusing() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | FRAME_RATE | const | f64	math	pictures per second the additive step assumes, a term of the formula
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | GROWTH | const | f64	math	growth factor per second of the target
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Group::holds() | ret | bool	generic	predicate result
@@ -4340,6 +4342,7 @@ ambre-trame | src/ui/locale.rs | crate::ui::locale | locale_notice() | ret | Opt
 ambre-trame | src/ui/locale.rs | crate::ui::locale | spelled() | ret | &str	local	the tag or the words for none, read by locale_notice() alone
 ambre-sfu | src/forward.rs | crate::forward | Member.inbox | field | Vec<(Instant,SocketAddr,Vec<u8>)>	foreign-api	the datagrams the socket read, kept as bytes until the poll hands each to str0m as a DatagramRecv
 ambre-sfu | src/forward.rs | crate::forward | Member.new_layer | field | bool	generic	fact flag: a track showed a layer the last choice did not know, selects no mode
+ambre-sfu | src/forward.rs | crate::forward | Member.rechoose | field | bool	generic	fact flag: the congestion control lowered its target or changed its overuse since the last choice, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Member.touched | field | bool	generic	fact flag: the SFU wrote to the connection since its last drain, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Member.wants_slots | field | bool	generic	fact flag: the room carries a track of another participant, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Sfu.workers | field | usize	local	the most threads one poll runs the connections on, read by the one call that sizes the thread scope
