@@ -1250,13 +1250,13 @@ pub(crate) struct Spot {
     pub(crate) after: Option<Element>,
 }
 
-/// The root name of the movable list `id`, `None` for any other container.
-fn movable_list(id: &ContainerID) -> Option<&str> {
+/// The movable list `id` names, `None` for any other container.
+fn movable_list(doc: &LoroDoc, id: &ContainerID) -> Option<LoroMovableList> {
     match id {
         ContainerID::Root {
             name,
             container_type: ContainerType::MovableList,
-        } => Some(name.as_str()),
+        } => Some(doc.get_movable_list(name.as_str())),
         _ => None,
     }
 }
@@ -1276,11 +1276,12 @@ fn slot_of(values: &[LoroValue], spelled: &str) -> Option<usize> {
         .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == spelled))
 }
 
-/// Whether the element at `slot` of `list` is the one spelled `spelled`. One
-/// lookup in the list, not a read of it.
-fn holds(list: &LoroMovableList, slot: usize, spelled: &str) -> bool {
+/// Whether the element at `slot` of `list` is `element`. One lookup in the
+/// list, not a read of it.
+fn holds(list: &LoroMovableList, slot: Pos<Slot>, element: Element) -> bool {
+    let spelled = element.spell();
     matches!(
-        list.get(slot),
+        list.get(slot.to_usize()),
         Some(ValueOrContainer::Value(LoroValue::String(s))) if s.as_str() == spelled
     )
 }
@@ -1295,7 +1296,7 @@ fn holds(list: &LoroMovableList, slot: usize, spelled: &str) -> bool {
 /// finds it unless another write moved the list. Only a miss reads the list
 /// again, so an undo of many lines costs one read and a lookup per element.
 pub(crate) fn restore_spots(doc: &LoroDoc, id: &ContainerID, spots: &[&Spot]) {
-    let Some(list) = movable_list(id).map(|name| doc.get_movable_list(name)) else {
+    let Some(list) = movable_list(doc, id) else {
         return;
     };
     // Sorted, so the read tells each list value apart by a binary search and
@@ -1320,17 +1321,13 @@ pub(crate) fn restore_spots(doc: &LoroDoc, id: &ContainerID, spots: &[&Spot]) {
         }
         let at = match spot.after {
             None => 0,
-            Some(after) => {
-                let after = after.spell();
-                let hint = spot.slot.to_usize();
-                match hint.checked_sub(1) {
-                    Some(before) if holds(&list, before, &after) => hint,
-                    _ => match slot_of(items(&list.get_value()), &after) {
-                        Some(slot) => slot + 1,
-                        None => hint.min(list.len()),
-                    },
-                }
-            }
+            Some(after) => match spot.slot.prev() {
+                Some(before) if holds(&list, before, after) => spot.slot.to_usize(),
+                _ => match slot_of(items(&list.get_value()), &after.spell()) {
+                    Some(slot) => slot + 1,
+                    None => spot.slot.to_usize().min(list.len()),
+                },
+            },
         };
         if list.insert(at, spelled.as_str()).is_ok() {
             held.insert(spelled);
@@ -1342,16 +1339,14 @@ pub(crate) fn restore_spots(doc: &LoroDoc, id: &ContainerID, spots: &[&Spot]) {
 /// given, wherever each one stands. Each element is checked at the slot it
 /// held first, as [`restore_spots`] checks it.
 pub(crate) fn remove_spots(doc: &LoroDoc, id: &ContainerID, spots: &[&Spot]) {
-    let Some(list) = movable_list(id).map(|name| doc.get_movable_list(name)) else {
+    let Some(list) = movable_list(doc, id) else {
         return;
     };
     for spot in spots {
-        let spelled = spot.element.spell();
-        let hint = spot.slot.to_usize();
-        let slot = if holds(&list, hint, &spelled) {
-            Some(hint)
+        let slot = if holds(&list, spot.slot, spot.element) {
+            Some(spot.slot.to_usize())
         } else {
-            slot_of(items(&list.get_value()), &spelled)
+            slot_of(items(&list.get_value()), &spot.element.spell())
         };
         if let Some(slot) = slot {
             let _ = list.delete(slot, 1);

@@ -2922,6 +2922,7 @@ ambre-trame | src/model/axis.rs | crate::model::axis | Before::key() | ret | Str
 ambre-trame | src/model/axis.rs | crate::model::axis | DERIVATION_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::place(key) | param | &str	generic	the key a cell map stores, read back into its element pair: the codec of a struct of two fields
 ambre-trame | src/model/axis.rs | crate::model::axis | generation_key() | ret | String	generic	the key a generation record stores: the codec of a line before and a generation
+ambre-trame | src/model/axis.rs | crate::model::axis | holds() | ret | bool	generic	predicate
 ambre-trame | src/model/axis.rs | crate::model::axis | parse_generation_key(key) | param | &str	generic	the key a generation record stores, read back into a line before and a generation
 ambre-trame | src/model/axis.rs | crate::model::axis | <Slot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/model/axis.rs | crate::model::axis | AxisView<L>::is_empty() | ret | bool	generic	predicate
