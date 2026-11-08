@@ -12,13 +12,23 @@
 // on each side. It notes each list element it removed, with the element
 // before it. Its commit carries an origin the manager excludes, and one stack
 // orders these steps with the items of the manager.
+//
+// The manager reads each excluded commit as a remote edit, and transforms its
+// items by position through it. An undo of a recorded delete puts back a new
+// element. The manager sees one element deleted and another inserted. An item
+// whose undo deletes or moves the old element then misses it. So a delete
+// commits for the manager when it removes an element in reach of an item. An
+// element is in reach when an operation the item holds, or a later one,
+// placed it in a list the item places in.
 
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use ambre_core::HistoryStep;
 use ambre_core::crdt::CommitOrigin;
 use loro::{
-    ContainerID, ContainerTrait, ContainerType, InternalString, LoroDoc, LoroMap, ValueOrContainer,
+    ContainerID, ContainerTrait, ContainerType, Counter, InternalString, LoroDoc, LoroMap, PeerID,
+    UndoItemMeta, UndoManager, ValueOrContainer,
 };
 
 use super::remote::LocalNote;
@@ -98,9 +108,25 @@ impl Journal {
     }
 
     /// The step the journal holds, each value after the delete read from
-    /// `doc`. `None` when a write escaped the journal.
-    fn finish(mut self, doc: &LoroDoc) -> Option<LineStep> {
+    /// `doc`. `None` when a write escaped the journal. `None` too when an
+    /// element it removed is in reach of an item of the manager. `reach`
+    /// holds what each item places, and `peer` is this peer.
+    fn finish(mut self, doc: &LoroDoc, reach: &[&Places], peer: PeerID) -> Option<LineStep> {
         if self.partial == Partial::Lost {
+            return None;
+        }
+        let reached = |d: &ListDelete| {
+            reach
+                .iter()
+                .flat_map(|places| places.iter())
+                .any(|(list, from)| {
+                    list.as_ref().is_none_or(|list| *list == d.list)
+                        && d.spot
+                            .placed
+                            .is_none_or(|id| id.peer == peer && id.counter >= *from)
+                })
+        };
+        if self.deletes.iter().any(reached) {
             return None;
         }
         for write in &mut self.writes {
@@ -190,12 +216,28 @@ fn remove(doc: &LoroDoc, delete: &ListDelete) {
     crate::model::remove_spot(doc, &delete.list, &delete.spot);
 }
 
+/// Where an item of the manager places list elements: each list, `None` for
+/// every list, with the first operation of this peer that places there. An
+/// undo of the item deletes or moves what it placed.
+pub(super) type Places = Vec<(Option<ContainerID>, Counter)>;
+
+/// Fold `more` into `places`, each list keeping its first operation.
+fn widen(places: &mut Places, more: Places) {
+    for (list, from) in more {
+        match places.iter_mut().find(|(at, _)| *at == list) {
+            Some((_, first)) => *first = (*first).min(from),
+            None => places.push((list, from)),
+        }
+    }
+}
+
 /// One step of the history: an item of the undo manager, or a line delete
 /// this module holds.
 #[derive(Debug)]
 pub(super) enum Step {
-    /// An item the undo manager holds. The manager replays it.
-    Managed,
+    /// An item the undo manager holds, with the lists it places elements in.
+    /// The manager replays it.
+    Managed(Places),
     /// A line delete, replayed from its journal.
     Line(Box<LineStep>),
 }
@@ -203,16 +245,57 @@ pub(super) enum Step {
 /// The history of the document: the steps an undo walks back, and the steps
 /// a redo walks forward. The managed steps match the items of the undo
 /// manager's two stacks, one for one and in order.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct History {
     past: Vec<Step>,
     future: Vec<Step>,
+    /// Where the items the manager pushed since the last read place list
+    /// elements.
+    placing: Arc<Mutex<Places>>,
 }
 
 impl History {
+    /// An empty history that watches each item `manager` pushes. An item
+    /// pushed by an undo or a redo carries no event, and counts as placing.
+    pub(super) fn watching(manager: &mut UndoManager) -> Self {
+        let placing = Arc::new(Mutex::new(Places::new()));
+        let seen = Arc::clone(&placing);
+        manager.set_on_push(Some(Box::new(move |_, span, event| {
+            let places: Places = match event {
+                None => vec![(None, span.start)],
+                Some(event) => event
+                    .events
+                    .iter()
+                    .filter(|diff| diff.target.container_type() == ContainerType::MovableList)
+                    .map(|diff| (Some(diff.target.clone()), span.start))
+                    .collect(),
+            };
+            if let Ok(mut seen) = seen.lock() {
+                widen(&mut seen, places);
+            }
+            UndoItemMeta::new()
+        })));
+        Self {
+            past: Vec::new(),
+            future: Vec::new(),
+            placing,
+        }
+    }
+
+    /// Where the items pushed since the last call place list elements.
+    fn take_placing(&self) -> Places {
+        self.placing
+            .lock()
+            .map(|mut seen| std::mem::take(&mut *seen))
+            .unwrap_or_default()
+    }
+
     /// How many managed steps `steps` holds.
     fn managed(steps: &[Step]) -> usize {
-        steps.iter().filter(|s| matches!(s, Step::Managed)).count()
+        steps
+            .iter()
+            .filter(|s| matches!(s, Step::Managed(_)))
+            .count()
     }
 
     /// Drop the topmost managed steps of `steps` until `count` remain.
@@ -221,7 +304,7 @@ impl History {
         let mut at = steps.len();
         while extra > 0 && at > 0 {
             at -= 1;
-            if matches!(steps.get(at), Some(Step::Managed)) {
+            if matches!(steps.get(at), Some(Step::Managed(_))) {
                 steps.remove(at);
                 extra -= 1;
             }
@@ -232,7 +315,7 @@ impl History {
     fn trim_bottom(steps: &mut Vec<Step>, count: usize) {
         let mut extra = Self::managed(steps).saturating_sub(count);
         steps.retain(|s| {
-            if extra > 0 && matches!(s, Step::Managed) {
+            if extra > 0 && matches!(s, Step::Managed(_)) {
                 extra -= 1;
                 false
             } else {
@@ -261,6 +344,12 @@ impl TrameState {
         matches!(self.history.past.last(), Some(Step::Line(_)))
     }
 
+    /// Whether the next step a redo would take is a recorded line delete.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(super) fn next_redo_is_recorded(&self) -> bool {
+        matches!(self.history.future.last(), Some(Step::Line(_)))
+    }
+
     /// Whether an undo has a step to take back.
     pub(super) fn can_undo(&self) -> ambre_core::Availability {
         ambre_core::Availability::from_bool(!self.history.past.is_empty())
@@ -273,14 +362,25 @@ impl TrameState {
 
     /// Follow the undo manager across a command that is no undo and no redo.
     /// `depth` is its undo stack before the command. A new item clears the
-    /// redo side, as the manager clears its own.
+    /// redo side, as the manager clears its own. A write the manager merged
+    /// into its top item widens what that item places.
     pub(super) fn follow_manager(&mut self, depth: usize) {
         let now = self.undo_manager.undo_count();
+        let placed = self.history.take_placing();
         if now > depth {
             self.history
                 .past
-                .extend(std::iter::repeat_with(|| Step::Managed).take(now - depth));
+                .extend(std::iter::repeat_with(|| Step::Managed(placed.clone())).take(now - depth));
             self.history.future.clear();
+        } else if !placed.is_empty()
+            && let Some(Step::Managed(top)) = self
+                .history
+                .past
+                .iter_mut()
+                .rev()
+                .find(|s| matches!(s, Step::Managed(_)))
+        {
+            widen(top, placed);
         }
         // A checkout or a new peer id empties the manager's stacks.
         History::trim_bottom(&mut self.history.past, now);
@@ -318,7 +418,20 @@ impl TrameState {
         let journal = self.journal.borrow_mut().take();
         #[cfg(all(test, not(target_arch = "wasm32")))]
         let journal = journal.filter(|_| self.history_path == HistoryPath::Recorded);
-        let Some(step) = journal.and_then(|j| j.finish(&self.doc)) else {
+        // What the items of the manager place. An undo of a recorded delete
+        // puts back an element they no longer name. So a delete of an element
+        // in their reach goes to the manager.
+        let reach: Vec<&Places> = self
+            .history
+            .past
+            .iter()
+            .filter_map(|s| match s {
+                Step::Managed(places) => Some(places),
+                Step::Line(_) => None,
+            })
+            .collect();
+        let peer = self.doc.peer_id();
+        let Some(step) = journal.and_then(|j| j.finish(&self.doc, &reach, peer)) else {
             self.doc.commit();
             return;
         };
@@ -344,8 +457,8 @@ impl TrameState {
         };
         match from.pop() {
             None => TrameOutcome::display_only(Vec::new()),
-            Some(Step::Managed) => {
-                from.push(Step::Managed);
+            Some(Step::Managed(places)) => {
+                from.push(Step::Managed(places));
                 self.managed_step(step)
             }
             Some(Step::Line(line)) => {
@@ -366,6 +479,7 @@ impl TrameState {
         let undo = self.undo_manager.undo_count();
         let redo = self.undo_manager.redo_count();
         let outcome = self.apply_history(step);
+        let placed = self.history.take_placing();
         let undo_now = self.undo_manager.undo_count();
         let redo_now = self.undo_manager.redo_count();
         let (from, to, gained) = match step {
@@ -385,7 +499,7 @@ impl TrameState {
             HistoryStep::Redo => redo_now,
         };
         History::trim_top(from, left);
-        to.extend(std::iter::repeat_with(|| Step::Managed).take(gained));
+        to.extend(std::iter::repeat_with(|| Step::Managed(placed.clone())).take(gained));
         self.refresh_undo_state(outcome)
     }
 

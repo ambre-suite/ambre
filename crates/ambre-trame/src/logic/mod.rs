@@ -440,6 +440,7 @@ impl TrameState {
         undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
         // A line delete is a step of Trame's own history (`TRAME-286`).
         undo_manager.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Recorded.as_str());
+        let history = line_history::History::watching(&mut undo_manager);
         let (imported, imports) = remote::watch(&doc);
         let (lines, lines_watch) = line_cells::watch(&doc);
         let mut state = Self {
@@ -481,7 +482,7 @@ impl TrameState {
             write_refusals: Vec::new(),
             edit_anchor: None,
             undo_manager,
-            history: line_history::History::default(),
+            history,
             journal: std::cell::RefCell::new(None),
             sheet_counter: Some(ambre_core::IdCounter::ZERO),
             uid_counter: Some(ambre_core::IdCounter::ZERO),

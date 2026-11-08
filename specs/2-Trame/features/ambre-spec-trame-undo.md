@@ -34,8 +34,8 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-286` | `POST` | An undo of a line delete MUST leave the document the undo manager would leave, and so MUST its redo. | this spec section 3; `ambre-spec-undo.md` (`UNDO-001`, `UNDO-002`) | `ambre_trame::logic::line_history_tests::a_recorded_line_delete_undoes_as_the_undo_manager` -- a proptest, 256 cases over two sheets: a state that records each delete runs beside a reference model whose undo manager holds every delete, and after each step both store the same document. A third peer receives each delta and stores it too | none | verified |
-| `TRAME-287` | `FRAME` | An undo or a redo of a line delete MUST NOT overwrite a value a peer wrote after the delete. | this spec section 2, row 2; `ambre-spec-undo.md` (`UNDO-007`) | `ambre_trame::logic::line_history_tests::an_undone_line_delete_keeps_a_later_write_of_a_peer` -- the peer types over a formula the delete rewrote, and the value stands through the undo and the redo, on both peers | none | verified |
+| `TRAME-286` | `POST` | An undo of a line delete MUST leave the document the undo manager would leave, and so MUST its redo. | this spec section 3; `ambre-spec-undo.md` (`UNDO-001`, `UNDO-002`) | `ambre_trame::logic::line_history_tests::a_recorded_line_delete_undoes_as_the_undo_manager` -- a proptest, 256 cases over two sheets: a state that records each delete runs beside a reference model whose undo manager holds every delete, and after each step both store the same document. A third peer receives each delta and stores it too; `::an_undone_delete_of_an_inserted_row_lets_the_insert_undo` -- its shrunk case, a row inserted, deleted and both undone; `::an_undone_delete_of_a_placed_line_lets_its_item_undo` -- the same through a move, a sort, a column and a delete undone twice | none | verified |
+| `TRAME-287` | `FRAME` | An undo or a redo of a line delete MUST NOT overwrite a value a peer wrote after the delete. | this spec section 2, row 2; `ambre-spec-undo.md` (`UNDO-007`) | `ambre_trame::logic::line_history_tests::an_undone_line_delete_keeps_a_later_write_of_a_peer` -- the peer types over a formula the delete rewrote, and the value stands through the undo and the redo, on both peers; `::an_undone_delete_keeps_a_peer_write_the_manager_would_overwrite` -- the same where the undo manager would write the formula back; `::a_recorded_line_delete_undoes_as_the_undo_manager` -- the proptest of `TRAME-286` lets such a key alone differ from the manager | none | verified |
 
 * **Budget.** an undo and a redo of a line delete each hold the Trame whole line delete row of
   `ambre-spec-budgets.md section 1`. Any other undo runs under the command rows there. The stack
@@ -75,6 +75,9 @@ So a line delete notes each key it writes, with the value on each side. It also 
 element it removes, with the element before it. Its commit carries an origin the undo manager
 excludes. An undo writes each value back, and puts each element back after its neighbour. A redo
 writes the delete again. A key a later write changed keeps that write (`TRAME-287`).
+
+**A delete of a line an item placed commits for the manager** (`TRAME-286`). An undo puts back a
+new element, and the item that inserted or moved the old one would miss it.
 
 **One history orders the two kinds of step** (`TRAME-288`). It holds an entry for each item of the
 undo manager and each recorded line delete, in the order they were made. An undo takes the top
