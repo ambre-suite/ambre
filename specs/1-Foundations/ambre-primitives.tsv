@@ -2570,7 +2570,7 @@ ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | p
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	the other formula number compared, the order of the two free
 ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	an operator's result inside the formula engine
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/history.rs | crate::logic::history | Chunk::is_empty() | ret | bool	generic	predicate
+ambre-crdt | src/history.rs | crate::history | Chunk::is_empty() | ret | bool	generic	predicate
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells() | ret | (Vec<(CellPos,&'a String,&'a LoroValue)>,LineRead)	foreign-api	the stored keys and values of a Loro map, each placed on its grid cell
 ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells(entries) | param | impl IntoIterator<Item=(&'a String,&'a LoroValue)>	foreign-api	the entries of a Loro map value, as the map hands them out
@@ -4217,12 +4217,14 @@ ambre-sfu | src/rewrite.rs | crate::rewrite | Clock::ticks_per_ms() | ret | u128
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::congested() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | DelayControl::overusing() | ret | bool	generic	predicate result
 ambre-sfu | src/forward.rs | crate::forward | Member.rechoose | field | bool	generic	fact flag: the congestion control lowered its target or changed its overuse since the last choice, selects no mode
-ambre-trame | src/logic/history.rs | crate::logic::history | Motion::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/history.rs | crate::logic::history | Motion::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/history.rs | crate::logic::history | Replayable::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/history.rs | crate::logic::history | Replayable::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/history.rs | crate::logic::history | Started::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/history.rs | crate::logic::history | Started::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history.rs | crate::history | Motion::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history.rs | crate::history | Motion::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history.rs | crate::history | Replayable::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history.rs | crate::history | Replayable::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history.rs | crate::history | Started::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history.rs | crate::history | Started::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history.rs | crate::history | Replayed::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history.rs | crate::history | Replayed::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding

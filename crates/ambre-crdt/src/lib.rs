@@ -11,6 +11,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod history;
+
 use std::marker::PhantomData;
 
 use ambre_core::crdt::FieldKey;

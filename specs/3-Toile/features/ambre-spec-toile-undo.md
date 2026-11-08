@@ -46,7 +46,8 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `ToileCommand::Undo` / `Redo` | UI to Logic | nothing: the history is the Logic thread's |
 | `ToileEvent::UndoState { undo, redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
 
-The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
+The engine field is still the Loro undo manager, not the one history of `ambre-spec-undo.md section
+3`: the `Toile and Prose on the one undo history` Story (`ambre-roadmap.md` E8).
 
 **Which caches an undo reseeds** (`UNDO-005`), whole and from the document:
 

@@ -263,11 +263,9 @@ pub struct TrameState {
     /// runs one.
     #[cfg(all(test, not(target_arch = "wasm32")))]
     oracle: UndoManager,
-    /// The history and the mirror it reads each commit against, shared with
-    /// the subscription that records them (`TRAME-288`).
-    recorder: history::RecorderSink,
-    /// Keeps the recorder subscribed for the life of the state.
-    _recorder: loro::Subscription,
+    /// The one undo history: each local commit records its own inverse
+    /// (`TRAME-288`).
+    history: ambre_crdt::history::UndoHistory,
     /// Per-session monotonic counter for minting explicit `sheet_id`s. Combined
     /// with the document `PeerID` so two peers that concurrently add a sheet mint
     /// distinct ids that both survive (`trame-sheets`). Not persisted: ids, once
@@ -428,7 +426,11 @@ impl TrameState {
         // The history starts after the initial commit. The implicit-sheet
         // registration is document scaffolding, not a user edit, so no undo
         // takes it back.
-        let (recorder, recorder_watch) = history::watch(&doc);
+        // The materialized lines are no edit of the user.
+        let history = ambre_crdt::history::UndoHistory::watch(
+            &doc,
+            &[ambre_core::crdt::CommitOrigin::Materialize],
+        );
         #[cfg(all(test, not(target_arch = "wasm32")))]
         let oracle = {
             let mut oracle = UndoManager::new(&doc);
@@ -483,8 +485,7 @@ impl TrameState {
             edit_anchor: None,
             #[cfg(all(test, not(target_arch = "wasm32")))]
             oracle,
-            recorder,
-            _recorder: recorder_watch,
+            history,
             sheet_counter: Some(ambre_core::IdCounter::ZERO),
             uid_counter: Some(ambre_core::IdCounter::ZERO),
             sheet_list_sent: false,

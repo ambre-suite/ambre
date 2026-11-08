@@ -72,7 +72,7 @@ revert travels as a delta, two peers undo into each other. Trame's own:
 **Every edit records its own step** (`TRAME-288`). The undo manager answers an undo by a checkout,
 and a checkout rebuilds the state of every map the item wrote. On a sheet of 10k formulas the undo
 of one cell write costs about 250 million instructions, about 300 ms on a phone. So no undo manager
-runs, and Trame keeps one history of its own.
+runs, and Trame undoes through the one history of the suite (`ambre-spec-undo.md section 3`).
 
 A subscription keeps a plain copy of every root container, the mirror. Each local commit reads
 the value each key held from the mirror, before the mirror takes the commit. It reads the place
@@ -102,8 +102,8 @@ purges.
 | `StaticKey<Commands>::UNDO` / `REDO` | chrome to Logic | the same two intents, from the toolbar or the keymap |
 | `TrameEvent::UndoState { undo, redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
 
-The engine holds no `undo_manager`, the one departure from `ambre-spec-undo.md section 3`. The
-undo manager runs in the test of `TRAME-286` alone, as the reference model.
+The engine field is the shared history of `ambre-spec-undo.md section 3`. The undo manager runs in
+the test of `TRAME-286` alone, as the reference model.
 
 **Which caches step 3 of the shared sequence reseeds** (`UNDO-005`), whole and from the document:
 
@@ -131,8 +131,10 @@ undo manager runs in the test of `TRAME-286` alone, as the reference model.
 
 * `crates/ambre-trame/src/logic/commands.rs` -- `undo_state_event`, and the seal of the step at
   the head of the dispatcher;
-* `crates/ambre-trame/src/logic/history.rs` -- the mirror, the step each commit records, its
-  replay, and the history;
+* `crates/ambre-crdt/src/history.rs` -- the mirror, the step each commit records, its replay,
+  and the history, one type for the suite (`ambre-spec-undo.md section 3`);
+* `crates/ambre-trame/src/logic/history.rs` -- the seal of a step per command, and the tail an
+  undo runs on what the step wrote;
 * `chrome/commands.rs` -- the two command identifiers, the three chords, the enabled state.
 
 ---

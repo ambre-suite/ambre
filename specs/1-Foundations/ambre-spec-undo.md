@@ -2,8 +2,9 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
-**Implementation:** partial -- the three applications ship an undo stack over the shared model.
-Prose shows no undo affordance, and the depth is unbounded in all three.
+**Implementation:** partial -- the three applications ship an undo stack. Trame undoes through the
+one history; Toile and Prose still through the Loro undo manager. The depth is unbounded in all
+three.
 
 > A user presses `Ctrl+Z` and their last action comes back. A collaborator's action never does, and
 > never disappears from under them.
@@ -85,17 +86,30 @@ which is why one undo item is one commit rather than one container write.
 | `<App>Command::Undo` / `Redo` | UI to Logic | nothing: the history is the Logic thread's |
 | `<App>Event::UndoState { undo, redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
 
-**Engine state.** One field of each application's engine but Trame's, the same shape everywhere:
+**One model: each edit records its own inverse.**
+
+* A subscription keeps a plain copy of every root container, the mirror.
+* Each local commit reads from the mirror what it overwrites: the value of each key, and the
+  place and neighbour of each list element. That is the step.
+* An undo writes each value back and puts each element back after its old neighbour. A redo
+  writes the edit again.
+* A key a later write changed keeps that write (`UNDO-007`).
+* A commit that writes a nested container ends the history: no step can replay it.
+* The registry entry and a replay are no step.
+
+**Engine state.** One field of each application's engine, the same type everywhere:
 
 ```rust
 /// Local-only history, built over the document when it opens and dropped when it
 /// closes. It observes the `LoroDoc` itself: nothing is registered by hand.
-undo_manager: loro::UndoManager,
+history: ambre_crdt::history::UndoHistory,
 ```
 
-Trame holds none: on a sheet of 10k formulas the manager's checkout spends about 250 million
-instructions on the undo of one cell write. Each edit of a workbook records its own inverse into
-one history of Trame's own (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-288`).
+The Loro undo manager is rejected (section 5).
+
+* Trame holds the history (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-288`).
+* Toile and Prose still hold the manager: each of their edits writes a nested container or a
+  text. It is the `Toile and Prose on the one undo history` Story (`ambre-roadmap.md` E8).
 
 **Steps, when a user undoes or redoes.** The same five everywhere; step 3 is the application's own.
 
@@ -114,7 +128,8 @@ a continuous gesture the exception that seals once at the end. Which gestures co
 is each application's rule (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-017`;
 `3-Toile/features/ambre-spec-toile-undo.md`, `TOILE-014`).
 
-**Code.** none of its own -- each application's handler reverts and reseeds in its own engine, cited
+**Code.** `crates/ambre-crdt/src/history.rs` -- the mirror, the step, its replay and the history.
+Each application's handler seals a step per command, reverts and reseeds in its own engine, cited
 from its undo document.
 
 ---
@@ -142,6 +157,7 @@ never re-enables a button. Which keys carry these intents is `ambre-spec-command
 | An undo is an ordinary change, broadcast like any other | rolling the document back to a stored version | two peers cannot agree on it. Inverse operations are operations, so they converge by the one path everything else uses, and a peer that was offline receives them in order |
 | The caches are reseeded whole after an undo | rebuilding only what the reverted item touched | one item can move an element, restore a span and change a derived value at once, so what needs refreshing is the whole derived state. A partial refresh is a list that goes stale |
 | The history dies with the document | persisting the stack | it would offer to revert operations the user cannot see: the stack lives in memory beside a `LoroDoc` that is itself rebuilt from a snapshot on open, and the operations it holds are a previous session's. What a user wants across sessions is a named version, not a stack |
+| Each edit records its own inverse, in one history type for the suite | the Loro undo manager | it answers an undo by a checkout, which rebuilds every map the item wrote: about 250 million instructions for the undo of one cell write on a sheet of 10k formulas. It also restores a value over a peer's later write, which breaks `UNDO-007`, and it mints a new identity for each node it creates again (`4-Prose/features/ambre-spec-prose-undo.md`, `PROSE-134`) |
 | The chrome is told what is available, and never counts | the chrome tracking its own depth | a chrome-side counter drifts the moment a command merges two items. One source for the two buttons, and the Logic thread is the only place that knows |
 | Both redo chords are bound | `Ctrl+Y` alone, which one earlier design carried | the two chords are split across the applications a user comes from, so binding one teaches nothing to the half that reaches for the other |
 
