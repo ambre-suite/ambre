@@ -31,7 +31,7 @@ withdrawn for that reason.
 **Scope.** The comments of `crates/**/*.rs`, and the prose of the corpus.
 
 Usage:
-    python3 scripts/prose.py --check    # CI: fail on a breach
+    python3 scripts/prose.py    # fails on a breach, with no flag
 """
 
 from __future__ import annotations
@@ -448,7 +448,6 @@ def markdown_files() -> list[Path]:
 
 
 def main() -> int:
-    check = "--check" in sys.argv
     errors: list[str] = list(glossary_breaches())
     rust = rust_files()
     documents = markdown_files()
@@ -476,7 +475,7 @@ def main() -> int:
     print(f"{len(errors)} defects")
     for error in errors:
         print(f"ERROR {error}")
-    return 1 if (check and errors) else 0
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

@@ -214,7 +214,6 @@ def layers():
 
 
 def main() -> int:
-    check = "--check" in sys.argv
     write = "--write" in sys.argv
     errors: list[str] = []
 
@@ -249,7 +248,7 @@ def main() -> int:
     for e in errors:
         print(f"ERROR {e}", file=sys.stderr)
     print(f"\n{len(errors)} inventory defects")
-    return 1 if (check and errors) else 0
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

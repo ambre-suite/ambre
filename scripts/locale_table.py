@@ -12,10 +12,11 @@ Three steps, each its own mode:
 * `--fetch` downloads the two pinned CLDR packages from the npm registry,
   checks each against its pinned integrity, and writes the values Ambre reads
   into `SUBSET`. It is the one step that needs the network.
-* the default mode writes the Rust table `TABLE` from `SUBSET`.
-* `--check` writes nothing, and fails when `TABLE` is not what `SUBSET` gives,
-  or when `SUBSET` names another CLDR version or locale list than this file.
-  CI runs it, offline, through `just locale-table-check`.
+* `--write` writes the Rust table `TABLE` from `SUBSET`. `--fetch` writes it
+  too, after the download.
+* the default mode writes nothing, and fails when `TABLE` is not what `SUBSET`
+  gives, or when `SUBSET` names another CLDR version or locale list than this
+  file. CI runs it, offline, through `just locale-table-check`.
 
 A locale the list leaves out formats in the neutral forms, as a document with
 no locale does (`LOCALE-013`).
@@ -247,7 +248,7 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--fetch", action="store_true", help="refresh the subset from CLDR")
-    mode.add_argument("--check", action="store_true", help="fail on a stale table")
+    mode.add_argument("--write", action="store_true", help="write the table from the subset")
     args = parser.parse_args(argv)
     if args.fetch:
         subset = extract(fetch_package("cldr-numbers-full"), fetch_package("cldr-dates-full"))
@@ -255,13 +256,13 @@ def main(argv: list[str]) -> int:
         SUBSET.write_text(json.dumps(subset, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     subset = read_subset()
     table = render(subset)
-    if args.check:
-        if not TABLE.exists() or TABLE.read_text(encoding="utf-8") != table:
-            print(f"{TABLE.relative_to(ROOT)} is stale: run `just locale-table`", file=sys.stderr)
-            return 1
-        print(f"locale table: {len(subset['locales'])} locales, CLDR {CLDR_VERSION}")
+    if args.fetch or args.write:
+        TABLE.write_text(table, encoding="utf-8")
         return 0
-    TABLE.write_text(table, encoding="utf-8")
+    if not TABLE.exists() or TABLE.read_text(encoding="utf-8") != table:
+        print(f"{TABLE.relative_to(ROOT)} is stale: run `just locale-table`", file=sys.stderr)
+        return 1
+    print(f"locale table: {len(subset['locales'])} locales, CLDR {CLDR_VERSION}")
     return 0
 
 

@@ -2307,7 +2307,6 @@ def check_sfu_crypto(errors: list[str]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -2410,7 +2409,7 @@ def main() -> int:
     for line in errors:
         print(f"  {line}")
 
-    if args.check and errors:
+    if errors:
         print(
             "\nERROR: a crate boundary was crossed. Fixture machinery must stay "
             "out of the client build, a generator must drive `handle_command` "

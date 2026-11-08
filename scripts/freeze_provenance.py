@@ -274,7 +274,6 @@ def check_artifact(root: Path, rel: str, command: str) -> tuple[list[str], list[
 
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="exit non-zero on a finding")
     parser.add_argument(
         "--base",
         default="origin/main",
@@ -315,7 +314,7 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     print(f"\n{on}: {checked} frozen artifacts checked at their freeze commit, {taken} taken as checked")
     for line in errors:
         print(f"  {line}")
-    if args.check and errors:
+    if errors:
         print("FAIL freeze_provenance.py", file=sys.stderr)
         return 1
     return 0

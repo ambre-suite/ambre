@@ -88,7 +88,7 @@ since-deleted heading is doing its job. Their document names are still resolved,
 less the names the corpus has deliberately deleted -- `RETIRED`, which is that
 list and nothing wider.
 
-Run: `just spec-refs` (list), `just spec-refs --check` (fail on any dead name).
+Run: `just spec-refs`. It lists each dead name, and fails on any.
 """
 
 import re
@@ -477,7 +477,6 @@ def citations(text: str, own: str | None, shorts: dict[str, str]):
 
 
 def main() -> int:
-    check = "--check" in sys.argv
     files = corpus_files()
     shared = duplicates(files)
     known = documents()
@@ -557,7 +556,7 @@ def main() -> int:
           f"{len(dead_names)} dead names, {len(dead_coords)} dead coordinates, "
           f"{len(dead_paths)} dead paths, {len(ranged_paths)} line ranges, "
           f"{len(quoted)} quoted Story names, {len(shared)} shared file names")
-    if check and shared:
+    if shared:
         print(
             "\nERROR: two documents carry one file name, and a citation carries "
             "the file name alone (ambre-spec-template.md section 1.G). One of "
@@ -565,7 +564,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if check and (dead_names or dead_coords):
+    if (dead_names or dead_coords):
         print(
             "\nERROR: a citation names a document, or a section of one, that does "
             "not exist (ambre-spec-template.md section 1.G). Point the citation at "
@@ -573,7 +572,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if check and dead_paths:
+    if dead_paths:
         print(
             "\nERROR: a citation names a file of `crates/` that does not exist "
             "(ambre-spec-template.md section 1.G). Point it at the file that "
@@ -581,7 +580,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if check and ranged_paths:
+    if ranged_paths:
         print(
             "\nERROR: a code path carries a line range, and `crates/` carries no "
             "coordinate (ambre-spec-template.md section 1.G). A range is exact "
@@ -590,7 +589,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if check and quoted:
+    if quoted:
         print(
             "\nERROR: a Story name is written in double quotes "
             "(ambre-spec-template.md section 1). A tool reading the gap finds the "

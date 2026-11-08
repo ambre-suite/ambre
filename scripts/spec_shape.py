@@ -59,7 +59,7 @@ count is not comparable between a two-page spec and a register, which is what
 the share is for. The schema document is the one place a raw count decides
 anything, and there it is a budget the template states.
 
-Run: `just spec-shape` (report), `--check` (fail).
+Run: `just spec-shape`. It prints the report, and fails on any defect.
 """
 
 import re
@@ -627,7 +627,6 @@ LONG_LINES = f"lines over {LONG_LINE_COLS} columns"
 
 
 def main() -> int:
-    check = "--check" in sys.argv
     errors: list[str] = []
     titles: dict[str, list[str]] = {}
 
@@ -702,7 +701,7 @@ def main() -> int:
     for e in errors:
         print(f"ERROR {e}", file=sys.stderr)
     print(f"\n{len(errors)} shape defects")
-    return 1 if (check and errors) else 0
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":
