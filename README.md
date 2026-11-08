@@ -115,7 +115,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-murmure` | Secure messaging |
 | `ambre-app` | Main WASM application (UI integration). High-level integration and the shell only: the logic of an application lives in its own crate (`ARCH-018`) |
 | `ambre-belt` | Test-only: the browser tier, which drives the served build in headless Chrome. No product crate depends on it |
-| `ambre-primitives` | Host-only gate: every bare primitive outside a test is typed or named by the allowlist (`ARCH-033`). No product crate depends on it |
+| `ambre-primitives` | Host-only gate: every bare primitive outside a test is typed or named by the allowlist (`ARCH-033`), and the crate boundaries hold, read through rustc and `cargo metadata`. No product crate depends on it |
 
 ## Specifications
 

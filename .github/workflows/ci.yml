@@ -80,7 +80,9 @@ jobs:
       # Then, on the same records, the strict unwrap report: no newtype
       # unwrapped early inside a body unless `ambre-unwrap.tsv` names its key
       # with a count and a reason (`ARCH-073`). The step prints both verdicts
-      # on its last line, and fails on either.
+      # on its last line, and fails on either. The same run holds the crate
+      # boundaries: each resolved path against the part of the workspace that
+      # may reach it, and the graph `cargo metadata` resolves.
       - run: just primitives
       # What a spec quotes: no function body in a spec (template §0).
       - run: just spec-code
@@ -104,9 +106,8 @@ jobs:
       # A frozen artifact is checked at the commit that froze it, which the
       # whole history carries. Only the artifacts `main` lacks are rebuilt.
       - run: just freeze-provenance
-      # What each crate can reach: fixture machinery out of the client build,
-      # a generator driving commands, a shared control with no whole-style
-      # type to emit, and a launcher naming no application's logic.
+      # The boundaries neither rustc nor cargo reads: a stylesheet, a page, a
+      # string, and the code rules still to move to the driver.
       - run: just crate-boundaries
       # Which compiler builds: no file but `rust-toolchain.toml` names a
       # toolchain or a channel, and that file pins a dated nightly (`ARCH-075`).

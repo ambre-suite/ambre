@@ -25,6 +25,9 @@
 //!       (`ARCH-066`);
 //!     * a feature no compile turns on, a `.rs` file no compile reads, and a
 //!       stray workspace (`features.rs`, `files.rs`);
+//!     * the crate boundaries (`boundaries.rs`). The driver refuses a
+//!       resolved path, the judge reads the manifests from `cargo metadata`,
+//!       and refuses a wire type the worker or the relay redeclares;
 //!   * `check --unwrap-strict` also runs the strict unwrap report on the same
 //!     records, and prints both verdicts. It fails when either fails;
 //!   * `--prune` removes the lines that name no site, and the exception lines
@@ -38,6 +41,7 @@
 
 mod aliases;
 mod allowlist;
+mod boundaries;
 mod features;
 mod files;
 mod newtypes;
@@ -304,6 +308,20 @@ fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Ver
         "the bare-alias check (ambre-spec-newtypes.md section 3)",
         aliases::judge(spec.as_deref(), records),
     );
+    let manifests = boundaries::metadata(root)
+        .and_then(|text| boundaries::Graph::parse(&text))
+        .map_or_else(
+            |error| vec![error],
+            |graph| boundaries::manifests(&graph, &|p| std::fs::read_to_string(p).ok()),
+        );
+    report(
+        "the crate boundaries of the manifests (ambre-spec-architecture.md section 2)",
+        manifests,
+    );
+    report(
+        "the one wire definition (ARCH-006)",
+        boundaries::wire(records),
+    );
     for (check, message) in &records.refusals {
         eprintln!("primitives: {check}: {message}");
     }
@@ -311,7 +329,7 @@ fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Ver
         eprintln!(
             "primitives: {} refusals the code settles: a Deref to a primitive, a secret read \
              or wiped outside its module, a sink outside its file, a public field of a tuple \
-             struct. No line of {ALLOWLIST} admits one.",
+             struct, a crate boundary crossed. No line of {ALLOWLIST} admits one.",
             records.refusals.len()
         );
         failed = true;

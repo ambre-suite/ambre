@@ -105,7 +105,7 @@ WIRE_ROW = (
 def scratch(tmp: str) -> Path:
     """A minimal tree that passes every check."""
     root = Path(tmp)
-    write(root, cb.CLIENT, '[dependencies]\nambre-logic = { path = "../ambre-logic" }\n')
+    write(root, "crates/ambre-app/Cargo.toml", '[dependencies]\nambre-logic = { path = "../ambre-logic" }\n')
     write(root, cb.CHROME, '[dependencies]\nambre-commands = { path = "../ambre-commands" }\n')
     for rel in cb.FIXTURE_MODULES:
         write(root, rel, "impl S {\n    fn read(&self) { self.doc.get_map(X); }\n}\n\nfn build_a(s: &mut S) {\n    s.handle_command(C);\n}\n")
@@ -140,12 +140,12 @@ def scratch(tmp: str) -> Path:
     )
     write(
         root,
-        cb.WORKSPACE,
+        "Cargo.toml",
         '[workspace]\nmembers = [\n    "crates/ambre-sync",\n]\n\n'
         '[workspace.lints.clippy]\nunwrap_used = "deny"\n',
     )
     write(root, f"{cb.WORKER}/http.rs", "fn put() { gloo_net::http::Request::put(url); }\n")
-    write(root, cb.NETWORK_EXCEPTIONS[0], "fn font() { window.fetch_with_str(url); }\n")
+    write(root, "crates/ambre-canvas/src/host.rs", "fn font() { window.fetch_with_str(url); }\n")
     write(
         root,
         cb.LAZY_CREATE,
@@ -195,10 +195,7 @@ def scratch(tmp: str) -> Path:
         "    let e = Closure::new(|_| { ambre_canvas::signal_fatal(r); });\n"
         "    worker.set_onerror(Some(e));\n}\n",
     )
-    write(root, cb.LOGIC_MANIFEST, '[dependencies]\nambre-bus = { path = "../ambre-bus" }\n\n[dev-dependencies]\nwgpu = "1"\n')
     write(root, "crates/ambre-bus/Cargo.toml", '[dependencies]\nambre-core = { path = "../ambre-core" }\n')
-    write(root, cb.CANVAS_MANIFEST, '[dependencies]\nambre-draw = { path = "../ambre-draw" }\n')
-    write(root, f"{cb.PROTOCOL}/lib.rs", "pub struct Update {\n    pub seq: u64,\n}\n")
     write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
     write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
     write(root, f"{cb.BUS}/lib.rs", "pub struct SheetId(pub String);\npub enum C {\n    Go { sheet_id: SheetId },\n}\n")
@@ -208,15 +205,6 @@ def scratch(tmp: str) -> Path:
     write(root, f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW)
     for rel, text in WALKS.items():
         write(root, rel, text)
-    write(
-        root,
-        cb.LOCKFILE,
-        '[[package]]\nname = "ambre-sfu"\ndependencies = ["str0m"]\n\n'
-        '[[package]]\nname = "str0m"\ndependencies = ["dimpl 0.9.0"]\n\n'
-        '[[package]]\nname = "dimpl"\nversion = "0.9.0"\n\n'
-        '[[package]]\nname = "ambre-server"\ndependencies = ["ring"]\n\n'
-        '[[package]]\nname = "ring"\n',
-    )
     return root
 
 
@@ -224,17 +212,9 @@ class CrateBoundaries(unittest.TestCase):
     def run_checks(self, root: Path) -> list[str]:
         with Tree(root):
             errors: list[str] = []
-            cb.check_client(errors)
             cb.check_generators(errors)
             cb.check_generator_reads(errors)
-            cb.check_chrome(errors)
-            cb.check_launcher(errors)
-            cb.check_density(errors)
-            cb.check_network(errors)
-            cb.check_storage(errors)
             cb.check_passphrase(errors)
-            cb.check_lints(errors)
-            cb.check_pdf(errors)
             cb.check_fonts(errors)
             cb.check_renderer_colors(errors)
             cb.check_ui_thread(errors)
@@ -255,14 +235,11 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_signal_types(errors)
             cb.check_bus_ids(errors)
             cb.check_message_crdt(errors)
-            cb.check_bus_vocabulary(errors)
             cb.check_wire_ids(errors)
             cb.check_typed_answers(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
-            cb.check_thread_reach(errors)
-            cb.check_renderer_reach(errors)
-            cb.check_worker_messages(errors)
+            cb.check_request_ids(errors)
             cb.check_engine_and_relay(errors)
             cb.check_switchboard_decisions(errors)
             cb.check_handlers(errors)
@@ -270,7 +247,6 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_failure_latches(errors)
             cb.check_exit_writes(errors)
             cb.check_walks(errors)
-            cb.check_sfu_crypto(errors)
             return errors
 
     def breach(self, rel: str, text: str) -> list[str]:
@@ -281,33 +257,6 @@ class CrateBoundaries(unittest.TestCase):
             root = scratch(tmp)
             write(root, rel, text)
             return self.run_checks(root)
-
-    def test_the_sfu_reaching_a_c_cryptography_library_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(
-                root,
-                cb.LOCKFILE,
-                '[[package]]\nname = "ambre-sfu"\ndependencies = ["str0m"]\n\n'
-                '[[package]]\nname = "str0m"\ndependencies = ["dimpl"]\n\n'
-                '[[package]]\nname = "dimpl"\ndependencies = ["aws-lc-rs 1.19.0"]\n\n'
-                '[[package]]\nname = "aws-lc-rs"\nversion = "1.19.0"\ndependencies = ["aws-lc-sys"]\n\n'
-                '[[package]]\nname = "aws-lc-sys"\n',
-            )
-            errors = self.run_checks(root)
-        self.assertTrue(any("reaches `aws-lc-sys`" in e for e in errors), errors)
-
-    def test_a_c_cryptography_library_outside_the_sfu_stays_free(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(self.run_checks(scratch(tmp)), [])
-
-    def test_a_lockfile_without_the_sfu_is_refused(self):
-        errors = self.breach(cb.LOCKFILE, '[[package]]\nname = "str0m"\n')
-        self.assertTrue(any("no `ambre-sfu` package" in e for e in errors), errors)
 
     def test_a_family_state_is_told_apart_by_its_marker(self):
         web = cb.state_type("Validated<WebAddress>")
@@ -511,24 +460,6 @@ class CrateBoundaries(unittest.TestCase):
             errors = self.run_checks(root)
         self.assertEqual(errors, [])
 
-    def test_a_pdf_call_outside_the_logic_thread_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, "crates/ambre-toile/src/ui/export.rs", "fn save() { let s = KrillaSurface::new(); }\n")
-            errors = self.run_checks(root)
-        self.assertTrue(any("outside the Logic thread: `KrillaSurface`" in e for e in errors), errors)
-
-    def test_a_pdf_call_under_the_logic_directory_stays_free(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, "crates/ambre-toile/src/logic/pdf.rs", "fn save() { krilla::Document::new(); }\n")
-            errors = self.run_checks(root)
-        self.assertEqual(errors, [])
-
     def test_an_embedded_font_is_refused(self):
         import tempfile
 
@@ -611,42 +542,6 @@ class CrateBoundaries(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(self.run_checks(scratch(tmp)), [])
 
-    def test_a_member_that_does_not_inherit_the_lints_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, "crates/ambre-sync/Cargo.toml", '[dependencies]\ngloo-net = { workspace = true }\n')
-            errors = self.run_checks(root)
-        self.assertTrue(any("does not inherit the workspace lints" in e for e in errors), errors)
-
-    def test_a_root_without_a_lint_table_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, cb.WORKSPACE, '[workspace]\nmembers = [\n    "crates/ambre-sync",\n]\n')
-            errors = self.run_checks(root)
-        self.assertTrue(any("no `[workspace.lints]` table" in e for e in errors), errors)
-
-    def test_a_client_enabling_the_fixture_feature_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, cb.CLIENT, '[dependencies]\nambre-logic = { path = "..", features = ["fixtures"] }\n')
-            errors = self.run_checks(root)
-        self.assertTrue(any("enables `fixtures`" in e for e in errors), errors)
-
-    def test_a_default_feature_set_folding_in_fixtures_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, "crates/ambre-logic/Cargo.toml", '[features]\ndefault = ["fixtures"]\n')
-            errors = self.run_checks(root)
-        self.assertTrue(any("`default` feature set" in e for e in errors), errors)
-
     def test_a_generator_writing_to_the_crdt_is_refused(self):
         import tempfile
 
@@ -703,130 +598,6 @@ class CrateBoundaries(unittest.TestCase):
                 (root / rel).unlink()
             errors = self.run_checks(root)
         self.assertTrue(any("no generator module found" in e for e in errors), errors)
-
-    def test_a_chrome_that_depends_on_an_app_crate_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, cb.CHROME, '[dependencies]\nambre-bus = { path = "../ambre-bus" }\n')
-            errors = self.run_checks(root)
-        self.assertTrue(any("depends on `ambre-bus`" in e for e in errors), errors)
-
-    def test_a_launcher_building_an_application_command_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(
-                root,
-                f"{cb.LAUNCHER}/shell/app_root.rs",
-                "fn bold() { send(AppCommand::Trame(TrameCommand::SetCellStyle { patch })); }\n",
-            )
-            errors = self.run_checks(root)
-        self.assertTrue(any("`TrameCommand::SetCellStyle`" in e for e in errors), errors)
-
-    def test_a_launcher_matching_an_application_event_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(
-                root,
-                f"{cb.LAUNCHER}/lib.rs",
-                "fn relay() { if let AppEvent::Toile(ToileEvent::FindResults(fr)) = ev {} }\n",
-            )
-            errors = self.run_checks(root)
-        self.assertTrue(any("`ToileEvent::FindResults`" in e for e in errors), errors)
-
-    def test_a_launcher_deciding_what_a_command_id_does_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(
-                root,
-                f"{cb.LAUNCHER}/platform.rs",
-                "fn run(id: CommandId) { if id == ambre_prose::commands::SAVE_FILE {} }\n",
-            )
-            errors = self.run_checks(root)
-        self.assertTrue(any("`ambre_prose::commands::SAVE_FILE`" in e for e in errors), errors)
-
-    def test_a_view_reading_the_density_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(
-                root,
-                "crates/ambre-trame/src/ui/view/lifecycle.rs",
-                "fn new() { let dpr = window.device_pixel_ratio(); }\n",
-            )
-            errors = self.run_checks(root)
-        self.assertTrue(any("lifecycle.rs:1: reads the display density" in e for e in errors), errors)
-
-    def test_a_density_read_named_in_a_comment_is_not_a_breach(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, "crates/ambre-toile/src/ui/view.rs", "// No devicePixelRatio here (`CANVAS-043`).\n")
-            errors = self.run_checks(root)
-        self.assertEqual(errors, [])
-
-    def test_a_density_file_that_reads_nothing_is_an_error_not_a_pass(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, cb.DENSITY, "fn read() -> f64 { 1.0 }\n")
-            errors = self.run_checks(root)
-        self.assertTrue(any("reads no density" in e for e in errors), errors)
-
-    def test_a_network_call_outside_the_worker_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(
-                root,
-                "crates/ambre-logic/src/dispatch.rs",
-                "fn leak() { let ws = web_sys::WebSocket::new(url); }\n",
-            )
-            errors = self.run_checks(root)
-        self.assertTrue(any("dispatch.rs:1: a network call outside" in e for e in errors), errors)
-
-    def test_a_transport_crate_outside_the_worker_is_refused(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            write(root, "crates/ambre-trame/Cargo.toml", '[dependencies]\nreqwest = { workspace = true }\n')
-            errors = self.run_checks(root)
-        self.assertTrue(any("declares the transport crate `reqwest`" in e for e in errors), errors)
-
-    def test_the_worker_and_the_stated_reads_stay_free(self):
-        """The worker's transport and the font fetch are the rule, not a breach."""
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            errors = self.run_checks(root)
-        self.assertEqual(errors, [])
-
-    def test_a_worker_writing_to_browser_storage_is_refused(self):
-        import tempfile
-
-        for line in (
-            "fn keep(t: &str) { window.local_storage().set_item(\"token\", t); }\n",
-            "fn keep(t: &str) { document.set_cookie(t); }\n",
-            "fn keep(b: &[u8]) { scope.indexed_db(); }\n",
-        ):
-            with tempfile.TemporaryDirectory() as tmp:
-                root = scratch(tmp)
-                write(root, f"{cb.WORKER}/auth.rs", line)
-                errors = self.run_checks(root)
-            self.assertTrue(any("reaches browser storage" in e for e in errors), (line, errors))
 
     def test_a_request_carrying_a_passphrase_is_refused(self):
         import tempfile
@@ -1174,18 +945,6 @@ class CrateBoundaries(unittest.TestCase):
             errors = self.run_checks(root)
         self.assertTrue(any("identifier boundary reads nothing" in e for e in errors), errors)
 
-    def test_an_application_message_declared_in_the_bus_is_refused(self):
-        text = "pub enum TrameCommand {\n    Undo,\n}\n"
-        errors = self.breach(f"{cb.BUS}/app/trame.rs", text)
-        self.assertTrue(any("declares an application's message" in e for e in errors), errors)
-
-    def test_an_envelope_or_a_test_enum_in_the_bus_stays_free(self):
-        text = (
-            "pub enum LogicCommand<A> {\n    App(A),\n}\npub enum RestEvent {\n    Done,\n}\n"
-            "#[cfg(test)]\nmod tests {\n    pub enum ProbeCommand {\n        Go,\n    }\n}\n"
-        )
-        self.assertEqual(self.breach(f"{cb.BUS}/logic.rs", text), [])
-
     def test_a_message_naming_a_crdt_handle_is_refused(self):
         for text in (
             "pub enum E {\n    Doc { doc: loro::LoroDoc },\n}\n",
@@ -1281,19 +1040,6 @@ class CrateBoundaries(unittest.TestCase):
             errors = self.breach(cb.PAGE, text)
             self.assertTrue(any("wasm artefacts" in e for e in errors), (text, errors))
 
-    def test_a_crate_depending_on_the_worker_is_refused(self):
-        errors = self.breach("crates/ambre-app/Cargo.toml", '[dependencies]\nambre-sync = { path = "../ambre-sync" }\n')
-        self.assertTrue(any("merges it into a second instance" in e for e in errors), errors)
-
-    def test_a_shared_worker_or_a_second_spawn_is_refused(self):
-        for line, words in (
-            ("fn s() { web_sys::SharedWorker::new(URL); }\n", "two tabs would share"),
-            ("fn s() { nav.service_worker().register(URL); }\n", "two tabs would share"),
-            ("fn s() { web_sys::Worker::new(URL); }\n", "spawned outside the launcher"),
-        ):
-            errors = self.breach("crates/ambre-app/src/shell/extra.rs", line)
-            self.assertTrue(any(words in e for e in errors), (line, errors))
-
     def test_an_unsandboxed_frame_is_refused_and_a_test_frame_stays_free(self):
         frame = 'fn f() { doc.create_element("iframe"); }\n'
         errors = self.breach("crates/ambre-app/src/host/extra.rs", frame)
@@ -1303,43 +1049,9 @@ class CrateBoundaries(unittest.TestCase):
         sandboxed = frame + 'fn g() { f.set_attribute("sandbox", S); }\n'
         self.assertEqual(self.breach("crates/ambre-app/src/host/extra.rs", sandboxed), [])
 
-    def test_the_logic_runtime_declaring_the_toolkit_is_refused(self):
-        errors = self.breach(cb.LOGIC_MANIFEST, '[dependencies]\nleptos = { workspace = true }\n')
-        self.assertTrue(any("declares `leptos`" in e for e in errors), errors)
-
-    def test_the_worker_reaching_the_canvas_through_a_crate_is_refused(self):
-        text = '[dependencies]\nambre-core = { path = "../ambre-core" }\nambre-canvas = { path = "../ambre-canvas" }\n'
-        errors = self.breach("crates/ambre-bus/Cargo.toml", text)
-        self.assertTrue(any("reaches `ambre-canvas`" in e for e in errors), errors)
-
-    def test_the_renderer_declaring_the_bus_is_refused(self):
-        for table in ("dependencies", "dev-dependencies", "target.'cfg(target_arch = \"wasm32\")'.dependencies"):
-            text = f'[dependencies]\nambre-draw = {{ path = "../ambre-draw" }}\n\n[{table}]\nambre-bus = {{ path = "../ambre-bus" }}\n'
-            errors = self.breach(cb.CANVAS_MANIFEST, text)
-            self.assertTrue(any("the renderer declares `ambre-bus`" in e for e in errors), (table, errors))
-
-    def test_the_renderer_reaching_the_bus_through_a_crate_is_refused(self):
-        text = '[dependencies]\nambre-core = { path = "../ambre-core" }\nambre-bus = { path = "../ambre-bus" }\n'
-        errors = self.breach("crates/ambre-draw/Cargo.toml", text)
-        self.assertTrue(any("the renderer reaches `ambre-bus` through `ambre-draw`" in e for e in errors), errors)
-
-    def test_a_missing_renderer_manifest_is_an_error_not_a_pass(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            (root / cb.CANVAS_MANIFEST).unlink()
-            errors = self.run_checks(root)
-        self.assertTrue(any("the renderer reach is unread" in e for e in errors), errors)
-
-    def test_a_redeclared_wire_type_is_refused(self):
-        errors = self.breach("crates/ambre-server/src/ws.rs", "pub struct Update {\n    seq: u64,\n}\n")
-        self.assertTrue(any("redeclares the wire type `Update`" in e for e in errors), errors)
-
     def test_a_worker_id_or_an_app_message_is_refused(self):
         for line in (
             "fn f() { let id = ambre_bus::next_request(); }\n",
-            "fn f(c: TrameCommand) {}\n",
             "fn f() { let id = Seq::<Request>::ZERO.next(); }\n",
             "fn f() { let id = Seq::new(1); }\n",
             "fn f() { let id = ambre_core::Seq::ZERO.next(); }\n",
@@ -1347,7 +1059,7 @@ class CrateBoundaries(unittest.TestCase):
             "fn f() { let issuer = Issuer::<Request>::new(()); }\n",
         ):
             errors = self.breach(f"{cb.WORKER}/extra.rs", line)
-            self.assertTrue(any("allocates an id or names an app message" in e for e in errors), (line, errors))
+            self.assertTrue(any("allocates a request id" in e for e in errors), (line, errors))
 
     def test_a_worker_test_allocating_an_id_stays_free(self):
         text = "fn f() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { next_request(); }\n}\n"
@@ -1364,15 +1076,6 @@ class CrateBoundaries(unittest.TestCase):
     def test_a_relay_that_drains_no_sync_queue_is_refused(self):
         errors = self.breach(cb.APP_LIB, "fn boot() { ambre_logic::run(bell); }\n")
         self.assertTrue(any("does not drain the Logic to Sync queue" in e for e in errors), errors)
-
-    def test_a_missing_client_manifest_is_an_error_not_a_pass(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = scratch(tmp)
-            (root / cb.CLIENT).unlink()
-            errors = self.run_checks(root)
-        self.assertTrue(any("gone from the tree" in e for e in errors), errors)
 
     def test_a_walk_reaching_a_screen_module_is_refused(self):
         rel = "crates/ambre-prose/src/view/walk.rs"

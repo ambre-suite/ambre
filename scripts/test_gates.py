@@ -173,7 +173,7 @@ class GatesFailWithNoFlag(unittest.TestCase):
 
         checks = [n for n in dir(crate_boundaries) if n.startswith("check_")]
         patches = [mock.patch.object(crate_boundaries, n, lambda errors: 0) for n in checks]
-        patches.append(mock.patch.object(crate_boundaries, "check_client", breach))
+        patches.append(mock.patch.object(crate_boundaries, "check_instances", breach))
         self.fails("crate_boundaries", patches)
 
     def test_schema_freeze(self) -> None:
