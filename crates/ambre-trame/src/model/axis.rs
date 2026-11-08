@@ -36,8 +36,9 @@ use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Axis, IdxVec, Len, Pos};
 use ambre_core::{OpenRange, Version, VersionKind};
 use blake2::{Blake2b512, Digest};
+use loro::cursor::Side;
 use loro::{
-    ContainerID, ContainerTrait, ContainerType, LoroDoc, LoroMap, LoroMovableList, LoroValue,
+    ContainerID, ContainerTrait, ContainerType, ID, LoroDoc, LoroMap, LoroMovableList, LoroValue,
 };
 
 use super::line::Line;
@@ -1247,6 +1248,9 @@ pub(crate) struct Spot {
     pub(crate) element: Element,
     /// The element just before it at that moment, `None` at the head.
     pub(crate) after: Option<Element>,
+    /// The operation that put the element at its slot: its insert, or its
+    /// last move. `None` when the list could not name it.
+    pub(crate) placed: Option<ID>,
 }
 
 /// The list `id` and its values, in order. The values stay shared with the
@@ -1405,6 +1409,10 @@ impl<'a> Axes<'a> {
                     slot,
                     element: view.elements.get(slot).copied()?,
                     after: slot.prev().and_then(|b| view.elements.get(b).copied()),
+                    placed: slot
+                        .to_index()
+                        .and_then(|at| list.get_cursor(at, Side::Middle))
+                        .and_then(|cursor| cursor.id),
                 })
             })
             .collect();
