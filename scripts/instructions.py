@@ -150,6 +150,35 @@ CEILINGS = [
         row="Trame whole line delete, 10k formula cells, the whole redo of a row insert (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
+    # The delete of a block of five hundred rows, its undo and its redo. Not
+    # the budget: the 16 ms of the row is 12 800 000. Each ceiling is the count
+    # reached on 2026-11-08 with foldhash, plus about 4 % for the probes a
+    # random key per process moves. It stops a regression while the gap stays
+    # open, and only moves down.
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="many_line_delete",
+        symbol="ambre_budget_trame_block_remove",
+        row="Trame delete of a block of 500 rows, 10k formula cells (the ceiling reached, not the < 16 ms budget)",
+        ceiling=52_500_000,
+    ),
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="many_line_delete_undo",
+        symbol="ambre_budget_trame_block_undo",
+        row="Trame delete of a block of 500 rows, its whole undo (the ceiling reached, not the < 16 ms budget)",
+        ceiling=73_500_000,
+    ),
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="many_line_delete_redo",
+        symbol="ambre_budget_trame_block_redo",
+        row="Trame delete of a block of 500 rows, its whole redo (the ceiling reached, not the < 16 ms budget)",
+        ceiling=52_500_000,
+    ),
     # The undo and the redo of one cell write, held to the command row of a
     # cell write: no undo manager checks out the cell map any more.
     Ceiling(
