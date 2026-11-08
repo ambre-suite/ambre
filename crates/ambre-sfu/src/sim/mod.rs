@@ -6,6 +6,8 @@ mod client;
 pub(crate) mod impair;
 mod load;
 mod net;
+#[cfg(test)]
+mod paths;
 mod udp;
 
 #[cfg(test)]
