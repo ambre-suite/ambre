@@ -19,7 +19,7 @@ use ambre_core::index::Pos;
 
 use petgraph::Direction;
 use petgraph::stable_graph::StableGraph;
-use petgraph::visit::{Dfs, EdgeRef};
+use petgraph::visit::EdgeRef;
 
 use super::types::{AxisId, CellId, EngineSheet, RangeId};
 use crate::model::SheetIndex;
@@ -229,11 +229,15 @@ impl DependencyGraph {
         let mut seen: HashSet<CellId> = queue.iter().copied().collect();
 
         while let Some(cur) = queue.pop() {
-            // Level 1: DFS descendants in cell_dag (cells that depend on `cur`).
+            // Level 1: the cells that read `cur` directly. The queue walks
+            // their own readers in turn, so the closure is complete. A `Dfs`
+            // per cell would clear a bit set over the whole graph each time:
+            // about 2 500 bytes per cell on a sheet of 10k formulas.
             if let Some(&node) = self.cell_to_node.get(&cur) {
-                let mut dfs = Dfs::new(&self.cell_dag, node);
-                while let Some(n) = dfs.next(&self.cell_dag) {
-                    let cell = self.cell_dag[n];
+                for n in self.cell_dag.neighbors(node) {
+                    let Some(&cell) = self.cell_dag.node_weight(n) else {
+                        continue;
+                    };
                     if cell == cur {
                         continue;
                     }
@@ -278,10 +282,17 @@ impl DependencyGraph {
     /// back. Both searches stay inside the descendants of `node`: a formula
     /// that nothing reads costs one step.
     fn cycle_through(&self, node: petgraph::graph::NodeIndex) -> Option<Vec<CellId>> {
-        let mut below = HashSet::default();
-        let mut dfs = Dfs::new(&self.cell_dag, node);
-        while let Some(n) = dfs.next(&self.cell_dag) {
-            below.insert(n);
+        // A set of the nodes met, not a `Dfs`: a `Dfs` clears a bit set over
+        // the whole graph, which costs more than the walk when few cells read
+        // `node`.
+        let mut below: HashSet<_> = std::iter::once(node).collect();
+        let mut stack = vec![node];
+        while let Some(cur) = stack.pop() {
+            for n in self.cell_dag.neighbors(cur) {
+                if below.insert(n) {
+                    stack.push(n);
+                }
+            }
         }
         // A dependency of `node` that is also below it closes the loop.
         let closes = self

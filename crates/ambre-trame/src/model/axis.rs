@@ -1625,16 +1625,13 @@ impl<'a> Axes<'a> {
     /// a delete that removes them.
     pub(crate) fn purge_record(&self, uids: &[Uid]) {
         let record = self.record();
-        // One walk of the record for every line, however many go. The lines
-        // are sorted and searched, so the walk hashes no key.
-        let mut gone: Vec<String> = uids.iter().map(Uid::to_key_part).collect();
-        gone.sort_unstable();
+        // One walk of the record for every line, however many go. Each key
+        // costs one hash: a sorted search compared the long peer prefix that
+        // the uids of one peer share about nine times per key.
+        let gone: HashSet<String> = uids.iter().map(Uid::to_key_part).collect();
         let keys: Vec<String> = record
             .keys()
-            .filter(|key| {
-                line_of_generation_key(key)
-                    .is_some_and(|before| gone.binary_search_by(|g| g.as_str().cmp(before)).is_ok())
-            })
+            .filter(|key| line_of_generation_key(key).is_some_and(|before| gone.contains(before)))
             .map(|key| key.to_string())
             .collect();
         for key in keys {
