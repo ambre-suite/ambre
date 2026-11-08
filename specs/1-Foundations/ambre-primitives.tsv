@@ -4140,6 +4140,7 @@ ambre-server | src/db/content.rs | crate::db::content | <Snapshots as ambre_core
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | <Requests as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-server | src/s3.rs | crate::s3 | <DrainedEntries as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::position() | ret | Option<(usize,Seq<DeltaAuthor>)>	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/channels.rs | crate::channels | SyncState::space_on_its_way() | ret | bool	generic	predicate result: whether a space is open here and not on the relay yet
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | <ImportDepth as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | <CachedBlobs as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <Tiles as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire

@@ -135,6 +135,35 @@ impl SyncState {
         }
     }
 
+    /// Whether the document of `space_id` is open here and on its way to the
+    /// relay, which does not hold it yet.
+    pub(crate) fn space_on_its_way(&self, space_id: Id<Space>) -> bool {
+        self.documents
+            .get(&space_id.document_id())
+            .is_some_and(|space| space.existence == crate::Existence::LocalOnly)
+    }
+
+    /// Run the channel creations that waited on `document_id`, now on the
+    /// relay (`SYNC-189`).
+    pub(crate) fn release_creations(&mut self, document_id: Id<Document>) {
+        for command in self.held_creations.remove(&document_id).unwrap_or_default() {
+            self.handle_command(command);
+        }
+    }
+
+    /// Fail the channel creations that waited on `document_id`, whose own
+    /// creation failed: the view learns each one (`SYNC-189`).
+    pub(crate) fn refuse_creations(&mut self, document_id: Id<Document>) {
+        for command in self.held_creations.remove(&document_id).unwrap_or_default() {
+            if let SyncCommand::CreateChannel { channel_id, .. } = command {
+                self.send_to_logic(LogicEvent::ChannelRequestFailed {
+                    channel_id,
+                    message: SyncError::NotOnRelay.to_string(),
+                });
+            }
+        }
+    }
+
     /// The keys of an open space that the relay holds, and this user's
     /// exchange key: what a channel creation and a self-join both need. A
     /// catalogue entry sealed before a rotation of the space opens under the
@@ -2060,6 +2089,103 @@ pub(crate) mod tests {
             [LogicEvent::ThreadLinkFailed { root: answered_root, message, .. }]
                 if *answered_root == root && *message == no_relay
         ));
+    }
+
+    /// `SYNC-189`: a public channel created while its new space is on
+    /// its way to the relay waits for it, then runs. One whose space fails
+    /// to reach the relay fails, and the view learns it.
+    #[test]
+    fn a_public_creation_waits_for_its_space_to_reach_the_relay() {
+        let (mut state, rx) = bare_state();
+        let (tx, _events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        state.set_event_tx(tx);
+        let (space_id, failed_space) = (Id::<Space>::mint(), Id::<Space>::mint());
+        for space in [space_id, failed_space] {
+            state.documents.insert(
+                space.document_id(),
+                SyncDocumentState::new(
+                    space.document_id(),
+                    DocumentKey::generate(),
+                    DocType::Murmure,
+                    crate::Existence::LocalOnly,
+                ),
+            );
+        }
+        let create = |state: &mut SyncState, space_id| {
+            let channel_id = Id::<Channel>::mint();
+            state.handle_command(SyncCommand::CreateChannel {
+                channel_id,
+                space_id,
+                meta: Id::<Meta>::mint(),
+                segment: Id::<Segment>::mint(),
+                visibility: ambre_core::Visibility::Public,
+                name: None,
+            });
+            channel_id
+        };
+        let (waits, refused) = (
+            create(&mut state, space_id),
+            create(&mut state, failed_space),
+        );
+        assert_eq!(rx.try_iter().count(), 0, "both wait, and neither fails");
+
+        state.handle_sync_event(SyncEvent::DocumentMaterialized {
+            document_id: space_id.document_id(),
+        });
+        // The creation ran past the space: the next missing piece answers.
+        assert!(matches!(
+            rx.try_iter().collect::<Vec<_>>().as_slice(),
+            [LogicEvent::ChannelRequestFailed { channel_id, message }]
+                if *channel_id == waits && *message == SyncError::SessionLocked.to_string()
+        ));
+
+        state.handle_sync_event(SyncEvent::DocumentCreateFailed {
+            document_id: failed_space.document_id(),
+            failure: http::Failed::local("refused".into()),
+        });
+        assert!(matches!(
+            rx.try_iter().collect::<Vec<_>>().as_slice(),
+            [LogicEvent::ChannelRequestFailed { channel_id, message }]
+                if *channel_id == refused && *message == SyncError::NotOnRelay.to_string()
+        ));
+        assert!(state.held_creations.is_empty());
+    }
+
+    /// `SYNC-190`: the log of a public channel this client created
+    /// admits a self-join from the moment the relay holds the channel. A
+    /// refused creation, and a private channel, mark no log.
+    #[test]
+    fn a_created_public_channel_admits_a_self_join_at_once() {
+        let (mut state, _rx) = bare_state();
+        let (tx, _events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        state.set_event_tx(tx);
+        let space_id = Id::<Space>::mint();
+        let mut create = |visibility| {
+            let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
+            state.handle_command(SyncCommand::CreateChannel {
+                channel_id,
+                space_id,
+                meta,
+                segment: Id::<Segment>::mint(),
+                visibility,
+                name: None,
+            });
+            (channel_id, meta.document_id())
+        };
+        let (public, public_meta) = create(ambre_core::Visibility::Public);
+        let (refused, refused_meta) = create(ambre_core::Visibility::Public);
+        let (private, private_meta) = create(ambre_core::Visibility::Private);
+        for (channel_id, result) in [
+            (public, Ok(None)),
+            (refused, Err(crate::http::HttpError::Local("403".into()))),
+            (private, Ok(None)),
+        ] {
+            state.handle_sync_event(SyncEvent::ChannelCreated { channel_id, result });
+        }
+        assert_eq!(state.self_join_logs.get(&public_meta), Some(&space_id));
+        assert!(!state.self_join_logs.contains_key(&refused_meta));
+        assert!(!state.self_join_logs.contains_key(&private_meta));
+        assert!(state.creating_public.is_empty());
     }
 
     /// `SYNC-187`: a public channel needs the key of a space the relay

@@ -1088,6 +1088,10 @@ pub struct SyncState {
     /// admit a self-join (`SYNC-106`) and heed their space; no other log
     /// does either.
     self_join_logs: HashMap<Id<Document>, Id<Space>>,
+    /// The `meta` and the space of each public channel this client is
+    /// creating, until the relay answers. A created one's log admits a
+    /// self-join at once, as its catalogue lists it (`SYNC-190`).
+    creating_public: HashMap<Id<Channel>, (Id<Document>, Id<Space>)>,
     /// The rotations this admin client drives after a leave, per space
     /// document (the Murmure spaces spec).
     space_rotations: HashMap<Id<Document>, space_rotation::SpaceRotation>,
@@ -1158,6 +1162,10 @@ pub struct SyncState {
     /// The documents of spaces this client created and the relay does not
     /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
     new_spaces: HashSet<Id<Document>>,
+    /// The public channel creations that wait for the document of their
+    /// space to reach the relay, by that document. Each runs once the relay
+    /// holds it, and fails if its creation fails (`SYNC-189`).
+    held_creations: HashMap<Id<Document>, Vec<SyncCommand>>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>>,
@@ -1222,6 +1230,7 @@ impl SyncState {
             signing_key: None,
             exchange_key: None,
             self_join_logs: HashMap::new(),
+            creating_public: HashMap::new(),
             space_rotations: HashMap::new(),
             ws: None,
             _onmessage: None,
@@ -1248,6 +1257,7 @@ impl SyncState {
             member_channels_asked: ambre_core::Issuer::default(),
             listed_keys: HashMap::new(),
             new_spaces: HashSet::new(),
+            held_creations: HashMap::new(),
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1447,7 +1457,11 @@ impl SyncState {
                 document_id,
                 doc_type,
             } => self.handle_open_document(document_id, doc_type),
-            SyncCommand::CloseDocument { document_id } => self.handle_close_document(document_id),
+            SyncCommand::CloseDocument { document_id } => {
+                // A space closed before the relay held it creates no channel.
+                self.refuse_creations(document_id);
+                self.handle_close_document(document_id);
+            }
             SyncCommand::ReleaseDocument {
                 document_id,
                 applied_seq,
@@ -1508,6 +1522,19 @@ impl SyncState {
             SyncCommand::MarkThreadRead { thread } => self.handle_mark_thread_read(thread),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),
             SyncCommand::FetchActivity => self.handle_fetch_activity(),
+            // A public channel seals its key under the space key, which the
+            // relay must hold first. A creation sent while the space is still
+            // on its way waits for it (`SYNC-189`).
+            cmd @ SyncCommand::CreateChannel {
+                space_id,
+                visibility: ambre_core::Visibility::Public,
+                ..
+            } if self.space_on_its_way(space_id) => {
+                self.held_creations
+                    .entry(space_id.document_id())
+                    .or_default()
+                    .push(cmd);
+            }
             SyncCommand::CreateChannel {
                 channel_id,
                 space_id,
@@ -1516,6 +1543,10 @@ impl SyncState {
                 visibility,
                 name,
             } => {
+                if visibility == ambre_core::Visibility::Public {
+                    self.creating_public
+                        .insert(channel_id, (meta.document_id(), space_id));
+                }
                 self.handle_create_channel(channel_id, space_id, (meta, segment), visibility, name)
             }
             SyncCommand::NameChannel { meta, name } => self.handle_name_channel(meta, name),
