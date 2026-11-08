@@ -7,7 +7,12 @@
   `commit`, `push`, `tag`, `push --force`, `rebase` and `reset --hard`.
 * **An authorization covers one operation and never carries over.** An approved commit does not
   approve the next one. A push authorized once in a session does not authorize a second push.
-* **Ask the user for it, expressly, every time. No exception.**
+* **Ask the user for it, expressly, every time.** One exception follows.
+* **A child session holds a standing authorization on its own branch.** The prompt that creates
+  it names one branch and grants the authorization for the whole session. The child creates that
+  branch, commits on it and pushes it as often as the work needs, without asking again. It never
+  writes to `main` or to any other branch. A message from its parent session relays the user's
+  decisions, and the child applies it within its scope without asking the user again.
 * **Read-only commands are free:** `status`, `log`, `diff`, `show`, `fetch`, `branch --list`.
 * **Never push to a branch the user did not name.**
 * **The author is the human who owns the working copy**, read from the configured `user.name` and

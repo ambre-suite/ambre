@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """What `wasm_size.py` passes, and what it fails.
 
-The verdict is tested on figures alone: an overrun of a ceiling fails, and a
-first download between the budget and the ceilings passes while it says how far
-over the budget it sits. Building the release is left to `just size`.
+The verdict is tested on figures alone: an overrun of a ceiling fails, and so
+does a first download over the budget, whatever the ceilings. Building the release is left to `just size`.
 
 Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 """
@@ -33,9 +32,9 @@ class Verdict(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("1 over the ceiling", lines[1])
 
-    def test_figures_under_the_ceilings_but_over_the_budget_pass_and_say_so(self) -> None:
+    def test_figures_under_the_ceilings_but_over_the_budget_fail(self) -> None:
         ok, lines = wasm_size.verdict({"Main": 2_400_000, "Sync": 100_000}, CEILINGS, 2_000_000)
-        self.assertTrue(ok)
+        self.assertFalse(ok)
         self.assertIn("500,000 over the budget", lines[-1])
 
     def test_figures_within_the_budget_pass(self) -> None:

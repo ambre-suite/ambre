@@ -209,21 +209,22 @@
   `ambre-sync` carries crypto plus protocol plus gloo-net, small at ~6.8 MB unoptimized, with no
   wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
   dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable.
-* **The first download, Main plus Sync, < 2 MB brotli**, and Prose interop stays
-  **lazy-loaded**. At 10 Mbit/s, 2 MB takes 1.6 s, which leaves the rest of the README's 3 s
-  initial load on 4G to compile and boot.
+* **The first download, Main plus Sync, < 4 MB brotli**, and Prose interop stays
+  **lazy-loaded**. One wasm carries the whole suite: an application is never a download of its
+  own, so opening a second one costs nothing. 4G commonly runs at 20 Mbit/s, where 4 MB takes
+  1.6 s. That leaves the rest of the README's 3 s initial load to compile and boot.
 * **Counted in brotli, as served.** The release build writes a brotli copy at quality 11 beside
   each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is, with
   no compression per request. On the wasm it weighs 27% less than gzip at level 9.
 * **Cached for good after the first visit.** Every built file is named by a hash of its content
   (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
   again, and a release downloads only the instance it changed.
-* **The first download breaks the budget today.** On 2026-10-20 a release build weighed 3.07 MB
-  brotli for Main and 0.34 MB for Sync. On 2026-11-07, `just size` read 3 128 174 bytes for Main
-  and 352 134 for Sync. The `wasm-release` profile builds every crate for size and strips the name
-  section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job holds each figure as a
-  ceiling (`scripts/wasm_size.py`), and a ceiling is not the budget. The roadmap story `The Main
-  instance within its download budget` closes the gap, and it needs the applications split out.
+* **The first download holds the budget, and the ceilings stay tight.** On 2026-10-20 a release
+  build weighed 3.07 MB brotli for Main and 0.34 MB for Sync. On 2026-11-07, `just size` read
+  3 128 174 bytes for Main and 352 134 for Sync. The `wasm-release` profile builds every crate for
+  size and strips the name section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job
+  holds each figure as a ceiling (`scripts/wasm_size.py`) and fails past the budget. A ceiling
+  sits under the budget: it catches any growth long before the budget does.
 * **Both ceilings went up on 2026-11-07**, to 3.13 MB for Main and 0.36 MB for Sync. No dead code
   grew, so no cut was found. The table below is `twiggy top` on a build that keeps the name
   section, from the 2026-10-20 ceiling commit `a70872374` to that day. A crate's raw growth is
@@ -237,6 +238,44 @@
 | Main | `blake2` | +7 KB | The line uid of Trame schema 2 is a BLAKE2b hash, so the hash now links into Main |
 | Sync | `ambre-core` | +19 KB | The generic newtype families, one copy per marker |
 | Sync | `ambre-sync`, `serde`, `percent-encoding` | +11 KB | The percent-encoded query (`SYNC-179`) and a flattened token pair |
+* **Main sat over its ceiling on 2026-11-08.** That day, `just size` read 3 136 988 bytes for
+  Main and 354 035 for Sync. The features merged since 2026-11-07 grew Main by 8 814 bytes. One
+  cut took 4 461 back: `ambre-toile` now names `roxmltree` 0.21, the version usvg 0.47 links,
+  so the instance carries one copy of the parser. Main then read 3 132 527, still 2 527 over.
+* **The ceiling of Main went up to 3.14 MB on 2026-11-08.** The growth is the features
+  themselves: the HTML half of the clipboard write (`UI-THREAD-055`) and the formula bind of
+  Trame (`TRAME-289`).
+* **Where the weight sits.** The table below splits the Main instance by
+  subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
+  cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
+  parts that only an application needs weigh about 0.84 MB of brotli. Splitting them out would
+  not have reached the old 2 MB budget: the shared part alone weighs about 2.3 MB.
+
+| Part | Raw | Brotli, estimated | What it is |
+|---|---|---|---|
+| Data segments, glue, `core`, `alloc` and the generic code no crate names | 3 068 KB | ~700 KB | Shared, and not split by the measure |
+| GPU | 1 635 KB | ~373 KB | `naga`, `wgpu-core` and `wgpu-hal`, needed by the WebGL2 backend |
+| CRDT | 1 585 KB | ~361 KB | `loro` and its crates |
+| Shared Ambre crates | 1 471 KB | ~335 KB | `ambre-app`, `ambre-logic`, `ambre-core`, `ambre-bus`, `ambre-canvas`, `ambre-chrome` |
+| UI | 1 170 KB | ~267 KB | `leptos`, `tachys`, `reactive_graph` |
+| Text | 1 126 KB | ~257 KB | `parley`, `swash`, `skrifa`, `read-fonts`, `harfrust`, `zeno` |
+| PDF writer | 968 KB | ~221 KB | `krilla` and the second copy of `skrifa` and `read-fonts` it links, older than `parley`'s |
+| Toile | 849 KB | ~194 KB | `ambre-toile`, `usvg`, `roxmltree`, `i_overlay` |
+| Prose | 664 KB | ~151 KB | `ambre-prose`, `html5ever`, `pulldown-cmark` |
+| Trame | 541 KB | ~123 KB | `ambre-trame`, `petgraph` |
+| Murmure | 352 KB | ~80 KB | `ambre-murmure` |
+| Picture codecs | 296 KB | ~67 KB | `image`, `png`, `zune-jpeg`, `gif` |
+
+* **Four compile-time cuts were measured on 2026-11-08 and left out.** Each figure is the brotli
+  size of Main against the same build without the cut.
+
+| Cut | Main | Why it stays out |
+|---|---|---|
+| `-Z location-detail=none` in the `wasm-release` profile | -75 697, and -8 709 on Sync | The primitive gate refuses a `-Z` flag in a rustflags list (`ARCH-033`) |
+| `-Z fmt-debug=shallow` | -51 777 | Every `Debug` output loses its fields, the logs included, and `ARCH-033` refuses it too |
+| `panic_immediate_abort` in `build-std-features` | not built | The panic loses the message that the fatal screen shows |
+| `log` and `tracing` call sites removed in a release | -1 590 | No logger reads them, so they cost nothing at run time, and the gain is too small for a new dependency |
+
 * **wasm-opt stays off.** Binaryen 124 takes 7% off the raw Main wasm, and the result compresses
   0.8% worse, in gzip and in brotli alike. The download is the budget, so the pass costs.
 

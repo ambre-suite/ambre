@@ -457,6 +457,7 @@
   {"edge": "verified-by", "from": "ARCH-073", "to": "::report_mode_passes_on_refusals_and_strict_mode_fails"},
   {"edge": "verified-by", "from": "ARCH-073", "to": "::a_missing_or_malformed_allowlist_fails_both_modes"},
   {"edge": "verified-by", "from": "ARCH-073", "to": "::strict_mode_holds_each_line_to_its_count"},
+  {"edge": "cites-document", "from": "ARCH-074", "section": "2", "to": "ambre-spec-testing.md"},
   {"edge": "cites-section", "from": "ARCH-013", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "verified-by", "from": "ARCH-013", "to": "ambre_logic::authorship_tests::two_tabs_of_one_user_converge_as_two_users_do"},
   {"edge": "verified-by", "from": "ARCH-013", "to": "ambre_sync::updates::tests::each_open_draws_a_new_peer_and_a_repeated_open_keeps_it"},
