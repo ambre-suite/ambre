@@ -100,6 +100,9 @@ jobs:
       # a generator driving commands, a shared control with no whole-style
       # type to emit, and a launcher naming no application's logic.
       - run: just crate-boundaries
+      # Which compiler builds: no file but `rust-toolchain.toml` names a
+      # toolchain or a channel, and that file pins a dated nightly (`ARCH-075`).
+      - run: just toolchain-pin
       # How the English is written: the mechanical half of
       # `ai/ambre-writing-style.md`, every metric a hard error.
       - run: just prose
