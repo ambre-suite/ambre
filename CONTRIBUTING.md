@@ -66,11 +66,13 @@ Install the merge driver of the generated spec files once per clone, for the sam
 git config merge.ambre-generated.driver "python3 scripts/merge_generated.py %O %A %B %P"
 ```
 
-`.gitattributes` names the contract ledger, the contract index, the contract graph and the
-inventories. On a merge or a rebase, the driver writes each one from the merged sources. Two
+`.gitattributes` names the contract ledger and the inventories, all Markdown. The contract index
+and the contract graph are never committed, so they need no driver.
+
+On a merge or a rebase, the driver writes each such file from the merged sources. Two
 branches that each add a row then conflict on no generated file. Without it, git merges them as text:
 the merge conflicts, or it writes counts that no generator writes. A lone cherry-pick names no
-other commit, so the driver keeps your side and prints the three commands that regenerate the files.
+other commit, so the driver keeps your side and prints the two commands that regenerate the files.
 `scripts/merge_generated.py` states each case.
 
 `just primitives` refuses a `RUSTC_WRAPPER` such as sccache. It also refuses a lever, an

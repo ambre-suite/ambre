@@ -7,9 +7,9 @@ is a read of the whole document, plus every document it cites, and a reader
 cannot tell which paragraph mattered. `ambre-spec-trame-cell-merges.md` is 5 700
 words; one of its rows needs a few hundred of them.
 
-So the closure is compiled, from the two artefacts of `contract_index.py`. The
-index says where the row is and what it says; the graph says what else it
-reaches. Only then is any Markdown opened, and only the documents those two
+So the closure is compiled, from the index and the graph of `contract_index.py`,
+built in memory at each run. The index says where the row is and what it says;
+the graph says what else it reaches. Only then is any Markdown opened, and only the documents those two
 named. Nothing here re-walks the corpus.
 
 **Seven blocks, one per question a builder has**, in the order they are asked.
@@ -53,7 +53,6 @@ Run: `just spec-context <ID>`, or `just spec-context-story "<NAME>"`.
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from functools import lru_cache
@@ -61,8 +60,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import contract_index  # noqa: E402  -- the two artefacts, and where they live
-import contracts  # noqa: E402  -- the corpus has one contract parser
+import contract_index  # noqa: E402  -- the index and the graph, built in memory
+import contracts  # noqa: E402  -- the row grammar and the schedule
+import corpus  # noqa: E402  -- the corpus has one parser
 import spec_answers  # noqa: E402  -- the answer budget, as the gate counts it
 import spec_refs  # noqa: E402  -- the document and section namespaces
 import spec_shape  # noqa: E402  -- the prose ceiling, as the gate counts it
@@ -97,7 +97,7 @@ class Missing(Exception):
 
 
 @lru_cache(maxsize=None)
-def corpus() -> tuple[dict[str, Path], dict[str, str]]:
+def namespace() -> tuple[dict[str, Path], dict[str, str]]:
     """The document namespace, read once.
 
     `--all` compiles 2 485 closures, and each one resolves a citation. Walking
@@ -110,7 +110,7 @@ def corpus() -> tuple[dict[str, Path], dict[str, str]]:
 @lru_cache(maxsize=None)
 def lines_of(path: Path) -> tuple[str, ...]:
     """One document's lines, read once per run."""
-    return tuple(path.read_text().splitlines())
+    return tuple(line.text for line in corpus.read(path).lines)
 
 
 @lru_cache(maxsize=None)
@@ -128,17 +128,12 @@ def schedule() -> dict[str, tuple[str, bool, int, str]]:
 def load() -> tuple[dict[str, dict], list[dict]]:
     """The index by id, and the graph whole.
 
-    A stale artefact is a wrong closure, silently: the row would be compiled
-    from what the corpus said at the last write. `just index` holds the two
-    files, and this refuses to run when it has not been run.
+    Built from the corpus at each run, never read from `just index-write`'s
+    files: a stale artefact would compile the row from what the corpus said at
+    the last write, silently.
     """
-    for path in (contract_index.INDEX, contract_index.GRAPH):
-        if not path.exists():
-            raise Missing(f"`{path.name}` is not generated. Run `just index-write`")
-    records = json.loads(contract_index.INDEX.read_text())
-    return {row["id"]: row for row in records}, json.loads(
-        contract_index.GRAPH.read_text()
-    )
+    records, graph = contract_index.build()
+    return {row["id"]: row for row in records}, graph
 
 
 def document(target: str, shorts: dict[str, str], known: dict[str, Path]) -> Path:
@@ -157,63 +152,38 @@ def table_of(path: Path, rid: str) -> tuple[str, list[str], list[tuple[str, str]
     operation has its own. Reading a postcondition without the frame condition
     beside it is how an operation gets built to spec and breaks its neighbour.
     """
-    heading, opened = "", ""
-    block: list[str] = []
-    reading = False
-    lines = lines_of(path) + ("",)
-    for at, line in enumerate(lines):
-        if contracts.TABLE_HEAD.match(line):
-            columns = contracts.header_cells(line)
-            reading = KIND in columns
-            opened, block = heading, [line] if reading else []
-            continue
-        row = contracts.ROW.match(line) if reading else None
-        if row is not None:
-            block.append(line)
-            continue
-        if reading and line.lstrip().startswith("|"):
-            block.append(line)  # the separator under the header
-            continue
-        # The table is closed. It is the one the id lives in, or it is not.
-        ids = [found for found in (contracts.ROW.match(kept) for kept in block)
-               if found]
-        if any(found["id"] == rid for found in ids):
-            # The `**Frame:**` line under the table is part of the operation: it
-            # names the shared frame the operation obeys in place of a local row.
-            after = next((kept for kept in lines[at:] if kept.strip()), "")
-            if contracts.FRAME_LINE.match(after.strip()):
-                block += ["", after]
-            return opened, block, [(found["id"], found["rest"]) for found in ids]
-        reading, block = False, []
-        if line.startswith(("## ", "### ")):
-            heading = line.strip()
-    raise Missing(f"`{rid}` is declared by no table of `{path.name}`")
+    doc = corpus.read(path)
+    row = next((found for found in doc.contract_rows
+                if found.id == rid and found.table.contract), None)
+    if row is None:
+        raise Missing(f"`{rid}` is declared by no table of `{path.name}`")
+    table = row.table
+    above = doc.heading_above(table.start)
+    block = [line.text for line in table.lines]
+    # The `**Frame:**` line under the table is part of the operation: it names
+    # the shared frame the operation obeys in place of a local row.
+    if table.closer is not None and contracts.FRAME_LINE.match(table.closer.text.strip()):
+        block += ["", table.closer.text]
+    siblings = [(found.id, found.rest) for found in doc.rows_of(table)]
+    return (above.text.strip() if above else ""), block, siblings
 
 
 def section(path: Path, number: str) -> list[str]:
     """The body of `## <number>.`, its heading included, up to the next `##`."""
-    kept: list[str] = []
-    for line in lines_of(path):
-        match = spec_refs.HEADING.match(line)
-        if match:
-            if kept:
-                break
-            if match.group(1) != number:
-                continue
-            kept.append(line)
-        elif kept:
-            kept.append(line)
-    if not kept:
+    found = corpus.read(path).section(number)
+    if found is None:
         raise Missing(f"`{path.name}` has no section {number}")
+    kept = lines_of(path)[found.start - 1:found.end]
     return [line for line in kept if not line.startswith("---")]
 
 
 def pillar(name: str) -> str:
     """The `README.md` row declaring one pillar, verbatim."""
-    for line in (contracts.ROOT / "README.md").read_text().splitlines():
-        match = PILLAR_LINE.match(line)
-        if match and match.group(1).strip() == name:
-            return line
+    for table in corpus.read(contracts.ROOT / "README.md").tables:
+        for row in table.rows:
+            match = PILLAR_LINE.match(row.text)
+            if match and match.group(1).strip() == name:
+                return row.text
     raise Missing(f"`README.md` declares no pillar `{name}`")
 
 
@@ -287,7 +257,7 @@ def closure(rid: str, records: dict[str, dict], graph: list[dict],
     row = records.get(rid)
     if row is None:
         raise Missing(f"no contract row declares the id `{rid}`")
-    known, shorts = corpus()
+    known, shorts = namespace()
     own = contracts.SPECS / row["document"]
     heading, table, siblings = table_of(own, rid)
     mine = [edge for edge in graph if edge["from"] == rid]
@@ -383,7 +353,7 @@ def words(lines: list[str]) -> int:
 def drawn_from(ids: list[str], records: dict[str, dict],
                graph: list[dict]) -> set[Path]:
     """Every document the closures of `ids` read, own document included."""
-    known, shorts = corpus()
+    known, shorts = namespace()
     touched = {contracts.SPECS / records[rid]["document"] for rid in ids}
     wanted = set(ids)
     for edge in graph:
@@ -448,7 +418,7 @@ def margins(docs: list[str]) -> list[str]:
     """
     out = ["What each document has left before the writing caps:", ""]
     for doc in docs:
-        text = (contracts.SPECS / doc).read_text()
+        text = corpus.read(contracts.SPECS / doc)
         used = spec_answers.answer_words(text)
         share = spec_shape.prose_share(text)
         out.append(

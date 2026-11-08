@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import glossary  # noqa: E402  -- the vocabulary, read from the corpus
-import prose  # noqa: E402  -- the corpus readers and the prose filters
+import prose  # noqa: E402  -- the prose readers and filters, over `corpus.py`
 
 # A term and its ordinary inflections. Wide on purpose: a miss here is a synonym
 # the report never shows, and the cost of a false hit is one line a reader skips.
@@ -61,8 +61,10 @@ def measure(terms: list[str]) -> tuple[collections.Counter, dict[str, list[str]]
     patterns = {t: re.compile(rf"\b{re.escape(t)}{INFLECTIONS}\b", re.I) for t in terms}
     for path in prose.rust_files() + prose.markdown_files():
         rel = str(path.relative_to(prose.ROOT))
-        text = path.read_text()
-        lines = prose.rust_comments(text) if path.suffix == ".rs" else prose.markdown_prose(text)
+        if path.suffix == ".rs":
+            lines = prose.rust_comments(path.read_text())
+        else:
+            lines = prose.markdown_prose(prose.corpus.read(path))
         for lineno, para in prose.paragraphs(lines):
             body = prose.clean(para)
             for term, pattern in patterns.items():

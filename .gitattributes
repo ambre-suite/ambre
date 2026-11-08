@@ -1,7 +1,6 @@
 # The generated spec files are regenerated on a merge, never merged as text.
 # The driver is `scripts/merge_generated.py`; `CONTRIBUTING.md` section 3 says
-# how to install it. Without it, git merges these files as text.
+# how to install it. Without it, git merges these files as text. The contract
+# index and graph are built on demand under `target/` and never committed.
 specs/1-Foundations/ambre-contract-ledger.md merge=ambre-generated
-specs/1-Foundations/ambre-contract-index.json merge=ambre-generated
-specs/1-Foundations/ambre-contract-graph.json merge=ambre-generated
 specs/*/ambre-*-inventory.md merge=ambre-generated

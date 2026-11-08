@@ -38,6 +38,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
 
 # The three labels are the template's, read from it, exactly as the gate that
 # holds each one present reads them (`scripts/template_vocabulary.py`).
@@ -58,8 +59,6 @@ NON_NORMATIVE = {"ambre-roadmap-journal.md"}
 HISTORY_EXEMPT = {"ambre-spec-template.md"}
 GENERATED = re.compile(r"-(inventory|ledger)\.md$")
 
-ANSWER = re.compile(rf"^\*\s+\*\*(?:{'|'.join(ANSWER_LABELS)})\.\*\*")
-CONTRACT_ROW = re.compile(r"^\|\s*`[A-Z][A-Z0-9-]*-\d+`\s*\|")
 
 # The document writing about itself. Each pattern pairs a subject that could be
 # the system with a verb that could not.
@@ -83,52 +82,46 @@ METRICS = (
 CAPS = {"answer_words": ANSWER_WORDS_TARGET, "history": 0}
 
 
-def measured_files() -> list[tuple[str, str]]:
-    """`(rel, text)` for every normative document under `specs/`."""
+def measured_files() -> list[tuple[str, corpus.Document]]:
+    """`(rel, document)` for every normative document under `specs/`."""
     out = []
-    for path in sorted(SPECS.rglob("*.md")):
+    for path in corpus.markdown(SPECS):
         rel = str(path.relative_to(SPECS))
         if "reviews/" in rel or "Todo/" in rel or "audits/" in rel:
             continue
         if path.name in NON_NORMATIVE or GENERATED.search(path.name):
             continue
-        out.append((rel, path.read_text()))
+        out.append((rel, corpus.read(path)))
     return out
 
 
-def answer_words(text: str) -> int:
+def answer_words(text) -> int:
     """The words the three answers spend, bullet and continuation together.
 
     A continuation is an indented non-empty line under an answer bullet, which
-    is how the template wraps one. A blank line ends the run: an answer that
-    needs a second paragraph has already lost.
+    is how the template wraps one, and a nested bullet is one too. A blank line
+    ends the run: an answer that needs a second paragraph has already lost.
     """
-    total = 0
-    inside = False
-    for line in text.splitlines():
-        if ANSWER.match(line):
-            inside = True
-        elif inside and not (line.startswith("  ") and line.strip()):
-            inside = False
-        if inside:
-            total += len(line.split())
-    return total
+    return sum(
+        len(line.split())
+        for bullet in corpus.as_document(text).bullets
+        if bullet.label in ANSWER_LABELS
+        for line in bullet.item
+    )
 
 
-def history_lines(text: str):
-    """Yield `(line_no, reason)` for every line writing the document's history."""
-    fenced = False
-    for i, line in enumerate(text.splitlines(), 1):
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-            continue
-        # A table cell states a gap, which is what the row is for, and the
-        # contract grammar puts the Story of an `unimplemented` row there.
-        if fenced or line.lstrip().startswith("|"):
+def history_lines(text):
+    """Yield `(line_no, reason)` for every line writing the document's history.
+
+    A fence holds code, and a table cell states a gap, which is what the row is
+    for: the contract grammar puts the Story of an `unimplemented` row there.
+    """
+    for line in corpus.as_document(text).lines:
+        if line.kind in (corpus.FENCE, corpus.CODE, corpus.TABLE):
             continue
         for pattern, reason in HISTORY_MARKERS:
-            if pattern.search(line):
-                yield i, f"{reason}: {line.strip()[:70]}"
+            if pattern.search(line.text):
+                yield line.no, f"{reason}: {line.text.strip()[:70]}"
                 break
 
 
@@ -138,8 +131,7 @@ def main() -> int:
     detail: dict[str, list[str]] = {}
 
     for rel, text in measured_files():
-        lines = text.splitlines()
-        if not any(CONTRACT_ROW.match(line) for line in lines):
+        if not corpus.as_document(text).contract_rows:
             # No table, no answers owed. History is still refused, so the
             # document is measured on that metric alone.
             words = 0

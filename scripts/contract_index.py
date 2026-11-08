@@ -24,8 +24,7 @@ document and the section -- except the pillar, which nothing resolved until now.
 The graph is where that join is a fact rather than a scan.
 
 **Neither file is a source of truth, and neither carries a coordinate.** The
-Markdown is authoritative, exactly as it is for the ledger, and a stale artefact
-fails rather than being read. No record carries a line number: a line is the one
+Markdown is authoritative, exactly as it is for the ledger. No record carries a line number: a line is the one
 part of a citation an edit above it breaks, which is what
 `ambre-spec-template.md` section 1.G refuses for `crates/`. A document and an id
 locate a row, and the id is unique corpus-wide.
@@ -36,12 +35,21 @@ and no function", so a container is cited by a `3. MODEL` section and belongs to
 a document, never to a row. `spec_shape.py` holds the container table against the
 code, and an edge from a row would have no tail to attach to.
 
-Run: `just index` (fail when the files on disk differ), `just index-write`.
+**Neither file is committed.** The two weigh megabytes, every commit touching a
+spec rewrote them, and their readers are tools. So `--write` builds them into
+`target/specs/`, which git ignores, and a reader of `scripts/` builds them in
+memory through `build()` and reads no file. A parse of the corpus takes a fifth
+of a second, so no reader can meet a stale artefact. A tool outside `scripts/`
+runs `just index-write` first.
+
+Run: `just index` (fail on an edge resolving to nothing, write nothing),
+`just index-write` (the same, then build both files).
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -49,6 +57,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import contracts  # noqa: E402  -- the row grammar, read once and never copied
+import corpus  # noqa: E402  -- the one reader of the Markdown
 import spec_refs  # noqa: E402  -- the document and section namespaces
 from template_vocabulary import (  # noqa: E402
     GAP,
@@ -58,8 +67,10 @@ from template_vocabulary import (  # noqa: E402
     STATEMENT,
 )
 
-INDEX = contracts.SPECS / "1-Foundations" / "ambre-contract-index.json"
-GRAPH = contracts.SPECS / "1-Foundations" / "ambre-contract-graph.json"
+# Under `target/`, which git ignores: the files are built on demand, never committed.
+OUT = contracts.ROOT / "target" / "specs"
+INDEX = OUT / "ambre-contract-index.json"
+GRAPH = OUT / "ambre-contract-graph.json"
 
 # A pillar of `README.md`, declared in the one table that carries them. The bold
 # run is the name a `Sources` cell quotes verbatim.
@@ -72,29 +83,17 @@ FINDING = re.compile(r"`([A-Z]\d{1,3})`")
 def read_rows():
     """Yield `(document, id, status, cells)` for every contract row of the corpus.
 
-    The walk is the gate's own, held to it by one test: a table is opened by a
-    header declaring `ID` and `Kind`, and closed by the first line that is not a
-    table row. A reader that closed a table on a blank line would split an
-    operation in two, and the half it kept would index against the wrong header.
+    The rows are the corpus's, read by the parser every gate shares, so the
+    index holds the rows the contract gate checks: a table is opened by a header
+    declaring `ID` and `Kind`, and a blank line inside it closes nothing.
     """
-    for path in sorted(contracts.SPECS.rglob("*.md")):
+    for path in corpus.markdown(contracts.SPECS):
         if path.name == contracts.TEMPLATE:
             continue  # example rows, not contracts
         rel = str(path.relative_to(contracts.SPECS))
-        columns: list[str] | None = None
-        for line in path.read_text().splitlines():
-            stripped = line.lstrip()
-            head = contracts.TABLE_HEAD.match(line)
-            if head or (stripped and not stripped.startswith("|")):
-                columns = contracts.header_cells(line) if head else None
-                if columns is not None and KIND not in columns:
-                    columns = None  # a table keyed by `ID` that is not a contract
-            match = contracts.ROW.match(line)
-            if match is None or columns is None:
-                continue
-            yield rel, match["id"], match["status"], contracts.row_cells(
-                columns, match["rest"]
-            )
+        for row in corpus.read(path).contract_rows:
+            if row.table.contract:
+                yield rel, row.id, row.status, row.cells
 
 
 def record(document: str, rid: str, status: str, cells: dict[str, str]) -> dict:
@@ -180,9 +179,9 @@ def declared_pillars() -> set[str]:
     that name is minted, so a renamed pillar leaves every citation of it pointing
     at a row that no longer exists.
     """
-    text = (contracts.ROOT / "README.md").read_text()
-    return {match.group(1).strip() for line in text.splitlines()
-            if (match := PILLAR_ROW.match(line))}
+    readme = corpus.read(contracts.ROOT / "README.md")
+    return {match.group(1).strip() for table in readme.tables for row in table.rows
+            if (match := PILLAR_ROW.match(row.text))}
 
 
 def edge_defects(records: list[dict], found: list[dict]) -> list[str]:
@@ -245,31 +244,28 @@ def render(payload: list[dict]) -> str:
     return f"[\n{body}\n]\n"
 
 
-def main() -> int:
+def build() -> tuple[list[dict], list[dict]]:
+    """The index and the graph of the corpus as it is now, in memory.
+
+    The reader of `scripts/` calls this rather than reading the two files, so
+    what it reads cannot lag the Markdown.
+    """
     records = index()
-    found = edges(records)
+    return records, edges(records)
+
+
+def main() -> int:
+    records, found = build()
     defects = edge_defects(records, found)
     for defect in defects:
         print(f"ERROR {defect}")
-    artefacts = ((INDEX, render(records)), (GRAPH, render(found)))
     if "--write" in sys.argv:
-        for path, text in artefacts:
-            path.write_text(text)
-            print(f"wrote {path.relative_to(contracts.ROOT)}")
-        return 1 if defects else 0
-    stale = [path for path, text in artefacts
-             if not path.exists() or path.read_text() != text]
-    for path in stale:
-        print(f"ERROR {path.relative_to(contracts.SPECS)}: stale")
+        INDEX.parent.mkdir(parents=True, exist_ok=True)
+        for path, payload in ((INDEX, records), (GRAPH, found)):
+            path.write_text(render(payload))
+            print(f"wrote {os.path.relpath(path, contracts.ROOT)}")
     print(f"\n{len(records)} rows, {len(found)} edges, "
           f"{len(defects)} edges resolving to nothing")
-    if stale:
-        print(
-            "\nERROR: a generated artefact on disk is not what the corpus says "
-            "today (ambre-spec-template.md section 1.G). Run `just index-write`.",
-            file=sys.stderr,
-        )
-        return 1
     if defects:
         print(
             "\nERROR: an edge of the graph resolves to nothing "

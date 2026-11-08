@@ -19,17 +19,17 @@ read fails at import rather than narrowing to what it found.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import corpus  # noqa: E402  -- the one reader of the Markdown
 
 GLOSSARY = Path(__file__).resolve().parent.parent / "specs" / "ambre-glossary.md"
 
-# A row of any glossary table: term, gloss, forbidden, reference. The header and
-# the alignment row carry no backtick in the reference cell, so both fall out.
-ROW = re.compile(
-    r"^\|\s*(?P<term>[^|]+?)\s*\|\s*(?P<gloss>[^|]*?)\s*\|"
-    r"\s*(?P<forbidden>[^|]*?)\s*\|\s*`(?P<ref>[^`]+)`\s*\|\s*$",
-    re.M,
-)
+# The reference cell of a glossary row: one backticked path and nothing else. A
+# header carries no backtick there, so it falls out.
+REF = re.compile(r"`(?P<ref>[^`]+)`")
 # `deny (not default-deny)`: the word, and the one compound that stays legal.
 FORBIDDEN = re.compile(r"^(?P<word>[a-z][a-z -]*?)\s*(?:\(not (?P<except>[^)]+)\))?$", re.I)
 
@@ -54,8 +54,10 @@ class Entry:
 def entries() -> list[Entry]:
     """Every row of the glossary, in file order."""
     out = [
-        Entry(m["term"], m["gloss"], m["forbidden"], m["ref"])
-        for m in ROW.finditer(GLOSSARY.read_text())
+        Entry(row.cells[0], row.cells[1], row.cells[2], ref["ref"])
+        for table in corpus.read(GLOSSARY).tables
+        for row in table.rows
+        if len(row.cells) == 4 and row.cells[0] and (ref := REF.fullmatch(row.cells[3]))
     ]
     if not out:
         raise ValueError("glossary: no row parsed -- the table shape changed")

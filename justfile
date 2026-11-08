@@ -336,13 +336,15 @@ contracts-write:
 # the statement, the sources and the mechanism, so a tool needing a row whole
 # parses the corpus again to get it back. This holds it parsed, and resolves
 # every edge -- the README pillar of a `Sources` cell included, which is the one
-# form no other gate reads.
+# form no other gate reads. The two files weigh megabytes and only a tool reads
+# them, so git never carries them: `index-write` builds them under `target/specs/`,
+# and `spec-context` and `spec-code` build the same parse in memory.
 
-# contract index and graph: fail when the files on disk are not what the corpus says.
+# contract index and graph: build them in memory, fail on an edge resolving to nothing.
 index:
     python3 scripts/contract_index.py
 
-# Rewrite the index and the graph after a contract row changed.
+# Build the index and the graph into `target/specs/`, for a tool that reads them.
 index-write:
     python3 scripts/contract_index.py --write
 
@@ -403,8 +405,8 @@ spec-shape:
 # a reader: where the rule comes from, which mechanism holds it, what that leaves
 # open, and where it stands. They are why the table is trustworthy, and why one
 # row wraps over four screen widths. This prints the same rows reduced to the
-# three a reader asks for, from the same parser `contracts.py` uses, so the view
-# can never state a rule the ledger does not. It writes nothing: a reading view
+# three a reader asks for, from the parser every gate shares (`scripts/corpus.py`),
+# so the view can never state a rule the ledger does not. It writes nothing: a reading view
 # on disk is a second copy of every rule, free to go stale.
 
 # reading view of one spec's contract: the id, the kind, the rule.
@@ -500,7 +502,8 @@ crate-boundaries:
 # prose one, and the worst produced no symptom: a table row left the reader's
 # result, so the hard rules never read it. A check that reads nothing and a
 # check that is satisfied look alike from outside, which is what these hold,
-# one test file per script.
+# one test file per script. `test_corpus.py` holds one fixture document that
+# every gate reads through `scripts/corpus.py`, the same way.
 
 # what each check in `scripts/` reads, and what it refuses.
 test-scripts:
@@ -532,6 +535,16 @@ inventory:
 # Rewrite each application's inventory after a feature document changed.
 inventory-write:
     python3 scripts/feature_inventory.py --write
+
+# The toolchain is one file: `rust-toolchain.toml`, a dated nightly that moves by
+# a roadmap story alone (`ARCH-075`). A toolchain named in any other file builds
+# part of the workspace on another compiler, and a bump would miss it. `fuzz/`
+# inherits the root file through the directory lookup of rustup. The script
+# lists what it refuses.
+
+# toolchain pin: no file but `rust-toolchain.toml` names a toolchain or a channel.
+toolchain-pin:
+    python3 scripts/toolchain_pin.py
 
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part

@@ -1,7 +1,11 @@
 [toolchain]
-# Pinned date — bump deliberately. Required for `-Z build-std` to rebuild
-# `std` with `+atomics` (multi-threaded WASM). See
-# specs/1-Foundations/ambre-spec-architecture.md.
+# The one toolchain of the repository: every build, CI job, nested workspace
+# (`fuzz/` reads this file through the rustup directory lookup) and tool uses it.
+# No other file names a toolchain or a channel; `just toolchain-pin` holds that.
+# Nightly, because `-Z build-std` rebuilds `std` with `+atomics` for
+# multi-threaded WASM. The date moves only by a roadmap story that runs the full
+# belt: specs/1-Foundations/ambre-spec-architecture.md section 2, the toolchain
+# (`ARCH-075`).
 channel = "nightly-2026-03-29"
 targets = ["wasm32-unknown-unknown"]
 components = ["rust-src"]

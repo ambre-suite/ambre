@@ -11,7 +11,7 @@ are also why a row wraps over four screen widths.
 So the columns stay, and the reading view drops them here rather than in the
 file. What comes out is the document's opening, then every contract row under
 its own subsection, reduced to `ID | Kind | Statement`. Nothing is computed:
-this reparses the same rows `contracts.py` does, with its parser, so a view that
+this reads the rows `contracts.py` reads, through `corpus.py`, so a view that
 disagreed with the ledger would be a bug in one file and not a second
 interpretation of the corpus.
 
@@ -31,7 +31,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import contracts  # noqa: E402  -- the corpus has one contract parser
+import corpus  # noqa: E402  -- the corpus has one parser
+from template_vocabulary import KIND, STATEMENT  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
@@ -68,7 +69,7 @@ def opening(text: str) -> list[str]:
     """
     kept: list[str] = []
     wrapping = False
-    for line in text.splitlines():
+    for line in (line.text for line in corpus.parse(text).lines):
         if line.startswith("---"):
             break
         opens = line.startswith("# ") or line.startswith(">") or line.startswith(HEADER_FIELDS)
@@ -83,33 +84,24 @@ def reading_view(text: str) -> list[str]:
 
     A row is printed where it was declared: the subsections are what group an
     operation's four kinds, and a flat list of the ids would lose the one piece
-    of structure the reduction cannot restate.
+    of structure the reduction cannot restate. The heading is the most recent of
+    either depth: a feature document groups its rows under `###` subsections,
+    and a schema document declares them under a `##` section with no subsection.
     """
+    doc = corpus.parse(text)
     lines = opening(text)
-    columns: list[str] | None = None
-    heading = ""
     printed_heading = None
 
-    for line in text.splitlines():
-        # The most recent heading of either depth: a feature document groups its
-        # rows under `###` subsections, and a schema document declares them under
-        # a `##` section with no subsection at all.
-        if line.startswith(("## ", "### ")):
-            heading = line.strip()
-        elif contracts.TABLE_HEAD.match(line):
-            columns = contracts.header_cells(line)
-        else:
-            match = contracts.ROW.match(line)
-            if not match:
-                continue
-            cells = contracts.row_cells(columns, match.group("rest"))
-            if heading != printed_heading:
-                lines += ["", heading, "", "| ID | Kind | Statement |", "|---|---|---|"]
-                printed_heading = heading
-            lines.append(
-                f"| `{match.group('id')}` | {cells.get('Kind', '')} |"
-                f" {cells.get('Statement (RFC 2119)', '')} |"
-            )
+    for row in doc.contract_rows:
+        above = doc.heading_above(row.no)
+        heading = above.text.strip() if above else ""
+        if heading != printed_heading:
+            lines += ["", heading, "", "| ID | Kind | Statement |", "|---|---|---|"]
+            printed_heading = heading
+        lines.append(
+            f"| `{row.id}` | {row.cells.get(KIND, '')} |"
+            f" {row.cells.get(STATEMENT, '')} |"
+        )
 
     return lines
 

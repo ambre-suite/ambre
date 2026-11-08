@@ -84,6 +84,7 @@ prefix is `ARCH`.
 | `ARCH-067` | `INV` | A module-level `type` alias whose target holds an instance of a generic family of `ambre-core` in a tuple, a container or a closure MUST stay only where that target, written out at one of its uses, fails `clippy::type_complexity`. Its doc comment MUST say so in one line. | `ambre-spec-newtypes.md section 3`, the row `A name` | human-review -- the reviewer writes out at its uses each such alias a change adds, and runs clippy: the alias stays only when the type complexity lint of clippy refuses one use. The lint is never allowed or expected to keep an alias out | unheld -- `type-resolution` -- the gate parses with `syn` and runs no clippy, so it cannot score a type written out at a use | human-review |
 | `ARCH-073` | `INV` | Code outside a test MUST NOT hand a newtype it unwrapped to a workspace callee that takes a primitive. A line of `specs/1-Foundations/ambre-unwrap.tsv` MAY excuse the key of such a site, with a count of sites and a reason. An unwrap is an accessor of the newtype, a `.0` that is not private, or a `to_string` that prints its content. A conversion into a primitive, `into` or `String::from`, is an unwrap too. The tuple struct of a newtype is a workspace callee, as its `new` is. The module of the newtype, its own impl and an impl of a conversion trait that names it are exempt. A named conversion, an associated `fn` of one newtype parameter that returns `Self`, is exempt for that parameter. The report places a type name through a `use` of the file, the crate its path starts at, or a declaration of the current crate. A glob `use` of the workspace places the name last, and only when one crate answers it. A name that two such globs answer leaves its value untyped, never foreign. A re-export is followed through the `pub use` items of its crate. On a receiver the report cannot type, an accessor or a callee that std shares is ambiguous, never refused. So is an accessor that several newtypes share. The report fails on a missing or malformed file. A strict report also fails on a key no line names, on a key with more sites than its count, and on a stale line. | `ai/ambre-rust-style.md`, the newtype rule; `ambre-spec-testing.md section 2`, the primitive gate | `ambre_primitives::unwrap::tests::an_unwrap_handed_to_a_workspace_fn_is_refused`; `::an_unwrap_kept_in_a_binding_is_refused_where_the_binding_reaches_the_workspace`; `::an_unwrap_handed_to_a_foreign_call_passes`; `::test_code_is_not_read`; `::a_method_only_the_workspace_defines_is_refused`; `::a_public_tuple_field_is_an_unwrap_and_a_private_one_is_not`; `::to_string_is_an_unwrap_when_the_display_reads_a_field`; `::a_from_impl_into_a_primitive_makes_into_and_from_unwraps`; `::a_hand_written_as_ref_of_bytes_is_an_accessor`; `::the_tuple_struct_of_a_newtype_is_refused_like_its_new`; `::the_own_impl_and_the_defining_module_of_a_newtype_unwrap_it_freely`; `::the_impl_of_a_newtype_unwraps_that_newtype_alone`; `::a_conversion_impl_unwraps_the_newtype_it_converts`; `::a_named_conversion_unwraps_its_one_newtype_freely`; `::a_two_parameter_fn_or_a_method_is_no_named_conversion`; `::a_one_newtype_fn_that_returns_another_type_is_no_named_conversion`; `::the_crate_a_path_names_decides_its_type`; `::a_foreign_fn_a_use_imports_shadows_a_workspace_fn`; `::a_renamed_dependency_reaches_its_package`; `::a_type_name_two_crates_and_a_foreign_import_share_is_judged_by_each_type`; `::a_workspace_glob_places_a_name_only_when_one_crate_answers`; `::a_name_two_workspace_globs_answer_is_ambiguous`; `::a_re_export_resolves_through_the_pub_use_of_its_crate`; `::a_method_both_the_workspace_and_std_define_is_ambiguous`; `::a_std_accessor_on_an_unknown_receiver_is_ambiguous`; `::an_accessor_many_newtypes_share_is_ambiguous_on_an_untyped_receiver`; `::an_untyped_receiver_drops_the_site_only_when_every_candidate_is_local`; `::the_allowlist_names_each_defect_of_its_lines`; `::report_mode_passes_on_refusals_and_strict_mode_fails`; `::a_missing_or_malformed_allowlist_fails_both_modes`; `::strict_mode_holds_each_line_to_its_count`; ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, which runs the strict report on the scan of the primitive gate | none | verified |
 | `ARCH-074` | `INV` | A gate under `scripts/` MUST exit non-zero on a breach when run with no flag, and a generator under `scripts/` MUST leave its target unchanged when run with no flag. A generator writes only under `--write`, or under `--fetch` for the one that downloads its source. | `ambre-spec-testing.md section 2`, the gate rung of the ladder | ci-gate -- `scripts/test_gates.py`, run by `just test-scripts` in the CI `lint` job, gives every script of `scripts/` a role, refuses a gate that reads a `--check` flag, runs each gate with no flag on one planted breach and fails it on exit 0, and runs each generator with no flag on a stale target that must stay as it was | none | verified |
+| `ARCH-075` | `INV` | Every build, CI job, nested workspace and tool that the repository runs MUST use the toolchain of the root `rust-toolchain.toml`. That file MUST pin a dated nightly. Another file MUST NOT name a toolchain or a channel. | this spec section 2, the toolchain; `ARCH-012` | ci-gate -- `scripts/toolchain_pin.py`, run by `just toolchain-pin` in the CI `lint` job, reads every tracked file outside `vendor/`. It refuses a root `channel` other than `nightly-YYYY-MM-DD` and a second toolchain file at any depth. It refuses a `+toolchain` argument, `RUSTUP_TOOLCHAIN`, `--toolchain`, a rustup verb that selects or installs a toolchain, and a Rust container image. That covers scripts, recipes, hooks, workflows, manifests, Rust sources and the shell fences of Markdown. A Rust test file may quote a command line as data, and is held to the override, the flag, the verbs and a lone `"+toolchain"` argument. A workflow `toolchain:` input or Rust install action fails, and so does a manifest `rust-version`. The tests of `scripts/test_toolchain_pin.py` plant each one | none | verified |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | `ambre_logic::authorship_tests::two_tabs_of_one_user_converge_as_two_users_do` -- two sessions of one user, one cell edited at once; `ambre_sync::updates::tests::each_open_draws_a_new_peer_and_a_repeated_open_keeps_it` -- each session its own PeerID; `ambre_server::ws::pubsub_hub::tests::a_frame_from_one_instance_reaches_a_subscriber_of_the_other` -- the relay fans out per connection, never per user | none | verified |
 
 ### 1.2 A thread fails
@@ -123,7 +124,7 @@ The user types, then closes the document before the Logic thread has answered th
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 65 `verified`, 9 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 66 `verified`, 9 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -277,6 +278,29 @@ to that target, so the relay and the host tests are unaffected. The page must be
 cross-origin isolated for the shared memory to exist at all, and the Sync worker inherits that
 property from the page.
 
+**One pin.** The rebuilt standard library takes `-Z build-std`, so the whole workspace builds on
+nightly, the relay and the host tests included. The root `rust-toolchain.toml` pins one dated
+nightly, and no other file names a toolchain or a channel (`ARCH-075`). Two compilers in one
+repository disagree on lints, on `std` and on the dep-info the primitive gate reads. A nested
+workspace, `fuzz/` today, carries no toolchain file. Rustup looks for the file in the current
+directory and then in each parent, so the nested workspace reads the root pin.
+
+**Why the directory lookup.** A copy per nested workspace is a second statement that a bump must
+remember. A symbolic link breaks on a checkout with `core.symlinks` off. The lookup needs neither,
+and the gate refuses a second file at any depth. A `rustup override` on a contributor's machine
+outranks the file. That machine is outside the repository, and CI sets no override.
+
+**A bump.** The date moves only by a decision, and the decision is a story of its own in
+`ambre-roadmap.md`. That row names the new date and the reason for the move. The bump commit changes
+the `channel` line alone and runs the full belt on the new compiler:
+
+1. `just lint` and `just lint-wasm`;
+2. `just test-native`, `just test-db`, `just test-wasm` and the browser tier;
+3. `just size` and `just instructions`, since codegen moves with the compiler;
+4. `just primitives`, and a build of every target of `just fuzz`.
+
+A belt that fails on the new date fixes the code in the same story, or the date stays.
+
 **Sequences.** A sequence number is a number one issuer hands out going up, each once. A timer,
 a request or a cache key carries the number it was armed, asked or built under. The relay numbers
 each update, and an author numbers its own deltas.
@@ -365,6 +389,9 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | One binary per instance, not one per application | a separate build per application | the applications share the render runtime, the interface toolkit and the engine, so splitting them would duplicate the heavy half of the download per application. |
 | An application hands the shell one trait object | moving each command's logic into a free function of its crate, still called by the shell | the shell would still name each command it routes, so the next command would land in the shell again and nothing would stop it |
 | No dependency-injection framework | a container that resolves the graph at run time | the registry is a map and the wiring is explicit in the launcher: two queues, a closure that builds a view, and a worker handle. |
+| One dated nightly for the whole workspace | stable for the host and the relay, nightly for the wasm target alone | two compilers give two lint sets and two `std`, and a host build no longer proves what the wasm build compiles. The primitive gate reads the dep-info of both lines, so it would read two compilers too. |
+| A dated `channel`, moved by a story | a floating `nightly` channel | each fresh runner takes a new compiler, so a red build carries no change of ours to blame, and two contributors build on two compilers. |
+| Nested workspaces read the root file through the rustup lookup | a toolchain file per nested workspace, copied or linked | a copy is a second date a bump must remember, and a link breaks on a checkout without symbolic links. |
 | No fourth thread for import and export | a fourth thread for conversions | during an import the interface shows a waiting state, and a blocked Logic thread is the intended behaviour. The cost of a long conversion is paid by lazy loading, not by another thread. |
 
 ---

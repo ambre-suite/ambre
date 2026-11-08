@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """The merge driver of the generated spec files: it regenerates them, never merges them.
 
-The contract ledger, the contract index, the contract graph and the inventories
-are committed outputs of `contracts.py`, `contract_index.py` and
-`feature_inventory.py`. Two branches that each add a contract row both change
-them, so a text merge conflicts on four or five files. Neither side is right: the
+The contract ledger and the inventories are committed outputs of `contracts.py`
+and `feature_inventory.py`. Two branches that each add a contract row both change
+them, so a text merge conflicts on two or three files. Neither side is right: the
 right content is what the generators write from the merged sources.
 
 `.gitattributes` names each such file with `merge=ambre-generated`. Git calls
@@ -17,9 +16,9 @@ clone, as `CONTRIBUTING.md` section 3 states:
 **Git merges in memory, so the work tree holds our sources, not the merged
 ones.** The script therefore rebuilds the merged sources itself. It names the
 other side, merges the two commits with `git merge-tree --write-tree`, extracts
-that tree into a temporary directory and runs the three generators there, with
+that tree into a temporary directory and runs the two generators there, with
 `--write`. The outputs of one merged tree are kept under the git directory, so
-the second to fifth file of one merge cost no second run.
+the second and third file of one merge cost no second run.
 
 The other side is known in two cases:
 
@@ -30,9 +29,13 @@ The other side is known in two cases:
 Elsewhere -- a single `git cherry-pick`, `git revert`, `git am -3`, an octopus
 merge -- git names no other commit. A source conflict also leaves no merged
 sources to read. In each of these cases the script keeps our side, exits 0 and
-says on standard error which commands regenerate the files. `just contracts`,
-`just index` and `just inventory` then refuse a stale file, so a wrong file
-never passes a gate.
+says on standard error which commands regenerate the files. `just contracts`
+and `just inventory` then refuse a stale file, so a wrong file never passes a
+gate.
+
+The contract index and the contract graph are no longer committed: `just
+index-write` builds them into `target/`. They need no driver, which therefore
+serves Markdown only.
 
 Run by git only. `test_merge_generated.py` merges two real branches of this
 repository through it.
@@ -62,19 +65,18 @@ NESTED = "AMBRE_MERGE_GENERATED_NESTED"
 # generator that failed before it wrote.
 GENERATORS = (
     "scripts/contracts.py",
-    "scripts/contract_index.py",
     "scripts/feature_inventory.py",
 )
 
-# What the three generators write, and nothing else. `.gitattributes` names the
+# What the two generators write, and nothing else. `.gitattributes` names the
 # same set, and `test_merge_generated.py` holds the two together.
 GENERATED = (
-    re.compile(r"^specs/1-Foundations/ambre-contract-(ledger\.md|index\.json|graph\.json)$"),
+    re.compile(r"^specs/1-Foundations/ambre-contract-ledger\.md$"),
     re.compile(r"^specs/[^/]+/ambre-[a-z]+-inventory\.md$"),
 )
 
 # The regeneration a person runs when the driver could not.
-REGENERATE = "just contracts-write && just index-write && just inventory-write"
+REGENERATE = "just contracts-write && just inventory-write"
 
 GITHEAD = re.compile(r"^GITHEAD_([0-9a-f]{40}|[0-9a-f]{64})$")
 
