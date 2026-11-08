@@ -41,6 +41,7 @@ import spec_answers  # noqa: E402
 import spec_code  # noqa: E402
 import spec_refs  # noqa: E402
 import spec_shape  # noqa: E402
+import toolchain_pin  # noqa: E402
 import wasm_size  # noqa: E402
 
 GATE = "gate"
@@ -71,6 +72,7 @@ SCRIPTS = {
     "spec_shape": GATE,
     "template_vocabulary": TOOL,
     "term_drift": TOOL,
+    "toolchain_pin": GATE,
     "trunk_post_build": TOOL,
     "wasm_size": GATE,
 }
@@ -195,6 +197,12 @@ class GatesFailWithNoFlag(unittest.TestCase):
         self.fails("wasm_size", [
             mock.patch.object(wasm_size, "find", lambda dist, pattern: wasm),
             mock.patch.object(wasm_size, "CEILINGS", {"Main": 0, "Sync": 0}),
+        ])
+
+    def test_toolchain_pin(self) -> None:
+        self.fails("toolchain_pin", [
+            mock.patch.object(toolchain_pin, "pinned", lambda: 'channel = "nightly-2026-03-29"\n'),
+            mock.patch.object(toolchain_pin, "files", lambda: [("fuzz/rust-toolchain.toml", "")]),
         ])
 
     def test_commit_msg(self) -> None:

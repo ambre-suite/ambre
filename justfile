@@ -533,6 +533,16 @@ inventory:
 inventory-write:
     python3 scripts/feature_inventory.py --write
 
+# The toolchain is one file: `rust-toolchain.toml`, a dated nightly that moves by
+# a roadmap story alone (`ARCH-075`). A toolchain named in any other file builds
+# part of the workspace on another compiler, and a bump would miss it. `fuzz/`
+# inherits the root file through the directory lookup of rustup. The script
+# lists what it refuses.
+
+# toolchain pin: no file but `rust-toolchain.toml` names a toolchain or a channel.
+toolchain-pin:
+    python3 scripts/toolchain_pin.py
+
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part
 # of the graph being checked rather than invisible to it. No network build: this

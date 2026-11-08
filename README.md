@@ -172,16 +172,14 @@ without the four columns a review reads. It writes nothing, and the file stays t
 
 ### Prerequisites
 
-- Rust stable (with `wasm32-unknown-unknown` target)
+- `rustup`. The first `cargo` command installs the pinned nightly of `rust-toolchain.toml`, with its
+  `wasm32-unknown-unknown` target and `rust-src`. No other toolchain builds Ambre (`ARCH-075`).
 - `trunk` for building and serving the WASM frontend
 - PostgreSQL and Redis 7.4 or later (for the server)
 
 ### Building
 
 ```bash
-# Install wasm target
-rustup target add wasm32-unknown-unknown
-
 # Build all crates
 cargo build --release
 
