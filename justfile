@@ -138,10 +138,10 @@ locale-table-fetch:
     python3 scripts/locale_table.py --fetch
 
 locale-table:
-    python3 scripts/locale_table.py
+    python3 scripts/locale_table.py --write
 
 locale-table-check:
-    python3 scripts/locale_table.py --check
+    python3 scripts/locale_table.py
 
 # Copy one artifact out of `current/` into `frozen/`, deriving the version
 # suffix from its manifest. Takes a generator name (`trame/grid_literals`),
@@ -314,7 +314,7 @@ mutants-diff base="origin/main" *flags:
 # rule cited outside its application, and on a test that cites a rule whose
 # `Mechanism` does not name it (the defects listed in spec_code_citations.allow aside).
 spec-code:
-    python3 scripts/spec_code.py --check
+    python3 scripts/spec_code.py
 
 # Ledger of the per-spec contract tables (`ambre-contract-ledger.md`), written
 # by the script and by nothing else -- a hand-maintained roll-up is the same
@@ -397,7 +397,7 @@ primitives-prune:
 # spec shape: prose share (words), line length, feature-document markers, schema
 # budgets, containers.
 spec-shape:
-    python3 scripts/spec_shape.py --check
+    python3 scripts/spec_shape.py
 
 # A contract row is seven columns, and four of them answer a reviewer rather than
 # a reader: where the rule comes from, which mechanism holds it, what that leaves
@@ -447,10 +447,6 @@ spec-context-story NAME:
 # the answers under a contract table: how many words they spend, and whether any
 # line writes the document's own history.
 spec-answers:
-    python3 scripts/spec_answers.py --check
-
-# Every breach, with its line, so a red check says what to rewrite.
-spec-answers-detail:
     python3 scripts/spec_answers.py
 
 # `ai/ambre-writing-style.md` ended on "No script checks this file [...] It is a
@@ -463,7 +459,7 @@ spec-answers-detail:
 
 # writing style: the mechanical half of `ai/ambre-writing-style.md`.
 prose:
-    python3 scripts/prose.py --check
+    python3 scripts/prose.py
 
 # Each application freezes, under its compiled `SCHEMA_VERSION`, the key set and
 # the value types a build writes. A belt in the crate holds a build against that
@@ -479,7 +475,7 @@ prose:
 
 # append-only schema freezes: a released shape section never moves.
 schema-freeze:
-    python3 scripts/schema_freeze.py --check
+    python3 scripts/schema_freeze.py
 
 # A frozen artifact outlives its generator, so the tree of a later commit cannot
 # show where it came from. Its freeze commit can: the freeze must sit in the bump
@@ -490,14 +486,14 @@ schema-freeze:
 
 # each new frozen artifact traced to its seed at the commit that froze it.
 freeze-provenance:
-    python3 scripts/freeze_provenance.py --check
+    python3 scripts/freeze_provenance.py
 
 # Three reachability rules a manifest line could erase: fixture machinery out
 # of the client build (`FIXTURE-007`), a generator driving commands rather than
 # the CRDT (`FIXTURE-004`) and reading no file (`FIXTURE-032`), and a shared
 # control with no whole-style type to emit (`SCHEMA-002`).
 crate-boundaries:
-    python3 scripts/crate_boundaries.py --check
+    python3 scripts/crate_boundaries.py
 
 # The checks in `scripts/` guard every Rust comment, every document and every
 # contract row, and nothing guarded the checks. Three defects shipped in the
@@ -519,7 +515,7 @@ test-scripts:
 
 # citation resolution: every document and section cited exists.
 spec-refs:
-    python3 scripts/spec_refs.py --check
+    python3 scripts/spec_refs.py
 
 # What the product does today, one row per feature document. The roadmap holds
 # what is left to do, and a feature built by three stories across two epics
@@ -531,7 +527,7 @@ spec-refs:
 
 # feature inventory: generated from the feature documents, and never stale.
 inventory:
-    python3 scripts/feature_inventory.py --check
+    python3 scripts/feature_inventory.py
 
 # Rewrite each application's inventory after a feature document changed.
 inventory-write:

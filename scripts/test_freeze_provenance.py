@@ -80,7 +80,7 @@ class Repo:
     def check(self, *args: str) -> tuple[int, str]:
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
-            code = fp.main(["--check", "--regenerate", REGENERATE, *args], root=self.root)
+            code = fp.main(["--regenerate", REGENERATE, *args], root=self.root)
         return code, out.getvalue()
 
 
@@ -269,7 +269,7 @@ class FreezeProvenance(unittest.TestCase):
         )
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
-            code = fp.main(["--check", "--all", "--regenerate", REGENERATE], root=clone)
+            code = fp.main(["--all", "--regenerate", REGENERATE], root=clone)
         self.assertEqual(code, 1, out.getvalue())
         self.assertIn("git fetch --unshallow", out.getvalue())
 

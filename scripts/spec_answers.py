@@ -133,7 +133,6 @@ def history_lines(text: str):
 
 
 def main() -> int:
-    check = "--check" in sys.argv
     fresh: dict[str, dict[str, int]] = {}
     errors: list[str] = []
     detail: dict[str, list[str]] = {}
@@ -174,7 +173,7 @@ def main() -> int:
     for e in errors:
         print(f"ERROR {e}", file=sys.stderr)
     print(f"{len(errors)} answer defects")
-    return 1 if (check and errors) else 0
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

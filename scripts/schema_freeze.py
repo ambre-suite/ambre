@@ -249,11 +249,11 @@ def check_belts(errors: list[str]) -> int:
     return len(read)
 
 
-def report_belts(errors: list[str], check: bool) -> int:
+def report_belts(errors: list[str]) -> int:
     """The pairing findings, printed, and the exit code they decide."""
     for line in errors:
         print(f"  {line}")
-    if check and errors:
+    if errors:
         print(
             "\nERROR: a shape freeze and its belt came apart. The freeze is only "
             "worth the test that compares a build against it, and `SCHEMA-009` "
@@ -265,7 +265,7 @@ def report_belts(errors: list[str], check: bool) -> int:
     return 0
 
 
-def prerelease(check: bool) -> int:
+def prerelease() -> int:
     """The check before the first release: the pairing alone, no base read.
 
     No peer holds a document written under a section yet, so an edited or a
@@ -275,12 +275,11 @@ def prerelease(check: bool) -> int:
     paired = check_belts(errors)
     print(f"mode: pre-release (no tag matches `{RELEASE_TAG}`), no base read and "
           f"no section bound; {paired} crates read for a shape and its belt")
-    return report_belts(errors, check)
+    return report_belts(errors)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="exit non-zero on a finding")
     parser.add_argument(
         "--base",
         default="origin/main",
@@ -299,7 +298,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        return prerelease(args.check)
+        return prerelease()
     print(f"mode: released ({len(tags)} tags match `{RELEASE_TAG}`), "
           "every published section is append-only")
 
@@ -349,9 +348,9 @@ def main() -> int:
     for line in dropped:
         print(f"  dropped {line}")
 
-    if report_belts(errors, args.check):
+    if report_belts(errors):
         return 1
-    if args.check and (edited or dropped):
+    if edited or dropped:
         print(
             "\nERROR: a frozen shape section changed after it was published. A "
             "section is the record of what one `SCHEMA_VERSION` wrote, and peers "

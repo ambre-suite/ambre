@@ -28,7 +28,7 @@ and a list of those failures would freeze nothing useful.
 The defects found when the check landed are listed in `ALLOW`, one per line.
 The list only shrinks: a new defect fails, and so does a line no defect matches.
 
-Run: `just spec-code` (list), `just spec-code --check` (fail on any body).
+Run: `just spec-code`. It lists each body, and fails on any.
 """
 
 import json
@@ -330,7 +330,6 @@ def check_citations() -> int:
 
 
 def main() -> int:
-    check = "--check" in sys.argv
     total = 0
     files = 0
     fence_defects = 0
@@ -360,7 +359,7 @@ def main() -> int:
             print(f"\n{rel}:{lineno}  LOOSE-IMPL (statement at fence depth 0): {sig}")
     print(f"\n{total} lines of function bodies across {files} specs; {fence_defects} fence defects")
     citations = check_citations()
-    if check and citations:
+    if citations:
         print(
             "\nERROR: a rule cited in a crate belongs to that crate's application or to "
             "the foundations, and a test that cites a rule is named by its `Mechanism`. "
@@ -368,7 +367,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if check and (total or fence_defects):
+    if total or fence_defects:
         print(
             "\nERROR: a spec states what and why, the source states how "
             "(ambre-spec-template.md §0). Rust shapes live only in ```rust fences "

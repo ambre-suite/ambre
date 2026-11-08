@@ -135,7 +135,7 @@ class RepositoryTest(unittest.TestCase):
 
     def run_check(self, base: str) -> int:
         argv = sys.argv
-        sys.argv = ["schema_freeze.py", "--check", "--base", base]
+        sys.argv = ["schema_freeze.py", "--base", base]
         try:
             return schema_freeze.main()
         finally:
@@ -267,7 +267,7 @@ class ShallowTest(unittest.TestCase):
 
     def run_check(self) -> int:
         argv = sys.argv
-        sys.argv = ["schema_freeze.py", "--check", "--base", "HEAD~1"]
+        sys.argv = ["schema_freeze.py", "--base", "HEAD~1"]
         try:
             return schema_freeze.main()
         finally:

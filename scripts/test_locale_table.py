@@ -63,7 +63,7 @@ class Patterns(unittest.TestCase):
         self.assertEqual(locale_table.rust_char(" "), "'\\u{202f}'")
 
     def test_the_committed_table_is_what_the_subset_gives(self) -> None:
-        self.assertEqual(locale_table.main(["--check"]), 0)
+        self.assertEqual(locale_table.main([]), 0)
 
 
 if __name__ == "__main__":
