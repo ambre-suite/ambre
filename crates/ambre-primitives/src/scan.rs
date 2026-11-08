@@ -193,7 +193,8 @@ const SKIPPED: &[&str] = &[".git", "target"];
 /// The nested workspaces under the root, which build apart, as the fuzz
 /// targets do under `cargo-fuzz`. The orphan check leaves each out, and a
 /// listing leaves out its build output.
-pub(crate) const NESTED_WORKSPACES: &[&str] = &["fuzz", "spikes/unwrap-lint"];
+pub(crate) const NESTED_WORKSPACES: &[&str] =
+    &["fuzz", "spikes/unwrap-lint", "spikes/unwrap-lint/ra"];
 
 /// The third-party crates the workspace patches in, which the root
 /// `Cargo.toml` excludes from its members. Their code is not ours, so the

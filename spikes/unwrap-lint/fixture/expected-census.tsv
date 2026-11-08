@@ -1,0 +1,10 @@
+newtype	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:6	private	Name	String	source
+newtype	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:12	private	Root	String	source
+newtype	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:21	pub	Key	String	source
+newtype	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:25	pub	Key	u32	source
+field-read	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:42	field	0	Key	source
+newtype	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:62	pub	Open	u32	source
+field-read	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:65	field	0	Open	source
+newtype	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:69	private	Word	String	source
+deref	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:70	deref	census::Word	str	source
+bool-lit	ambre_fixture	spikes/unwrap-lint/fixture/fixture.rs:82	arg	census::toggle		source

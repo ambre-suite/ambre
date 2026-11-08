@@ -54,3 +54,31 @@ pub mod sites {
         crate::a::store(bare);
     }
 }
+
+// The census pass: one site per check that reads zero sites on the workspace.
+pub mod census {
+    // A newtype whose field is not private, read outside its module.
+    pub mod inner {
+        pub struct Open(pub u32);
+    }
+    pub fn read(open: &inner::Open) -> u32 {
+        open.0
+    }
+
+    // A `Deref` to a primitive.
+    pub struct Word(String);
+    impl core::ops::Deref for Word {
+        type Target = str;
+        fn deref(&self) -> &str {
+            &self.0
+        }
+    }
+
+    // A `bool` literal handed to a `pub` workspace `fn`.
+    pub fn toggle(on: bool) -> bool {
+        on
+    }
+    pub fn caller() -> bool {
+        toggle(true)
+    }
+}

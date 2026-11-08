@@ -32,6 +32,8 @@ if [[ $line == fixture ]]; then
     "$driver" rustc --edition 2024 --crate-name ambre_fixture --crate-type lib \
         --emit metadata -o "$tmp/fixture.rmeta" spikes/unwrap-lint/fixture/fixture.rs
     diff spikes/unwrap-lint/fixture/expected.tsv "$out"/ambre_fixture-*.tsv
+    grep -v -P '^sig\t' "$out"/census/ambre_fixture-*.tsv \
+        | diff spikes/unwrap-lint/fixture/expected-census.tsv -
     echo "fixture: the sites match"
     exit 0
 fi

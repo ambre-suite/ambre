@@ -29,6 +29,7 @@
 
 #![feature(rustc_private)]
 
+extern crate rustc_ast;
 extern crate rustc_driver;
 extern crate rustc_hir;
 extern crate rustc_interface;
@@ -36,6 +37,8 @@ extern crate rustc_lint;
 extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
+
+mod census;
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -110,7 +113,7 @@ fn is_inner(tcx: TyCtxt<'_>, ty: Ty<'_>) -> bool {
 }
 
 /// The newtype `ty` names, its references peeled, if it is one.
-fn newtype_of<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
+pub(crate) fn newtype_of<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
     let tcx = cx.tcx;
     let ty::Adt(adt, args) = ty.peel_refs().kind() else {
         return None;
@@ -445,8 +448,9 @@ struct Callbacks;
 impl rustc_driver::Callbacks for Callbacks {
     fn config(&mut self, config: &mut rustc_interface::interface::Config) {
         config.register_lints = Some(Box::new(|_sess, store| {
-            store.register_lints(&[AMBRE_NEWTYPE_UNWRAP]);
+            store.register_lints(&[AMBRE_NEWTYPE_UNWRAP, census::AMBRE_PRIMITIVE_CENSUS]);
             store.register_late_pass(|_| Box::new(UnwrapPass::default()));
+            store.register_late_pass(|_| Box::new(census::CensusPass::default()));
         }));
     }
 }
