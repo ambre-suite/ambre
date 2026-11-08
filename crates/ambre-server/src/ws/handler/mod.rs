@@ -87,8 +87,9 @@ const MEMBERSHIP_RECHECK_TTL: Duration = Duration::from_secs(30);
 /// replay of the document history from S3, a concurrent GET fan-out per page. An
 /// unthrottled client could spam it and turn a trivial message into an O(n)
 /// storage-read amplification. One replay per reconnect is the legitimate need;
-/// this cooldown bounds the abuse without touching that path.
-const REPLAY_MIN_INTERVAL: Duration = Duration::from_secs(1);
+/// this cooldown bounds the abuse without touching that path. The value is the
+/// protocol's, so the Sync worker's spacing cannot fall under it (`SYNC-191`).
+const REPLAY_MIN_INTERVAL: Duration = ambre_protocol::ws::REPLAY_MIN_INTERVAL.to_duration();
 
 /// What the caller's role on a subscribed document permits: writing, or
 /// reading alone. The write gate of `handle_update` reads it.

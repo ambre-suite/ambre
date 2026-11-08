@@ -12,9 +12,17 @@ use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::id::{Document, Id, Snapshot};
 use ambre_core::{
-    Bounded, Bounds, DocType, FixedBytes, KeyId, Payload, PublicKey, Refusal, RefusalCode,
+    Bounded, Bounds, DocType, FixedBytes, KeyId, Ms, Payload, PublicKey, Refusal, RefusalCode,
+    TimeSpan,
 };
 use serde::{Deserialize, Serialize};
+
+/// The relay's throttle window on replays: it answers nothing to a second
+/// [`WsClientMsg::RequestMissing`] of one document on one connection inside
+/// it (`SRV-086`). The relay and the Sync worker both read this one value.
+/// The worker spaces its asks past it, and a const assertion there fails the
+/// build when the window outgrows that spacing (`SYNC-191`).
+pub const REPLAY_MIN_INTERVAL: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_000);
 
 // ---------------------------------------------------------------------------
 // Client -> Server

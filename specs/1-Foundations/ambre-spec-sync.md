@@ -33,6 +33,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | `ambre_sync::websocket::tests::the_socket_address_carries_no_token`; `ambre_sync::websocket::tests::a_logged_token_pair_carries_no_token`; `ambre_core::secret::tests::a_session_token_prints_nothing_and_travels_as_its_text` -- the socket address holds no token, and the token pair prints with the token redacted. The raw form is read in the Secret module alone (`ARCH-045`). It reaches a request header through the sink `Credential<AccessToken>::present_bearer` (`ARCH-049`), and the socket frame through a clone of that `Credential<AccessToken>`, which shares the wrapper | none | verified |
 | `SYNC-013` | `INV` | Application code MUST contain no unchecked memory access. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
 | `SYNC-058` | `INV` | The worker MUST NOT block its own event loop: the socket and the requests MUST stay serviceable. | `ambre-spec-architecture.md section 4` | `ambre_sync::run_tests::the_loop_yields_to_the_tasks_beside_it` -- on one thread, a task beside the waiting loop runs, and closing the commands from it wakes the loop; `ambre_sync::run_tests::the_loop_hands_each_command_to_the_worker` -- the loop hands a command it waited on to the worker | none | verified |
+| `SYNC-191` | `INV` | The worker's spacing between two replay asks of one document MUST outlast the relay's throttle window. | this spec section 2; `ambre-spec-sequencer.md`, `SRV-086`; `ambre-spec-budgets.md section 8` | type-level -- a const assertion beside `REPLAY_ASK_SPACING` compares it with the protocol's `REPLAY_MIN_INTERVAL`, the window the relay reads, so a raised window fails the build | none | verified |
 
 ### 1.2 The worker starts
 
@@ -117,7 +118,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 60 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 61 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
