@@ -18,7 +18,12 @@
 // bottom-left Y-up flip internally, so no coordinate mapping is needed here.
 // ============================================================================
 
+mod document;
+pub use document::{PdfWriteError, write_document};
+
+use ambre_core::index::Pos;
 use ambre_draw::Px;
+use ambre_draw::list::{Glyphs, PrintGlyph};
 use ambre_draw::{
     Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Rect, Stroke,
 };
@@ -51,6 +56,68 @@ impl<'a, 'b> KrillaSurface<'a, 'b> {
     /// Wrap a krilla page surface. Obtain it via `page.surface()`.
     pub fn new(surface: &'a mut Surface<'b>) -> Self {
         Self { surface }
+    }
+
+    /// Draw shaped glyphs of `font` at `size`, placed by `transform`. This is
+    /// the one glyph path of the surface. A live parley run and a recorded
+    /// draw list both end here, so the two print the same page.
+    pub fn draw_glyph_list(
+        &mut self,
+        font: Font,
+        size: Px<ambre_draw::Surface>,
+        glyphs: &[PrintGlyph],
+        color: Color,
+        transform: Affine,
+    ) {
+        // krilla takes the size as `f32`.
+        let font_size = size.get() as f32;
+        if font_size <= 0.0 || glyphs.is_empty() {
+            return;
+        }
+        // krilla positions the run from `start`, then advances each glyph by its
+        // (em-normalized) advance and applies per-glyph offsets. Parley already
+        // gives per-glyph advance/offset in pixels at `font_size`, so normalize
+        // by dividing by `font_size` (krilla multiplies back by the size).
+        //
+        // `text_range` is left empty: we do not thread the source string here.
+        // The PDF therefore carries no ToUnicode mapping for these glyphs (text
+        // is not selectable/copyable). Glyph shapes render correctly regardless.
+        // Wiring the cluster text is a later refinement.
+        let glyphs: Vec<KrillaGlyph> = glyphs
+            .iter()
+            .map(|g| {
+                KrillaGlyph::new(
+                    GlyphId::new(g.id.get()),
+                    g.advance.get() as f32 / font_size,
+                    g.x.get() as f32 / font_size,
+                    g.y.get() as f32 / font_size,
+                    0.0,
+                    0..0,
+                    None,
+                )
+            })
+            .collect();
+
+        let (paint, opacity) = paint_and_opacity(color);
+        self.surface.set_fill(Some(Fill {
+            paint,
+            opacity,
+            rule: FillRule::NonZero,
+        }));
+
+        // The run's origin transform (baseline placement, plus any Toile/Prose
+        // pan/zoom) is applied as a pushed transform; glyphs then start at the
+        // local origin. Balanced with the pop below.
+        self.surface.push_transform(&affine_to_transform(transform));
+        self.surface.draw_glyphs(
+            Point::from_xy(0.0, 0.0),
+            &glyphs,
+            font,
+            "",
+            font_size,
+            false,
+        );
+        self.surface.pop();
     }
 
     /// Fill the given krilla path with a solid color, honoring the color alpha
@@ -115,69 +182,31 @@ impl DrawSurface for KrillaSurface<'_, '_> {
 
         let parley_run = run.run();
         let font_data = parley_run.font();
-        let font_size = parley_run.font_size();
-        if font_size <= 0.0 {
-            return;
-        }
-
         // Rebuild the krilla font from the same bytes Parley shaped with. The
         // HTTP cache already deduplicates the download; here we only clone the
         // in-memory blob so krilla owns an independent handle. Variable-font
         // coordinates (`normalized_coords`) are ignored: the base export fonts
         // are static. Revisit for variable fonts (Font::new_variable).
-        let font = match Font::new(Data::from(font_data.data.data().to_vec()), font_data.index) {
-            Some(f) => f,
-            None => return,
+        let Some(font) = Font::new(Data::from(font_data.data.data().to_vec()), font_data.index)
+        else {
+            return;
         };
-
-        // krilla positions the run from `start`, then advances each glyph by its
-        // (em-normalized) advance and applies per-glyph offsets. Parley already
-        // gives per-glyph advance/offset in pixels at `font_size`, so normalize
-        // by dividing by `font_size` (krilla multiplies back by the size).
-        //
-        // `text_range` is left empty: we do not thread the source string here.
-        // The PDF therefore carries no ToUnicode mapping for these glyphs (text
-        // is not selectable/copyable). Glyph shapes render correctly regardless.
-        // Wiring the cluster text is a later refinement.
-        let glyphs: Vec<KrillaGlyph> = run
+        let glyphs: Vec<PrintGlyph> = run
             .glyphs()
-            .map(|g| {
-                KrillaGlyph::new(
-                    GlyphId::new(g.id),
-                    g.advance / font_size,
-                    g.x / font_size,
-                    g.y / font_size,
-                    0.0,
-                    0..0,
-                    None,
-                )
+            .map(|g| PrintGlyph {
+                id: Pos::<Glyphs>::new(g.id),
+                advance: Px::new(f64::from(g.advance)),
+                x: Px::new(f64::from(g.x)),
+                y: Px::new(f64::from(g.y)),
             })
             .collect();
-
-        if glyphs.is_empty() {
-            return;
-        }
-
-        let (paint, opacity) = paint_and_opacity(color);
-        self.surface.set_fill(Some(Fill {
-            paint,
-            opacity,
-            rule: FillRule::NonZero,
-        }));
-
-        // The run's origin transform (baseline placement, plus any Toile/Prose
-        // pan/zoom) is applied as a pushed transform; glyphs then start at the
-        // local origin. Balanced with the pop below.
-        self.surface.push_transform(&affine_to_transform(transform));
-        self.surface.draw_glyphs(
-            Point::from_xy(0.0, 0.0),
-            &glyphs,
+        self.draw_glyph_list(
             font,
-            "",
-            font_size,
-            false,
+            Px::new(f64::from(parley_run.font_size())),
+            &glyphs,
+            color,
+            transform,
         );
-        self.surface.pop();
     }
 
     fn push_clip(&mut self, rect: Rect) {

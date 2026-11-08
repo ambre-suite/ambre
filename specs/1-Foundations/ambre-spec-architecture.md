@@ -24,7 +24,7 @@ prefix is `ARCH`.
 | `ARCH-002` | `INV` | The crate graph MUST stay acyclic. | this spec section 2 | crate-graph -- a cycle between two workspace crates fails to resolve, so the edit that would create one never builds | none | verified |
 | `ARCH-004` | `INV` | Every cryptographic operation MUST run in the Sync worker. The chunk seal of a call runs in the call worker, under the keys `CALL-004` allows. | README pillar "Zero-Knowledge"; `ambre-spec-zero-knowledge.md`, `ZK-002`; `ambre-spec-call-media.md section 3` (`CALL-003`) | cargo-deny -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, and to `ambre-logic` for one host-only fixture hash, so every other crate fails the CI job; `ambre_logic::dispatch::tests::a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui` -- the one Logic gesture that needs a seal hands it to the Sync worker | none | verified |
 | `ARCH-012` | `INV` | The client MUST build against a shared memory with atomics enabled. | this spec section 2 | target-build -- the flags are scoped to the wasm target in `.cargo/config.toml`, and the threading runtime fails to link without them | none | verified |
-| `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. A macro sandbox is a frame outside both, and it holds none of their memory. During a call, a call worker adds a third instance, which holds the keys of that call alone. | this spec section 2; `1-Foundations/ambre-spec-macros.md section 3`; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-004`) | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses an `ambre-sync` that builds no `cdylib` and a crate that depends on it, a renamed or a test dependency included (`ambre_primitives::boundaries::tests::a_dependency_on_the_worker_and_a_worker_with_no_artefact_are_refused`); ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a worker spawned outside `platform.rs` (`ambre_primitives::driver::bounds::a_worker_spawned_through_an_alias_or_shared_through_a_re_export_is_refused`); ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a page that loads other than two Rust artefacts and a created frame with no `sandbox`, text neither tool reads | none | verified |
+| `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. A macro sandbox is a frame outside both, and it holds none of their memory. During a call, a call worker adds a third instance, which holds the keys of that call alone. On the first conversion, the Logic thread adds the converter instance, which holds no key and no memory of the others (`ARCH-079`). | this spec section 2; `1-Foundations/ambre-spec-macros.md section 3`; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-004`) | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses an `ambre-sync` that builds no `cdylib` and a crate that depends on it, a renamed or a test dependency included (`ambre_primitives::boundaries::tests::a_dependency_on_the_worker_and_a_worker_with_no_artefact_are_refused`); ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a worker spawned outside `platform.rs` (`ambre_primitives::driver::bounds::a_worker_spawned_through_an_alias_or_shared_through_a_re_export_is_refused`); ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a page that loads other than two Rust artefacts and a created frame with no `sandbox`, text neither tool reads | none | verified |
 | `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a dependency of `ambre-logic` on `ambre-canvas`, `wgpu`, `leptos` or another render or toolkit crate, a renamed one included (`ambre_primitives::boundaries::tests::a_thread_reaching_the_rendering_through_any_crate_is_refused`); cargo-deny -- `deny.toml` grants `wgpu` to `ambre-canvas` and `ambre-app`, and the CI `deny` job fails any other crate that takes it | none | verified |
 | `ARCH-005` | `INV` | Every network call of the two instances MUST leave from the Sync worker. A macro sandbox calls on its own, held by the browser to the domains its user approved. The peer connection of a call leaves from the UI thread, and carries sealed chunks alone. | this spec section 2; `ZK-001`; `1-Foundations/ambre-spec-macros.md section 3` (`MACRO-010`); `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-001`) | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a network call outside the worker, the relay, the SFU and the belt (`ambre_primitives::driver::bounds::a_network_call_through_an_alias_or_a_macro_is_refused_outside_the_worker`); ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a transport crate declared outside them (`ambre_primitives::boundaries::tests::a_transport_crate_is_refused_outside_the_network_crates`). The launcher's two reads of `UI-THREAD-004` are its stated exception | none | verified |
 | `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, records each type, alias and trait of `ambre-protocol`, `ambre-sync` and `ambre-server`, a private one and one a macro writes included (`ambre_primitives::driver::bounds::every_type_the_worker_declares_is_recorded_a_macro_written_one_included`). The judge refuses a type of the worker or the relay under the name of a public type of `ambre-protocol` (`ambre_primitives::boundaries::tests::a_wire_type_redeclared_by_the_worker_or_the_relay_is_refused`) | none | verified |
@@ -122,11 +122,32 @@ The user types, then closes the document before the Logic thread has answered th
 |---|---|---|---|---|---|---|
 | `ARCH-019` | `FRAME` | Closing a document MUST NOT drop the snapshot an edit earlier in the same pass is owed. | this spec section 2 | `ambre_logic::pass_tests::a_document_closed_in_the_pass_keeps_its_last_edit` | none | verified |
 
+### 1.5 The converter module
+
+What every build and every session holds of the module, before any file is converted.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ARCH-078` | `INV` | The Main instance and the Sync worker MUST NOT link a format converter that the converter module holds: today the PDF writer and the CSV reader and writer. | this spec section 2, the converter module; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/converter_boundary.py`, run by `just converter-boundary` in the CI `lint` job, reads the graph `cargo tree` resolves for each instance on the wasm target and refuses `krilla`, `ambre-pdf` and `csv` in it (`scripts/test_converter_boundary.py`, `scripts/test_gates.py`) | none | verified |
+| `ARCH-079` | `INV` | The converter module MUST reach no capability: the Logic thread MUST answer each function the module imports with a trap, and refuse a module that imports anything else. | this spec section 2, the converter module; README pillar "Zero-Knowledge" | `ambre_convert::loader::wasm_tests::a_module_that_imports_a_memory_is_refused`; `::a_call_out_of_the_module_traps_into_an_error`; `::bytes_that_are_no_module_are_refused` -- run by `just test-wasm` in the browser | none | verified |
+| `ARCH-080` | `INV` | The Sync worker MUST fetch the converter module from the page's origin, under the name its digest gives. It MUST hand the Logic thread only bytes whose BLAKE2b-256 digest equals the digest its build carries. | this spec section 2, the converter module; `ARCH-004`; `ARCH-005`; README pillar "Security" | `ambre_sync::converter::tests::bytes_of_another_digest_never_reach_the_logic_thread`; `::the_module_is_named_by_its_digest_beside_the_worker`; `ambre_crypto::tests::the_module_digest_is_blake2b_256` -- the worker's digest is the build script's; ci-gate -- `scripts/test_trunk_post_build.py`, run by `just test-scripts` in the CI `lint` job, refuses a served copy whose name or bytes its digest does not name | none | verified |
+
+### 1.6 A file is converted
+
+The user exports a deck as a PDF, or imports a CSV file, and no converter has been loaded yet in
+this session.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ARCH-081` | `POST` | A command that needs the converter MUST run once the module loads, in arrival order. The first such command of a session MUST ask the Sync worker once. A load that fails MUST answer each waiting command with the reason, and the next command MUST ask again. Past 16 waiting commands, a command MUST be answered at once. | this spec section 2, the converter module | `ambre_logic::dispatch::tests::the_first_conversion_asks_for_the_converter_once_and_the_rest_wait`; `::a_refused_converter_answers_each_waiting_command_and_the_next_asks_again`; `::a_command_past_the_waiting_limit_is_told_to_try_again`; `::a_csv_export_converts_once_the_module_lands` | none | verified |
+| `ARCH-082` | `POST` | In the served build, a CSV import and a PDF export MUST complete through the converter module the Sync worker fetched. | this spec section 2, the converter module | `ambre_belt::converter::tests::a_csv_import_and_a_pdf_export_run_through_the_fetched_module` -- run by `just test-browser` on the Trunk build, served in front of a relay | none | verified |
+| `ARCH-083` | `FRAME` | Loading the converter MUST NOT hand the Sync worker any byte of the file a command converts. | this spec section 2, the converter module; `ZK-001` | type-level -- `SyncCommand::FetchConverter` carries no field; `ambre_logic::dispatch::tests::an_import_hands_sync_a_delta_and_never_the_file` -- every command the import sends, the fetch included, is read for the file's bytes | none | verified |
+
 * **Budget.** the whole of `ambre-spec-budgets.md`: this stack is what every row of that register
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 69 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 75 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -147,6 +168,7 @@ The user types, then closes the document before the Logic thread has answered th
 | Logic thread | a worker sharing the Main instance's heap | the documents, the engines, the dispatch |
 | Sync worker | a second instance, with its own memory | the socket, the requests, the cryptography, the compression |
 | Call worker | a third instance during a call, with its own memory | the sender keys and the chunk seal of one call (`ambre-spec-call-media.md`) |
+| Converter module | an instance inside the Logic worker, from the first conversion, with its own memory | the file formats Ambre reads and writes: no key, no document, no import (this section, the converter module) |
 
 A document with macros adds a fourth context: a sandboxed frame on a domain of its own, outside both
 instances. It speaks to Logic by message only (`ambre-spec-macros.md section 3`). It holds no key,
@@ -168,6 +190,32 @@ flowchart TB
     SYNC -->|"binary WebSocket"| RELAY
     RELAY -->|"server messages"| SYNC
 ```
+
+**The converter module.** Every file format Ambre reads or writes costs every user its download,
+and the first download sits a few kilobytes under its ceiling (`ambre-spec-budgets.md section 5`).
+A Cargo feature cannot defer a converter: the build emits one wasm artefact per instance. So the
+converters live in a third artefact, `ambre-convert`, which a user fetches on the first conversion.
+A user who never converts never downloads it.
+
+| Question | Answer |
+|---|---|
+| Where it runs | inside the Logic worker, as a second instance with its own memory. The Logic thread runs the conversions, so they stay client-side and off the UI thread. It is no new thread: the worker blocks on the conversion, as it blocks on any command. |
+| How it is built | `scripts/converter_build.py`, the `pre_build` hook of Trunk, builds the crate with its `engine` feature, single-threaded, into `target/converter/`. It writes the module's BLAKE2b-256 digest beside it. |
+| How it is named | the post-build hook serves it as `ambre-convert-<16 hex digits>.wasm`, the head of its digest. A release thus caches for good, like every hashed file. |
+| How it is fetched | the Logic thread cannot fetch, so on the first command that needs it, it asks the Sync worker once (`ARCH-081`). The worker fetches the module from the page's origin, as it makes every network call (`ARCH-005`). |
+| How it is checked | the Sync worker's build carries the digest: `build.rs` reads it. The worker compares the fetched bytes against it before any reach the Logic thread (`ARCH-080`). The check is the worker's, as every cryptographic operation is (`ARCH-004`). The page names the worker, so the trust root is the one TOFU already accepts. |
+| What it may reach | nothing. The Logic thread compiles the bytes and answers each imported function with a trap (`ARCH-079`). The module computes on its own memory, and holds no key, no socket and no document. |
+| How it talks | four exports, each taking or giving a 32-bit number: reserve an input buffer, run, and read the answer's address and length. A request crosses as postcard bytes of `ambre_convert::Conversion`, and an answer as `Result<Converted, String>`. |
+| What crosses | bytes in, and either records or file bytes out: the CSV records, the bytes of a CSV or PDF file. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. |
+| How the host tier tests it | the Logic thread links the engine in place on the host, and the loader calls it with the same request and answer bytes. The host tier thus runs the interface the browser runs. |
+
+The Main instance keeps the request types and the loader. The PDF writer and the CSV reader and
+writer link into the module alone (`ARCH-078`). The other readers and writers still link into Main:
+Prose's Markdown and HTML, Toile's SVG. Each one moves into the module with its own story.
+
+**Why not a glue file.** wasm-bindgen writes JavaScript glue to start a module, and the glue
+starts it with a promise. The Logic thread runs no browser event loop, so it would never see the
+promise settle. Four numbers need no glue: the loader calls the raw exports synchronously.
 
 **Why the split is not uniform.** The UI to Logic link carries scroll and typing, so it keeps shared
 memory and moves typed values with no encoding. The Logic to Sync link carries network traffic,
@@ -394,6 +442,13 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | One dated nightly for the whole workspace | stable for the host and the relay, nightly for the wasm target alone | two compilers give two lint sets and two `std`, and a host build no longer proves what the wasm build compiles. The primitive gate reads the dep-info of both lines, so it would read two compilers too. |
 | A dated `channel`, moved by a story | a floating `nightly` channel | each fresh runner takes a new compiler, so a red build carries no change of ours to blame, and two contributors build on two compilers. |
 | Nested workspaces read the root file through the rustup lookup | a toolchain file per nested workspace, copied or linked | a copy is a second date a bump must remember, and a link breaks on a checkout without symbolic links. |
+| The converters live in a module fetched on demand | raising the ceiling of Main for each converter that lands | the import and export stories each cost hundreds of kilobytes of brotli: DOCX, xlsx, HTML, ODS, PNG. Every user would download all of them, and most never convert. |
+| The converter module is a third artefact | a Cargo feature that leaves a converter out | the build emits one wasm artefact per instance, so a feature either ships the converter to every user or to none. |
+| The converter instance lives in the Logic worker | a worker of its own for conversions | a fourth thread changes the pillar of three isolated workers, and buys nothing: the Logic thread blocks on a conversion as on any command. |
+| The Sync worker fetches the module and checks its digest | the UI thread fetches it, as it fetches the fonts | the UI thread may open a network path only for the reads `UI-THREAD-004` names, and every cryptographic check runs in the Sync worker (`ARCH-004`). |
+| The digest is compiled into the Sync worker | the digest in a meta of the page | the page is asked again on every visit, while the worker is named by its content. A digest compiled into the worker cannot drift from the worker that checks it. |
+| The loader calls four raw exports | the JavaScript glue wasm-bindgen writes | the glue starts the module with a promise, and the Logic thread runs no event loop to settle it. |
+| The raw module, with its wasm-bindgen describe exports | the module processed by the wasm-bindgen command | the command strips about 8 KB of brotli, and the hook runs before Trunk fetches the command on a fresh runner. Each import of the raw module is a trap, so the two reach the same nothing. |
 | No fourth thread for import and export | a fourth thread for conversions | during an import the interface shows a waiting state, and a blocked Logic thread is the intended behaviour. The cost of a long conversion is paid by lazy loading, not by another thread. |
 
 ---

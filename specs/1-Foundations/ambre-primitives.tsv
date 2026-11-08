@@ -2130,7 +2130,7 @@ ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Js
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.msg | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Parse.0 | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport::skip(reason) | param | impl Into<String>	free-text	label, message or user text
-ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_export | PdfExportError::Serialize.0 | field | String	free-text	foreign error message
+ambre-pdf | src/document.rs | crate::document | PdfWriteError::Serialize.0 | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | decode_media(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.document | field | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.skipped | field | Vec<String>	free-text	user-facing report lines naming each element the export skipped
@@ -2783,9 +2783,9 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice()
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	generic	the codec of an enum that carries data: the style name the tree stores and the lookup matches back
 ambre-prose | src/doc.rs | crate::doc | RefusalCause::sentence() | ret | &'static str	free-text	log and refusal sentence of the cause
-ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter.0 | field | u8	newtype-inner	the byte of a validated CSV separator
-ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter::byte() | ret | u8	newtype-inner	hands the byte to the csv crate's reader and writer builders
-ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter::new(byte) | param | u8	newtype-inner	the fallible constructor that checks the byte
+ambre-convert | src/lib.rs | crate | CsvDelimiter.0 | field | u8	newtype-inner	the byte of a validated CSV separator
+ambre-convert | src/lib.rs | crate | CsvDelimiter::byte() | ret | u8	newtype-inner	hands the byte to the csv crate's reader and writer builders
+ambre-convert | src/lib.rs | crate | CsvDelimiter::new(byte) | param | u8	newtype-inner	the fallible constructor that checks the byte
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(DateParts)->i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	free-text	the search text the user typed, folded by the case it is compared under
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
@@ -2812,8 +2812,8 @@ ambre-trame | src/message/command.rs | crate::message::command | InvalidDefinedN
 ambre-trame | src/message/command.rs | crate::message::command | InvalidDefinedName::new(value) | param | String	newtype-inner	the constructor of the InvalidDefinedName newtype
 ambre-trame | src/message/command.rs | crate::message::command | SheetName.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
 ambre-trame | src/message/command.rs | crate::message::command | SheetNameKey.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
-ambre-trame | src/message/command.rs | crate::message::command | <DelimiterByte as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-trame | src/message/command.rs | crate::message::command | <DelimiterByte as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
+ambre-convert | src/lib.rs | crate | <DelimiterByte as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-convert | src/lib.rs | crate | <DelimiterByte as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
 ambre-bus | src/app/find.rs | crate::app::find | FindText.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
 ambre-bus | src/app/find.rs | crate::app::find | FindText::new(text) | param | String	newtype-inner	the text the constructor validates
 ambre-bus | src/app/find.rs | crate::app::find | FindText::as_str() | ret | &str	newtype-inner	the find text the newtype wraps
@@ -4230,3 +4230,52 @@ ambre-crdt | src/history.rs | crate::history | Replayed::from_bool(value) | para
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding
+ambre-bus | src/event.rs | crate::event | LogicEvent::ConverterRefused.reason | field | String	free-text	the words the user reads on why the converter did not load
+ambre-convert | src/engine.rs | crate::engine | convert() | ret | Answer	free-text	the converter's refusal, in words the user reads
+ambre-convert | src/engine.rs | crate::engine | write_csv() | ret | Answer	free-text	the writer's refusal, in words the user reads
+ambre-convert | src/engine.rs | crate::engine | write_csv(records) | param | &[Vec<String>]	free-text	the fields of CSV records: text with no rule
+ambre-convert | src/exports.rs | crate::exports | INPUT | const | LocalKey<RefCell<Vec<u8>>>	foreign-api	the buffer the loader writes into the module's memory through JavaScript, read as a request by run
+ambre-convert | src/exports.rs | crate::exports | OUTPUT | const | LocalKey<RefCell<Vec<u8>>>	foreign-api	the buffer the loader reads out of the module's memory through JavaScript
+ambre-convert | src/exports.rs | crate::exports | input_reserve() | ret | u32	foreign-api	an address in the module's memory, the raw export the loader calls through a JavaScript number
+ambre-convert | src/exports.rs | crate::exports | input_reserve(len) | param | u32	foreign-api	a byte length the loader passes to the raw export as a JavaScript number
+ambre-convert | src/exports.rs | crate::exports | output_len() | ret | u32	foreign-api	a byte length the raw export hands the loader as a JavaScript number
+ambre-convert | src/exports.rs | crate::exports | output_ptr() | ret | u32	foreign-api	an address in the module's memory, the raw export hands the loader as a JavaScript number
+ambre-convert | src/lib.rs | crate | <UnreadableRecords as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-convert | src/lib.rs | crate | <UnreadableRecords as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-convert | src/lib.rs | crate | <EncodedRequest as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-convert | src/lib.rs | crate | <EncodedAnswer as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-convert | src/lib.rs | crate | Answer | alias | Result<Converted,String>	free-text	the converter's refusal, in words the user reads
+ambre-convert | src/lib.rs | crate | Conversion::WriteCsv.records | field | Vec<Vec<String>>	free-text	the fields of CSV records: text with no rule
+ambre-convert | src/lib.rs | crate | Converted::Records.records | field | Vec<Vec<String>>	free-text	the fields of CSV records: text with no rule
+ambre-convert | src/lib.rs | crate | ConvertError::Refused.0 | field | String	free-text	the converter's refusal, in words the user reads
+ambre-convert | src/lib.rs | crate | ConvertError::Stopped.0 | field | String	free-text	the browser's words on a module that trapped or did not load
+ambre-convert | src/loader.rs | crate::loader::wasm | Instance::call() | ret | Result<u32,ConvertError>	foreign-api	the JavaScript number a raw export returns: an address or a length
+ambre-convert | src/loader.rs | crate::loader::wasm | Instance::call(name) | param | &str	foreign-api	the export name Reflect::get reads off the instance
+ambre-convert | src/loader.rs | crate::loader::wasm | Instance::window(at) | param | u32	foreign-api	the start offset Uint8Array::subarray takes
+ambre-convert | src/loader.rs | crate::loader::wasm | Instance::window(len) | param | u32	foreign-api	a byte length, added to the offset Uint8Array::subarray takes
+ambre-convert | src/loader.rs | crate::loader::wasm | words() | ret | String	free-text	the browser's words on an error
+ambre-core | src/payload.rs | crate::payload | <ConverterModule as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <ModuleDigest as crate::FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ModuleDigest>, which states its width
+ambre-core | src/payload.rs | crate::payload | <ModuleDigest as crate::FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-draw | src/list.rs | crate::list | <FaceInFile as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-draw | src/list.rs | crate::list | <Faces as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-draw | src/list.rs | crate::list | <Glyphs as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-draw | src/list.rs | crate::list | <Pictures as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-draw | src/list.rs | crate::list | FaceKey.blob | field | u64	local	the identity the resource handle gives a shared font blob, compared for equality alone inside the recorder
+ambre-logic | src/converting.rs | crate::converting | LogicState::answer_unconverted(reason) | param | &str	free-text	the words the user reads on why a conversion did not run
+ambre-logic | src/converting.rs | crate::converting | LogicState::converter_refused(reason) | param | &str	free-text	the words the user reads on why the converter did not load
+ambre-logic | src/converting.rs | crate::converting | <WaitingConversions as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-logic | src/converting.rs | crate::converting | <WaitingConversions as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-logic | src/converting.rs | crate::converting | needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
+ambre-primitives | src/run.rs | crate::run | unit_stem() | ret | Option<String>	generic	the file stem a record of the driver is named by
+ambre-sync | src/converter.rs | crate::converter | DIGEST | const | Option<&str>	foreign-api	the hex text option_env! gives at compile time, parsed by expected() before any use
+ambre-sync | src/converter.rs | crate::converter | NAME_DIGITS | const | usize	local	how many hex digits of the digest the file name carries, read by module_path alone
+ambre-sync | src/converter.rs | crate::converter | SyncState::converter_fetched(result) | param | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
+ambre-sync | src/converter.rs | crate::converter | check() | ret | Result<Payload<ConverterModule>,String>	free-text	the words the user reads on why the bytes were refused
+ambre-sync | src/converter.rs | crate::converter | expected() | ret | Result<FixedBytes<ModuleDigest>,String>	free-text	the words the user reads on why the build carries no digest
+ambre-sync | src/converter.rs | crate::converter | fetch() | ret | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
+ambre-sync | src/converter.rs | crate::converter | fetch(path) | param | &str	foreign-api	the relative address gloo_net::http::Request::get takes
+ambre-sync | src/converter.rs | crate::converter | module_path() | ret | String	foreign-api	the relative address handed to gloo_net::http::Request::get
+ambre-sync | src/converter.rs | crate::converter | <FetchedModule as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-sync | src/lib.rs | crate | SyncEvent::ConverterFetched.result | field | Result<ambre_core::Payload<converter::FetchedModule>,String>	free-text	the words the user reads on why the fetch failed

@@ -8,7 +8,7 @@ use super::*;
 use ambre_core::id::{CondFormat, FilterView, Sheet};
 use ambre_core::id::{Id, User};
 use ambre_core::index::{Len, Pos};
-use ambre_core::{Rank, Redacted, Refused, Refuses, Rule, Validated};
+use ambre_core::{Rank, Redacted, Rule, Validated};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- commands (UI -> Logic)
@@ -203,50 +203,9 @@ impl std::fmt::Display for SheetName {
     }
 }
 
-/// A byte refused as a CSV field separator: the double quote, CR, LF, or a
-/// byte outside ASCII. The marker of its [`Refused<DelimiterByte>`], which
-/// echoes the byte.
-pub enum DelimiterByte {}
-
-impl Refuses for DelimiterByte {
-    type Raw = u8;
-    const NAME: &'static str = "InvalidCsvDelimiter";
-
-    fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "byte {raw:#04x} cannot separate CSV fields")
-    }
-}
-
-/// The byte that separates the fields of a CSV record (`trame-import-export`).
-/// It is an ASCII byte other than the double quote, which opens a quoted
-/// field, and CR and LF, which end a record. A byte outside ASCII would cut a
-/// UTF-8 character in two.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CsvDelimiter(u8);
-
-impl CsvDelimiter {
-    pub const COMMA: Self = Self(b',');
-    pub const SEMICOLON: Self = Self(b';');
-    pub const TAB: Self = Self(b'\t');
-
-    /// The separator `byte` is.
-    ///
-    /// # Errors
-    ///
-    /// [`Refused<DelimiterByte>`] for the double quote, CR, LF and any byte
-    /// outside ASCII.
-    pub const fn new(byte: u8) -> Result<Self, Refused<DelimiterByte>> {
-        match byte {
-            b'"' | b'\r' | b'\n' | 0x80.. => Err(Refused::new(byte)),
-            _ => Ok(Self(byte)),
-        }
-    }
-
-    /// The byte a CSV reader or writer is configured with.
-    pub const fn byte(self) -> u8 {
-        self.0
-    }
-}
+/// The CSV separator and its refusal live with the converter module that reads
+/// and writes CSV, and the vocabulary names them from there.
+pub use ambre_convert::{CsvDelimiter, DelimiterByte};
 
 /// Shape of a Trame selection band (`trame-selection`), the bus-side mirror of
 /// `ambre_trame`'s `SelKind`. `Cells` is the ordinary rectangle; `Cols`/`Rows`
@@ -1356,6 +1315,16 @@ impl ambre_bus::Mutation for TrameCommand {
 }
 
 impl TrameCommand {
+    /// Whether the command reads or writes a file through the converter
+    /// module. The Logic thread loads the module on the first such command
+    /// (`ambre-spec-architecture.md section 2`, the converter module).
+    pub fn needs_converter(&self) -> bool {
+        matches!(
+            self,
+            Self::ImportCsv { .. } | Self::ExportCsv { .. } | Self::ExportActiveSheetCsv
+        )
+    }
+
     /// Whether this command can change the sheet's shared CRDT state (`architecture`).
     ///
     /// Only the commands documented above as local-only or read-only are listed here;

@@ -82,6 +82,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate | f64	a log-zoom 
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term | i64	a signed place in a fill series, from a Delta of either axis: a fill line runs down rows or across columns, and Delta keeps the two axes apart
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer | String	the root name of one sheet's container, joined in one place
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth | i64	a day that may run past either end of its month, as DATE reads it
-ambre-trame | src/message/command.rs | crate::message::command | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
+ambre-convert | src/lib.rs | crate | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
 ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for. It moves a Bounded<Decimals> held at its bounds, an operation no family carries
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey | String	the 51-character key of the cell maps, a row and a column joined in one place (trame-schema)

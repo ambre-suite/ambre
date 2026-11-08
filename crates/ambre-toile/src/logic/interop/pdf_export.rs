@@ -1,10 +1,12 @@
 //! PDF export for Toile decks (`toile-pdf-export`), gated behind the `pdf`
-//! feature so the krilla dependency only links when export is compiled in.
+//! feature.
 //!
 //! One presentation frame becomes one PDF page. The export drives the **same**
 //! [`BoardWalk`](crate::ui::walk::BoardWalk) the screen uses (`CANVAS-074`). It
-//! runs against a [`KrillaSurface`](ambre_pdf::KrillaSurface) instead of the
-//! GPU surface, so screen and PDF render identically. This is why
+//! records the walk through a [`ListRecorder`] instead of the GPU surface, and
+//! the converter module writes the recorded pages
+//! (`ambre-spec-architecture.md section 2`, the converter module). Screen and
+//! PDF therefore render identically, and the Main instance links no PDF writer. This is why
 //! `logic::interop` reaches into `ui::walk` / `ui::viewport`: both are pure,
 //! wgpu-free geometry.
 //!
@@ -18,12 +20,10 @@
 use std::collections::HashMap;
 
 use ambre_canvas::{Palette, TextCache};
+use ambre_convert::{Conversion, ConvertError, Converted, Converter};
 use ambre_core::{PrintLength, Pt};
+use ambre_draw::list::{ListRecorder, PrintDocument, PrintPage, RecorderTables};
 use ambre_draw::{DocumentWalk, DrawSurface, FontContext, Rect};
-
-use ambre_pdf::KrillaSurface;
-use krilla::Document;
-use krilla::page::PageSettings;
 
 use crate::logic::command::DisplayViewport;
 use crate::ui::grid;
@@ -41,7 +41,7 @@ pub struct PageSize {
 
 impl PageSize {
     /// A page of `width` x `height` points, each clamped to a positive minimum so
-    /// `PageSettings::from_wh` never rejects it.
+    /// the writer never rejects it.
     pub fn new(width: PrintLength<Pt>, height: PrintLength<Pt>) -> Self {
         let least = PrintLength::<Pt>::new(1.0);
         Self {
@@ -73,37 +73,33 @@ pub struct PdfPage {
     pub clip: Option<Rect>,
 }
 
-/// A PDF export failure. `Serialize` wraps krilla's final assembly error; the
+/// A PDF export failure. `Convert` wraps the converter module's refusal; the
 /// walk itself cannot fail (it only emits draw calls).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PdfExportError {
     #[error("no pages to export")]
     Empty,
-    #[error("failed to serialize the PDF: {0}")]
-    Serialize(String),
+    #[error("{0}")]
+    Convert(#[from] ConvertError),
 }
 
 /// Render `pages` into a single PDF document (`toile-pdf-export`).
 ///
-/// Every page runs the screen content walk against a fresh krilla page surface,
-/// clipped to its frame rect. `font_cx` must already carry the base faces
-/// (`LogicState::export_cx`, seeded at boot) or text emits no glyphs. `images`
-/// carries the decoded media pixels an `Image` element paints; an absent hash
-/// falls back to a placeholder box. `editing` and Smart Animate overrides have
-/// no meaning off-screen, so the walk runs with none.
+/// Every page runs the screen content walk against a fresh page of a
+/// recorded [`PrintDocument`], clipped to its frame rect. `converter` writes
+/// the recorded pages as PDF bytes. `font_cx` must already carry the base
+/// faces (`LogicState::export_cx`, seeded at boot) or text emits no glyphs.
+/// `images` carries the decoded media pixels an `Image` element paints; an
+/// absent hash falls back to a placeholder box. `editing` and Smart Animate
+/// overrides have no meaning off-screen, so the walk runs with none.
 ///
-/// Deterministic: krilla assembles the same bytes for the same input, so two
-/// runs of identical `pages` are byte-stable.
+/// Deterministic: the writer assembles the same bytes for the same input, so
+/// two runs of identical `pages` are byte-stable.
 ///
 /// # Errors
 ///
 /// [`PdfExportError::Empty`] on an empty `pages`, or
-/// [`PdfExportError::Serialize`] when krilla refuses the bytes.
-///
-/// # Panics
-///
-/// When krilla refuses a unit page as a fallback page size, which its own
-/// validity rule accepts.
+/// [`PdfExportError::Convert`] when the converter refuses or cannot run.
 pub fn export_pdf(
     pages: &[PdfPage],
     page: PageSize,
@@ -111,30 +107,50 @@ pub fn export_pdf(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    converter: &Converter,
 ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
+    let document = record_pdf(pages, page, palette, font_cx, text_cache, images)?;
+    match converter.convert(&Conversion::WritePdf { document })? {
+        Converted::File(bytes) => Ok(bytes),
+        Converted::Records { .. } => Err(ConvertError::Malformed.into()),
+    }
+}
+
+/// Record `pages` as the document the converter writes: one op list per
+/// page, every face and picture once.
+///
+/// # Errors
+///
+/// [`PdfExportError::Empty`] on an empty `pages`.
+pub fn record_pdf(
+    pages: &[PdfPage],
+    page: PageSize,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+) -> Result<PrintDocument, PdfExportError> {
     if pages.is_empty() {
         return Err(PdfExportError::Empty);
     }
-
-    let mut doc = Document::new();
+    let mut document = PrintDocument::new(PrintPage {
+        width: page.width,
+        height: page.height,
+    });
+    let mut tables = RecorderTables::default();
     for pdf_page in pages {
-        // `from_wh` only rejects a non-positive extent; `PageSize::new` clamps to
-        // a positive minimum, so this is infallible in practice.
-        let settings = PageSettings::from_wh(page.width.get(), page.height.get())
-            .or_else(|| PageSettings::from_wh(1.0, 1.0))
-            .unwrap_or_default();
-        let mut kpage = doc.start_page_with(settings);
-        {
-            let mut surface = kpage.surface();
-            let mut s = KrillaSurface::new(&mut surface);
-            paint_page(&mut s, pdf_page, palette, font_cx, text_cache, images);
-        }
-        kpage.finish();
+        let mut recorder = ListRecorder::new(&mut document, &mut tables);
+        paint_page(
+            &mut recorder,
+            pdf_page,
+            palette,
+            font_cx,
+            text_cache,
+            images,
+        );
+        recorder.finish();
     }
-
-    doc.finish()
-        .map(ambre_core::Payload::<ambre_core::FileBytes>::new)
-        .map_err(|e| PdfExportError::Serialize(format!("{e:?}")))
+    Ok(document)
 }
 
 /// Paint one page onto any surface: the board background, then the screen's
@@ -187,6 +203,32 @@ mod tests {
     use ambre_core::id::{Element, Id};
     use ambre_core::{Board, Px};
     use ambre_draw::Affine;
+
+    /// The converter the Logic thread's host build hands in: the engine,
+    /// linked in place.
+    fn converter() -> Converter {
+        Converter::load(&ambre_core::Payload::new(Vec::new())).expect("the host links the engine")
+    }
+
+    /// The export, written through [`converter`].
+    fn export_pdf(
+        pages: &[PdfPage],
+        page: PageSize,
+        palette: &Palette,
+        font_cx: &mut FontContext,
+        text_cache: &mut TextCache,
+        images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
+        super::export_pdf(
+            pages,
+            page,
+            palette,
+            font_cx,
+            text_cache,
+            images,
+            &converter(),
+        )
+    }
 
     fn rect_node(id: &str, bounds: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {

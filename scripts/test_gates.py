@@ -30,6 +30,7 @@ sys.path.insert(0, str(HERE))
 import commit_msg  # noqa: E402
 import contract_index  # noqa: E402
 import contracts  # noqa: E402
+import converter_boundary  # noqa: E402
 import crate_boundaries  # noqa: E402
 import feature_inventory  # noqa: E402
 import freeze_provenance  # noqa: E402
@@ -55,6 +56,8 @@ SCRIPTS = {
     "commit_msg": GATE,
     "contract_index": GATE,
     "contracts": GENERATOR,
+    "converter_boundary": GATE,
+    "converter_build": TOOL,
     "corpus": TOOL,
     "crate_boundaries": GATE,
     "feature_inventory": GENERATOR,
@@ -176,6 +179,11 @@ class GatesFailWithNoFlag(unittest.TestCase):
         patches.append(mock.patch.object(crate_boundaries, "check_instances", breach))
         self.fails("crate_boundaries", patches)
 
+    def test_converter_boundary(self) -> None:
+        self.fails("converter_boundary", [
+            mock.patch.object(converter_boundary, "linked", lambda crate: [crate, "krilla"]),
+        ])
+
     def test_schema_freeze(self) -> None:
         def breach(errors: list[str]) -> int:
             errors.append("a freeze with no belt")
@@ -210,7 +218,7 @@ class GatesFailWithNoFlag(unittest.TestCase):
         wasm.write_bytes(b"x")
         self.fails("wasm_size", [
             mock.patch.object(wasm_size, "find", lambda dist, pattern: wasm),
-            mock.patch.object(wasm_size, "CEILINGS", {"Main": 0, "Sync": 0}),
+            mock.patch.object(wasm_size, "CEILINGS", {"Main": 0, "Sync": 0, "Converter": 0}),
         ])
 
     def test_toolchain_pin(self) -> None:

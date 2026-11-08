@@ -183,9 +183,9 @@ pub use object_key::ObjectKey;
 pub use opaque::{Opaque, OpaqueKind, OpaqueLength, SealedAtRest, WireOpaque};
 pub use ordinal::{Ordinal, OrdinalKind};
 pub use payload::{
-    Becomes, ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,
-    LoroPayloadRef, MediaBytes, Payload, PayloadKind, PickedContainer, PickedFile,
-    PlaintextContainer, RgbaPixels, SealedContainer, SealedPreviousKey, SealedRowBytes,
+    Becomes, ClipboardBytes, ConverterModule, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic,
+    LoroPayload, LoroPayloadRef, MediaBytes, ModuleDigest, Payload, PayloadKind, PickedContainer,
+    PickedFile, PlaintextContainer, RgbaPixels, SealedContainer, SealedPreviousKey, SealedRowBytes,
     SnapshotBytes, ThumbnailPng,
 };
 pub use provider::OidcProvider;

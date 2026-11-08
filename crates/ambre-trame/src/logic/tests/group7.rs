@@ -28,7 +28,7 @@ fn csv_export_typed_6x10_has_no_trailing_columns() {
             });
         }
     }
-    let out = state.handle_command(TrameCommand::ExportActiveSheetCsv);
+    let out = state.convert(TrameCommand::ExportActiveSheetCsv);
     let text = String::from_utf8(export_bytes(&out)).unwrap();
     for line in text.lines() {
         assert_eq!(
@@ -52,7 +52,7 @@ fn csv_export_evaluates_formulas() {
         col: Pos::<Col>::new(1),
         text: "=A1*3".to_owned(),
     });
-    let out = state.handle_command(TrameCommand::ExportCsv {
+    let out = state.convert(TrameCommand::ExportCsv {
         sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         delimiter: None,
         range: None,
@@ -627,7 +627,7 @@ fn find_matches_the_formatted_value() {
 #[test]
 fn csv_export_writes_the_formatted_value() {
     let mut state = percent_sheet();
-    let out = state.handle_command(TrameCommand::ExportCsv {
+    let out = state.convert(TrameCommand::ExportCsv {
         sheet_id: Id::<Sheet>::from_text("s0".to_owned()),
         delimiter: None,
         range: None,
@@ -640,7 +640,7 @@ fn csv_export_writes_the_formatted_value() {
 #[test]
 fn import_reports_unreadable_records() {
     let mut state = TrameState::new();
-    let out = state.handle_command(TrameCommand::ImportCsv {
+    let out = state.convert(TrameCommand::ImportCsv {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\n\xff\xfe,c\nd,e\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
@@ -669,7 +669,7 @@ fn an_import_past_the_grid_edge_is_cut_and_said() {
     data.extend(b",\n".repeat(crate::TOTAL_ROWS.to_usize() - 1));
     data.extend(b"z\n");
     let mut state = TrameState::new();
-    let out = state.handle_command(TrameCommand::ImportCsv {
+    let out = state.convert(TrameCommand::ImportCsv {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
         delimiter: None,
         header: HeaderRow::Absent,
@@ -707,7 +707,7 @@ fn an_import_starting_past_the_grid_edge_writes_nothing() {
         (crate::TOTAL_ROWS.as_end(), Pos::<Col>::new(0)),
         (Pos::<Row>::new(0), crate::TOTAL_COLS.as_end()),
     ] {
-        let out = state.handle_command(TrameCommand::ImportCsv {
+        let out = state.convert(TrameCommand::ImportCsv {
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\n".to_vec()),
             delimiter: None,
             header: HeaderRow::Absent,
@@ -734,7 +734,7 @@ fn an_import_starting_past_the_grid_edge_writes_nothing() {
 fn export_with_nothing_to_write_says_so() {
     let mut state = TrameState::new();
     for sheet_id in ["s0", "nope"] {
-        let out = state.handle_command(TrameCommand::ExportCsv {
+        let out = state.convert(TrameCommand::ExportCsv {
             sheet_id: Id::<Sheet>::from_text(sheet_id.to_owned()),
             delimiter: None,
             range: None,

@@ -19,10 +19,15 @@ impl TrameState {
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
         // A command names the cells it changed, and no command before it.
         self.engine.changed.clear();
-        let mut outcome = self.dispatch_command(cmd);
-        // Any command that produced a CRDT delta also moved the `UndoManager`
-        // stacks, so the chrome's Undo/Redo affordances must be refreshed. Undo
-        // and Redo already append their own `UndoState`; skip the duplicate.
+        let outcome = self.dispatch_command(cmd);
+        self.report_undo(outcome)
+    }
+
+    /// `outcome`, with the undo state it changed. Any command that produced a
+    /// CRDT delta also moved the `UndoManager` stacks, so the chrome's
+    /// Undo/Redo affordances must be refreshed. Undo and Redo already append
+    /// their own `UndoState`; skip the duplicate.
+    pub(super) fn report_undo(&self, mut outcome: TrameOutcome) -> TrameOutcome {
         let already_reported = matches!(outcome.display.last(), Some(TrameEvent::UndoState { .. }));
         if outcome.update.is_some() && !already_reported {
             outcome.display.push(self.undo_state_event());
@@ -297,28 +302,16 @@ impl TrameState {
                 }
                 None => Self::replace_nothing(),
             },
-            TrameCommand::ImportCsv {
-                data,
-                delimiter,
-                header,
-                target_sheet_id,
-                start_row,
-                start_col,
-            } => self.import_csv(
-                data,
-                delimiter,
-                header,
-                target_sheet_id,
-                CellPos::new(start_row, start_col),
-            ),
-            TrameCommand::ExportCsv {
-                sheet_id,
-                delimiter,
-                range,
-            } => self.export_csv(&sheet_id, delimiter, range),
-            TrameCommand::ExportActiveSheetCsv => {
-                let sheet = self.active_sheet.clone();
-                self.export_csv(&sheet, None, None)
+            // Served through the converter module, which the Logic thread
+            // loads and hands to `handle_conversion`. This arm is reached
+            // only by a caller driving `TrameState` without one. It answers
+            // rather than falling silent.
+            TrameCommand::ImportCsv { .. }
+            | TrameCommand::ExportCsv { .. }
+            | TrameCommand::ExportActiveSheetCsv => {
+                TrameOutcome::display_only(vec![TrameEvent::Error {
+                    message: "a CSV file is converted by the Logic thread".to_owned(),
+                }])
             }
             // Served by the Logic thread: the container's header carries the
             // document's identity, which a workbook does not know

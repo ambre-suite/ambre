@@ -357,6 +357,14 @@ pub enum SyncCommand {
     /// cursors (`SRV-109`). Answered by [`crate::LogicEvent::ChannelActivity`].
     FetchActivity,
 
+    // -- The converter module --------------------------------------------------
+    /// Fetch the converter module from the page's origin and check it against
+    /// the digest this build carries (`ARCH-080`). The Logic thread asks on the
+    /// first command that reads or writes a file. Answered by
+    /// [`crate::LogicEvent::ConverterFetched`] or
+    /// [`crate::LogicEvent::ConverterRefused`].
+    FetchConverter,
+
     // -- Lifecycle -------------------------------------------------------------
     Shutdown,
 }

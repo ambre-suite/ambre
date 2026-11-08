@@ -18,6 +18,9 @@ ambre-core = { path = "../ambre-core" }
 kurbo = { workspace = true }
 peniko = { workspace = true }
 parley = { workspace = true }
+# The recorded draw list crosses into the converter module as postcard bytes
+# (`list`, `ambre-spec-drawing-surface.md`).
+serde = { workspace = true }
 
 [lints]
 workspace = true

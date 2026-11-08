@@ -11,6 +11,16 @@ use ambre_core::index::Pos;
 
 use crate::test_support::{at, span};
 
+impl TrameState {
+    /// Serve `cmd` with the converter linked in place, as the Logic thread's
+    /// host build hands it in.
+    fn convert(&mut self, cmd: TrameCommand) -> TrameOutcome {
+        let converter = ambre_convert::Converter::load(&ambre_core::Payload::new(Vec::new()))
+            .expect("the host links the engine");
+        self.handle_conversion(cmd, &converter)
+    }
+}
+
 /// `rect` as `(r1, c1, r2, c2)`.
 fn rect_tuple(rect: crate::CellRect) -> (u32, u32, u32, u32) {
     let (a, b) = (rect.top_left, rect.bottom_right);

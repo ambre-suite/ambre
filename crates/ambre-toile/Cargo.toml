@@ -7,7 +7,7 @@ description = "Whiteboard & presentations application for Ambre — infinite can
 
 [features]
 # PDF export (`toile-pdf-export`). Off by default; the Logic thread turns it on.
-pdf = ["dep:ambre-pdf", "dep:krilla"]
+pdf = ["dep:ambre-convert"]
 # Document-fixture machinery (`ambre-spec-fixtures.md`, `FIXTURE-007`). Non-default and
 # host-only. Explicitly forwards `ambre-core/fixtures`: a Cargo feature never
 # enables its dependency's feature implicitly, and the gated code names
@@ -26,13 +26,10 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
-# PDF export (`toile-pdf-export`), gated behind the `pdf` feature so krilla only
-# links when export is compiled in. `ambre-pdf` supplies the KrillaSurface
-# DrawSurface impl; krilla is named directly for the Document / page assembly.
-# raster-images is enabled so embedded Toile media survives into the PDF, and
-# feature-unifies with ambre-pdf's own krilla dependency.
-ambre-pdf = { path = "../ambre-pdf", optional = true }
-krilla = { workspace = true, features = ["raster-images"], optional = true }
+# PDF export (`toile-pdf-export`), gated behind the `pdf` feature. The deck is
+# recorded as a draw list and the converter module writes it, so this crate
+# links the request types and the loader, never the writer (`ARCH-078`).
+ambre-convert = { path = "../ambre-convert", optional = true }
 
 # CRDT
 loro = { workspace = true }
@@ -113,6 +110,9 @@ wasm-bindgen-test = "0.3"
 # host-testable, so gate it to the host target like ambre-trame does.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# The PDF tests write the recorded deck through the engine linked in place, as
+# the Logic thread's host build does (`ambre_convert::Converter`).
+ambre-convert = { path = "../ambre-convert", features = ["engine"] }
 # The import bench holds the "Toile SVG import, 5 000 nodes" row of the budget
 # registry. Host-only, as the other benches of the workspace are.
 criterion = { workspace = true }

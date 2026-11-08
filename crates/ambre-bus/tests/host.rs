@@ -201,6 +201,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::MarkThreadRead { .. } => "MarkThreadRead",
         SyncCommand::MarkAllRead => "MarkAllRead",
         SyncCommand::FetchActivity => "FetchActivity",
+        SyncCommand::FetchConverter => "FetchConverter",
         SyncCommand::Shutdown => "Shutdown",
     }
 }
@@ -263,12 +264,14 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::ApiError { .. } => "ApiError",
         LogicEvent::SetupRequired => "SetupRequired",
         LogicEvent::UpdateRequired => "UpdateRequired",
+        LogicEvent::ConverterFetched { .. } => "ConverterFetched",
+        LogicEvent::ConverterRefused { .. } => "ConverterRefused",
     }
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 39;
-const EVENT_VARIANTS: usize = 55;
+const SYNC_VARIANTS: usize = 40;
+const EVENT_VARIANTS: usize = 57;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -453,6 +456,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::MarkThreadRead { thread: doc },
         SyncCommand::MarkAllRead,
         SyncCommand::FetchActivity,
+        SyncCommand::FetchConverter,
         SyncCommand::Shutdown,
     ];
     let events = [
@@ -729,6 +733,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::SetupRequired,
         LogicEvent::UpdateRequired,
+        LogicEvent::ConverterFetched {
+            module: ambre_core::Payload::new(b"\0asm".to_vec()),
+        },
+        LogicEvent::ConverterRefused {
+            reason: "the server answered 404".to_owned(),
+        },
     ];
     for cmd in &commands {
         roundtrip_sync(cmd);

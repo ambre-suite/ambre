@@ -27,9 +27,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-002` | `INV` | Application render code MUST NOT name a GPU type: it draws through the shared surface alone. | this spec section 2 | crate-graph -- neither `ambre-trame` nor `ambre-toile` declares `wgpu`, and their render tests drive `RecordingSurface` on host | none | verified |
 | `CANVAS-025` | `INV` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate-graph -- `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | none | verified |
 | `CANVAS-026` | `INV` | The drawing crate MUST decode nothing: a raster image MUST arrive as pixels the caller already decoded. | this spec section 2 | crate-graph -- `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | none | verified |
-| `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | crate-graph -- `ambre-app` declares neither `krilla` nor `ambre-pdf`, and Toile's `pdf` feature is off by default, so nothing links krilla into a client build | none | verified |
+| `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/converter_boundary.py`, run by `just converter-boundary` in the CI `lint` job, refuses `krilla` and `ambre-pdf` in the graph `cargo tree` resolves for either instance on the wasm target (`ARCH-078`): the back end links into the converter module alone, fetched on the first export | none | verified |
 | `CANVAS-056` | `INV` | A drawing primitive MUST take geometry and paint alone, and no screen-only state. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, reads every method of `DrawSurface` and refuses a parameter whose type is not a rectangle, a line, a colour, a surface length, an affine, a path, a stroke, a brush, a glyph run or an image. It refuses a bare number not named as a width, so a `density: f64` fails though its type is listed | none | verified |
-| `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a path that reaches `krilla` or `ambre_pdf` outside `crates/ambre-pdf/` and the `src/logic/` directories (`ambre_primitives::driver::bounds::the_pdf_back_end_under_a_foreign_name_is_refused_outside_the_logic_thread`) | none | verified |
+| `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a path that reaches `krilla` or `ambre_pdf` outside `crates/ambre-pdf/`, the converter module `crates/ambre-convert/`, which the Logic thread instantiates and calls, and the `src/logic/` directories (`ambre_primitives::driver::bounds::the_pdf_back_end_under_a_foreign_name_is_refused_outside_the_logic_thread`) | none | verified |
 | `CANVAS-030` | `INV` | A surface that does not implement an optional primitive MUST do nothing, never fail. | this spec section 2 | type-level -- each optional method carries a default empty body, so a back end that omits it compiles and draws nothing | none | verified |
 | `CANVAS-061` | `OBS` | A vector edge MUST reach the screen antialiased. | this spec section 2 | not built | unbuilt -- lands with the `Antialiased vector geometry` Story (`ambre-roadmap.md` E6). Every screen pipeline runs at one sample and the solid shader returns its vertex colour unmodified, so a diagonal is a hard staircase and only glyphs escape, through their own coverage atlas | unimplemented |
 | `CANVAS-063` | `OBS` | An antialiased edge MUST keep its width in screen pixels at every zoom. | this spec section 2 | not built | unbuilt -- lands with the `Antialiased vector geometry` Story (`ambre-roadmap.md` E6). Tessellation is in model space, so a width in model units is a band that thickens as the board zooms in | unimplemented |
@@ -113,7 +113,7 @@ and only the brush has one. A caller passes the render colour explicitly.
 | Surface | Crate | Thread | Back end |
 |---|---|---|---|
 | `WgpuSurface<'a>` | `ambre-canvas` | UI | the quad batch, with a CPU-side clip stack applied before a vertex is pushed |
-| `KrillaSurface<'a, 'b>` | `ambre-pdf` | Logic, lazy-loaded | `krilla::surface::Surface`, borrowed from the page rather than owned |
+| `KrillaSurface<'a, 'b>` | `ambre-pdf` | Logic, in the converter module fetched on demand | `krilla::surface::Surface`, borrowed from the page rather than owned |
 | `RecordingSurface` | `ambre-draw`, behind the `testing` feature | host | a list of the calls made, which is what makes a render walk testable with no browser and no GPU |
 
 ```rust
@@ -127,7 +127,7 @@ pub struct WgpuSurface<'r> {
     transform_stack: Vec<Affine>,  // composed model-to-screen, one per live push_transform
 }
 
-// ambre-pdf -- krilla backend, Logic thread, lazy-loaded
+// ambre-pdf -- krilla backend, Logic thread, in the converter module
 pub struct KrillaSurface<'a, 'b> {
     surface: &'a mut krilla::surface::Surface<'b>,
 }
@@ -191,10 +191,23 @@ Y-down like this trait, so no coordinate flips. The clip stack and the transform
 onto krilla's single instruction stack. Each push is a push, each pop is a `Surface::pop`, and
 `CANVAS-027` is what keeps them paired.
 
-**Code:** `crates/ambre-draw/src/lib.rs` holds the trait, `ImageSource` and the re-exports;
-`crates/ambre-draw/src/testing.rs` holds `RecordingSurface` behind the `testing` feature;
-`crates/ambre-canvas/src/render/surface.rs` holds `WgpuSurface` and the tessellation;
-`crates/ambre-pdf/src/lib.rs` holds `KrillaSurface`.
+**The recorded draw list.** The back end runs in the converter module, a second instance that
+shares no memory with the Logic thread (`ambre-spec-architecture.md section 2`). A borrowed glyph
+run or pixel slice cannot cross into it. So the Logic thread draws each page through
+`ListRecorder`, a surface that records each call as a `DrawOp` owning its data. The module replays
+the ops on `KrillaSurface`, and a recorded glyph run reaches krilla through the same method as a
+live one. A font face and an image each enter the document's table once.
+
+**Code:**
+
+| File | What it holds |
+|---|---|
+| `crates/ambre-draw/src/lib.rs` | the trait, `ImageSource` and the re-exports |
+| `crates/ambre-draw/src/testing.rs` | `RecordingSurface`, behind the `testing` feature |
+| `crates/ambre-draw/src/list.rs` | the recorded draw list and `ListRecorder` |
+| `crates/ambre-canvas/src/render/surface.rs` | `WgpuSurface` and the tessellation |
+| `crates/ambre-pdf/src/lib.rs` | `KrillaSurface` |
+| `crates/ambre-pdf/src/document.rs` | the replay of a recorded document |
 
 ---
 
@@ -206,7 +219,7 @@ The user touches no drawing call. What they see of this document is that two des
 |---|---|
 | the content is drawn on screen | one walk over the document, through the screen surface |
 | the document is exported to PDF | the same walk, through the PDF surface, in the Logic thread |
-| the export runs for the first time | krilla is fetched then, not at startup |
+| the export runs for the first time | krilla is fetched then, in the converter module, not at startup (`ambre-spec-architecture.md section 2`) |
 | a shape crosses a clip edge | it is drawn whole on screen, which is the defect of section 5 |
 | a shape carries a gradient | it paints as nothing, which is the second defect of section 5 |
 | text is selected in an exported PDF | nothing is selected: the glyphs carry no character mapping |

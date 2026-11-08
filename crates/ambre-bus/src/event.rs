@@ -457,6 +457,16 @@ pub enum LogicEvent {
     /// The relay speaks a newer wire version than this build. Only an update
     /// cures it, so the socket stays closed (`ambre-spec-sync.md`, `SYNC-137`).
     UpdateRequired,
+
+    // -- The converter module --------------------------------------------------
+    /// The converter module, fetched and checked against the build's digest
+    /// (`ARCH-080`). Answers [`crate::SyncCommand::FetchConverter`].
+    ConverterFetched {
+        module: ambre_core::Payload<ambre_core::ConverterModule>,
+    },
+    /// The converter module did not arrive, or its bytes are not the ones the
+    /// build names. Answers [`crate::SyncCommand::FetchConverter`].
+    ConverterRefused { reason: String },
 }
 
 /// Why a document could not open (`SYNC-173`).

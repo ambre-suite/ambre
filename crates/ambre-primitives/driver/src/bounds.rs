@@ -13,7 +13,7 @@
 //! | a worker spawned outside the launcher's spawner | `ARCH-001`, `ARCH-011` |
 //! | a worker that two tabs would share | `ARCH-011` |
 //! | browser storage named by the Sync worker | `SYNC-054`, `SYNC-060` |
-//! | the PDF back end named outside a `src/logic/` directory | `CANVAS-028` |
+//! | the PDF back end named outside a `src/logic/` directory and the converter module | `CANVAS-028` |
 //! | the display density read outside `density.rs` | `CANVAS-031`, `CANVAS-043` |
 //! | an application's command, event or command id named by the launcher | `ARCH-018` |
 //! | an application message named by the Sync worker | `BUS-021` |
@@ -223,8 +223,11 @@ const BOUNDS: &[Bound] = &[
         what: "the PDF back end outside the Logic thread",
         reads: Reads::AllCode,
         closed: |f| {
+            // The converter module runs on the Logic thread too: the Logic
+            // thread instantiates it and calls it synchronously.
             f.starts_with("crates/")
                 && !f.starts_with("crates/ambre-pdf/")
+                && !f.starts_with("crates/ambre-convert/")
                 && !f.contains("/src/logic/")
         },
         reaches: |r| {

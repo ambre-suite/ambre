@@ -187,11 +187,12 @@ impl ToileState {
     /// # Errors
     ///
     /// [`PdfExportError::Empty`] when the board yields no page, and
-    /// [`PdfExportError::Serialize`] when krilla refuses to assemble the bytes.
+    /// [`PdfExportError::Convert`] when the converter refuses or cannot run.
     pub fn export_pdf_document(
         &self,
         page: crate::logic::interop::PageSize,
         font_cx: &mut ambre_draw::FontContext,
+        converter: &ambre_convert::Converter,
     ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, crate::logic::interop::PdfExportError>
     {
         let pages = self.pdf_pages(page);
@@ -205,6 +206,7 @@ impl ToileState {
             font_cx,
             &mut text_cache,
             &self.decoded_media(),
+            converter,
         )
     }
 
@@ -257,6 +259,14 @@ impl ToileState {
 
 #[cfg(test)]
 mod tests {
+    /// The converter the Logic thread's host build hands in: the engine,
+    /// linked in place.
+    #[cfg(feature = "pdf")]
+    fn host_converter() -> ambre_convert::Converter {
+        ambre_convert::Converter::load(&ambre_core::Payload::new(Vec::new()))
+            .expect("the host links the engine")
+    }
+
     use kurbo::{Point, Size};
 
     use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
@@ -380,7 +390,7 @@ mod tests {
         let st = board_with_a_rect();
         let mut fonts = ambre_draw::FontContext::default();
         let pdf = st
-            .export_pdf_document(Default::default(), &mut fonts)
+            .export_pdf_document(Default::default(), &mut fonts, &host_converter())
             .expect("a board with content renders");
         let pdf = pdf.as_bytes();
         assert!(pdf.starts_with(b"%PDF-"), "a PDF header: {:?}", &pdf[..8]);
@@ -395,7 +405,7 @@ mod tests {
         let st = board_with_a_rect();
         let before = st.doc.oplog_vv();
         let mut fonts = ambre_draw::FontContext::default();
-        st.export_pdf_document(Default::default(), &mut fonts)
+        st.export_pdf_document(Default::default(), &mut fonts, &host_converter())
             .expect("a board with content renders");
         assert_eq!(st.doc.oplog_vv(), before, "the export wrote to the board");
         assert_eq!(st.doc.state_vv(), before);
@@ -410,7 +420,7 @@ mod tests {
         let st = ToileState::new();
         let mut fonts = ambre_draw::FontContext::default();
         assert!(matches!(
-            st.export_pdf_document(Default::default(), &mut fonts),
+            st.export_pdf_document(Default::default(), &mut fonts, &host_converter()),
             Err(crate::logic::interop::PdfExportError::Empty)
         ));
     }

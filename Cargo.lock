@@ -190,6 +190,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-convert"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "ambre-draw",
+ "ambre-pdf",
+ "csv",
+ "js-sys",
+ "postcard",
+ "serde",
+ "thiserror 2.0.18",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "ambre-core"
 version = "0.1.0"
 dependencies = [
@@ -243,6 +259,7 @@ dependencies = [
  "kurbo",
  "parley",
  "peniko",
+ "serde",
 ]
 
 [[package]]
@@ -250,6 +267,7 @@ name = "ambre-logic"
 version = "0.1.0"
 dependencies = [
  "ambre-bus",
+ "ambre-convert",
  "ambre-core",
  "ambre-crypto",
  "ambre-draw",
@@ -311,6 +329,7 @@ dependencies = [
  "krilla",
  "kurbo",
  "peniko",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -454,17 +473,16 @@ dependencies = [
  "ambre-canvas",
  "ambre-chrome",
  "ambre-commands",
+ "ambre-convert",
  "ambre-core",
  "ambre-crdt",
  "ambre-draw",
- "ambre-pdf",
  "base64 0.22.1",
  "criterion",
  "i_overlay",
  "icondata",
  "image",
  "js-sys",
- "krilla",
  "kurbo",
  "leptos",
  "leptos_icons",
@@ -491,11 +509,11 @@ dependencies = [
  "ambre-canvas",
  "ambre-chrome",
  "ambre-commands",
+ "ambre-convert",
  "ambre-core",
  "ambre-crdt",
  "ambre-draw",
  "blake2",
- "csv",
  "icondata",
  "js-sys",
  "kurbo",

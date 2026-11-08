@@ -26,7 +26,7 @@ is drawn by, what the bytes owe, and what the export must leave alone.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PDF-008` | `POST` | In Toile, a page MUST be drawn by the application's own screen walk, retargeted to the shared surface, and by no second PDF-only renderer. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | structural -- `crates/ambre-toile/src/logic/interop/pdf_export.rs` imports `paint_content` from `crates/ambre-toile/src/ui/render.rs` and runs it against a krilla page, so the page walk and the screen walk are one function, and a second renderer would be a second function that does not exist; Toile `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf` | none | verified |
+| `PDF-008` | `POST` | In Toile, a page MUST be drawn by the application's own screen walk, retargeted to the shared surface, and by no second PDF-only renderer. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | structural -- `crates/ambre-toile/src/logic/interop/pdf_export.rs` imports `paint_content` from `crates/ambre-toile/src/ui/render.rs` and records it for the converter module to replay on a krilla page, so the page walk and the screen walk are one function, and a second renderer would be a second function that does not exist; Toile `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf` | none | verified |
 | `PDF-001` | `POST` | In Trame, a page MUST be drawn by the application's own screen walk, retargeted to the shared surface, and by no second PDF-only renderer. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | not built | unbuilt -- lands with the `Sheet PDF export` Story (`ambre-roadmap.md` E6). Trame's primitives are surface-generic and driven through a recording surface, and it aims them at no page yet | unimplemented |
 | `PDF-009` | `POST` | In Prose, a page MUST be drawn by the application's own screen walk, retargeted to the shared surface, and by no second PDF-only renderer. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PDF-010` | `POST` | In Toile, two exports of one unchanged document MUST produce identical bytes, whether one peer runs both or two peers holding the same faces do. | this spec section 3; section 5 | Toile `ambre_toile::logic::interop::pdf_export::tests::export_is_byte_stable`; `::two_peers_holding_the_same_faces_export_one_file` -- two sealed contexts fed the shipped faces, against an empty one as the control, both under the `pdf` feature that `just test-native` enables | none | verified |
@@ -84,8 +84,10 @@ Each application adds the scenarios its own page format turns on, in its own pdf
 
 **The surface, the writer and the fonts** are `ambre-spec-drawing-surface.md` and
 `ambre-spec-render-assets.md`. They are the `Surface` trait, the krilla back end, the `ambre-pdf`
-crate behind a feature, and the font database the shaping needs (`CANVAS-025`, `CANVAS-028`). This
-document adds no primitive of its own.
+crate in the converter module, and the font database the shaping needs (`CANVAS-025`, `CANVAS-028`).
+The Logic thread records each page as a draw list and the converter module writes the file
+(`ambre-spec-architecture.md section 2`, the converter module). This document adds no primitive of
+its own.
 
 **The export context is sealed** (`PDF-007`). A default context discovers the faces of the machine,
 and parley falls back to one of them for a codepoint the asked family misses. Two peers would then
@@ -98,7 +100,8 @@ pages, one a deck of slides, one a column of pages (section 6).
 
 **Code:**
 
-* `crates/ambre-pdf/` -- the shared PDF surface, over krilla;
+* `crates/ambre-pdf/` -- the shared PDF surface, over krilla, and the replay of a recorded document;
+* `crates/ambre-convert/` -- the converter module that links it;
 * each application's Logic-thread driver -- Toile's `crates/ambre-toile/src/logic/interop/pdf_export.rs`
   is built; Trame's and Prose's are not.
 

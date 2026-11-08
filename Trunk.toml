@@ -5,8 +5,16 @@ target = "crates/ambre-app/index.html"
 # worker's hashed name from the post-build hook below.
 filehash = true
 
-# Writes the Sync worker's address into the page and, in a release, a brotli
-# copy beside each compressible file (`scripts/trunk_post_build.py`).
+# Builds the converter module and writes its digest, before the two instances
+# build: the Sync worker carries the digest (`scripts/converter_build.py`).
+[[hooks]]
+stage = "pre_build"
+command = "python3"
+command_arguments = ["scripts/converter_build.py"]
+
+# Writes the Sync worker's address into the page, the converter module named
+# by its digest and, in a release, a brotli copy beside each compressible file
+# (`scripts/trunk_post_build.py`).
 [[hooks]]
 stage = "post_build"
 command = "python3"

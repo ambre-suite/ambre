@@ -144,11 +144,16 @@ name = "ambre-crdt"
 wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
 
 # The CSV reader and writer. A conversion runs on the user's machine, in the
-# Logic thread of the application that owns the format (`TRAME-IO-001`). The
+# converter module the Logic thread loads (`TRAME-IO-001`, `ARCH-078`). The
 # relay and the Sync worker compile no file reader.
 [[bans.deny]]
 name = "csv"
-wrappers = ["ambre-trame"]
+wrappers = ["ambre-convert"]
+
+# The PDF writer: in the converter module alone (`ARCH-078`).
+[[bans.deny]]
+name = "ambre-pdf"
+wrappers = ["ambre-convert"]
 
 # A channel crate that locks. flume's queue sits behind a `std::sync::Mutex`,
 # and on the page's main thread a contended one ends in `Atomics.wait`, which

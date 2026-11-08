@@ -43,6 +43,22 @@ class Verdict(unittest.TestCase):
         self.assertIn("within the budget", lines[-1])
 
 
+class FirstDownload(unittest.TestCase):
+    def test_the_converter_counts_against_its_ceiling_alone(self) -> None:
+        ceilings = {**CEILINGS, "Converter": 500_000}
+        sizes = {"Main": 1_700_000, "Sync": 200_000, "Converter": 400_000}
+        ok, lines = wasm_size.verdict(sizes, ceilings, 2_000_000)
+        self.assertTrue(ok)
+        self.assertIn("First download: 1,900,000", lines[-1])
+
+    def test_a_converter_over_its_ceiling_fails(self) -> None:
+        ceilings = {**CEILINGS, "Converter": 500_000}
+        sizes = {"Main": 1, "Sync": 1, "Converter": 500_001}
+        ok, lines = wasm_size.verdict(sizes, ceilings, 2_000_000)
+        self.assertFalse(ok)
+        self.assertIn("1 over the ceiling", lines[2])
+
+
 class Find(unittest.TestCase):
     def test_one_hashed_file_is_found(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -8,7 +8,8 @@
 use super::*;
 // The deck's PDF export is answered here rather than inside `ToileState`.
 // This file therefore names the two Toile bus types the rest of the module
-// reaches only through `AppCommand` / `AppEvent`.
+// reaches only through `AppCommand` / `AppEvent`. A command that needs the
+// converter module waits in `converting` first.
 use ambre_bus::Mutation;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_toile::message::{ToileCommand, ToileEvent};
@@ -25,16 +26,22 @@ impl LogicState {
     /// Every refusal reaches the user as a `ExportFailed`. A build without the
     /// export compiled in and a session whose fonts have not landed answer by
     /// name. So do a board with nothing to draw and a serializer that gave up.
-    fn export_toile_pdf(&mut self, document_id: Id<Document>) {
+    pub(crate) fn export_toile_pdf(&mut self, document_id: Id<Document>) {
         self.settle_import(document_id);
         let Self {
-            docs, export_cx, ..
+            docs,
+            export_cx,
+            converter,
+            ..
         } = self;
         let Some(DocState::Toile(state)) = docs.get(&document_id).map(|d| &d.state) else {
             tracing::warn!("Logic: PDF export asked of a document that is not a board");
             return;
         };
-        let answer = match export_pdf_of(state, export_cx.as_mut()) {
+        let converting::ConverterSlot::Ready(converter) = &*converter else {
+            return;
+        };
+        let answer = match export_pdf_of(state, export_cx.as_mut(), converter) {
             Ok(data) => ToileEvent::ExportComplete {
                 filename: ambre_core::ExportFilename::named(
                     PDF_STEM,
@@ -219,12 +226,12 @@ impl LogicState {
             }
             return;
         }
-        // The deck's PDF export is the one app command this thread serves itself
-        // (`toile-pdf-export`). The render walk needs the base font faces the
-        // Main thread fetched at boot. Those live here, beside the documents
-        // rather than inside one.
-        if matches!(command, AppCommand::Toile(ToileCommand::ExportPdf)) {
-            self.export_toile_pdf(document_id);
+        // A command that reads or writes a file runs through the converter
+        // module, which this thread loads on the first such command
+        // (`ARCH-081`). The deck's PDF export also needs the base font faces
+        // the Main thread fetched at boot, which live here (`toile-pdf-export`).
+        if converting::needs_converter(&command) {
+            self.convert_for(document_id, command);
             return;
         }
         // The native file is the same operation whichever engine owns the
@@ -386,7 +393,7 @@ impl LogicState {
     /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence, which
     /// logs the same delta. Shared by every `AppCommand` arm; the arm only
     /// decides which `AppEvent` variant wraps the display events.
-    fn dispatch_outcome(
+    pub(crate) fn dispatch_outcome(
         &mut self,
         document_id: Id<Document>,
         display: Vec<AppEvent>,
@@ -1179,6 +1186,7 @@ const PDF_STEM: &str = "deck";
 fn export_pdf_of(
     state: &ToileState,
     font_cx: Option<&mut parley::FontContext>,
+    converter: &ambre_convert::Converter,
 ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, String> {
     let Some(font_cx) = font_cx else {
         // The faces are fetched once at boot and never re-requested, so this is
@@ -1186,7 +1194,7 @@ fn export_pdf_of(
         return Err("the fonts are still loading".to_owned());
     };
     state
-        .export_pdf_document(Default::default(), font_cx)
+        .export_pdf_document(Default::default(), font_cx, converter)
         .map_err(|e| e.to_string())
 }
 
@@ -1194,6 +1202,7 @@ fn export_pdf_of(
 fn export_pdf_of(
     _state: &ToileState,
     _font_cx: Option<&mut parley::FontContext>,
+    _converter: &ambre_convert::Converter,
 ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, String> {
     Err("PDF export is not compiled into this build".to_owned())
 }
