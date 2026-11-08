@@ -236,6 +236,41 @@
 | Main | `blake2` | +7 KB | The line uid of Trame schema 2 is a BLAKE2b hash, so the hash now links into Main |
 | Sync | `ambre-core` | +19 KB | The generic newtype families, one copy per marker |
 | Sync | `ambre-sync`, `serde`, `percent-encoding` | +11 KB | The percent-encoded query (`SYNC-179`) and a flattened token pair |
+* **Main sat over its ceiling on 2026-11-08.** That day, `just size` read 3 136 988 bytes for
+  Main and 354 035 for Sync. The features merged since 2026-11-07 grew Main by 8 814 bytes. One
+  cut took 4 461 back: `ambre-toile` now names `roxmltree` 0.21, the version usvg 0.47 links,
+  so the instance carries one copy of the parser. Main then read 3 132 527, still 2 527 over.
+* **The applications alone cannot close the gap.** The table below splits the Main instance by
+  subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
+  cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
+  parts that only an application needs weigh about 0.84 MB of brotli. Without them, the shared
+  part alone weighs about 2.3 MB, over the 2 MB of Main plus Sync.
+
+| Part | Raw | Brotli, estimated | What it is |
+|---|---|---|---|
+| Data segments, glue, `core`, `alloc` and the generic code no crate names | 3 068 KB | ~700 KB | Shared, and not split by the measure |
+| GPU | 1 635 KB | ~373 KB | `naga`, `wgpu-core` and `wgpu-hal`, needed by the WebGL2 backend |
+| CRDT | 1 585 KB | ~361 KB | `loro` and its crates |
+| Shared Ambre crates | 1 471 KB | ~335 KB | `ambre-app`, `ambre-logic`, `ambre-core`, `ambre-bus`, `ambre-canvas`, `ambre-chrome` |
+| UI | 1 170 KB | ~267 KB | `leptos`, `tachys`, `reactive_graph` |
+| Text | 1 126 KB | ~257 KB | `parley`, `swash`, `skrifa`, `read-fonts`, `harfrust`, `zeno` |
+| PDF writer | 968 KB | ~221 KB | `krilla` and the second copy of `skrifa` and `read-fonts` it links, older than `parley`'s |
+| Toile | 849 KB | ~194 KB | `ambre-toile`, `usvg`, `roxmltree`, `i_overlay` |
+| Prose | 664 KB | ~151 KB | `ambre-prose`, `html5ever`, `pulldown-cmark` |
+| Trame | 541 KB | ~123 KB | `ambre-trame`, `petgraph` |
+| Murmure | 352 KB | ~80 KB | `ambre-murmure` |
+| Picture codecs | 296 KB | ~67 KB | `image`, `png`, `zune-jpeg`, `gif` |
+
+* **Four compile-time cuts were measured on 2026-11-08 and left out.** Each figure is the brotli
+  size of Main against the same build without the cut.
+
+| Cut | Main | Why it stays out |
+|---|---|---|
+| `-Z location-detail=none` in the `wasm-release` profile | -75 697, and -8 709 on Sync | The primitive gate refuses a `-Z` flag in a rustflags list (`ARCH-033`) |
+| `-Z fmt-debug=shallow` | -51 777 | Every `Debug` output loses its fields, the logs included, and `ARCH-033` refuses it too |
+| `panic_immediate_abort` in `build-std-features` | not built | The panic loses the message that the fatal screen shows |
+| `log` and `tracing` call sites removed in a release | -1 590 | No logger reads them, so they cost nothing at run time, and the gain is too small for a new dependency |
+
 * **wasm-opt stays off.** Binaryen 124 takes 7% off the raw Main wasm, and the result compresses
   0.8% worse, in gzip and in brotli alike. The download is the budget, so the pass costs.
 

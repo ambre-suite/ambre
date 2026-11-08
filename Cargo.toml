@@ -141,7 +141,9 @@ swash = "0.2"
 # own Parley text stack (`toile-import-export`). Dropping the font stack also trims
 # the WASM binary contribution.
 usvg = { version = "0.47", default-features = false }
-roxmltree = "0.20"
+# The version usvg 0.47 links, so the Main instance carries one copy of the
+# parser and not two (`ambre-spec-budgets.md` section 5).
+roxmltree = "0.21"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 # WASM
