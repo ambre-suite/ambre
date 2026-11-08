@@ -244,6 +244,17 @@
 * **The ceiling of Main went up to 3.14 MB on 2026-11-08.** The growth is the features
   themselves: the HTML half of the clipboard write (`UI-THREAD-055`) and the formula bind of
   Trame (`TRAME-289`).
+* **The ceiling of Main came down to 3.10 MB on 2026-11-08.** That day, `just size` read
+  3 134 561 bytes for Main before the cut and 3 098 641 after it: 35 920 bytes less. Sync did not
+  move, at 354 020.
+* **The cut aligns parley on the font readers of krilla.** krilla 0.8.2 is the newest release, and
+  it and subsetter 0.2.6 pin skrifa 0.42 and read-fonts 0.39. Parley went back from 0.12 to 0.10,
+  the last release on the same pair, so Main links one copy of each reader. The 0.10 line breaker
+  already sets each line's x offset and width, which `MURMURE-570` needs. Two bans of `deny.toml`
+  keep a newer pair out of the lock file.
+* **The cut costs one change of layout.** Parley 0.10 breaks a CR LF twice, so a CR LF that
+  reaches the canvas draws one empty line more (`CANVAS-084`). Prose, Trame and the browser
+  input turn a CR LF into an LF first, so only a peer or an imported file can bring one.
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
@@ -258,7 +269,7 @@
 | Shared Ambre crates | 1 471 KB | ~335 KB | `ambre-app`, `ambre-logic`, `ambre-core`, `ambre-bus`, `ambre-canvas`, `ambre-chrome` |
 | UI | 1 170 KB | ~267 KB | `leptos`, `tachys`, `reactive_graph` |
 | Text | 1 126 KB | ~257 KB | `parley`, `swash`, `skrifa`, `read-fonts`, `harfrust`, `zeno` |
-| PDF writer | 968 KB | ~221 KB | `krilla` and the second copy of `skrifa` and `read-fonts` it links, older than `parley`'s |
+| PDF writer | 968 KB | ~221 KB | `krilla` and the second copy of `skrifa` and `read-fonts` it links, older than `parley`'s. The 2026-11-08 cut removed that copy |
 | Toile | 849 KB | ~194 KB | `ambre-toile`, `usvg`, `roxmltree`, `i_overlay` |
 | Prose | 664 KB | ~151 KB | `ambre-prose`, `html5ever`, `pulldown-cmark` |
 | Trame | 541 KB | ~123 KB | `ambre-trame`, `petgraph` |

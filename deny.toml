@@ -184,6 +184,17 @@ wrappers = [
     "ambre-trame",
 ]
 
+# One copy of the font readers in Main. krilla 0.8.2 and subsetter 0.2.6 pin
+# skrifa 0.42 and read-fonts 0.39, so parley stays on 0.10, the last release
+# that links the same pair. A newer pair is a second copy of both readers in
+# the download (`ambre-spec-budgets.md section 5`): lift these two bans in the
+# commit that moves krilla, subsetter and parley together.
+[[bans.deny]]
+crate = "skrifa:>=0.43"
+
+[[bans.deny]]
+crate = "read-fonts:>=0.40"
+
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"

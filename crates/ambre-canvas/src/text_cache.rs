@@ -151,27 +151,24 @@ pub(crate) fn break_indented<B: parley::Brush>(
 }
 
 /// The byte ranges of the paragraphs of `text`, each break left out. A break
-/// is a mandatory one of UAX #14, the set parley ends a paragraph on, and a
-/// CR LF is one break.
+/// is a mandatory one of UAX #14, the set parley ends a paragraph on. Parley
+/// 0.10 breaks a CR LF twice, so a CR and its LF end a paragraph each. The
+/// empty paragraph between them starts at the edge.
 fn paragraphs(text: &str) -> impl Iterator<Item = Span<Byte>> + '_ {
     let mut start = 0;
-    let mut chars = text.char_indices().peekable();
+    let mut chars = text.char_indices();
     std::iter::from_fn(move || {
         if start > text.len() {
             return None;
         }
-        while let Some((at, c)) = chars.next() {
+        for (at, c) in chars.by_ref() {
             let mandatory = matches!(
                 c,
                 '\n' | '\r' | '\u{0B}' | '\u{0C}' | '\u{85}' | '\u{2028}' | '\u{2029}'
             );
             if mandatory {
-                let mut next = at + c.len_utf8();
-                if c == '\r' && chars.next_if(|(_, c)| *c == '\n').is_some() {
-                    next += 1;
-                }
                 let held = Span::<Byte>::from_usize_range(start..at);
-                start = next;
+                start = at + c.len_utf8();
                 return Some(held);
             }
         }
@@ -655,8 +652,8 @@ mod tests {
 
     /// A span's indent starts each line of the paragraphs it holds that far
     /// right, a wrapped line too, and narrows them by as much. The paragraph
-    /// after it starts at the edge again, and a CR LF is one break
-    /// (`CANVAS-084`).
+    /// after it starts at the edge again. Parley 0.10 breaks a CR LF twice, and
+    /// the empty paragraph between the two starts at the edge (`CANVAS-084`).
     #[test]
     fn an_indent_starts_each_line_of_its_paragraphs_past_it() {
         let mut cx = font_cx();
@@ -681,14 +678,17 @@ mod tests {
                 let m = line.metrics();
                 (
                     m.inline_min_coord,
-                    m.inline_min_coord + m.advance - m.hanging_advance,
+                    m.inline_min_coord + m.advance - m.trailing_whitespace,
                 )
             })
             .collect();
-        let [(top, _), held @ .., (end, _)] = lines.as_slice() else {
-            panic!("three paragraphs, got {lines:?}");
+        // The held range ends past the second CR LF. The empty paragraph
+        // inside that CR LF is held, and the one inside the first is not.
+        let [(top, _), (gap, _), held @ .., (end, _)] = lines.as_slice() else {
+            panic!("five paragraphs, got {lines:?}");
         };
         assert_eq!((*top, *end), (0.0, 0.0), "the paragraphs around it");
+        assert_eq!(*gap, 0.0, "the empty paragraph inside the first CR LF");
         assert!(held.len() >= 2, "the paragraph wraps, got {held:?}");
         assert!(
             held.iter()
@@ -698,7 +698,7 @@ mod tests {
         let paragraphs: Vec<_> = super::paragraphs("a\r\nb\n\u{2029}")
             .map(Span::<Byte>::to_usize_range)
             .collect();
-        assert_eq!(paragraphs, [0..1, 3..4, 5..5, 8..8]);
+        assert_eq!(paragraphs, [0..1, 2..2, 3..4, 5..5, 8..8]);
     }
 
     /// An overflow drops the coldest layouts and keeps the hot ones

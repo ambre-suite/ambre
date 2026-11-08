@@ -785,8 +785,6 @@ fn build(
             index: 0,
             width: style.indent_first.get(),
             height: 0.0,
-            baseline: None,
-            vertical_align: parley::VerticalAlign::BASELINE,
         });
     }
     let mut layout: Layout<ParleyBrush> = builder.build(text);
