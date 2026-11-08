@@ -147,6 +147,26 @@ impl FormulaEngine {
         reach.into_iter().collect()
     }
 
+    /// The formulas a write that added lines to `sheet` binds. Each one reads
+    /// a cell of `sheet` by a position past the used range. `index`, the
+    /// layout after the write, now holds a line there. A full reseed binds
+    /// that position to the line, so each one compiles again (`TRAME-289`).
+    /// The search costs the formulas that read a virtual axis, never the
+    /// whole cache.
+    pub fn bound_by_growth(&self, sheet: Pos<EngineSheet>, index: &SheetIndex) -> Vec<CellId> {
+        self.bytecode
+            .unbound()
+            .filter(|cell| {
+                self.bytecode.get(cell).is_some_and(|bc| {
+                    bc.cell_deps
+                        .iter()
+                        .any(|dep| dep.sheet == sheet && dep.binds_in(index))
+                })
+            })
+            .copied()
+            .collect()
+    }
+
     /// Carry the engine across one structural edit, without a reseed.
     ///
     /// `removed` are the cells of the lines the edit removed, and `reread` the

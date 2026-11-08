@@ -666,6 +666,12 @@ mod line_history_tests;
 #[cfg(not(target_arch = "wasm32"))]
 mod structural_tests;
 
+// Host-only, on `proptest` like the structural tests: a local write that adds
+// lines against a full reseed (`TRAME-289`).
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod growth_tests;
+
 // Host-only, on `proptest` like the structural tests: the carried remote apply
 // against a full rebuild (`TRAME-282`).
 #[cfg(test)]

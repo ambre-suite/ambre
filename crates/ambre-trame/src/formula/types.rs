@@ -287,6 +287,20 @@ impl CellId {
     pub fn col_uid(&self) -> Option<Uid> {
         self.col.uid()
     }
+
+    /// Whether one axis of the cell is a position past the used range.
+    pub fn reads_a_virtual_axis(&self) -> bool {
+        self.row.uid().is_none() || self.col.uid().is_none()
+    }
+
+    /// Whether `index`, the layout of this cell's sheet, now holds a line at
+    /// a virtual axis of the cell. A compile against `index` then binds that
+    /// axis to the line (`TRAME-289`).
+    pub fn binds_in(&self, index: &SheetIndex) -> bool {
+        let row = matches!(self.row, AxisId::Virtual(pos) if Row::uid(index, pos).is_some());
+        let col = matches!(self.col, AxisId::Virtual(pos) if Col::uid(index, pos).is_some());
+        row || col
+    }
 }
 
 /// One bound of a compiled range, on a single axis.

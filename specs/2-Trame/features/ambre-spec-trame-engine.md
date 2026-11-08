@@ -40,6 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-002` | `POST` | Recomputing what a change made stale MUST finish before the command returns. | this spec section 3 | type-level -- `handle_command` returns `TrameOutcome` by value and the crate has no `async fn`, no `.await` and no spawn, so there is nowhere to defer to. No test separates the two recomputes: the one that reads a formula's new value (`ambre_trame::logic::tests::group1::sum_over_plain_literals_and_formula_raw_in_viewport`) reads it from the viewport that follows, which recomputes again | none | verified |
 | `TRAME-243` | `FAIL` | A write that needs a row, column or sheet id the session can no longer mint MUST answer with a notice saying so. Each cell, line or sheet short of an id MUST stay as it was. | `ambre-spec-trame-schema.md section 2` (`TRAME-242`) | `ambre_trame::logic::tests::group2::a_cell_short_of_uids_pushes_no_line_and_keeps_the_undo_stack` -- a cell one uid short pushes neither line and leaves the undo stack alone; `::a_spent_uid_counter_answers_each_line_write_with_its_notice` -- a resize, a merge and a restyle; `::a_spent_uid_counter_refuses_new_lines_and_overwrites_nothing` -- a cell write and an insert; `::a_batch_names_the_cap_after_the_counter_is_spent` -- each refusal keeps its own cause; `ambre_trame::logic::tests::group3::a_spent_sheet_counter_refuses_the_next_sheet_and_overwrites_nothing` -- a sheet; `ambre_trame::logic::tests::group12::an_import_with_a_spent_sheet_counter_writes_nothing` -- a CSV import into a new sheet; `ambre_trame::logic::tests::group10::a_merged_tile_short_of_a_line_says_so`; `::a_carried_style_short_of_a_line_says_so` -- a fill; `::an_empty_fill_onto_a_cell_short_of_a_line_says_nothing` -- a cell that writes nothing raises no notice; `::a_pasted_style_short_of_a_line_says_so` -- a paste | none | verified |
+| `TRAME-289` | `POST` | After a local write that adds lines, each formula MUST hold the value, the dependencies and the error that a full reseed of the workbook gives it. | this spec section 3.C; `TRAME-042` | `ambre_trame::logic::growth_tests::a_local_write_that_adds_lines_equals_a_full_reseed` -- a proptest, 256 cases over two sheets: cell writes and pastes past the used range, among formulas that read positions past it, ranges across it and the other sheet. After each step the state matches a state that reseeds after each step, on the stored text, each value, each dependency and each range; `::a_write_that_adds_a_row_binds_a_formula_that_reads_it`; `::a_write_that_adds_a_row_binds_a_formula_of_another_sheet` | none | verified |
 | `TRAME-166` | `FRAME` | A command that mutates nothing MUST NOT produce a delta. | this spec section 3 | `ambre_trame::logic::tests::group4::active_column_values_are_distinct_sorted_and_visible` -- a read-only query carries no update; `ambre_trame::logic::tests::group3::merge_selection_single_cell_is_noop` -- the same for a refused mutation | none | verified |
 
 ### 1.3 A remote delta arrives
@@ -64,7 +65,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 24 `verified`. What holds is what a compiler holds: a handler with no queue in
+* **Verification.** 25 `verified`. What holds is what a compiler holds: a handler with no queue in
   reach, an apply that returns display events and cannot broadcast. The sheet index equals a rebuild
   after every step of a random stream, and so does an engine carried across each remote batch. A
   native view reads each refused send in the log.
@@ -178,6 +179,11 @@ incremental update and the rebuild -- must agree, which is `TRAME-023`, and noth
 3. **collect** the dirty set through the dependency graph and evaluate it, before returning
    (`TRAME-002`);
 4. **return** the outcome: the display events, the delta, the presence payload.
+
+**A write past the used range adds lines** (`TRAME-289`). A formula that reads a position past the
+used range compiles it as a position. Once a write adds the line at that position, the formula
+compiles again, before step 2, and reads the line as a reseed binds it. Only a formula that reads
+such a position compiles again, on whichever sheet it sits.
 
 Step 3 walks the graph in topological order and evaluates each dirty cell on the stack machine
 (`features/ambre-spec-trame-formula-engine.md`). What each priority may cost is a row of
