@@ -31,7 +31,6 @@ The list only shrinks: a new defect fails, and so does a line no defect matches.
 Run: `just spec-code`. It lists each body, and fails on any.
 """
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -41,10 +40,12 @@ from pathlib import Path
 # here (`ambre-spec-template.md section 0`).
 from template_vocabulary import FENCE_TAGS
 
+# The contract rows, parsed in memory: the index file is built on demand, never committed.
+import contract_index  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 CRATES = ROOT / "crates"
-INDEX = SPECS / "1-Foundations" / "ambre-contract-index.json"
 ALLOW = Path(__file__).resolve().parent / "spec_code_citations.allow"
 
 # `specs/audits/` holds the non-normative analysis documents that live under
@@ -305,7 +306,7 @@ def read_allow() -> set[tuple[str, str, str]]:
 
 def check_citations() -> int:
     """Print the citation defects outside `ALLOW` and the stale lines of it; return their count."""
-    rows = {r["id"]: r for r in json.loads(INDEX.read_text())}
+    rows = {r["id"]: r for r in contract_index.index()}
     sources = {
         str(p.relative_to(ROOT)): p.read_text() for p in sorted(CRATES.rglob("*.rs"))
         if "/target/" not in str(p)

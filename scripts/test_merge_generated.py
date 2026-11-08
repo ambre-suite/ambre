@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # The regenerations a branch runs before it commits, and the gates that read
 # the generated files.
-WRITERS = ("scripts/contracts.py", "scripts/contract_index.py", "scripts/feature_inventory.py")
+WRITERS = ("scripts/contracts.py", "scripts/feature_inventory.py")
 GATES = (
     ("scripts/contracts.py",),
     ("scripts/contract_index.py",),
@@ -158,7 +158,7 @@ class MergeOfTwoRows(unittest.TestCase):
         # The scenario is only a test when each side touches what the other does.
         shared = set(self.repo.generated_changed("main", "accessibility")) & set(
             self.repo.generated_changed("main", "calls"))
-        self.assertGreaterEqual(len(shared), 3, shared)
+        self.assertGreaterEqual(len(shared), 2, shared)
 
     def test_without_the_driver_a_text_merge_leaves_a_generated_file_wrong(self):
         # A text merge either conflicts on a generated file, or merges the two
@@ -209,8 +209,10 @@ class GeneratedSet(unittest.TestCase):
                         if line.endswith(f": {mg.DRIVER}"))
         generated = sorted(path for path in files.split() if mg.is_generated(path))
         self.assertEqual(marked, generated)
-        # The ledger, the index, the graph, and one inventory per layer.
-        self.assertGreaterEqual(len(generated), 8)
+        # The ledger and one inventory per layer, Markdown only: the index and
+        # the graph are built on demand under `target/`, never committed.
+        self.assertGreaterEqual(len(generated), 6)
+        self.assertTrue(all(path.endswith(".md") for path in generated), generated)
 
 
 class OtherSide(unittest.TestCase):

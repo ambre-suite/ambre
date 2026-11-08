@@ -59,9 +59,10 @@ jobs:
       # Doc-side check, milliseconds: derives the contract ledger and fails on a
       # status value or a missing Story citation (`ambre-spec-architecture.md §4`).
       - run: just contracts
-      # The parsed corpus: one record per row and the edges it asserts, both
-      # generated, plus every edge resolved (`ambre-spec-template.md` §1.D).
-      - run: just index
+      # The parsed corpus: one record per row and the edges it asserts, built
+      # into the ignored `target/specs/`, plus every edge resolved
+      # (`ambre-spec-template.md` §1.D). Git carries neither file.
+      - run: just index-write
       # The primitive gate: every bare primitive outside a test is typed or named
       # by the allowlist, and no line names a site that is gone (`ARCH-033`).
       # It first holds the files it reads to the files rustc compiles: it runs

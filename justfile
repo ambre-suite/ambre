@@ -336,13 +336,15 @@ contracts-write:
 # the statement, the sources and the mechanism, so a tool needing a row whole
 # parses the corpus again to get it back. This holds it parsed, and resolves
 # every edge -- the README pillar of a `Sources` cell included, which is the one
-# form no other gate reads.
+# form no other gate reads. The two files weigh megabytes and only a tool reads
+# them, so git never carries them: `index-write` builds them under `target/specs/`,
+# and `spec-context` and `spec-code` build the same parse in memory.
 
-# contract index and graph: fail when the files on disk are not what the corpus says.
+# contract index and graph: build them in memory, fail on an edge resolving to nothing.
 index:
     python3 scripts/contract_index.py
 
-# Rewrite the index and the graph after a contract row changed.
+# Build the index and the graph into `target/specs/`, for a tool that reads them.
 index-write:
     python3 scripts/contract_index.py --write
 

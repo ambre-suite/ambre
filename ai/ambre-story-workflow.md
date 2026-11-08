@@ -51,8 +51,9 @@
 * **A row whose mechanism does not exist becomes `untested`**, and it keeps its Story.
 * **A row whose mechanism holds part of the rule is split in two.** The half held is a new row,
   `verified`. The half left keeps its Story, or its obstacle, under its own status.
-* **Regenerate the three artefacts:** `just index-write`, `just contracts-write`, `just
-  inventory-write`. Each one re-reads the corpus, so the order is free. The counts of each
+* **Regenerate the two committed artefacts:** `just contracts-write`, `just inventory-write`.
+  Each one re-reads the corpus, so the order is free. The index and the graph are never
+  committed: `just index` holds their edges. The counts of each
   `Verification` answer and the `human-review` table of `CONTRIBUTING.md` are among them:
   never recount them by hand.
 * **Ticking the box is the whole of it**, as `specs/ambre-roadmap.md` section 1 states.

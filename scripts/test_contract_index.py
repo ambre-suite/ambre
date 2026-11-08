@@ -11,16 +11,24 @@ number, because a line is the coordinate an edit above it breaks. And a
 `derived` source yields no edge, because a row that claims no source asserts no
 join.
 
+The last class holds where the two files go: under a path git ignores, built
+only by `--write`, so no commit can carry them again.
+
 Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 """
 
 from __future__ import annotations
 
+import io
 import json
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -189,6 +197,37 @@ class Render(unittest.TestCase):
         whole artefact and diff as a corpus change."""
         self.assertEqual('[\n  {"a": 1, "b": 2}\n]\n',
                          contract_index.render([{"b": 2, "a": 1}]))
+
+
+
+class BuiltOnDemand(unittest.TestCase):
+    """The two files are build outputs: ignored by git, and written by `--write` only."""
+
+    def test_both_files_land_in_a_path_git_ignores(self):
+        for path in (contract_index.INDEX, contract_index.GRAPH):
+            with self.subTest(file=path.name):
+                run = subprocess.run(["git", "check-ignore", "-q", "--no-index", str(path)],
+                                     cwd=contracts.ROOT)
+                self.assertEqual(0, run.returncode, f"{path} is not ignored")
+
+    def test_no_file_of_the_index_is_tracked(self):
+        tracked = subprocess.run(["git", "ls-files", "*ambre-contract-index.json",
+                                  "*ambre-contract-graph.json"], cwd=contracts.ROOT,
+                                 capture_output=True, text=True, check=True).stdout
+        self.assertEqual("", tracked)
+
+    def test_write_builds_both_files_from_the_corpus(self):
+        records, found = contract_index.build()
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "nested"
+            index, graph = out / "index.json", out / "graph.json"
+            with mock.patch.object(contract_index, "INDEX", index), \
+                    mock.patch.object(contract_index, "GRAPH", graph), \
+                    mock.patch.object(sys, "argv", ["contract_index.py", "--write"]), \
+                    redirect_stdout(io.StringIO()):
+                self.assertEqual(0, contract_index.main())
+            self.assertEqual(records, json.loads(index.read_text()))
+            self.assertEqual(found, json.loads(graph.read_text()))
 
 
 if __name__ == "__main__":
