@@ -13,7 +13,7 @@ use crate::formula::engine::Carry;
 use crate::formula::identity::{self, AxisEdit, LineEdit};
 use crate::formula::text::{CellText, StoredForm};
 use crate::model::{Axes, CellKey, Removed};
-use ambre_core::index::{Len, Pos};
+use ambre_core::index::{Len, Pos, Span};
 
 impl TrameState {
     /// Carry every formula that reads the active sheet across one structural
@@ -222,7 +222,6 @@ impl TrameState {
         };
         let after = render::render(&after);
         if after != body {
-            self.note_write(map, key);
             let _ = map.insert(key, format!("={after}").as_str());
         }
     }
@@ -358,9 +357,7 @@ impl TrameState {
     pub(super) fn delete_axis<L: SheetLine>(&mut self, at: Pos<L>) -> TrameOutcome {
         // The delete reads the layout it already holds, not the lists.
         let mut layout = Some(self.index.clone());
-        self.open_journal();
         let Some(removal) = self.remove_line(&mut layout, at) else {
-            self.drop_journal();
             return TrameOutcome::display_only(vec![]);
         };
         let new = self.layout_after(layout);
@@ -369,7 +366,7 @@ impl TrameState {
             &[removal.uid],
             new,
         );
-        self.commit_line_delete();
+        self.doc.commit();
         self.after_line_removal(walk, removal.filter_dropped)
     }
 
@@ -406,8 +403,9 @@ impl TrameState {
         // A virtual line has nothing materialized to remove. Every element of
         // the line goes, the hidden ones too (`TRAME-269`).
         let removed = self.axes().delete(layout, at)?;
-        self.note_list(self.axes().list_id::<L>(), &removed.spots);
         let filter_dropped = self.purge_axis(&removed, L::AXIS);
+        // The generations recorded after the line go with it.
+        self.axes().purge_record(&[removed.uid]);
         Some(Removal {
             uid: removed.uid,
             filter_dropped,
@@ -451,25 +449,28 @@ impl TrameState {
         else {
             return TrameOutcome::display_only(vec![]);
         };
-        let mut removals: Vec<Removal> = Vec::new();
+        // Every line of the span leaves the list in one pass. A block of
+        // adjacent lines goes in one operation, and the layout follows once.
         let mut layout = Some(self.index.clone());
-        let mut at = Some(end);
-        self.open_journal();
-        while let Some(line) = at.filter(|line| *line >= start) {
-            removals.extend(self.remove_line(&mut layout, line));
-            at = line.prev();
-        }
-        if removals.is_empty() {
-            self.drop_journal();
+        let removed = self
+            .axes()
+            .delete_lines::<L>(&mut layout, Span::new(start, end + Len::ONE));
+        if removed.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
+        let mut dropped = Vec::new();
+        for line in &removed {
+            dropped.push(self.purge_axis(line, L::AXIS));
+        }
         // The removed lines are the materialized run from `start`.
-        let n = Len::of(removals.len());
-        let gone: Vec<Uid> = removals.iter().map(|r| r.uid).collect();
+        let n = Len::of(removed.len());
+        let gone: Vec<Uid> = removed.iter().map(|r| r.uid).collect();
+        // The generations recorded after each line go with it, in one walk.
+        self.axes().purge_record(&gone);
         let new = self.layout_after(layout);
         let walk = self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }), &gone, new);
-        self.commit_line_delete();
-        self.after_line_removal(walk, removals.iter().any(|r| r.filter_dropped))
+        self.doc.commit();
+        self.after_line_removal(walk, dropped.contains(&true))
     }
 
     /// The range [`sort_selection`](Self::sort_selection) and the multi-key sort
@@ -564,7 +565,6 @@ impl TrameState {
                 .doc
                 .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
             for key in stale {
-                self.note_write(&map, key.as_str());
                 let _ = map.delete(key.as_str());
                 // A formula under a gone line of the other axis goes too, and
                 // the walk no longer reads it (`TRAME-280`).
@@ -583,9 +583,6 @@ impl TrameState {
         if filter_dropped {
             self.drop_filter();
         }
-        // The generations recorded after the line go with it.
-        self.axes()
-            .purge_record(&removed.uid, |map, key| self.note_write(map, key));
         // The line's own formatting is keyed by its uid alone: its size, and
         // for a row its filter mark (`TRAME-082`).
         let line_maps = match axis {
@@ -598,7 +595,6 @@ impl TrameState {
                 .doc
                 .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
             if map.get(&key).is_some() {
-                self.note_write(&map, &key);
                 let _ = map.delete(&key);
             }
         }

@@ -19,12 +19,7 @@ impl TrameState {
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
         // A command names the cells it changed, and no command before it.
         self.engine.changed.clear();
-        let depth = self.undo_manager.undo_count();
-        let history = matches!(cmd, TrameCommand::Undo | TrameCommand::Redo);
         let mut outcome = self.dispatch_command(cmd);
-        if !history {
-            self.follow_manager(depth);
-        }
         // Any command that produced a CRDT delta also moved the `UndoManager`
         // stacks, so the chrome's Undo/Redo affordances must be refreshed. Undo
         // and Redo already append their own `UndoState`; skip the duplicate.
@@ -38,14 +33,10 @@ impl TrameState {
     /// Execute one command and return its raw outcome, before the central
     /// [`UndoState`](TrameEvent::UndoState) refresh applied by [`handle_command`].
     pub(super) fn dispatch_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
-        // Seal any still-open interactive edit group before handling the next command.
-        // An edit is grouped across all its commits: the cell write plus derived
-        // side-effects such as a filtered-column recompute. It is normally closed by
-        // `CommitEdit` on cell exit. This is the fallback boundary when the UI omits it
-        // (for example a non-edit command intervenes). One cell edit is then always
-        // exactly one undo item (`trame-cell-editing`, `trame-undo`). `group_end` is a
-        // no-op when no group is open.
-        self.undo_manager.group_end();
+        // Every commit a command makes joins one step of the history. The cell
+        // write and its derived commits, such as a filtered-column recompute,
+        // are one undo item (`TRAME-017`).
+        self.seal_history();
         match cmd {
             TrameCommand::SetActiveCell {
                 row,
@@ -83,10 +74,6 @@ impl TrameState {
                     col,
                     text.chars().count(),
                 );
-                // Open the edit group: the cell write below and any derived
-                // commit (filter recompute) merge into a single undo item. The
-                // next `CommitEdit` seals it, or the fallback seal above.
-                let _ = self.undo_manager.group_start();
                 let at = CellPos::new(row, col);
                 let typed = self.typed_source(CellText::<SourceForm>::new(text));
                 if typed.kind == TypedKind::Date {
@@ -109,11 +96,6 @@ impl TrameState {
             TrameCommand::EndCellEdit { session } => self.end_cell_edit(session),
             TrameCommand::SetCellsBatch { cells } => {
                 tracing::info!("[Logic] SetCellsBatch {} cells", cells.len());
-                // A multi-cell fill / clear (Ctrl+Enter, Delete over a range).
-                // All writes share ONE undo group, so the whole batch is a single
-                // undo item. The group spans the loop and is sealed by the next
-                // command's fallback `group_end` (or an explicit `CommitEdit`).
-                let _ = self.undo_manager.group_start();
                 // Pre-materialize every written cell so all the excluded-origin
                 // `materialize` commits happen up front. Interleaving them between
                 // the value commits would split the batch into one undo item per
@@ -392,6 +374,7 @@ impl TrameState {
     /// availability the chrome holds is still true (`UNDO-009`).
     ///
     /// [`UndoState`]: crate::message::TrameEvent::UndoState
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(super) fn apply_history(&mut self, step: HistoryStep) -> TrameOutcome {
         // An undo can take back the sheet the user is on, an import's above
         // all. The reader then lands where a deletion leaves them (`TRAME-075`).
@@ -400,8 +383,8 @@ impl TrameState {
         self.engine.changed.clear();
         self.note_local(super::remote::LocalNote::Noted);
         let changed = match step {
-            HistoryStep::Undo => self.undo_manager.undo(),
-            HistoryStep::Redo => self.undo_manager.redo(),
+            HistoryStep::Undo => self.oracle.undo(),
+            HistoryStep::Redo => self.oracle.redo(),
         }
         .unwrap_or(false);
         self.note_local(super::remote::LocalNote::Ignored);

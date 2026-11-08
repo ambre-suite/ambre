@@ -1,8 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 9b8866e48d872c18345595347b6c19302b952ba24619bcf88d6c6f8c323d922c # shrinks to program = [InsertRow { at: 0 }, DeleteRows { from: 0, to: 0 }, Undo, Undo]
-cc c8ca4f2f60eca104eae17ece21dcc7772d2a8391d4e6da830527f650976c2fe1 # shrinks to program = [Write { row: 0, col: 1, text: "=SUM(2:3)" }, DeleteRow { at: 1 }, Remote { row: 0, col: 1, text: "0" }, Undo]

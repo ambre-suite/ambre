@@ -37,7 +37,7 @@ history moves, so the two share a table rather than repeating one.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UNDO-001` | `POST` | An undo MUST revert this peer's own last operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the peer's own edit back as reverted; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; Prose `ambre_prose::logic::blocks::tests::an_undone_deletion_brings_the_block_back_whole` | none | verified |
-| `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged; Toile `ambre_toile::logic::convergence_tests::an_undo_leaves_a_remote_move_alone`; Prose `ambre_prose::logic::tests::an_undo_leaves_a_remote_edit_alone` | none | verified |
+| `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged; `ambre_trame::logic::history_tests::an_undone_write_keeps_a_later_write_of_a_peer` -- the peer types over the cell the undone write wrote; Toile `ambre_toile::logic::convergence_tests::an_undo_leaves_a_remote_move_alone`; Prose `ambre_prose::logic::tests::an_undo_leaves_a_remote_edit_alone` | none | verified |
 | `UNDO-002` | `POST` | An undo MUST broadcast its inverse operations as an ordinary CRDT delta, like any other change. | this spec section 2, row 2 | Trame `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the undo's delta applied on a second peer; Toile `ambre_toile::logic::convergence_tests::a_history_step_reaches_the_other_peer_as_a_delta` -- the undo and the redo deltas applied on a second board | none | verified |
 | `UNDO-005` | `POST` | An undo MUST rebuild every derived cache whole, so nothing derived is stale afterwards. | this spec section 3; `4-Prose/features/ambre-spec-prose-undo.md` (`PROSE-UI-045`), the caret that stands in for a derived cache Prose has not got | Trame `ambre_trame::logic::tests::group2::undo_insert_row_rebuilds_sheet_index`; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; `::undo_reverts_group_as_one_item`; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the cross-reference numbering resolves again | none | verified |
 | `UNDO-006` | `POST` | The undo and redo affordances MUST report what the engine holds. | this spec section 4 | Trame `ambre_trame::logic::tests::group2::mutating_command_reports_undo_state`; chrome `ambre_trame::tests::chrome_ui::undo_state_mirrors_into_command_store`; Toile `ambre_toile::logic::state::undo_state_tests::mutating_command_reports_undo_state`; chrome `ambre_toile::tests::chrome_ui::undo_state_mirrors_into_command_store`; Prose `ambre_prose::logic::tests::a_write_reports_the_history_and_a_no_op_reports_none`; chrome `ambre_prose::tests::chrome_panel::the_history_rows_follow_the_reported_state` -- the context menu's two rows follow each reported state, and another event leaves them | none | verified |
@@ -85,7 +85,7 @@ which is why one undo item is one commit rather than one container write.
 | `<App>Command::Undo` / `Redo` | UI to Logic | nothing: the history is the Logic thread's |
 | `<App>Event::UndoState { undo, redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
 
-**Engine state.** One field of each application's engine, the same shape everywhere:
+**Engine state.** One field of each application's engine but Trame's, the same shape everywhere:
 
 ```rust
 /// Local-only history, built over the document when it opens and dropped when it
@@ -93,8 +93,9 @@ which is why one undo item is one commit rather than one container write.
 undo_manager: loro::UndoManager,
 ```
 
-Trame adds one history beside it, for a line delete whose item the manager would replay too slowly
-(`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-286`).
+Trame holds none: on a sheet of 10k formulas the manager's checkout spends about 250 million
+instructions on the undo of one cell write. Each edit of a workbook records its own inverse into
+one history of Trame's own (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-288`).
 
 **Steps, when a user undoes or redoes.** The same five everywhere; step 3 is the application's own.
 

@@ -325,7 +325,7 @@ fn an_import_is_one_undo_item() {
 fn an_import_with_a_spent_sheet_counter_writes_nothing() {
     let mut state = with_one_edit();
     state.sheet_counter = None;
-    let undo_before = state.undo_manager.undo_count();
+    let undo_before = state.undo_depth();
     let vv_before = state.doc.oplog_vv();
     let out = import(&mut state, b"1,2\n3,4\n", None);
     assert!(
@@ -337,7 +337,7 @@ fn an_import_with_a_spent_sheet_counter_writes_nothing() {
     assert!(out.update.is_none());
     state.doc.commit();
     assert_eq!(state.doc.oplog_vv(), vv_before, "nothing left pending");
-    assert_eq!(state.undo_manager.undo_count(), undo_before);
+    assert_eq!(state.undo_depth(), undo_before);
     assert_eq!(state.sheet_order_ids().len(), 1);
     assert_eq!(state.active_sheet, crate::logic::default_sheet());
     state.handle_command(TrameCommand::Undo);

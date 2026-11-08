@@ -29,17 +29,14 @@
 //! A string names a container anywhere, so `scripts/crate_boundaries.py`
 //! refuses an axis container name outside this file.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{CellPos, CellRect, Col, Row};
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::{Axis, IdxVec, Len, Pos};
+use ambre_core::index::{Axis, IdxVec, Len, Pos, Span};
 use ambre_core::{OpenRange, Version, VersionKind};
 use blake2::{Blake2b512, Digest};
-use loro::cursor::Side;
-use loro::{
-    ContainerID, ContainerTrait, ContainerType, ID, LoroDoc, LoroMap, LoroMovableList, LoroValue,
-};
+use loro::{ContainerID, ContainerType, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroValue};
 
 use super::line::Line;
 use super::sheet_index::{CellKey, LineRead, Uid, parse_cell_key};
@@ -112,10 +109,17 @@ impl Element {
     /// The list value: the bare uid of a minted line, `"{uid}#{element}"` for a
     /// derived one, each half in the canonical spelling (`TRAME-248`).
     pub(crate) fn spell(&self) -> String {
-        if self.is_minted() {
-            self.uid.to_key_part()
-        } else {
-            format!("{}#{}", self.uid.to_key_part(), self.id.0.to_key_part())
+        let mut out = String::with_capacity(51);
+        self.push_spelling(&mut out);
+        out
+    }
+
+    /// Append the list value to `out`, as [`spell`](Self::spell) writes it.
+    pub(crate) fn push_spelling(&self, out: &mut String) {
+        self.uid.push_key_part(out);
+        if !self.is_minted() {
+            out.push('#');
+            self.id.0.push_key_part(out);
         }
     }
 
@@ -532,6 +536,50 @@ impl<L: Axis> AxisView<L> {
         Some(())
     }
 
+    /// Remove every element of each line of `gone` from the view, as
+    /// [`Axes::delete_lines`] removes them from the list, in one pass. `None`
+    /// where [`remove_line`](Self::remove_line) gives up, and the caller then
+    /// drops the view.
+    fn remove_lines(&mut self, gone: &HashSet<Uid>) -> Option<()> {
+        if self.read == LineRead::Skipped {
+            return None;
+        }
+        let first = gone
+            .iter()
+            .map(|uid| self.pos(uid))
+            .collect::<Option<Vec<Pos<L>>>>()?
+            .into_iter()
+            .min()?;
+        // The slots each kept element moves down by: the removed slots before
+        // it, counted in one walk of the list in order.
+        let mut kept = IdxVec::default();
+        let mut shift: HashMap<Pos<Slot>, Pos<Slot>> = HashMap::new();
+        for (slot, element) in self.elements.iter_enumerated() {
+            if gone.contains(&element.uid) {
+                self.owner.remove(&element.id);
+            } else {
+                shift.insert(slot, kept.push(*element));
+            }
+        }
+        self.elements = kept;
+        let mut lines = IdxVec::default();
+        let mut shown = IdxVec::default();
+        for (uid, slot) in self.lines.iter().zip(self.shown.iter()) {
+            if !gone.contains(uid) {
+                lines.push(*uid);
+                shown.push(*shift.get(slot)?);
+            }
+        }
+        self.lines = lines;
+        self.shown = shown;
+        for uid in gone {
+            self.at.remove(uid);
+            self.hidden_of.remove(uid);
+        }
+        self.renumber_from(first);
+        Some(())
+    }
+
     /// Insert the minted line `uid` before the line at `at`, as
     /// [`Axes::insert`] writes it, with no read of the list. `None` where the
     /// view and the list may differ, as for
@@ -617,6 +665,18 @@ impl Before {
 fn generation_key<L: AxisOrder>(before: Before, generation: Version<LineGeneration>) -> String {
     format!("{}:{generation:08x}", before.key::<L>())
 }
+
+/// The half of a generation key that names what the line follows. It is cut
+/// at the fixed width of the generation [`generation_key`] writes, with no
+/// scan of the key. `None` for a key of any other shape.
+fn line_of_generation_key(key: &str) -> Option<&str> {
+    let cut = key.len().checked_sub(GENERATION_DIGITS + 1)?;
+    let (before, rest) = key.split_at_checked(cut)?;
+    rest.starts_with(':').then_some(before)
+}
+
+/// The hex digits of the generation half of a generation key.
+const GENERATION_DIGITS: usize = 8;
 
 /// Read a generation key of axis `L` back into its two halves. `None` for a
 /// key of the other axis root, and for any other spelling than the one
@@ -1055,6 +1115,13 @@ impl SheetIndex {
         Some(self)
     }
 
+    /// The index after every line of `gone` of axis `L` is deleted, derived
+    /// from this one in one pass. `None` when only a read can tell.
+    pub(crate) fn without_lines<L: AxisOrder>(mut self, gone: &HashSet<Uid>) -> Option<SheetIndex> {
+        L::view_mut(&mut self).remove_lines(gone)?;
+        Some(self)
+    }
+
     /// The index after the minted line `uid` of axis `L` is inserted before
     /// position `at`, derived from this one with no read of the document.
     /// `None` when only a read can tell ([`AxisView::insert_minted`]).
@@ -1235,84 +1302,72 @@ impl AxisOrder for Col {
 pub(crate) struct Removed {
     pub(crate) uid: Uid,
     pub(crate) elements: Vec<Element>,
-    /// Each element the list lost, in the order of the deletes.
-    pub(crate) spots: Vec<Spot>,
 }
 
-/// One element a delete took out of a list, and where it stood.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Spot {
-    /// The slot the element held when the delete took it.
-    pub(crate) slot: Pos<Slot>,
-    /// The element.
-    pub(crate) element: Element,
-    /// The element just before it at that moment, `None` at the head.
-    pub(crate) after: Option<Element>,
-    /// The operation that put the element at its slot: its insert, or its
-    /// last move. `None` when the list could not name it.
-    pub(crate) placed: Option<ID>,
+/// A root list of either kind: an axis list, or the tab order. A replay of a
+/// history step reaches each list through it, so this module stays the one
+/// door to a line order.
+pub(crate) enum RootList {
+    Plain(LoroList),
+    Movable(LoroMovableList),
 }
 
-/// The list `id` and its values, in order. The values stay shared with the
-/// document: a copy of a long list costs more than the read.
-fn list_of(doc: &LoroDoc, id: &ContainerID) -> Option<(LoroMovableList, LoroValue)> {
-    let ContainerID::Root {
-        name,
-        container_type: ContainerType::MovableList,
-    } = id
-    else {
-        return None;
-    };
-    let list = doc.get_movable_list(name.as_str());
-    let values = list.get_value();
-    Some((list, values))
-}
-
-/// The values a list read holds, none for any other value.
-fn items(values: &LoroValue) -> &[LoroValue] {
-    match values {
-        LoroValue::List(items) => items,
-        _ => &[],
+/// The root list `id` names, `None` for any other container.
+pub(crate) fn root_list(doc: &LoroDoc, id: &ContainerID) -> Option<RootList> {
+    match id {
+        ContainerID::Root {
+            name,
+            container_type: ContainerType::List,
+        } => Some(RootList::Plain(doc.get_list(name.as_str()))),
+        ContainerID::Root {
+            name,
+            container_type: ContainerType::MovableList,
+        } => Some(RootList::Movable(doc.get_movable_list(name.as_str()))),
+        _ => None,
     }
 }
 
-/// The slot of the element spelled `spelled` in `values`.
-fn slot_of(values: &[LoroValue], spelled: &str) -> Option<usize> {
-    values
-        .iter()
-        .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == spelled))
-}
-
-/// Put the element of `spot` back into the list `id`, after the element that
-/// stood before it. When that one is gone too, the element goes back to its
-/// old slot, or to the end of a shorter list. An element already in the list
-/// stays where it is.
-pub(crate) fn restore_spot(doc: &LoroDoc, id: &ContainerID, spot: &Spot) {
-    let Some((list, values)) = list_of(doc, id) else {
-        return;
-    };
-    let values = items(&values);
-    let spelled = spot.element.spell();
-    if slot_of(values, &spelled).is_some() {
-        return;
+impl RootList {
+    /// The values of the list, in order.
+    pub(crate) fn values(&self) -> Vec<LoroValue> {
+        let value = match self {
+            Self::Plain(list) => list.get_value(),
+            Self::Movable(list) => list.get_value(),
+        };
+        match value {
+            LoroValue::List(items) => items.to_vec(),
+            _ => Vec::new(),
+        }
     }
-    let at = match spot.after {
-        None => 0,
-        Some(after) => match slot_of(values, &after.spell()) {
-            Some(slot) => slot + 1,
-            None => spot.slot.to_usize().min(values.len()),
-        },
-    };
-    let _ = list.insert(at, spelled.as_str());
-}
 
-/// Take the element of `spot` out of the list `id` again, wherever it stands.
-pub(crate) fn remove_spot(doc: &LoroDoc, id: &ContainerID, spot: &Spot) {
-    let Some((list, values)) = list_of(doc, id) else {
-        return;
-    };
-    if let Some(slot) = slot_of(items(&values), &spot.element.spell()) {
-        let _ = list.delete(slot, 1);
+    /// Insert `value` at `at`.
+    pub(crate) fn put(&self, at: Pos<Slot>, value: &LoroValue) {
+        let _ = match self {
+            Self::Plain(list) => list.insert(at.to_usize(), value.clone()),
+            Self::Movable(list) => list.insert(at.to_usize(), value.clone()),
+        };
+    }
+
+    /// Delete the `len` elements from `at` on.
+    pub(crate) fn take(&self, at: Pos<Slot>, len: Len<Slot>) {
+        let _ = match self {
+            Self::Plain(list) => list.delete(at.to_usize(), len.to_usize()),
+            Self::Movable(list) => list.delete(at.to_usize(), len.to_usize()),
+        };
+    }
+
+    /// Move the element at `from` so it stands at `to`. A plain list has no
+    /// move, so it takes the element out and puts its value back.
+    pub(crate) fn shift(&self, from: Pos<Slot>, to: Pos<Slot>, value: &LoroValue) {
+        match self {
+            Self::Plain(list) => {
+                let _ = list.delete(from.to_usize(), 1);
+                let _ = list.insert(to.to_usize(), value.clone());
+            }
+            Self::Movable(list) => {
+                let _ = list.mov(from.to_usize(), to.to_usize());
+            }
+        }
     }
 }
 
@@ -1333,12 +1388,6 @@ impl<'a> Axes<'a> {
     fn list<L: AxisOrder>(&self) -> LoroMovableList {
         self.doc
             .get_movable_list(SheetContainer::of(L::order_root(), self.sheet).as_str())
-    }
-
-    /// The container of the list of the axis `L`, for a journal that names
-    /// it.
-    pub(crate) fn list_id<L: AxisOrder>(&self) -> ContainerID {
-        self.list::<L>().id()
     }
 
     /// The index of the sheet, both axes read from the document.
@@ -1400,22 +1449,6 @@ impl<'a> Axes<'a> {
             .iter()
             .filter_map(|slot| view.elements.get(*slot).copied())
             .collect();
-        // The slots come last first, so the element before each one still
-        // stands where the view read it when its delete runs.
-        let spots: Vec<Spot> = slots
-            .iter()
-            .filter_map(|&slot| {
-                Some(Spot {
-                    slot,
-                    element: view.elements.get(slot).copied()?,
-                    after: slot.prev().and_then(|b| view.elements.get(b).copied()),
-                    placed: slot
-                        .to_index()
-                        .and_then(|at| list.get_cursor(at, Side::Middle))
-                        .and_then(|cursor| cursor.id),
-                })
-            })
-            .collect();
         let next = layout
             .take()
             .and_then(|index| index.without_line::<L>(&uid));
@@ -1423,11 +1456,71 @@ impl<'a> Axes<'a> {
             list.delete(slot.to_index()?, 1).ok()?;
         }
         *layout = next;
-        Some(Removed {
-            uid,
-            elements,
-            spots,
-        })
+        Some(Removed { uid, elements })
+    }
+
+    /// Delete the lines at `span`, as [`delete`](Self::delete) deletes one,
+    /// in one pass of the list. Each run of adjacent slots goes in one delete,
+    /// so a block of lines costs one operation. Returns what each line
+    /// removed, the last line first, as a delete from the far edge inward
+    /// would. A virtual line removes nothing.
+    pub(crate) fn delete_lines<L: AxisOrder>(
+        &self,
+        layout: &mut Option<SheetIndex>,
+        span: Span<L>,
+    ) -> Vec<Removed> {
+        let list = self.list::<L>();
+        let cached = layout
+            .as_ref()
+            .map(L::view)
+            .filter(|view| view.read_state() == LineRead::Clean);
+        #[cfg(test)]
+        if let Some(view) = cached {
+            assert_eq!(
+                *view,
+                AxisView::<L>::read(&list),
+                "the layout is the list's"
+            );
+        }
+        let read;
+        let view = match cached {
+            Some(view) => view,
+            None => {
+                read = AxisView::<L>::read(&list);
+                &read
+            }
+        };
+        let uids: Vec<Uid> = span.into_iter().filter_map(|at| view.uid(at)).collect();
+        let gone: HashSet<Uid> = uids.iter().copied().collect();
+        let mut elements: HashMap<Uid, Vec<Element>> = HashMap::new();
+        let mut slots = Vec::new();
+        for (slot, element) in view.elements.iter_enumerated() {
+            if gone.contains(&element.uid) {
+                elements.entry(element.uid).or_default().push(*element);
+                slots.push(slot);
+            }
+        }
+        let next = layout
+            .take()
+            .and_then(|index| index.without_lines::<L>(&gone));
+        // The runs last first, so each slot still holds what the view read.
+        for run in slots.chunk_by(|a, b| b.prev() == Some(*a)).rev() {
+            let Some(index) = run.first().and_then(|slot| slot.to_index()) else {
+                continue;
+            };
+            if list.delete(index, run.len()).is_err() {
+                *layout = None;
+                return Vec::new();
+            }
+        }
+        *layout = next;
+        uids.into_iter()
+            .rev()
+            .map(|uid| Removed {
+                uid,
+                elements: elements.remove(&uid).unwrap_or_default(),
+            })
+            .collect()
     }
 
     /// Move the line at `from` so it shows at `to`. Only the visible element
@@ -1594,18 +1687,23 @@ impl<'a> Axes<'a> {
         Some(())
     }
 
-    /// Drop every generation the record holds under the line `uid`, for a
-    /// delete that removes it. `noted` sees each key just before its delete.
-    pub(crate) fn purge_record(&self, uid: &Uid, mut noted: impl FnMut(&LoroMap, &str)) {
+    /// Drop every generation the record holds under each line of `uids`, for
+    /// a delete that removes them.
+    pub(crate) fn purge_record(&self, uids: &[Uid]) {
         let record = self.record();
-        let prefix = format!("{}:", uid.to_key_part());
+        // One walk of the record for every line, however many go. The lines
+        // are sorted and searched, so the walk hashes no key.
+        let mut gone: Vec<String> = uids.iter().map(Uid::to_key_part).collect();
+        gone.sort_unstable();
         let keys: Vec<String> = record
             .keys()
-            .filter(|key| key.starts_with(&prefix))
+            .filter(|key| {
+                line_of_generation_key(key)
+                    .is_some_and(|before| gone.binary_search_by(|g| g.as_str().cmp(before)).is_ok())
+            })
             .map(|key| key.to_string())
             .collect();
         for key in keys {
-            noted(&record, &key);
             let _ = record.delete(&key);
         }
     }

@@ -12,7 +12,7 @@ use ambre_core::index::{Len, Pos};
 #[test]
 fn batch_write_is_one_undo_item() {
     let mut state = TrameState::new();
-    let undo_before = state.undo_manager.undo_count();
+    let undo_before = state.undo_depth();
 
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: vec![
@@ -36,7 +36,7 @@ fn batch_write_is_one_undo_item() {
     assert_eq!(read_cell(&mut state, 0, 0), "x");
     assert_eq!(read_cell(&mut state, 1, 0), "x");
     assert_eq!(
-        state.undo_manager.undo_count(),
+        state.undo_depth(),
         undo_before + 1,
         "the whole batch collapses into a single undo item",
     );
@@ -70,7 +70,7 @@ fn filtered_column_edit_is_one_undo_item() {
             value: "3".to_owned(),
         },
     });
-    let undo_before = state.undo_manager.undo_count();
+    let undo_before = state.undo_depth();
 
     // Edit a filtered cell so the hidden set is recomputed (a second commit),
     // then exit the editor.
@@ -82,7 +82,7 @@ fn filtered_column_edit_is_one_undo_item() {
     state.handle_command(TrameCommand::CommitEdit);
 
     assert_eq!(
-        state.undo_manager.undo_count(),
+        state.undo_depth(),
         undo_before + 1,
         "cell write + filter recompute collapse into a single undo item",
     );
@@ -298,7 +298,7 @@ fn undo_stack_cleared_on_doc_close() {
         col: Pos::<Col>::new(0),
         text: "hello".to_owned(),
     });
-    assert!(state.undo_manager.can_undo(), "edit is undoable in-session");
+    assert!((state.undo_depth() > 0), "edit is undoable in-session");
 
     // Close + reopen: persist a snapshot, restore into a fresh state.
     let snapshot = state.export_snapshot();
@@ -308,7 +308,7 @@ fn undo_stack_cleared_on_doc_close() {
         .expect("a snapshot this build wrote reads back at the current schema");
 
     assert!(
-        !reopened.undo_manager.can_undo(),
+        reopened.undo_depth() == 0,
         "undo history does not survive a reopen"
     );
     // The value is intact (data persisted), but Ctrl+Z cannot revert it.
@@ -413,7 +413,7 @@ fn a_cell_short_of_uids_pushes_no_line_and_keeps_the_undo_stack() {
     });
     let last = Some(ambre_core::IdCounter::new(u32::MAX));
     state.uid_counter = last;
-    let undo_before = state.undo_manager.undo_count();
+    let undo_before = state.undo_depth();
     let vv_before = state.doc.oplog_vv();
     let out = state.handle_command(TrameCommand::SetCellText {
         row: Pos::<Row>::new(1),
@@ -426,7 +426,7 @@ fn a_cell_short_of_uids_pushes_no_line_and_keeps_the_undo_stack() {
     assert_eq!(state.uid_counter, last, "the last uid is handed back");
     state.doc.commit();
     assert_eq!(state.doc.oplog_vv(), vv_before, "nothing left pending");
-    assert_eq!(state.undo_manager.undo_count(), undo_before);
+    assert_eq!(state.undo_depth(), undo_before);
     state.handle_command(TrameCommand::SetCellText {
         row: Pos::<Row>::new(1),
         col: Pos::<Col>::new(0),

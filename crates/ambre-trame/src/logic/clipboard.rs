@@ -36,11 +36,6 @@ impl TrameState {
         let dc = target.col - payload.src_col;
         let land = |cell: &ClipboardCell| CellPos::new(target.row + cell.dr, target.col + cell.dc);
 
-        // One undo group for the whole paste (sealed by the next command's
-        // fallback `group_end`). Pre-materialize every written cell first so the
-        // value writes collapse into a single trailing commit -> one undo item
-        // (same reasoning as `SetCellsBatch`, see `commands.rs`).
-        let _ = self.undo_manager.group_start();
         for cell in &payload.cells {
             if !cell.raw.is_empty() {
                 let _ = self.materialize(land(cell));

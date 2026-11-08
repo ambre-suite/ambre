@@ -121,10 +121,6 @@ impl TrameState {
     ) -> TrameOutcome {
         let needle = fold_needle(query, options.case);
 
-        // One undo group for the whole replace (sealed by the next command's
-        // fallback `group_end`), mirroring `fill_range`.
-        let _ = self.undo_manager.group_start();
-
         // Active sheet first, through the regular write path (engine-aware).
         let mut replaced = self.replace_in_active(&needle, replacement, options);
 
@@ -171,7 +167,6 @@ impl TrameState {
         let needle = fold_needle(query, options.case);
         let at = self.active;
 
-        let _ = self.undo_manager.group_start();
         let replaced = if self.replace_active_cell(at, &needle, replacement, options) {
             Len::<Match>::ONE
         } else {

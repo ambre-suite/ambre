@@ -105,9 +105,6 @@ impl TrameState {
             return TrameOutcome::display_only(vec![]);
         }
 
-        // One undo group for the whole fill (sealed by the next command's fallback
-        // `group_end`), mirroring `paste_range`.
-        let _ = self.undo_manager.group_start();
         // Materialize every destination cell up front (`TRAME-UI-073`). Each
         // `materialize` is its own excluded-origin commit, and one between two
         // value writes splits the fill into one undo item per cell. Done first,
