@@ -29,10 +29,10 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | structural -- `markdown_read::read` returns a `ProseIr` and names no command, document or engine type | none | verified |
 | `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | structural -- `markdown_write::write` takes a `&ProseIr` and nothing else | none | verified |
 | `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | structural -- `ProseState::walk` in `crates/ambre-prose/src/logic/interop.rs` is the one walk, and the Markdown export calls it | none | verified |
-| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote`; `ambre_prose::logic::interop::tests::a_styled_cell_is_reported_on_export` | none | verified |
-| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3 | `ambre_prose::interop::markdown_read::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
-| `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3 | not built | unbuilt -- lands with the `DOCX interop` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3 | structural -- `ConversionReport` and `InteropError` are two types; `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | none | verified |
+| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3; `INTEROP-003` | `ambre_prose::interop::markdown_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote`; `ambre_prose::logic::interop::tests::a_styled_cell_is_reported_on_export` | none | verified |
+| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3; `INTEROP-003` | `ambre_prose::interop::markdown_read::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
+| `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3; `INTEROP-003` | not built | unbuilt -- lands with the `DOCX interop` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3; `INTEROP-002` | structural -- `ConversionReport` and `InteropError` are two types; `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | none | verified |
 | `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | structural -- `crates/ambre-prose/src/logic/docfile.rs` declares no header of its own and calls the shared writer and reader; `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` | none | verified |
@@ -49,8 +49,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | `ambre_prose::logic::interop::tests::one_undo_takes_the_import_back` | none | verified |
 | `PROSE-IO-026` | `POST` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, never dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::interop::tests::a_block_the_item_refuses_is_lifted_and_reported`; structural -- `place` in `crates/ambre-prose/src/logic/interop.rs`, the one builder every import goes through, walks up the parent chain | none | verified |
 | `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::interop::tests::a_block_the_item_refuses_is_lifted_and_reported`; structural -- `place` records each lift in the import's warnings | none | verified |
-| `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4 | `ambre_prose::interop::tests::a_report_reads_as_one_sentence`; structural -- `ImportCompleted` carries the report, and `ambre_prose::chrome::notify_event` toasts it | none | verified |
-| `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4; `INTEROP-007` | `ambre_prose::interop::tests::a_report_reads_as_one_sentence`; `ambre_prose::tests::chrome_panel::an_interop_report_reaches_the_user` | none | verified |
+| `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1`; `INTEROP-009` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
@@ -66,7 +66,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 | `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
 | `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1`; `INTEROP-009` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-017` | `FRAME` | An export to any format but PDF MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export; `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 
 ### 1.4 Save a native file
@@ -397,46 +397,23 @@ pub struct IrReply {
 pub enum IrImageAlign { Block, Left, Right, Center }
 ```
 
-**The report, and the two error kinds.** A report is what the user reads after a conversion that
-finished. An error is what a caller gets when no document could be produced at all:
+**The report, and the two error kinds.** The shapes are the shared ones
+(`1-Foundations/ambre-spec-interop.md section 3`). Prose names its constructs in three families,
+each with its own outcome:
 
 ```rust
 // ambre_prose::message
-/// A conversion that produced nothing answers an `InteropError` instead: the two are never
-/// one type (`PROSE-IO-047`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConversionReport {
-    pub format:   ConversionFormat,
-    pub warnings: Vec<ConversionWarning>,
-}
+pub type ConversionReport = ambre_bus::interop::ConversionReport<ProseConstruct>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ConversionFormat { Ambre, Markdown }
-
-/// The same construct lost twice is one warning with its count.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ConversionWarning {
-    /// A construct the format has no syntax for, dropped or approximated (`PROSE-IO-004`).
-    FeatureNotSupported { feature: UnsupportedFeature, format: ConversionFormat, count: u32 },
-    /// An element the reader does not recognise, its text kept where it has any
-    /// (`PROSE-IO-005`).
-    ElementDropped      { element: DroppedElement, count: u32 },
+pub enum ProseConstruct {
+    /// A construct the format has no syntax for, dropped (`PROSE-IO-004`).
+    Feature(UnsupportedFeature),
+    /// An element the reader does not recognise, dropped with its text kept (`PROSE-IO-005`).
+    Element(DroppedElement),
     /// A block the tree refuses where the file put it, moved (`PROSE-IO-026`, `PROSE-IO-052`).
-    BlockLifted         { block: LiftedBlock, count: u32 },
-}
-
-/// The whole call failed and produced nothing.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-pub enum InteropError {
-    /// The bytes do not read as the format named.
-    ParseFailed(String),
-    /// The file is larger than a conversion accepts.
-    TooLarge(Count<Octets>),
+    Block(LiftedBlock),
 }
 ```
-
-A warning names its construct from a closed list and carries a count, so a long file does not bury
-the user in repeats.
 
 **Steps, on an import:**
 
@@ -468,11 +445,12 @@ budget row rather than four, and what keeps a writer from reading the document (
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `ProseCommand::ImportDocument` | UI to Logic | the format and the bytes |
-| `ProseCommand::ExportDocument` | UI to Logic | the format; the options join it with the first writer that reads one |
-| `ProseEvent::ImportCompleted` | Logic to UI | the report of what the file lost |
-| `ProseEvent::ExportReady` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, the bytes and their media type; the report joins it with the first lossy writer |
-| `ProseEvent::ImportProgress`, `::ExportProgress` | Logic to UI | a percentage, past one megabyte (`PROSE-IO-021`) |
+| `ProseCommand::Interop(Import(ProseImport { format, data }))` | UI to Logic | the format and the bytes |
+| `ProseCommand::Interop(Export(ExportFormat))` | UI to Logic | the format; the options join it with the first writer that reads one |
+| `ProseEvent::Interop(ImportCompleted { report })` | Logic to UI | the report of what the file lost |
+| `ProseEvent::Interop(ExportReady { file, report })` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, the bytes and their media type, and what the format lost |
+| `ProseEvent::Interop(Failed(failure))` | Logic to UI | why the file produced nothing (`PROSE-IO-047`) |
+| `ProseEvent::Interop(Progress(progress))` | Logic to UI | the bytes read of a total, past one megabyte (`PROSE-IO-021`) |
 
 ```rust
 // ambre_prose::message. A reader or a writer adds its variant on the day it lands, so the
@@ -491,7 +469,7 @@ pub enum ExportFormat {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MarkdownFlavor { Gfm, CommonMark }
 
-/// Not built: the options join `ExportDocument` with the first writer that reads one.
+/// Not built: the options join `ExportFormat` with the first writer that reads one.
 pub struct ExportOptions {
     /// Gates the comment threads in the Word and the HTML writers (`PROSE-IO-022`).
     pub include_comments:      bool,
@@ -686,16 +664,12 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Only the native file has a gesture.** The palette saves it and the home screen opens it. No
-  gesture imports or exports a foreign format (`PROSE-IO-027`), and `ImportDocument` is not on the
+  gesture imports or exports a foreign format (`PROSE-IO-027`), and the import is not on the
   plane yet.
 * **Where an import lands is not ruled.** A failed import leaves the document untouched
   (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
   `TOILE-IO-023` and Prose states nothing, so the batch of step 5 has no defined destination.
-* **A failed conversion has no way back to the user.** `PROSE-IO-047` makes the report and the
-  error two answers, and the bus carries one of them. `ImportCompleted` holds a report, and no
-  event holds an `InteropError`. A file that does not open therefore has a typed refusal and no
-  declared path to the screen that must show it.
 * **An export has no size to measure its progress against.** `PROSE-IO-057` owes a progress event
   and the threshold is one megabyte of file. An import knows that before it starts, and an export
   learns it only when it has finished. Nothing states what an export counts instead.
@@ -716,11 +690,6 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   the nesting depth (`TOILE-IO-002`); Prose bounds nothing. A file with a million blocks, or a list
   nested ten thousand deep, has no stated refusal. The atomicity rule means the whole batch is
   held in memory before any of it is applied.
-* **Three applications now import and export, and the vocabulary is theirs alone.** Trame reports
-  an import through one type and one event name, Toile through another, and Prose through a third.
-  The report, the progress event and the completion event differ in shape and in spelling for one
-  behaviour. The formats share nothing and belong to each application; the report a user reads does
-  not. No rule holds the three together, and no document owns the question.
 * **The four reader crates are a plan.** `crates/ambre-prose` declares none of them, so the
   dependency table above marks each one absent rather than reading as a description of the
   manifest.

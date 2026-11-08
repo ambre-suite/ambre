@@ -490,9 +490,9 @@ pub enum ProseCommand {
     Undo,
     Redo,
 
-    // -- Interoperability (`features/ambre-spec-prose-import-export.md`) --
-    ExportDocument { format: ExportFormat },
-    ImportDocument { format: ImportFormat, data: FileBytes },
+    // -- Interoperability (`features/ambre-spec-prose-import-export.md`), the shared shape
+    // of `1-Foundations/ambre-spec-interop.md` --
+    Interop(InteropRequest<ProseImport, ExportFormat>),
 
     // -- Not built: pictures (`features/ambre-spec-prose-images.md`) --
     InsertImage      { parent_id: Option<BlockId>, after_id: Option<BlockId>,
@@ -598,18 +598,14 @@ pub enum ProseEvent {
     /// Where the caret lands after a step between cells: the cell, and its first block.
     CellEntered { cell: BlockId, block: BlockId },
 
-    // -- Interoperability --
-    ImportCompleted { report: ConversionReport },
-    /// The name obeys `DOCFILE-019` and `DOCFILE-020`; `media_type` types `data`, so the view
-    /// has one download path for every format (`PROSE-IO-020`).
-    ExportReady     { filename: ExportFilename, media_type: MediaType, data: FileBytes,
-                      report: ConversionReport },
+    // -- Interoperability: a finished import, a written file, a progress and a failure. The
+    // file name obeys `DOCFILE-019` and `DOCFILE-020`; its media type types the bytes, so the
+    // view has one download path for every format (`PROSE-IO-020`).
+    Interop(InteropAnswer<ProseConstruct>),
 
     // -- Not built: the spell checker (`features/ambre-spec-prose-spell-check.md`) --
     SpellErrors     { block_id: BlockId, errors: Vec<SpellError> },
-    // -- Not built: progress on a large file (`PROSE-IO-021`) --
-    ImportProgress  { percent: u8 },
-    ExportProgress  { percent: u8 },
+    // -- Not built: progress on a large file (`PROSE-IO-021`) rides `Interop` --
 
     // -- Failure --
     /// What the engine turned down, and why (`PROSE-105`, `PROSE-106`).

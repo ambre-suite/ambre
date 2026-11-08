@@ -429,7 +429,7 @@ directions, never an application. A passphrase cannot travel in a `StaticKey<Com
 is a UI-only intent the launcher intercepts. The shape Find and the column filter already do this.
 One component serves both (`ambre-chrome`): one operation seals a board and a workbook.
 
-**How the sealed save travels.** The application emits `ExportAmbreFileSealed` and knows nothing
+**How the sealed save travels.** The application emits its sealed native export and knows nothing
 else about it. Logic intercepts that command, writes the plaintext container itself, and hands it to
 the Sync worker with the passphrase. The answer comes back as the application's **ordinary** export
 event, which leaves the download anchor, the filename rule and both engines untouched
