@@ -584,7 +584,7 @@ impl Sfu {
                 .map(|t| Feed {
                     source: t.source,
                     mid: t.mid,
-                    layer: Layer(None),
+                    layer: Layer::new(None),
                 })
                 .collect();
             let videos: Vec<&Track> = ranked
