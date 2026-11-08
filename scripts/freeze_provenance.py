@@ -51,9 +51,9 @@ import crate_boundaries  # noqa: E402  -- the scan of a generator module
 ROOT = Path(__file__).resolve().parent.parent
 FROZEN = "fixtures/frozen"
 CURRENT = "fixtures/current"
-# The live corpus, rewritten at the commit the frozen bytes were taken from.
 # The subdirectory of the checkout's target that a rerun builds into.
 RERUN_TARGET = "freeze-provenance"
+# The live corpus, rewritten at the commit the frozen bytes were taken from.
 REGENERATE = "cargo run --quiet -p ambre-logic --features fixtures --bin ambre-fixtures -- generate"
 
 
