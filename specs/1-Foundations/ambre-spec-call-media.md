@@ -105,16 +105,27 @@ The downlink estimate of a receiver falls below what the SFU forwards it.
 | `CALL-043` | `FRAME` | A layer drop for one receiver MUST NOT change the layer another receiver gets. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_layer_drop_for_one_receiver_leaves_another_receiver_on_its_layer` -- eight seeded runs | none | verified |
 | `CALL-044` | `FRAME` | A random loss of 10 % or less on the downlink of a receiver MUST NOT lower the layer it gets. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_of_twenty_keeps_the_top_layer_up_to_ten_percent_loss` -- a call of twenty at 150 ms of round trip, 2 % and 10 % of loss; `ambre_sfu::congestion::tests::the_target_holds_under_random_loss_up_to_ten_percent` -- a modelled link at 2 %, 5 % and 10 % | none | verified |
 
+### 1.7 Raise a layer again
+
+The downlink of a receiver carries more than its target, after a drop with no lasting congestion.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CALL-050` | `POST` | Given a receiver that dropped a layer on a delay step with no lasting congestion, the SFU MUST forward it the top layer again within the delay of `ambre-spec-budgets.md section 3`. | this spec section 3, the SFU; `CALL-038` | `ambre_sfu::sim::tests::a_receiver_climbs_back_to_the_top_layer_after_a_delay_step` -- eight seeded runs at 150 ms of round trip and 2 % loss, a step of 40 ms | none | verified |
+| `CALL-051` | `FRAME` | A probe MUST NOT raise the target of a receiver to a layer step its downlink cannot carry. | this spec section 3, the SFU; `CALL-050` | `ambre_sfu::sim::tests::a_receiver_capped_below_the_top_layer_never_climbs_to_it` -- eight seeded runs at 150 ms of round trip and 2 % loss, under a cap of 1.2 Mbit/s | none | verified |
+| `CALL-052` | `POST` | Given a probe that raises overuse, the SFU MUST stop its padding at the feedback that reads the overuse. | this spec section 3, the SFU; `CALL-050` | `ambre_sfu::congestion::tests::a_probe_that_raises_overuse_stops_at_once` -- the controller alone, a modelled link at 20 ms of round trip and 2 % loss | none | verified |
+
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 20 `verified`, 29 `unimplemented`. The SFU links no C cryptography,
+* **Verification.** 23 `verified`, 29 `unimplemented`. The SFU links no C cryptography,
   completes DTLS, and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-037`). It
   chooses the layer of each receiver, and a browser on TCP 443 alone reaches it through TURN
-  (`CALL-038` to `CALL-043`). Its congestion control holds under random loss (`CALL-044`), and
-  each receiver holds fixed slots (`CALL-045` to `CALL-049`). No call code exists beyond it.
+  (`CALL-038` to `CALL-043`). Its congestion control holds under random loss and climbs back
+  after a false drop (`CALL-044`, `CALL-050` to `CALL-052`). Each receiver holds fixed slots
+  (`CALL-045` to `CALL-049`), and no call code exists beyond the SFU.
 
 ---
 
@@ -214,6 +225,20 @@ admits under a pseudonymous identifier per call. The SFU mints the TURN credenti
   100 % per second before its first decrease, never above 1.5 times the acknowledged rate.
 * Under overuse, the SFU pads nothing. The padding would hold the queue of the bottleneck full,
   and the keyframe of the lower layer would wait behind it.
+* A decrease sets the target under the acknowledged rate, and the target grows back by about one
+  packet per round trip. So a delay step with no lasting congestion would hold a lower layer for
+  seconds. The SFU probes instead (`CALL-050`).
+* A probe starts while the delay bound reads no overuse, no loss bounds the target, and a layer
+  step lies above the target. For 300 ms, the SFU pads at 1.6 times that step. The padding fills
+  the gaps between the media alone, so the link sees less than that pace.
+* The target takes the step when the acknowledged rate reaches 95 % of it, with no overuse. The
+  layer choice then climbs.
+* A probe that raises overuse stops its padding at once (`CALL-052`). Until that overuse ends,
+  or for one round trip and 600 ms at most, no decrease goes under the target the probe found.
+  The queue is the probe's, and it drains.
+* A failed probe waits 1 s before the next one, and each further failure doubles the wait up to
+  30 s. So a capped receiver sees a probe rarely, and never takes a step it cannot carry
+  (`CALL-051`).
 * Each receiver holds three audio slots and nine video slots (`CALL-045`). The SFU offers them
   once, when the room first carries a track of another participant.
 * A change of speaker moves a slot to another sender, and renegotiates nothing (`CALL-046`). The
@@ -234,6 +259,9 @@ admits under a pseudonymous identifier per call. The SFU mints the TURN credenti
   sender of a slot.
 * A switch to a lower layer of the same track stops the current layer at once. Its packets would
   queue in the pacer of the congested downlink, ahead of the lower layer, for seconds.
+* The stopped layer resumes on a keyframe alone, when the switch no longer goes down. It missed
+  pictures, and a resume between two keyframes would also break the sequence numbers
+  (`CALL-040`).
 * The receiver sees a freeze until the keyframe of the lower layer arrives. The SFU asks for that
   keyframe again every 300 ms, the shortest interval libwebrtc keeps between two keyframes.
 * It writes nothing to a receiver before its connection is up. str0m would hold the packets and
@@ -262,7 +290,7 @@ assumes them away.
 | `src/lib.rs` | the connection settings of a participant |
 | `src/forward.rs` | the forwarding core, without I/O |
 | `src/layer.rs` | the layer choice |
-| `src/congestion.rs` | the congestion control of each receiver: the loss bound and the acknowledged rate |
+| `src/congestion.rs` | the congestion control of each receiver: the loss bound, the acknowledged rate and the probe |
 | `src/congestion/delay.rs` | its delay bound, ported from str0m under the MIT license, with its notice |
 | `src/rewrite.rs` | the header fields of a slot across a switch of layer or of sender |
 | `src/serve.rs` | the UDP socket and the signalling WebSocket |
@@ -271,6 +299,10 @@ assumes them away.
 **A simulated run is seeded.** The seed sets the losses of each link and the random numbers str0m
 draws on its thread. The patched str0m keeps its streams in a sorted map, and the simulated SFU
 runs its connections on one thread. So a seed gives one path, on any machine and under any load.
+
+The simulated clock steps by 1 ms. The SFU wakes str0m at the timeout it asks, and tokio rounds
+that timeout to 1 ms. The pacer of str0m sends one padding packet per wake. A coarser step would
+starve a probe of padding that the SFU sends.
 
 **Dependencies.** Each one the SFU adds, and why:
 
@@ -319,6 +351,8 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | Fixed slots per receiver | a media section per track of the room | each join renegotiated every receiver, and the pacer of str0m read 98 send streams at each packet of a call of fifty |
 | The audio of the three most recent speakers | every audio track of the room | a slot count bounds the pacer and the downlink; a listener follows no fourth voice at once |
 | A seeded simulation | a run isolated from the load of the machine | the spread came from the random numbers of str0m, not from the load: on 2026-11-08, seven runs alone on the machine dropped a layer from 0.87 s to 3.42 s |
+| A probe pads up to the next layer step | a faster growth of the target near the known capacity | the target would grow on a capped downlink too, and the receiver would climb into overuse, then drop again |
+| A probe pads up to the next layer step | the probe clusters of str0m | str0m starts none while the SFU sets the estimate, and its result feeds the estimate of str0m, which `CALL-044` rejects |
 | A drop to a lower layer stops the current layer | the current layer flows until the lower keyframe | its packets queue in the pacer of the congested downlink. Over 40 seeds on 2026-11-08, the worst drop took 2.52 s, against 0.85 s |
 | The video of the nine most recent speakers | every video of the room to every receiver | 49 videos at the lowest layer exceed the downlink of a phone, and the SFU cost grows with the count |
 | str0m drives the SFU | the `rtc` crate of webrtc-rs | ring or aws-lc-rs seal its DTLS records, not only its certificate |
