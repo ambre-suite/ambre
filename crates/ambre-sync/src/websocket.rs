@@ -29,6 +29,13 @@ fn replay_retry_delay(stop: u32) -> Option<TimeSpan<Ms>> {
 /// flight (`ambre-spec-budgets.md` section 8).
 const REPLAY_ASK_SPACING: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_250);
 
+// The relay's window is a protocol constant, and a relay that raised it past
+// the spacing would drop the second ask with no answer (`SYNC-191`).
+const _: () = assert!(
+    REPLAY_ASK_SPACING.get() > ambre_protocol::ws::REPLAY_MIN_INTERVAL.get(),
+    "REPLAY_ASK_SPACING must outlast the relay's REPLAY_MIN_INTERVAL"
+);
+
 /// Whether a replay ask leaves now, or waits for the relay's window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AskSlot {
