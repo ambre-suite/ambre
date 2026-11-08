@@ -115,17 +115,26 @@ The downlink of a receiver carries more than its target, after a drop with no la
 | `CALL-051` | `FRAME` | A probe MUST NOT raise the target of a receiver to a layer step its downlink cannot carry. | this spec section 3, the SFU; `CALL-050` | `ambre_sfu::sim::tests::a_receiver_capped_below_the_top_layer_never_climbs_to_it` -- eight seeded runs at 150 ms of round trip and 2 % loss, under a cap of 1.2 Mbit/s | none | verified |
 | `CALL-052` | `POST` | Given a probe that raises overuse, the SFU MUST stop its padding at the feedback that reads the overuse. | this spec section 3, the SFU; `CALL-050` | `ambre_sfu::congestion::tests::a_probe_that_raises_overuse_stops_at_once` -- the controller alone, a modelled link at 20 ms of round trip and 2 % loss | none | verified |
 
+### 1.8 Simulate a call
+
+A test runs the SFU and synthetic participants in simulated time, from a seed.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CALL-053` | `INV` | A simulated run of the SFU MUST follow one path per seed, in any process and under any load. | this spec section 3, the SFU | `ambre_sfu::sim::paths::each_seed_follows_one_path_in_separate_processes` -- every test of the simulation in three concurrent processes | none | verified |
+
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 23 `verified`, 29 `unimplemented`. The SFU links no C cryptography,
+* **Verification.** 24 `verified`, 29 `unimplemented`. The SFU links no C cryptography,
   completes DTLS, and forwards RTP within a room (`CALL-013`, `CALL-031` to `CALL-037`). It
   chooses the layer of each receiver, and a browser on TCP 443 alone reaches it through TURN
   (`CALL-038` to `CALL-043`). Its congestion control holds under random loss and climbs back
   after a false drop (`CALL-044`, `CALL-050` to `CALL-052`). Each receiver holds fixed slots
-  (`CALL-045` to `CALL-049`), and no call code exists beyond the SFU.
+  (`CALL-045` to `CALL-049`), a seed gives one path (`CALL-053`), and no call code exists
+  beyond the SFU.
 
 ---
 
@@ -294,11 +303,23 @@ assumes them away.
 | `src/congestion/delay.rs` | its delay bound, ported from str0m under the MIT license, with its notice |
 | `src/rewrite.rs` | the header fields of a slot across a switch of layer or of sender |
 | `src/serve.rs` | the UDP socket and the signalling WebSocket |
-| `src/sim/` | tests alone: the impairment relay, the synthetic participants, the load run |
+| `src/sim/` | tests alone: the impairment relay, the synthetic participants, the load run, the guard of one path per seed |
 
 **A simulated run is seeded.** The seed sets the losses of each link and the random numbers str0m
 draws on its thread. The patched str0m keeps its streams in a sorted map, and the simulated SFU
-runs its connections on one thread. So a seed gives one path, on any machine and under any load.
+runs its connections on one thread. So a seed gives one path, on any machine and under any load
+(`CALL-053`). The guard compares the runs of three processes in the native tier, and
+`just sim-paths` compares 20.
+
+The simulated clock starts at a fixed offset from the origin of the clock of str0m. The test
+exports of the patched str0m pin the wall clock of that origin. str0m reads the round trip from
+the NTP times of a sender report, at a resolution of 1/65536 s. Started from the clock of the
+process, that round trip rounds another way in each process. It times the retries of a NACK. On
+2026-11-08, one retry 1 ms apart gave seed 1 of `CALL-051` 0 or 4 layer switches.
+
+The keys of a simulated DTLS handshake come from the generator of the OS. The length of an ECDSA
+signature then varies by a byte or two between processes. The guard of `CALL-053` leaves the size
+of a DTLS record out of its trace, and keeps its time and its link.
 
 The simulated clock steps by 1 ms. The SFU wakes str0m at the timeout it asks, and tokio rounds
 that timeout to 1 ms. The pacer of str0m sends one padding packet per wake. A coarser step would
@@ -351,6 +372,8 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | Fixed slots per receiver | a media section per track of the room | each join renegotiated every receiver, and the pacer of str0m read 98 send streams at each packet of a call of fifty |
 | The audio of the three most recent speakers | every audio track of the room | a slot count bounds the pacer and the downlink; a listener follows no fourth voice at once |
 | A seeded simulation | a run isolated from the load of the machine | the spread came from the random numbers of str0m, not from the load: on 2026-11-08, seven runs alone on the machine dropped a layer from 0.87 s to 3.42 s |
+| The simulated clock starts from the pinned origin of str0m | a simulated clock that starts from the clock of the process | the round trip str0m reads from a sender report rounds another way in each process, as section 3 states |
+| The keys of a simulated DTLS handshake come from the generator of the OS | a DTLS handshake seeded in full | dimpl draws its key share from the generator of the OS inside its own crypto provider, which the workspace does not patch. The size of a handshake record moved no path: on 2026-11-08, four processes traced the same datagram times over every seeded run |
 | A probe pads up to the next layer step | a faster growth of the target near the known capacity | the target would grow on a capped downlink too, and the receiver would climb into overuse, then drop again |
 | A probe pads up to the next layer step | the probe clusters of str0m | str0m starts none while the SFU sets the estimate, and its result feeds the estimate of str0m, which `CALL-044` rejects |
 | A drop to a lower layer stops the current layer | the current layer flows until the lower keyframe | its packets queue in the pacer of the congested downlink. Over 40 seeds on 2026-11-08, the worst drop took 2.52 s, against 0.85 s |

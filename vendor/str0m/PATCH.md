@@ -16,7 +16,8 @@ The SFU runs a congestion control of its own per receiver
 (`crates/ambre-sfu/src/congestion.rs`). str0m keeps the transport-wide feedback
 and its estimate to itself, so the copy opens two doors: it hands the feedback
 out, and it takes an estimate in. The simulation of the SFU also needs str0m to
-pick among its streams in a fixed order.
+pick among its streams in a fixed order, and to map its instants to one wall
+clock in every process.
 
 ## The change
 
@@ -59,6 +60,14 @@ against the crate from crates.io. Each added public item carries the words
   `HashMap` changes with each process. With the map sorted and the `fastrand`
   generator of the thread seeded by the caller, a simulated call follows one
   path. The copy itself seeds nothing.
+* `src/util/time_tricks.rs`: under the feature `_internal_test_exports`, the
+  origin of str0m's clock takes a pinned wall clock, `PINNED_WALL_CLOCK`, in
+  place of the one read at its first use. str0m maps an instant to an NTP time
+  through that origin. A simulation that starts its clock at a fixed offset
+  from the origin then reads one round trip from a sender report in every
+  process. Without the feature, nothing changes.
+* `src/_internal_test_exports/mod.rs`: the function `time_origin`, which
+  answers the instant of that origin.
 
 Drop this directory and the patch line once str0m ships a way to run an
-external congestion control and a fixed stream order.
+external congestion control, a fixed stream order and a pinned clock origin.

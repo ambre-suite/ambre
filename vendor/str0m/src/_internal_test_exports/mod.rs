@@ -15,6 +15,15 @@ use rng::Rng;
 
 mod setup;
 
+/// UNSTABLE: not public API!
+///
+/// Patched in by Ambre: the instant str0m counts its time from. Its wall clock is pinned
+/// under this feature, so an instant at a fixed offset from it maps to one NTP time in
+/// every process.
+pub fn time_origin() -> std::time::Instant {
+    crate::util::already_happened()
+}
+
 impl Rtc {
     /// UNSTABLE: not public API!
     pub fn _mids(&self) -> Vec<Mid> {
