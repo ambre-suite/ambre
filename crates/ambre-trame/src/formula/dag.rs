@@ -231,8 +231,8 @@ impl DependencyGraph {
         while let Some(cur) = queue.pop() {
             // Level 1: the cells that read `cur` directly. The queue walks
             // their own readers in turn, so the closure is complete. A `Dfs`
-            // per cell would clear a bit set over the whole graph each time:
-            // about 2 500 bytes per cell on a sheet of 10k formulas.
+            // per cell clears a bit set over the whole graph. On a sheet of
+            // 10k formulas, that is about 2 500 bytes per cell.
             if let Some(&node) = self.cell_to_node.get(&cur) {
                 for n in self.cell_dag.neighbors(node) {
                     let Some(&cell) = self.cell_dag.node_weight(n) else {
@@ -282,8 +282,8 @@ impl DependencyGraph {
     /// back. Both searches stay inside the descendants of `node`: a formula
     /// that nothing reads costs one step.
     fn cycle_through(&self, node: petgraph::graph::NodeIndex) -> Option<Vec<CellId>> {
-        // A set of the nodes met, not a `Dfs`: a `Dfs` clears a bit set over
-        // the whole graph, which costs more than the walk when few cells read
+        // A set of the nodes met, not a `Dfs`. A `Dfs` clears a bit set over
+        // the whole graph. That costs more than the walk when few cells read
         // `node`.
         let mut below: HashSet<_> = std::iter::once(node).collect();
         let mut stack = vec![node];
