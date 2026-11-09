@@ -7,31 +7,55 @@
 //! restores a value over a peer's later write (`UNDO-007`).
 //!
 //! So every edit records its own inverse, and no undo manager runs. A
-//! subscription keeps a mirror of every root container. Each local commit
-//! reads the value each key held and the place each list element held from
-//! that mirror, before the mirror takes the commit. An undo writes those values
-//! back and puts each element back after its old neighbour. An element is
-//! named by its value, so a step never depends on the identity of an element
-//! in the list.
+//! subscription keeps a mirror of every container. Each local commit reads
+//! what it overwrites from that mirror, before the mirror takes the commit:
+//!
+//! * a map key keeps its value on each side; a nested container a commit
+//!   deletes is kept by value, and created again by value;
+//! * a list element keeps its place and its neighbour, named by its value;
+//! * a text keeps the characters each edit put in or took out, placed by Loro
+//!   cursors;
+//! * a tree node keeps its parent and its sibling; a node a commit created is
+//!   hidden on an undo, never deleted.
+
+mod list;
+mod rich;
+mod shot;
+mod text;
+mod tree;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ambre_core::crdt::{CommitOrigin, FoundationRoot};
-use ambre_core::index::{Axis, Len, Pos};
+use ambre_core::index::{Axis, Len};
 use ambre_core::{Availability, HistoryStep};
-use loro::event::{ContainerDiff, Diff, DiffEvent, ListDiffItem};
+use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{
-    ContainerID, ContainerTrait, ContainerType, EventTriggerKind, InternalString, LoroDoc,
-    LoroList, LoroMap, LoroMovableList, LoroValue, Subscription, ValueOrContainer,
+    Container, ContainerID, ContainerTrait, ContainerType, EventTriggerKind, InternalString,
+    LoroDoc, LoroValue, Subscription,
 };
 
-/// The index space of a root list: one slot per element.
+use list::{ListWrite, plain, seq_list, take_list};
+use rich::Rich;
+use shot::{Held, Parent, Shot, attach};
+use text::{Direction, Shifts, TextWrite};
+use tree::{Forest, Kept, TreeWrite};
+
+/// The index space of a list: one slot per element.
 #[derive(Debug, PartialEq, Eq)]
 enum Slot {}
 
 impl Axis for Slot {
     const NAME: &'static str = "Slot";
+}
+
+/// The index space of a text: one place per Unicode scalar.
+#[derive(Debug, PartialEq, Eq)]
+enum Chars {}
+
+impl Axis for Chars {
+    const NAME: &'static str = "Chars";
 }
 
 /// The index space of the history: one place per step.
@@ -42,91 +66,79 @@ impl Axis for Steps {
     const NAME: &'static str = "Steps";
 }
 
-/// A root list of either kind, the one container a step moves elements in.
-enum RootList {
-    Plain(LoroList),
-    Movable(LoroMovableList),
+/// The marker an undo of a tree node's creation writes into the node's map,
+/// so the node hides and keeps its identity. A redo takes the marker off.
+/// The application names the key and computes the value when the undo runs.
+#[derive(Clone)]
+pub struct Hide {
+    /// The key of the node map the marker sits under.
+    pub key: InternalString,
+    /// The value the marker takes, read from the document when the undo runs.
+    pub value: fn(&LoroDoc) -> LoroValue,
 }
 
-/// The root list `id` names, `None` for any other container.
-fn root_list(doc: &LoroDoc, id: &ContainerID) -> Option<RootList> {
-    match id {
-        ContainerID::Root {
-            name,
-            container_type: ContainerType::List,
-        } => Some(RootList::Plain(doc.get_list(name.as_str()))),
-        ContainerID::Root {
-            name,
-            container_type: ContainerType::MovableList,
-        } => Some(RootList::Movable(doc.get_movable_list(name.as_str()))),
-        _ => None,
+impl std::fmt::Debug for Hide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Hide")
+            .field("key", &self.key)
+            .finish_non_exhaustive()
     }
 }
 
-impl RootList {
-    /// The values of the list, in order.
-    fn values(&self) -> Vec<LoroValue> {
-        let value = match self {
-            Self::Plain(list) => list.get_value(),
-            Self::Movable(list) => list.get_value(),
-        };
-        match value {
-            LoroValue::List(items) => items.to_vec(),
-            _ => Vec::new(),
+/// The new identity of each container a replay created again by value.
+#[derive(Debug, Default, Clone)]
+struct Renames {
+    to: HashMap<ContainerID, ContainerID>,
+}
+
+impl Renames {
+    /// The identity `id` stands under now. A container created again twice
+    /// follows the chain to its last identity.
+    fn resolve(&self, id: &ContainerID) -> ContainerID {
+        let mut now = id;
+        // Each replay adds one link, so the chain is as long as the
+        // history and holds no loop. The bound guards the walk all the same.
+        for _ in 0..=self.to.len() {
+            match self.to.get(now) {
+                Some(next) => now = next,
+                None => break,
+            }
         }
+        now.clone()
     }
 
-    /// Insert `value` at `at`.
-    fn put(&self, at: Pos<Slot>, value: &LoroValue) {
-        let _ = match self {
-            Self::Plain(list) => list.insert(at.to_usize(), value.clone()),
-            Self::Movable(list) => list.insert(at.to_usize(), value.clone()),
-        };
-    }
-
-    /// Delete the `len` elements from `at` on.
-    fn take(&self, at: Pos<Slot>, len: Len<Slot>) {
-        let _ = match self {
-            Self::Plain(list) => list.delete(at.to_usize(), len.to_usize()),
-            Self::Movable(list) => list.delete(at.to_usize(), len.to_usize()),
-        };
-    }
-
-    /// Move the element at `from` so it stands at `to`. A plain list has no
-    /// move, so it takes the element out and puts its value back.
-    fn shift(&self, from: Pos<Slot>, to: Pos<Slot>, value: &LoroValue) {
-        match self {
-            Self::Plain(list) => {
-                let _ = list.delete(from.to_usize(), 1);
-                let _ = list.insert(to.to_usize(), value.clone());
-            }
-            Self::Movable(list) => {
-                let _ = list.mov(from.to_usize(), to.to_usize());
-            }
+    /// Note that the container `old` stands under `new` from now on.
+    fn note(&mut self, old: ContainerID, new: ContainerID) {
+        if old != new {
+            self.to.insert(old, new);
         }
     }
 }
 
-/// The plain content of one root container, as the last event left it.
+/// The plain content of one container, as the last event left it.
 #[derive(Debug)]
 enum Mirrored {
     Map(HashMap<InternalString, LoroValue>),
     List(Vec<LoroValue>),
+    Text(Rich),
+    Tree(Forest),
 }
 
-/// The plain content of every root container of the document.
+/// The plain content of every container of the document. A nested container
+/// stands in its parent as its id.
 #[derive(Debug, Default)]
 struct Mirror {
-    roots: HashMap<InternalString, Mirrored>,
+    containers: HashMap<ContainerID, Mirrored>,
 }
 
 ambre_core::define_flag! {
     /// Whether a commit wrote only what a step can replay.
     enum Replayable {
-        /// Every write is a plain value in a root map or list.
+        /// Every write is one a step replays.
         Whole,
-        /// A write landed in a nested container, held a container value, or
-        /// changed a container of a kind the history does not replay.
+        /// A write the history cannot replay. It deleted a tree node, put a
+        /// container in a list or created a node with no marker to hide it. Or
+        /// it changed a container of a kind the history does not replay.
         Lost,
     }
 }
@@ -144,42 +156,12 @@ ambre_core::define_flag! {
 /// One key a commit wrote, with its value on each side of the commit.
 #[derive(Debug, Clone)]
 struct MapWrite {
-    map: InternalString,
+    map: ContainerID,
     key: InternalString,
     /// The value before the commit, `None` for an absent key.
-    before: Option<LoroValue>,
+    before: Option<Held>,
     /// The value after the commit, `None` for an absent key.
-    after: Option<LoroValue>,
-}
-
-/// One element a commit put into a list or took out of it. It keeps its place
-/// and the element just before it, on that side of the commit.
-#[derive(Debug, Clone)]
-struct Placed {
-    value: LoroValue,
-    at: Pos<Slot>,
-    pred: Option<LoroValue>,
-}
-
-/// One element a commit moved inside a list, with its place and its
-/// neighbour on each side of the commit.
-#[derive(Debug, Clone)]
-struct Moved {
-    value: LoroValue,
-    from: Placed,
-    to: Placed,
-}
-
-/// What one commit did to one list.
-#[derive(Debug, Clone)]
-struct ListWrite {
-    list: ContainerID,
-    /// The elements the commit took out, in their order before it.
-    removed: Vec<Placed>,
-    /// The elements the commit put in, in their order after it.
-    added: Vec<Placed>,
-    /// The elements the commit moved.
-    moved: Vec<Moved>,
+    after: Option<Held>,
 }
 
 /// What one commit wrote, read against the mirror.
@@ -187,12 +169,20 @@ struct ListWrite {
 struct Chunk {
     maps: Vec<MapWrite>,
     lists: Vec<ListWrite>,
+    texts: Vec<TextWrite>,
+    trees: Vec<TreeWrite>,
+    /// The containers the commit created. A write into one rides its
+    /// creation by value, so a replay skips it.
+    born: HashSet<ContainerID>,
 }
 
 impl Chunk {
     /// Whether the commit wrote nothing a step replays.
     fn is_empty(&self) -> bool {
-        self.maps.is_empty() && self.lists.is_empty()
+        self.maps.is_empty()
+            && self.lists.is_empty()
+            && self.texts.is_empty()
+            && self.trees.is_empty()
     }
 }
 
@@ -200,7 +190,7 @@ impl Chunk {
 #[derive(Debug, Default)]
 struct Step {
     chunks: Vec<Chunk>,
-    touched: HashSet<InternalString>,
+    touched: HashSet<ContainerID>,
 }
 
 /// Whether the commits that come take part in the step of the command under
@@ -236,7 +226,7 @@ struct History {
 
 impl History {
     /// Take one recorded commit. A new step clears the redo side.
-    fn record(&mut self, chunk: Chunk, touched: HashSet<InternalString>) {
+    fn record(&mut self, chunk: Chunk, touched: HashSet<ContainerID>) {
         if chunk.is_empty() {
             return;
         }
@@ -278,7 +268,7 @@ impl History {
 
     /// A peer's change that meets what the open step wrote ends it. Each later
     /// commit is then a step of its own, as the undo manager ends its group.
-    fn meet_import(&mut self, touched: &HashSet<InternalString>) {
+    fn meet_import(&mut self, touched: &HashSet<ContainerID>) {
         let met = matches!(
             self.group,
             Group::Open {
@@ -299,6 +289,31 @@ impl History {
 struct Recorder {
     mirror: Mirror,
     history: History,
+    renames: Renames,
+    reach: Reach,
+    /// A handle on the document, to read the cursors of a text edit. The
+    /// history lets go of it before it unsubscribes (`Drop for UndoHistory`).
+    reader: Option<LoroDoc>,
+}
+
+/// Which containers a history records.
+#[derive(Debug, Default)]
+enum Reach {
+    /// Root maps and root lists alone.
+    #[default]
+    Roots,
+    /// Every container, a tree node's creation hidden under the marker.
+    Nested { hide: Option<Hide> },
+}
+
+impl Reach {
+    /// The marker a tree node's creation hides under, if any.
+    fn hide(&self) -> Option<&Hide> {
+        match self {
+            Self::Roots => None,
+            Self::Nested { hide } => hide.as_ref(),
+        }
+    }
 }
 
 /// The origins of a local commit no application records: the registry entry
@@ -306,14 +321,26 @@ struct Recorder {
 const UNRECORDED: [CommitOrigin; 2] = [CommitOrigin::Peers, CommitOrigin::Recorded];
 
 /// The one undo history of a document: each local commit records its own
-/// inverse, read against a mirror of every root container (`ambre-spec-undo.md section 3`).
+/// inverse, read against a mirror of every container (`ambre-spec-undo.md section 3`).
 ///
-/// It records root maps and root lists. A commit that writes a nested
-/// container, or a container value, clears it: no step can replay it.
+/// It records maps, lists and texts at any depth, and the creations and moves
+/// of a tree. A commit it cannot replay clears it: a tree node deleted, a
+/// container put into a list, or a counter.
 pub struct UndoHistory {
     recorder: Arc<Mutex<Recorder>>,
     /// Keeps the recorder subscribed for the life of the history.
     _watch: Subscription,
+}
+
+impl Drop for UndoHistory {
+    /// Let go of the recorder's handle on the document while the subscription
+    /// still stands, and outside the lock. The last handle commits what is
+    /// pending as it drops. Dropped inside the unsubscription, that commit
+    /// would wait on the lock Loro holds to unsubscribe.
+    fn drop(&mut self) {
+        let reader = self.held().reader.take();
+        drop(reader);
+    }
 }
 
 impl std::fmt::Debug for UndoHistory {
@@ -326,11 +353,30 @@ impl UndoHistory {
     /// Record every local commit of `doc` from now on, its mirror read from
     /// what `doc` holds now. A commit whose origin starts with one of
     /// `skipped`, or with an origin no application records, is no step.
+    ///
+    /// The history reaches root maps and root lists alone: a commit that
+    /// writes a nested container, a container value or a text clears it.
     #[must_use]
     pub fn watch(doc: &LoroDoc, skipped: &[CommitOrigin]) -> Self {
+        Self::start(doc, skipped, Reach::Roots)
+    }
+
+    /// [`watch`](Self::watch), reaching every container: nested maps and
+    /// lists, texts and trees. An undo of a tree node's creation hides the node
+    /// under `hide`; with no marker, a commit that creates a node clears the
+    /// history.
+    #[must_use]
+    pub fn watch_nested(doc: &LoroDoc, skipped: &[CommitOrigin], hide: Option<Hide>) -> Self {
+        Self::start(doc, skipped, Reach::Nested { hide })
+    }
+
+    fn start(doc: &LoroDoc, skipped: &[CommitOrigin], reach: Reach) -> Self {
         let recorder = Arc::new(Mutex::new(Recorder {
             mirror: Mirror::read(doc),
             history: History::default(),
+            renames: Renames::default(),
+            reach,
+            reader: Some(doc.clone()),
         }));
         let into = Arc::clone(&recorder);
         let skipped: Vec<CommitOrigin> = UNRECORDED.iter().chain(skipped).copied().collect();
@@ -382,6 +428,12 @@ impl UndoHistory {
         self.held().history.seal();
     }
 
+    /// End the step under way: each later commit is a step of its own until
+    /// the next [`seal`](Self::seal).
+    pub fn close(&self) {
+        self.held().history.group = Group::Closed;
+    }
+
     /// Forget every step, for a new identity: a step names this peer's work.
     pub fn clear(&self) {
         self.held().history.clear();
@@ -392,21 +444,30 @@ impl UndoHistory {
     /// [`CommitOrigin::Recorded`], so the replay records no step.
     /// [`Replayed::Nothing`] when that side is empty, and `doc` is untouched.
     pub fn write(&self, doc: &LoroDoc, step: HistoryStep) -> Replayed {
-        let mut held = self.held();
-        let held = &mut *held;
-        let taken = match step {
-            HistoryStep::Undo => held.history.past.pop(),
-            HistoryStep::Redo => held.history.future.pop(),
+        let (taken, renames) = {
+            let mut held = self.held();
+            let taken = match step {
+                HistoryStep::Undo => held.history.past.pop(),
+                HistoryStep::Redo => held.history.future.pop(),
+            };
+            (taken, held.renames.clone())
         };
-        let Some(taken) = taken else {
+        let Some(mut taken) = taken else {
             return Replayed::Nothing;
         };
-        let mirror = &held.mirror;
-        let lists = |name: &InternalString| match mirror.roots.get(name) {
-            Some(Mirrored::List(items)) => items.clone(),
-            _ => Vec::new(),
-        };
-        taken.write(doc, step, &lists);
+        // Every cursor is read before anything is written. The recorder stays
+        // unlocked meanwhile. A cursor on a gone character makes Loro commit
+        // what is pending, and that commit reaches the subscription.
+        taken.read(doc, &renames);
+        let mut held = self.held();
+        let held = &mut *held;
+        taken.write(
+            doc,
+            step,
+            &held.mirror,
+            &mut held.renames,
+            held.reach.hide(),
+        );
         match step {
             HistoryStep::Undo => held.history.future.push(taken),
             HistoryStep::Redo => held.history.past.push(taken),
@@ -429,6 +490,16 @@ impl Recorder {
     /// Take one event: the mirror follows it, and a local commit of the user
     /// becomes a step. A peer's change ends the open step where it meets it.
     fn take(&mut self, event: &DiffEvent<'_>, skipped: &[CommitOrigin]) {
+        // A history that is dropping has no handle left, and records nothing.
+        let Some(doc) = self.reader.take() else {
+            return;
+        };
+        self.take_with(event, skipped, &doc);
+        self.reader = Some(doc);
+    }
+
+    /// [`take`](Self::take), with the handle on the document.
+    fn take_with(&mut self, event: &DiffEvent<'_>, skipped: &[CommitOrigin], doc: &LoroDoc) {
         let record = event.triggered_by == EventTriggerKind::Local
             && !skipped
                 .iter()
@@ -437,11 +508,16 @@ impl Recorder {
         let mut replayable = Replayable::Whole;
         let mut touched = HashSet::new();
         for change in &event.events {
-            if let ContainerID::Root { name, .. } = change.target {
-                touched.insert(name.clone());
+            let root = match change.target {
+                ContainerID::Root { .. } => Some(change.target),
+                ContainerID::Normal { .. } => change.path.first().map(|(id, _)| id),
+            };
+            touched.extend(root.cloned());
+            if matches!(self.reach, Reach::Roots) && self.mirror.nests(change) {
+                replayable = Replayable::Lost;
             }
             let journal = if record { Some(&mut chunk) } else { None };
-            if self.mirror.take(change, journal) == Replayable::Lost {
+            if self.mirror.take(change, journal, doc, self.reach.hide()) == Replayable::Lost {
                 replayable = Replayable::Lost;
             }
         }
@@ -457,112 +533,263 @@ impl Recorder {
 }
 
 impl Mirror {
-    /// The mirror of what `doc` holds now: every root map and list.
+    /// The mirror of what `doc` holds now: every container, nested ones
+    /// included.
     fn read(doc: &LoroDoc) -> Self {
+        let mut mirror = Self::default();
         let LoroValue::Map(roots) = doc.get_value() else {
-            return Self::default();
+            return mirror;
         };
-        let roots = roots
-            .iter()
-            .filter_map(|(name, value)| {
-                let mirrored = match value {
-                    LoroValue::Container(ContainerID::Root {
-                        container_type: ContainerType::Map,
-                        name,
-                    }) => match doc.get_map(name.as_str()).get_value() {
-                        LoroValue::Map(map) => Mirrored::Map(
-                            map.iter()
-                                .map(|(k, v)| (InternalString::from(k.as_str()), v.clone()))
-                                .collect(),
-                        ),
-                        _ => return None,
-                    },
-                    LoroValue::Container(id @ ContainerID::Root { .. }) => {
-                        match root_list(doc, id).map(|list| list.values()) {
-                            Some(items) => Mirrored::List(items),
-                            None => return None,
-                        }
-                    }
-                    _ => return None,
-                };
-                Some((InternalString::from(name.as_str()), mirrored))
+        let mut queue: Vec<ContainerID> = roots
+            .values()
+            .filter_map(|value| match value {
+                LoroValue::Container(id) => Some(id.clone()),
+                _ => None,
             })
             .collect();
-        Self { roots }
+        while let Some(id) = queue.pop() {
+            let Some(container) = doc.get_container(id.clone()) else {
+                continue;
+            };
+            let children = |value: &LoroValue| match value {
+                LoroValue::Container(child) => Some(child.clone()),
+                _ => None,
+            };
+            let mirrored = match container {
+                Container::Map(map) => match map.get_value() {
+                    LoroValue::Map(entries) => {
+                        queue.extend(entries.values().filter_map(children));
+                        Mirrored::Map(
+                            entries
+                                .iter()
+                                .map(|(k, v)| (InternalString::from(k.as_str()), v.clone()))
+                                .collect(),
+                        )
+                    }
+                    _ => continue,
+                },
+                Container::List(list) => {
+                    let items = seq_values(list.get_value());
+                    queue.extend(items.iter().filter_map(children));
+                    Mirrored::List(items)
+                }
+                Container::MovableList(list) => {
+                    let items = seq_values(list.get_value());
+                    queue.extend(items.iter().filter_map(children));
+                    Mirrored::List(items)
+                }
+                Container::Text(text) => Mirrored::Text(Rich::from_delta(&text.to_delta())),
+                Container::Tree(tree) => {
+                    let forest = Forest::read(&tree);
+                    queue.extend(forest.nodes().map(|node| node.associated_meta_container()));
+                    Mirrored::Tree(forest)
+                }
+                _ => continue,
+            };
+            mirror.containers.insert(id, mirrored);
+        }
+        mirror
+    }
+
+    /// Whether `change` reaches past the root maps and lists. Such a change
+    /// lands in a nested container or a text, puts a container in, or writes
+    /// over one. Read before the mirror takes the change.
+    fn nests(&self, change: &ContainerDiff<'_>) -> bool {
+        let is_container = |value: &Option<loro::ValueOrContainer>| {
+            matches!(value, Some(loro::ValueOrContainer::Container(_)))
+        };
+        if !matches!(change.target, ContainerID::Root { .. }) {
+            return true;
+        }
+        match &change.diff {
+            Diff::Map(delta) => {
+                let held = match self.containers.get(change.target) {
+                    Some(Mirrored::Map(entries)) => Some(entries),
+                    _ => None,
+                };
+                delta.updated.iter().any(|(key, value)| {
+                    is_container(value)
+                        || held.is_some_and(|entries| {
+                            matches!(
+                                entries.get(&InternalString::from(key.as_ref())),
+                                Some(LoroValue::Container(_))
+                            )
+                        })
+                })
+            }
+            Diff::List(items) => items.iter().any(|item| match item {
+                loro::event::ListDiffItem::Insert { insert, .. } => insert
+                    .iter()
+                    .any(|v| matches!(v, loro::ValueOrContainer::Container(_))),
+                _ => false,
+            }),
+            _ => true,
+        }
+    }
+
+    /// Forget the container `id` and every container nested in it: its parent
+    /// deleted it.
+    fn forget(&mut self, id: &ContainerID) {
+        let mut stack = vec![id.clone()];
+        while let Some(id) = stack.pop() {
+            let nested = |value: &LoroValue| match value {
+                LoroValue::Container(child) => Some(child.clone()),
+                _ => None,
+            };
+            match self.containers.remove(&id) {
+                Some(Mirrored::Map(entries)) => stack.extend(entries.values().filter_map(nested)),
+                Some(Mirrored::List(items)) => stack.extend(items.iter().filter_map(nested)),
+                Some(Mirrored::Tree(forest)) => {
+                    stack.extend(forest.nodes().map(|node| node.associated_meta_container()));
+                }
+                Some(Mirrored::Text(_)) | None => {}
+            }
+        }
     }
 
     /// Take one container change, and note it in `journal` when the commit is
     /// recorded. Returns whether the change is one a step replays.
-    fn take(&mut self, change: &ContainerDiff<'_>, journal: Option<&mut Chunk>) -> Replayable {
-        let ContainerID::Root {
-            name,
-            container_type,
-        } = change.target
-        else {
-            return Replayable::Lost;
-        };
+    fn take(
+        &mut self,
+        change: &ContainerDiff<'_>,
+        journal: Option<&mut Chunk>,
+        doc: &LoroDoc,
+        hide: Option<&Hide>,
+    ) -> Replayable {
+        let target = change.target;
         // The registry entry is bookkeeping: no undo retracts it (`AUTHOR-009`).
-        let journal = journal.filter(|_| name.as_str() != FoundationRoot::Peers.as_str());
-        match (&change.diff, container_type) {
+        let registry = matches!(
+            target,
+            ContainerID::Root { name, .. } if name.as_str() == FoundationRoot::Peers.as_str()
+        );
+        let journal = journal.filter(|_| !registry);
+        match (&change.diff, target.container_type()) {
             (Diff::Map(delta), ContainerType::Map) => {
-                let Mirrored::Map(map) = self
-                    .roots
-                    .entry(name.clone())
+                let Mirrored::Map(entries) = self
+                    .containers
+                    .entry(target.clone())
                     .or_insert_with(|| Mirrored::Map(HashMap::new()))
                 else {
                     return Replayable::Lost;
                 };
-                let mut replayable = Replayable::Whole;
-                let mut writes = Vec::new();
+                let mut written = Vec::new();
                 for (key, value) in &delta.updated {
                     let key = InternalString::from(key.as_ref());
                     // A container stands in the mirror as its id, so a later
                     // write over it is known for one.
                     let after = value.as_ref().map(plain);
                     let before = match &after {
-                        Some(value) => map.insert(key.clone(), value.clone()),
-                        None => map.remove(&key),
+                        Some(value) => entries.insert(key.clone(), value.clone()),
+                        None => entries.remove(&key),
                     };
-                    if [&before, &after]
-                        .iter()
-                        .any(|v| matches!(v, Some(LoroValue::Container(_))))
-                    {
-                        replayable = Replayable::Lost;
-                    }
+                    written.push((key, before, after));
+                }
+                let mut writes = Vec::new();
+                let mut gone = Vec::new();
+                for (key, before, after) in written {
+                    // A container that leaves is kept by value, read from the
+                    // mirror before the mirror forgets it.
+                    let before = before.map(|value| match value {
+                        LoroValue::Container(id) => {
+                            let shot = Shot::from_mirror(self, &id);
+                            gone.push(id);
+                            Held::Container(shot)
+                        }
+                        value => Held::Value(value),
+                    });
                     writes.push(MapWrite {
-                        map: name.clone(),
+                        map: target.clone(),
                         key,
                         before,
-                        after,
+                        after: after.as_ref().map(Held::of),
                     });
+                }
+                for id in &gone {
+                    self.forget(id);
                 }
                 if let Some(chunk) = journal {
                     // Key order, so a replay writes the same operations on
                     // every run whatever order the delta hands the keys out in.
                     writes.sort_unstable_by(|a, b| a.key.cmp(&b.key));
+                    chunk
+                        .born
+                        .extend(writes.iter().filter_map(|w| match &w.after {
+                            Some(Held::Container(shot)) => Some(shot.id.clone()),
+                            _ => None,
+                        }));
                     chunk.maps.extend(writes);
                 }
-                replayable
+                Replayable::Whole
             }
             (Diff::List(items), ContainerType::List | ContainerType::MovableList) => {
                 let Mirrored::List(list) = self
-                    .roots
-                    .entry(name.clone())
+                    .containers
+                    .entry(target.clone())
                     .or_insert_with(|| Mirrored::List(Vec::new()))
                 else {
                     return Replayable::Lost;
                 };
-                let write = take_list(list, items, change.target.clone());
-                if write
+                let write = take_list(list, items, target.clone());
+                let gone: Vec<ContainerID> = write
+                    .removed
+                    .iter()
+                    .filter_map(|p| match &p.value {
+                        LoroValue::Container(id) => Some(id.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                for id in &gone {
+                    self.forget(id);
+                }
+                let nested = write
                     .added
                     .iter()
-                    .any(|p| matches!(p.value, LoroValue::Container(_)))
-                {
+                    .any(|p| matches!(p.value, LoroValue::Container(_)));
+                match journal {
+                    Some(_) if nested || !gone.is_empty() => Replayable::Lost,
+                    Some(chunk) => {
+                        chunk.lists.push(write);
+                        Replayable::Whole
+                    }
+                    None => Replayable::Whole,
+                }
+            }
+            (Diff::Text(delta), ContainerType::Text) => {
+                let Mirrored::Text(rich) = self
+                    .containers
+                    .entry(target.clone())
+                    .or_insert_with(|| Mirrored::Text(Rich::default()))
+                else {
+                    return Replayable::Lost;
+                };
+                let edits = rich.take(delta);
+                if let Some(chunk) = journal {
+                    chunk.texts.push(TextWrite::record(doc, target, edits));
+                }
+                Replayable::Whole
+            }
+            (Diff::Tree(diff), ContainerType::Tree) => {
+                let Mirrored::Tree(forest) = self
+                    .containers
+                    .entry(target.clone())
+                    .or_insert_with(|| Mirrored::Tree(Forest::default()))
+                else {
+                    return Replayable::Lost;
+                };
+                let mut gone = Vec::new();
+                let (mut write, kept) = forest.take(diff, &mut gone);
+                for node in gone {
+                    self.forget(&node.associated_meta_container());
+                }
+                let Some(chunk) = journal else {
+                    return Replayable::Whole;
+                };
+                if kept == Kept::Lost || (!write.born.is_empty() && hide.is_none()) {
                     return Replayable::Lost;
                 }
-                if let Some(chunk) = journal {
-                    chunk.lists.push(write);
-                }
+                write.tree = Some(target.clone());
+                chunk.born.extend(write.born_metas());
+                chunk.trees.push(write);
                 Replayable::Whole
             }
             _ => Replayable::Lost,
@@ -570,287 +797,144 @@ impl Mirror {
     }
 }
 
-/// Apply the list diff `items` to the mirror `list`, and read what it did.
-/// An element taken out keeps its place and neighbour before. An element put
-/// in keeps its place and neighbour after, and a move keeps both.
-fn take_list(list: &mut Vec<LoroValue>, items: &[ListDiffItem], id: ContainerID) -> ListWrite {
-    // First pass: the places, before and after, of each element the diff
-    // removes or inserts. The neighbour before is read from the mirror while
-    // it still holds the list before the diff.
-    let mut removed = Vec::new();
-    let mut inserted: Vec<(Pos<Slot>, LoroValue, Motion)> = Vec::new();
-    let mut before = Pos::<Slot>::ZERO;
-    let mut after = Pos::<Slot>::ZERO;
-    for item in items {
-        match item {
-            ListDiffItem::Retain { retain } => {
-                before = Pos::from_usize(before.to_usize() + retain);
-                after = Pos::from_usize(after.to_usize() + retain);
-            }
-            ListDiffItem::Delete { delete } => {
-                for at in before.to_usize()..before.to_usize() + delete {
-                    if let Some(value) = list.get(at) {
-                        removed.push(Placed {
-                            value: value.clone(),
-                            at: Pos::from_usize(at),
-                            pred: at.checked_sub(1).and_then(|b| list.get(b)).cloned(),
-                        });
-                    }
-                }
-                before = Pos::from_usize(before.to_usize() + delete);
-            }
-            ListDiffItem::Insert { insert, is_move } => {
-                for value in insert {
-                    let value = plain(value);
-                    let motion = if *is_move {
-                        Motion::Move
-                    } else {
-                        Motion::Fresh
-                    };
-                    inserted.push((after, value, motion));
-                    after = Pos::from_usize(after.to_usize() + 1);
-                }
-            }
-        }
-    }
-    // Second pass: the mirror takes the diff.
-    let mut at = 0usize;
-    for item in items {
-        match item {
-            ListDiffItem::Retain { retain } => at += retain,
-            ListDiffItem::Delete { delete } => {
-                let end = (at + delete).min(list.len());
-                list.drain(at.min(end)..end);
-            }
-            ListDiffItem::Insert { insert, .. } => {
-                for value in insert {
-                    let value = plain(value);
-                    list.insert(at.min(list.len()), value);
-                    at += 1;
-                }
-            }
-        }
-    }
-    // The neighbour after each inserted element, read from the list after
-    // the diff. A move is an insert of a value the diff also removes.
-    let mut added = Vec::new();
-    let mut moved = Vec::new();
-    for (at, value, motion) in inserted {
-        let pred = at
-            .to_usize()
-            .checked_sub(1)
-            .and_then(|b| list.get(b))
-            .cloned();
-        let to = Placed {
-            value: value.clone(),
-            at,
-            pred,
-        };
-        let from = match motion {
-            Motion::Move => removed
-                .iter()
-                .position(|r: &Placed| r.value == value)
-                .map(|i| removed.remove(i)),
-            Motion::Fresh => None,
-        };
-        match from {
-            Some(from) => moved.push(Moved { value, from, to }),
-            None => added.push(to),
-        }
-    }
-    ListWrite {
-        list: id,
-        removed,
-        added,
-        moved,
-    }
-}
-
-/// The value an event hands out, a container standing as its id.
-fn plain(value: &ValueOrContainer) -> LoroValue {
+/// The values of a list read whole.
+fn seq_values(value: LoroValue) -> Vec<LoroValue> {
     match value {
-        ValueOrContainer::Value(value) => value.clone(),
-        ValueOrContainer::Container(container) => LoroValue::Container(container.id()),
-    }
-}
-
-/// The place of `value` in `cur`: at `hint` when it stands there, else the
-/// first place that holds it.
-fn find(cur: &[LoroValue], value: &LoroValue, hint: Pos<Slot>) -> Option<Pos<Slot>> {
-    if cur.get(hint.to_usize()) == Some(value) {
-        return Some(hint);
-    }
-    cur.iter().position(|v| v == value).map(Pos::from_usize)
-}
-
-/// The place an element goes so it stands right after `pred`. That is `hint`
-/// when `pred` stands just before it, else the place after the first one that
-/// holds `pred`. When `pred` is gone, the element goes back to `hint`.
-fn place_after(cur: &[LoroValue], pred: Option<&LoroValue>, hint: Pos<Slot>) -> Pos<Slot> {
-    let Some(pred) = pred else {
-        return Pos::ZERO;
-    };
-    let fallback = || Pos::from_usize(hint.to_usize().min(cur.len()));
-    match hint.to_usize().checked_sub(1) {
-        Some(before) if cur.get(before) == Some(pred) => hint,
-        _ => cur
-            .iter()
-            .position(|v| v == pred)
-            .map_or_else(fallback, |at| Pos::from_usize(at + 1)),
-    }
-}
-
-impl ListWrite {
-    /// Replay the list write into `list`, whose values are `cur`: `Undo`
-    /// takes it back, `Redo` makes it again. An element named by its value is
-    /// found wherever it stands. One a peer took out meanwhile is left out.
-    fn write(&self, list: &RootList, cur: &mut Vec<LoroValue>, step: HistoryStep) {
-        // The side the step leaves: the elements to take out, and the
-        // elements to put back with their place and neighbour there.
-        let (out, back): (&[Placed], Vec<(&LoroValue, &Placed)>) = match step {
-            HistoryStep::Undo => (
-                &self.added,
-                self.removed
-                    .iter()
-                    .map(|p| (&p.value, p))
-                    .chain(self.moved.iter().map(|m| (&m.value, &m.from)))
-                    .collect(),
-            ),
-            HistoryStep::Redo => (
-                &self.removed,
-                self.added
-                    .iter()
-                    .map(|p| (&p.value, p))
-                    .chain(self.moved.iter().map(|m| (&m.value, &m.to)))
-                    .collect(),
-            ),
-        };
-        // Every element to take out is found before any goes, so each place
-        // the write noted still holds. Each run of adjacent places then goes
-        // in one delete, the last run first.
-        let mut gone: Vec<Pos<Slot>> = out
-            .iter()
-            .filter_map(|placed| find(cur, &placed.value, placed.at))
-            .collect();
-        gone.sort_unstable();
-        gone.dedup();
-        for run in gone.chunk_by(|a, b| b.prev() == Some(*a)).rev() {
-            if let Some(first) = run.first() {
-                list.take(*first, Len::of(run.len()));
-            }
-        }
-        if !gone.is_empty() {
-            let mut next = gone.iter().peekable();
-            let mut at = Pos::<Slot>::ZERO;
-            cur.retain(|_| {
-                let kept = next.peek().is_none_or(|g| **g != at);
-                if !kept {
-                    next.next();
-                }
-                at += Len::ONE;
-                kept
-            });
-        }
-        // In their order on the side the step leaves, so the neighbour of each
-        // one stands already when it lands. A run of elements, each after the
-        // one before it, lands in one place.
-        let mut back = back;
-        back.sort_by_key(|(_, placed)| placed.at);
-        let moves: HashSet<&LoroValue> = self.moved.iter().map(|m| &m.value).collect();
-        let mut rest = back.as_slice();
-        while let Some(((value, placed), tail)) = rest.split_first() {
-            if moves.contains(value) {
-                rest = tail;
-                let Some(from) = find(cur, value, placed.at) else {
-                    continue;
-                };
-                cur.remove(from.to_usize());
-                let to = place_after(cur, placed.pred.as_ref(), placed.at);
-                list.shift(from, to, value);
-                cur.insert(to.to_usize(), (*value).clone());
-                continue;
-            }
-            let length = 1 + tail
-                .iter()
-                .zip(rest.iter())
-                .take_while(|((next, at), (prev, _))| {
-                    !moves.contains(next) && at.pred.as_ref() == Some(*prev)
-                })
-                .count();
-            let (run, after) = rest.split_at(length.min(rest.len()));
-            rest = after;
-            let to = place_after(cur, placed.pred.as_ref(), placed.at);
-            if cur.get(to.to_usize()) == Some(*value) {
-                continue;
-            }
-            let values: Vec<LoroValue> = run.iter().map(|(v, _)| (*v).clone()).collect();
-            for (offset, value) in values.iter().enumerate() {
-                list.put(Pos::from_usize(to.to_usize() + offset), value);
-            }
-            let at = to.to_usize().min(cur.len());
-            cur.splice(at..at, values);
-        }
+        LoroValue::List(items) => items.to_vec(),
+        _ => Vec::new(),
     }
 }
 
 impl MapWrite {
     /// Replay the write into `doc`. A key a later write changed keeps that
     /// write: the step reverts this peer's work and never a peer's
-    /// (`UNDO-007`). The undo manager restores the value over the peer's.
-    fn write(&self, doc: &LoroDoc, step: HistoryStep) {
-        let (from, to) = match step {
-            HistoryStep::Undo => (&self.after, &self.before),
-            HistoryStep::Redo => (&self.before, &self.after),
+    /// (`UNDO-007`). A map a peer deleted, or replaced, takes nothing: an undo
+    /// never raises a container a peer removed.
+    fn write(&mut self, doc: &LoroDoc, undo: Direction, renames: &mut Renames) {
+        let id = renames.resolve(&self.map);
+        let map = match doc.get_container(id) {
+            Some(Container::Map(map)) if !map.is_deleted() => map,
+            _ => return,
         };
-        let map: LoroMap = doc.get_map(self.map.as_str());
-        let now = match map.get(&self.key) {
-            None => None,
-            Some(ValueOrContainer::Value(value)) => Some(value),
-            Some(ValueOrContainer::Container(_)) => return,
+        let Self {
+            key, before, after, ..
+        } = self;
+        let (from, to) = match undo {
+            Direction::Back => (after, before),
+            Direction::Forward => (before, after),
         };
-        if now.as_ref() != from.as_ref() {
+        let now = map.get(key).map(|value| match value {
+            loro::ValueOrContainer::Value(value) => value,
+            loro::ValueOrContainer::Container(container) => LoroValue::Container(container.id()),
+        });
+        let same = match from {
+            None => now.is_none(),
+            Some(held) => held.is(now.as_ref(), renames),
+        };
+        if !same {
             return;
         }
-        let _ = match to {
-            Some(value) => map.insert(&self.key, value.clone()),
-            None => map.delete(&self.key),
-        };
+        // A container that leaves is captured as it stands, so the replay
+        // that brings it back brings what it held.
+        if let Some(Held::Container(shot)) = from {
+            shot.body = Shot::from_doc(doc, &renames.resolve(&shot.id)).body;
+        }
+        match to {
+            None => {
+                let _ = map.delete(key);
+            }
+            Some(held) => attach(&Parent::Map(&map, key.as_str()), held, renames),
+        }
     }
 }
 
 impl Step {
+    /// Read every cursor of the step's text edits, before anything is written.
+    fn read(&mut self, doc: &LoroDoc, renames: &Renames) {
+        for chunk in &mut self.chunks {
+            for text in &mut chunk.texts {
+                text.read(doc, renames);
+            }
+        }
+    }
+
     /// Write the step into `doc`: `Undo` takes each commit back, the last
-    /// first, and `Redo` makes each again, the first first. `lists` reads the
-    /// values a list holds now from the mirror.
+    /// first, and `Redo` makes each again, the first first. `mirror` holds
+    /// the lists as they stand before the replay.
     fn write(
-        &self,
+        &mut self,
         doc: &LoroDoc,
         step: HistoryStep,
-        lists: &dyn Fn(&InternalString) -> Vec<LoroValue>,
+        mirror: &Mirror,
+        renames: &mut Renames,
+        hide: Option<&Hide>,
     ) {
-        let chunks: Vec<&Chunk> = match step {
-            HistoryStep::Undo => self.chunks.iter().rev().collect(),
-            HistoryStep::Redo => self.chunks.iter().collect(),
+        let undo = match step {
+            HistoryStep::Undo => Direction::Back,
+            HistoryStep::Redo => Direction::Forward,
+        };
+        let chunks: Vec<&mut Chunk> = match undo {
+            Direction::Back => self.chunks.iter_mut().rev().collect(),
+            Direction::Forward => self.chunks.iter_mut().collect(),
         };
         // Each list is read once for the whole step, then followed as the
-        // step writes it.
-        let mut read: HashMap<InternalString, Vec<LoroValue>> = HashMap::new();
+        // step writes it. Each text follows the places the step moved.
+        let mut read: HashMap<ContainerID, Vec<LoroValue>> = HashMap::new();
+        let mut shifts: HashMap<ContainerID, Shifts> = HashMap::new();
         for chunk in chunks {
-            let writes: Vec<&ListWrite> = match step {
-                HistoryStep::Undo => chunk.lists.iter().rev().collect(),
-                HistoryStep::Redo => chunk.lists.iter().collect(),
-            };
-            for write in writes {
-                let (Some(list), ContainerID::Root { name, .. }) =
-                    (root_list(doc, &write.list), &write.list)
-                else {
-                    continue;
+            let Chunk {
+                maps,
+                lists,
+                texts,
+                trees,
+                born,
+            } = chunk;
+            let write_lists = |read: &mut HashMap<ContainerID, Vec<LoroValue>>,
+                               renames: &Renames| {
+                let writes: Vec<&ListWrite> = match undo {
+                    Direction::Back => lists.iter().rev().collect(),
+                    Direction::Forward => lists.iter().collect(),
                 };
-                let cur = read.entry(name.clone()).or_insert_with(|| lists(name));
-                write.write(&list, cur, step);
-            }
-            for write in &chunk.maps {
-                write.write(doc, step);
+                for write in writes.into_iter().filter(|w| !born.contains(&w.list)) {
+                    let id = renames.resolve(&write.list);
+                    let Some(list) = seq_list(doc, &id) else {
+                        continue;
+                    };
+                    let cur = read.entry(id.clone()).or_insert_with(|| {
+                        match mirror.containers.get(&id) {
+                            Some(Mirrored::List(items)) => items.clone(),
+                            _ => list.values(),
+                        }
+                    });
+                    write.write(&list, cur, step);
+                }
+            };
+            let texts = texts.iter_mut().filter(|t| !born.contains(&t.text));
+            match undo {
+                Direction::Back => {
+                    for text in texts.rev() {
+                        text.write(doc, undo, renames, &mut shifts);
+                    }
+                    write_lists(&mut read, renames);
+                    for write in maps.iter_mut().filter(|w| !born.contains(&w.map)) {
+                        write.write(doc, undo, renames);
+                    }
+                    for tree in trees.iter_mut().rev() {
+                        tree.write(doc, undo, hide);
+                    }
+                }
+                Direction::Forward => {
+                    for tree in trees.iter_mut() {
+                        tree.write(doc, undo, hide);
+                    }
+                    for write in maps.iter_mut().filter(|w| !born.contains(&w.map)) {
+                        write.write(doc, undo, renames);
+                    }
+                    write_lists(&mut read, renames);
+                    for text in texts {
+                        text.write(doc, undo, renames, &mut shifts);
+                    }
+                }
             }
         }
     }
@@ -947,8 +1031,185 @@ mod tests {
         assert_eq!(history.can_undo(), Availability::Disabled);
     }
 
+    /// Sync `from` into `to`: every update `to` lacks.
+    fn sync(from: &LoroDoc, to: &LoroDoc) {
+        to.import(
+            &from
+                .export(loro::ExportMode::all_updates())
+                .expect("an export"),
+        )
+        .expect("an import");
+    }
+
+    /// A nested map deleted, then undone, comes back by value under its key,
+    /// its text with it; a later step on it still reaches it.
     #[test]
-    fn a_write_into_a_nested_container_ends_the_history() {
+    fn a_deleted_nested_map_comes_back_by_value() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        history.seal();
+        let element = doc
+            .get_map("elements")
+            .insert_container("e", loro::LoroMap::new())
+            .expect("a nested map");
+        element.insert("x", 1).expect("a write");
+        let body = element
+            .insert_container("text", loro::LoroText::new())
+            .expect("a nested text");
+        body.insert(0, "hi").expect("a text write");
+        doc.commit();
+        history.seal();
+        element.insert("x", 2).expect("a move");
+        doc.commit();
+        history.seal();
+        doc.get_map("elements").delete("e").expect("a delete");
+        doc.commit();
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(element_of(&doc), Some((2, "hi".to_owned())));
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(element_of(&doc), Some((1, "hi".to_owned())));
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(element_of(&doc), None);
+        for _ in 0..3 {
+            let _ = replay(&doc, &history, HistoryStep::Redo);
+        }
+        assert_eq!(element_of(&doc), None);
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(element_of(&doc), Some((2, "hi".to_owned())));
+    }
+
+    /// The `x` and the text of the element `e`, `None` when it is absent.
+    fn element_of(doc: &LoroDoc) -> Option<(i64, String)> {
+        let loro::ValueOrContainer::Container(loro::Container::Map(element)) =
+            doc.get_map("elements").get("e")?
+        else {
+            return None;
+        };
+        let x = element.get("x")?.into_value().ok()?.into_i64().ok()?;
+        let loro::ValueOrContainer::Container(loro::Container::Text(text)) = element.get("text")?
+        else {
+            return None;
+        };
+        Some((x, text.to_string()))
+    }
+
+    /// An undo never raises a nested map a peer deleted: the undo of a move on
+    /// it writes nothing.
+    #[test]
+    fn an_undo_leaves_a_map_a_peer_deleted_deleted() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        let element = doc
+            .get_map("elements")
+            .insert_container("e", loro::LoroMap::new())
+            .expect("a nested map");
+        element.insert("x", 1).expect("a write");
+        doc.commit();
+        history.seal();
+        element.insert("x", 2).expect("a move");
+        doc.commit();
+        let peer = LoroDoc::new();
+        sync(&doc, &peer);
+        peer.get_map("elements").delete("e").expect("a peer delete");
+        peer.commit();
+        sync(&peer, &doc);
+        let before = doc.oplog_vv();
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        assert_eq!(doc.oplog_vv(), before, "the undo wrote into a deleted map");
+        assert!(doc.get_map("elements").get("e").is_none());
+    }
+
+    /// An undo of typing takes out this peer's characters alone, wherever a
+    /// peer's typing moved them; a redo puts them back.
+    #[test]
+    fn an_undo_of_typing_keeps_a_peer_s_characters() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        let text = doc.get_text("t");
+        text.insert(0, "ac").expect("a seed");
+        doc.commit();
+        history.seal();
+        text.insert(1, "XY").expect("typing");
+        doc.commit();
+        let peer = LoroDoc::new();
+        sync(&doc, &peer);
+        peer.get_text("t")
+            .insert(0, "P")
+            .expect("a peer types before");
+        peer.get_text("t")
+            .insert(5, "Q")
+            .expect("a peer types after");
+        peer.commit();
+        sync(&peer, &doc);
+        assert_eq!(text.to_string(), "PaXYcQ");
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(text.to_string(), "PacQ");
+        let _ = replay(&doc, &history, HistoryStep::Redo);
+        assert_eq!(text.to_string(), "PaXYcQ");
+    }
+
+    /// An undo of a deletion puts the characters back with their marks.
+    #[test]
+    fn an_undone_deletion_puts_the_marks_back() {
+        let doc = LoroDoc::new();
+        doc.config_default_text_style(Some(loro::StyleConfig {
+            expand: loro::ExpandType::After,
+        }));
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        let text = doc.get_text("t");
+        text.insert(0, "abcd").expect("a seed");
+        text.mark(1..3, "b", true).expect("a mark");
+        doc.commit();
+        history.seal();
+        text.delete(1, 2).expect("a delete");
+        doc.commit();
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(text.to_string(), "abcd");
+        assert_eq!(
+            text.slice_delta(0, 4, loro::cursor::PosType::Unicode)
+                .expect("a delta")
+                .len(),
+            3,
+            "the restored run is marked apart from its neighbours"
+        );
+        let _ = replay(&doc, &history, HistoryStep::Redo);
+        assert_eq!(text.to_string(), "ad");
+    }
+
+    /// An undo of a tree node's creation hides the node; its redo shows the
+    /// same node again.
+    #[test]
+    fn an_undone_node_creation_hides_the_same_node() {
+        let doc = LoroDoc::new();
+        let tree = doc.get_tree("blocks");
+        tree.enable_fractional_index(0);
+        let history = UndoHistory::watch_nested(
+            &doc,
+            &[],
+            Some(super::Hide {
+                key: loro::InternalString::from("gone"),
+                value: |_| loro::LoroValue::Bool(true),
+            }),
+        );
+        history.seal();
+        let node = tree.create(None).expect("a node");
+        tree.get_meta(node)
+            .expect("a meta")
+            .insert("t", 1)
+            .expect("a field");
+        doc.commit();
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        let meta = tree.get_meta(node).expect("a meta");
+        assert!(meta.get("gone").is_some());
+        assert!(meta.get("t").is_some(), "a hidden node keeps its fields");
+        let _ = replay(&doc, &history, HistoryStep::Redo);
+        assert!(tree.get_meta(node).expect("a meta").get("gone").is_none());
+        assert_eq!(tree.roots(), vec![node]);
+    }
+
+    /// A history of the roots alone ends at a write into a nested container.
+    #[test]
+    fn a_write_into_a_nested_container_ends_a_history_of_the_roots() {
         let doc = LoroDoc::new();
         let history = UndoHistory::watch(&doc, &[]);
         write(&doc, &history, "a", 1);
@@ -957,6 +1218,18 @@ mod tests {
             .get_map("m")
             .insert_container("n", loro::LoroMap::new())
             .expect("a nested map");
+        doc.commit();
+        assert_eq!(history.can_undo(), Availability::Disabled);
+    }
+
+    /// With no marker named, a node's creation ends the history.
+    #[test]
+    fn a_node_creation_with_no_marker_ends_the_history() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        write(&doc, &history, "a", 1);
+        history.seal();
+        let _ = doc.get_tree("blocks").create(None).expect("a node");
         doc.commit();
         assert_eq!(history.can_undo(), Availability::Disabled);
     }

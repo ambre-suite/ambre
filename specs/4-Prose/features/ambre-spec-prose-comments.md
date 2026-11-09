@@ -190,7 +190,7 @@ from the key that signed the frame, and stores none. A comment writes its author
 footer are refused, since a band is drawn on every page and its thread would sit on all of them. An
 empty range, and a range past the text, are refused too (`PROSE-FEAT-295`).
 
-**Out of the undo stack.** Every comment command commits under an origin the undo manager
+**Out of the undo stack.** Every comment command commits under an origin the undo history
 excludes, as Toile does (`TOILE-FEAT-017`). `Ctrl+Z` takes back the typing, and never a message a
 collaborator may have read (`PROSE-FEAT-296`). An undo that removes the marked text orphans the
 thread, as any deletion does.

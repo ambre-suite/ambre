@@ -70,7 +70,7 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 use kurbo::Rect;
-use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
+use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::message::{Elements, IdCounter};
 use ambre_core::id::{Connector, Element, Frame, Id, Thread, User};
@@ -148,7 +148,8 @@ pub struct ToileState {
     exported_vv: VersionVector,
     /// Local-only undo/redo: undoes only this peer's operations, one
     /// item per atomic user action (one `doc.commit()` per mutating command).
-    undo: UndoManager,
+    /// Each commit records its own inverse (`ambre-spec-undo.md section 3`).
+    history: ambre_crdt::history::UndoHistory,
     /// Canonical per-user identifier, seeded from `LogicEvent::SessionReady`
     /// by the dispatcher. `None` until the session carries an authenticated
     /// user. A stable `Id<User>`, NOT `peer`, which is per-session / per-device
@@ -346,16 +347,17 @@ impl ToileState {
         doc.commit();
         doc.set_peer_id(peer)
             .expect("a document outside a transaction takes a peer id");
-        // Create the undo manager AFTER the initial commit. The board
-        // scaffolding is document setup, not a user edit, so it must not sit on
-        // the stack.
-        let mut undo = UndoManager::new(&doc);
-        // Keep every comment write off the undo stack (`TOILE-FEAT-017`): undo
-        // reverts what the user drew, never a message a teammate has read.
-        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Comment.as_str());
-        // The registry entry is bookkeeping, not a drawing: an undo never
-        // retracts it (`AUTHOR-009`).
-        undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
+        // Open the history AFTER the initial commit. The board scaffolding is
+        // document setup, not a user edit, so it must not sit on the stack.
+        // Every comment write stays off the stack (`TOILE-FEAT-017`): undo
+        // reverts what the user drew, never a message a teammate has read. The
+        // registry entry stays off it too (`AUTHOR-009`), as for every
+        // application.
+        let history = ambre_crdt::history::UndoHistory::watch_nested(
+            &doc,
+            &[ambre_core::crdt::CommitOrigin::Comment],
+            None,
+        );
         let (touched, watch) = caches::watch(&doc);
         Self {
             doc,
@@ -374,7 +376,7 @@ impl ToileState {
             viewport: Viewport::default(),
             viewport_version: ambre_core::Seq::ZERO,
             exported_vv: VersionVector::default(),
-            undo,
+            history,
             my_user_id: None,
             my_name: None,
             presence: HashMap::new(),
@@ -495,8 +497,7 @@ impl ToileState {
 
     /// Handle a UI command and return a typed outcome.
     ///
-    /// Any command that produced a CRDT delta also moved the `UndoManager`
-    /// stacks, so the chrome's Undo/Redo affordances must be refreshed
+    /// Any command that produced a CRDT delta also moved the undo history, so the chrome's Undo/Redo affordances must be refreshed
     /// (`UNDO-006`). Undo and Redo already append their own `UndoState`; skip
     /// the duplicate.
     /// A command that wrote also announces [`BoardChanged`](ToileEvent::BoardChanged),
@@ -925,25 +926,25 @@ impl ToileState {
 
     // -- undo / redo --------------------------------------------------
 
-    /// Apply one undo or redo step. `undo()`/`redo()` commit the inverse ops,
-    /// then this method reseeds the derived caches and broadcasts the delta like
-    /// any structural edit. A no-op (empty stack) only reports availability.
+    /// Apply one undo or redo step. The history writes the inverse ops. The
+    /// commit lands them under the replay origin, so they record no step. This
+    /// method then reseeds the derived caches and broadcasts the delta like any
+    /// structural edit. A no-op (empty stack) only reports availability.
     fn apply_history(&mut self, step: HistoryStep) -> ToileOutcome {
         // Read before the step: the deck and the notes come off the document,
         // which the step has already moved once it returns.
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
         let dangling_before = self.dangling_connectors();
-        let changed = match step {
-            HistoryStep::Undo => self.undo.undo(),
-            HistoryStep::Redo => self.undo.redo(),
-        }
-        .unwrap_or(false);
         // An empty stack changes nothing, so it refreshes nothing
         // (`UNDO-009`).
-        if !changed {
+        self.doc.commit();
+        if self.history.write(&self.doc, step) == ambre_crdt::history::Replayed::Nothing {
             return ToileOutcome::display_only(Vec::new());
         }
+        self.doc
+            .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Recorded.as_str());
+        self.doc.commit();
         self.rebuild_caches();
         // `undo_state_event` last, so the central refresh in `handle_command`
         // sees it and skips the duplicate (`UNDO-006`).
@@ -1009,8 +1010,8 @@ impl ToileState {
 
     pub(super) fn undo_state_event(&self) -> ToileEvent {
         ToileEvent::UndoState {
-            undo: ambre_core::Availability::from_bool(self.undo.can_undo()),
-            redo: ambre_core::Availability::from_bool(self.undo.can_redo()),
+            undo: self.history.can_undo(),
+            redo: self.history.can_redo(),
         }
     }
 

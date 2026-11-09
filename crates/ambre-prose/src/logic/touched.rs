@@ -131,6 +131,26 @@ impl Touched {
     }
 }
 
+impl Touched {
+    /// The blocks whose body lost characters since the last layout, when every
+    /// change since then typed or erased body text and nothing else. `None`
+    /// when anything structural changed, or a block was deleted.
+    pub(crate) fn erased(&self) -> Option<Vec<TreeID>> {
+        if self.structural.load(Ordering::Relaxed) {
+            return None;
+        }
+        let moved = self.moved.lock().unwrap_or_else(PoisonError::into_inner);
+        moved.removed.is_empty().then(|| {
+            moved
+                .edits
+                .iter()
+                .filter(|&&(_, _, delta)| delta < Delta::<DocChar>::ZERO)
+                .map(|&(block, _, _)| block)
+                .collect()
+        })
+    }
+}
+
 /// Whether one container change is text typed or erased in a body, and
 /// nothing else: no mark set or cleared, and no footnote call inserted.
 ///

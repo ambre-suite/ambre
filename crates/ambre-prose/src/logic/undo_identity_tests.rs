@@ -2,14 +2,10 @@
 //! (`PROSE-133`, `PROSE-134`).
 //!
 //! A deletion hides the block and keeps its node (`PROSE-FEAT-133`), so an undo
-//! of it unhides the same node. The undo manager names each step by the Loro
-//! identity it wrote. The oracle is a page kept by hand. It holds the root
-//! blocks in order, each with its text, and a stack of the pages an undo
-//! returns to.
-//!
-//! A redo of an undone insertion creates a new node, and the body stays keyed
-//! by the old one (`PROSE-134`). The two tests that reach that path are
-//! ignored until the `Toile and Prose on the one undo history` Story lands.
+//! of it unhides the same node. An undo of an insertion hides the node too, so
+//! its redo shows the same block, its body still keyed by it (`PROSE-134`).
+//! The oracle is a page kept by hand. It holds the root blocks in order, each
+//! with its text, and a stack of the pages an undo returns to.
 
 use ambre_core::index::Pos;
 use proptest::prelude::*;
@@ -89,8 +85,6 @@ fn an_undone_delete_then_an_undone_insert_leaves_no_block() {
 /// `PROSE-134`: a typed block inserted, undone twice and redone twice, comes
 /// back as the same block with its text.
 #[test]
-#[ignore = "fails (PROSE-134): a redo of an undone insert mints a new block; \
-            lands with the Toile and Prose on the one undo history story"]
 fn a_redone_insert_puts_back_the_same_block() {
     let mut state = ProseState::new().expect("a document is built");
     let first = state.root_blocks()[0];
@@ -319,8 +313,6 @@ proptest! {
 
     /// `PROSE-134`: the same run with inserts, from a fresh page.
     #[test]
-    #[ignore = "fails (PROSE-134): a redo of an undone insert mints a new block; \
-                lands with the Toile and Prose on the one undo history story"]
     fn undo_and_redo_follow_a_page_rebuilt_by_hand(ops in prop::collection::vec(op(), 1..32)) {
         let mut state = ProseState::new().expect("a document is built");
         check(&mut state, &ops)?;

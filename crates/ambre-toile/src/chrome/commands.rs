@@ -22,7 +22,7 @@ pub use crate::ui::commands::COMMANDS;
 /// itself, by contrast, is kept outside the reactive tree by the launcher.
 #[derive(Clone, Copy)]
 pub struct Toggles {
-    /// Undo/Redo availability (Loro `UndoManager` stacks), driving the matching
+    /// Undo/Redo availability (the undo history of the document), driving the matching
     /// menu rows' `disabled` state. Fed by [`ToileEvent::UndoState`] via
     /// [`mirror_event`].
     pub undo_enabled: RwSignal<Availability>,

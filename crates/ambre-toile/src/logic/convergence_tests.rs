@@ -3148,6 +3148,32 @@ fn an_undo_leaves_a_remote_move_alone() {
     assert_eq!(b.bounds_of(&shared), Some(Rect::new(5.0, 7.0, 15.0, 17.0)));
 }
 
+/// `UNDO-012`: B moves a sticky, A deletes it, and B's undo of the move
+/// brings back no sticky. The element map is gone, so the undo writes into
+/// nothing.
+#[test]
+fn an_undo_leaves_an_element_a_peer_deleted_deleted() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let shared = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    b.apply_remote_snapshot(&a.export_snapshot());
+    let moved = b.handle_command(ToileCommand::MoveElements {
+        ids: vec![shared.clone()],
+        delta: Vec2::new(5.0, 7.0),
+    });
+    a.apply_remote(&moved.update.expect("a move writes"));
+    let deleted = a.handle_command(ToileCommand::DeleteElements {
+        ids: vec![shared.clone()],
+    });
+    b.apply_remote(&deleted.update.expect("a delete writes"));
+    assert!(b.bounds_of(&shared).is_none());
+    b.handle_command(ToileCommand::Undo);
+    assert!(
+        b.bounds_of(&shared).is_none(),
+        "the undo raised the sticky a peer deleted"
+    );
+}
+
 #[test]
 fn undo_reverts_group_as_one_item() {
     let mut st = ToileState::new();
@@ -6452,8 +6478,9 @@ fn a_remove_takes_every_entry_a_concurrent_add_left() {
 
 /// An undo of a delete puts the id back on its frame's list. A peer that
 /// took the member out and in again meanwhile left one entry of its own.
-/// The list then names the member twice, and each peer's caches still
-/// equal a rebuild of its own document. One remove then takes both entries.
+/// The history puts an element back by its value, and finds it already
+/// listed, so the list names the member once. Each peer's caches still
+/// equal a rebuild of its own document, and one remove takes the member out.
 #[test]
 fn an_undone_delete_after_a_concurrent_re_add_keeps_the_caches_whole() {
     let (mut a, mut b, frame, rect) = a_framed_rect_on_two_peers();
@@ -6490,11 +6517,7 @@ fn an_undone_delete_after_a_concurrent_re_add_keeps_the_caches_whole() {
         .expect("a delta");
     b.apply_remote(&undone);
     for (name, st) in [("undoer", &mut a), ("peer", &mut b)] {
-        assert_eq!(
-            st.membership_of(&frame),
-            vec![rect.clone(), rect.clone()],
-            "{name}"
-        );
+        assert_eq!(st.membership_of(&frame), vec![rect.clone()], "{name}");
         assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
     }
     let removed = b

@@ -137,8 +137,8 @@ pub enum CommitOrigin {
     /// The scaffolding an edit forces into existence around the value the user
     /// wrote.
     Materialize,
-    /// A step the application records in a history of its own, beside the
-    /// undo manager's: an edit whose undo the manager would cost too much.
+    /// The replay of a step of the undo history (`ambre-spec-undo.md section
+    /// 3`): an undo or a redo, which records no step of its own.
     Recorded,
 }
 

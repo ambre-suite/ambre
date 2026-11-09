@@ -175,7 +175,7 @@ The engine converts at its own boundary, so the value is one identity and not tw
 
 | Crate | Role | Rationale |
 |---|---|---|
-| `loro` | the single-document CRDT | `LoroTree` for the block hierarchy, `LoroText` for a body, `LoroMap` for the registers, `UndoManager` for the local history |
+| `loro` | the single-document CRDT | `LoroTree` for the block hierarchy, `LoroText` for a body, `LoroMap` for the registers |
 | `parley` | the typographic layout the Logic thread measures with | pagination needs line breaking and glyph metrics, not just the run types `DrawSurface` exposes, so the dependency is direct and not through `ambre-draw` |
 | `ambre-core` | the identity and document types | `Uuid`, `DocType`, reached through the `ambre-bus` re-export |
 | `ambre-bus` | the typed IPC envelopes | the envelopes that carry the two planes of sections 3.B and 3.C, which `ambre_prose::message` declares (`BUS-032`) |
@@ -203,7 +203,7 @@ thread leaves as a return value (`PROSE-024`).
 | the layout | the page layout and the version that stamps it (`features/ambre-spec-prose-pagination.md`) | on a change that moves text, incrementally from the first dirty page |
 | the tracking flag | whether an edit becomes a suggestion (`features/ambre-spec-prose-track-changes.md`) | per session, never shared |
 | the media cache | decrypted picture bytes by content hash, bounded (`features/ambre-spec-prose-images.md`) | from the download route; it dies with the session |
-| the local history | the undo manager, opened over the document (`features/ambre-spec-prose-undo.md`) | never: it dies with the session |
+| the local history | the one undo history, opened over the document (`features/ambre-spec-prose-undo.md`) | never: it dies with the session |
 | the sync cursor | the last version vector exported to Sync | advanced after every export |
 | the session identity | the canonical `Id<User>` and the display name, seeded from `SessionReady` | per session, never in the document |
 | the peer set | every remote peer's last resolved caret, keyed by that `Id<User>` (`PROSE-058`) | from each inbound sample; it dies with the session |
@@ -213,7 +213,7 @@ thread leaves as a return value (`PROSE-024`).
 
 pub struct ProseState {
     doc:              LoroDoc,
-    undo:             UndoManager,
+    history:          UndoHistory,
     media_cache:      HashMap<Validated<ContentHash>, MediaBytes>,
     last_exported_vv: VersionVector,
     peer:             PeerId,
@@ -485,7 +485,7 @@ pub enum ProseCommand {
     UpdateCursor { pos: CursorPosition },
 
     // -- Local history (`features/ambre-spec-prose-undo.md`) --
-    // Applied to the document by the undo manager; the delta it produces is broadcast like
+    // Applied to the document by the undo history; the delta it produces is broadcast like
     // any other mutation.
     Undo,
     Redo,

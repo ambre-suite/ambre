@@ -243,11 +243,70 @@ fn board_paint() {
     assert!(ops >= BOARD_ELEMENTS, "every element was drawn");
 }
 
+/// A board of `BOARD_ELEMENTS` stickies, each placed by its own command, and
+/// one of them moved: the edit an undo takes back.
+fn moved_board() -> ToileState {
+    let mut st = ToileState::new();
+    let mut last = None;
+    for i in 0..BOARD_ELEMENTS {
+        let out = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Sticky,
+            at: Point::new((i % 50) as f64 * 220.0, (i / 50) as f64 * 220.0),
+            size: Size::new(200.0, 200.0),
+            content: InitContent::Text(format!("note {i}")),
+            fill: None,
+            correlate: None,
+        });
+        last = out.display.iter().find_map(|e| match e {
+            ToileEvent::ElementCreated { id, .. } => Some(id.clone()),
+            _ => None,
+        });
+    }
+    let id = last.expect("a create names its element");
+    st.handle_command(ToileCommand::MoveElements {
+        ids: vec![id],
+        delta: kurbo::Vec2::new(40.0, 0.0),
+    });
+    st
+}
+
+/// One `Undo` of a move, from the command to its outcome: the replay, the
+/// commit, the reseed of every cache and the delta. Counted alone.
+#[inline(never)]
+fn ambre_budget_toile_move_undo(st: &mut ToileState) {
+    let out = st.handle_command(black_box(ToileCommand::Undo));
+    assert!(out.update.is_some(), "the undo writes the old place back");
+}
+
+/// One `Redo` of that move, counted the same way.
+#[inline(never)]
+fn ambre_budget_toile_move_redo(st: &mut ToileState) {
+    let out = st.handle_command(black_box(ToileCommand::Redo));
+    assert!(out.update.is_some(), "the redo writes the new place again");
+}
+
+/// The undo of a move on a board of `BOARD_ELEMENTS` elements, the
+/// "Toile transform command" row of `ambre-spec-budgets.md section 1`.
+fn move_undo() {
+    let mut st = moved_board();
+    ambre_budget_toile_move_undo(&mut st);
+}
+
+/// The redo of that move, after its undo outside the count.
+fn move_redo() {
+    let mut st = moved_board();
+    let out = st.handle_command(ToileCommand::Undo);
+    assert!(out.update.is_some(), "the undo writes the old place back");
+    ambre_budget_toile_move_redo(&mut st);
+}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 3] = [
+const OPERATIONS: [(&str, fn()); 5] = [
     ("body_commit", body_commit),
     ("body_commit_at_cap", body_commit_at_cap),
     ("board_paint", board_paint),
+    ("move_undo", move_undo),
+    ("move_redo", move_redo),
 ];
 
 fn main() {
