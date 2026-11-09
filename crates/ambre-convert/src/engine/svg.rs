@@ -16,9 +16,14 @@ use ambre_core::{FileBytes, Payload, Rgb};
 use usvg::tiny_skia_path::PathSegment;
 
 use crate::images::{
-    MAX_DEPTH, SvgDepth, SvgImage, SvgItem, SvgKind, SvgNode, SvgPaint, SvgPath, SvgPicture,
-    SvgPoint, SvgRect, SvgSegment, SvgSource, SvgStroke, SvgText, SvgTransform, SvgTree,
+    SvgDepth, SvgImage, SvgItem, SvgKind, SvgNode, SvgPaint, SvgPath, SvgPicture, SvgPoint,
+    SvgRect, SvgSegment, SvgSource, SvgStroke, SvgText, SvgTransform, SvgTree,
 };
+
+/// The deepest group the module walks. Toile refuses a drawing far shallower
+/// than this (`Limits::max_depth`), so the bound only keeps a hostile file
+/// from growing the module's stack.
+const MAX_DEPTH: usize = 256;
 
 /// The drawing of the SVG file `data`.
 ///

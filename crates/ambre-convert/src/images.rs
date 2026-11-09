@@ -10,16 +10,11 @@
 //! The drawing is format-level and flat. Toile maps it onto its elements in
 //! the Main instance, with its own limits, clamps and report. A node names its
 //! children by position, so postcard never recurses on the Logic thread. A
-//! tree nested past [`MAX_DEPTH`] stops there and says so.
+//! tree nested past the module's depth bound stops there and says so.
 
 use ambre_core::index::{Axis, IdxVec, Pos};
 use ambre_core::{FileBytes, Payload, Rgb};
 use serde::{Deserialize, Serialize};
-
-/// The deepest group the module walks. Toile refuses a drawing far shallower
-/// than this (`Limits::max_depth`), so the bound only keeps a hostile file
-/// from growing the module's stack.
-pub(crate) const MAX_DEPTH: usize = 256;
 
 /// The places of a drawing: a [`Pos<SvgNode>`] names a node. Only the images
 /// module hands one out.
@@ -36,7 +31,7 @@ pub struct SvgTree {
     nodes: IdxVec<SvgNode, SvgItem>,
     /// Whether the text pass could read the source.
     pub source: SvgSource,
-    /// Whether a group sat deeper than [`MAX_DEPTH`].
+    /// Whether a group sat deeper than the module's depth bound.
     pub depth: SvgDepth,
 }
 
@@ -69,7 +64,7 @@ pub enum SvgSource {
     Unreadable,
 }
 
-/// Whether every group of the file sat within [`MAX_DEPTH`].
+/// Whether every group of the file sat within the module's depth bound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SvgDepth {
     Within,

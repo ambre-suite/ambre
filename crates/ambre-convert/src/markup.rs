@@ -175,15 +175,6 @@ pub enum MdList {
     Ordered,
 }
 
-/// The deepest nesting of HTML elements the markup module reads.
-///
-/// The tree builder walks the open elements to check an element's scope. A
-/// tree `n` deep thus costs `n` squared: 350 KB of nested lists takes seconds.
-/// A list nested nine levels in Google Docs opens about forty elements, so a
-/// cap four times that keeps every real fragment. Chrome caps its own tree at
-/// 512, which the budget of a paste cannot afford.
-pub(crate) const HTML_DEPTH_MAX: usize = 128;
-
 /// The places of an HTML tree: a [`Pos<HtmlNode>`] names a node. Only the
 /// markup module hands one out.
 #[derive(PartialEq, Eq)]

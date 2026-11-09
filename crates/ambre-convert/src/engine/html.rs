@@ -26,8 +26,14 @@ pub(super) fn read(html: &str) -> HtmlTree {
     parse_document(Arena::new(), ParseOpts::default()).one(html)
 }
 
-/// The deepest nesting the module reads.
-const DEPTH_MAX: usize = crate::markup::HTML_DEPTH_MAX;
+/// The deepest nesting of HTML elements the markup module reads.
+///
+/// The tree builder walks the open elements to check an element's scope. A
+/// tree `n` deep thus costs `n` squared: 350 KB of nested lists takes seconds.
+/// A list nested nine levels in Google Docs opens about forty elements, so a
+/// cap four times that keeps every real fragment. Chrome caps its own tree at
+/// 512, which the budget of a paste cannot afford.
+const DEPTH_MAX: usize = 128;
 
 /// The elements the tree builder closes on its own, and the void ones: none
 /// of them deepens the tree.
