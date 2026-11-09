@@ -8,7 +8,7 @@ use std::collections::BinaryHeap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
-use ambre_core::{Seq, Validated};
+use ambre_core::{Payload, Seq, Validated};
 use str0m::net::Transmit;
 
 use super::client::Synth;
@@ -189,7 +189,9 @@ impl Net {
                 break;
             };
             match flight.to {
-                To::Sfu => self.sfu.receive(self.now, flight.source, &flight.contents),
+                To::Sfu => self
+                    .sfu
+                    .receive(self.now, flight.source, Payload::new(flight.contents)),
                 To::Client(index) => {
                     if let Some(m) = self.members.get_mut(index) {
                         m.synth.receive(self.now, flight.source, &flight.contents);

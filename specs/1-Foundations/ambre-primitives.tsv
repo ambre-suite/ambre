@@ -3638,28 +3638,13 @@ ambre-trame | src/ui/locale.rs | crate::ui::locale | date_preview() | ret | Opti
 ambre-trame | src/ui/locale.rs | crate::ui::locale | date_preview(typed) | param | &str	free-text	what a reader is typing in the formula bar
 ambre-trame | src/ui/locale.rs | crate::ui::locale | locale_notice() | ret | Option<String>	free-text	the notice the status bar shows a reader
 ambre-trame | src/ui/locale.rs | crate::ui::locale | spelled() | ret | &str	local	the tag or the words for none, read by locale_notice() alone
-ambre-sfu | src/forward.rs | crate::forward | Member.inbox | field | Vec<(Instant,SocketAddr,Vec<u8>)>	foreign-api	the datagrams the socket read, kept as bytes until the poll hands each to str0m as a DatagramRecv
 ambre-sfu | src/forward.rs | crate::forward | Member.new_layer | field | bool	generic	fact flag: a track showed a layer the last choice did not know, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Member.touched | field | bool	generic	fact flag: the SFU wrote to the connection since its last drain, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Member::has_work() | ret | bool	generic	predicate
-ambre-sfu | src/forward.rs | crate::forward | PARALLEL_FROM | const | usize	math	threshold count of busy connections, local to the poll
 ambre-sfu | src/forward.rs | crate::forward | SPEECH_LEVEL | const | i8	foreign-api	the audio level of RFC 6464 in -dBov, as the ExtensionValues of str0m hold it
-ambre-sfu | src/forward.rs | crate::forward | Sfu::receive(contents) | param | &[u8]	foreign-api	the bytes of one datagram the socket read, which str0m parses
-ambre-sfu | src/forward.rs | crate::forward | WORKERS | const | usize	math	thread count cap, local to the poll
-ambre-sfu | src/layer.rs | crate::layer | Meter::count(payload) | param | &[u8]	foreign-api	the RTP payload str0m hands out, read for its length alone
 ambre-sfu | src/layer.rs | crate::layer | UPGRADE_MARGIN | const | f64	math	scalar multiplier of the layer choice
-ambre-sfu | src/layer.rs | crate::layer | VIDEOS_PER_RECEIVER | const | usize	math	cap count of the layer choice, the budget row of videos per receiver
 ambre-sfu | src/layer.rs | crate::layer | VIDEO_SHARE | const | f64	math	ratio of the estimate the video may take
-ambre-sfu | src/rewrite.rs | crate::rewrite | Last.picture | field | Option<u16>	foreign-api	the VP8 picture id, as the Vp8Descriptor of str0m reads and patches it
-ambre-sfu | src/rewrite.rs | crate::rewrite | Last.time | field | u32	foreign-api	the RTP timestamp, as RtpWrite of str0m takes it
-ambre-sfu | src/rewrite.rs | crate::rewrite | Last.tl0 | field | Option<u8>	foreign-api	the VP8 TL0PICIDX, as the Vp8Descriptor of str0m reads and patches it
 ambre-sfu | src/rewrite.rs | crate::rewrite | PICTURE_ID_MASK | const | u16	foreign-api	the width of a 15-bit VP8 picture id, as the Vp8Descriptor of str0m reads it
-ambre-sfu | src/rewrite.rs | crate::rewrite | Rewritten.time | field | u32	foreign-api	the RTP timestamp, as RtpWrite of str0m takes it
-ambre-sfu | src/rewrite.rs | crate::rewrite | Shift.picture | field | u16	foreign-api	the wrapping offset added to a VP8 picture id of str0m
-ambre-sfu | src/rewrite.rs | crate::rewrite | Shift.seq | field | u64	foreign-api	the wrapping offset added to the extended sequence number a SeqNo of str0m holds
-ambre-sfu | src/rewrite.rs | crate::rewrite | Shift.time | field | u32	foreign-api	the wrapping offset added to an RTP timestamp of str0m
-ambre-sfu | src/rewrite.rs | crate::rewrite | Shift.tl0 | field | u8	foreign-api	the wrapping offset added to a VP8 TL0PICIDX of str0m
-ambre-sfu | src/serve.rs | crate::serve | BATCH | const | usize	math	batch count of datagrams per turn, local to the media loop
 ambre-app | src/host/mod.rs | crate::host | dropped_item(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
 ambre-app | src/host/mod.rs | crate::host | publish(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
 ambre-bus | src/conduit.rs | crate::conduit | Shared.receiver_alive | field | AtomicBool	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
@@ -4176,46 +4161,25 @@ ambre-sfu | src/congestion.rs | crate::congestion | RTT_WEIGHT | const | f64	mat
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | <Samples as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | <Samples as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | ACKED_RATIO | const | f64	math	scalar multiplier of the acknowledged rate, the cap of an increase
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | ADDITIVE_FLOOR | const | f64	math	least step of an additive increase in bit/s, a term of the formula
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | BETA | const | f64	math	ratio of the acknowledged rate a decrease keeps
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | CAPACITY_BAND | const | f64	math	scalar multiplier of the standard deviation of the capacity
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | CAPACITY_WEIGHT | const | f64	math	smoothing weight of a capacity sample
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity.mean_bps | field | f64	math	running mean of the acknowledged rate in bit/s, a term of the variance formula
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity.variance | field | f64	math	running variance of the acknowledged rate
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::above() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::below() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::holds() | ret | bool	generic	predicate result
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | FRAME_RATE | const | f64	math	pictures per second the additive step assumes, a term of the formula
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | GROWTH | const | f64	math	growth factor per second of the target
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Group::holds() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | K_DOWN | const | f64	math	adaptation rate of the trend threshold, per millisecond
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | K_UP | const | f64	math	adaptation rate of the trend threshold, per millisecond
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | PACKET_BITS | const | f64	math	packet size in bits the additive step assumes, a term of the formula
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Point.at_ms | field | f64	math	abscissa of the least-squares fit, milliseconds since the first arrival
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Point.delay_ms | field | f64	math	ordinate of the least-squares fit, the smoothed delay in milliseconds
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | SMOOTHING | const | f64	math	smoothing weight of the accumulated delay
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | SPIKE_OFFSET | const | f64	math	offset in milliseconds above the threshold, a term of the adaptation formula
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | START_GROWTH | const | f64	math	growth factor per second of the target before its first decrease
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Sample.delta_ms | field | f64	math	delay change between two groups in milliseconds, the input of the trendline formula
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | THRESHOLD_MAX | const | f64	math	upper clamp of the trend threshold in milliseconds
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | THRESHOLD_MIN | const | f64	math	lower clamp of the trend threshold in milliseconds
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | THRESHOLD_START | const | f64	math	first trend threshold in milliseconds
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | TREND_GAIN | const | f64	math	scalar multiplier of the trend against the threshold
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline.accumulated_ms | field | f64	math	accumulated delay change in milliseconds, a term of the trendline formula
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline.previous_trend | field | f64	math	slope of the previous fit
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline.smoothed_ms | field | f64	math	smoothed accumulated delay in milliseconds, a term of the trendline formula
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline.threshold_ms | field | f64	math	adaptive threshold of the trend in milliseconds
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::adapt(modified) | param | f64	math	the trend scaled by the sample count and the gain
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::detect(trend) | param | f64	math	slope of the least-squares fit
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::slope() | ret | Option<f64>	math	slope of the least-squares fit, none on a degenerate history
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | WINDOW | const | usize	math	cap count of the points the least-squares fit reads
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | signed_ms() | ret | f64	math	signed difference of two instants in milliseconds, a term of the delay formulas
 ambre-sfu | src/forward.rs | crate::forward | Member.wants_slots | field | bool	generic	fact flag: the room carries a track of another participant, selects no mode
-ambre-sfu | src/forward.rs | crate::forward | Sfu.workers | field | usize	local	the most threads one poll runs the connections on, read by the one call that sizes the thread scope
 ambre-sfu | src/forward.rs | crate::forward | Feed::is_track() | ret | bool	generic	predicate
 ambre-sfu | src/forward.rs | crate::forward | Slot::carries() | ret | bool	generic	predicate
-ambre-sfu | src/layer.rs | crate::layer | AUDIO_SLOTS | const | usize	math	cap count of the audio slots of a receiver, the budget row of audio per receiver
-ambre-sfu | src/rewrite.rs | crate::rewrite | Clock::ticks_per_ms() | ret | u128	math	the ticks of an RTP clock in one millisecond, a conversion factor of 48 or 90
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::congested() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | DelayControl::overusing() | ret | bool	generic	predicate result
 ambre-sfu | src/forward.rs | crate::forward | Member.rechoose | field | bool	generic	fact flag: the congestion control lowered its target or changed its overuse since the last choice, selects no mode
@@ -4230,3 +4194,21 @@ ambre-crdt | src/history.rs | crate::history | Replayed::from_bool(value) | para
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | RateVariance.0 | field | f64	newtype-inner	the variance of a rate in square bit/s, the one field of its newtype
+ambre-sfu | src/forward.rs | crate::forward | <Connections as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-sfu | src/forward.rs | crate::forward | <Connections as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-sfu | src/forward.rs | crate::forward | <Datagram as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-sfu | src/forward.rs | crate::forward | <Threads as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-sfu | src/forward.rs | crate::forward | <Threads as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-sfu | src/layer.rs | crate::layer | <Slots as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-sfu | src/layer.rs | crate::layer | <Slots as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-sfu | src/rewrite.rs | crate::rewrite | <PictureId as Field>::NAME | const | &'static str	free-text	the name a value of the field prints through Debug, for a log line
+ambre-sfu | src/rewrite.rs | crate::rewrite | <PictureId as Field>::Repr | assoc | u16	newtype-inner	the number a VP8 picture id holds, at the 16 bits the Vp8Descriptor of str0m reads
+ambre-sfu | src/rewrite.rs | crate::rewrite | <Sequence as Field>::NAME | const | &'static str	free-text	the name a value of the field prints through Debug, for a log line
+ambre-sfu | src/rewrite.rs | crate::rewrite | <Sequence as Field>::Repr | assoc | u64	newtype-inner	the number an extended RTP sequence number holds, at the 64 bits a SeqNo of str0m holds
+ambre-sfu | src/rewrite.rs | crate::rewrite | <Timestamp as Field>::NAME | const | &'static str	free-text	the name a value of the field prints through Debug, for a log line
+ambre-sfu | src/rewrite.rs | crate::rewrite | <Timestamp as Field>::Repr | assoc | u32	newtype-inner	the number an RTP timestamp holds, at the 32 bits RFC 3550 fixes
+ambre-sfu | src/rewrite.rs | crate::rewrite | <Tl0Index as Field>::NAME | const | &'static str	free-text	the name a value of the field prints through Debug, for a log line
+ambre-sfu | src/rewrite.rs | crate::rewrite | <Tl0Index as Field>::Repr | assoc | u8	newtype-inner	the number a VP8 TL0PICIDX holds, at the 8 bits RFC 7741 fixes
+ambre-sfu | src/serve.rs | crate::serve | <Datagrams as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-sfu | src/serve.rs | crate::serve | <Datagrams as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds

@@ -2,6 +2,7 @@
 
 use std::time::{Duration, Instant};
 
+use ambre_core::Count;
 use str0m::bwe::Bitrate;
 use str0m::media::Rid;
 
@@ -50,13 +51,11 @@ fn an_estimate_below_every_lowest_layer_forwards_no_video() {
 
 #[test]
 fn a_receiver_gets_no_more_videos_than_the_cap() {
-    let candidates = vec![simulcast(None); VIDEOS_PER_RECEIVER + 3];
+    let cap = usize::try_from(VIDEOS_PER_RECEIVER.get()).expect("a cap that fits");
+    let candidates = vec![simulcast(None); cap + 3];
     let chosen = choose(Bitrate::mbps(100), &candidates);
-    assert_eq!(
-        chosen.iter().filter(|c| c.is_some()).count(),
-        VIDEOS_PER_RECEIVER
-    );
-    assert!(chosen.iter().skip(VIDEOS_PER_RECEIVER).all(Option::is_none));
+    assert_eq!(chosen.iter().filter(|c| c.is_some()).count(), cap);
+    assert!(chosen.iter().skip(cap).all(Option::is_none));
 }
 
 #[test]
@@ -81,7 +80,7 @@ fn the_meter_reads_the_rate_of_its_packets() {
     let mut meter = Meter::new(start);
     // 100 packets of 1250 bytes over one second: 1 Mbit/s.
     for n in 0..=100 {
-        meter.count(start + Duration::from_millis(n * 10), &[0; 1250]);
+        meter.count(start + Duration::from_millis(n * 10), Count::new(1250));
     }
     let kbps = meter.rate().as_f64() / 1000.0;
     assert!((900.0..1100.0).contains(&kbps), "measured {kbps} kbit/s");

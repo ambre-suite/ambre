@@ -8,7 +8,7 @@
 use std::net::SocketAddr;
 use std::time::Instant;
 
-use ambre_core::{Seq, Validated};
+use ambre_core::{Count, CountKind, Payload, Seq, Validated};
 use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
@@ -99,8 +99,16 @@ pub async fn run(addresses: Addresses) -> std::io::Result<()> {
     axum::serve(listener, app).await
 }
 
+/// How many datagrams one turn of the media loop reads.
+enum Datagrams {}
+
+impl CountKind for Datagrams {
+    type Repr = u32;
+    const NAME: &'static str = "DatagramCount";
+}
+
 /// The most datagrams one turn of the media loop reads before it polls the SFU.
-const BATCH: usize = 64;
+const BATCH: Count<Datagrams> = Count::new(64);
 
 /// Owns the SFU: reads the socket and the commands, and sends what the SFU answers.
 async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver<Command>) {
@@ -122,16 +130,16 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 if let Ok((n, source)) = read
                     && let Some(datagram) = buf.get(..n)
                 {
-                    sfu.receive(Instant::now(), source, datagram);
+                    sfu.receive(Instant::now(), source, Payload::new(datagram.to_vec()));
                 }
                 // Every datagram already queued goes in before one poll, so the cost of a
                 // poll spreads over a batch.
-                for _ in 0..BATCH {
+                for _ in 0..BATCH.get() {
                     let Ok((n, source)) = udp.try_recv_from(&mut buf) else {
                         break;
                     };
                     if let Some(datagram) = buf.get(..n) {
-                        sfu.receive(Instant::now(), source, datagram);
+                        sfu.receive(Instant::now(), source, Payload::new(datagram.to_vec()));
                     }
                 }
             }
