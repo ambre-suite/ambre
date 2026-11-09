@@ -23,6 +23,13 @@ a slower build is a budget missed.
 **A count of zero proves nothing**: it means the function was renamed or
 inlined, and the operation was never counted. It fails like an overrun.
 
+**A count repeats exactly.** The hash tables of the applications hash under
+a key drawn per process, and a random key moves the probes of each lookup, so
+it moves the count from run to run. The bench build therefore turns on the
+`fixed-hash-key` feature of `ambre-core`, and only this build does
+(`ARCH-087`). Two runs then count the same total, and a ceiling that is no
+budget sits 0.5 % above the count (`ambre-spec-testing.md section 2`).
+
 Run: `just instructions`. Needs `valgrind` on the path.
 """
 
@@ -296,19 +303,31 @@ def verdict(c: Ceiling, count: int) -> str | None:
     return None
 
 
+# The feature that swaps the key of every hash table for a fixed one, so a
+# count repeats. A shipped build never names it (`ARCH-087`).
+FIXED_KEY = "ambre-core/fixed-hash-key"
+
+
+def build_command(c: Ceiling) -> list[str]:
+    """The cargo command that builds the bench of `c`, under the fixed key."""
+    return [
+        "cargo",
+        "bench",
+        "-p",
+        c.crate,
+        "--bench",
+        c.bench,
+        "--features",
+        FIXED_KEY,
+        "--no-run",
+        "--message-format=json",
+    ]
+
+
 def build(c: Ceiling) -> str:
     """Build the bench of `c` and return its binary."""
     out = subprocess.run(
-        [
-            "cargo",
-            "bench",
-            "-p",
-            c.crate,
-            "--bench",
-            c.bench,
-            "--no-run",
-            "--message-format=json",
-        ],
+        build_command(c),
         cwd=ROOT,
         check=True,
         capture_output=True,

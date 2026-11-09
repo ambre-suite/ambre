@@ -43,6 +43,16 @@ CEILING = instructions.Ceiling(
 )
 
 
+class BuildCommand(unittest.TestCase):
+    def test_every_bench_builds_under_the_fixed_key(self) -> None:
+        for c in instructions.CEILINGS:
+            command = instructions.build_command(c)
+            self.assertIn("--features", command)
+            self.assertEqual(
+                command[command.index("--features") + 1], "ambre-core/fixed-hash-key"
+            )
+
+
 class Executable(unittest.TestCase):
     def test_the_bench_binary_is_found_among_the_artifacts(self) -> None:
         messages = "\n".join(
