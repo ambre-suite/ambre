@@ -300,6 +300,17 @@
 | Markup module | -- | 204 276 | new | `pulldown-cmark` and `html5ever` |
 | Images module | -- | 180 880 | new | `usvg` and `roxmltree` |
 
+* **WebP joined the images module on 2026-11-09.** Toile reads a WebP picture through the module,
+  dropped or inside an SVG file. It writes the pixels as PNG with the encoder Main already links.
+  Main's own `image` line keeps PNG and JPEG alone. `scripts/converter_build.py` then the brotli of
+  each module, on the session container, read the figures below.
+
+| Images module | Brotli | Change | Why |
+|---|---|---|---|
+| Without WebP | 180 880 | -- | `usvg` and `roxmltree` |
+| With `image` and its `webp` feature, answering PNG | 318 205 | +137 325 | the `image` decoding frame, its colour management and the PNG encoder came with the decoder: past the 300 KB budget |
+| With `image-webp` alone, answering pixels | 220 913 | +40 033 | the same pure-Rust decoder the `webp` feature wraps, called directly. Kept |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its budget and to a tight ceiling at today's figure, and adds none to the
@@ -311,7 +322,7 @@
 | Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS have families of their own | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 210 KB | 204 276 | Markdown and HTML, read | the Markdown writer, the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
-| Images | < 300 KB | 190 KB | 180 880 | SVG, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
+| Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
 | OOXML | < 900 KB | -- | not built | -- | DOCX, xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | **none exists**: the first OOXML story builds the module, and `wasm_size.py` holds it from that commit |
 | OpenDocument | < 600 KB | -- | not built | -- | ODS read, then ODT and ODP | **none exists**: the OpenDocument story builds the module, and `wasm_size.py` holds it from that commit |
 

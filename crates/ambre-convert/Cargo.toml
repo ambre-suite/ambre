@@ -19,7 +19,7 @@ crate-type = ["cdylib", "rlib"]
 tables = ["engine", "dep:csv"]
 pdf = ["engine", "dep:ambre-pdf"]
 markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
-images = ["engine", "dep:usvg", "dep:roxmltree"]
+images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp"]
 # Every family, linked in place: the host tier and the tests.
 all-families = ["tables", "pdf", "markup", "images"]
 # Set by each family: this build carries an engine and its exports.
@@ -51,6 +51,11 @@ html5ever  = { workspace = true, optional = true }
 # font stack (workspace manifest), so its tree carries no text.
 usvg       = { workspace = true, optional = true }
 roxmltree  = { workspace = true, optional = true }
+# images: the WebP decoder, pure Rust (`image-webp`), the one the `image`
+# crate's `webp` feature wraps. Called directly, without the 98 KB of brotli
+# the `image` crate adds around it. Main's own `image` line keeps PNG and JPEG
+# alone: a WebP picture reaches a board through this module.
+image-webp = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # The module's exports, and the loader the Logic thread instantiates it with.

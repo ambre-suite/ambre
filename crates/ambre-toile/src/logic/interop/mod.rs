@@ -44,7 +44,7 @@ pub use media::{
 pub(crate) use pdf_export::paint_page;
 #[cfg(feature = "pdf")]
 pub use pdf_export::{PageSize, PdfExportError, PdfPage, export_pdf, record_pdf};
-pub use raster::import_raster;
+pub use raster::{import_raster, png_of};
 pub use svg_export::export_svg;
 pub use svg_import::import_svg;
 

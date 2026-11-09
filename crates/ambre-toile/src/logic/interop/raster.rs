@@ -113,6 +113,28 @@ pub(super) fn decode_media(
     })
 }
 
+/// The PNG file of the pixels the images module decoded from a WebP picture.
+/// Main decodes PNG and JPEG alone, so the picture reaches the board, the
+/// store and the renderer as PNG, lossless.
+///
+/// # Errors
+///
+/// [`ImportError::Decode`] when the samples do not fill the size the module
+/// gave, or when the encoder refuses them.
+pub fn png_of(pixels: &ambre_convert::images::Pixels) -> Result<Vec<u8>, ImportError> {
+    let picture = image::RgbaImage::from_raw(
+        pixels.size.width.get(),
+        pixels.size.height.get(),
+        pixels.rgba.as_bytes().to_vec(),
+    )
+    .ok_or_else(|| ImportError::Decode("the decoded samples do not fill the picture".to_owned()))?;
+    let mut png = Vec::new();
+    picture
+        .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+        .map_err(|e| ImportError::Decode(e.to_string()))?;
+    Ok(png)
+}
+
 /// Map a decoded [`ImageFormat`] to its MIME string for the media entry.
 fn mime_of(format: ImageFormat) -> ambre_core::MediaType {
     ambre_core::MediaType::from(match format {

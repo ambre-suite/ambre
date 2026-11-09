@@ -62,6 +62,10 @@ pub enum Conversion {
     ReadHtml { html: String },
     /// Read an SVG file into its drawing (`toile-import-export`).
     ReadSvg { data: Payload<FileBytes> },
+    /// Decode a WebP picture into its pixels, which the Main instance cannot
+    /// decode itself (`toile-import-export`). Answered by
+    /// [`Converted::Pixels`].
+    DecodeWebp { data: Payload<FileBytes> },
 }
 
 impl Conversion {
@@ -72,7 +76,7 @@ impl Conversion {
             Self::ReadCsv { .. } | Self::WriteCsv { .. } => ConverterFamily::Tables,
             Self::WritePdf { .. } => ConverterFamily::Pdf,
             Self::ReadMarkdown { .. } | Self::ReadHtml { .. } => ConverterFamily::Markup,
-            Self::ReadSvg { .. } => ConverterFamily::Images,
+            Self::ReadSvg { .. } | Self::DecodeWebp { .. } => ConverterFamily::Images,
         }
     }
 }
@@ -94,6 +98,15 @@ pub enum Converted {
     Html(markup::HtmlTree),
     /// The drawing of an SVG file.
     Svg(images::SvgTree),
+    /// The pixels of a decoded picture.
+    Pixels(images::Pixels),
+}
+
+/// Whether `bytes` open as a WebP file: a RIFF container of the `WEBP` form.
+/// A reader asks before it chooses the images module for a picture.
+#[must_use]
+pub fn is_webp(bytes: &[u8]) -> bool {
+    bytes.get(..4) == Some(b"RIFF".as_slice()) && bytes.get(8..12) == Some(b"WEBP".as_slice())
 }
 
 /// The records of a CSV file the reader skipped.

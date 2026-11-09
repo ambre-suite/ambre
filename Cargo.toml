@@ -153,6 +153,10 @@ usvg = { version = "0.47", default-features = false }
 # parser and not two (`ambre-spec-budgets.md` section 5).
 roxmltree = "0.21"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# The WebP decoder the images converter module runs, the one `image` wraps
+# (`ambre-spec-budgets.md section 5`). Decoding only: the module never calls
+# its lossless encoder, which the tests alone use to write their fixtures.
+image-webp = { version = "0.2", default-features = false }
 
 # WASM
 gloo-net = { version = "0.7", features = ["http", "websocket"] }

@@ -13,7 +13,7 @@
 //! tree nested past the module's depth bound stops there and says so.
 
 use ambre_core::index::{Axis, IdxVec, Pos};
-use ambre_core::{FileBytes, Payload, Rgb};
+use ambre_core::{FileBytes, Image, Payload, Px, Rgb, RgbaPixels, Size};
 use serde::{Deserialize, Serialize};
 
 /// The places of a drawing: a [`Pos<SvgNode>`] names a node. Only the images
@@ -172,13 +172,17 @@ pub struct SvgImage {
     pub bounds: SvgRect,
 }
 
-/// The picture an `<image>` embeds. Toile decodes PNG and JPEG itself; the
-/// other kinds carry no bytes, since nothing reads them.
+/// The picture an `<image>` embeds. Toile decodes PNG and JPEG itself. The
+/// module decodes a WebP picture into its pixels; `Webp` is one it could not
+/// decode. The other kinds carry no bytes, since nothing reads them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SvgPicture {
     Png(Payload<FileBytes>),
     Jpeg(Payload<FileBytes>),
+    /// A WebP picture, decoded by the module.
+    WebpPixels(Pixels),
     Gif,
+    /// A WebP picture the decoder refused.
     Webp,
     /// A nested SVG document.
     Svg,
@@ -209,4 +213,13 @@ impl std::fmt::Debug for SvgText {
             .field("transform", &self.transform)
             .finish()
     }
+}
+
+/// A decoded picture: non-premultiplied RGBA8 samples, row-major, four bytes
+/// a pixel, and its size. The module answers it for a WebP picture, which
+/// the Main instance encodes as PNG for the board.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Pixels {
+    pub size: Size<Px<Image>>,
+    pub rgba: Payload<RgbaPixels>,
 }
