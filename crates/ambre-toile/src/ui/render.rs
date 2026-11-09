@@ -13,7 +13,7 @@
 //   paint_overlay -- selection bounding box + transform handles (screen space).
 // ============================================================================
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use crate::message::{
     DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, PresentMode, ShapeKind,
@@ -48,7 +48,7 @@ pub(crate) use super::walk::{paint_label_plate, rotate_about};
 pub fn missing_media(
     nodes: &[DisplayNode],
     images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
-    requested: &std::collections::HashSet<ambre_core::Validated<ambre_core::ContentHash>>,
+    requested: &ambre_core::hash::HashSet<ambre_core::Validated<ambre_core::ContentHash>>,
 ) -> Vec<ambre_core::Validated<ambre_core::ContentHash>> {
     let mut out: Vec<ambre_core::Validated<ambre_core::ContentHash>> = Vec::new();
     for node in nodes {
@@ -810,8 +810,8 @@ mod tests {
             Scene {
                 viewport: &vp,
                 palette: &LIGHT_PALETTE,
-                images: &HashMap::new(),
-                anim: &HashMap::new(),
+                images: &HashMap::default(),
+                anim: &HashMap::default(),
             },
             BoardWalk {
                 font_cx: &mut font_cx,
@@ -858,7 +858,7 @@ mod tests {
             ],
         };
         // Override "a" with a half-opacity blue fill at a tweened rect; leave "b".
-        let mut anim = HashMap::new();
+        let mut anim = HashMap::default();
         anim.insert(
             Id::<Element>::from_text("a".into()),
             AnimatedElement {
@@ -878,7 +878,7 @@ mod tests {
             Scene {
                 viewport: &vp,
                 palette: &LIGHT_PALETTE,
-                images: &HashMap::new(),
+                images: &HashMap::default(),
                 anim: &anim,
             },
             BoardWalk {
@@ -939,8 +939,8 @@ mod tests {
             Scene {
                 viewport: vp,
                 palette: &LIGHT_PALETTE,
-                images: &HashMap::new(),
-                anim: &HashMap::new(),
+                images: &HashMap::default(),
+                anim: &HashMap::default(),
             },
             BoardWalk {
                 font_cx: &mut font_cx,
@@ -1196,7 +1196,7 @@ mod tests {
             // Not a picture: it names no address at all.
             elem("d", DisplayGeom::Rect, b),
         ];
-        let mut images = HashMap::new();
+        let mut images = HashMap::default();
         images.insert(
             hh('1'),
             DecodedImage {
@@ -1204,7 +1204,7 @@ mod tests {
                 size: ambre_core::Size::new(Px::new(1), Px::new(1)),
             },
         );
-        let asked = missing_media(&nodes, &images, &std::collections::HashSet::new());
+        let asked = missing_media(&nodes, &images, &ambre_core::hash::HashSet::default());
         assert_eq!(asked, vec![hh('2')]);
     }
 
@@ -1215,12 +1215,16 @@ mod tests {
     fn a_pending_request_is_not_repeated() {
         let b = Rect::new(0.0, 0.0, 10.0, 10.0);
         let nodes = vec![elem("a", DisplayGeom::Image(Some(hh('1'))), b)];
-        let mut pending = std::collections::HashSet::new();
+        let mut pending = ambre_core::hash::HashSet::default();
         pending.insert(hh('1'));
-        assert!(missing_media(&nodes, &HashMap::new(), &pending).is_empty());
+        assert!(missing_media(&nodes, &HashMap::default(), &pending).is_empty());
         // With nothing pending, the same list does ask.
         assert_eq!(
-            missing_media(&nodes, &HashMap::new(), &std::collections::HashSet::new()),
+            missing_media(
+                &nodes,
+                &HashMap::default(),
+                &ambre_core::hash::HashSet::default()
+            ),
             vec![hh('1')]
         );
     }
@@ -1243,7 +1247,7 @@ mod tests {
             ],
         };
         // Only "h1" is decoded; "h2" is still pending.
-        let mut images = HashMap::new();
+        let mut images = HashMap::default();
         images.insert(
             hh('1'),
             DecodedImage {
@@ -1261,7 +1265,7 @@ mod tests {
                 viewport: &vp,
                 palette: &LIGHT_PALETTE,
                 images: &images,
-                anim: &HashMap::new(),
+                anim: &HashMap::default(),
             },
             BoardWalk {
                 font_cx: &mut font_cx,
@@ -1315,7 +1319,7 @@ mod tests {
                 preview: None,
                 find_hits: &[],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -1353,7 +1357,7 @@ mod tests {
                 preview: None,
                 find_hits: &[],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -1401,7 +1405,7 @@ mod tests {
                 preview: None,
                 find_hits: &[],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -1530,7 +1534,7 @@ mod tests {
                 preview: None,
                 find_hits: &[Id::<Element>::from_text("r".into())],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Presenting,
@@ -1559,7 +1563,7 @@ mod tests {
             )],
         };
         let preview_bounds = Rect::new(0.0, 0.0, 90.0, 70.0);
-        let mut gesture = HashMap::new();
+        let mut gesture = HashMap::default();
         gesture.insert(
             Id::<Element>::from_text("r".into()),
             AnimatedElement {
@@ -1632,7 +1636,7 @@ mod tests {
                 preview: None,
                 find_hits: &[],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: Some(&selected),
             },
             PresentMode::Editing,
@@ -1687,7 +1691,7 @@ mod tests {
                 preview: None,
                 find_hits: &[],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -1724,7 +1728,7 @@ mod tests {
                 preview: None,
                 find_hits: &[],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: Some(&selected),
             },
             PresentMode::Editing,
@@ -1760,7 +1764,7 @@ mod tests {
                 preview: None,
                 find_hits: &hits,
                 find_focus: Some(&Id::<Element>::from_text("b".into())),
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -1802,7 +1806,7 @@ mod tests {
                 preview: None,
                 find_hits: &hits,
                 find_focus: Some(&Id::<Element>::from_text("b".into())),
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -1875,7 +1879,7 @@ mod tests {
                 preview: None,
                 find_hits: &[],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -2404,7 +2408,7 @@ mod tests {
                 preview: None,
                 find_hits: &[],
                 find_focus: None,
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -2454,7 +2458,7 @@ mod tests {
                 preview: None,
                 find_hits: &hits,
                 find_focus: Some(&hits[0]),
-                gesture: &HashMap::new(),
+                gesture: &HashMap::default(),
                 arrow: None,
             },
             PresentMode::Editing,
@@ -2500,7 +2504,7 @@ mod tests {
                     preview: Some(p),
                     find_hits: &[],
                     find_focus: None,
-                    gesture: &HashMap::new(),
+                    gesture: &HashMap::default(),
                     arrow: None,
                 },
                 PresentMode::Editing,

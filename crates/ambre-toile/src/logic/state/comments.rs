@@ -36,8 +36,8 @@
 //! (`TOILE-FEAT-017`).
 
 use ambre_core::StoredAsI64;
+use ambre_core::hash::HashSet;
 use ambre_core::index::{Len, Pos};
-use std::collections::HashSet;
 
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 

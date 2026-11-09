@@ -67,8 +67,8 @@ mod schema_shape;
 mod schema_reading;
 
 use ambre_core::Count;
+use ambre_core::hash::{HashMap, HashSet};
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
 
 use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
@@ -366,10 +366,10 @@ impl ToileState {
         Self {
             doc,
             index: SpatialIndex::default(),
-            bounds: HashMap::new(),
+            bounds: HashMap::default(),
             layers: Vec::new(),
-            parents: HashMap::new(),
-            members: HashMap::new(),
+            parents: HashMap::default(),
+            members: HashMap::default(),
             touched,
             _watch: watch,
             wires: std::cell::RefCell::default(),
@@ -383,7 +383,7 @@ impl ToileState {
             history,
             my_user_id: None,
             my_name: None,
-            presence: HashMap::new(),
+            presence: HashMap::default(),
             now: Instant::<PageLoad>::new(0.0),
             present: PresentMode::Editing,
             playback: PlaybackState::default(),

@@ -5,7 +5,7 @@
 //! R-tree caches.
 
 use ambre_core::Count;
-use std::collections::HashSet;
+use ambre_core::hash::HashSet;
 
 use ambre_core::id::{Element, Id};
 use kurbo::Rect;
@@ -73,7 +73,7 @@ impl ToileState {
         members = members
             .iter()
             .filter(|m| {
-                let mut sub = HashSet::new();
+                let mut sub = HashSet::default();
                 self.collect_subtree(m, &mut sub);
                 sub.remove(*m);
                 !members.iter().any(|o| o != *m && sub.contains(o))
@@ -182,7 +182,7 @@ impl ToileState {
         let mut unbound = Vec::new();
         let mut not_a_group = None;
         let mut frames = Vec::new();
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         for group in groups {
             if !seen.insert(group) {
                 continue;
@@ -613,7 +613,7 @@ impl ToileState {
     /// can write a group into its own subtree, so each group is entered once
     /// (`TOILE-276`).
     pub(super) fn collect_leaves(&self, id: &Id<Element>, out: &mut HashSet<Id<Element>>) {
-        self.collect_leaves_once(id, out, &mut HashSet::new());
+        self.collect_leaves_once(id, out, &mut HashSet::default());
     }
 
     /// [`collect_leaves`](Self::collect_leaves), skipping a group already in

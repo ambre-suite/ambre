@@ -19,6 +19,14 @@ fixtures = []
 # downstream test names this feature in its `[dev-dependencies]`, and nowhere
 # else: `tests/testing_feature.rs` refuses any other table that names it.
 testing = []
+# foldhash's fixed key in place of the key drawn per process (`src/hash.rs`).
+# A random key moves the probes of each lookup, so a count of instructions
+# moves from run to run. `scripts/instructions.py` alone names it, on its
+# command line: every peer would share this key, so a shipped build that
+# carried it would reopen HashDoS. It refuses to compile on wasm32, and
+# `tests/fixed_hash_key_feature.rs` refuses any manifest or other command line
+# that names it (`ARCH-087`).
+fixed-hash-key = []
 
 [dependencies]
 # The sealed bytes of `encoded` travel as URL-safe base64, decoded when the
@@ -43,6 +51,13 @@ subtle = { workspace = true }
 # raw `[u8; 32]` would serialize as 32 JSON integers and defeat the readable
 # diff the sidecar exists for.
 hex = { workspace = true, features = ["serde"] }
+# The hash tables of every application (`src/hash.rs`, `ARCH-087`): foldhash
+# under a key drawn once per process from the platform entropy source. A peer
+# chooses the keys, so a key it can learn lets it force collisions. SipHash,
+# the std default, cost about a sixth of the undo of a Trame block delete.
+# Both are pure Rust and already in the lock, getrandom through uuid.
+foldhash  = { workspace = true }
+getrandom = { workspace = true }
 
 [dev-dependencies]
 postcard = { workspace = true }

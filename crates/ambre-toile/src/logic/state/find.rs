@@ -43,7 +43,7 @@ impl ToileState {
     /// concurrently dropped `layers` entry therefore never hides a hit.
     fn find_hits(&self, query: &FindQuery<FindOptions>) -> Vec<Id<Element>> {
         let mut hits = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = ambre_core::hash::HashSet::default();
         for node in &self.layers {
             if let NodeId::Element(id) = node
                 && seen.insert(id.clone())

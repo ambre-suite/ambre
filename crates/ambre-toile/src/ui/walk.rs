@@ -15,7 +15,7 @@
 // `crate_boundaries.py` holds.
 // ============================================================================
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 use std::sync::LazyLock;
 
 use crate::message::{

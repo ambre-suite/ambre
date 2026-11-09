@@ -16,8 +16,8 @@
     reason = "a bench aborts on a fixture it cannot run"
 )]
 
+use ambre_core::hash::HashMap;
 use ambre_core::{Board, Px};
-use std::collections::HashMap;
 use std::hint::black_box;
 
 use ambre_canvas::{TextCache, Theme};
@@ -203,8 +203,8 @@ fn walk(
         Scene {
             viewport,
             palette: Theme::Light.palette(),
-            images: &HashMap::new(),
-            anim: &HashMap::new(),
+            images: &HashMap::default(),
+            anim: &HashMap::default(),
         },
         BoardWalk {
             font_cx,

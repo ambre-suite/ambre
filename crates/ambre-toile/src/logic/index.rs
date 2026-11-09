@@ -6,7 +6,7 @@
 //! rebuild must yield the same visible set as the incremental path -- the
 //! index-equivalence invariant, proven by the property test at the bottom.
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use kurbo::{Point, Rect};
 use rstar::{AABB, RTree, RTreeObject};

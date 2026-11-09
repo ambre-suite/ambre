@@ -9,8 +9,8 @@
 //! never synced. This mirrors the durable-intent vs momentary-gesture split
 //! already used for presence (`toile-presence`).
 
+use ambre_core::hash::HashSet;
 use ambre_core::index::{Len, Pos};
-use std::collections::HashSet;
 
 use ambre_core::id::{Element, Frame, Id, User};
 use ambre_core::{Char, char_len};
@@ -790,7 +790,7 @@ mod pdf_tests {
             ambre_canvas::Theme::Light.palette(),
             &mut ambre_draw::FontContext::default(),
             &mut ambre_canvas::TextCache::new(),
-            &std::collections::HashMap::new(),
+            &ambre_core::hash::HashMap::default(),
         );
         s
     }
@@ -887,8 +887,8 @@ mod pdf_tests {
             crate::ui::render::Scene {
                 viewport: &pages[0].viewport,
                 palette: ambre_canvas::Theme::Light.palette(),
-                images: &std::collections::HashMap::new(),
-                anim: &std::collections::HashMap::new(),
+                images: &ambre_core::hash::HashMap::default(),
+                anim: &ambre_core::hash::HashMap::default(),
             },
             crate::ui::walk::BoardWalk {
                 font_cx: &mut ambre_draw::FontContext::default(),
