@@ -281,6 +281,7 @@
   holds its ceiling apart and never adds it to the first download. On 4G at 20 Mbit/s, 420 KB
   takes 0.17 s: the first export waits that long once. The split below replaced this row on
   2026-11-09.
+* **The ceiling of Main came down to 2.72 MB on 2026-11-09**, with the split below.
 * **The converters split by format family on 2026-11-09.** Each family is its own module, fetched
   on the first conversion of that family and checked against its own digest
   (`ambre-spec-architecture.md section 2`, the converter modules). Prose's Markdown and HTML
@@ -288,12 +289,16 @@
   then `scripts/wasm_size.py`, on the session container, read the figures below. The Main figure
   before is the same build on the parent commit.
 
-| Artefact | Brotli, 2026-11-09 |
-|---|---|
-| Tables module | 43 317 |
-| PDF module | 412 507 |
-| Markup module | 204 276 |
-| Images module | 180 880 |
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 949 129 | 2 712 212 | -236 917 | `pulldown-cmark`, `html5ever`, `usvg` and `roxmltree` left; the trees the modules answer came in |
+| Sync | 355 038 | 355 660 | +622 | one digest and one module name per family |
+| First download | 3 304 167 | 3 067 872 | -236 295 | Main plus Sync |
+| Converter module | 419 468 | -- | gone | split into the four modules below |
+| Tables module | -- | 43 318 | new | `csv` |
+| PDF module | -- | 412 507 | new | `krilla` and the draw list it replays |
+| Markup module | -- | 204 276 | new | `pulldown-cmark` and `html5ever` |
+| Images module | -- | 180 880 | new | `usvg` and `roxmltree` |
 
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
@@ -303,7 +308,7 @@
 
 | Module | Budget, brotli | Ceiling | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
 |---|---|---|---|---|---|---|
-| Tables | < 100 KB | 50 KB | 43 317 | CSV, read and write | TSV; xlsx and ODS have families of their own | `scripts/wasm_size.py`, run by `just size` |
+| Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS have families of their own | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 210 KB | 204 276 | Markdown and HTML, read | the Markdown writer, the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 190 KB | 180 880 | SVG, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |

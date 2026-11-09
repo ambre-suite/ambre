@@ -17,6 +17,7 @@
 //!       `ARCH-034`);
 //!     * a claimed shape the site lacks, and the three privacy refusals
 //!       (`ARCH-036` to `ARCH-040`);
+//!     * a `math` line on a name that ends on a unit (`ARCH-084`);
 //!     * each refusal the code alone settles (`ARCH-037`, `ARCH-045` to
 //!       `ARCH-049`, `NEWTYPE-001`). A `Deref` to a primitive is one, and a
 //!       secret read or wiped outside its module is another. So are a sink
@@ -48,6 +49,7 @@ mod files;
 mod newtypes;
 mod records;
 mod run;
+mod units;
 mod unwraps;
 
 use std::path::{Path, PathBuf};

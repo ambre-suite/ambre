@@ -13,7 +13,7 @@ graph cargo resolves for each instance alone, on the wasm target, with its
 normal dependencies: `cargo tree -p <crate> --target wasm32-unknown-unknown
 -e normal`. A crate of `CONVERTERS` in that graph is a breach (`ARCH-078`).
 
-Each module holds its own family alone (`ARCH-084`): a user who exports a CSV
+Each module holds its own family alone (`ARCH-085`): a user who exports a CSV
 never downloads the PDF writer. So the gate also reads the graph of
 `ambre-convert` with each family's feature alone, as
 `scripts/converter_build.py` builds it, and refuses a converter of another

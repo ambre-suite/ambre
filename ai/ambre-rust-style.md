@@ -159,8 +159,8 @@
   the source hands one (`ARCH-076`).
 
   The gate checks the category word. It also refutes a `newtype-inner` or a `trait` line whose
-  site lacks the shape stated below (`ARCH-036`). It refuses eight more defects, whatever the line
-  says:
+  site lacks the shape stated below (`ARCH-036`). It refutes a `math` line whose name ends on a
+  unit, such as `delay_ms` (`ARCH-084`). It refuses eight more defects, whatever the line says:
   1. a `Deref` or a `DerefMut` to a primitive (`ARCH-037`);
   2. a `local` line on a site that is not private (`ARCH-038`);
   3. a `bool` field that is not private, unless its line is `foreign-api` (`ARCH-039`);

@@ -125,7 +125,7 @@ mod tests {
     use crate::message::DocChar;
     use ambre_core::index::Pos;
 
-    /// `ARCH-085`: a paste of Ambre's own bytes reads no HTML, so it waits on
+    /// `ARCH-086`: a paste of Ambre's own bytes reads no HTML, so it waits on
     /// no module. The same HTML from another application waits on the markup
     /// module.
     #[test]

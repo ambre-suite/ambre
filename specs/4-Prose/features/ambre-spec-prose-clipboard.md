@@ -140,7 +140,7 @@ fn paste_clipboard(&mut self, blob: ClipboardBlob, source: PasteSource);
 | anything else | the plain text: one paragraph per line, control characters dropped |
 
 **Reading HTML.** The parse runs on the Logic thread, in the markup converter module
-(`ARCH-085`). A tokenizer pass first measures the nesting depth. A fragment deeper than 128
+(`ARCH-086`). A tokenizer pass first measures the nesting depth. A fragment deeper than 128
 elements is not built (`PROSE-UI-221`), since the tree builder costs the square of the depth. The
 WHATWG tree builder of `html5ever` then fills an arena, and Prose walks it once, iteratively,
 keeping an allow-list.
