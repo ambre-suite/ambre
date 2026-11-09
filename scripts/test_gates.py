@@ -181,7 +181,7 @@ class GatesFailWithNoFlag(unittest.TestCase):
 
     def test_converter_boundary(self) -> None:
         self.fails("converter_boundary", [
-            mock.patch.object(converter_boundary, "linked", lambda crate: [crate, "krilla"]),
+            mock.patch.object(converter_boundary, "linked", lambda crate, features=None: [crate, "krilla"]),
         ])
 
     def test_schema_freeze(self) -> None:
