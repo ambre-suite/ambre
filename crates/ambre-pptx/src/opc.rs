@@ -17,7 +17,7 @@
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Write};
 
-use ambre_core::{Count, FileBytes, Octets, Payload, Rule, Validated};
+use ambre_core::{Count, CountKind, FileBytes, Octets, Payload, PayloadKind, Rule, Validated};
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use zip::write::SimpleFileOptions;
@@ -37,8 +37,23 @@ const NS_RELATIONSHIPS: &str = "http://schemas.openxmlformats.org/package/2006/r
 /// The content type of a relationships part.
 const RELATIONSHIPS_TYPE: &str = "application/vnd.openxmlformats-package.relationships+xml";
 
+/// The parts of one package, counted.
+pub enum PackageParts {}
+
+impl CountKind for PackageParts {
+    type Repr = u32;
+    const NAME: &'static str = "PackagePartCount";
+}
+
 /// The most parts a package may hold before the reader refuses it.
-const MAX_PARTS: usize = 10_000;
+const MAX_PARTS: Count<PackageParts> = Count::<PackageParts>::new(10_000);
+
+/// The bytes of one part of a package: `Payload<PartBytes>`.
+pub enum PartBytes {}
+
+impl PayloadKind for PartBytes {
+    const NAME: &'static str = "PartBytes";
+}
 
 /// The most bytes the parts of a package may unpack to before the reader
 /// refuses it. A zip of a few kilobytes can claim gigabytes, so the reader
@@ -175,7 +190,7 @@ impl Source {
         match self {
             Self::Package => Validated::<PartName>::parse("/_rels/.rels"),
             Self::Part(name) => {
-                let (dir, file) = split_dir(name.as_str());
+                let (dir, file) = (dir_of(name), file_of(name));
                 Validated::<PartName>::parse(format!("{dir}_rels/{file}.rels"))
             }
         }
@@ -186,7 +201,7 @@ impl Source {
     fn base(&self) -> &str {
         match self {
             Self::Package => "/",
-            Self::Part(name) => split_dir(name.as_str()).0,
+            Self::Part(name) => dir_of(name),
         }
     }
 }
@@ -203,7 +218,7 @@ pub struct Relationship {
 struct HeldPart {
     name: Validated<PartName>,
     content_type: Validated<ContentType>,
-    data: Vec<u8>,
+    data: Payload<PartBytes>,
 }
 
 /// The writer of a package: parts, then relationships between them, then the
@@ -227,7 +242,7 @@ impl PackageWriter {
         &mut self,
         name: Validated<PartName>,
         content_type: Validated<ContentType>,
-        data: Vec<u8>,
+        data: Payload<PartBytes>,
     ) {
         match self.parts.iter_mut().find(|p| p.name == name) {
             Some(held) => {
@@ -297,11 +312,11 @@ impl PackageWriter {
         // saves nothing.
         let stored = deflated.compression_method(CompressionMethod::Stored);
         zip.start_file(CONTENT_TYPES, deflated)?;
-        zip.write_all(&self.content_types()?)?;
+        zip.write_all(self.content_types()?.as_bytes())?;
         for (source, list) in &self.relationships {
             let name = source.relationships_part()?;
             zip.start_file(entry_name(&name), deflated)?;
-            zip.write_all(&relationships_xml(source, list)?)?;
+            zip.write_all(relationships_xml(source, list)?.as_bytes())?;
         }
         for part in &self.parts {
             let options = if part.content_type.as_str().starts_with("image/") {
@@ -310,7 +325,7 @@ impl PackageWriter {
                 deflated
             };
             zip.start_file(entry_name(&part.name), options)?;
-            zip.write_all(&part.data)?;
+            zip.write_all(part.data.as_bytes())?;
         }
         let bytes = zip.finish()?.into_inner();
         Ok(Payload::new(bytes))
@@ -322,7 +337,7 @@ impl PackageWriter {
 
     /// The content types part: a default for the relationships parts, and an
     /// override for every part the writer holds.
-    fn content_types(&self) -> Result<Vec<u8>, OpcError> {
+    fn content_types(&self) -> Result<Payload<PartBytes>, OpcError> {
         let mut xml = Xml::part();
         xml.open("Types", &[("xmlns", NS_CONTENT_TYPES)]);
         xml.leaf(
@@ -343,16 +358,21 @@ impl PackageWriter {
             );
         }
         xml.close("Types");
-        xml.finish().map_err(|e| OpcError::Xml(e.to_string()))
+        xml.finish()
+            .map(Payload::new)
+            .map_err(|e| OpcError::Xml(e.to_string()))
     }
 }
 
 /// The relationships part of `source`, each target written relative to it.
-fn relationships_xml(source: &Source, list: &[Relationship]) -> Result<Vec<u8>, OpcError> {
+fn relationships_xml(
+    source: &Source,
+    list: &[Relationship],
+) -> Result<Payload<PartBytes>, OpcError> {
     let mut xml = Xml::part();
     xml.open("Relationships", &[("xmlns", NS_RELATIONSHIPS)]);
     for rel in list {
-        let target = relative_target(source.base(), rel.target.as_str());
+        let target = relative_target(source, &rel.target);
         xml.leaf(
             "Relationship",
             &[
@@ -363,7 +383,9 @@ fn relationships_xml(source: &Source, list: &[Relationship]) -> Result<Vec<u8>, 
         );
     }
     xml.close("Relationships");
-    xml.finish().map_err(|e| OpcError::Xml(e.to_string()))
+    xml.finish()
+        .map(Payload::new)
+        .map_err(|e| OpcError::Xml(e.to_string()))
 }
 
 /// The name of the zip entry of a part: the part name without its leading
@@ -372,20 +394,31 @@ fn entry_name(name: &Validated<PartName>) -> &str {
     name.as_str().trim_start_matches('/')
 }
 
-/// The directory of a part name with its closing slash, and the file name.
-fn split_dir(name: &str) -> (&str, &str) {
-    match name.rfind('/') {
-        Some(at) => name.split_at(at + 1),
-        None => ("/", name),
-    }
+/// The directory of a part name, with its closing slash.
+fn dir_of(name: &Validated<PartName>) -> &str {
+    let text = name.as_str();
+    text.rfind('/')
+        .and_then(|at| text.get(..=at))
+        .unwrap_or("/")
 }
 
-/// The path from the directory `base` to the part `target`, as a
-/// relationship writes it: `../slideLayouts/slideLayout1.xml` from
-/// `/ppt/slides/`.
-fn relative_target(base: &str, target: &str) -> String {
-    let from: Vec<&str> = base.split('/').filter(|s| !s.is_empty()).collect();
-    let to: Vec<&str> = target.split('/').filter(|s| !s.is_empty()).collect();
+/// The last segment of a part name: its file name.
+fn file_of(name: &Validated<PartName>) -> &str {
+    let text = name.as_str();
+    text.rfind('/')
+        .and_then(|at| text.get(at + 1..))
+        .unwrap_or(text)
+}
+
+/// The path from `source` to the part `target`, as a relationship writes
+/// it: `../slideLayouts/slideLayout1.xml` from a slide.
+fn relative_target(source: &Source, target: &Validated<PartName>) -> String {
+    let from: Vec<&str> = source.base().split('/').filter(|s| !s.is_empty()).collect();
+    let to: Vec<&str> = target
+        .as_str()
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
     let (to_dirs, file) = match to.split_last() {
         Some((file, dirs)) => (dirs, *file),
         None => (&[][..], ""),
@@ -401,14 +434,13 @@ fn relative_target(base: &str, target: &str) -> String {
     path.join("/")
 }
 
-/// The part a relationship target names, resolved against the directory
-/// `base`: `..` climbs one directory, and a target that opens on `/` is
-/// absolute.
-fn resolve_target(base: &str, target: &str) -> Result<Validated<PartName>, OpcError> {
+/// The part a relationship target names, resolved against `source`: `..`
+/// climbs one directory, and a target that opens on `/` is absolute.
+fn resolve_target(source: &Source, target: &str) -> Result<Validated<PartName>, OpcError> {
     let mut path: Vec<&str> = if target.starts_with('/') {
         Vec::new()
     } else {
-        base.split('/').filter(|s| !s.is_empty()).collect()
+        source.base().split('/').filter(|s| !s.is_empty()).collect()
     };
     for segment in target.split('/').filter(|s| !s.is_empty() && *s != ".") {
         if segment == ".." {
@@ -427,7 +459,7 @@ fn resolve_target(base: &str, target: &str) -> Result<Validated<PartName>, OpcEr
 /// A package read whole into memory: every part, under the size bound.
 #[derive(Debug)]
 pub struct Package {
-    parts: BTreeMap<Validated<PartName>, Payload<FileBytes>>,
+    parts: BTreeMap<Validated<PartName>, Payload<PartBytes>>,
     content_types: BTreeMap<Validated<PartName>, Validated<ContentType>>,
 }
 
@@ -454,7 +486,7 @@ impl Package {
     /// As [`Package::open`], with [`OpcError::TooLarge`] past `bound`.
     pub fn open_within(bytes: &Payload<FileBytes>, bound: Count<Octets>) -> Result<Self, OpcError> {
         let mut archive = ZipArchive::new(Cursor::new(bytes.as_bytes()))?;
-        if archive.len() > MAX_PARTS {
+        if Count::<PackageParts>::of(archive.len()) > MAX_PARTS {
             return Err(OpcError::TooLarge(bound));
         }
         let mut left = bound.get();
@@ -474,13 +506,13 @@ impl Package {
                 return Err(OpcError::TooLarge(bound));
             }
             left -= read;
-            parts.insert(name, Payload::new(data));
+            parts.insert(name, Payload::<PartBytes>::new(data));
         }
         let types_name = Validated::<PartName>::parse(format!("/{CONTENT_TYPES}"))?;
         let types = parts
             .get(&types_name)
             .ok_or_else(|| OpcError::Malformed("the package holds no content types".into()))?;
-        let content_types = read_content_types(types.as_bytes(), parts.keys())?;
+        let content_types = read_content_types(types, parts.keys())?;
         Ok(Self {
             parts,
             content_types,
@@ -489,7 +521,7 @@ impl Package {
 
     /// The bytes of the part `name`, or `None` when the package lacks it.
     #[must_use]
-    pub fn part(&self, name: &Validated<PartName>) -> Option<&Payload<FileBytes>> {
+    pub fn part(&self, name: &Validated<PartName>) -> Option<&Payload<PartBytes>> {
         self.parts.get(name)
     }
 
@@ -518,7 +550,7 @@ impl Package {
             return Ok(Vec::new());
         };
         let mut out = Vec::new();
-        for attrs in elements(part.as_bytes(), b"Relationship")? {
+        for attrs in elements(part, "Relationship")? {
             // An external target is no part of the package: a hyperlink.
             if attrs.get("TargetMode").is_some_and(|m| m == "External") {
                 continue;
@@ -531,7 +563,7 @@ impl Package {
             out.push(Relationship {
                 id: Validated::<RelationshipId>::parse(field("Id")?)?,
                 kind: Validated::<RelationshipType>::parse(field("Type")?)?,
-                target: resolve_target(source.base(), &field("Target")?)?,
+                target: resolve_target(source, &field("Target")?)?,
             });
         }
         Ok(out)
@@ -541,11 +573,11 @@ impl Package {
 /// The content type of every part: its override, else the default of its
 /// extension. A part neither names has none.
 fn read_content_types<'a>(
-    xml: &[u8],
+    xml: &Payload<PartBytes>,
     names: impl Iterator<Item = &'a Validated<PartName>>,
 ) -> Result<BTreeMap<Validated<PartName>, Validated<ContentType>>, OpcError> {
     let mut defaults = BTreeMap::new();
-    for attrs in elements(xml, b"Default")? {
+    for attrs in elements(xml, "Default")? {
         if let (Some(ext), Some(ct)) = (attrs.get("Extension"), attrs.get("ContentType")) {
             defaults.insert(
                 ext.to_ascii_lowercase(),
@@ -554,7 +586,7 @@ fn read_content_types<'a>(
         }
     }
     let mut overrides = BTreeMap::new();
-    for attrs in elements(xml, b"Override")? {
+    for attrs in elements(xml, "Override")? {
         if let (Some(name), Some(ct)) = (attrs.get("PartName"), attrs.get("ContentType")) {
             overrides.insert(
                 Validated::<PartName>::parse(name.clone())?,
@@ -565,8 +597,9 @@ fn read_content_types<'a>(
     let mut out = BTreeMap::new();
     for name in names {
         let by_extension = || {
-            let (_, file) = split_dir(name.as_str());
-            let ext = file.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+            let ext = file_of(name)
+                .rsplit_once('.')
+                .map(|(_, e)| e.to_ascii_lowercase())?;
             defaults.get(&ext).cloned()
         };
         if let Some(ct) = overrides.get(name).cloned().or_else(by_extension) {
@@ -578,13 +611,18 @@ fn read_content_types<'a>(
 
 /// The attributes of every element of the local name `local` in `xml`, in
 /// document order, unescaped.
-fn elements(xml: &[u8], local: &[u8]) -> Result<Vec<BTreeMap<String, String>>, OpcError> {
-    let mut reader = Reader::from_reader(xml);
+fn elements(
+    xml: &Payload<PartBytes>,
+    local: &str,
+) -> Result<Vec<BTreeMap<String, String>>, OpcError> {
+    let mut reader = Reader::from_reader(xml.as_bytes());
     let mut buf = Vec::new();
     let mut out = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e) | Event::Empty(e)) if e.local_name().as_ref() == local => {
+            Ok(Event::Start(e) | Event::Empty(e))
+                if e.local_name().as_ref() == local.as_bytes() =>
+            {
                 let mut attrs = BTreeMap::new();
                 for attr in e.attributes() {
                     let attr = attr.map_err(|err| OpcError::Xml(err.to_string()))?;
@@ -640,35 +678,50 @@ mod tests {
 
     #[test]
     fn a_target_is_written_relative_to_its_source() {
+        let part = |text: &str| Source::Part(name(text));
         assert_eq!(
-            relative_target("/ppt/slides/", "/ppt/slideLayouts/slideLayout1.xml"),
+            relative_target(
+                &part("/ppt/slides/slide1.xml"),
+                &name("/ppt/slideLayouts/slideLayout1.xml")
+            ),
             "../slideLayouts/slideLayout1.xml"
         );
         assert_eq!(
-            relative_target("/ppt/", "/ppt/slides/slide1.xml"),
+            relative_target(
+                &part("/ppt/presentation.xml"),
+                &name("/ppt/slides/slide1.xml")
+            ),
             "slides/slide1.xml"
         );
         assert_eq!(
-            relative_target("/", "/ppt/presentation.xml"),
+            relative_target(&Source::Package, &name("/ppt/presentation.xml")),
             "ppt/presentation.xml"
         );
     }
 
     #[test]
     fn a_relative_target_resolves_back_to_its_part() {
-        for (base, target) in [
-            ("/ppt/slides/", "/ppt/slideLayouts/slideLayout1.xml"),
-            ("/ppt/", "/ppt/slides/slide1.xml"),
-            ("/", "/docProps/core.xml"),
-            ("/ppt/notesSlides/", "/ppt/media/image1.png"),
+        for (source, target) in [
+            (
+                Source::Part(name("/ppt/slides/s.xml")),
+                "/ppt/slideLayouts/slideLayout1.xml",
+            ),
+            (Source::Part(name("/ppt/p.xml")), "/ppt/slides/slide1.xml"),
+            (Source::Package, "/docProps/core.xml"),
+            (
+                Source::Part(name("/ppt/notesSlides/n.xml")),
+                "/ppt/media/image1.png",
+            ),
         ] {
-            let written = relative_target(base, target);
+            let written = relative_target(&source, &name(target));
             assert_eq!(
-                resolve_target(base, &written).expect("resolves").as_str(),
+                resolve_target(&source, &written)
+                    .expect("resolves")
+                    .as_str(),
                 target
             );
         }
-        assert!(resolve_target("/", "../outside.xml").is_err());
+        assert!(resolve_target(&Source::Package, "../outside.xml").is_err());
     }
 
     #[test]
@@ -676,8 +729,8 @@ mod tests {
         let mut w = PackageWriter::new();
         let doc = name("/doc/main.xml");
         let other = name("/doc/sub/other.xml");
-        w.add_part(doc.clone(), xml_type(), b"<a/>".to_vec());
-        w.add_part(other.clone(), xml_type(), b"<b/>".to_vec());
+        w.add_part(doc.clone(), xml_type(), Payload::new(b"<a/>".to_vec()));
+        w.add_part(other.clone(), xml_type(), Payload::new(b"<b/>".to_vec()));
         let first = w.relate(&Source::Package, kind(), &doc).expect("relates");
         let second = w
             .relate(&Source::Part(doc.clone()), kind(), &other)
@@ -700,7 +753,7 @@ mod tests {
     fn a_relationship_to_a_missing_part_is_refused() {
         let mut w = PackageWriter::new();
         let doc = name("/doc/main.xml");
-        w.add_part(doc, xml_type(), Vec::new());
+        w.add_part(doc, xml_type(), Payload::new(Vec::new()));
         w.relate(&Source::Package, kind(), &name("/doc/gone.xml"))
             .expect("relates");
         assert!(matches!(w.finish(), Err(OpcError::Malformed(_))));
@@ -711,7 +764,7 @@ mod tests {
         let write = || {
             let mut w = PackageWriter::new();
             let doc = name("/doc/main.xml");
-            w.add_part(doc.clone(), xml_type(), b"<a/>".to_vec());
+            w.add_part(doc.clone(), xml_type(), Payload::new(b"<a/>".to_vec()));
             w.relate(&Source::Package, kind(), &doc).expect("relates");
             w.finish().expect("finishes")
         };
@@ -723,7 +776,11 @@ mod tests {
         let mut w = PackageWriter::new();
         // A kilobyte of one byte deflates to a few bytes: the zip is small, and
         // what it unpacks to is not.
-        w.add_part(name("/doc/big.xml"), xml_type(), vec![b'a'; 1024]);
+        w.add_part(
+            name("/doc/big.xml"),
+            xml_type(),
+            Payload::new(vec![b'a'; 1024]),
+        );
         let bytes = w.finish().expect("finishes");
         assert!(bytes.as_bytes().len() < 1024);
         let bound = Count::<Octets>::new(512);

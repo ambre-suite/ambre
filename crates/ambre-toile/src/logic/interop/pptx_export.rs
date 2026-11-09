@@ -24,17 +24,18 @@
 use ambre_bus::interop::{Direction, FileFormat, Outcome};
 use ambre_core::id::{Element, Id};
 use ambre_core::index::Pos;
-use ambre_core::{FontFamily, Payload, PrintLength, Pt, Rgba, Weight};
+use ambre_core::{Board, FontFamily, PrintLength, Pt, Px, Rgba, Weight};
 use ambre_pptx::model::{
     Attachment, Cap as PptxCap, Connector, ConnectorEnd, Deck, Geometry, Item, Line, PathSegment,
-    Picture, PictureBytes, Placement, Route, Shape, Site, Slide, SlideItems, SlidePoint, SlideSize,
-    TextAlign, TextAnchor, TextBody,
+    Picture, Placement, Route, Shape, Site, Slide, SlideItems, SlidePoint, SlideSize, TextAlign,
+    TextAnchor, TextBody,
 };
 use kurbo::{BezPath, PathEl, Point, Rect, Shape as _};
 
 use super::ExportElement;
 use crate::logic::model::{Anchor, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind};
 use crate::message::{Cap, STICKY_DEFAULT_FILL, ToileConstruct, ToileReport};
+use crate::ui::label::{LABEL_H, LABEL_W};
 
 /// The width of every slide of the deck. PowerPoint opens a new deck on it.
 const SLIDE_WIDTH: PrintLength<Pt> = SlideSize::WIDESCREEN.width;
@@ -44,12 +45,7 @@ const DEFAULT_INK: Rgba = Rgba::from_bits(0x1F29_37FF);
 
 /// The space between the edge of a sticky note and its text, in world units:
 /// the padding the board draws a note body with.
-const STICKY_INSET: f64 = 12.0;
-
-/// The box of a connector caption, in world units: the box the board draws
-/// it in.
-const CAPTION_WIDTH: f64 = 160.0;
-const CAPTION_HEIGHT: f64 = 24.0;
+const STICKY_INSET: Px<Board> = Px::<Board>::new(12.0);
 
 /// One slide of the board walk: the region it frames and what lies in it.
 #[derive(Clone, PartialEq)]
@@ -137,8 +133,8 @@ pub fn export_pptx(slides: &[PptxSlideSource]) -> PptxExport {
         SlideSize::with_aspect_of(
             SLIDE_WIDTH,
             SlideSize {
-                width: pt(first.frame.width()),
-                height: pt(first.frame.height()),
+                width: narrow(first.frame.width()),
+                height: narrow(first.frame.height()),
             },
         )
     });
@@ -187,20 +183,20 @@ impl Fit {
     fn point(&self, p: Point) -> SlidePoint {
         let at = (p - self.origin) * self.scale + self.offset;
         SlidePoint {
-            x: pt(at.x),
-            y: pt(at.y),
+            x: narrow(at.x),
+            y: narrow(at.y),
         }
     }
 
-    fn length(&self, world: f64) -> PrintLength<Pt> {
-        pt(world * self.scale)
+    fn length(&self, world: Px<Board>) -> PrintLength<Pt> {
+        narrow(world.get() * self.scale)
     }
 
     fn placement(&self, rect: Rect, rotation: ambre_core::Radians) -> Placement {
         Placement {
             origin: self.point(rect.origin()),
-            width: self.length(rect.width()),
-            height: self.length(rect.height()),
+            width: self.length(Px::<Board>::new(rect.width())),
+            height: self.length(Px::<Board>::new(rect.height())),
             rotation,
         }
     }
@@ -212,7 +208,7 @@ impl Fit {
     clippy::cast_possible_truncation,
     reason = "a slide coordinate fits an f32"
 )]
-fn pt(value: f64) -> PrintLength<Pt> {
+fn narrow(value: f64) -> PrintLength<Pt> {
     PrintLength::<Pt>::new(value as f32)
 }
 
@@ -262,7 +258,7 @@ fn map_slide(source: &PptxSlideSource, size: SlideSize, report: &mut ToileReport
             },
             line: Line {
                 colour: faded(style.stroke.unwrap_or(DEFAULT_INK), style),
-                width: fit.length(f64::from(style.stroke_w.get()).max(1.0)),
+                width: fit.length(Px::<Board>::new(style.stroke_w.widened().get().max(1.0))),
             },
             start_cap: cap(connector.caps.start),
             end_cap: cap(connector.caps.end),
@@ -307,7 +303,7 @@ const fn cap(cap: Cap) -> PptxCap {
 /// line.
 fn caption_box(connector: &PptxConnector, fit: &Fit) -> Item {
     let middle = connector.start.midpoint(connector.end);
-    let rect = Rect::from_center_size(middle, (CAPTION_WIDTH, CAPTION_HEIGHT));
+    let rect = Rect::from_center_size(middle, (LABEL_W.get(), LABEL_H.get()));
     Item::Shape(Shape {
         name: "Connector label".to_owned(),
         at: fit.placement(rect, ambre_core::Radians::ZERO),
@@ -336,7 +332,7 @@ fn map_element(el: &PptxElement, fit: &Fit, report: &mut ToileReport) -> Option<
     let outline = || {
         style.stroke.map(|colour| Line {
             colour: faded(colour, style),
-            width: fit.length(f64::from(style.stroke_w.get())),
+            width: fit.length(style.stroke_w.widened()),
         })
     };
     let fill = || style.fill.map(|colour| faded(colour, style));
@@ -350,8 +346,8 @@ fn map_element(el: &PptxElement, fit: &Fit, report: &mut ToileReport) -> Option<
     };
     let item = match e.kind {
         ElementKind::Shape(ShapeKind::Rect) => {
-            let corner = f64::from(style.corner.get());
-            let geometry = if corner > 0.0 {
+            let corner = style.corner.widened();
+            let geometry = if corner.get() > 0.0 {
                 Geometry::RoundRect {
                     radius: fit.length(corner),
                 }
@@ -399,7 +395,7 @@ fn map_element(el: &PptxElement, fit: &Fit, report: &mut ToileReport) -> Option<
                 name: "Sticky note".to_owned(),
                 at,
                 geometry: Geometry::RoundRect {
-                    radius: fit.length(f64::from(style.corner.get())),
+                    radius: fit.length(style.corner.widened()),
                 },
                 fill: Some(faded(style.fill.unwrap_or(STICKY_DEFAULT_FILL), style)),
                 line: None,
@@ -429,7 +425,7 @@ fn map_element(el: &PptxElement, fit: &Fit, report: &mut ToileReport) -> Option<
                 fill: None,
                 line: Some(Line {
                     colour: faded(style.stroke.unwrap_or(DEFAULT_INK), style),
-                    width: fit.length(f64::from(style.stroke_w.get()).max(1.0)),
+                    width: fit.length(Px::<Board>::new(style.stroke_w.widened().get().max(1.0))),
                 }),
                 text: None,
             })
@@ -442,7 +438,7 @@ fn map_element(el: &PptxElement, fit: &Fit, report: &mut ToileReport) -> Option<
             Item::Picture(Picture {
                 name: "Picture".to_owned(),
                 at,
-                png: Payload::<PictureBytes>::new(png.as_bytes().to_vec()),
+                png: png.clone().into_role(),
             })
         }
         ElementKind::Group => {
@@ -531,7 +527,9 @@ fn typeface(family: Option<&FontFamily>) -> String {
 /// The size a text is drawn at, on the slide. An automatic size is the
 /// default the board draws a text at.
 fn text_size(style: &ElementStyle, fit: &Fit) -> PrintLength<Pt> {
-    fit.length(f64::from(style.font.size.or_default().to_px().get()))
+    fit.length(Px::<Board>::new(f64::from(
+        style.font.size.or_default().to_px().get(),
+    )))
 }
 
 /// `colour` under the opacity of `style`.
@@ -556,6 +554,10 @@ fn count(report: &ToileReport, construct: ToileConstruct, outcome: Outcome) -> u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pt(value: f64) -> PrintLength<Pt> {
+        narrow(value)
+    }
 
     fn element(kind: ElementKind, rect: Rect) -> PptxElement {
         PptxElement {

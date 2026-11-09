@@ -13,7 +13,8 @@
 
 use ambre_core::index::{Axis, Pos};
 use ambre_core::{
-    Payload, PayloadKind, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Weight,
+    Becomes, Payload, PayloadKind, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline,
+    Weight,
 };
 use serde::{Deserialize, Serialize};
 
@@ -211,6 +212,9 @@ pub enum PictureBytes {}
 impl PayloadKind for PictureBytes {
     const NAME: &'static str = "PictureBytes";
 }
+
+/// The thumbnail a board holds of a picture is a PNG file the deck carries.
+impl Becomes<PictureBytes> for ambre_core::ThumbnailPng {}
 
 /// A picture, stretched to the box of its placement.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

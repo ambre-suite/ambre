@@ -16,19 +16,20 @@
 //! The model is the whole of what the writer carries, so it reports nothing
 //! of its own.
 
-use std::collections::BTreeMap;
-
+use ambre_core::index::Pos;
 use ambre_core::{
-    FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Validated,
-    Weight,
+    Becomes, FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline,
+    Validated, Weight,
 };
 
 use crate::PptxError;
 use crate::model::{
-    Cap, Connector, ConnectorEnd, Deck, Geometry, Item, Line, PathSegment, Picture, Placement,
-    Route, Shape, Site, Slide, SlidePoint, TextAlign, TextAnchor, TextBody,
+    Cap, Connector, ConnectorEnd, Deck, Geometry, Item, Line, PathSegment, Picture, PictureBytes,
+    Placement, Route, Shape, Site, Slide, SlideItems, SlidePoint, TextAlign, TextAnchor, TextBody,
 };
-use crate::opc::{ContentType, PackageWriter, PartName, RelationshipId, RelationshipType, Source};
+use crate::opc::{
+    ContentType, PackageWriter, PartBytes, PartName, RelationshipId, RelationshipType, Source,
+};
 use crate::xml::Xml;
 
 /// The DrawingML namespace.
@@ -61,19 +62,15 @@ const APP_XML: &str = include_str!("parts/app.xml");
 /// inch.
 const EMU_PER_PT: f64 = 12_700.0;
 
-/// The id of the one slide master. A master id starts at 2^31, and the layout
-/// the static master names takes the next one.
-const MASTER_ID: &str = "2147483648";
-
-/// The id of the first slide. A slide id lies at 256 or above.
-const FIRST_SLIDE_ID: usize = 256;
+/// One English Metric Unit, the smallest length a part writes.
+const ONE_EMU: PrintLength<Pt> = PrintLength::<Pt>::new(1.0 / 12_700.0);
 
 /// The eight bytes every PNG file opens on.
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
 
-/// The text sizes a run may carry, in hundredths of a point.
-const MIN_TEXT_SIZE: f64 = 100.0;
-const MAX_TEXT_SIZE: f64 = 400_000.0;
+/// The text sizes a run may carry: 1 pt to 4 000 pt.
+const MIN_TEXT_SIZE: PrintLength<Pt> = PrintLength::<Pt>::new(1.0);
+const MAX_TEXT_SIZE: PrintLength<Pt> = PrintLength::<Pt>::new(4_000.0);
 
 /// The writer of a deck.
 ///
@@ -101,12 +98,12 @@ pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
     w.add_part(
         core,
         content_type("application/vnd.openxmlformats-package.core-properties+xml")?,
-        CORE_XML.as_bytes().to_vec(),
+        Payload::new(CORE_XML.as_bytes().to_vec()),
     );
     w.add_part(
         app,
         content_type("application/vnd.openxmlformats-officedocument.extended-properties+xml")?,
-        APP_XML.as_bytes().to_vec(),
+        Payload::new(APP_XML.as_bytes().to_vec()),
     );
 
     // The static master names its layout `rId1`, so that relationship comes
@@ -117,14 +114,18 @@ pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
     w.add_part(
         master.clone(),
         pml_type("slideMaster")?,
-        MASTER_XML.as_bytes().to_vec(),
+        Payload::new(MASTER_XML.as_bytes().to_vec()),
     );
     w.add_part(
         layout.clone(),
         pml_type("slideLayout")?,
-        LAYOUT_XML.as_bytes().to_vec(),
+        Payload::new(LAYOUT_XML.as_bytes().to_vec()),
     );
-    w.add_part(theme.clone(), theme_type()?, THEME_XML.as_bytes().to_vec());
+    w.add_part(
+        theme.clone(),
+        theme_type()?,
+        Payload::new(THEME_XML.as_bytes().to_vec()),
+    );
 
     let pres = Source::Part(presentation.clone());
     let master_rel = w.relate(&pres, rel("slideMaster")?, &master)?;
@@ -138,11 +139,15 @@ pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
             rel("theme")?,
             &notes_theme,
         )?;
-        w.add_part(notes_theme, theme_type()?, THEME_XML.as_bytes().to_vec());
+        w.add_part(
+            notes_theme,
+            theme_type()?,
+            Payload::new(THEME_XML.as_bytes().to_vec()),
+        );
         w.add_part(
             notes_master.clone(),
             pml_type("notesMaster")?,
-            NOTES_MASTER_XML.as_bytes().to_vec(),
+            Payload::new(NOTES_MASTER_XML.as_bytes().to_vec()),
         );
     }
 
@@ -178,7 +183,7 @@ pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
     ] {
         let name = part(path)?;
         w.relate(&pres, rel(kind)?, &name)?;
-        w.add_part(name, pml_type(kind)?, xml.as_bytes().to_vec());
+        w.add_part(name, pml_type(kind)?, Payload::new(xml.as_bytes().to_vec()));
     }
     let xml = presentation_xml(deck, &master_rel, notes_rel.as_ref(), &slide_rels)?;
     w.add_part(presentation, pml_type("presentation.main")?, xml);
@@ -188,17 +193,20 @@ pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
 /// The pictures of the deck, each one part however many items show it.
 #[derive(Default)]
 struct Media {
-    parts: BTreeMap<Vec<u8>, Validated<PartName>>,
+    parts: Vec<(Payload<PictureBytes>, Validated<PartName>)>,
 }
+
+/// The bytes of a picture go into the package as the bytes of its part.
+impl Becomes<PartBytes> for PictureBytes {}
 
 impl Media {
     /// The part of the picture `png`, added to the package on its first use.
     fn part_of(
         &mut self,
         w: &mut PackageWriter,
-        png: &Payload<crate::model::PictureBytes>,
+        png: &Payload<PictureBytes>,
     ) -> Result<Validated<PartName>, PptxError> {
-        if let Some(name) = self.parts.get(png.as_bytes()) {
+        if let Some((_, name)) = self.parts.iter().find(|(held, _)| held == png) {
             return Ok(name.clone());
         }
         if !png.as_bytes().starts_with(&PNG_SIGNATURE) {
@@ -208,9 +216,9 @@ impl Media {
         w.add_part(
             name.clone(),
             content_type("image/png")?,
-            png.as_bytes().to_vec(),
+            png.clone().into_role(),
         );
-        self.parts.insert(png.as_bytes().to_vec(), name.clone());
+        self.parts.push((png.clone(), name.clone()));
         Ok(name)
     }
 }
@@ -222,7 +230,7 @@ fn presentation_xml(
     master: &Validated<RelationshipId>,
     notes_master: Option<&Validated<RelationshipId>>,
     slides: &[Validated<RelationshipId>],
-) -> Result<Vec<u8>, PptxError> {
+) -> Result<Payload<PartBytes>, PptxError> {
     let mut x = Xml::part();
     x.open(
         "p:presentation",
@@ -236,7 +244,8 @@ fn presentation_xml(
     x.open("p:sldMasterIdLst", &[]);
     x.leaf(
         "p:sldMasterId",
-        &[("id", MASTER_ID), ("r:id", master.as_str())],
+        // A master id starts at 2^31; the static layout takes the next one.
+        &[("id", "2147483648"), ("r:id", master.as_str())],
     );
     x.close("p:sldMasterIdLst");
     if let Some(notes) = notes_master {
@@ -246,21 +255,24 @@ fn presentation_xml(
     }
     x.open("p:sldIdLst", &[]);
     for (index, rid) in slides.iter().enumerate() {
-        let id = (FIRST_SLIDE_ID + index).to_string();
+        // A slide id lies at 256 or above.
+        let id = (256 + index).to_string();
         x.leaf("p:sldId", &[("id", &id), ("r:id", rid.as_str())]);
     }
     x.close("p:sldIdLst");
     x.leaf(
         "p:sldSz",
         &[
-            ("cx", &emu(deck.size.width).to_string()),
-            ("cy", &emu(deck.size.height).to_string()),
+            ("cx", &emu(deck.size.width)),
+            ("cy", &emu(deck.size.height)),
         ],
     );
     // The portrait letter page every notes page prints on.
     x.leaf("p:notesSz", &[("cx", "6858000"), ("cy", "9144000")]);
     x.close("p:presentation");
-    x.finish().map_err(|e| PptxError::Xml(e.to_string()))
+    x.finish()
+        .map(Payload::new)
+        .map_err(|e| PptxError::Xml(e.to_string()))
 }
 
 /// One slide part. A picture adds its media part and the relationship to it.
@@ -269,7 +281,7 @@ fn slide_xml(
     w: &mut PackageWriter,
     source: &Source,
     media: &mut Media,
-) -> Result<Vec<u8>, PptxError> {
+) -> Result<Payload<PartBytes>, PptxError> {
     let mut x = Xml::part();
     x.open(
         "p:sld",
@@ -282,15 +294,15 @@ fn slide_xml(
     }
     open_tree(&mut x);
     for (index, item) in slide.items.iter().enumerate() {
-        let id = shape_id(index);
+        let at = Pos::<SlideItems>::from_usize(index);
         match item {
-            Item::Shape(shape) => write_shape(&mut x, &id, shape),
+            Item::Shape(shape) => write_shape(&mut x, at, shape),
             Item::Picture(picture) => {
                 let target = media.part_of(w, &picture.png)?;
                 let rid = w.relate(source, rel("image")?, &target)?;
-                write_picture(&mut x, &id, picture, &rid);
+                write_picture(&mut x, at, picture, &rid);
             }
-            Item::Connector(connector) => write_connector(&mut x, &id, connector, &slide.items),
+            Item::Connector(connector) => write_connector(&mut x, at, connector, &slide.items),
         }
     }
     x.close("p:spTree");
@@ -299,12 +311,15 @@ fn slide_xml(
     x.leaf("a:masterClrMapping", &[]);
     x.close("p:clrMapOvr");
     x.close("p:sld");
-    x.finish().map_err(|e| PptxError::Xml(e.to_string()))
+    x.finish()
+        .map(Payload::new)
+        .map_err(|e| PptxError::Xml(e.to_string()))
 }
 
-/// The id of the item at `index` of a slide: the tree itself is 1.
-fn shape_id(index: usize) -> String {
-    (index + 2).to_string()
+/// The id of the item at `at` of a slide, as a part spells it. The tree
+/// itself is 1, so the first item is 2.
+fn shape_id(at: Pos<SlideItems>) -> String {
+    (at.to_usize() + 2).to_string()
 }
 
 /// Open the shape tree of a slide or a notes page, with the empty group
@@ -331,11 +346,11 @@ fn open_tree(x: &mut Xml) {
 }
 
 /// One shape: its outline, its paint and its text.
-fn write_shape(x: &mut Xml, id: &str, shape: &Shape) {
+fn write_shape(x: &mut Xml, at: Pos<SlideItems>, shape: &Shape) {
     let text_box = shape.fill.is_none() && shape.line.is_none() && shape.text.is_some();
     x.open("p:sp", &[]);
     x.open("p:nvSpPr", &[]);
-    x.leaf("p:cNvPr", &[("id", id), ("name", &shape.name)]);
+    x.leaf("p:cNvPr", &[("id", &shape_id(at)), ("name", &shape.name)]);
     if text_box {
         x.leaf("p:cNvSpPr", &[("txBox", "1")]);
     } else {
@@ -384,17 +399,11 @@ fn write_xfrm(x: &mut Xml, at: &Placement, flip: Flip) {
     x.open("a:xfrm", &attrs);
     x.leaf(
         "a:off",
-        &[
-            ("x", &emu(at.origin.x).to_string()),
-            ("y", &emu(at.origin.y).to_string()),
-        ],
+        &[("x", &emu(at.origin.x)), ("y", &emu(at.origin.y))],
     );
     x.leaf(
         "a:ext",
-        &[
-            ("cx", &emu(at.width.abs()).to_string()),
-            ("cy", &emu(at.height.abs()).to_string()),
-        ],
+        &[("cx", &emu(at.width.abs())), ("cy", &emu(at.height.abs()))],
     );
     x.close("a:xfrm");
 }
@@ -455,8 +464,8 @@ fn write_geometry(x: &mut Xml, geometry: &Geometry, at: &Placement) {
 fn write_custom(x: &mut Xml, path: &[PathSegment], at: &Placement) {
     // A path of no width or no height still draws: a box of one unit keeps
     // the scale of its points finite.
-    let w = emu(at.width.abs()).max(1).to_string();
-    let h = emu(at.height.abs()).max(1).to_string();
+    let w = emu(at.width.abs().max(ONE_EMU));
+    let h = emu(at.height.abs().max(ONE_EMU));
     x.open("a:custGeom", &[]);
     for list in ["a:avLst", "a:gdLst", "a:ahLst", "a:cxnLst"] {
         x.leaf(list, &[]);
@@ -465,8 +474,8 @@ fn write_custom(x: &mut Xml, path: &[PathSegment], at: &Placement) {
     x.open("a:pathLst", &[]);
     x.open("a:path", &[("w", &w), ("h", &h)]);
     let point = |x: &mut Xml, p: SlidePoint| {
-        let px = emu(p.x - at.origin.x).to_string();
-        let py = emu(p.y - at.origin.y).to_string();
+        let px = emu(p.x - at.origin.x);
+        let py = emu(p.y - at.origin.y);
         x.leaf("a:pt", &[("x", &px), ("y", &py)]);
     };
     for segment in path {
@@ -546,7 +555,7 @@ fn write_line(x: &mut Xml, line: Option<&Line>, ends: Ends) {
         x.close("a:ln");
         return;
     };
-    x.open("a:ln", &[("w", &emu(line.width.abs()).to_string())]);
+    x.open("a:ln", &[("w", &emu(line.width.abs()))]);
     write_solid_fill(x, line.colour);
     if let Ends::Caps(caps) = ends {
         // DrawingML calls the start of a line its head.
@@ -561,7 +570,7 @@ fn write_line(x: &mut Xml, line: Option<&Line>, ends: Ends) {
 
 /// The text of a shape: one paragraph per line, each in one run.
 fn write_text(x: &mut Xml, text: &TextBody) {
-    let inset = emu(text.inset.abs()).to_string();
+    let inset = emu(text.inset.abs());
     let anchor = match text.anchor {
         TextAnchor::Top => "t",
         TextAnchor::Middle => "ctr",
@@ -570,9 +579,9 @@ fn write_text(x: &mut Xml, text: &TextBody) {
         TextAlign::Left => "l",
         TextAlign::Centre => "ctr",
     };
-    let size = (f64::from(text.size.get()) * 100.0)
+    // A run size is in hundredths of a point.
+    let size = (f64::from(text.size.clamp(MIN_TEXT_SIZE, MAX_TEXT_SIZE).get()) * 100.0)
         .round()
-        .clamp(MIN_TEXT_SIZE, MAX_TEXT_SIZE)
         .to_string();
     x.open("p:txBody", &[]);
     x.open(
@@ -633,10 +642,15 @@ fn run_attributes<'a>(text: &TextBody, size: &'a str) -> Vec<(&'static str, &'a 
 }
 
 /// One picture, stretched to its box.
-fn write_picture(x: &mut Xml, id: &str, picture: &Picture, rid: &Validated<RelationshipId>) {
+fn write_picture(
+    x: &mut Xml,
+    at: Pos<SlideItems>,
+    picture: &Picture,
+    rid: &Validated<RelationshipId>,
+) {
     x.open("p:pic", &[]);
     x.open("p:nvPicPr", &[]);
-    x.leaf("p:cNvPr", &[("id", id), ("name", &picture.name)]);
+    x.leaf("p:cNvPr", &[("id", &shape_id(at)), ("name", &picture.name)]);
     x.open("p:cNvPicPr", &[]);
     x.leaf("a:picLocks", &[("noChangeAspect", "1")]);
     x.close("p:cNvPicPr");
@@ -658,7 +672,7 @@ fn write_picture(x: &mut Xml, id: &str, picture: &Picture, rid: &Validated<Relat
 /// One connector: a connection shape over the box of its two ends. The shape
 /// mirrors so that its line runs from its start to its end, and it binds to
 /// the shapes it holds on to.
-fn write_connector(x: &mut Xml, id: &str, connector: &Connector, items: &[Item]) {
+fn write_connector(x: &mut Xml, at: Pos<SlideItems>, connector: &Connector, items: &[Item]) {
     let (a, b) = (connector.start.at, connector.end.at);
     let flip = match (b.x < a.x, b.y < a.y) {
         (false, false) => Flip::None,
@@ -666,7 +680,7 @@ fn write_connector(x: &mut Xml, id: &str, connector: &Connector, items: &[Item])
         (false, true) => Flip::Vertical,
         (true, true) => Flip::Both,
     };
-    let at = Placement {
+    let box_of = Placement {
         origin: SlidePoint {
             x: a.x.min(b.x),
             y: a.y.min(b.y),
@@ -682,18 +696,18 @@ fn write_connector(x: &mut Xml, id: &str, connector: &Connector, items: &[Item])
     };
     x.open("p:cxnSp", &[]);
     x.open("p:nvCxnSpPr", &[]);
-    x.leaf("p:cNvPr", &[("id", id), ("name", &connector.name)]);
+    x.leaf(
+        "p:cNvPr",
+        &[("id", &shape_id(at)), ("name", &connector.name)],
+    );
     x.open("p:cNvCxnSpPr", &[]);
-    for (name, end) in [("a:stCxn", &connector.start), ("a:endCxn", &connector.end)] {
-        if let Some((shape, site)) = connection(end, items) {
-            x.leaf(name, &[("id", &shape), ("idx", &site)]);
-        }
-    }
+    write_connection(x, ConnectionEnd::Start, &connector.start, items);
+    write_connection(x, ConnectionEnd::End, &connector.end, items);
     x.close("p:cNvCxnSpPr");
     x.leaf("p:nvPr", &[]);
     x.close("p:nvCxnSpPr");
     x.open("p:spPr", &[]);
-    write_xfrm(x, &at, flip);
+    write_xfrm(x, &box_of, flip);
     x.open("a:prstGeom", &[("prst", preset)]);
     x.leaf("a:avLst", &[]);
     x.close("a:prstGeom");
@@ -709,14 +723,22 @@ fn write_connector(x: &mut Xml, id: &str, connector: &Connector, items: &[Item])
     x.close("p:cxnSp");
 }
 
-/// The shape id and the connection site an end holds on to, or `None` when
-/// the end is free. An end that names no item, an item that is no shape, or
-/// a shape whose outline has no such site, stays free.
-fn connection(end: &ConnectorEnd, items: &[Item]) -> Option<(String, String)> {
-    let attachment = end.attached?;
-    let index = attachment.item.to_index()?;
-    let Some(Item::Shape(shape)) = items.get(index) else {
-        return None;
+/// Which end of a connection shape a binding names.
+#[derive(Clone, Copy)]
+enum ConnectionEnd {
+    Start,
+    End,
+}
+
+/// The binding of one end to the shape and the site it holds on to. A free
+/// end writes nothing. An end is free when it names no item, an item that is
+/// no shape, or a shape whose outline has no such site.
+fn write_connection(x: &mut Xml, which: ConnectionEnd, end: &ConnectorEnd, items: &[Item]) {
+    let Some(attachment) = end.attached else {
+        return;
+    };
+    let Some(Item::Shape(shape)) = attachment.item.to_index().and_then(|i| items.get(i)) else {
+        return;
     };
     // The site order of each preset, ECMA-376 Part 1, the preset shape
     // definitions.
@@ -739,14 +761,24 @@ fn connection(end: &ConnectorEnd, items: &[Item]) -> Option<(String, String)> {
             Site::Bottom => 3,
             Site::Right => 5,
         },
-        (Geometry::Line | Geometry::Freeform(_), _) => return None,
+        (Geometry::Line | Geometry::Freeform(_), _) => return,
     };
-    Some((shape_id(index), site.to_string()))
+    let name = match which {
+        ConnectionEnd::Start => "a:stCxn",
+        ConnectionEnd::End => "a:endCxn",
+    };
+    x.leaf(
+        name,
+        &[
+            ("id", &shape_id(attachment.item)),
+            ("idx", &site.to_string()),
+        ],
+    );
 }
 
 /// The notes page of a slide: the slide image and the notes, one paragraph
 /// per line.
-fn notes_xml(notes: &str) -> Result<Vec<u8>, PptxError> {
+fn notes_xml(notes: &str) -> Result<Payload<PartBytes>, PptxError> {
     let mut x = Xml::part();
     x.open(
         "p:notes",
@@ -808,19 +840,21 @@ fn notes_xml(notes: &str) -> Result<Vec<u8>, PptxError> {
     x.leaf("a:masterClrMapping", &[]);
     x.close("p:clrMapOvr");
     x.close("p:notes");
-    x.finish().map_err(|e| PptxError::Xml(e.to_string()))
+    x.finish()
+        .map(Payload::new)
+        .map_err(|e| PptxError::Xml(e.to_string()))
 }
 
-/// A length in English Metric Units, rounded to the unit. A length that is
-/// no number reads as zero, and the float cast saturates past the range.
-fn emu(length: PrintLength<Pt>) -> i64 {
+/// A length as a part spells it: whole English Metric Units. A length that
+/// is no number reads as zero, and the float cast saturates past the range.
+fn emu(length: PrintLength<Pt>) -> String {
     let value = (f64::from(length.get()) * EMU_PER_PT).round();
     if value.is_finite() {
         #[expect(clippy::cast_possible_truncation, reason = "the cast saturates")]
         let units = value as i64;
-        units
+        units.to_string()
     } else {
-        0
+        "0".to_owned()
     }
 }
 
