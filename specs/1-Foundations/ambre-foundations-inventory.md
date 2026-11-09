@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 83 | 8 |
+| `architecture` | How the client is split, and why. | implemented | 84 | 8 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
@@ -64,4 +64,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**48 features: 20 implemented, 24 partial, 4 design-only. 1274 contract rows, 10 loose.**
+**48 features: 20 implemented, 24 partial, 4 design-only. 1275 contract rows, 10 loose.**

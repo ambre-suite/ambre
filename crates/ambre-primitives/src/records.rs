@@ -35,6 +35,11 @@ impl SiteKey {
             .then(|| Self(text.to_owned()))
     }
 
+    /// The item path the key names, its fourth field.
+    pub fn item(&self) -> &str {
+        self.0.split(Self::SEPARATOR).nth(3).unwrap_or_default()
+    }
+
     /// The kind the key names, its fifth field.
     pub fn kind(&self) -> &str {
         self.0.split(Self::SEPARATOR).nth(4).unwrap_or_default()
