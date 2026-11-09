@@ -43,7 +43,7 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
 
 /// The token signing seed every test instance derives its keys from, as a
 /// deployment's instances share `JWT_SIGNING_SEED`.
-const TEST_JWT_SEED: [u8; 32] = [9u8; 32];
+pub(crate) const TEST_JWT_SEED: [u8; 32] = [9u8; 32];
 
 /// The seed of the admission key of every test instance: a key of its own, as in a deployment.
 const TEST_ADMISSION_SEED: [u8; 32] = [8u8; 32];

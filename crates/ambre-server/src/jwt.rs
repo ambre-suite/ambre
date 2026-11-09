@@ -108,6 +108,12 @@ impl JwtSeed {
         Self(Box::new(SigningKey::from_bytes(&bytes)))
     }
 
+    /// The public half of the key, for a test that checks which key signed a token.
+    #[cfg(test)]
+    pub fn verifying_key_bytes(&self) -> [u8; 32] {
+        self.0.verifying_key().to_bytes()
+    }
+
     /// Reads the seed from `JWT_SIGNING_SEED`, whose hex text is a secret
     /// too. The text goes straight into a [`SeedText`], so no bare copy of
     /// it leaves this function, and it is wiped once the key is built.

@@ -401,3 +401,39 @@ async fn the_call_tables_hold_only_what_the_relay_may_learn(pool: sqlx::PgPool) 
         ]
     );
 }
+
+/// An admission the relay issues verifies under the admission key alone, never under the key
+/// of the access tokens. The SFU holds `SFU_ADMISSION_KEY`. So it refuses a token signed with
+/// the session key, and holds no key that verifies a session
+/// (`ambre-spec-call-media.md` section 3, the admission token).
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn an_admission_never_verifies_under_the_session_key(pool: sqlx::PgPool) {
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let channel = channel_of(&pool, &alice, &[]).await;
+    let (token, _) = admitted(
+        answer_join(&state, &Id::<Call>::mint(), alice.join(&state, channel))
+            .await
+            .expect("a join"),
+    );
+    let admission = verified(&state, &token);
+    let wire = postcard::to_allocvec(&token).expect("a token travels");
+    let text: String = postcard::from_bytes(&wire).expect("a token is text");
+    let (_, signature) =
+        Admission::read(&ambre_core::Payload::new(hex::decode(text).expect("hex")))
+            .expect("a token reads");
+    let session = crate::jwt::JwtSeed::from_array(crate::test_helpers::TEST_JWT_SEED);
+    let session_key =
+        ed25519_dalek::VerifyingKey::from_bytes(&session.verifying_key_bytes()).expect("a key");
+    let signed = admission.signed_bytes().expect("an admission encodes");
+    assert!(
+        session_key
+            .verify_strict(
+                signed.as_bytes(),
+                &ed25519_dalek::Signature::from_bytes(signature.as_array()),
+            )
+            .is_err(),
+        "an admission verifies under the session key"
+    );
+}
