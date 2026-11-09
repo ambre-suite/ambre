@@ -39,26 +39,28 @@ impl Mark {
         }
     }
 
+    /// A cursor on the character just before `at`, which points right after
+    /// it. None at the start of the text.
+    fn before(text: &LoroText, at: Pos<Chars>) -> Self {
+        match at.prev() {
+            Some(prev) => Self::at(text, prev, Side::Right),
+            None => Self {
+                cursor: None,
+                found: None,
+            },
+        }
+    }
+
     /// Read where the cursor points now. A character a peer took out reads
     /// as `None`: Loro answers it with a new cursor.
-    fn read(&mut self, doc: &LoroDoc, live: Live) {
+    fn read(&mut self, doc: &LoroDoc) {
         self.found = self.cursor.as_ref().and_then(|cursor| {
             let answer = doc.get_cursor_pos(cursor).ok()?;
-            match (live, answer.update) {
-                (Live::Needed, Some(_)) => None,
-                _ => Some(Pos::from_usize(answer.current.pos)),
-            }
+            answer
+                .update
+                .is_none()
+                .then(|| Pos::from_usize(answer.current.pos))
         });
-    }
-}
-
-ambre_core::define_flag! {
-    /// Whether a cursor must still name a standing character.
-    enum Live {
-        /// A gone character still gives the place it stood at.
-        Any,
-        /// A gone character gives no place.
-        Needed,
     }
 }
 
@@ -73,9 +75,13 @@ pub(super) enum TextOp {
         content: Rich,
         hint: Pos<Chars>,
     },
-    /// `content` is gone from the text: this peer took it out. `anchor` names
-    /// the character that stood right after it.
+    /// `content` is gone from the text: this peer took it out. `before` and
+    /// `anchor` name the characters that stood right before and right after
+    /// it. A later step may take a neighbour out and put it back under a new
+    /// identity. The cursor on it then names a dead character, and the other
+    /// neighbour, or the recorded place, stands in.
     Gone {
+        before: Mark,
         anchor: Mark,
         content: Rich,
         hint: Pos<Chars>,
@@ -118,6 +124,7 @@ impl TextWrite {
                     }
                 }
                 Edit::Took { at, content } => TextOp::Gone {
+                    before: Mark::before(&text, at),
                     anchor: Mark::at(&text, at, Side::Left),
                     content,
                     hint: at,
@@ -159,10 +166,13 @@ impl TextWrite {
         for op in &mut self.ops {
             match op {
                 TextOp::Standing { first, last, .. } | TextOp::Marked { first, last, .. } => {
-                    first.read(doc, Live::Needed);
-                    last.read(doc, Live::Needed);
+                    first.read(doc);
+                    last.read(doc);
                 }
-                TextOp::Gone { anchor, .. } => anchor.read(doc, Live::Any),
+                TextOp::Gone { before, anchor, .. } => {
+                    before.read(doc);
+                    anchor.read(doc);
+                }
             }
         }
     }
@@ -297,18 +307,21 @@ impl TextOp {
                 text.delete(at.to_usize(), len.to_usize()).ok()?;
                 shift.note(at, len, Len::ZERO);
                 Some(Self::Gone {
+                    before: Mark::before(text, at),
                     anchor: Mark::at(text, at, Side::Left),
                     content: content.clone(),
                     hint: at,
                 })
             }
             Self::Gone {
+                before,
                 anchor,
                 content,
                 hint,
             } => {
                 let size = Len::<Chars>::of(text.len_unicode());
-                let at = match anchor.found.filter(|_| cells == Cells::Recorded) {
+                let found = anchor.found.or(before.found);
+                let at = match found.filter(|_| cells == Cells::Recorded) {
                     Some(at) => shift.follow(at),
                     None => (*hint).min(size.as_end()),
                 };

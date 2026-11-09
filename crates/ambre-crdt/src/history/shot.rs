@@ -162,7 +162,7 @@ pub(super) fn attach(parent: &Parent<'_>, held: &Held, renames: &mut Renames) {
     match (&shot.body, shot.id.container_type()) {
         (Some(Body::Map(entries)), ContainerType::Map) => {
             if let Some(map) = parent.child(LoroMap::new()) {
-                renames.note(shot.id.clone(), map.id());
+                renames.note(&shot.id, map.id());
                 for (key, held) in entries {
                     attach(&Parent::Map(&map, key.as_str()), held, renames);
                 }
@@ -170,7 +170,7 @@ pub(super) fn attach(parent: &Parent<'_>, held: &Held, renames: &mut Renames) {
         }
         (Some(Body::List(items)), ContainerType::MovableList) => {
             if let Some(list) = parent.child(LoroMovableList::new()) {
-                renames.note(shot.id.clone(), list.id());
+                renames.note(&shot.id, list.id());
                 for (at, held) in items.iter().enumerate() {
                     attach(&Parent::Movable(&list, Pos::from_usize(at)), held, renames);
                 }
@@ -178,7 +178,7 @@ pub(super) fn attach(parent: &Parent<'_>, held: &Held, renames: &mut Renames) {
         }
         (Some(Body::List(items)), ContainerType::List) => {
             if let Some(list) = parent.child(LoroList::new()) {
-                renames.note(shot.id.clone(), list.id());
+                renames.note(&shot.id, list.id());
                 for (at, held) in items.iter().enumerate() {
                     attach(&Parent::List(&list, Pos::from_usize(at)), held, renames);
                 }
@@ -186,7 +186,7 @@ pub(super) fn attach(parent: &Parent<'_>, held: &Held, renames: &mut Renames) {
         }
         (Some(Body::Text(rich)), ContainerType::Text) => {
             if let Some(text) = parent.child(LoroText::new()) {
-                renames.note(shot.id.clone(), text.id());
+                renames.note(&shot.id, text.id());
                 rich.write_into(&text, Pos::ZERO);
             }
         }
