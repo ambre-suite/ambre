@@ -1,0 +1,30 @@
+[package]
+name = "ambre-pptx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The PowerPoint codec: a deck model, and its writer to a PresentationML package (3-Toile/features/ambre-spec-toile-pptx-export.md)"
+
+[features]
+# The writer and the package layer. Without it the crate is the deck model
+# alone: the shape the Logic thread fills and the converter module reads, so
+# the Main instance links no zip and no XML writer.
+codec = ["dep:zip", "dep:flate2", "dep:quick-xml"]
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+serde      = { workspace = true }
+thiserror  = { workspace = true }
+
+zip       = { workspace = true, optional = true }
+flate2    = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
+
+[dev-dependencies]
+roxmltree = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true
