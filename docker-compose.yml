@@ -1,6 +1,11 @@
+# Each image names one exact version and the digest of its multi-arch index,
+# and the `services:` of `.github/workflows/ci.yml` name the same images.
+# `just service-pins` holds both (`ARCH-087`, `ARCH-088`). A bump moves the
+# version and the digest together, in both files.
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
     environment:
       POSTGRES_USER: ambre
       POSTGRES_PASSWORD: ambre
@@ -15,7 +20,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:8-alpine
+    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
     ports:
       - "6379:6379"
     healthcheck:
@@ -27,7 +32,7 @@ services:
   # `scripts/garage_init.sh` creates the layout, the key and the bucket from
   # the host (`just services-up` runs it).
   garage:
-    image: dxflrs/garage:v2.3.0
+    image: dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
     container_name: ambre-garage
     ports:
       - "9000:3900"
@@ -41,7 +46,7 @@ services:
       retries: 5
 
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.19.0@sha256:3591b3d02910dcd817dec6fcaa681c278ba6966945283dd0ea0042731c330c83
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@ambre.dev
       PGADMIN_DEFAULT_PASSWORD: admin
