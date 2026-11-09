@@ -51,8 +51,10 @@ pub(super) fn decode(file: &Payload<FileBytes>) -> Result<Pixels, String> {
         samples
     } else {
         samples
-            .chunks_exact(3)
-            .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], u8::MAX])
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|&[r, g, b]| [r, g, b, u8::MAX])
             .collect()
     };
     Ok(Pixels {
