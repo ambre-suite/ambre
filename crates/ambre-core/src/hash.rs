@@ -1,5 +1,5 @@
 //! The hash tables of every application: foldhash under a key drawn once per
-//! process from the platform entropy source (`TRAME-292`, `TOILE-293`).
+//! process from the platform entropy source.
 //!
 //! A peer chooses the cell keys, the line ids and the element ids that reach
 //! these tables. A hasher with a key the peer can learn lets it send keys that
@@ -18,10 +18,9 @@
 //! foldhash's fixed key. A random key moves the probes of every lookup, so a
 //! count of instructions moves from run to run. `scripts/instructions.py`
 //! alone turns the feature on, so its counts repeat exactly
-//! (`ambre-spec-testing.md` section 2). A shipped build never does (`ARCH-087`):
-//! the feature refuses to compile on wasm32, and
-//! `tests/fixed_hash_key_feature.rs` refuses any manifest or command line that
-//! turns it on elsewhere.
+//! (`ambre-spec-testing.md` section 2). A shipped build never does (`ARCH-087`).
+//! The feature refuses to compile on wasm32. `tests/fixed_hash_key_feature.rs`
+//! refuses any manifest or command line that turns it on elsewhere.
 
 #[cfg(all(feature = "fixed-hash-key", target_arch = "wasm32"))]
 compile_error!(

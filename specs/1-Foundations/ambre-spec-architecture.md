@@ -151,7 +151,7 @@ format's family has loaded yet in this session.
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 78 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 79 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,

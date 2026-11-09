@@ -61,7 +61,7 @@ compiler needs no test, no run and no reading.
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
 **A measure the CI holds to a ceiling repeats exactly.** Two runs of one build on one input give
-the same count, or the ceiling fails a build on noise and hides a regression under the noise. A
+the same count. Otherwise the ceiling fails a build on noise, and the noise hides a regression. A
 random key per process moves the probes of every hash lookup, so it moves a count of instructions.
 On 2026-11-09 a Trame block undo read 73 597 735 against a ceiling of 73 500 000, with no change
 to the code.

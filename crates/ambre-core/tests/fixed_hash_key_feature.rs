@@ -73,9 +73,8 @@ fn manifest_offences(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// The files that hold a cargo command line of the tree, relative to the
-/// root: the recipes, the CI, the shell wrappers, the build configuration and
-/// the scripts.
+/// The files that hold a cargo command line of the tree. They are the
+/// recipes, the CI, the shell wrappers, the build configuration and the scripts.
 fn command_files(root: &Path) -> Vec<PathBuf> {
     let mut files = vec![
         root.join("justfile"),
@@ -106,8 +105,8 @@ fn command_files(root: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Whether `rel` may name the feature: the bench script, and the tests of the
-/// scripts, which hold a breach to check that a gate goes red.
+/// Whether `rel` may name the feature. The bench script may, and so may the
+/// tests of the scripts, which hold a breach to check that a gate goes red.
 fn may_name(rel: &str) -> bool {
     rel == BENCH_SCRIPT || rel.starts_with("scripts/test_")
 }

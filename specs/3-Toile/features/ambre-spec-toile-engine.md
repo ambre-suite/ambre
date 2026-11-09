@@ -108,7 +108,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 42 `verified`. What holds is the pair no other application holds: the index
+* **Verification.** 43 `verified`. What holds is the pair no other application holds: the index
   equivalence, at a camera that culls too, and the convergence of every derived cache. Ten verified
   rows are structural.
 
